@@ -79,10 +79,14 @@ const POWERSHELL_RULES = `PowerShell specifics:
 - Append to file: Add-Content -Path file.md -Value "line"
 - Read files: Get-Content file.md
 - List directory: dir (or Get-ChildItem)
-- NEVER use: echo -e (doesn't exist), mkdir to create files, cat (use Get-Content)
+- Create directories: New-Item -ItemType Directory -Force -Path "folder"
+- NEVER use: echo -e, cat (use Get-Content), bash syntax like mkdir -p or {src/routes,...}
 - NEVER use single quotes for strings with \\n, \\t — use DOUBLE quotes: "line1\\nline2"
 - Paths use backslashes: src\\index.ts
-- Check file exists: Test-Path file.md`;
+- Check file exists: Test-Path file.md
+- Install deps: npm install (NOT npm i)
+- Run dev: npm run dev (NOT npx tsx watch)`;
+
 
 const UNIX_EXAMPLES = `Examples (Linux/macOS):
   <tool_call>{"name":"bash","arguments":{"cmd":"ls -la"}}</tool_call>
@@ -233,7 +237,7 @@ const CLEAR_LINE = '\r\x1b[K';
 async function doChat(
   provider: LLMProvider,
   messages: ChatMessage[],
-  retries = 1,
+  retries = 3,
 ): Promise<{ response: string; genTimeMs: number }> {
   const theme = getTheme();
   for (let attempt = 0; attempt <= retries; attempt++) {
