@@ -15,6 +15,7 @@ import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } fro
 import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../tools/todo.js';
 import { askQuestion, parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
+import { checkFileSyntax } from '../tools/syntax-check.js';
 import { getTheme } from '../styling/index.js';
 
 const TOOL_FORMAT = `Available tools:
@@ -529,6 +530,19 @@ export async function runAgentLoop(
       }
 
       runPostToolUseHooks(process.cwd(), parsed.name, cmd, toolOutput, toolExitCode);
+
+      // Syntax check after file creation
+      if (toolExitCode === 0 && cmd.match(/Set-Content|Add-Content/)) {
+        const pathMatch = cmd.match(/-Path\s+['"]?([^'"]+\.(?:ts|tsx|js|jsx))['"]?/i);
+        if (pathMatch) {
+          const filePath = pathMatch[1].replace(/\\/g, '/');
+          const syntaxResult = checkFileSyntax(filePath, process.cwd());
+          if (syntaxResult !== 'OK') {
+            toolOutput += `\n\n[syntax check]\n${syntaxResult}`;
+            console.log(theme.bracketTag('syntax', syntaxResult.split('\n')[0]));
+          }
+        }
+      }
 
       messages.push({
         role: 'tool',

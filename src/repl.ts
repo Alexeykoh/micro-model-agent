@@ -404,6 +404,7 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
   /save [name]      — save current session
   /clear            — clear context (new session)
   /index [cmd]      — index status/rebuild/map
+  /stop             — stop agent loop
   /exit             — exit MMA
           `));
           break;
@@ -452,6 +453,10 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
         case 'new':
           slashClear(conversationHistory);
           break;
+        case 'stop':
+          console.log(theme.dim('  Stopping agent loop...'));
+          rl.close();
+          return;
         case 'index':
           slashIndex(args);
           break;
