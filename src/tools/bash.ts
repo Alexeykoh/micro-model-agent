@@ -46,6 +46,21 @@ function translateToPowerShell(cmd: string): string {
   return cmd;
 }
 
+function ensureDirectoryExists(cmd: string, cwd: string): void {
+  // Auto-create directory for Set-Content commands
+  const match = cmd.match(/Set-Content\s+-Path\s+['"]?([^'"]+?)['"]?\s+-Value/i);
+  if (match) {
+    const filePath = match[1];
+    const dir = filePath.split(/[/\\]/).slice(0, -1).join('/');
+    if (dir) {
+      const fullDir = join(cwd, dir);
+      if (!existsSync(fullDir)) {
+        mkdirSync(fullDir, { recursive: true });
+      }
+    }
+  }
+}
+
 function encodePowerShellCommand(cmd: string): string {
   const utf16le = Buffer.from(cmd, 'utf16le');
   return utf16le.toString('base64');
@@ -57,6 +72,9 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
     const theme = getTheme();
     return { stdout: '', stderr: theme.error(`Blocked by sanitizer`), exitCode: 1, truncated: false };
   }
+
+  // Auto-create directory for file write commands
+  ensureDirectoryExists(cmd, process.cwd());
 
   if (!existsSync(CACHE_DIR)) {
     mkdirSync(CACHE_DIR, { recursive: true });
