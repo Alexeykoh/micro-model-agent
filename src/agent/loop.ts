@@ -15,6 +15,7 @@ import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } fro
 import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../tools/todo.js';
 import { askQuestion, parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
+import { getTheme } from '../styling/index.js';
 
 const TOOL_FORMAT = `Available tools:
 
@@ -148,86 +149,29 @@ You help with software engineering tasks in the project directory.`;
 }
 
 function extractToolCallJson(response: string): string | null {
-  // Stage 1: Find <tool_call> block
-  let text = response;
-  const tcStart = text.indexOf('<tool_call>');
-  const tcEnd = text.indexOf('</tool_call>');
-  if (tcStart !== -1) {
-    if (tcEnd !== -1) {
-      text = text.slice(tcStart + '<tool_call>'.length, tcEnd);
-    } else {
-      text = text.slice(tcStart + '<tool_call>'.length);
-    }
-  }
+  const startIdx = response.indexOf('<tool_call>');
+  if (startIdx === -1) return null;
 
-  // Stage 2: Strip markdown code fences
-  text = text.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
-
-  // Stage 3: Find JSON object with brace matching
-  const jsonStart = text.indexOf('{');
+  const jsonStart = response.indexOf('{', startIdx);
   if (jsonStart === -1) return null;
 
   let depth = 0;
   let inStr = false;
   let esc = false;
 
-  for (let i = jsonStart; i < text.length; i++) {
-    const ch = text[i];
+  for (let i = jsonStart; i < response.length; i++) {
+    const ch = response[i];
     if (esc) { esc = false; continue; }
     if (ch === '\\' && inStr) { esc = true; continue; }
     if (ch === '"') { inStr = !inStr; continue; }
     if (inStr) continue;
     if (ch === '{') depth++;
     if (ch === '}') depth--;
-    if (depth === 0) return text.slice(jsonStart, i + 1);
-  }
-
-  // Stage 4: If no closing brace, take everything from { to end (truncated JSON)
-  if (depth > 0 && jsonStart < text.length) {
-    return text.slice(jsonStart);
+    if (depth === 0) return response.slice(jsonStart, i + 1);
   }
 
   return null;
 }
-
-function extractToolCallFallback(response: string): { name: string; cmd: string } | null {
-  // Fallback: regex extraction for "name":"bash","arguments":{"cmd":"..."}
-  const patterns = [
-    /"name"\s*:\s*"bash"\s*,\s*"arguments"\s*:\s*\{\s*"cmd"\s*:\s*"((?:[^"\\]|\\.)*)"/,
-    /"cmd"\s*:\s*"((?:[^"\\]|\\.)*)"/,
-    /name['"]\s*:\s*['"]bash['"]\s*,.*?cmd['"]\s*:\s*['"]((?:[^'\\]|\\.)*)['"]/,
-  ];
-
-  for (const re of patterns) {
-    const m = response.match(re);
-    if (m) {
-      let cmd = m[1];
-      // Unescape
-      cmd = cmd.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      return { name: 'bash', cmd };
-    }
-  }
-  return null;
-}
-
-function validateToolCall(parsed: any): { valid: boolean; cmd?: string; error?: string } {
-  if (!parsed || typeof parsed !== 'object') {
-    return { valid: false, error: 'Not an object' };
-  }
-  if (parsed.name !== 'bash') {
-    return { valid: false, error: `Unknown tool: ${parsed.name}` };
-  }
-  if (!parsed.arguments || typeof parsed.arguments !== 'object') {
-    return { valid: false, error: 'Missing arguments' };
-  }
-  const cmd = String(parsed.arguments.cmd ?? '').trim();
-  if (!cmd) {
-    return { valid: false, error: 'Empty command' };
-  }
-  return { valid: true, cmd };
-}
-
-
 
 const CLEAR_LINE = '\r\x1b[K';
 
@@ -236,12 +180,13 @@ async function doChat(
   messages: ChatMessage[],
   retries = 1,
 ): Promise<{ response: string; genTimeMs: number }> {
+  const theme = getTheme();
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
     const fullText: string[] = [];
     let started = false;
 
-    process.stdout.write('  ⏳');
+    process.stdout.write(theme.spinner());
 
     try {
       let buf = '';
@@ -285,8 +230,8 @@ async function doChat(
         }
       }
     } catch (e: any) {
-      console.error(`\n[LLM] ${e.message}`);
-      console.log('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
+      console.error(theme.error(`\n[LLM] ${e.message}`));
+      console.log(theme.warning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)'));
       return { response: '', genTimeMs: 0 };
     }
 
@@ -295,12 +240,12 @@ async function doChat(
     console.log();
 
     if (response.trim()) {
-      console.log(`  ⏱ ${(genTimeMs / 1000).toFixed(1)}s`);
+      console.log(theme.timingLine((genTimeMs / 1000).toFixed(1)));
       return { response, genTimeMs };
     }
 
     if (attempt < retries) {
-      console.log(`  [retry ${attempt + 1}/${retries}]`);
+      console.log(theme.bracketTag('retry', `${attempt + 1}/${retries}`));
     }
   }
 
@@ -319,17 +264,18 @@ export async function runAgentLoop(
   contextManager?: ContextManager,
   previousMessages?: ChatMessage[],
 ): Promise<AgentLoopResult> {
+  const theme = getTheme();
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
 
   const skills = loadSkillsFromRefs(prompt, process.cwd());
   if (skills.length > 0) {
-    console.log(`  Loaded ${skills.length} skill(s): ${skills.map(s => s.name).join(', ')} (~${skills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`);
+    console.log(theme.info(`  Loaded ${skills.length} skill(s): ${skills.map(s => s.name).join(', ')} (~${skills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`));
   }
 
   if (files.length > 0) {
     const totalTokens = files.reduce((sum, f) => sum + f.tokens, 0);
     const totalLines = files.reduce((sum, f) => sum + f.content.split('\n').length, 0);
-    console.log(`  Loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`);
+    console.log(theme.info(`  Loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`));
     console.log();
   }
 
@@ -349,7 +295,7 @@ export async function runAgentLoop(
     if (ctx.needsCompact && messages.length > 6) {
       const before = messages.length;
       messages.splice(0, messages.length, ...ctx.compact(messages));
-      console.log(`  [compact] ${before} → ${messages.length} messages`);
+      console.log(theme.bracketTag('compact', `${before} → ${messages.length} messages`));
       await ctx.updateTokens(messages);
     }
 
@@ -359,187 +305,160 @@ export async function runAgentLoop(
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'tool') {
         messages.push({ role: 'user', content: 'Теперь ответь пользователю на основе результата выше. Не вызывай инструменты — просто напиши ответ.' });
-        console.log('  [empty response after tool, retrying with prompt]');
+        console.log(theme.dim('  [empty response after tool, retrying with prompt]'));
         continue;
       }
-      console.log('[model returned empty response]');
+      console.log(theme.error('[model returned empty response]'));
       return { messages };
     }
 
     messages.push({ role: 'assistant', content: response });
 
-    let parsed: any = null;
-    let cmd = '';
-
-    // Stage 1: Try standard JSON extraction
     const jsonRaw = extractToolCallJson(response);
-    if (jsonRaw) {
-      try {
-        parsed = JSON.parse(jsonrepair(jsonRaw));
-      } catch {
-        // jsonrepair failed, try raw parse
-        try { parsed = JSON.parse(jsonRaw); } catch { /* continue to fallback */ }
-      }
+    if (!jsonRaw) {
+      return { messages };
     }
 
-    // Stage 2: Validate parsed structure
-    if (parsed) {
-      const v = validateToolCall(parsed);
-      if (v.valid) {
-        cmd = v.cmd!;
-      } else {
-        console.log(`  [invalid tool call] ${v.error}`);
-        // Add error feedback to messages and retry
-        messages.push({ role: 'tool', content: `Error: Invalid tool call format. ${v.error}. Use exactly: {"name":"bash","arguments":{"cmd":"your command"}}`, tool_call_id: `err-${step}` });
-        continue;
-      }
-    }
-
-    // Stage 3: Fallback regex extraction
-    if (!cmd) {
-      const fallback = extractToolCallFallback(response);
-      if (fallback) {
-        cmd = fallback.cmd;
-        console.log('  [fallback regex extracted command]');
-      } else {
-        const preview = response.trim().slice(0, 300);
-        console.log(`  [no tool call] response starts with: ${JSON.stringify(preview)}`);
+    try {
+      const parsed = JSON.parse(jsonrepair(jsonRaw));
+      if (parsed.name !== 'bash') {
+        console.log(theme.error(`  [unknown tool: ${parsed.name}]`));
         return { messages };
       }
-    }
 
-    const cmdPreview = cmd.length > 200 ? cmd.slice(0, 200) + '...' : cmd;
-    const toolId = `call-${Date.now()}-${step}`;
-
-    console.log();
-    console.log(`  ── tool: ${parsed.name} ──`);
-    console.log(`  ${cmdPreview}`);
-
-    const preHook = runPreToolUseHooks(process.cwd(), parsed.name, cmd);
-    if (!preHook.continue) {
-      console.log(`  [hook blocked] ${preHook.message}`);
-      messages.push({ role: 'tool', content: `Hook blocked: ${preHook.message}`, tool_call_id: toolId });
-      continue;
-    }
-
-    // MCP command handling
-    let toolOutput = '';
-    let toolExitCode = 0;
-    const toolStart = performance.now();
-
-    if (cmd.startsWith('plan ')) {
-      // Plan tool
-      const planArgs = cmd.slice(5).trim();
-      const { action, params } = parsePlanCommand(planArgs);
-      console.log(`  [plan] ${action}`);
-      switch (action) {
-        case 'create':
-          toolOutput = createPlan(params[0] || 'Untitled Plan', params.slice(1));
-          break;
-        case 'done':
-          toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'done');
-          break;
-        case 'progress':
-          toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'in_progress');
-          break;
-        case 'show':
-          toolOutput = showPlan();
-          break;
-        case 'clear':
-          toolOutput = clearPlan();
-          break;
-        default:
-          toolOutput = 'Unknown plan action. Use: create, done, progress, show, clear';
-          toolExitCode = 1;
+      const cmd = String(parsed.arguments?.cmd ?? '').trim();
+      if (!cmd) {
+        console.log(theme.error('  [empty command]'));
+        return { messages };
       }
-    } else if (cmd.startsWith('todo ')) {
-      // Todo tool
-      const todoArgs = cmd.slice(5).trim();
-    const { action, params } = parseTodoCommand(todoArgs);
-    console.log(`  [todo] ${action}`);
-    switch (action) {
-      case 'add':
-        toolOutput = addTodo(params);
-        break;
-      case 'done':
-        toolOutput = doneTodo(params);
-        break;
-      case 'remove':
-      case 'rm':
-        toolOutput = removeTodo(params);
-        break;
-      case 'list':
-      case 'ls':
-        toolOutput = listTodos();
-        break;
-      default:
-        toolOutput = 'Unknown todo action. Use: add, done, remove, list';
-        toolExitCode = 1;
-    }
-  } else if (cmd.startsWith('question ')) {
-    // Question tool - pause and ask user
-    const qArgs = cmd.slice(9).trim();
-    const { question, choices } = parseQuestionCommand(qArgs);
-    console.log(`  [question] ${question}`);
-    // Add the tool call to messages
-    messages.push({
-      role: 'tool',
-      content: `Question asked: ${question}`,
-      tool_call_id: toolId,
-    });
-    // Return with question pending
-    return {
-      messages,
-      questionPending: { question, choices: choices.length > 0 ? choices : undefined },
-    };
-  } else if (cmd.startsWith('approve ')) {
-    // Approve tool - pause and ask for confirmation
-    const approveArgs = cmd.slice(8).trim();
-    const action = parseApproveCommand(approveArgs);
-    console.log(`  [approve] ${action}`);
-    // Add the tool call to messages
-    messages.push({
-      role: 'tool',
-      content: `Approval requested: ${action}`,
-      tool_call_id: toolId,
-    });
-    // Return with question pending (approve is a yes/no question)
-    return {
-      messages,
-      questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
-    };
-  } else if (isMCPCommand(cmd)) {
-    const mcpCmd = parseMCPCommand(cmd);
-    if (mcpCmd) {
-      console.log(`  [mcp] ${mcpCmd.server}/${mcpCmd.tool}`);
-      toolOutput = callMCPTool(process.cwd(), mcpCmd.server, mcpCmd.tool, mcpCmd.args);
-    } else {
-      toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
-      toolExitCode = 1;
-    }
-  } else {
-    const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 120 } });
-    toolOutput = result.stdout || result.stderr || '(no output)';
-    toolExitCode = result.exitCode;
-  }
 
-  const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
-  console.log(`  ⏱ ${toolTime}s · exit ${toolExitCode}`);
-  if (toolExitCode !== 0) {
-    const errText = toolOutput;
-    for (const line of errText.split('\n').slice(0, 5)) {
-      console.log(`  ${line}`);
+      const cmdPreview = cmd.length > 200 ? cmd.slice(0, 200) + '...' : cmd;
+      const toolId = `call-${Date.now()}-${step}`;
+
+      console.log();
+      console.log(theme.toolHeader(parsed.name));
+      console.log(`  ${theme.dim(cmdPreview)}`);
+
+      const preHook = runPreToolUseHooks(process.cwd(), parsed.name, cmd);
+      if (!preHook.continue) {
+        console.log(theme.bracketTag('hook blocked', preHook.message || ''));
+        messages.push({ role: 'tool', content: `Hook blocked: ${preHook.message || ''}`, tool_call_id: toolId });
+        continue;
+      }
+
+      let toolOutput = '';
+      let toolExitCode = 0;
+      const toolStart = performance.now();
+
+      if (cmd.startsWith('plan ')) {
+        const planArgs = cmd.slice(5).trim();
+        const { action, params } = parsePlanCommand(planArgs);
+        console.log(theme.bracketTag('plan', action));
+        switch (action) {
+          case 'create':
+            toolOutput = createPlan(params[0] || 'Untitled Plan', params.slice(1));
+            break;
+          case 'done':
+            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'done');
+            break;
+          case 'progress':
+            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'in_progress');
+            break;
+          case 'show':
+            toolOutput = showPlan();
+            break;
+          case 'clear':
+            toolOutput = clearPlan();
+            break;
+          default:
+            toolOutput = 'Unknown plan action. Use: create, done, progress, show, clear';
+            toolExitCode = 1;
+        }
+      } else if (cmd.startsWith('todo ')) {
+        const todoArgs = cmd.slice(5).trim();
+        const { action, params } = parseTodoCommand(todoArgs);
+        console.log(theme.bracketTag('todo', action));
+        switch (action) {
+          case 'add':
+            toolOutput = addTodo(params);
+            break;
+          case 'done':
+            toolOutput = doneTodo(params);
+            break;
+          case 'remove':
+          case 'rm':
+            toolOutput = removeTodo(params);
+            break;
+          case 'list':
+          case 'ls':
+            toolOutput = listTodos();
+            break;
+          default:
+            toolOutput = 'Unknown todo action. Use: add, done, remove, list';
+            toolExitCode = 1;
+        }
+      } else if (cmd.startsWith('question ')) {
+        const qArgs = cmd.slice(9).trim();
+        const { question, choices } = parseQuestionCommand(qArgs);
+        console.log(theme.bracketTag('question', question));
+        messages.push({
+          role: 'tool',
+          content: `Question asked: ${question}`,
+          tool_call_id: toolId,
+        });
+        return {
+          messages,
+          questionPending: { question, choices: choices.length > 0 ? choices : undefined },
+        };
+      } else if (cmd.startsWith('approve ')) {
+        const approveArgs = cmd.slice(8).trim();
+        const action = parseApproveCommand(approveArgs);
+        console.log(theme.bracketTag('approve', action));
+        messages.push({
+          role: 'tool',
+          content: `Approval requested: ${action}`,
+          tool_call_id: toolId,
+        });
+        return {
+          messages,
+          questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
+        };
+      } else if (isMCPCommand(cmd)) {
+        const mcpCmd = parseMCPCommand(cmd);
+        if (mcpCmd) {
+          console.log(theme.bracketTag('mcp', `${mcpCmd.server}/${mcpCmd.tool}`));
+          toolOutput = callMCPTool(process.cwd(), mcpCmd.server, mcpCmd.tool, mcpCmd.args);
+        } else {
+          toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
+          toolExitCode = 1;
+        }
+      } else {
+        const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 120 } });
+        toolOutput = result.stdout || result.stderr || '(no output)';
+        toolExitCode = result.exitCode;
+      }
+
+      const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
+      console.log(theme.timingLine(toolTime, toolExitCode));
+      if (toolExitCode !== 0) {
+        const errText = toolOutput;
+        for (const line of errText.split('\n').slice(0, 5)) {
+          console.log(`  ${theme.error(line)}`);
+        }
+        autoLearnFromError(cmd, toolExitCode !== 0 ? toolOutput : '', '');
+      }
+
+      runPostToolUseHooks(process.cwd(), parsed.name, cmd, toolOutput, toolExitCode);
+
+      messages.push({
+        role: 'tool',
+        content: toolOutput.slice(0, 4000),
+        tool_call_id: toolId,
+      });
+    } catch (e: any) {
+      console.log(theme.error(`  [parse error] ${e.message}`));
+      return { messages };
     }
-    autoLearnFromError(cmd, toolExitCode !== 0 ? toolOutput : '', '');
-  }
-
-  runPostToolUseHooks(process.cwd(), parsed.name, cmd, toolOutput, toolExitCode);
-
-  messages.push({
-    role: 'tool',
-    content: toolOutput.slice(0, 4000),
-    tool_call_id: toolId,
-  });
   }
   return { messages };
 }
