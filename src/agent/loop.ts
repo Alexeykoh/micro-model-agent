@@ -128,47 +128,61 @@ You help with software engineering tasks in the project directory.`;
   return [header, platformBlock, sysInfo, memory, projectMap, agentsBlock].filter(Boolean).join('\n');
 }
 
-function extractToolCallJson(response: string): string | null {
-  // Stage 1: Find <tool_call> block
+function extractAllToolCalls(response: string): string[] {
+  const results: string[] = [];
   let text = response;
-  const tcStart = text.indexOf('<tool_call>');
-  const tcEnd = text.indexOf('</tool_call>');
-  if (tcStart !== -1) {
+
+  while (true) {
+    const tcStart = text.indexOf('<tool_call>');
+    if (tcStart === -1) break;
+
+    const tcEnd = text.indexOf('</tool_call>', tcStart);
+    let block: string;
     if (tcEnd !== -1) {
-      text = text.slice(tcStart + '<tool_call>'.length, tcEnd);
+      block = text.slice(tcStart + '<tool_call>'.length, tcEnd);
+      text = text.slice(tcEnd + '</tool_call>'.length);
     } else {
-      text = text.slice(tcStart + '<tool_call>'.length);
+      block = text.slice(tcStart + '<tool_call>'.length);
+      text = '';
+    }
+
+    // Strip markdown code fences
+    block = block.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
+
+    // Find JSON object
+    const jsonStart = block.indexOf('{');
+    if (jsonStart === -1) continue;
+
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+
+    for (let i = jsonStart; i < block.length; i++) {
+      const ch = block[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\' && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      if (ch === '}') depth--;
+      if (depth === 0) {
+        results.push(block.slice(jsonStart, i + 1));
+        break;
+      }
+    }
+
+    // If no closing brace, take everything
+    if (depth > 0 && jsonStart < block.length) {
+      results.push(block.slice(jsonStart));
     }
   }
 
-  // Stage 2: Strip markdown code fences
-  text = text.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
+  return results;
+}
 
-  // Stage 3: Find JSON object with brace matching
-  const jsonStart = text.indexOf('{');
-  if (jsonStart === -1) return null;
-
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-
-  for (let i = jsonStart; i < text.length; i++) {
-    const ch = text[i];
-    if (esc) { esc = false; continue; }
-    if (ch === '\\' && inStr) { esc = true; continue; }
-    if (ch === '"') { inStr = !inStr; continue; }
-    if (inStr) continue;
-    if (ch === '{') depth++;
-    if (ch === '}') depth--;
-    if (depth === 0) return text.slice(jsonStart, i + 1);
-  }
-
-  // Stage 4: If no closing brace, take everything from { to end (truncated JSON)
-  if (depth > 0 && jsonStart < text.length) {
-    return text.slice(jsonStart);
-  }
-
-  return null;
+function extractToolCallJson(response: string): string | null {
+  const calls = extractAllToolCalls(response);
+  return calls.length > 0 ? calls[0] : null;
 }
 
 function extractToolCallFallback(response: string): { name: string; cmd: string } | null {
@@ -349,47 +363,47 @@ export async function runAgentLoop(
 
     messages.push({ role: 'assistant', content: response });
 
-    let parsed: any = null;
-    let cmd = '';
+    // Extract ALL tool calls from response
+    const allJsonRaw = extractAllToolCalls(response);
+    const allFallbacks: { name: string; cmd: string }[] = [];
 
-    // Stage 1: Try standard JSON extraction
-    const jsonRaw = extractToolCallJson(response);
-    if (jsonRaw) {
+    // Try to parse each tool call
+    const validCalls: { parsed: any; cmd: string }[] = [];
+    for (const jsonRaw of allJsonRaw) {
+      let p: any = null;
       try {
-        parsed = JSON.parse(jsonrepair(jsonRaw));
+        p = JSON.parse(jsonrepair(jsonRaw));
       } catch {
-        // jsonrepair failed, try raw parse
-        try { parsed = JSON.parse(jsonRaw); } catch { /* continue to fallback */ }
+        try { p = JSON.parse(jsonRaw); } catch { /* continue */ }
+      }
+
+      if (p) {
+        const v = validateToolCall(p);
+        if (v.valid) {
+          validCalls.push({ parsed: p, cmd: v.cmd! });
+        }
       }
     }
 
-    // Stage 2: Validate parsed structure
-    if (parsed) {
-      const v = validateToolCall(parsed);
-      if (v.valid) {
-        cmd = v.cmd!;
-      } else {
-        console.log(theme.error(`  [invalid tool call] ${v.error}`));
-        // Add error feedback to messages and retry
-        messages.push({ role: 'tool', content: `Error: Invalid tool call format. ${v.error}. Use exactly: {"name":"bash","arguments":{"cmd":"your command"}}`, tool_call_id: `err-${step}` });
-        continue;
-      }
-    }
-
-    // Stage 3: Fallback regex extraction
-    if (!cmd) {
+    // Also try fallback for any remaining
+    if (validCalls.length === 0) {
       const fallback = extractToolCallFallback(response);
       if (fallback) {
-        cmd = fallback.cmd;
-        parsed = { name: 'bash', arguments: { cmd } };
+        validCalls.push({ parsed: { name: 'bash', arguments: { cmd: fallback.cmd } }, cmd: fallback.cmd });
         console.log(theme.bracketTag('fallback', 'regex extracted command'));
-      } else {
-        return { messages };
       }
     }
 
+    // If no valid calls, return
+    if (validCalls.length === 0) {
+      return { messages };
+    }
+
+    // Process each tool call sequentially
+    for (const call of validCalls) {
+      const { parsed, cmd } = call;
       const cmdPreview = cmd.length > 200 ? cmd.slice(0, 200) + '...' : cmd;
-      const toolId = `call-${Date.now()}-${step}`;
+      const toolId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
 
       console.log();
       console.log(theme.toolHeader('bash'));
@@ -524,6 +538,7 @@ export async function runAgentLoop(
         content: toolOutput.slice(0, 4000),
         tool_call_id: toolId,
       });
+    } // end for each tool call
   }
   return { messages };
 }
