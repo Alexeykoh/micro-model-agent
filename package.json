@@ -1,7 +1,7 @@
 {
   "name": "mma",
   "version": "0.1.0",
-  "description": "MiMo Agent — LLM agent harness for small models",
+  "description": "Micro Models Agent (MMA) — LLM agent harness for small models",
   "type": "module",
   "bin": {
     "mma": "./src/index.ts"
@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "commander": "^12.0.0",
-    "js-tiktoken": "^1.0.0"
+    "execa": "^9.6.1",
+    "js-tiktoken": "^1.0.0",
+    "jsonrepair": "^3.15.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

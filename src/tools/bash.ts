@@ -1,4 +1,4 @@
-import { execSync, ExecSyncOptions } from 'node:child_process';
+import { execa, ExecaError } from 'execa';
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -28,6 +28,7 @@ const UNIX_TO_PWSH: [RegExp, string][] = [
   [/^wc\s+/, 'Measure-Object -Line '],
   [/^head\s+/, 'Get-Content -TotalCount '],
   [/^tail\s+/, 'Get-Content -Tail '],
+  [/^echo\s+-e\s+/, 'Write-Output '],
   [/^echo\s+/, 'Write-Output '],
   [/^pwd\s*$/, 'Get-Location'],
   [/^which\s+/, 'Get-Command '],
@@ -44,7 +45,12 @@ function translateToPowerShell(cmd: string): string {
   return cmd;
 }
 
-export function executeBash(cmd: string, timeoutSeconds: number = 120): BashResult {
+function encodePowerShellCommand(cmd: string): string {
+  const utf16le = Buffer.from(cmd, 'utf16le');
+  return utf16le.toString('base64');
+}
+
+export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
   cmd = translateToPowerShell(cmd);
   if (!sanitize(cmd).safe) {
     return { stdout: '', stderr: `Blocked by sanitizer`, exitCode: 1, truncated: false };
@@ -57,26 +63,33 @@ export function executeBash(cmd: string, timeoutSeconds: number = 120): BashResu
   const cacheId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const cacheFile = join(CACHE_DIR, `${cacheId}.out`);
 
-  const options: ExecSyncOptions = {
-    timeout: timeoutSeconds * 1000,
-    maxBuffer: 10 * 1024 * 1024,
-    windowsHide: true,
-    shell: 'pwsh -NoProfile',
-    cwd: process.cwd(),
-    env: process.env as Record<string, string>,
-  };
-
   let stdout = '';
   let stderr = '';
   let exitCode = 0;
 
+  const encoded = encodePowerShellCommand(cmd);
+
   try {
-    const output = execSync(cmd, options);
-    stdout = output.toString();
+    const result = await execa('pwsh', ['-NoProfile', '-EncodedCommand', encoded], {
+      timeout: timeoutSeconds * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+      cwd: process.cwd(),
+      env: process.env as Record<string, string>,
+      encoding: 'utf8',
+    });
+    stdout = result.stdout;
+    stderr = result.stderr;
+    exitCode = result.exitCode ?? 0;
   } catch (e: any) {
-    if (e.stdout) stdout = e.stdout.toString();
-    if (e.stderr) stderr = e.stderr.toString();
-    exitCode = e.status ?? 1;
+    if (e instanceof ExecaError) {
+      stdout = e.stdout ?? '';
+      stderr = e.stderr ?? '';
+      exitCode = e.exitCode ?? 1;
+    } else {
+      stderr = String(e);
+      exitCode = 1;
+    }
   }
 
   writeFileSync(cacheFile, stdout, 'utf-8');

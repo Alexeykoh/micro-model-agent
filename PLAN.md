@@ -803,8 +803,9 @@ MMA> provider use ollama
 | **P7** | Piped mode (`cat file | MMA "review"`) | Интеграция в пайплайны | M1 |
 | **P8** | Advanced context (ACE, importance scoring, VISTA dashboard) | Оптимальное использование контекста | M4 |
 | **P9** | Полировка (ошибки, краевые случаи, документация, тесты) | Релиз | все |
+| **P10** | Сессии (сохранение/восстановление диалогов) | Как в Claude Code / Cursor — `/sessions`, `/resume`, auto-save | M2, M4 |
 
-**Post-MVP = P1-P9.**
+**Post-MVP = P1-P10.**
 
 ---
 
@@ -829,7 +830,69 @@ M0 → M1 → M2 ─────────────────────
 
 M4 ──→ P8 (advanced context)
 все ──→ P9 (polish)
+P10 (sessions) ──→ M2, M4
 ```
+
+---
+
+### P10. Сессии (сохранение/восстановление диалогов)
+
+Как в Claude Code / Cursor / Aider — полная поддержка сессий.
+
+**Фичи:**
+
+| Команда | Описание |
+|---------|----------|
+| `/sessions` | Список сохранённых сессий (дата, превью, размер) |
+| `/resume <id>` | Восстановить сессию по ID |
+| `/save [name]` | Сохранить текущую сессию с именем |
+| `/clear` | Очистить контекст (новая сессия без сохранения) |
+| `/new` | То же что `/clear` (алиас) |
+
+**Автоматическое сохранение:**
+- При каждом `/exit` или SIGINT → авто-сессия `auto-<timestamp>`
+- При превышении лимита токенов → авто-сессия перед compact
+- При crash → сохранение последнего состояния
+
+**Хранилище:**
+```
+.mma/
+├── sessions/
+│   ├── auto-2026-07-16T14-30.json    # Авто-сессия
+│   ├── my-feature.json                # Именованная сессия
+│   └── index.json                     # Индекс сессий
+```
+
+**Формат сессии (JSON):**
+```json
+{
+  "id": "ses_abc123",
+  "name": "my-feature",
+  "created": "2026-07-16T14:30:00Z",
+  "provider": "lmstudio/qwen3.5-9b",
+  "messages": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." },
+    { "role": "tool", "content": "..." }
+  ],
+  "context": {
+    "totalTokens": 12400,
+    "compactCount": 2
+  },
+  "cwd": "E:\\projects\\micro-models-agent"
+}
+```
+
+**Восстановление сессии:**
+- `/resume auto-2026-07-16T14-30` → загружает messages, provider, cwd
+- Контекст восстанавливается из messages
+- Память проекта загружается заново
+- Провайдер и модель берутся из сессии (или текущие, если не совпадают)
+
+**Лимиты:**
+- Максимум 50 сессий (старые авто-сессии удаляются)
+- Максимум размера сессии: 10MB
+- Хранение: `.mma/sessions/` (gitignore)
 
 ---
 
@@ -1240,7 +1303,7 @@ MMA
 MMA --model qwen3.5:9b
 ```
 ```
-MiMo Agent v0.1 — qwen3.5:9b (Ollama)
+Micro Models Agent (MMA) v0.1 — qwen3.5:9b (Ollama)
 Context: 32K tokens | Model: qwen3.5:9b
 
 MMA> добавь тесты для auth модуля
@@ -1455,7 +1518,7 @@ $ MMA "создай сервер"
 ```bash
 $ MMA --verbose
 
-MiMo Agent v0.1 — qwen3.5:9b (Ollama)
+Micro Models Agent (MMA) v0.1 — qwen3.5:9b (Ollama)
 Context: 32K | Tokens: 4,200 / 32,768 (13%)
 
 MMA> проанализируй проект и предложи рефакторинг

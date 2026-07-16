@@ -7,7 +7,10 @@ import { executeBash } from './tools/bash.js';
 import type { LLMProvider } from './llm/provider.js';
 import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
-import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir } from './agent/memory.js';
+import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, removeMemoryEntry, exportMemory } from './agent/memory.js';
+import { listInstalledSkills } from './skills/loader.js';
+import { listSessions, loadSession, createNamedSession, formatSessionList } from './session/store.js';
+import { rebuildCodeIndex, rebuildProjectMap } from './indexer/cache.js';
 
 function slashRead(path: string): void {
   try {
@@ -29,7 +32,9 @@ function slashRead(path: string): void {
 
 function slashFind(pattern: string): void {
   try {
-    const results = globSync(pattern) as string[];
+    const IGNORE = ['node_modules', '.git', 'dist', '.mma', 'build', '__pycache__'];
+    const fixedPattern = pattern.includes('/') || pattern.includes('\\') ? pattern : `**/${pattern}`;
+    const results = (globSync(fixedPattern) as string[]).filter(f => !f.split(/[/\\]/).some(p => IGNORE.includes(p)));
     if (results.length === 0) {
       console.log('  No matches');
       return;
@@ -74,10 +79,61 @@ function slashWrite(path: string, content: string): void {
   }
 }
 
-function slashBash(cmd: string): void {
-  const result = executeBash(cmd);
+function slashEdit(args: string): void {
+  const parts = args.split(/\s+/);
+  if (parts.length < 3) {
+    console.log('  Usage: /edit <file> <line> <new content>');
+    console.log('  Example: /edit src/index.ts 5 const x = 1;');
+    return;
+  }
+  const [filePath, lineStr, ...rest] = parts;
+  const lineNum = parseInt(lineStr, 10);
+  if (isNaN(lineNum) || lineNum < 1) {
+    console.log('  Line number must be a positive integer');
+    return;
+  }
+  const newContent = rest.join(' ');
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    if (lineNum > lines.length) {
+      console.log(`  File has only ${lines.length} lines`);
+      return;
+    }
+    lines[lineNum - 1] = newContent;
+    writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    console.log(`  ✓ Line ${lineNum} updated in ${filePath}`);
+  } catch (e: any) {
+    console.error(`  Error: ${e.message}`);
+  }
+}
+
+async function slashBash(cmd: string): Promise<void> {
+  const result = await executeBash(cmd);
   if (result.stdout) console.log(result.stdout);
   if (result.stderr) console.error(result.stderr);
+}
+
+function slashSkill(args: string): void {
+  const subcmd = args.trim() || 'list';
+  switch (subcmd) {
+    case 'list': {
+      const skills = listInstalledSkills();
+      if (skills.length === 0) {
+        console.log('  No skills installed.');
+        console.log('  Skills are loaded from: ~/.mma/skills/, ~/.claude/skills/, .claude/skills/, .agents/skills/');
+        console.log('  Reference skills in prompts with @skill-name');
+      } else {
+        console.log(`  Installed skills (${skills.length}):`);
+        for (const s of skills) {
+          console.log(`    @${s}`);
+        }
+      }
+      break;
+    }
+    default:
+      console.log('  Usage: /skill [list]');
+  }
 }
 
 function slashMemory(args: string): void {
@@ -137,9 +193,112 @@ function slashMemory(args: string): void {
       }
       break;
     }
-    default: {
-      console.log('  Usage: /memory [show <type>|add <type> <text>|search <query>]');
+    case 'remove': {
+      if (!type) {
+        console.log('  Usage: /memory remove <type> <line-number>');
+        console.log('  First use /memory show <type> to see entries with line numbers.');
+        return;
+      }
+      const lineNum = parseInt(text, 10);
+      if (isNaN(lineNum) || lineNum < 1) {
+        console.log('  Line number must be a positive integer');
+        return;
+      }
+      const removed = removeMemoryEntry(type, lineNum);
+      if (removed) {
+        console.log(`  ✓ Entry removed from ${type}.md`);
+      } else {
+        console.log('  Could not remove entry (line number out of range?)');
+      }
+      break;
     }
+    case 'export': {
+      const exported = exportMemory();
+      if (exported) {
+        console.log(`  ✓ Memory exported to ${exported}`);
+      } else {
+        console.log('  No memory to export');
+      }
+      break;
+    }
+    default: {
+      console.log('  Usage: /memory [show <type>|add <type> <text>|search <query>|remove <type> <line>|export]');
+    }
+  }
+}
+
+function slashSessions(): void {
+  const sessions = listSessions();
+  console.log(formatSessionList(sessions));
+}
+
+async function slashResume(args: string, provider: LLMProvider, registry: ToolRegistry): Promise<void> {
+  if (!args.trim()) {
+    console.log('  Usage: /resume <session-id>');
+    console.log('  Use /sessions to see available sessions.');
+    return;
+  }
+  const session = loadSession(args.trim());
+  if (!session) {
+    console.log(`  Session "${args.trim()}" not found.`);
+    return;
+  }
+  console.log(`  Resumed session: ${session.id} (${session.messages.length} messages)`);
+  console.log(`  Provider: ${session.provider}`);
+  console.log();
+  // Replay with session context
+  const lastUser = session.messages.filter(m => m.role === 'user').pop();
+  const prevMsgs = session.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant' | 'tool', content: m.content }));
+  if (lastUser) {
+    await runAgentLoop(provider, registry, lastUser.content, undefined, prevMsgs);
+  }
+}
+
+function slashSave(args: string, history: { role: 'user' | 'assistant'; content: string }[], provider: LLMProvider): void {
+  if (history.length === 0) {
+    console.log('  No conversation to save.');
+    return;
+  }
+  const name = args.trim() || '';
+  const providerLabel = `${provider.model}`;
+  const filePath = createNamedSession(name, history, providerLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+  const id = filePath.split(/[/\\]/).pop()?.replace('.json', '') || '';
+  console.log(`  ✓ Session saved: ${id}${name ? ` (${name})` : ''}`);
+}
+
+function slashClear(history: { role: string; content: string }[]): void {
+  history.length = 0;
+  console.log('  Context cleared. Starting new session.');
+}
+
+function slashIndex(args: string): void {
+  const subcmd = args.trim() || 'status';
+  switch (subcmd) {
+    case 'rebuild': {
+      console.log('  Rebuilding code index...');
+      const { formatted } = rebuildCodeIndex(process.cwd());
+      console.log(formatted);
+      console.log('  ✓ Code index rebuilt');
+      break;
+    }
+    case 'map': {
+      console.log('  Rebuilding project map...');
+      const { formatted } = rebuildProjectMap(process.cwd());
+      console.log(formatted);
+      console.log('  ✓ Project map rebuilt');
+      break;
+    }
+    case 'status': {
+      const { getOrBuildCodeIndex, getOrBuildProjectMap } = require('./indexer/cache.js');
+      const { formatted: mapFormatted } = getOrBuildProjectMap(process.cwd());
+      const { formatted: idxFormatted } = getOrBuildCodeIndex(process.cwd());
+      console.log(mapFormatted.split('\n').slice(0, 3).join('\n'));
+      console.log();
+      console.log(idxFormatted.split('\n').slice(0, 3).join('\n'));
+      break;
+    }
+    default:
+      console.log('  Usage: /index [status|rebuild|map]');
   }
 }
 
@@ -157,6 +316,7 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
 
   let currentWritePath: string | null = null;
   let writeBuffer: string[] = [];
+  let conversationHistory: { role: 'user' | 'assistant'; content: string }[] = [];
   let closed = false;
   rl.on('close', () => { closed = true; });
 
@@ -196,6 +356,7 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
           console.log(`
   /bash <cmd>       — run shell command
   /read <file>      — display file with line numbers
+  /edit <file> <n>  — replace line N in file with rest of args
   /write <file>     — write file (end with EOF on its own line)
   /find <pattern>   — find files by glob pattern
   /search <pattern> — search file contents
@@ -204,11 +365,19 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
   /memory show <t>  — show memory type content
   /memory add <t>   — add memory entry
   /memory search <q> — search memory
+  /memory remove <t> <n> — remove entry N from type
+  /memory export    — export memory to .mma/memory-export.md
+  /skill            — list installed skills
+  /sessions         — list saved sessions
+  /resume <id>      — resume a session
+  /save [name]      — save current session
+  /clear            — clear context (new session)
+  /index [cmd]      — index status/rebuild/map
   /exit             — exit MMA
           `);
           break;
         case 'bash':
-          slashBash(args);
+          await slashBash(args);
           break;
         case 'read':
           slashRead(args);
@@ -221,6 +390,9 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
             console.log('  Type your content. End with EOF on its own line:');
           }
           break;
+        case 'edit':
+          slashEdit(args);
+          break;
         case 'find':
           slashFind(args);
           break;
@@ -228,10 +400,29 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
           slashSearch(args);
           break;
         case 'git':
-          slashBash(`git ${args}`);
+          await slashBash(`git ${args}`);
           break;
         case 'memory':
           slashMemory(args);
+          break;
+        case 'skill':
+          slashSkill(args);
+          break;
+        case 'sessions':
+          slashSessions();
+          break;
+        case 'resume':
+          await slashResume(args, provider, registry);
+          break;
+        case 'save':
+          slashSave(args, conversationHistory, provider);
+          break;
+        case 'clear':
+        case 'new':
+          slashClear(conversationHistory);
+          break;
+        case 'index':
+          slashIndex(args);
           break;
         default:
           console.log(`  Unknown command: /${cmd}. Type /help`);
@@ -239,6 +430,12 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
       continue;
     }
 
-    await runAgentLoop(provider, registry, line);
+    const newMessages = await runAgentLoop(provider, registry, line, undefined, conversationHistory);
+    // Keep system prompt out of history, only store user/assistant/tool
+    for (const msg of newMessages) {
+      if (msg.role !== 'system') {
+        conversationHistory.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+      }
+    }
   }
 }

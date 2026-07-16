@@ -19,7 +19,7 @@ export interface ToolCall {
 export type ToolResult = BashResult;
 
 export class ToolRegistry {
-  execute(toolCall: ToolCall): ToolResult {
+  async execute(toolCall: ToolCall): Promise<ToolResult> {
     if (toolCall.name === 'bash') {
       const cmd = String(toolCall.arguments.cmd ?? '');
       const timeout = Number(toolCall.arguments.timeout ?? 120);
