@@ -9,7 +9,7 @@ import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
 import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, removeMemoryEntry, exportMemory } from './agent/memory.js';
 import { listInstalledSkills } from './skills/loader.js';
-import { listSessions, loadSession, createNamedSession, formatSessionList } from './session/store.js';
+import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from './session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap } from './indexer/cache.js';
 
 function slashRead(path: string): void {
@@ -320,6 +320,16 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
   let closed = false;
   rl.on('close', () => { closed = true; });
 
+  // Auto-save on SIGINT (Ctrl+C)
+  process.on('SIGINT', () => {
+    if (conversationHistory.length > 0) {
+      createAutoSession(conversationHistory, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+      console.log('\n  Session auto-saved.');
+    }
+    rl.close();
+    process.exit(0);
+  });
+
   while (!closed) {
     let line: string;
     try {
@@ -349,6 +359,10 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
       switch (cmd) {
         case 'exit':
         case 'quit':
+          if (conversationHistory.length > 0) {
+            createAutoSession(conversationHistory, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+            console.log('  Session auto-saved.');
+          }
           console.log('Bye!');
           rl.close();
           return;
