@@ -66,13 +66,6 @@ export function loadSkillsFromRefs(text: string, cwd: string): Skill[] {
     if (skill) skills.push(skill);
   }
 
-  // Auto-load project-setup skill for project creation tasks
-  const projectKeywords = /create|создай|REST API|проект|project|init|setup/i;
-  if (projectKeywords.test(text) && !skills.some(s => s.name === 'project-setup')) {
-    const projectSkill = loadSkill('project-setup', cwd);
-    if (projectSkill) skills.push(projectSkill);
-  }
-
   return skills;
 }
 
