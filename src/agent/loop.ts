@@ -18,47 +18,22 @@ import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { getTheme } from '../styling/index.js';
 
-const TOOL_FORMAT = `Available tools:
+const TOOL_FORMAT = `CRITICAL: There is ONLY ONE tool — bash. ALL commands are called through bash.
 
-1. bash — Execute shell commands. Use for ALL operations: read/write files, git, npm, etc.
-   To call it, output EXACTLY this format (on its own line):
-   <tool_call>{"name":"bash","arguments":{"cmd":"your command here"}}</tool_call>
+To call ANY tool, output EXACTLY this format (on its own line):
 
-2. plan — Manage project plans for complex tasks.
-   To call it, output EXACTLY this format (on its own line):
-   <tool_call>{"name":"bash","arguments":{"cmd":"plan create MyProject Step1 Step2 Step3"}}</tool_call>
-   Commands:
-    plan create <name> <step1> <step2> ... — Create a new plan
-    plan show — Show current plan
-    plan done <stepId> — Mark step as done
-    plan progress <stepId> — Mark step as in progress
-    plan clear — Clear current plan
+<tool_call>{"name":"bash","arguments":{"cmd":"command here"}}</tool_call>
 
-3. todo — Track task progress.
-   To call it, output EXACTLY this format (on its own line):
-   <tool_call>{"name":"bash","arguments":{"cmd":"todo add Create index.ts"}}</tool_call>
-   Commands:
-    todo add <text> — Add a new task
-    todo done <id|text> — Mark task as done
-    todo remove <id|text> — Remove task
-    todo list — Show all tasks with progress
+This includes:
+- File operations: dir, Get-Content, Set-Content
+- Git operations: git status, git add, git commit
+- Package managers: npm install, npm test
+- Plan tool: plan create, plan show, plan done
+- Todo tool: todo add, todo done, todo list
+- Question tool: question What framework? | Express | Fastify
+- Approve tool: approve Delete this file?
 
-4. question — Ask the user a question before proceeding.
-   To call it, output EXACTLY this format (on its own line):
-   <tool_call>{"name":"bash","arguments":{"cmd":"question What framework? | Express | Fastify | Hapi"}}</tool_call>
-   Use when:
-   - You need to clarify requirements before starting
-   - You need to choose between multiple options
-   - You need user input to continue
-
-5. approve — Request confirmation before risky actions.
-   To call it, output EXACTLY this format (on its own line):
-   <tool_call>{"name":"bash","arguments":{"cmd":"approve Delete all files in dist/"}}</tool_call>
-   Use before:
-   - Deleting files or directories
-   - Overwriting existing files
-   - Running destructive commands
-   - Any action that cannot be easily undone`;
+NEVER output tool calls in any other format. ALWAYS use <tool_call>{"name":"bash","arguments":{...}}</tool_call>`;
 
 const RULES_COMMON = `Rules:
 1. Use bash for EVERYTHING — ALWAYS use <tool_call> for file ops, never write content as chat text.
