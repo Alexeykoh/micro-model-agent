@@ -12,7 +12,7 @@ export interface BashResult {
   truncated: boolean;
 }
 
-const MAX_OUTPUT_LENGTH = 2000;
+const MAX_OUTPUT_LENGTH = 8000;
 const CACHE_DIR = join(homedir(), '.mma', 'cache');
 
 const UNIX_TO_PWSH: [RegExp, string | ((match: RegExpMatchArray) => string)][] = [

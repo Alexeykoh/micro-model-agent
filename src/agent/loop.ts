@@ -42,7 +42,11 @@ const RULES_COMMON = `Rules:
    If exit code != 0, DO NOT claim success — tell the user about the error.
    Verify files were created before saying "done".
 4. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\\".
-   If your command contains double quotes, wrap them in escaped form.`;
+   If your command contains double quotes, wrap them in escaped form.
+5. For large files (>200 lines), read in chunks:
+   - First 100 lines: Get-Content file -TotalCount 100
+   - Next 100 lines: Get-Content file | Select-Object -Skip 100 -First 100
+   - Or use: Select-String -Path file -Pattern "search term"`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
