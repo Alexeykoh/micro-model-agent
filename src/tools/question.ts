@@ -1,3 +1,5 @@
+import { getTheme } from '../styling/index.js';
+
 export interface QuestionState {
   active: boolean;
   question: string;
@@ -42,6 +44,21 @@ export function formatQuestion(q: QuestionState): string {
     }
     lines.push('');
     lines.push(`Enter number (1-${q.choices.length}) or custom text:`);
+  }
+
+  return lines.join('\n');
+}
+
+export function formatQuestionColored(q: QuestionState): string {
+  const theme = getTheme();
+  const lines: string[] = [];
+  lines.push(theme.warning(`  ${theme.icon.separator} Question: ${q.question}`));
+
+  if (q.choices && q.choices.length > 0) {
+    lines.push('');
+    for (let i = 0; i < q.choices.length; i++) {
+      lines.push(`    ${theme.highlight(String(i + 1))}. ${q.choices[i]}`);
+    }
   }
 
   return lines.join('\n');

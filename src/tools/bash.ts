@@ -3,6 +3,7 @@ import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { sanitize } from './sanitizer.js';
+import { getTheme } from '../styling/index.js';
 
 export interface BashResult {
   stdout: string;
@@ -53,7 +54,8 @@ function encodePowerShellCommand(cmd: string): string {
 export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
   cmd = translateToPowerShell(cmd);
   if (!sanitize(cmd).safe) {
-    return { stdout: '', stderr: `Blocked by sanitizer`, exitCode: 1, truncated: false };
+    const theme = getTheme();
+    return { stdout: '', stderr: theme.error(`Blocked by sanitizer`), exitCode: 1, truncated: false };
   }
 
   if (!existsSync(CACHE_DIR)) {

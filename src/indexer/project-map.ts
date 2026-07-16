@@ -142,10 +142,13 @@ export function generateProjectMap(cwd: string): ProjectMap {
   };
 }
 
+import { getTheme } from '../styling/index.js';
+
 export function formatProjectMap(map: ProjectMap): string {
+  const theme = getTheme();
   const lines: string[] = [];
-  lines.push(`PROJECT: ${map.projectName}`);
-  lines.push(`Files: ${map.files.length} | Generated: ${map.generatedAt}`);
+  lines.push(theme.heading(`PROJECT: ${map.projectName}`));
+  lines.push(theme.dim(`Files: ${map.files.length} | Generated: ${map.generatedAt}`));
   lines.push('');
 
   let currentDir = '';
@@ -155,13 +158,13 @@ export function formatProjectMap(map: ProjectMap): string {
 
     if (dir !== currentDir) {
       if (currentDir !== '') lines.push('');
-      lines.push(`├── ${dir}/`);
+      lines.push(`${theme.dim(theme.icon.bullet)} ${theme.filePath(dir + '/')}`);
       currentDir = dir;
     }
 
     const name = parts[parts.length - 1];
-    const expStr = file.exports.length > 0 ? `  exports: ${file.exports.join(', ')}` : '';
-    lines.push(`│   ├── ${name}${expStr}`);
+    const expStr = file.exports.length > 0 ? `  ${theme.dim('exports:')} ${file.exports.join(', ')}` : '';
+    lines.push(`${theme.dim(theme.icon.subBullet)} ${name}${expStr}`);
   }
 
   return lines.join('\n');

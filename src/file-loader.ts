@@ -2,6 +2,7 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { globSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { countTokens } from './llm/token-counter.js';
+import { getTheme } from './styling/index.js';
 
 interface LoadedFile {
   path: string;
@@ -127,9 +128,10 @@ export async function parseFileRefs(input: string): Promise<ParseResult> {
   }
 
   if (files.length > 0) {
+    const theme = getTheme();
     const fileList = files.map(f => {
       const lines = f.content.split('\n').length;
-      return `  ✓ ${f.path} (${lines} строк, ~${f.tokens} токенов)`;
+      return theme.successMsg(`${theme.filePath(f.path)} (${lines} строк, ~${f.tokens} токенов)`);
     }).join('\n');
 
     const filesSection = files.map(f =>

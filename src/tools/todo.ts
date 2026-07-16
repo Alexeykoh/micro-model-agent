@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { getTheme } from '../styling/index.js';
 
 const STATE_DIR = join(homedir(), '.mma', 'state');
 const TODO_FILE = join(STATE_DIR, 'todos.json');
@@ -89,6 +90,7 @@ export function listTodos(): string {
 }
 
 function formatTodos(todos: TodoList): string {
+  const theme = getTheme();
   if (todos.items.length === 0) {
     return 'No tasks. Add one with: todo add <text>';
   }
@@ -100,14 +102,14 @@ function formatTodos(todos: TodoList): string {
   const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
   const lines: string[] = [];
-  lines.push(`Tasks: [${doneCount}/${total} ${progress}%]`);
+  lines.push(`${theme.heading(`Tasks:`)} [${doneCount}/${total} ${progress}%]`);
   lines.push('');
 
   for (const item of pending) {
-    lines.push(`  [ ] ${item.id}. ${item.text}`);
+    lines.push(`  ${theme.dim(theme.icon.pending)} ${theme.dim(String(item.id))}. ${item.text}`);
   }
   for (const item of done) {
-    lines.push(`  [✓] ${item.id}. ${item.text}`);
+    lines.push(`  ${theme.stepIcon('done')} ${theme.dim(String(item.id))}. ${theme.dim(item.text)}`);
   }
 
   return lines.join('\n');

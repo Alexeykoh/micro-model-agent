@@ -204,10 +204,13 @@ export function buildCodeIndex(cwd: string): CodeIndex {
   return index;
 }
 
+import { getTheme } from '../styling/index.js';
+
 export function formatCodeIndex(index: CodeIndex): string {
+  const theme = getTheme();
   const lines: string[] = [];
-  lines.push(`CODE INDEX (${index.language})`);
-  lines.push(`Symbols: ${Object.keys(index.symbols).length} | Files: ${Object.keys(index.fileHashes).length}`);
+  lines.push(theme.heading(`CODE INDEX (${index.language})`));
+  lines.push(theme.dim(`Symbols: ${Object.keys(index.symbols).length} | Files: ${Object.keys(index.fileHashes).length}`));
   lines.push('');
 
   const byType: Record<string, [string, SymbolInfo][]> = {};
@@ -218,12 +221,12 @@ export function formatCodeIndex(index: CodeIndex): string {
   }
 
   for (const [type, syms] of Object.entries(byType).sort()) {
-    lines.push(`[${type}]`);
+    lines.push(theme.bracket(type));
     for (const [name, info] of syms.slice(0, 30)) {
-      lines.push(`  ${name} → ${info.file}:${info.line}`);
+      lines.push(`  ${theme.symbolName(name)} ${theme.dim(theme.icon.arrow)} ${theme.filePath(info.file)}:${theme.lineNumbers(String(info.line))}`);
     }
     if (syms.length > 30) {
-      lines.push(`  ... and ${syms.length - 30} more`);
+      lines.push(theme.dim(`  ... and ${syms.length - 30} more`));
     }
   }
 

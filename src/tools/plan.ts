@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { getTheme } from '../styling/index.js';
 
 const PLAN_DIR = join(homedir(), '.mma', 'state');
 const PLAN_FILE = join(PLAN_DIR, 'current-plan.json');
@@ -78,17 +79,18 @@ export function clearPlan(): string {
 }
 
 function formatPlan(plan: Plan): string {
+  const theme = getTheme();
   const done = plan.steps.filter(s => s.status === 'done').length;
   const total = plan.steps.length;
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const lines: string[] = [];
-  lines.push(`Plan: ${plan.name} [${done}/${total} ${progress}%]`);
+  lines.push(`${theme.heading(`Plan: ${plan.name}`)} [${done}/${total} ${progress}%]`);
   lines.push('');
 
   for (const step of plan.steps) {
-    const icon = step.status === 'done' ? '✓' : step.status === 'in_progress' ? '~' : ' ';
-    lines.push(`  [${icon}] ${step.id}. ${step.title}`);
+    const icon = theme.stepIcon(step.status);
+    lines.push(`  ${icon} ${theme.dim(String(step.id))}. ${step.title}`);
   }
 
   return lines.join('\n');

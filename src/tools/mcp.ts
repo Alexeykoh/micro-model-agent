@@ -98,14 +98,17 @@ export function parseMCPCommand(cmd: string): { server: string; tool: string; ar
   return { server, tool, args };
 }
 
+import { getTheme } from '../styling/index.js';
+
 export function formatMCPToolList(servers: MCPServer[]): string {
+  const theme = getTheme();
   if (servers.length === 0) {
     return 'No MCP servers configured.\nAdd servers to .mma/mcp.json or .mmrc "mcp" section.';
   }
 
-  const lines: string[] = ['MCP Servers:'];
+  const lines: string[] = [theme.heading('MCP Servers:')];
   for (const s of servers) {
-    lines.push(`  ${s.name}: ${s.command} ${(s.args || []).join(' ')}`);
+    lines.push(`  ${theme.toolName(s.name)}: ${s.command} ${(s.args || []).join(' ')}`);
   }
   return lines.join('\n');
 }

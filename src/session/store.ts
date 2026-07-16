@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { getTheme } from '../styling/index.js';
 
 const SESSIONS_DIR = join(homedir(), '.mma', 'sessions');
 const INDEX_FILE = join(SESSIONS_DIR, 'index.json');
@@ -62,7 +63,7 @@ export function saveSession(session: Session): string {
   const content = JSON.stringify(session, null, 2);
 
   if (content.length > MAX_SIZE_BYTES) {
-    console.log(`  Warning: session too large (${Math.round(content.length / 1024)}KB), truncating messages`);
+    console.log(getTheme().warning(`  Warning: session too large (${Math.round(content.length / 1024)}KB), truncating messages`));
     session.messages = session.messages.slice(-50);
     return saveSession(session);
   }
@@ -134,14 +135,15 @@ export function createNamedSession(name: string, messages: SessionMessage[], pro
 }
 
 export function formatSessionList(sessions: { id: string; name: string; created: string; size: number }[]): string {
-  if (sessions.length === 0) return '  No saved sessions.';
+  const theme = getTheme();
+  if (sessions.length === 0) return theme.dim('  No saved sessions.');
 
-  const lines: string[] = [`  Saved sessions (${sessions.length}):`];
+  const lines: string[] = [theme.info(`  Saved sessions (${sessions.length}):`)];
   for (const s of sessions) {
     const date = new Date(s.created).toLocaleString('ru-RU');
     const name = s.name || '(auto)';
     const size = `${Math.round(s.size / 1024)}KB`;
-    lines.push(`    ${s.id}  ${name}  ${date}  ${size}`);
+    lines.push(`    ${theme.highlight(s.id)}  ${name}  ${theme.dim(date)}  ${size}`);
   }
   return lines.join('\n');
 }

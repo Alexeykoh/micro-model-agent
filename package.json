@@ -17,7 +17,8 @@
     "commander": "^12.0.0",
     "execa": "^9.6.1",
     "js-tiktoken": "^1.0.0",
-    "jsonrepair": "^3.15.0"
+    "jsonrepair": "^3.15.0",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

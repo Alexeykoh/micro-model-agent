@@ -1,0 +1,42 @@
+{
+  "name": "dark",
+  "colors": {
+    "prompt": "cyan",
+    "success": "green",
+    "error": "red",
+    "warning": "yellow",
+    "info": "cyan",
+    "dim": "dim",
+    "toolName": "magenta",
+    "timing": "yellow",
+    "contextBar": "cyan",
+    "highlight": "bold",
+    "lineNumbers": "dim",
+    "filePath": "cyan",
+    "link": "underline",
+    "heading": "bold",
+    "symbolName": "yellow",
+    "symbolType": "dim",
+    "bracket": "dim"
+  },
+  "icons": {
+    "success": "✓",
+    "failure": "✗",
+    "spinner": "⏳",
+    "inProgress": "~",
+    "pending": " ",
+    "separator": "──",
+    "arrow": "→",
+    "barFill": "█",
+    "barEmpty": "░",
+    "check": "✓",
+    "cross": "✗",
+    "bullet": "├──",
+    "subBullet": "│   ├──",
+    "pipe": "│"
+  },
+  "format": {
+    "indent": "  ",
+    "indentSize": 2
+  }
+}

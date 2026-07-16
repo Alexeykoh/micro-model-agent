@@ -4,16 +4,18 @@ import { OpenAICompat } from './llm/openai-compat.js';
 import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
 import { runRepl } from './repl.js';
+import { getTheme, initTheme, ensureThemeDir } from './styling/index.js';
 
 function createProvider(config: ReturnType<typeof loadConfig>) {
+  const theme = getTheme();
   const providerCfg = config.providers[config.active.provider];
   if (!providerCfg) {
-    console.error(`Provider "${config.active.provider}" not found`);
+    console.error(theme.error(`Provider "${config.active.provider}" not found`));
     process.exit(1);
   }
   const modelCfg = providerCfg.models[config.active.model];
   if (!modelCfg) {
-    console.error(`Model "${config.active.model}" not found for "${config.active.provider}"`);
+    console.error(theme.error(`Model "${config.active.model}" not found for "${config.active.provider}"`));
     process.exit(1);
   }
   return {
@@ -44,9 +46,10 @@ export function createCli() {
     .description('List all providers')
     .action(() => {
       const config = loadConfig();
+      const theme = getTheme();
       for (const [name, p] of Object.entries(config.providers)) {
-        const active = name === config.active.provider ? ' (active)' : '';
-        console.log(`  ${name}  ${p.url}${active}`);
+        const active = name === config.active.provider ? theme.dim(' (active)') : '';
+        console.log(`${theme.indent}${theme.highlight(name)}  ${p.url}${active}`);
       }
     });
 
@@ -56,8 +59,9 @@ export function createCli() {
     .description('Switch active provider')
     .action((name: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       if (!config.providers[name]) {
-        console.error(`Provider "${name}" not found`);
+        console.error(theme.error(`Provider "${name}" not found`));
         process.exit(1);
       }
       config.active.provider = name;
@@ -66,8 +70,8 @@ export function createCli() {
         config.active.model = modelNames[0];
       }
       saveConfig(config);
-      console.log(`  ✓ Provider: ${name} (${config.providers[name].url})`);
-      console.log(`  ✓ Model: ${config.active.model}`);
+      console.log(theme.successMsg(`Provider: ${name} (${config.providers[name].url})`));
+      console.log(theme.successMsg(`Model: ${config.active.model}`));
     });
 
   providerCmd
@@ -77,8 +81,9 @@ export function createCli() {
     .description('Add a new provider')
     .action((name: string, url: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       if (config.providers[name]) {
-        console.error(`Provider "${name}" already exists. Use "provider use" to switch.`);
+        console.error(theme.error(`Provider "${name}" already exists. Use "provider use" to switch.`));
         process.exit(1);
       }
       config.providers[name] = {
@@ -88,8 +93,8 @@ export function createCli() {
         models: {},
       };
       saveConfig(config);
-      console.log(`  ✓ Provider "${name}" added (${url})`);
-      console.log(`  Add models: mma model add ${name} <model-name> <context-window>`);
+      console.log(theme.successMsg(`Provider "${name}" added (${url})`));
+      console.log(`  Add models: ${theme.info(`mma model add ${name} <model-name> <context-window>`)}`);
     });
 
   providerCmd
@@ -98,17 +103,18 @@ export function createCli() {
     .description('Remove a provider')
     .action((name: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       if (!config.providers[name]) {
-        console.error(`Provider "${name}" not found`);
+        console.error(theme.error(`Provider "${name}" not found`));
         process.exit(1);
       }
       if (name === config.active.provider) {
-        console.error(`Cannot remove active provider "${name}". Switch to another first.`);
+        console.error(theme.error(`Cannot remove active provider "${name}". Switch to another first.`));
         process.exit(1);
       }
       delete config.providers[name];
       saveConfig(config);
-      console.log(`  ✓ Provider "${name}" removed`);
+      console.log(theme.successMsg(`Provider "${name}" removed`));
     });
 
   // Model commands
@@ -120,15 +126,16 @@ export function createCli() {
     .option('--provider <provider>', 'provider to list models for')
     .action((options: Record<string, any>) => {
       const config = loadConfig();
+      const theme = getTheme();
       const providerName = options.provider || config.active.provider;
       const p = config.providers[providerName];
       if (!p) {
-        console.error(`Provider "${providerName}" not found`);
+        console.error(theme.error(`Provider "${providerName}" not found`));
         process.exit(1);
       }
       for (const [name, m] of Object.entries(p.models)) {
-        const active = providerName === config.active.provider && name === config.active.model ? ' (active)' : '';
-        console.log(`  ${name}  ${m.contextWindow}K context${active}`);
+        const active = providerName === config.active.provider && name === config.active.model ? theme.dim(' (active)') : '';
+        console.log(`${theme.indent}${theme.highlight(name)}  ${m.contextWindow}K context${active}`);
       }
     });
 
@@ -138,15 +145,16 @@ export function createCli() {
     .description('Switch active model')
     .action((name: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       const p = config.providers[config.active.provider];
       if (!p.models[name]) {
-        console.error(`Model "${name}" not found for provider "${config.active.provider}"`);
+        console.error(theme.error(`Model "${name}" not found for provider "${config.active.provider}"`));
         process.exit(1);
       }
       config.active.model = name;
       saveConfig(config);
-      console.log(`  ✓ Model: ${name}`);
-      console.log(`  ✓ Context: ${p.models[name].contextWindow}K`);
+      console.log(theme.successMsg(`Model: ${name}`));
+      console.log(theme.successMsg(`Context: ${p.models[name].contextWindow}K`));
     });
 
   modelCmd
@@ -157,9 +165,10 @@ export function createCli() {
     .description('Add a model to the active provider')
     .action((name: string, modelId: string, contextWindow: number) => {
       const config = loadConfig();
+      const theme = getTheme();
       const p = config.providers[config.active.provider];
       if (p.models[name]) {
-        console.error(`Model "${name}" already exists in provider "${config.active.provider}"`);
+        console.error(theme.error(`Model "${name}" already exists in provider "${config.active.provider}"`));
         process.exit(1);
       }
       p.models[name] = {
@@ -168,9 +177,9 @@ export function createCli() {
         params: { temperature: 0.7, max_tokens: 4096 },
       };
       saveConfig(config);
-      console.log(`  ✓ Model "${name}" added to ${config.active.provider}`);
-      console.log(`  ID: ${modelId}`);
-      console.log(`  Context: ${contextWindow}K`);
+      console.log(theme.successMsg(`Model "${name}" added to ${config.active.provider}`));
+      console.log(`${theme.indent}${theme.dim('ID:')} ${modelId}`);
+      console.log(`${theme.indent}${theme.dim('Context:')} ${contextWindow}K`);
     });
 
   modelCmd
@@ -179,18 +188,19 @@ export function createCli() {
     .description('Remove a model from the active provider')
     .action((name: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       const p = config.providers[config.active.provider];
       if (!p.models[name]) {
-        console.error(`Model "${name}" not found`);
+        console.error(theme.error(`Model "${name}" not found`));
         process.exit(1);
       }
       if (name === config.active.model) {
-        console.error(`Cannot remove active model "${name}". Switch to another first.`);
+        console.error(theme.error(`Cannot remove active model "${name}". Switch to another first.`));
         process.exit(1);
       }
       delete p.models[name];
       saveConfig(config);
-      console.log(`  ✓ Model "${name}" removed`);
+      console.log(theme.successMsg(`Model "${name}" removed`));
     });
 
   modelCmd
@@ -199,19 +209,20 @@ export function createCli() {
     .description('Show model parameters')
     .action((name?: string) => {
       const config = loadConfig();
+      const theme = getTheme();
       const modelName = name || config.active.model;
       const p = config.providers[config.active.provider];
       const m = p.models[modelName];
       if (!m) {
-        console.error(`Model "${modelName}" not found`);
+        console.error(theme.error(`Model "${modelName}" not found`));
         process.exit(1);
       }
-      console.log(`  Model: ${modelName} (${m.model})`);
-      console.log(`  Context: ${m.contextWindow}K`);
-      console.log(`  Parameters:`);
+      console.log(`${theme.indent}${theme.highlight('Model:')} ${modelName} (${m.model})`);
+      console.log(`${theme.indent}${theme.dim('Context:')} ${m.contextWindow}K`);
+      console.log(`${theme.indent}${theme.heading('Parameters:')}`);
       for (const [k, v] of Object.entries(m.params)) {
         if (v !== null && v !== undefined) {
-          console.log(`    ${k} = ${v}`);
+          console.log(`    ${theme.dim(k)} = ${theme.info(String(v))}`);
         }
       }
     });
@@ -223,16 +234,17 @@ export function createCli() {
     .description('Set model parameters')
     .action((name: string, paramArgs: string[]) => {
       const config = loadConfig();
+      const theme = getTheme();
       const p = config.providers[config.active.provider];
       const m = p.models[name];
       if (!m) {
-        console.error(`Model "${name}" not found`);
+        console.error(theme.error(`Model "${name}" not found`));
         process.exit(1);
       }
       for (const param of paramArgs) {
         const eq = param.indexOf('=');
         if (eq === -1) {
-          console.error(`  Invalid format: "${param}" (expected key=value)`);
+          console.error(`  ${theme.error('Invalid format:')} "${param}" (expected key=value)`);
           continue;
         }
         const key = param.slice(0, eq);
@@ -243,7 +255,7 @@ export function createCli() {
         else if (raw === 'false') value = false;
         else if (!isNaN(Number(raw))) value = Number(raw);
         (m.params as Record<string, unknown>)[key] = value;
-        console.log(`  ✓ ${key} = ${value}`);
+        console.log(theme.successMsg(`${key} = ${value}`));
       }
       saveConfig(config);
     });
@@ -264,17 +276,20 @@ export function createCli() {
     .description('Reset config to defaults')
     .action(() => {
       const config = loadConfig();
+      const theme = getTheme();
       config.providers = {};
       config.active = { provider: 'lmstudio', model: 'qwen3.5-9b' };
       config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000 };
       saveConfig(config);
-      console.log('  ✓ Configuration reset to defaults');
+      console.log(theme.successMsg('Configuration reset to defaults'));
     });
 
   // Default action: prompt or REPL
   program.action(async (prompt?: string) => {
     ensureMmaDir();
+    ensureThemeDir();
     const config = loadConfig();
+    initTheme(config.theme);
 
     const providerOpt = program.getOptionValue('provider');
     const modelOpt = program.getOptionValue('model');

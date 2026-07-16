@@ -38,4 +38,5 @@ export interface AppConfig {
   providers: Record<string, ProviderConfig>;
   active: ActiveConfig;
   agent: AgentConfig;
+  theme?: string;
 }
