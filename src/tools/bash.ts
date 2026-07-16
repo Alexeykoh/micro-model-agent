@@ -15,14 +15,18 @@ export interface BashResult {
 const MAX_OUTPUT_LENGTH = 2000;
 const CACHE_DIR = join(homedir(), '.mma', 'cache');
 
-const UNIX_TO_PWSH: [RegExp, string][] = [
+const UNIX_TO_PWSH: [RegExp, string | ((match: RegExpMatchArray) => string)][] = [
   [/^ls\s+-la/, 'dir'],
   [/^ls\s+/, 'dir '],
   [/^cat\s+/, 'Get-Content '],
   [/^rm\s+/, 'Remove-Item -Force '],
   [/^mv\s+/, 'Move-Item '],
   [/^cp\s+/, 'Copy-Item '],
-  [/^mkdir\s+-p\s+/, 'New-Item -ItemType Directory -Force -Path '],
+  [/^mkdir\s+-p\s+(.+)/, (match: RegExpMatchArray) => {
+    // Handle multiple directories: mkdir -p dir1 dir2 dir3
+    const dirs = match[1].split(/\s+/).filter(Boolean);
+    return dirs.map(d => `New-Item -ItemType Directory -Force -Path "${d}"`).join('; ');
+  }],
   [/^mkdir\s+/, 'New-Item -ItemType Directory -Path '],
   [/^touch\s+/, 'New-Item -ItemType File -Force -Path '],
   [/^grep\s+/, "Select-String -Pattern "],
@@ -40,7 +44,12 @@ const UNIX_TO_PWSH: [RegExp, string][] = [
 function translateToPowerShell(cmd: string): string {
   for (const [pattern, replacement] of UNIX_TO_PWSH) {
     if (pattern.test(cmd)) {
-      return cmd.replace(pattern, replacement);
+      if (typeof replacement === 'function') {
+        const match = cmd.match(pattern);
+        if (match) return replacement(match);
+      } else {
+        return cmd.replace(pattern, replacement);
+      }
     }
   }
   return cmd;
@@ -50,8 +59,10 @@ function ensureDirectoryExists(cmd: string, cwd: string): void {
   // Auto-create directory for Set-Content commands
   const match = cmd.match(/Set-Content\s+-Path\s+['"]?([^'"]+?)['"]?\s+-Value/i);
   if (match) {
-    const filePath = match[1];
-    const dir = filePath.split(/[/\\]/).slice(0, -1).join('/');
+    let filePath = match[1];
+    // Fix common path issues: blog-api\src\file.ts -> blog-api/src/file.ts
+    filePath = filePath.replace(/\\/g, '/');
+    const dir = filePath.split('/').slice(0, -1).join('/');
     if (dir) {
       const fullDir = join(cwd, dir);
       if (!existsSync(fullDir)) {
@@ -61,12 +72,25 @@ function ensureDirectoryExists(cmd: string, cwd: string): void {
   }
 }
 
+function fixCommonPathIssues(cmd: string): string {
+  // Fix: blog-api\src\file.ts -> blog-api/src/file.ts (normalize slashes)
+  // Fix: blog-apifile.ts -> blog-api/file.ts (missing slash)
+  let fixed = cmd;
+
+  // Fix missing slash between folder and file: "blog-api\package.json" -> "blog-api/package.json"
+  // But only if it looks like a path issue (no slash between folder name and file)
+  fixed = fixed.replace(/(['"])(\w+)-(\w+)\\(\w+\.\w+)/g, '$1$2-$3/$4');
+
+  return fixed;
+}
+
 function encodePowerShellCommand(cmd: string): string {
   const utf16le = Buffer.from(cmd, 'utf16le');
   return utf16le.toString('base64');
 }
 
 export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
+  cmd = fixCommonPathIssues(cmd);
   cmd = translateToPowerShell(cmd);
   if (!sanitize(cmd).safe) {
     const theme = getTheme();
