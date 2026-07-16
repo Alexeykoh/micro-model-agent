@@ -1,0 +1,26 @@
+{
+  "name": "mma",
+  "version": "0.1.0",
+  "description": "MiMo Agent — LLM agent harness for small models",
+  "type": "module",
+  "bin": {
+    "mma": "./src/index.ts"
+  },
+  "scripts": {
+    "mma": "tsx src/index.ts",
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "js-tiktoken": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}
