@@ -72,6 +72,21 @@ function ensureDirectoryExists(cmd: string, cwd: string): void {
   }
 }
 
+function fixJsonContent(cmd: string): string {
+  // Fix backslashes in JSON content that break JSON parsing
+  // Problem: "dist\index.js" -> "dist\\index.js" or "dist/index.js"
+  return cmd.replace(
+    /(-Value\s+['"])(.*?)(['"])/gs,
+    (match, prefix, content, suffix) => {
+      // Replace \ with / in content (except for valid JSON escapes like \n, \t, \")
+      const fixed = content
+        .replace(/\\([^nrtbf"\\])/g, '/$1')  // \i -> /i, but keep \n \t etc
+        .replace(/\\\\/g, '/');               // \\ -> /
+      return prefix + fixed + suffix;
+    }
+  );
+}
+
 function fixCommonPathIssues(cmd: string): string {
   // Fix: blog-api\src\file.ts -> blog-api/src/file.ts (normalize slashes)
   // Fix: blog-apifile.ts -> blog-api/file.ts (missing slash)
@@ -91,6 +106,7 @@ function encodePowerShellCommand(cmd: string): string {
 
 export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
   cmd = fixCommonPathIssues(cmd);
+  cmd = fixJsonContent(cmd);
   cmd = translateToPowerShell(cmd);
   if (!sanitize(cmd).safe) {
     const theme = getTheme();
