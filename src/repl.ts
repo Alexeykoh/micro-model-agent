@@ -11,6 +11,7 @@ import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, r
 import { listInstalledSkills } from './skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from './session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap } from './indexer/cache.js';
+import { getQuestion, hasActiveQuestion, answerQuestion, formatQuestion } from './tools/question.js';
 
 function slashRead(path: string): void {
   try {
@@ -232,7 +233,7 @@ function slashSessions(): void {
   console.log(formatSessionList(sessions));
 }
 
-async function slashResume(args: string, provider: LLMProvider, registry: ToolRegistry): Promise<void> {
+async function slashResume(args: string, provider: LLMProvider, registry: ToolRegistry, history: { role: 'user' | 'assistant'; content: string }[]): Promise<void> {
   if (!args.trim()) {
     console.log('  Usage: /resume <session-id>');
     console.log('  Use /sessions to see available sessions.');
@@ -250,7 +251,12 @@ async function slashResume(args: string, provider: LLMProvider, registry: ToolRe
   const lastUser = session.messages.filter(m => m.role === 'user').pop();
   const prevMsgs = session.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant' | 'tool', content: m.content }));
   if (lastUser) {
-    await runAgentLoop(provider, registry, lastUser.content, undefined, prevMsgs);
+    const result = await runAgentLoop(provider, registry, lastUser.content, undefined, prevMsgs);
+    for (const msg of result.messages) {
+      if (msg.role !== 'system') {
+        history.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+      }
+    }
   }
 }
 
@@ -426,7 +432,7 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
           slashSessions();
           break;
         case 'resume':
-          await slashResume(args, provider, registry);
+          await slashResume(args, provider, registry, conversationHistory);
           break;
         case 'save':
           slashSave(args, conversationHistory, provider);
@@ -444,11 +450,36 @@ export async function runRepl(provider: LLMProvider, registry: ToolRegistry, mod
       continue;
     }
 
-    const newMessages = await runAgentLoop(provider, registry, line, undefined, conversationHistory);
+    const result = await runAgentLoop(provider, registry, line, undefined, conversationHistory);
+    const newMessages = result.messages;
+
     // Keep system prompt out of history, only store user/assistant/tool
     for (const msg of newMessages) {
       if (msg.role !== 'system') {
         conversationHistory.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+      }
+    }
+
+    // Handle question pending
+    if (result.questionPending) {
+      const { question, choices } = result.questionPending;
+      console.log();
+      console.log(`  Question: ${question}`);
+      if (choices && choices.length > 0) {
+        for (let i = 0; i < choices.length; i++) {
+          console.log(`    ${i + 1}. ${choices[i]}`);
+        }
+      }
+      console.log();
+      const answer = await rl.question('  Your answer: ');
+      conversationHistory.push({ role: 'user', content: answer });
+
+      // Continue agent loop with the answer
+      const answerResult = await runAgentLoop(provider, registry, `User answered: ${answer}`, undefined, conversationHistory);
+      for (const msg of answerResult.messages) {
+        if (msg.role !== 'system') {
+          conversationHistory.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+        }
       }
     }
   }

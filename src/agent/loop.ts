@@ -11,11 +11,52 @@ import { getOrBuildProjectMap } from '../indexer/cache.js';
 import { loadAgentsMd, loadSkillsFromRefs, formatSkillsBlock } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
+import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } from '../tools/plan.js';
+import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../tools/todo.js';
+import { askQuestion, parseQuestionCommand } from '../tools/question.js';
+import { parseApproveCommand } from '../tools/approve.js';
 
-const TOOL_FORMAT = `Available tool — bash:
-  Execute shell commands. Use for ALL operations: read/write files, git, npm, etc.
-  To call it, output EXACTLY this format (on its own line):
-  <tool_call>{"name":"bash","arguments":{"cmd":"your command here"}}</tool_call>`;
+const TOOL_FORMAT = `Available tools:
+
+1. bash — Execute shell commands. Use for ALL operations: read/write files, git, npm, etc.
+   To call it, output EXACTLY this format (on its own line):
+   <tool_call>{"name":"bash","arguments":{"cmd":"your command here"}}</tool_call>
+
+2. plan — Manage project plans for complex tasks.
+   To call it, output EXACTLY this format (on its own line):
+   <tool_call>{"name":"bash","arguments":{"cmd":"plan create MyProject Step1 Step2 Step3"}}</tool_call>
+   Commands:
+    plan create <name> <step1> <step2> ... — Create a new plan
+    plan show — Show current plan
+    plan done <stepId> — Mark step as done
+    plan progress <stepId> — Mark step as in progress
+    plan clear — Clear current plan
+
+3. todo — Track task progress.
+   To call it, output EXACTLY this format (on its own line):
+   <tool_call>{"name":"bash","arguments":{"cmd":"todo add Create index.ts"}}</tool_call>
+   Commands:
+    todo add <text> — Add a new task
+    todo done <id|text> — Mark task as done
+    todo remove <id|text> — Remove task
+    todo list — Show all tasks with progress
+
+4. question — Ask the user a question before proceeding.
+   To call it, output EXACTLY this format (on its own line):
+   <tool_call>{"name":"bash","arguments":{"cmd":"question What framework? | Express | Fastify | Hapi"}}</tool_call>
+   Use when:
+   - You need to clarify requirements before starting
+   - You need to choose between multiple options
+   - You need user input to continue
+
+5. approve — Request confirmation before risky actions.
+   To call it, output EXACTLY this format (on its own line):
+   <tool_call>{"name":"bash","arguments":{"cmd":"approve Delete all files in dist/"}}</tool_call>
+   Use before:
+   - Deleting files or directories
+   - Overwriting existing files
+   - Running destructive commands
+   - Any action that cannot be easily undone`;
 
 const RULES_COMMON = `Rules:
 1. Use bash for EVERYTHING — ALWAYS use <tool_call> for file ops, never write content as chat text.
@@ -211,13 +252,18 @@ async function doChat(
   return { response: '', genTimeMs: 0 };
 }
 
+export interface AgentLoopResult {
+  messages: ChatMessage[];
+  questionPending?: { question: string; choices?: string[] };
+}
+
 export async function runAgentLoop(
   provider: LLMProvider,
   registry: ToolRegistry,
   prompt: string,
   contextManager?: ContextManager,
   previousMessages?: ChatMessage[],
-): Promise<ChatMessage[]> {
+): Promise<AgentLoopResult> {
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
 
   const skills = loadSkillsFromRefs(prompt, process.cwd());
@@ -262,7 +308,7 @@ export async function runAgentLoop(
         continue;
       }
       console.log('[model returned empty response]');
-      return messages;
+      return { messages };
     }
 
     messages.push({ role: 'assistant', content: response });
@@ -271,20 +317,20 @@ export async function runAgentLoop(
     if (!jsonRaw) {
       const preview = response.trim().slice(0, 300);
       console.log(`  [no tool call] response starts with: ${JSON.stringify(preview)}`);
-      return messages;
+      return { messages };
     }
 
     try {
       const parsed = JSON.parse(jsonrepair(jsonRaw));
       if (parsed.name !== 'bash') {
         console.log(`  [unknown tool: ${parsed.name}]`);
-        return messages;
+        return { messages };
       }
 
       const cmd = String(parsed.arguments?.cmd ?? '').trim();
       if (!cmd) {
         console.log('  [empty command]');
-        return messages;
+        return { messages };
       }
 
       const cmdPreview = cmd.length > 200 ? cmd.slice(0, 200) + '...' : cmd;
@@ -306,7 +352,88 @@ export async function runAgentLoop(
       let toolExitCode = 0;
       const toolStart = performance.now();
 
-      if (isMCPCommand(cmd)) {
+      if (cmd.startsWith('plan ')) {
+        // Plan tool
+        const planArgs = cmd.slice(5).trim();
+        const { action, params } = parsePlanCommand(planArgs);
+        console.log(`  [plan] ${action}`);
+        switch (action) {
+          case 'create':
+            toolOutput = createPlan(params[0] || 'Untitled Plan', params.slice(1));
+            break;
+          case 'done':
+            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'done');
+            break;
+          case 'progress':
+            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'in_progress');
+            break;
+          case 'show':
+            toolOutput = showPlan();
+            break;
+          case 'clear':
+            toolOutput = clearPlan();
+            break;
+          default:
+            toolOutput = 'Unknown plan action. Use: create, done, progress, show, clear';
+            toolExitCode = 1;
+        }
+      } else if (cmd.startsWith('todo ')) {
+        // Todo tool
+        const todoArgs = cmd.slice(5).trim();
+        const { action, params } = parseTodoCommand(todoArgs);
+        console.log(`  [todo] ${action}`);
+        switch (action) {
+          case 'add':
+            toolOutput = addTodo(params);
+            break;
+          case 'done':
+            toolOutput = doneTodo(params);
+            break;
+          case 'remove':
+          case 'rm':
+            toolOutput = removeTodo(params);
+            break;
+          case 'list':
+          case 'ls':
+            toolOutput = listTodos();
+            break;
+          default:
+            toolOutput = 'Unknown todo action. Use: add, done, remove, list';
+            toolExitCode = 1;
+        }
+      } else if (cmd.startsWith('question ')) {
+        // Question tool - pause and ask user
+        const qArgs = cmd.slice(9).trim();
+        const { question, choices } = parseQuestionCommand(qArgs);
+        console.log(`  [question] ${question}`);
+        // Add the tool call to messages
+        messages.push({
+          role: 'tool',
+          content: `Question asked: ${question}`,
+          tool_call_id: toolId,
+        });
+        // Return with question pending
+        return {
+          messages,
+          questionPending: { question, choices: choices.length > 0 ? choices : undefined },
+        };
+      } else if (cmd.startsWith('approve ')) {
+        // Approve tool - pause and ask for confirmation
+        const approveArgs = cmd.slice(8).trim();
+        const action = parseApproveCommand(approveArgs);
+        console.log(`  [approve] ${action}`);
+        // Add the tool call to messages
+        messages.push({
+          role: 'tool',
+          content: `Approval requested: ${action}`,
+          tool_call_id: toolId,
+        });
+        // Return with question pending (approve is a yes/no question)
+        return {
+          messages,
+          questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
+        };
+      } else if (isMCPCommand(cmd)) {
         const mcpCmd = parseMCPCommand(cmd);
         if (mcpCmd) {
           console.log(`  [mcp] ${mcpCmd.server}/${mcpCmd.tool}`);
@@ -340,8 +467,8 @@ export async function runAgentLoop(
       });
     } catch (e: any) {
       console.log(`  [parse error] ${e.message}`);
-      return messages;
+      return { messages };
     }
   }
-  return messages;
+  return { messages };
 }
