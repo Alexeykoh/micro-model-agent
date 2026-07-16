@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../llm/provider.js';
 import { countTokens } from '../llm/token-counter.js';
+import { getTheme } from '../styling/index.js';
 
 interface ScoredMessage {
   msg: ChatMessage;
@@ -151,23 +152,22 @@ export class ContextManager {
   }
 
   formatUsage(): string {
+    const theme = getTheme();
     const pct = this.usagePercent;
     const barLen = 20;
-    const filled = Math.round((pct / 100) * barLen);
-    const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
+    const bar = theme.contextBar(pct, barLen);
 
-    // VISTA dashboard: breakdown by role
     const roleTokens: Record<string, number> = {};
     for (const h of this._history) {
       roleTokens[h.role] = (roleTokens[h.role] || 0) + h.tokens;
     }
 
     const breakdown = Object.entries(roleTokens)
-      .map(([role, tokens]) => `${role}:${tokens}`)
+      .map(([role, tokens]) => `${theme.dim(role)}:${tokens}`)
       .join(' ');
 
-    return `Context: ${this._totalTokens.toLocaleString()} / ${this.contextWindow.toLocaleString()} tokens (${pct.toFixed(0)}%) [compacted:${this.compacted}]
+    return `Context: ${theme.highlight(this._totalTokens.toLocaleString())} / ${this.contextWindow.toLocaleString()} tokens (${pct.toFixed(0)}%) ${theme.bracket(`compacted:${this.compacted}`)}
   ${bar}
-  ${breakdown}`;
+  tokens: ${breakdown}`;
   }
 }
