@@ -401,6 +401,7 @@ export async function runAgentLoop(
       const fallback = extractToolCallFallback(response);
       if (fallback) {
         cmd = fallback.cmd;
+        parsed = { name: 'bash', arguments: { cmd } };
         console.log(theme.bracketTag('fallback', 'regex extracted command'));
       } else {
         return { messages };
