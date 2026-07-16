@@ -104,6 +104,32 @@ function encodePowerShellCommand(cmd: string): string {
   return utf16le.toString('base64');
 }
 
+function cleanCliXml(text: string): string {
+  // Remove CLIXML wrapper and ANSI codes
+  if (!text.includes('#< CLIXML') && !text.includes('<Objs')) return text;
+
+  // Extract error messages from CLIXML
+  const errors: string[] = [];
+  const regex = /<S S="Error">(.*?)<\/S>/gs;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Remove ANSI codes and CLIXML entities
+    let msg = match[1]
+      .replace(/_x001B_\[[0-9;]*m/g, '')  // ANSI codes
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .trim();
+    if (msg && !errors.includes(msg)) {
+      errors.push(msg);
+    }
+  }
+
+  return errors.length > 0 ? errors.join('\n') : text;
+}
+
 export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
   cmd = fixCommonPathIssues(cmd);
   cmd = fixJsonContent(cmd);
@@ -151,6 +177,9 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
       exitCode = 1;
     }
   }
+
+  // Clean CLIXML from stderr
+  stderr = cleanCliXml(stderr);
 
   writeFileSync(cacheFile, stdout, 'utf-8');
 
