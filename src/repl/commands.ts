@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { globSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { executeBash } from '../tools/bash.js';
@@ -456,6 +456,7 @@ function cmdExport(args: string, ctx: CommandContext): void {
   }
 
   const filename = `.mma/export-${Date.now()}.md`;
+  mkdirSync('.mma', { recursive: true });
   writeFileSync(filename, output, 'utf-8');
   ctx.renderer.writeSuccess(`  Exported to ${filename}`);
 }

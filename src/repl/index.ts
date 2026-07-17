@@ -14,7 +14,7 @@ export async function runRepl(
 ): Promise<void> {
   const memorySummary = loadAllMemory();
 
-  renderer.writeHeading(`MMA v0.1 — ${modelLabel}`);
+  renderer.writeInfo(`  ◉ MMA v0.1 — ${modelLabel}`);
   if (memorySummary) {
     renderer.writeLine(memorySummary);
   }

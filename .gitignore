@@ -1,5 +1,6 @@
 node_modules/
 dist/
+blog_api_test/
 .mma/
 .mimocode/
 *.log

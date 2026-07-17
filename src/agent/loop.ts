@@ -208,7 +208,6 @@ async function doChat(
     renderer.commitMarkdown();
 
     if (response.trim()) {
-      renderer.writeToolResult((genTimeMs / 1000).toFixed(1));
       return { response, genTimeMs };
     }
 
@@ -240,8 +239,8 @@ export async function runAgentLoop(
 
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
-  if (loadedSkills.length > 0 && !quiet) {
-    renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')} (~${loadedSkills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`);
+  if (loadedSkills.length > 0) {
+    renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')}`);
   }
 
   if (files.length > 0) {
@@ -283,9 +282,9 @@ export async function runAgentLoop(
     }
     let skillsAutoLoaded = false;
     await ctx.updateTokens(messages);
-    if (!quiet) {
-      renderer?.updateContextUsage(ctx.formatUsage());
-    }
+    const skillNames = loadedSkills.map(s => s.name).join(', ');
+    const usageText = ctx.formatUsage() + (skillNames ? ` │ skills: ${skillNames}` : '');
+    renderer?.updateContextUsage(usageText);
 
     renderer?.updateStatus({
       provider: providerName,
@@ -324,11 +323,11 @@ export async function runAgentLoop(
     }
     if (newSkillNames.length > 0) {
       skillsAutoLoaded = true;
-      if (!quiet) {
-        renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
-      }
+      renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills) };
-      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working.]` });
+      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working NOW — do NOT wait for user confirmation.]` });
+      // Force model to continue working after skills are loaded
+      continue;
     }
 
     if (!response.trim()) {
@@ -532,9 +531,6 @@ export async function runAgentLoop(
       }
 
       const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
-      if (!quiet) {
-        renderer?.writeToolResult(toolTime, toolExitCode);
-      }
       if (toolExitCode !== 0) {
         const errText = toolOutput;
         if (!quiet) {

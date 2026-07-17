@@ -94,15 +94,16 @@ const RULES_COMMON = `Rules:
    {"name":"read_file","arguments":{"path":"file.ts","offset":101,"limit":100}}
    Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
 7. SKILLS FIRST, THEN PLAN: For complex tasks (3+ steps):
-   a. Suggest relevant skills from Available Skills above: "Для этой задачи рекомендую @skill1 @skill2"
-   b. User loads skills in next message: "@skill1 @skill2"
-   c. Skills are injected into this prompt — READ the skill content carefully
-   d. Create a plan BASED ON the skill's workflow: plan create TaskName Step1 Step2 Step3
+   a. Suggest relevant skills: "Рекомендую @skill1 @skill2"
+   b. IMMEDIATELY start working — do NOT wait for user to confirm
+   c. If skills are in Available Skills, reference them in your response
+   d. Create a plan: plan create TaskName Step1 Step2 Step3
    e. Mark current step as in_progress before executing it
    f. Mark step as done only AFTER verifying the result (exit code 0 + file exists)
-   Example: User: "Создай REST API" → You: "Рекомендую @typescript-expert @nodejs-expert"
-   User: "@typescript-expert @nodejs-expert" → Skills loaded → You read them → plan create REST API ...
-8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.`;
+   Example: User: "Создай REST API" → You: "Рекомендую @typescript-expert. Создаю план..."
+   plan create REST API init-project create-schemas create-routes setup-auth
+8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
+9. NEVER JUST TALK — ALWAYS ACT. After suggesting skills, IMMEDIATELY create a plan and start executing. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
