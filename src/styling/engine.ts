@@ -121,6 +121,9 @@ export class ThemeEngine {
   }
 
   bracketTag(tag: string, message: string): string {
+    if (tag === 'user') {
+      return `${this.c('info')(`[${tag}]`)} ${this.c('highlight')(message)}`;
+    }
     return `${this.dim(`[${tag}]`)} ${message}`;
   }
 

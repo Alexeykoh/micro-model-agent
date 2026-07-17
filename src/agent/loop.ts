@@ -142,7 +142,7 @@ async function doChat(
   messages: ChatMessage[],
   renderer: OutputRenderer,
   signal?: AbortSignal,
-  retries = 3,
+  retries = 1,
 ): Promise<{ response: string; genTimeMs: number }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
@@ -213,7 +213,7 @@ async function doChat(
     }
 
     if (attempt < retries) {
-      renderer.writeBracketTag('retry', `${attempt + 1}/${retries}`);
+      renderer.writeDim(`[retry ${attempt + 1}/${retries}]`);
     }
   }
 
