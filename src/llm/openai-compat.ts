@@ -70,6 +70,9 @@ export class OpenAICompat implements LLMProvider {
           const delta = parsed.choices?.[0]?.delta;
           if (delta?.content) {
             yield { content: delta.content, finish_reason: null };
+          } else if (delta?.reasoning_content) {
+            // Thinking models put reasoning in reasoning_content
+            // We skip it silently — it's internal thinking
           }
           const finish = parsed.choices?.[0]?.finish_reason;
           if (finish) {
