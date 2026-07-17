@@ -41,7 +41,7 @@ mma config show                  # показать конфиг
 mma config reset                 # сбросить конфиг
 npm run build                    # tsc
 npm run dev                      # bun --watch
-npm test                         # vitest
+npm test                         # vitest (unit: context, sanitizer, code-index, file-loader, commands)
 ```
 
 ## Структура

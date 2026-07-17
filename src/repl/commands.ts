@@ -373,16 +373,37 @@ async function cmdResume(args: string, ctx: CommandContext): Promise<void> {
     ctx.renderer.writeError(`  Session "${args.trim()}" not found.`);
     return;
   }
-  ctx.renderer.writeInfo(`Resumed session: ${session.id} (${session.messages.length} messages)`);
-  ctx.renderer.writeDim(`Provider: ${session.provider}`);
+
+  ctx.renderer.clear();
+  ctx.renderer.writeInfo(`  Resumed session: ${session.id} (${session.messages.length} messages)`);
+  ctx.renderer.writeDim(`  Provider: ${session.provider}`);
   ctx.renderer.writeNewline();
-  const lastUser = session.messages.filter(m => m.role === 'user').pop();
-  const prevMsgs = session.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant' | 'tool', content: m.content }));
+
+  // Display previous conversation and rebuild history
+  ctx.history.length = 0;
+  const displayMsgs = session.messages.filter(m => m.role !== 'system');
+  for (const msg of displayMsgs) {
+    ctx.renderer.writeNewline();
+    ctx.renderer.writeDim('─'.repeat(40));
+    const tag = msg.role === 'user' ? 'user' : 'assistant';
+    ctx.renderer.writeBracketTag(tag, ` ${msg.content.slice(0, 200)}${msg.content.length > 200 ? '…' : ''}`);
+    if (msg.content.length > 200) {
+      ctx.renderer.writeDim('  (message truncated, full content loaded)');
+    }
+    ctx.renderer.writeDim('─'.repeat(40));
+    ctx.renderer.writeNewline();
+    ctx.history.push({ role: msg.role === 'tool' ? 'assistant' : msg.role as 'user' | 'assistant', content: msg.content });
+  }
+
+  const lastUser = [...displayMsgs].reverse().find(m => m.role === 'user');
   if (lastUser) {
+    // Feed history WITHOUT the last user message to avoid duplication
+    const prevMsgs = ctx.history.filter(m => m.content !== lastUser.content || m.role !== 'user');
     const result = await runAgentLoop(ctx.provider, ctx.registry, lastUser.content, undefined, prevMsgs, ctx.renderer);
     for (const msg of result.messages) {
       if (msg.role !== 'system') {
-        ctx.history.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+        const dup = ctx.history.find(m => m.content === msg.content && m.role === msg.role);
+        if (!dup) ctx.history.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
       }
     }
   }
@@ -402,6 +423,7 @@ function cmdSave(args: string, ctx: CommandContext): void {
 
 function cmdClear(_args: string, ctx: CommandContext): void {
   ctx.history.length = 0;
+  ctx.renderer.clear();
   ctx.renderer.writeInfo('  Context cleared. Starting new session.');
 }
 
@@ -410,12 +432,52 @@ function cmdStop(_args: string, ctx: CommandContext): void {
   ctx.renderer.destroy();
 }
 
+const AUTO_HEADERS = new Set([
+  '## Description', '## Git', '## Tech Stack',
+  '## Key Dependencies', '## Commands',
+  '## Conventions', '## Project Structure',
+]);
+
+export function stripAutoSections(content: string): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let skip = false;
+  for (const line of lines) {
+    const m = line.match(/^##\s+(.+)/);
+    if (m) skip = AUTO_HEADERS.has(`## ${m[1]}`);
+    if (!skip) result.push(line);
+  }
+  return result.join('\n').trim();
+}
+
+export function getGitInfo(): { remote: string; branch: string; lastCommit: string } | null {
+  try {
+    const remote = execSync('git config --get remote.origin.url', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' }).trim();
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' }).trim();
+    const lastCommit = execSync('git log --oneline -1', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' }).trim();
+    return { remote, branch, lastCommit };
+  } catch {
+    return null;
+  }
+}
+
 function cmdInit(_args: string, ctx: CommandContext): void {
   const theme = getTheme();
   const cwd = process.cwd();
   ctx.renderer.writeNewline();
   ctx.renderer.writeInfo('  Analyzing project...');
 
+  const agentsPath = join(cwd, 'AGENTS.md');
+  const existed = existsSync(agentsPath);
+
+  // Read existing AGENTS.md first to preserve custom sections
+  let preservedContent = '';
+  if (existed) {
+    const existingContent = readFileSync(agentsPath, 'utf-8');
+    preservedContent = stripAutoSections(existingContent);
+  }
+
+  // Scan project
   const projectName = basename(cwd);
   let description = '';
   let scripts: Record<string, string> = {};
@@ -463,6 +525,15 @@ function cmdInit(_args: string, ctx: CommandContext): void {
     agentsContent += `## Description\n\n${description}\n\n`;
   }
 
+  // Git info
+  const gitInfo = getGitInfo();
+  if (gitInfo) {
+    agentsContent += '## Git\n\n';
+    agentsContent += `- **Remote**: ${gitInfo.remote}\n`;
+    agentsContent += `- **Branch**: ${gitInfo.branch}\n`;
+    agentsContent += `- **Last commit**: ${gitInfo.lastCommit}\n\n`;
+  }
+
   if (stack || mainLang.length > 0) {
     agentsContent += '## Tech Stack\n\n';
     if (stack) agentsContent += `- **Framework/Tools**: ${stack.replace(/, $/, '')}\n`;
@@ -508,17 +579,21 @@ function cmdInit(_args: string, ctx: CommandContext): void {
 
   agentsContent += `## Project Structure\n\n`;
   try {
-    const top = readdirSync(cwd).filter(f => !f.startsWith('.') && f !== 'node_modules' && f !== 'dist').slice(0, 20);
+    const top = readdirSync(cwd, { withFileTypes: true })
+      .filter(f => !f.name.startsWith('.') && f.name !== 'node_modules' && f.name !== 'dist')
+      .slice(0, 20);
     agentsContent += '```\n';
     for (const f of top) {
-      const stat = existsSync(join(cwd, f)) ? readdirSync(join(cwd, f)).length : 0;
-      try { if (stat) agentsContent += `${f}/\n`; else agentsContent += `${f}\n`; } catch { agentsContent += `${f}\n`; }
+      agentsContent += f.isDirectory() ? `${f.name}/\n` : `${f.name}\n`;
     }
     agentsContent += '```\n\n';
   } catch { /* ignore */ }
 
-  const agentsPath = join(cwd, 'AGENTS.md');
-  const existed = existsSync(agentsPath);
+  // Append preserved custom sections from existing AGENTS.md
+  if (preservedContent) {
+    agentsContent += preservedContent + '\n\n';
+  }
+
   try {
     writeFileSync(agentsPath, agentsContent, 'utf-8');
     const verb = existed ? 'Updated' : 'Created';

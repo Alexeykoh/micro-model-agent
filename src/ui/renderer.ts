@@ -33,6 +33,8 @@ export interface OutputRenderer {
   updateContextUsage(text: string): void
   updateStatus(info: StatusInfo): void
 
+  clear(): void
+
   prompt(msg: string): Promise<string>
 
   writeFileOutput(lines: string[], startIndex?: number): void

@@ -100,6 +100,10 @@ export class ReadlineRenderer implements OutputRenderer {
     // noop — no status bar in readline mode
   }
 
+  clear(): void {
+    process.stdout.write('\x1Bc')
+  }
+
   async prompt(msg: string): Promise<string> {
     if (!this.rl) return ''
     return this.rl.question(msg)
