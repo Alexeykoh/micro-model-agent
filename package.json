@@ -7,25 +7,19 @@
     "mma": "./src/index.ts"
   },
   "scripts": {
-    "mma": "tsx src/index.ts",
-    "build": "tsc",
-    "dev": "tsx watch src/index.ts",
-    "test": "vitest run",
+    "mma": "bun run src/index.ts",
+    "tui": "bun run src/index.ts",
+    "plain": "bun run src/index.ts -- --plain",
+    "build": "bunx tsc",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@types/express": "^5.0.6",
-    "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.11.1",
+    "@opentui/core": "^0.4.4",
     "commander": "^12.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "esprima": "^4.0.1",
-    "execa": "^9.6.1",
-    "express": "^5.2.1",
     "js-tiktoken": "^1.0.0",
     "jsonrepair": "^3.15.0",
-    "jsonwebtoken": "^9.0.3",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {

@@ -19,7 +19,8 @@ LLM агент-харнес для маленьких моделей (Qwen3.5-9B
 
 ```bash
 npm run mma "запрос"                 # one-shot
-npm run mma                          # interactive REPL
+npm run mma                          # interactive TUI (по умолчанию)
+npm run plain                        # interactive readline (--plain)
 npm run mma -- provider list         # список провайдеров
 npm run mma -- provider add <n> <u>  # добавить провайдер
 npm run mma -- provider remove <n>   # удалить провайдер
@@ -39,8 +40,15 @@ npm test                             # vitest
 ```
 src/
 ├── index.ts            # Точка входа
-├── cli.ts              # Commander CLI + subcommands
-├── repl.ts             # Interactive REPL
+├── cli.ts              # Commander CLI + program.action (~100 строк)
+├── cli/                # CLI subcommands
+│   ├── provider.ts     # provider list/use/add/remove
+│   ├── model.ts        # model list/use/add/remove/params/set
+│   └── config.ts       # config show/reset
+├── repl/
+│   ├── index.ts        # runRepl() — основной цикл REPL
+│   ├── commands.ts     # Реестр slash-команд + handlers
+│   └── history.ts      # ConversationHistory — управление историей
 ├── file-loader.ts      # @file парсинг
 ├── config/
 │   ├── config.ts       # Загрузка/сохранение конфига
@@ -76,7 +84,8 @@ src/
 │       ├── grep-search.ts  # Поиск по regex
 │       └── tree.ts         # Дерево директорий
 ├── agent/
-│   ├── loop.ts         # ReAct цикл
+│   ├── loop.ts         # ReAct цикл (~517 строк, без NullRenderer)
+│   ├── system-prompt.ts # Системный промпт + константы
 │   ├── context.ts      # Менеджер контекста (бюджет, compact)
 │   └── memory.ts       # Persistent memory
 ├── indexer/
@@ -85,6 +94,19 @@ src/
 │   └── cache.ts        # Кэш индекса (.mma/index/)
 ├── skills/
 │   └── loader.ts       # Загрузка Skills/AGENTS.md
+├── ui/
+│   ├── index.ts            # Factory: createRenderer(mode)
+│   ├── renderer.ts         # OutputRenderer interface + types
+│   ├── readline-renderer.ts # console.log/process.stdout обёртка
+│   ├── opentui-renderer.ts  # @opentui/core split-footer реализация
+│   └── components/
+│       ├── status-bar.ts   # Форматирование строки статуса
+│       └── diff-view.ts    # Парсинг/форматирование diff
+├── styling/
+│   ├── index.ts        # getTheme() / initTheme()
+│   ├── engine.ts       # ThemeEngine
+│   ├── loader.ts       # Theme loading
+│   └── types.ts        # ThemeConfig, etc.
 └── session/
     └── store.ts        # Хранилище сессий (.mma/sessions/)
 ```
