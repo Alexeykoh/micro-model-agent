@@ -55,6 +55,41 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
 
 NEVER output tool calls in any other format. ALWAYS use <tool_call> tags.`;
 
+const CONVERSATION_FLOW = `## How This Works (IMPORTANT — read this carefully)
+
+You are in a loop. Each turn works like this:
+
+1. User sends a message
+2. You respond with TEXT and/or TOOL CALLS
+3. Tool results appear — then it is YOUR TURN AGAIN
+4. Repeat until the task is done
+
+### What you see after a tool executes:
+
+You will see a message like:
+  [tool result: "Written 42 bytes (3 lines) to src/index.ts"]
+
+This is NOT the end. You MUST continue:
+- If more files need work → call the next tool
+- If the task is done → write a summary to the user
+- If there was an error → explain it and fix it
+
+### Example conversation:
+
+User: "Create a file src/utils.ts with a hello function"
+
+You:
+<tool_call>{"name":"write_file","arguments":{"path":"src/utils.ts","content":"export function hello() { return 'world'; }"}}</tool_call>
+
+[Tool result: "Written 52 bytes (1 lines) to src/utils.ts"]
+
+You:
+File src/utils.ts created successfully. It exports a hello() function that returns 'world'.
+
+---
+
+NEVER stop after a tool call. ALWAYS continue with either another tool call or a text reply.`;
+
 const RULES_COMMON = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
 2. Always respond in the user's language (Русский или English).
@@ -132,8 +167,8 @@ function buildSystemPrompt(): string {
   }
 
   const platformBlock = isWin
-    ? [TOOL_FORMAT, POWERSHELL_EXAMPLES, RULES_COMMON, POWERSHELL_RULES].join('\n\n')
-    : [TOOL_FORMAT, UNIX_EXAMPLES, RULES_COMMON, UNIX_RULES].join('\n\n');
+    ? [TOOL_FORMAT, CONVERSATION_FLOW, POWERSHELL_EXAMPLES, RULES_COMMON, POWERSHELL_RULES].join('\n\n')
+    : [TOOL_FORMAT, CONVERSATION_FLOW, UNIX_EXAMPLES, RULES_COMMON, UNIX_RULES].join('\n\n');
 
   const header = `You are Micro Models Agent (MMA), an AI coding assistant.
 You help with software engineering tasks in the project directory.`;
@@ -462,8 +497,8 @@ export async function runAgentLoop(
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
         const retryPrompt = consecutiveEmpty === 1
-          ? 'The tool result is above. Now continue your work: either call the next tool or write your response to the user. Do NOT stay silent.'
-          : 'You returned an empty response again. You MUST write something — either another tool call using <tool_call> format, or a text reply to the user. Silence is not allowed.';
+          ? 'The tool result is above. Your turn now. Either: (1) call the next tool using <tool_call>{"name":"...","arguments":{...}}</tool_call>, or (2) write a text reply to the user summarizing progress. Do NOT output nothing.'
+          : 'You returned an empty response again. You MUST write something now. Example of what to write: "File created. Now I will create the next file..." or call another tool. Silence is not allowed.';
         messages.push({ role: 'user', content: retryPrompt });
         console.log(theme.dim(`  [empty response #${consecutiveEmpty}, retrying]`));
         continue;
