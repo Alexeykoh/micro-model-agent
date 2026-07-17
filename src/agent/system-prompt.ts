@@ -37,6 +37,14 @@ Search files: {"name":"glob_search","arguments":{"pattern":"**/*.ts"}}
 Search content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
 Directory tree: {"name":"tree","arguments":{"depth":2}}
 
+## Plan / Todo / Question / Approve (native tools):
+  {"name":"plan","arguments":{"name":"Todo App","steps":["Step 1","Step 2"]}}
+  {"name":"plan","arguments":{"TaskName":"Todo App","Steps":"1. Init\n2. Create\n3. Test"}}
+  {"name":"todo","arguments":{"action":"add","text":"Implement feature X"}}
+  {"name":"todo","arguments":{"action":"list"}}
+  {"name":"question","arguments":{"question":"What color?","choices":["Red","Blue"]}}
+  {"name":"approve","arguments":{"action":"Delete file foo.ts"}}
+
 ## Web tools (search & fetch):
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
   {"name":"web_fetch","arguments":{"url":"https://example.com"}}

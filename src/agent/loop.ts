@@ -93,7 +93,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -403,6 +403,7 @@ export async function runAgentLoop(
     const allJsonRaw = extractAllToolCalls(response);
 
     const validCalls: { parsed: any; cmd?: string }[] = [];
+    const invalidCalls: string[] = [];
     for (const jsonRaw of allJsonRaw) {
       let p: any = null;
       try {
@@ -415,6 +416,8 @@ export async function runAgentLoop(
         const v = validateToolCall(p);
         if (v.valid) {
           validCalls.push({ parsed: p, cmd: v.cmd });
+        } else if (v.error) {
+          invalidCalls.push(v.error);
         }
       }
     }
@@ -430,6 +433,14 @@ export async function runAgentLoop(
     }
 
     if (validCalls.length === 0) {
+      if (invalidCalls.length > 0) {
+        const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve.`;
+        if (!quiet) {
+          renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
+        }
+        messages.push({ role: 'tool', content: feedback, tool_call_id: `invalid-${Date.now()}` });
+        continue;
+      }
       if (!skillsAutoLoaded) {
         return { messages };
       }
@@ -477,8 +488,66 @@ export async function runAgentLoop(
       let toolExitCode = 0;
       const toolStart = performance.now();
 
-      // Bash-specific prefix commands (plan/todo/question/approve/mcp)
-      if (isBash && cmd!.startsWith('plan ')) {
+      // Native tool calls: plan/todo/question/approve
+      if (parsed.name === 'plan') {
+        const planName = String(parsed.arguments.TaskName || parsed.arguments.name || parsed.arguments.plan || 'Untitled');
+        const stepsRaw = parsed.arguments.Steps || parsed.arguments.steps || [];
+        const steps = Array.isArray(stepsRaw) ? stepsRaw : String(stepsRaw).split('\n').filter((s: string) => s.trim());
+        if (!quiet) {
+          renderer?.writeBracketTag('plan', 'create');
+        }
+        toolOutput = createPlan(planName, steps);
+        if (!quiet && toolOutput) {
+          renderer?.writeNewline();
+          renderer?.writeLine(toolOutput);
+        }
+      } else if (parsed.name === 'todo') {
+        const action = String(parsed.arguments.action || 'list');
+        const text = String(parsed.arguments.text || '');
+        if (!quiet) {
+          renderer?.writeBracketTag('todo', action);
+        }
+        switch (action) {
+          case 'add': toolOutput = addTodo(text); break;
+          case 'done': toolOutput = doneTodo(text); break;
+          case 'remove': case 'rm': toolOutput = removeTodo(text); break;
+          case 'list': case 'ls': toolOutput = listTodos(); break;
+          default: toolOutput = 'Unknown todo action. Use: add, done, remove, list'; toolExitCode = 1;
+        }
+        if (!quiet && toolExitCode === 0 && toolOutput) {
+          renderer?.writeNewline();
+          renderer?.writeLine(toolOutput);
+        }
+      } else if (parsed.name === 'question') {
+        const question = String(parsed.arguments.question || parsed.arguments.text || '');
+        const choicesArr = Array.isArray(parsed.arguments.choices) ? parsed.arguments.choices : [];
+        if (!quiet) {
+          renderer?.writeBracketTag('question', question);
+        }
+        messages.push({
+          role: 'tool',
+          content: `Question asked: ${question}`,
+          tool_call_id: toolId,
+        });
+        return {
+          messages,
+          questionPending: { question, choices: choicesArr.length > 0 ? choicesArr : undefined },
+        };
+      } else if (parsed.name === 'approve') {
+        const action = String(parsed.arguments.action || parsed.arguments.text || '');
+        if (!quiet) {
+          renderer?.writeBracketTag('approve', action);
+        }
+        messages.push({
+          role: 'tool',
+          content: `Approval requested: ${action}`,
+          tool_call_id: toolId,
+        });
+        return {
+          messages,
+          questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
+        };
+      } else if (isBash && cmd!.startsWith('plan ')) {
         const planArgs = cmd!.slice(5).trim();
         const { action, params } = parsePlanCommand(planArgs);
         if (!quiet) {
