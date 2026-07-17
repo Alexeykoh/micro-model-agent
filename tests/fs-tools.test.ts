@@ -274,6 +274,33 @@ describe('tree', () => {
   });
 });
 
+describe('argument validation', () => {
+  it('edit_file rejects missing path', () => {
+    const r = handleEditFile({ old_string: 'a', new_string: 'b' }, tmpDir);
+    fail(r);
+    expect(r.stderr).toContain('path is required');
+  });
+
+  it('edit_file rejects missing old_string', () => {
+    writeFileSync(join(tmpDir, 'f.txt'), 'content', 'utf-8');
+    const r = handleEditFile({ path: 'f.txt', new_string: 'b' }, tmpDir);
+    fail(r);
+    expect(r.stderr).toContain('old_string is required');
+  });
+
+  it('write_file rejects missing path', () => {
+    const r = handleWriteFile({ content: 'hello' }, tmpDir);
+    fail(r);
+    expect(r.stderr).toContain('path is required');
+  });
+
+  it('write_file rejects missing content', () => {
+    const r = handleWriteFile({ path: 'f.txt' }, tmpDir);
+    fail(r);
+    expect(r.stderr).toContain('string');
+  });
+});
+
 describe('path security', () => {
   it('rejects path traversal in all tools', () => {
     const malicious = '../../etc/passwd';

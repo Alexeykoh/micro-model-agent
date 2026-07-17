@@ -61,13 +61,17 @@ const RULES_COMMON = `Rules:
 3. CRITICAL: After every tool call, CHECK the result (exit code + output).
    If exit code != 0, DO NOT claim success — tell the user about the error.
    Verify files were created before saying "done".
-4. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\\".
+4. NEVER return an empty response. After receiving a tool result, you MUST either:
+   a) Call another tool (if more work is needed), OR
+   b) Write a text response to the user (summarize what was done, report errors, ask questions).
+   Staying silent after a tool result is always wrong.
+5. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\\".
    If your command contains double quotes, wrap them in escaped form.
-5. For large files (>200 lines), use offset/limit with read_file:
+6. For large files (>200 lines), use offset/limit with read_file:
    {"name":"read_file","arguments":{"path":"file.ts","offset":1,"limit":100}}
    {"name":"read_file","arguments":{"path":"file.ts","offset":101,"limit":100}}
    Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
-6. SKILLS FIRST, THEN PLAN: For complex tasks (3+ steps):
+7. SKILLS FIRST, THEN PLAN: For complex tasks (3+ steps):
    a. Suggest relevant skills from Available Skills above: "Для этой задачи рекомендую @skill1 @skill2"
    b. User loads skills in next message: "@skill1 @skill2"
    c. Skills are injected into this prompt — READ the skill content carefully
@@ -76,7 +80,7 @@ const RULES_COMMON = `Rules:
    f. Mark step as done only AFTER verifying the result (exit code 0 + file exists)
    Example: User: "Создай REST API" → You: "Рекомендую @typescript-expert @nodejs-expert"
    User: "@typescript-expert @nodejs-expert" → Skills loaded → You read them → plan create REST API ...
-7. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.`;
+8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
@@ -268,7 +272,32 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: true, name: parsed.name, cmd };
   }
 
-  // For filesystem tools, validate path-based args exist
+  // Validate required arguments for filesystem tools
+  const REQUIRED_ARGS: Record<string, string[]> = {
+    read_file: ['path'],
+    write_file: ['path', 'content'],
+    edit_file: ['path', 'old_string', 'new_string'],
+    list_dir: [],
+    create_dir: ['path'],
+    delete_file: ['path'],
+    copy_file: ['source', 'destination'],
+    move_file: ['source', 'destination'],
+    file_info: ['path'],
+    glob_search: ['pattern'],
+    grep_search: ['pattern'],
+    tree: [],
+  };
+
+  const required = REQUIRED_ARGS[parsed.name] ?? [];
+  const missing = required.filter(k => {
+    const v = parsed.arguments[k];
+    return v === undefined || v === null || v === '';
+  });
+
+  if (missing.length > 0) {
+    return { valid: false, error: `Missing required argument(s): ${missing.join(', ')}. Tool "${parsed.name}" requires: ${required.join(', ')}` };
+  }
+
   return { valid: true, name: parsed.name };
 }
 
@@ -387,6 +416,7 @@ export async function runAgentLoop(
   ];
 
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
+  let consecutiveEmpty = 0;
 
   for (let step = 0; step < 25; step++) {
     let skillsAutoLoaded = false;
@@ -428,15 +458,22 @@ export async function runAgentLoop(
     }
 
     if (!response.trim()) {
+      consecutiveEmpty++;
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'tool') {
-        messages.push({ role: 'user', content: 'Теперь ответь пользователю на основе результата выше. Не вызывай инструменты — просто напиши ответ.' });
-        console.log(theme.dim('  [empty response after tool, retrying with prompt]'));
+      if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
+        const retryPrompt = consecutiveEmpty === 1
+          ? 'The tool result is above. Now continue your work: either call the next tool or write your response to the user. Do NOT stay silent.'
+          : 'You returned an empty response again. You MUST write something — either another tool call using <tool_call> format, or a text reply to the user. Silence is not allowed.';
+        messages.push({ role: 'user', content: retryPrompt });
+        console.log(theme.dim(`  [empty response #${consecutiveEmpty}, retrying]`));
         continue;
       }
-      console.log(theme.error('[model returned empty response]'));
+      console.log(theme.error(consecutiveEmpty > 3
+        ? `[model returned empty response ${consecutiveEmpty} times in a row — stopping]`
+        : '[model returned empty response]'));
       return { messages };
     }
+    consecutiveEmpty = 0;
 
     messages.push({ role: 'assistant', content: response });
 

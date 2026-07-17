@@ -27,6 +27,7 @@ export function handleWriteFile(
   const path = String(args.path ?? '');
   const content = args.content;
 
+  if (!path) return fsError('path is required. Usage: {"name":"write_file","arguments":{"path":"file.ts","content":"..."}}');
   if (typeof content !== 'string') {
     return fsError('Content must be a string');
   }

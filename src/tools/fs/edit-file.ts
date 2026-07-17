@@ -31,7 +31,9 @@ export function handleEditFile(
   const newString = String(args.new_string ?? '');
   const replaceAll = Boolean(args.replace_all);
 
+  if (!path) return fsError('path is required. Usage: {"name":"edit_file","arguments":{"path":"file.ts","old_string":"old","new_string":"new"}}');
   if (!oldString) return fsError('old_string is required');
+  if (newString === '' && !args.hasOwnProperty('new_string')) return fsError('new_string is required (use empty string "" to delete text)');
 
   const resolved = resolvePath(path, cwd);
   if (!resolved.ok) return fsError(resolved.error);
