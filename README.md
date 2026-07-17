@@ -36,55 +36,73 @@ rm -rf ~/.mma                          # удалить конфиг, кэш, л
 
 ## Быстрый старт
 
-### 1. Добавьте провайдера
-
-Если у вас уже запущен LM Studio на `localhost:1234`:
+### Интерактивный режим (REPL) — самый простой способ
 
 ```bash
-# Провайдер уже есть в конфиге по умолчанию, можно сразу использовать
-mma "Привет! Как тебя зовут?"
+# Установите
+npm install -g micro-models-agent
+
+# И просто запустите
+mma
 ```
 
-Если нужно добавить другого провайдера:
+> **Совет:** перед первым запуском запустите LM Studio → вкладка Local Server → Start Server → загрузите модель (например, [Qwen 3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B-Instruct-GGUF)). Мастер сам найдёт её и настроит.
+
+**При первом запуске** появится мастер настройки:
+1. Выберите провайдера (LM Studio, Ollama или Remote API)
+2. Мастер найдёт доступные модели и протестирует соединение
+3. Готово — вы в REPL, можно писать запросы
+
+**При повторных запусках** REPL открывается сразу.
+
+В REPL работаете как в чате: пишете задачу, агент думает и выполняет. Доступны служебные команды:
+
+| Команда | Описание |
+|---------|----------|
+| `/help` | Справка |
+| `/read <file>` | Показать файл |
+| `/write <file>` | Записать файл |
+| `/bash <cmd>` | Выполнить команду |
+| `/clear` | Очистить контекст |
+| `/exit` | Выход |
+
+### One-shot (быстрый запрос)
 
 ```bash
-# Ollama
+mma "Создай React-компонент для формы входа"
+```
+
+Можно передать провайдера и модель флагами:
+
+```bash
+mma --provider ollama --model qwen3.5-9b "Напиши Dockerfile"
+```
+
+### С пайпом (stdin)
+
+```bash
+cat package.json | mma "Опиши зависимости"
+```
+
+## Настройка провайдеров и моделей
+
+По умолчанию конфиг настроен на LM Studio (`localhost:1234`). Если нужно добавить другой сервер:
+
+```bash
+# Добавить провайдера
 mma provider add ollama http://localhost:11434/v1
 
-# vLLM
-mma provider add vllm http://localhost:8000/v1
+# Переключиться на него
+mma provider use ollama
 
-# Together AI
-mma provider add together https://api.together.xyz/v1
-```
-
-### 2. Добавьте модель
-
-```bash
-# mma model add <имя_алиас> <model_id> <контекст_в_токенах>
-
+# Добавить модель к активному провайдеру
 mma model add qwen3.5-9b qwen3.5-9b-instruct 32768
-mma model add qwen2.5-14b qwen2.5-14b-instruct 32768
-mma model add deepseek-coder deepseek-coder-6.7b-instruct 16384
+
+# Выбрать модель (model add не активирует автоматически)
+mma model use qwen3.5-9b
 ```
 
-### 3. Используйте
-
-```bash
-# One-shot режим
-mma "Создай React-компонент для формы входа"
-
-# Интерактивный режим (REPL)
-mma
-
-# С stdin (пайп)
-cat package.json | mma "Опиши зависимости"
-
-# С выбором провайдера/модели
-mma --provider ollama --model qwen3.5:9b "Напиши Dockerfile для Node.js приложения"
-```
-
-## Управление провайдерами и моделями
+### Все команды управления
 
 ```bash
 # Провайдеры
@@ -95,7 +113,8 @@ mma provider remove <имя>      # Удалить провайдера
 
 # Модели
 mma model list                 # Список моделей активного провайдера
-mma model use qwen3.5-9b       # Переключиться на модель
+mma model use <имя>            # Переключиться на модель
+mma model current              # Показать активную модель
 mma model add <имя> <id> <ctx> # Добавить модель
 mma model remove <имя>         # Удалить модель
 mma model params [имя]         # Параметры модели
