@@ -93,7 +93,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree']);
+  const VALID_TOOLS = new Set(['bash', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -123,6 +123,8 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     glob_search: ['pattern'],
     grep_search: ['pattern'],
     tree: [],
+    web_search: ['query'],
+    web_fetch: ['url'],
   };
 
   const required = REQUIRED_ARGS[parsed.name] ?? [];

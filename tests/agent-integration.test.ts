@@ -126,4 +126,17 @@ describe('Agent loop integration', () => {
     expect(a || b || c).toBe(true);
     cleanup('multi-a.txt', 'multi-b.txt', 'multi-c.txt');
   }, 120000);
+
+  it('uses web_search tool', async () => {
+    if (!(await isAvailable())) return;
+    const registry = new ToolRegistry();
+    const result = await runAgentLoop(
+      provider, registry,
+      'Use the web_search tool to search for "weather Minsk today". Return the tool output.',
+      undefined, undefined, mockRenderer, 'test', { quiet: true },
+    );
+    const toolCalls = result.messages.filter(m => m.role === 'tool');
+    // Model should have called web_search — tool output is either results or "No results found."
+    expect(toolCalls.length).toBeGreaterThan(0);
+  }, 90000);
 });

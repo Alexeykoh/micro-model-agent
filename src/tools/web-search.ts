@@ -67,8 +67,8 @@ interface SearchResult {
 function parseDuckDuckGoResults(html: string, max: number): SearchResult[] {
   const results: SearchResult[] = [];
 
-  const linkRegex = /<a[^>]*href="([^"]*)"[^>]*class="result-link"[^>]*>([\s\S]*?)<\/a>/g;
-  const snippetRegex = /<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/g;
+  const linkRegex = /<a[^>]*href="([^"]*)"[^>]*class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/g;
+  const snippetRegex = /<td[^>]*class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/g;
 
   const links: { url: string; title: string }[] = [];
   let match: RegExpExecArray | null;
