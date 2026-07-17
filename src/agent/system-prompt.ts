@@ -93,17 +93,17 @@ const RULES_COMMON = `Rules:
    {"name":"read_file","arguments":{"path":"file.ts","offset":1,"limit":100}}
    {"name":"read_file","arguments":{"path":"file.ts","offset":101,"limit":100}}
    Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
-7. SKILLS FIRST, THEN PLAN: For complex tasks (3+ steps):
-   a. Suggest relevant skills: "Рекомендую @skill1 @skill2"
-   b. IMMEDIATELY start working — do NOT wait for user to confirm
-   c. If skills are in Available Skills, reference them in your response
+7. SKILLS AND PLANNING: For complex tasks (3+ steps):
+   a. If skills are NOT loaded yet: suggest them: "Рекомендую @skill1 @skill2"
+   b. If skills ARE loaded (you see "Skills loaded" in context): DO NOT suggest skills again — they are already loaded
+   c. IMMEDIATELY create a plan and start executing
    d. Create a plan: plan create TaskName Step1 Step2 Step3
    e. Mark current step as in_progress before executing it
    f. Mark step as done only AFTER verifying the result (exit code 0 + file exists)
-   Example: User: "Создай REST API" → You: "Рекомендую @typescript-expert. Создаю план..."
-   plan create REST API init-project create-schemas create-routes setup-auth
+   Example: User: "Создай REST API" → You: plan create REST API init-project create-schemas
 8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
-9. NEVER JUST TALK — ALWAYS ACT. After suggesting skills, IMMEDIATELY create a plan and start executing. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases.`;
+9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
+10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

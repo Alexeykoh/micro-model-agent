@@ -93,7 +93,7 @@ export class ReadlineRenderer implements OutputRenderer {
   }
 
   updateContextUsage(text: string): void {
-    console.log(`  ${text}`)
+    console.log(`\n  ${text}\n`)
   }
 
   updateStatus(_info: StatusInfo): void {

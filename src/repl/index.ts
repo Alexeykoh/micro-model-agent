@@ -73,16 +73,11 @@ export async function runRepl(
     }
 
     renderer.writeNewline();
-    renderer.writeBracketTag('user', line)
+    renderer.writeDim('─'.repeat(40));
+    renderer.writeBracketTag('user', ` ${line}`);
+    renderer.writeDim('─'.repeat(40));
+    renderer.writeNewline();
     const result = await history.send(line, provider, registry, renderer, modelLabel, { quiet: true });
-
-    // Show agent response with color
-    const lastMsg = result.messages[result.messages.length - 1];
-    if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
-      renderer.writeNewline();
-      renderer.writeSuccess(lastMsg.content);
-      renderer.writeNewline();
-    }
 
     if (result.questionPending) {
       const { question, choices } = result.questionPending;
