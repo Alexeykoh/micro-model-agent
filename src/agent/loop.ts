@@ -453,8 +453,8 @@ export async function runAgentLoop(
       console.log(theme.info(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`));
       // Rebuild system prompt with new skills
       messages[0] = { role: 'system', content: buildSystemPrompt() + '\n\n' + formatSkillsBlock(loadedSkills) };
-      // Tell model skills are loaded — it should proceed with planning
-      messages.push({ role: 'user', content: `[System: Skills already loaded: ${newSkillNames.join(', ')}. They are in your context now. Create a plan and start working — do NOT ask user to load skills again.]` });
+      // Tell model skills are loaded — it should proceed with planning, and REMEMBER to use fs tools
+      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working.]` });
     }
 
     if (!response.trim()) {
@@ -654,10 +654,13 @@ export async function runAgentLoop(
           ? (cmd!.match(/Set-Content|Add-Content/))
           : (parsed.name === 'write_file' || parsed.name === 'edit_file');
         if (isWriteOp) {
-          const filePath = isBash
+          const rawPath = isBash
             ? cmd!.match(/-Path\s+['"]?([^'"]+\.(?:ts|tsx|js|jsx|json))['"]?/i)?.[1]?.replace(/\\/g, '/')
             : String(parsed.arguments.path ?? '');
-          if (filePath && /\.(ts|tsx|js|jsx|json)$/.test(filePath)) {
+          if (rawPath && /\.(ts|tsx|js|jsx|json)$/.test(rawPath)) {
+            // Make path relative to cwd if it's absolute
+            const { isAbsolute, relative } = await import('node:path');
+            const filePath = isAbsolute(rawPath) ? relative(process.cwd(), rawPath).replace(/\\/g, '/') : rawPath;
             const syntaxResult = checkFileSyntax(filePath, process.cwd());
             if (syntaxResult !== 'OK') {
               const errorLines = syntaxResult.split('\n').filter(l => l.trim());

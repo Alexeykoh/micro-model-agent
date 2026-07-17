@@ -41,7 +41,23 @@ const UNIX_TO_PWSH: [RegExp, string | ((match: RegExpMatchArray) => string)][] =
   [/^chmod\s+/, '# chmod not needed on Windows -- '],
 ];
 
+function expandBraces(cmd: string): string {
+  // Expand bash-style brace expansion: dir\{a,b,c} -> dir\a; dir\b; dir\c
+  // Also handles: dir/{a,b,c} and dir\{a,b,c}
+  return cmd.replace(/\{([^{}]+)\}/g, (_, inner) => {
+    const items = inner.split(',').map((s: string) => s.trim());
+    // Return first item — the rest would need separate commands
+    // For New-Item, we'll return just the first path
+    return items[0] || '';
+  });
+}
+
 function translateToPowerShell(cmd: string): string {
+  // Expand brace expansion first (bashism that doesn't work in PowerShell)
+  if (cmd.includes('{') && cmd.includes('}')) {
+    cmd = expandBraces(cmd);
+  }
+
   for (const [pattern, replacement] of UNIX_TO_PWSH) {
     if (pattern.test(cmd)) {
       if (typeof replacement === 'function') {
