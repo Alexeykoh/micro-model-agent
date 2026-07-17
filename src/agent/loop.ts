@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import * as os from 'node:os';
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
@@ -715,7 +715,30 @@ export async function runAgentLoop(
               const shown = errorLines.slice(0, 3);
               const extra = errorLines.length > 3 ? ` (+${errorLines.length - 3} more)` : '';
               console.log(theme.bracketTag('syntax', `${shown.join('; ')}${extra}`));
-              toolOutput = `ERROR: File ${filePath} has syntax errors that MUST be fixed before continuing:\n${syntaxResult}\n\nFix this file now. Do NOT create new files until this is resolved.`;
+
+              // Extract line numbers from errors and show the actual code
+              const fullPath = join(process.cwd(), filePath);
+              let contextLines = '';
+              try {
+                const fileContent = readFileSync(fullPath, 'utf-8').split('\n');
+                for (const errLine of shown) {
+                  const lineMatch = errLine.match(/\((\d+),\d+\)/);
+                  if (lineMatch) {
+                    const lineNum = parseInt(lineMatch[1]);
+                    if (lineNum > 0 && lineNum <= fileContent.length) {
+                      const start = Math.max(0, lineNum - 2);
+                      const end = Math.min(fileContent.length, lineNum + 1);
+                      contextLines += `\n--- Line ${lineNum} ---\n`;
+                      for (let i = start; i < end; i++) {
+                        const marker = i === lineNum - 1 ? ' >> ' : '    ';
+                        contextLines += `${marker}${i + 1}: ${fileContent[i]}\n`;
+                      }
+                    }
+                  }
+                }
+              } catch { /* ignore read errors */ }
+
+              toolOutput = `SYNTAX ERROR in ${filePath}:\n${syntaxResult}${contextLines}\n\nDo NOT rewrite the entire file. Use edit_file to fix the specific broken line:\n{"name":"edit_file","arguments":{"path":"${filePath}","old_string":"broken code here","new_string":"fixed code here"}}`;
               hasSyntaxError = true;
               pendingSyntaxError = filePath;
             } else {
