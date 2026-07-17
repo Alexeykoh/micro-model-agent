@@ -306,6 +306,7 @@ export async function runAgentLoop(
   let consecutiveEmpty = 0;
   let pendingSyntaxError = '';
   let aborted = false;
+  let continuationNudges = 0;
 
   // Reset abort signal for this run
   if (renderer?.abortSignal === undefined) {
@@ -441,6 +442,21 @@ export async function runAgentLoop(
         messages.push({ role: 'tool', content: feedback, tool_call_id: `invalid-${Date.now()}` });
         continue;
       }
+
+      // Nudge model to continue working after a tool result
+      if (continuationNudges < 2) {
+        const lastThree = messages.slice(-3);
+        const hasRecentToolResult = lastThree.some(m => m.role === 'tool');
+        if (hasRecentToolResult) {
+          continuationNudges++;
+          if (!quiet) {
+            renderer?.writeDim(`  [nudge ${continuationNudges}/2: continue working]`);
+          }
+          messages.push({ role: 'user', content: '[Tool result received. Continue: call the next tool or write the final summary. Do NOT just repeat the plan — take action.]' });
+          continue;
+        }
+      }
+
       if (!skillsAutoLoaded) {
         return { messages };
       }
