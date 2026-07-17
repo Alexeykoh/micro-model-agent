@@ -452,6 +452,7 @@ export async function runAgentLoop(
 
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
   let consecutiveEmpty = 0;
+  let pendingSyntaxError = '';
 
   for (let step = 0; step < 25; step++) {
     let skillsAutoLoaded = false;
@@ -572,6 +573,17 @@ export async function runAgentLoop(
         continue;
       }
 
+      // Block new write operations if there's a pending syntax error
+      if (pendingSyntaxError && !isBash) {
+        const isWriteOp = parsed.name === 'write_file' || parsed.name === 'edit_file';
+        if (isWriteOp && String(parsed.arguments.path ?? '') !== pendingSyntaxError) {
+          const blocked = `BLOCKED: You have a syntax error in ${pendingSyntaxError}. Fix it first before writing new files.`;
+          console.log(theme.error(`  [blocked: fix syntax error in ${pendingSyntaxError} first]`));
+          messages.push({ role: 'tool', content: blocked, tool_call_id: toolId });
+          continue;
+        }
+      }
+
       let toolOutput = '';
       let toolExitCode = 0;
       const toolStart = performance.now();
@@ -684,6 +696,7 @@ export async function runAgentLoop(
       runPostToolUseHooks(process.cwd(), parsed.name, hookCmd, toolOutput, toolExitCode);
 
       // Syntax check after file write operations
+      let hasSyntaxError = false;
       if (toolExitCode === 0) {
         const isWriteOp = isBash
           ? (cmd!.match(/Set-Content|Add-Content/))
@@ -702,7 +715,14 @@ export async function runAgentLoop(
               const shown = errorLines.slice(0, 3);
               const extra = errorLines.length > 3 ? ` (+${errorLines.length - 3} more)` : '';
               console.log(theme.bracketTag('syntax', `${shown.join('; ')}${extra}`));
-              toolOutput += `\n\n[syntax check]\n${syntaxResult}`;
+              toolOutput = `ERROR: File ${filePath} has syntax errors that MUST be fixed before continuing:\n${syntaxResult}\n\nFix this file now. Do NOT create new files until this is resolved.`;
+              hasSyntaxError = true;
+              pendingSyntaxError = filePath;
+            } else {
+              // File has no errors — clear pending if this was the file with errors
+              if (pendingSyntaxError === filePath) {
+                pendingSyntaxError = '';
+              }
             }
           }
         }
@@ -731,6 +751,11 @@ export async function runAgentLoop(
         content: toolOutput.slice(0, 4000),
         tool_call_id: toolId,
       });
+
+      // If syntax error found — stop processing more tool calls in this batch
+      if (hasSyntaxError) {
+        break;
+      }
     } // end for each tool call
   }
   return { messages };
