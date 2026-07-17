@@ -18,7 +18,8 @@ interface ParseResult {
 const AT_REF_RE = /@([^\s"'|;]+)/g;
 
 function resolveFileRef(ref: string): string[] {
-  if (ref.includes(':') && !ref.includes('/')) {
+  // Filter out URLs (http://, https://, ftp://) but allow Windows paths (E:\...)
+  if (/^[a-z]+:\/\//i.test(ref)) {
     return [];
   }
 
