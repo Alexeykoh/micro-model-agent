@@ -146,7 +146,7 @@ async function doChat(
   renderer: OutputRenderer,
   signal?: AbortSignal,
   retries = 1,
-  filterThinking = false,
+  showThinking = false,
 ): Promise<{ response: string; genTimeMs: number }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
@@ -163,7 +163,7 @@ async function doChat(
 
     try {
       let buf = '';
-      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal, filterThinking })) {
+      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal, showThinking })) {
         if (!chunk.content && !chunk.reasoning) continue;
         if (chunk.content) fullText.push(chunk.content);
 
@@ -173,7 +173,7 @@ async function doChat(
         }
 
         if (chunk.reasoning) {
-          if (!filterThinking) {
+          if (showThinking) {
             if (reasoningBuf === false) {
               renderer.writeNewline();
               renderer.writeDim('┈ reasoning ┈');
@@ -266,7 +266,7 @@ export async function runAgentLoop(
   previousMessages?: ChatMessage[],
   renderer?: OutputRenderer,
   providerName?: string,
-  options?: { quiet?: boolean; filterThinking?: boolean },
+  options?: { quiet?: boolean; showThinking?: boolean },
 ): Promise<AgentLoopResult> {
   logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
@@ -350,8 +350,8 @@ export async function runAgentLoop(
       await ctx.updateTokens(messages);
     }
 
-    logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.filterThinking: ${options?.filterThinking}`);
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.filterThinking);
+    logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}`);
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.showThinking);
 
     // Auto-load skills if model suggested them in response
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);

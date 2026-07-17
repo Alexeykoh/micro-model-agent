@@ -21,7 +21,7 @@ export function registerConfigCommands(program: Command): void {
       const theme = getTheme();
       config.providers = {};
       config.active = { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' };
-      config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, filterThinking: true };
+      config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false };
       saveConfig(config);
       console.log(theme.successMsg('Configuration reset to defaults'));
     });
@@ -29,27 +29,27 @@ export function registerConfigCommands(program: Command): void {
   configCmd
     .command('thinking')
     .aliases(['think'])
-    .argument('[state]', 'on/off or true/false (toggle if not specified)')
-    .description('Show or toggle filterThinking (hide model reasoning)')
+    .argument('[state]', 'on/off or true/false')
+    .description('Show or toggle model reasoning display')
     .action((state?: string) => {
       const config = loadConfig();
       const theme = getTheme();
-      const current = config.agent.filterThinking ?? true;
+      const current = config.agent.showThinking ?? false;
 
       if (!state) {
         const status = current ? theme.successMsg('ON') : theme.error('OFF');
-        console.log(`${theme.highlight('filterThinking')}: ${status}`);
-        console.log(`  ${theme.dim('Model reasoning is')} ${current ? 'hidden' : 'shown'}`);
+        console.log(`${theme.highlight('showThinking')}: ${status}`);
+        console.log(`  ${theme.dim('Model reasoning is')} ${current ? 'shown' : 'hidden'}`);
         return;
       }
 
       const newValue = state === 'on' || state === 'true' || state === '1';
-      config.agent.filterThinking = newValue;
+      config.agent.showThinking = newValue;
       saveConfig(config);
 
       const status = newValue ? theme.successMsg('ON') : theme.error('OFF');
-      console.log(`${theme.highlight('filterThinking')}: ${status}`);
-      console.log(`  ${theme.dim('Model reasoning will be')} ${newValue ? 'hidden' : 'shown'}`);
+      console.log(`${theme.highlight('showThinking')}: ${status}`);
+      console.log(`  ${theme.dim('Model reasoning will be')} ${newValue ? 'shown' : 'hidden'}`);
       console.log(`  ${theme.dim('Restart MMA for changes to take effect')}`);
     });
 }

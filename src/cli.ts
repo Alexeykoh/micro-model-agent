@@ -178,7 +178,7 @@ export function createCli() {
             ? `${prompt}\n\nContext from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\``
             : `Context from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\`\n\nAnalyze the above content.`;
           const renderer = await createRenderer();
-          runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider, { filterThinking: config.agent.filterThinking });
+          runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
           return;
         }
       } catch { /* stdin not available, continue */ }
@@ -186,10 +186,10 @@ export function createCli() {
 
     if (prompt) {
       const renderer = await createRenderer();
-      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { filterThinking: config.agent.filterThinking });
+      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
     } else {
       const renderer = await createRenderer();
-      runRepl(provider, registry, modelLabel, renderer, { filterThinking: config.agent.filterThinking });
+      runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking });
     }
   });
 

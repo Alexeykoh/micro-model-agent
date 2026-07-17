@@ -25,7 +25,7 @@ export async function runRepl(
   registry: ToolRegistry,
   modelLabel: string,
   renderer: OutputRenderer,
-  options?: { filterThinking?: boolean },
+  options?: { showThinking?: boolean },
 ): Promise<void> {
   const sessionId = generateReadableId();
   initSessionLog(sessionId);
@@ -126,7 +126,7 @@ export async function runRepl(
     renderer.writeDim('─'.repeat(40));
     renderer.writeNewline();
     logREPL('user', line);
-    const result = await history.send(line, provider, registry, renderer, modelLabel, { filterThinking: options?.filterThinking });
+    const result = await history.send(line, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking });
 
     const lastAssistant = [...result.messages].reverse().find(m => m.role === 'assistant');
     if (lastAssistant) logREPL('assistant', lastAssistant.content);
@@ -145,7 +145,7 @@ export async function runRepl(
       renderer.writeBracketTag('user', answer);
       history.push('user', answer);
 
-      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel, { filterThinking: options?.filterThinking });
+      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking });
     }
     } catch (err: any) {
       const logPath = getLogPath();

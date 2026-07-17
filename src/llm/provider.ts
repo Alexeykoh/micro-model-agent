@@ -21,7 +21,7 @@ export interface ChatOptions {
   presence_penalty?: number;
   seed?: number;
   signal?: AbortSignal;
-  filterThinking?: boolean;
+  showThinking?: boolean;
 }
 
 export interface Chunk {

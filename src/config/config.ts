@@ -31,7 +31,7 @@ const DEFAULT_CONFIG: AppConfig = {
     },
   },
   active: { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' },
-  agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, filterThinking: true },
+  agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false },
 };
 
 function findProjectRoot(): string | null {

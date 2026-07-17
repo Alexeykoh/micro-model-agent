@@ -37,7 +37,7 @@ export class ConversationHistory {
     registry: ToolRegistry,
     renderer: OutputRenderer,
     providerName?: string,
-    options?: { quiet?: boolean; filterThinking?: boolean },
+    options?: { quiet?: boolean; showThinking?: boolean },
   ): Promise<AgentLoopResult> {
     logInfo('HISTORY', `send() called: "${prompt.slice(0, 50)}"`);
     const result = await runAgentLoop(
