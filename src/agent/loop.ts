@@ -8,7 +8,7 @@ import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
 import { loadAllMemory, loadAllMemoryDetailed, autoLearnFromError } from './memory.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
-import { loadAgentsMd, loadSkillsFromRefs, formatSkillsBlock } from '../skills/loader.js';
+import { loadAgentsMd, loadSkill, loadSkillsFromRefs, formatSkillsBlock, listInstalledSkills } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } from '../tools/plan.js';
@@ -18,35 +18,65 @@ import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { getTheme } from '../styling/index.js';
 
-const TOOL_FORMAT = `CRITICAL: There is ONLY ONE tool — bash. ALL commands are called through bash.
+const TOOL_FORMAT = `CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.
 
-To call ANY tool, output EXACTLY this format (on its own line):
+To call a tool, output EXACTLY this format (on its own line):
 
-<tool_call>{"name":"bash","arguments":{"cmd":"command here"}}</tool_call>
+<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>
 
-This includes:
-- File operations: dir, Get-Content, Set-Content
-- Git operations: git status, git add, git commit
-- Package managers: npm install, npm test
-- Plan tool: plan create, plan show, plan done
-- Todo tool: todo add, todo done, todo list
-- Question tool: question What framework? | Express | Fastify
-- Approve tool: approve Delete this file?
+## Filesystem Tools (USE THESE for file ops):
 
-NEVER output tool calls in any other format. ALWAYS use <tool_call>{"name":"bash","arguments":{...}}</tool_call>`;
+Read a file:
+  {"name":"read_file","arguments":{"path":"src/index.ts"}}
+  {"name":"read_file","arguments":{"path":"src/index.ts","offset":50,"limit":100}}
+
+Write/create a file:
+  {"name":"write_file","arguments":{"path":"src/utils.ts","content":"export function foo() { return 1; }"}}
+
+Edit (find & replace):
+  {"name":"edit_file","arguments":{"path":"src/index.ts","old_string":"old text","new_string":"new text"}}
+
+List directory:
+  {"name":"list_dir","arguments":{}}
+  {"name":"list_dir","arguments":{"path":"src"}}
+
+Create directory: {"name":"create_dir","arguments":{"path":"src/routes"}}
+Delete file: {"name":"delete_file","arguments":{"path":"old-file.ts"}}
+Copy file: {"name":"copy_file","arguments":{"source":"src/a.ts","destination":"src/b.ts"}}
+Move/rename: {"name":"move_file","arguments":{"source":"old.ts","destination":"new.ts"}}
+File info: {"name":"file_info","arguments":{"path":"src/index.ts"}}
+Search files: {"name":"glob_search","arguments":{"pattern":"**/*.ts"}}
+Search content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
+Directory tree: {"name":"tree","arguments":{"depth":2}}
+
+## Bash (for non-file operations — npm, git, etc):
+  {"name":"bash","arguments":{"cmd":"npm test"}}
+  {"name":"bash","arguments":{"cmd":"git status"}}
+
+NEVER output tool calls in any other format. ALWAYS use <tool_call> tags.`;
 
 const RULES_COMMON = `Rules:
-1. Use bash for EVERYTHING — ALWAYS use <tool_call> for file ops, never write content as chat text.
+1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
 2. Always respond in the user's language (Русский или English).
 3. CRITICAL: After every tool call, CHECK the result (exit code + output).
    If exit code != 0, DO NOT claim success — tell the user about the error.
    Verify files were created before saying "done".
 4. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\\".
    If your command contains double quotes, wrap them in escaped form.
-5. For large files (>200 lines), read in chunks:
-   - First 100 lines: Get-Content file -TotalCount 100
-   - Next 100 lines: Get-Content file | Select-Object -Skip 100 -First 100
-   - Or use: Select-String -Path file -Pattern "search term"`;
+5. For large files (>200 lines), use offset/limit with read_file:
+   {"name":"read_file","arguments":{"path":"file.ts","offset":1,"limit":100}}
+   {"name":"read_file","arguments":{"path":"file.ts","offset":101,"limit":100}}
+   Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
+6. SKILLS FIRST, THEN PLAN: For complex tasks (3+ steps):
+   a. Suggest relevant skills from Available Skills above: "Для этой задачи рекомендую @skill1 @skill2"
+   b. User loads skills in next message: "@skill1 @skill2"
+   c. Skills are injected into this prompt — READ the skill content carefully
+   d. Create a plan BASED ON the skill's workflow: plan create TaskName Step1 Step2 Step3
+   e. Mark current step as in_progress before executing it
+   f. Mark step as done only AFTER verifying the result (exit code 0 + file exists)
+   Example: User: "Создай REST API" → You: "Рекомендую @typescript-expert @nodejs-expert"
+   User: "@typescript-expert @nodejs-expert" → Skills loaded → You read them → plan create REST API ...
+7. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
@@ -129,7 +159,13 @@ You help with software engineering tasks in the project directory.`;
   const agentsMd = loadAgentsMd(process.cwd());
   const agentsBlock = agentsMd ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}` : '';
 
-  return [header, platformBlock, sysInfo, memory, projectMap, agentsBlock].filter(Boolean).join('\n');
+  // Build available skills list for the model
+  const allSkills = listInstalledSkills();
+  const skillsHint = allSkills.length > 0
+    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): SUGGEST skills FIRST → User loads them → You READ them → Create plan BASED ON skill content.\nDo NOT put @skill-name inside tool_call. Just tell the user which skill to load.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "Рекомендую @typescript-expert @nodejs-expert — напиши их в следующем сообщении."\n  3. User: "@typescript-expert @nodejs-expert"\n  4. Skills injected into this prompt — you READ them\n  5. You create plan BASED ON skill guidance: plan create REST API ...\n  6. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
+    : '';
+
+  return [header, platformBlock, sysInfo, memory, projectMap, agentsBlock, skillsHint].filter(Boolean).join('\n');
 }
 
 function extractAllToolCalls(response: string): string[] {
@@ -209,21 +245,31 @@ function extractToolCallFallback(response: string): { name: string; cmd: string 
   return null;
 }
 
-function validateToolCall(parsed: any): { valid: boolean; cmd?: string; error?: string } {
+function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: string; error?: string } {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, error: 'Not an object' };
   }
-  if (parsed.name !== 'bash') {
+
+  const VALID_TOOLS = new Set(['bash', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree']);
+
+  if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
   }
   if (!parsed.arguments || typeof parsed.arguments !== 'object') {
     return { valid: false, error: 'Missing arguments' };
   }
-  const cmd = String(parsed.arguments.cmd ?? '').trim();
-  if (!cmd) {
-    return { valid: false, error: 'Empty command' };
+
+  // For bash, require cmd argument
+  if (parsed.name === 'bash') {
+    const cmd = String(parsed.arguments.cmd ?? '').trim();
+    if (!cmd) {
+      return { valid: false, error: 'Empty command' };
+    }
+    return { valid: true, name: parsed.name, cmd };
   }
-  return { valid: true, cmd };
+
+  // For filesystem tools, validate path-based args exist
+  return { valid: true, name: parsed.name };
 }
 
 const CLEAR_LINE = '\r\x1b[K';
@@ -320,9 +366,10 @@ export async function runAgentLoop(
   const theme = getTheme();
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
 
-  const skills = loadSkillsFromRefs(prompt, process.cwd());
-  if (skills.length > 0) {
-    console.log(theme.info(`  Loaded ${skills.length} skill(s): ${skills.map(s => s.name).join(', ')} (~${skills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`));
+  const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
+  const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
+  if (loadedSkills.length > 0) {
+    console.log(theme.info(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')} (~${loadedSkills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`));
   }
 
   if (files.length > 0) {
@@ -332,7 +379,7 @@ export async function runAgentLoop(
     console.log();
   }
 
-  const systemPrompt = buildSystemPrompt() + (skills.length > 0 ? '\n\n' + formatSkillsBlock(skills) : '');
+  const systemPrompt = buildSystemPrompt() + (loadedSkills.length > 0 ? '\n\n' + formatSkillsBlock(loadedSkills) : '');
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...(previousMessages || []),
@@ -342,6 +389,7 @@ export async function runAgentLoop(
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
 
   for (let step = 0; step < 25; step++) {
+    let skillsAutoLoaded = false;
     await ctx.updateTokens(messages);
     console.log(`  ${ctx.formatUsage()}`);
 
@@ -353,6 +401,31 @@ export async function runAgentLoop(
     }
 
     const { response } = await doChat(provider, messages);
+
+    // Auto-load skills if model suggested them in response
+    const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
+    const newSkillNames: string[] = [];
+    for (const match of suggestedSkillRefs) {
+      const name = match[1];
+      // Skip common non-skill words
+      if (['email', 'api', 'id', 'json', 'url', 'http', 'https', 'localhost'].includes(name)) continue;
+      if (!loadedSkillNames.has(name)) {
+        const skill = loadSkill(name, process.cwd());
+        if (skill) {
+          newSkillNames.push(name);
+          loadedSkills.push(skill);
+          loadedSkillNames.add(name);
+        }
+      }
+    }
+    if (newSkillNames.length > 0) {
+      skillsAutoLoaded = true;
+      console.log(theme.info(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`));
+      // Rebuild system prompt with new skills
+      messages[0] = { role: 'system', content: buildSystemPrompt() + '\n\n' + formatSkillsBlock(loadedSkills) };
+      // Tell model skills are loaded — it should proceed with planning
+      messages.push({ role: 'user', content: `[System: Skills already loaded: ${newSkillNames.join(', ')}. They are in your context now. Create a plan and start working — do NOT ask user to load skills again.]` });
+    }
 
     if (!response.trim()) {
       const lastMsg = messages[messages.length - 1];
@@ -369,10 +442,9 @@ export async function runAgentLoop(
 
     // Extract ALL tool calls from response
     const allJsonRaw = extractAllToolCalls(response);
-    const allFallbacks: { name: string; cmd: string }[] = [];
 
     // Try to parse each tool call
-    const validCalls: { parsed: any; cmd: string }[] = [];
+    const validCalls: { parsed: any; cmd?: string }[] = [];
     for (const jsonRaw of allJsonRaw) {
       let p: any = null;
       try {
@@ -384,7 +456,7 @@ export async function runAgentLoop(
       if (p) {
         const v = validateToolCall(p);
         if (v.valid) {
-          validCalls.push({ parsed: p, cmd: v.cmd! });
+          validCalls.push({ parsed: p, cmd: v.cmd });
         }
       }
     }
@@ -398,22 +470,30 @@ export async function runAgentLoop(
       }
     }
 
-    // If no valid calls, return
+    // If no valid calls, return (unless skills were just auto-loaded — continue to let model use them)
     if (validCalls.length === 0) {
-      return { messages };
+      if (!skillsAutoLoaded) {
+        return { messages };
+      }
+      // Skills were loaded — continue loop so model can plan with them
+      continue;
     }
 
     // Process each tool call sequentially
     for (const call of validCalls) {
       const { parsed, cmd } = call;
-      const cmdPreview = cmd.length > 200 ? cmd.slice(0, 200) + '...' : cmd;
+      const isBash = parsed.name === 'bash';
+      const preview = isBash
+        ? (cmd!.length > 200 ? cmd!.slice(0, 200) + '...' : cmd!)
+        : JSON.stringify(parsed.arguments).slice(0, 200);
       const toolId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
 
       console.log();
-      console.log(theme.toolHeader('bash'));
-      console.log(`  ${theme.dim(cmdPreview)}`);
+      console.log(theme.toolHeader(parsed.name));
+      console.log(`  ${theme.dim(preview)}`);
 
-      const preHook = runPreToolUseHooks(process.cwd(), parsed.name, cmd);
+      const hookCmd = isBash ? cmd! : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
+      const preHook = runPreToolUseHooks(process.cwd(), parsed.name, hookCmd);
       if (!preHook.continue) {
         console.log(theme.bracketTag('hook blocked', preHook.message || ''));
         messages.push({ role: 'tool', content: `Hook blocked: ${preHook.message || ''}`, tool_call_id: toolId });
@@ -424,8 +504,9 @@ export async function runAgentLoop(
       let toolExitCode = 0;
       const toolStart = performance.now();
 
-      if (cmd.startsWith('plan ')) {
-        const planArgs = cmd.slice(5).trim();
+      // Bash-specific prefix commands (plan/todo/question/approve/mcp)
+      if (isBash && cmd!.startsWith('plan ')) {
+        const planArgs = cmd!.slice(5).trim();
         const { action, params } = parsePlanCommand(planArgs);
         console.log(theme.bracketTag('plan', action));
         switch (action) {
@@ -448,8 +529,8 @@ export async function runAgentLoop(
             toolOutput = 'Unknown plan action. Use: create, done, progress, show, clear';
             toolExitCode = 1;
         }
-      } else if (cmd.startsWith('todo ')) {
-        const todoArgs = cmd.slice(5).trim();
+      } else if (isBash && cmd!.startsWith('todo ')) {
+        const todoArgs = cmd!.slice(5).trim();
         const { action, params } = parseTodoCommand(todoArgs);
         console.log(theme.bracketTag('todo', action));
         switch (action) {
@@ -471,8 +552,8 @@ export async function runAgentLoop(
             toolOutput = 'Unknown todo action. Use: add, done, remove, list';
             toolExitCode = 1;
         }
-      } else if (cmd.startsWith('question ')) {
-        const qArgs = cmd.slice(9).trim();
+      } else if (isBash && cmd!.startsWith('question ')) {
+        const qArgs = cmd!.slice(9).trim();
         const { question, choices } = parseQuestionCommand(qArgs);
         console.log(theme.bracketTag('question', question));
         messages.push({
@@ -484,8 +565,8 @@ export async function runAgentLoop(
           messages,
           questionPending: { question, choices: choices.length > 0 ? choices : undefined },
         };
-      } else if (cmd.startsWith('approve ')) {
-        const approveArgs = cmd.slice(8).trim();
+      } else if (isBash && cmd!.startsWith('approve ')) {
+        const approveArgs = cmd!.slice(8).trim();
         const action = parseApproveCommand(approveArgs);
         console.log(theme.bracketTag('approve', action));
         messages.push({
@@ -497,8 +578,8 @@ export async function runAgentLoop(
           messages,
           questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
         };
-      } else if (isMCPCommand(cmd)) {
-        const mcpCmd = parseMCPCommand(cmd);
+      } else if (isBash && isMCPCommand(cmd!)) {
+        const mcpCmd = parseMCPCommand(cmd!);
         if (mcpCmd) {
           console.log(theme.bracketTag('mcp', `${mcpCmd.server}/${mcpCmd.tool}`));
           toolOutput = callMCPTool(process.cwd(), mcpCmd.server, mcpCmd.tool, mcpCmd.args);
@@ -506,7 +587,13 @@ export async function runAgentLoop(
           toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
           toolExitCode = 1;
         }
+      } else if (!isBash) {
+        // Filesystem or other dedicated tool — call registry directly
+        const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
+        toolOutput = result.stdout || result.stderr || '(no output)';
+        toolExitCode = result.exitCode;
       } else {
+        // Plain bash command
         const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 120 } });
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
@@ -519,21 +606,48 @@ export async function runAgentLoop(
         for (const line of errText.split('\n').slice(0, 5)) {
           console.log(`  ${theme.error(line)}`);
         }
-        autoLearnFromError(cmd, toolExitCode !== 0 ? toolOutput : '', '');
+        autoLearnFromError(hookCmd, toolExitCode !== 0 ? toolOutput : '', '');
       }
 
-      runPostToolUseHooks(process.cwd(), parsed.name, cmd, toolOutput, toolExitCode);
+      runPostToolUseHooks(process.cwd(), parsed.name, hookCmd, toolOutput, toolExitCode);
 
-      // Syntax check after file creation
-      if (toolExitCode === 0 && cmd.match(/Set-Content|Add-Content/)) {
-        const pathMatch = cmd.match(/-Path\s+['"]?([^'"]+\.(?:ts|tsx|js|jsx))['"]?/i);
-        if (pathMatch) {
-          const filePath = pathMatch[1].replace(/\\/g, '/');
-          const syntaxResult = checkFileSyntax(filePath, process.cwd());
-          if (syntaxResult !== 'OK') {
-            toolOutput += `\n\n[syntax check]\n${syntaxResult}`;
-            console.log(theme.bracketTag('syntax', syntaxResult.split('\n')[0]));
+      // Syntax check after file write operations
+      if (toolExitCode === 0) {
+        const isWriteOp = isBash
+          ? (cmd!.match(/Set-Content|Add-Content/))
+          : (parsed.name === 'write_file' || parsed.name === 'edit_file');
+        if (isWriteOp) {
+          const filePath = isBash
+            ? cmd!.match(/-Path\s+['"]?([^'"]+\.(?:ts|tsx|js|jsx|json))['"]?/i)?.[1]?.replace(/\\/g, '/')
+            : String(parsed.arguments.path ?? '');
+          if (filePath && /\.(ts|tsx|js|jsx|json)$/.test(filePath)) {
+            const syntaxResult = checkFileSyntax(filePath, process.cwd());
+            if (syntaxResult !== 'OK') {
+              const errorLines = syntaxResult.split('\n').filter(l => l.trim());
+              const shown = errorLines.slice(0, 3);
+              const extra = errorLines.length > 3 ? ` (+${errorLines.length - 3} more)` : '';
+              console.log(theme.bracketTag('syntax', `${shown.join('; ')}${extra}`));
+              toolOutput += `\n\n[syntax check]\n${syntaxResult}`;
+            }
           }
+        }
+      }
+
+      // Auto-show plan after plan operations
+      if (isBash && cmd!.startsWith('plan ') && toolExitCode === 0) {
+        const planOutput = showPlan();
+        if (planOutput && !planOutput.startsWith('No active plan')) {
+          console.log();
+          console.log(planOutput);
+        }
+      }
+
+      // Auto-show todos after todo operations
+      if (isBash && cmd!.startsWith('todo ') && toolExitCode === 0) {
+        const todoOutput = listTodos();
+        if (todoOutput) {
+          console.log();
+          console.log(todoOutput);
         }
       }
 

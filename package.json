@@ -14,11 +14,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/express": "^5.0.6",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
     "commander": "^12.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "esprima": "^4.0.1",
     "execa": "^9.6.1",
+    "express": "^5.2.1",
     "js-tiktoken": "^1.0.0",
     "jsonrepair": "^3.15.0",
+    "jsonwebtoken": "^9.0.3",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {

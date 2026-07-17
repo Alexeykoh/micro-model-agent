@@ -3,7 +3,14 @@ import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 const SKILLS_DIR = join(homedir(), '.mma', 'skills');
-const SKILLS_GLOBAL_DIR = join(homedir(), '.claude', 'skills');
+
+// Global skill directories searched in order (project-local dirs checked first in loadSkill)
+const SKILLS_GLOBAL_DIRS = [
+  join(homedir(), '.claude', 'skills'),
+  join(homedir(), '.agents', 'skills'),
+  join(homedir(), '.mimocode', 'skills'),
+  join(homedir(), '.opencode', 'skills'),
+];
 
 export interface Skill {
   name: string;
@@ -36,11 +43,14 @@ export function loadAgentsMd(cwd: string): string | null {
 
 export function loadSkill(name: string, cwd: string): Skill | null {
   const candidates = [
+    // Project-local directories first
     join(cwd, '.claude', 'skills', name, 'SKILL.md'),
     join(cwd, '.agents', 'skills', name, 'SKILL.md'),
     join(cwd, '.opencode', 'skills', name, 'SKILL.md'),
+    // User-local MMA skills
     join(SKILLS_DIR, name, 'SKILL.md'),
-    join(SKILLS_GLOBAL_DIR, name, 'SKILL.md'),
+    // Global skill directories (shared across harnesses)
+    ...SKILLS_GLOBAL_DIRS.map(dir => join(dir, name, 'SKILL.md')),
   ];
 
   for (const path of candidates) {
@@ -71,8 +81,9 @@ export function loadSkillsFromRefs(text: string, cwd: string): Skill[] {
 
 export function listInstalledSkills(): string[] {
   const skills: string[] = [];
+  const dirs = [SKILLS_DIR, ...SKILLS_GLOBAL_DIRS];
 
-  for (const dir of [SKILLS_DIR, SKILLS_GLOBAL_DIR]) {
+  for (const dir of dirs) {
     if (!existsSync(dir)) continue;
     try {
       const entries = readdirSync(dir, { withFileTypes: true });
