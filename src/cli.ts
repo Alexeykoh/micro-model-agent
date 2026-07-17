@@ -94,7 +94,7 @@ export function createCli() {
 
   program
     .name('mma')
-    .version('0.2.24')
+    .version('0.2.25')
     .description('Micro Models Agent (MMA) — LLM agent harness for small models');
 
   program
