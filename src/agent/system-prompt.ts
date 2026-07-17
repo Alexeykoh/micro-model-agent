@@ -108,7 +108,8 @@ const RULES_COMMON = `Rules:
    Example: User: "Создай REST API" → You: plan create REST API init-project create-schemas
 8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
 9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
-10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.`;
+10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.
+11. CRITICAL: NEVER include your internal reasoning, planning, or meta-instructions in the response. Do NOT start with phrases like "Пользователь сказал..., нужно..." or "Model should...". Output ONLY the final answer to the user. Keep responses short and direct.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
