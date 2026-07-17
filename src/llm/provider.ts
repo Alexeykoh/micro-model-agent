@@ -26,5 +26,6 @@ export interface ChatOptions {
 
 export interface Chunk {
   content: string;
+  reasoning?: string;
   finish_reason?: 'stop' | 'length' | 'tool_calls' | null;
 }

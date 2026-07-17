@@ -21,7 +21,7 @@ export function registerConfigCommands(program: Command): void {
       const theme = getTheme();
       config.providers = {};
       config.active = { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' };
-      config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000 };
+      config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, filterThinking: true };
       saveConfig(config);
       console.log(theme.successMsg('Configuration reset to defaults'));
     });
@@ -34,7 +34,7 @@ export function registerConfigCommands(program: Command): void {
     .action((state?: string) => {
       const config = loadConfig();
       const theme = getTheme();
-      const current = config.agent.filterThinking ?? false;
+      const current = config.agent.filterThinking ?? true;
 
       if (!state) {
         const status = current ? theme.successMsg('ON') : theme.error('OFF');

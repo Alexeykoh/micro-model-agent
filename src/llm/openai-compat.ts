@@ -70,8 +70,8 @@ export class OpenAICompat implements LLMProvider {
           const delta = parsed.choices?.[0]?.delta;
           if (delta?.content) {
             yield { content: delta.content, finish_reason: null };
-          } else if (delta?.reasoning_content && options?.filterThinking === false) {
-            yield { content: delta.reasoning_content, finish_reason: null };
+          } else if (delta?.reasoning_content) {
+            yield { content: '', reasoning: delta.reasoning_content, finish_reason: null };
           }
           const finish = parsed.choices?.[0]?.finish_reason;
           if (finish) {

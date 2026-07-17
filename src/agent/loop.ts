@@ -152,6 +152,7 @@ async function doChat(
     const startTime = performance.now();
     const fullText: string[] = [];
     let started = false;
+    let reasoningBuf: string | false = false;
 
     if (signal?.aborted) return { response: '', genTimeMs: 0 };
 
@@ -163,12 +164,30 @@ async function doChat(
     try {
       let buf = '';
       for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal, filterThinking })) {
-        if (!chunk.content) continue;
-        fullText.push(chunk.content);
+        if (!chunk.content && !chunk.reasoning) continue;
+        if (chunk.content) fullText.push(chunk.content);
 
         if (!started) {
           renderer.clearSpinner();
           started = true;
+        }
+
+        if (chunk.reasoning) {
+          if (!filterThinking) {
+            if (reasoningBuf === false) {
+              renderer.writeNewline();
+              renderer.writeDim('┈ reasoning ┈');
+              reasoningBuf = '';
+            }
+            reasoningBuf += chunk.reasoning;
+          }
+          continue;
+        }
+
+        if (reasoningBuf !== false) {
+          renderer.writeNewline();
+          renderer.writeDim(reasoningBuf);
+          reasoningBuf = false;
         }
 
         buf += chunk.content;
@@ -178,7 +197,7 @@ async function doChat(
           const tcEnd = buf.indexOf('</tool_call>');
 
           if (tcStart === -1 && tcEnd === -1) {
-            renderer.writeMarkdownChunk(buf);
+            if (buf) renderer.writeMarkdownChunk(buf);
             buf = '';
             break;
           }
@@ -201,6 +220,11 @@ async function doChat(
           }
         }
       }
+    if (reasoningBuf !== false) {
+      renderer.writeNewline();
+      renderer.writeDim(reasoningBuf);
+    }
+
     } catch (e: any) {
       if (e.name === 'AbortError') {
         logLLMResponse(provider.model, 0, performance.now() - startTime, 'Aborted');

@@ -44,8 +44,20 @@ function findProjectRoot(): string | null {
   }
 }
 
+function deepAssign(target: Record<string, unknown>, source: Record<string, unknown>): void {
+  for (const key of Object.keys(source)) {
+    const tv = target[key];
+    const sv = source[key];
+    if (tv && typeof tv === 'object' && !Array.isArray(tv) && sv && typeof sv === 'object' && !Array.isArray(sv)) {
+      deepAssign(tv as Record<string, unknown>, sv as Record<string, unknown>);
+    } else {
+      target[key] = sv;
+    }
+  }
+}
+
 export function loadConfig(): AppConfig {
-  const config = { ...DEFAULT_CONFIG, providers: { ...DEFAULT_CONFIG.providers }, active: { ...DEFAULT_CONFIG.active }, agent: { ...DEFAULT_CONFIG.agent } };
+  const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
 
   const projectRoot = findProjectRoot();
   if (projectRoot) {
@@ -53,7 +65,7 @@ export function loadConfig(): AppConfig {
     if (existsSync(rcPath)) {
       try {
         const rc = JSON.parse(readFileSync(rcPath, 'utf-8'));
-        Object.assign(config, rc);
+        deepAssign(config as unknown as Record<string, unknown>, rc);
       } catch { /* ignore invalid config */ }
     }
   }
@@ -62,7 +74,7 @@ export function loadConfig(): AppConfig {
   if (existsSync(globalPath)) {
     try {
       const global = JSON.parse(readFileSync(globalPath, 'utf-8'));
-      Object.assign(config, global);
+      deepAssign(config as unknown as Record<string, unknown>, global);
     } catch { /* ignore */ }
   }
 
