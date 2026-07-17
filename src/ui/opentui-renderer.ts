@@ -5,6 +5,8 @@ let _Text: any
 let _Box: any
 let _Input: any
 let _ScrollBox: any
+let _MarkdownRenderable: any
+let _SyntaxStyle: any
 
 async function loadOpentui() {
   const mod = await import('@opentui/core')
@@ -12,6 +14,8 @@ async function loadOpentui() {
   _Box = mod.Box
   _Input = mod.Input
   _ScrollBox = mod.ScrollBox
+  _MarkdownRenderable = mod.MarkdownRenderable
+  _SyntaxStyle = mod.SyntaxStyle
   return mod
 }
 
@@ -46,6 +50,8 @@ export class OpenTuiRenderer implements OutputRenderer {
   private scrollContent: any = null
   private mdBuffer = ''
   private mdTextNode: any = null
+  private mdRenderable: any = null
+  private syntaxStyle: any = null
   private inputResolve: ((value: string) => void) | null = null
   private destroyed = false
 
@@ -57,6 +63,20 @@ export class OpenTuiRenderer implements OutputRenderer {
       exitOnCtrlC: true,
       autoFocus: true,
       consoleMode: 'disabled',
+    })
+
+    this.syntaxStyle = _SyntaxStyle.fromStyles({
+      'markup.heading.1': { fg: theme.accent, bold: true },
+      'markup.heading.2': { fg: theme.info, bold: true },
+      'markup.heading.3': { fg: theme.tool, bold: true },
+      'markup.bold': { bold: true },
+      'markup.italic': { italic: true },
+      'markup.raw': { fg: theme.success },
+      'markup.link': { fg: theme.info, underline: true },
+      'markup.list': { fg: theme.text },
+      'markup.blockquote': { fg: theme.textDim },
+      'markup.code': { fg: theme.success },
+      default: { fg: theme.text },
     })
 
     this.buildLayout()
@@ -252,13 +272,14 @@ export class OpenTuiRenderer implements OutputRenderer {
 
   writeMarkdownChunk(chunk: string): void {
     this.mdBuffer += chunk
-    if (this.mdTextNode) {
-      this.mdTextNode.content = this.mdBuffer
+    if (this.mdRenderable) {
+      this.mdRenderable.content = this.mdBuffer
       this.renderer?.requestRender()
       return
     }
     if (!this.scrollContent || this.destroyed) return
-    const block = _Box({ ...blockStyle, backgroundColor: theme.assistantBg })
+    const bg = theme.assistantBg
+    const block = _Box({ ...blockStyle, backgroundColor: bg })
     const header = _Box({ flexDirection: 'row', alignItems: 'center' })
     header.add(_Text({ content: ' Assistant ', bold: true, fg: theme.accent, flexGrow: 1 }))
     header.add(_Text({
@@ -267,15 +288,24 @@ export class OpenTuiRenderer implements OutputRenderer {
       onMouseDown: () => this.copyText(this.mdBuffer),
     }))
     block.add(header)
-    const textVNode = _Text({ id: 'mma-md-stream', content: this.mdBuffer, fg: theme.text })
-    block.add(textVNode)
+    const md = new _MarkdownRenderable(this.renderer.root.ctx, {
+      content: this.mdBuffer,
+      syntaxStyle: this.syntaxStyle,
+      streaming: true,
+      width: '100%',
+    })
+    block.add(md)
     this.scrollContent.add(block)
-    this.mdTextNode = this.renderer?.root?.findDescendantById('mma-md-stream')
+    this.mdRenderable = md
     this.renderer?.requestRender()
   }
 
   commitMarkdown(): void {
-    this.mdTextNode = null
+    if (this.mdRenderable) {
+      this.mdRenderable.streaming = false
+      this.renderer?.requestRender()
+    }
+    this.mdRenderable = null
     this.mdBuffer = ''
   }
 
