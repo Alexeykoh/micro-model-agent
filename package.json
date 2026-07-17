@@ -8,15 +8,12 @@
   },
   "scripts": {
     "mma": "bun run src/index.ts",
-    "tui": "bun run src/index.ts",
-    "plain": "bun run src/index.ts -- --plain",
     "build": "bunx tsc",
     "dev": "bun --watch src/index.ts",
     "test": "bun test",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@opentui/core": "^0.4.4",
     "commander": "^12.0.0",
     "js-tiktoken": "^1.0.0",
     "jsonrepair": "^3.15.0",

@@ -39,6 +39,7 @@ export class OpenAICompat implements LLMProvider {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal: options?.signal,
     });
 
     if (!response.ok) {

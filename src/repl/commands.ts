@@ -50,6 +50,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'new', description: 'clear context', handler: cmdClear },
     { name: 'stop', description: 'stop agent loop', handler: cmdStop },
     { name: 'index', description: 'index management', handler: cmdIndex },
+    { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
 }
 
@@ -90,6 +91,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /resume <id>      — resume a session
   /save [name]      — save current session
   /clear            — clear context (new session)
+  /export [mode]    — export session (normal or debug)
   /index [cmd]      — index status/rebuild/map
   /stop             — stop agent loop
   /exit             — exit MMA
@@ -424,4 +426,36 @@ function cmdIndex(args: string, ctx: CommandContext): void {
     default:
       ctx.renderer.writeInfo('  Usage: /index [status|rebuild|map]');
   }
+}
+
+function cmdExport(args: string, ctx: CommandContext): void {
+  const mode = args.trim() || 'normal';
+  const history = ctx.conversationHistory;
+  if (history.length === 0) {
+    ctx.renderer.writeDim('  No conversation to export.');
+    return;
+  }
+
+  let output = '';
+  if (mode === 'debug') {
+    output = `# Session Debug Export\n`;
+    output += `Model: ${ctx.modelLabel}\n`;
+    output += `Messages: ${history.length}\n`;
+    output += `---\n\n`;
+    for (const msg of history) {
+      const role = msg.role === 'user' ? '## User' : '## Assistant';
+      output += `${role}\n\`\`\`\n${msg.content}\n\`\`\`\n\n`;
+    }
+  } else {
+    output = `# Session Export\n`;
+    output += `Model: ${ctx.modelLabel}\n\n`;
+    for (const msg of history) {
+      const role = msg.role === 'user' ? '**You:**' : '**Assistant:**';
+      output += `${role} ${msg.content}\n\n`;
+    }
+  }
+
+  const filename = `.mma/export-${Date.now()}.md`;
+  writeFileSync(filename, output, 'utf-8');
+  ctx.renderer.writeSuccess(`  Exported to ${filename}`);
 }

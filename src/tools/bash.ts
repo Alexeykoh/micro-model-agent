@@ -147,6 +147,11 @@ function cleanCliXml(text: string): string {
 }
 
 export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
+  // Block recursive calls to MMA itself
+  if (/\bmma\b/.test(cmd) && /\brun\b/.test(cmd)) {
+    return { stdout: '', stderr: 'Blocked: recursive MMA call detected. Use filesystem tools instead.', exitCode: 1, truncated: false };
+  }
+
   cmd = fixCommonPathIssues(cmd);
   cmd = fixJsonContent(cmd);
   cmd = translateToPowerShell(cmd);

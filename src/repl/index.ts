@@ -72,8 +72,17 @@ export async function runRepl(
       continue;
     }
 
+    renderer.writeNewline();
     renderer.writeBracketTag('user', line)
-    const result = await history.send(line, provider, registry, renderer, modelLabel);
+    const result = await history.send(line, provider, registry, renderer, modelLabel, { quiet: true });
+
+    // Show agent response with color
+    const lastMsg = result.messages[result.messages.length - 1];
+    if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content) {
+      renderer.writeNewline();
+      renderer.writeSuccess(lastMsg.content);
+      renderer.writeNewline();
+    }
 
     if (result.questionPending) {
       const { question, choices } = result.questionPending;

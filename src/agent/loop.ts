@@ -141,6 +141,7 @@ async function doChat(
   provider: LLMProvider,
   messages: ChatMessage[],
   renderer: OutputRenderer,
+  signal?: AbortSignal,
   retries = 3,
 ): Promise<{ response: string; genTimeMs: number }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -148,11 +149,13 @@ async function doChat(
     const fullText: string[] = [];
     let started = false;
 
+    if (signal?.aborted) return { response: '', genTimeMs: 0 };
+
     renderer.writeSpinner();
 
     try {
       let buf = '';
-      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192 })) {
+      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal })) {
         if (!chunk.content) continue;
         fullText.push(chunk.content);
 
@@ -192,6 +195,9 @@ async function doChat(
         }
       }
     } catch (e: any) {
+      if (e.name === 'AbortError') {
+        return { response: '', genTimeMs: 0 };
+      }
       renderer.writeError(`\n[LLM] ${e.message}`);
       renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
       return { response: '', genTimeMs: 0 };
@@ -227,12 +233,14 @@ export async function runAgentLoop(
   previousMessages?: ChatMessage[],
   renderer?: OutputRenderer,
   providerName?: string,
+  options?: { quiet?: boolean },
 ): Promise<AgentLoopResult> {
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
+  const quiet = options?.quiet ?? false;
 
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
-  if (loadedSkills.length > 0) {
+  if (loadedSkills.length > 0 && !quiet) {
     renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')} (~${loadedSkills.reduce((s, sk) => s + sk.tokens, 0)} tokens)`);
   }
 
@@ -253,6 +261,12 @@ export async function runAgentLoop(
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
   let consecutiveEmpty = 0;
   let pendingSyntaxError = '';
+  let aborted = false;
+
+  // Reset abort signal for this run
+  if (renderer?.abortSignal === undefined) {
+    // Renderer doesn't support abort — fine
+  }
 
   renderer?.updateStatus({
     provider: providerName,
@@ -263,9 +277,15 @@ export async function runAgentLoop(
   });
 
   for (let step = 0; step < 25; step++) {
+    if (renderer?.abortSignal?.aborted) {
+      aborted = true;
+      break;
+    }
     let skillsAutoLoaded = false;
     await ctx.updateTokens(messages);
-    renderer?.updateContextUsage(ctx.formatUsage());
+    if (!quiet) {
+      renderer?.updateContextUsage(ctx.formatUsage());
+    }
 
     renderer?.updateStatus({
       provider: providerName,
@@ -279,11 +299,13 @@ export async function runAgentLoop(
     if (ctx.needsCompact && messages.length > 6) {
       const before = messages.length;
       messages.splice(0, messages.length, ...ctx.compact(messages));
-      renderer?.writeBracketTag('compact', `${before} → ${messages.length} messages`);
+      if (!quiet) {
+        renderer?.writeBracketTag('compact', `${before} → ${messages.length} messages`);
+      }
       await ctx.updateTokens(messages);
     }
 
-    const { response } = await doChat(provider, messages, renderer!);
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal);
 
     // Auto-load skills if model suggested them in response
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
@@ -302,7 +324,9 @@ export async function runAgentLoop(
     }
     if (newSkillNames.length > 0) {
       skillsAutoLoaded = true;
-      renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
+      if (!quiet) {
+        renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
+      }
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills) };
       messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working.]` });
     }
@@ -315,7 +339,9 @@ export async function runAgentLoop(
           ? 'The tool result is above. Your turn now. Either: (1) call the next tool using <tool_call>{"name":"...","arguments":{...}}</tool_call>, or (2) write a text reply to the user summarizing progress. Do NOT output nothing.'
           : 'You returned an empty response again. You MUST write something now. Example of what to write: "File created. Now I will create the next file..." or call another tool. Silence is not allowed.';
         messages.push({ role: 'user', content: retryPrompt });
-        renderer?.writeDim(`  [empty response #${consecutiveEmpty}, retrying]`);
+        if (!quiet) {
+          renderer?.writeDim(`  [empty response #${consecutiveEmpty}, retrying]`);
+        }
         continue;
       }
       renderer?.writeError(consecutiveEmpty > 3
@@ -350,7 +376,9 @@ export async function runAgentLoop(
       const fallback = extractToolCallFallback(response);
       if (fallback) {
         validCalls.push({ parsed: { name: 'bash', arguments: { cmd: fallback.cmd } }, cmd: fallback.cmd });
-        renderer?.writeBracketTag('fallback', 'regex extracted command');
+        if (!quiet) {
+          renderer?.writeBracketTag('fallback', 'regex extracted command');
+        }
       }
     }
 
@@ -366,16 +394,20 @@ export async function runAgentLoop(
       const isBash = parsed.name === 'bash';
       const preview = isBash
         ? (cmd!.length > 200 ? cmd!.slice(0, 200) + '...' : cmd!)
-        : JSON.stringify(parsed.arguments).slice(0, 200);
+        : JSON.stringify(parsed.arguments);
       const toolId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
 
-      renderer?.writeToolHeader(parsed.name);
-      renderer?.writeToolPreview(preview);
+      if (!quiet) {
+        renderer?.writeToolHeader(parsed.name);
+        renderer?.writeToolPreview(parsed.name, preview);
+      }
 
       const hookCmd = isBash ? cmd! : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
       const preHook = runPreToolUseHooks(process.cwd(), parsed.name, hookCmd);
       if (!preHook.continue) {
-        renderer?.writeBracketTag('hook blocked', preHook.message || '');
+        if (!quiet) {
+          renderer?.writeBracketTag('hook blocked', preHook.message || '');
+        }
         messages.push({ role: 'tool', content: `Hook blocked: ${preHook.message || ''}`, tool_call_id: toolId });
         continue;
       }
@@ -384,7 +416,9 @@ export async function runAgentLoop(
         const isWriteOp = parsed.name === 'write_file' || parsed.name === 'edit_file';
         if (isWriteOp && String(parsed.arguments.path ?? '') !== pendingSyntaxError) {
           const blocked = `BLOCKED: You have a syntax error in ${pendingSyntaxError}. Fix it first before writing new files.`;
-          renderer?.writeError(`  [blocked: fix syntax error in ${pendingSyntaxError} first]`);
+          if (!quiet) {
+            renderer?.writeError(`  [blocked: fix syntax error in ${pendingSyntaxError} first]`);
+          }
           messages.push({ role: 'tool', content: blocked, tool_call_id: toolId });
           continue;
         }
@@ -398,7 +432,9 @@ export async function runAgentLoop(
       if (isBash && cmd!.startsWith('plan ')) {
         const planArgs = cmd!.slice(5).trim();
         const { action, params } = parsePlanCommand(planArgs);
-        renderer?.writeBracketTag('plan', action);
+        if (!quiet) {
+          renderer?.writeBracketTag('plan', action);
+        }
         switch (action) {
           case 'create':
             toolOutput = createPlan(params[0] || 'Untitled Plan', params.slice(1));
@@ -422,7 +458,9 @@ export async function runAgentLoop(
       } else if (isBash && cmd!.startsWith('todo ')) {
         const todoArgs = cmd!.slice(5).trim();
         const { action, params } = parseTodoCommand(todoArgs);
-        renderer?.writeBracketTag('todo', action);
+        if (!quiet) {
+          renderer?.writeBracketTag('todo', action);
+        }
         switch (action) {
           case 'add':
             toolOutput = addTodo(params);
@@ -445,7 +483,9 @@ export async function runAgentLoop(
       } else if (isBash && cmd!.startsWith('question ')) {
         const qArgs = cmd!.slice(9).trim();
         const { question, choices } = parseQuestionCommand(qArgs);
-        renderer?.writeBracketTag('question', question);
+        if (!quiet) {
+          renderer?.writeBracketTag('question', question);
+        }
         messages.push({
           role: 'tool',
           content: `Question asked: ${question}`,
@@ -458,7 +498,9 @@ export async function runAgentLoop(
       } else if (isBash && cmd!.startsWith('approve ')) {
         const approveArgs = cmd!.slice(8).trim();
         const action = parseApproveCommand(approveArgs);
-        renderer?.writeBracketTag('approve', action);
+        if (!quiet) {
+          renderer?.writeBracketTag('approve', action);
+        }
         messages.push({
           role: 'tool',
           content: `Approval requested: ${action}`,
@@ -471,7 +513,9 @@ export async function runAgentLoop(
       } else if (isBash && isMCPCommand(cmd!)) {
         const mcpCmd = parseMCPCommand(cmd!);
         if (mcpCmd) {
-          renderer?.writeBracketTag('mcp', `${mcpCmd.server}/${mcpCmd.tool}`);
+          if (!quiet) {
+            renderer?.writeBracketTag('mcp', `${mcpCmd.server}/${mcpCmd.tool}`);
+          }
           toolOutput = callMCPTool(process.cwd(), mcpCmd.server, mcpCmd.tool, mcpCmd.args);
         } else {
           toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
@@ -488,11 +532,15 @@ export async function runAgentLoop(
       }
 
       const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
-      renderer?.writeToolResult(toolTime, toolExitCode);
+      if (!quiet) {
+        renderer?.writeToolResult(toolTime, toolExitCode);
+      }
       if (toolExitCode !== 0) {
         const errText = toolOutput;
-        for (const line of errText.split('\n').slice(0, 5)) {
-          renderer?.writeError(`  ${line}`);
+        if (!quiet) {
+          for (const line of errText.split('\n').slice(0, 5)) {
+            renderer?.writeError(`  ${line}`);
+          }
         }
         autoLearnFromError(hookCmd, toolExitCode !== 0 ? toolOutput : '', '');
       }
@@ -517,7 +565,9 @@ export async function runAgentLoop(
               const errorLines = syntaxResult.split('\n').filter(l => l.trim());
               const shown = errorLines.slice(0, 3);
               const extra = errorLines.length > 3 ? ` (+${errorLines.length - 3} more)` : '';
-              renderer?.writeBracketTag('syntax', `${shown.join('; ')}${extra}`);
+              if (!quiet) {
+                renderer?.writeBracketTag('syntax', `${shown.join('; ')}${extra}`);
+              }
 
               const fullPath = join(process.cwd(), filePath);
               let contextLines = '';
@@ -578,6 +628,9 @@ export async function runAgentLoop(
         break;
       }
     }
+  }
+  if (aborted) {
+    renderer?.writeWarning('Agent stopped (double ESC)');
   }
   return { messages };
 }

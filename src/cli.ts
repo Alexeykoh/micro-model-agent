@@ -39,9 +39,7 @@ export function createCli() {
     .argument('[prompt]', 'prompt to execute')
     .option('--model <model>', 'model to use')
     .option('--provider <provider>', 'provider to use')
-    .option('--stdin', 'force read from stdin (for piped mode)')
-    .option('--plain', 'use readline terminal instead of TUI')
-    .option('--tui', 'enable OpenTUI terminal interface (default)');
+    .option('--stdin', 'force read from stdin (for piped mode)');
 
   registerProviderCommands(program);
   registerModelCommands(program);
@@ -55,8 +53,6 @@ export function createCli() {
 
     const providerOpt = program.getOptionValue('provider');
     const modelOpt = program.getOptionValue('model');
-    const plainMode = program.getOptionValue('plain') || process.env.MMA_PLAIN === '1';
-    const tuiMode = !plainMode;
     if (providerOpt) config.active.provider = providerOpt;
     if (modelOpt) config.active.model = modelOpt;
 
@@ -78,7 +74,7 @@ export function createCli() {
           const ctx = prompt
             ? `${prompt}\n\nContext from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\``
             : `Context from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\`\n\nAnalyze the above content.`;
-          const renderer = await createRenderer('readline');
+          const renderer = await createRenderer();
           runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider);
           return;
         }
@@ -86,11 +82,10 @@ export function createCli() {
     }
 
     if (prompt) {
-      const renderer = await createRenderer('readline');
+      const renderer = await createRenderer();
       runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider);
     } else {
-      const rendererMode = tuiMode ? 'tui' as const : 'readline' as const;
-      const renderer = await createRenderer(rendererMode);
+      const renderer = await createRenderer();
       runRepl(provider, registry, modelLabel, renderer);
     }
   });

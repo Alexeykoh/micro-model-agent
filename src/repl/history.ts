@@ -36,6 +36,7 @@ export class ConversationHistory {
     registry: ToolRegistry,
     renderer: OutputRenderer,
     providerName?: string,
+    options?: { quiet?: boolean },
   ): Promise<AgentLoopResult> {
     const result = await runAgentLoop(
       provider,
@@ -45,6 +46,7 @@ export class ConversationHistory {
       this.messages,
       renderer,
       providerName,
+      options,
     );
     this.pushFromResult(result);
     return result;

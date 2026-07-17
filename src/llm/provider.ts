@@ -20,6 +20,7 @@ export interface ChatOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   seed?: number;
+  signal?: AbortSignal;
 }
 
 export interface Chunk {
