@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { logDebug } from '../logger.js';
 
 const SKILLS_DIR = join(homedir(), '.mma', 'skills');
 
@@ -42,6 +43,7 @@ export function loadAgentsMd(cwd: string): string | null {
 }
 
 export function loadSkill(name: string, cwd: string): Skill | null {
+  const start = performance.now();
   const candidates = [
     // Project-local directories first
     join(cwd, '.claude', 'skills', name, 'SKILL.md'),
@@ -58,11 +60,14 @@ export function loadSkill(name: string, cwd: string): Skill | null {
       try {
         const content = readFileSync(path, 'utf-8').trim();
         if (content) {
+          const elapsed = (performance.now() - start).toFixed(1);
+          logDebug('SKILLS', `loaded skill "${name}" from ${path} in ${elapsed}ms`);
           return { name, path, content, tokens: Math.ceil(content.length / 4) };
         }
       } catch { /* skip */ }
     }
   }
+  logDebug('SKILLS', `skill "${name}" not found`);
   return null;
 }
 

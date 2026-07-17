@@ -89,6 +89,23 @@ export function registerModelCommands(program: Command): void {
     });
 
   modelCmd
+    .command('current')
+    .description('Show active model')
+    .action(() => {
+      const config = loadConfig();
+      const theme = getTheme();
+      const p = config.providers[config.active.provider];
+      const m = p?.models[config.active.model];
+      if (!m) {
+        console.log(theme.error('No active model configured'));
+        return;
+      }
+      console.log(`${theme.info('Provider:')} ${config.active.provider}`);
+      console.log(`${theme.info('Model:')}   ${config.active.model} (${m.model})`);
+      console.log(`${theme.info('Context:')} ${m.contextWindow}K`);
+    });
+
+  modelCmd
     .command('params')
     .argument('[name]', 'model name (defaults to active model)')
     .description('Show model parameters')

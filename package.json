@@ -1,14 +1,25 @@
 {
-  "name": "mma",
-  "version": "0.1.0",
-  "description": "Micro Models Agent (MMA) — LLM agent harness for small models",
+  "name": "micro-models-agent",
+  "version": "0.2.21",
+  "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context)",
   "type": "module",
   "bin": {
-    "mma": "./src/index.ts"
+    "mma": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "mma": "bun run src/index.ts",
-    "build": "bunx tsc",
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "prepack": "npm run build",
     "dev": "bun --watch src/index.ts",
     "test": "bun test tests/context.test.ts tests/sanitizer.test.ts tests/code-index.test.ts tests/plan-todo-memory.test.ts tests/file-loader-syntax.test.ts",
     "test:integration": "bun test tests/llm-integration.test.ts tests/agent-integration.test.ts",
@@ -17,11 +28,14 @@
   },
   "dependencies": {
     "commander": "^12.0.0",
+    "esprima": "^4.0.1",
+    "execa": "^9.6.1",
     "js-tiktoken": "^1.0.0",
     "jsonrepair": "^3.15.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
+    "@types/esprima": "^4.0.6",
     "@types/node": "^26.1.1",
     "tsx": "^4.0.0",
     "typescript": "^5.8.0",

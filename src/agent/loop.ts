@@ -16,6 +16,7 @@ import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
+import { logInfo, logWarn, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 
 function extractAllToolCalls(response: string): string[] {
   const results: string[] = [];
@@ -143,6 +144,7 @@ async function doChat(
   renderer: OutputRenderer,
   signal?: AbortSignal,
   retries = 1,
+  filterThinking = false,
 ): Promise<{ response: string; genTimeMs: number }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
@@ -151,11 +153,14 @@ async function doChat(
 
     if (signal?.aborted) return { response: '', genTimeMs: 0 };
 
+    const lastMsg = messages[messages.length - 1];
+    logLLMRequest(provider.model, messages.length, lastMsg?.content || '');
+
     renderer.writeSpinner();
 
     try {
       let buf = '';
-      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal })) {
+      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal, filterThinking })) {
         if (!chunk.content) continue;
         fullText.push(chunk.content);
 
@@ -196,8 +201,10 @@ async function doChat(
       }
     } catch (e: any) {
       if (e.name === 'AbortError') {
+        logLLMResponse(provider.model, 0, performance.now() - startTime, 'Aborted');
         return { response: '', genTimeMs: 0 };
       }
+      logLLMResponse(provider.model, 0, performance.now() - startTime, e.message);
       renderer.writeError(`\n[LLM] ${e.message}`);
       renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
       return { response: '', genTimeMs: 0 };
@@ -208,6 +215,7 @@ async function doChat(
     renderer.commitMarkdown();
 
     if (response.trim()) {
+      logLLMResponse(provider.model, response.length, genTimeMs);
       return { response, genTimeMs };
     }
 
@@ -232,25 +240,36 @@ export async function runAgentLoop(
   previousMessages?: ChatMessage[],
   renderer?: OutputRenderer,
   providerName?: string,
-  options?: { quiet?: boolean },
+  options?: { quiet?: boolean; filterThinking?: boolean },
 ): Promise<AgentLoopResult> {
+  logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
+  logDebug('LOOP', `parseFileRefs: ${files.length} files, prompt len: ${enrichedPrompt.length}`);
   const quiet = options?.quiet ?? false;
 
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
   if (loadedSkills.length > 0) {
+    logInfo('LOOP', `loaded ${loadedSkills.length} skills: ${loadedSkills.map(s => s.name).join(', ')}`);
     renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')}`);
   }
 
   if (files.length > 0) {
     const totalTokens = files.reduce((sum, f) => sum + f.tokens, 0);
     const totalLines = files.reduce((sum, f) => sum + f.content.split('\n').length, 0);
+    logInfo('LOOP', `loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`);
     renderer?.writeInfo(`  Loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`);
     renderer?.writeNewline();
   }
 
+  setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
+  writeStatus('Initializing...');
+  const sysStart = performance.now();
   const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined);
+  const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
+  writeStatus(`Done (${sysElapsed}s)`);
+  setStatusWriter(null);
+
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...(previousMessages || []),
@@ -281,6 +300,7 @@ export async function runAgentLoop(
       break;
     }
     let skillsAutoLoaded = false;
+    logDebug('LOOP', `step ${step + 1}/25 starting, ${messages.length} messages`);
     await ctx.updateTokens(messages);
     const skillNames = loadedSkills.map(s => s.name).join(', ');
     const usageText = ctx.formatUsage() + (skillNames ? ` │ skills: ${skillNames}` : '');
@@ -304,7 +324,8 @@ export async function runAgentLoop(
       await ctx.updateTokens(messages);
     }
 
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal);
+    logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.filterThinking: ${options?.filterThinking}`);
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.filterThinking);
 
     // Auto-load skills if model suggested them in response
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
@@ -331,6 +352,7 @@ export async function runAgentLoop(
     }
 
     if (!response.trim()) {
+      logWarn('LOOP', `empty response #${consecutiveEmpty + 1}`);
       consecutiveEmpty++;
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
@@ -395,6 +417,8 @@ export async function runAgentLoop(
         ? (cmd!.length > 200 ? cmd!.slice(0, 200) + '...' : cmd!)
         : JSON.stringify(parsed.arguments);
       const toolId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+
+      logToolCall(parsed.name, preview);
 
       if (!quiet) {
         renderer?.writeToolHeader(parsed.name);
@@ -531,6 +555,7 @@ export async function runAgentLoop(
       }
 
       const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
+      logToolCall(parsed.name, preview, toolExitCode !== 0 ? `exit:${toolExitCode} ${toolOutput.slice(0, 100)}` : `ok (${toolTime}s)`);
       if (toolExitCode !== 0) {
         const errText = toolOutput;
         if (!quiet) {
@@ -628,5 +653,6 @@ export async function runAgentLoop(
   if (aborted) {
     renderer?.writeWarning('Agent stopped (double ESC)');
   }
+  logInfo('LOOP', `runAgentLoop done: ${messages.length} total messages, aborted=${aborted}`);
   return { messages };
 }

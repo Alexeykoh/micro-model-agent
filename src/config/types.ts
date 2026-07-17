@@ -32,6 +32,7 @@ export interface AgentConfig {
   compactThreshold: number;
   toolTimeout: number;
   maxOutputLength: number;
+  filterThinking?: boolean;
 }
 
 export interface AppConfig {

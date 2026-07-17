@@ -1,10 +1,15 @@
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { logInfo, logWarn, logDebug } from '../logger.js';
+
+const maxFilesPerProject = new Map<string, number>();
 
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', '.mma', 'dist', 'build', '__pycache__',
   'vendor', '.next', '.nuxt', 'coverage', '.cache', 'target',
-  'out', '.output', '.turbo',
+  'out', '.output', '.turbo', '.venv', 'venv', 'env', '.env',
+  'lib', 'libs', 'third_party', 'third-party', 'bower_components',
+  'jspm_packages', '.dart_tool', '.pub-cache',
 ]);
 
 const EXT_MAP: Record<string, string> = {
@@ -12,6 +17,10 @@ const EXT_MAP: Record<string, string> = {
   py: 'py', go: 'go', rs: 'rs', java: 'java', kt: 'java',
   rb: 'rb', php: 'php', c: 'c', cpp: 'c', h: 'c', hpp: 'c',
 };
+
+export function getLangKeyFromExt(ext: string): string {
+  return EXT_MAP[ext.toLowerCase()] || ext.toLowerCase();
+}
 
 const EXPORT_PATTERNS: Record<string, RegExp> = {
   ts: /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|type|interface|enum|const|let|var)\s+(\w+)/g,
@@ -75,7 +84,7 @@ function walkDir(dir: string, baseDir: string, extensions: Set<string>, results:
   }
 }
 
-function extractExports(content: string, lang: string): string[] {
+export function extractExports(content: string, lang: string): string[] {
   const exports: string[] = [];
   const pattern = EXPORT_PATTERNS[lang];
   if (!pattern) return exports;
@@ -102,7 +111,31 @@ export interface ProjectMap {
   generatedAt: string;
 }
 
-export function generateProjectMap(cwd: string): ProjectMap {
+export function collectSourceFiles(cwd: string): string[] {
+  const langs = detectLanguage(cwd);
+  const extensions = new Set<string>();
+  for (const lang of langs) {
+    for (const [ext, langKey] of Object.entries(EXT_MAP)) {
+      if (langKey === lang) extensions.add(ext);
+    }
+  }
+  const filePaths: string[] = [];
+  walkDir(cwd, cwd, extensions, filePaths);
+  filePaths.sort();
+  return filePaths;
+}
+
+export function setMaxFilesForProject(cwd: string, max: number): void {
+  maxFilesPerProject.set(cwd, max);
+}
+
+export function getMaxFilesForProject(cwd: string): number | undefined {
+  return maxFilesPerProject.get(cwd);
+}
+
+export function generateProjectMap(cwd: string, maxFiles?: number): ProjectMap {
+  const start = performance.now();
+  logDebug('INDEXER', 'generateProjectMap start');
   let projectName = 'unknown';
   const pkgPath = join(cwd, 'package.json');
   if (existsSync(pkgPath)) {
@@ -111,17 +144,18 @@ export function generateProjectMap(cwd: string): ProjectMap {
     projectName = basename(cwd);
   }
 
-  const langs = detectLanguage(cwd);
-  const extensions = new Set<string>();
-  for (const lang of langs) {
-    for (const [ext, langKey] of Object.entries(EXT_MAP)) {
-      if (langKey === lang) extensions.add(ext);
-    }
-  }
+  const effectiveMax = maxFiles ?? maxFilesPerProject.get(cwd) ?? 5000;
 
-  const filePaths: string[] = [];
-  walkDir(cwd, cwd, extensions, filePaths);
-  filePaths.sort();
+  const filePaths = collectSourceFiles(cwd);
+  if (effectiveMax === 0) {
+    logInfo('INDEXER', 'Project map indexing skipped');
+    return { projectName, files: [], generatedAt: new Date().toISOString() };
+  }
+  const total = filePaths.length;
+  if (total > effectiveMax) {
+    logWarn('INDEXER', `Too many files: ${total}, using ${effectiveMax}`);
+    filePaths.length = effectiveMax;
+  }
 
   const allFiles: ProjectFile[] = [];
   for (const rel of filePaths) {
@@ -135,6 +169,8 @@ export function generateProjectMap(cwd: string): ProjectMap {
     } catch { /* skip unreadable */ }
   }
 
+  const elapsed = (performance.now() - start).toFixed(0);
+  logInfo('INDEXER', `generateProjectMap: ${allFiles.length} files in ${elapsed}ms`);
   return {
     projectName,
     files: allFiles,

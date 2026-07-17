@@ -1,87 +1,135 @@
 # MMA — Micro Models Agent
 
-LLM agent harness for small models (Qwen3.5-9B, 32K-64K context).
+LLM агент-харнес для маленьких моделей (Qwen3.5-9B, 32K-64K контекст).
 
-## Features
+Работает с OpenAI-совместимыми API: LM Studio, Ollama, vLLM, Together AI и другими.
 
-- **Bash-first architecture** — one tool for everything (files, git, npm, etc.)
-- **Hermes format** — `<tool_call>{"name":"bash","arguments":{"cmd":"..."}}</tool_call>`
-- **OpenAI-compatible providers** — LM Studio, Ollama, vLLM, Together
-- **@file syntax** — `@src/index.ts -- explain this`
-- **Project indexer** — auto-generated project map + code index
-- **Skills system** — load AGENTS.md and SKILL.md files
-- **Session management** — save/restore conversations
-- **Context management** — auto-compact at 85%, importance scoring
-- **Security** — command sanitizer, dangerous pattern detection
+## Установка
 
-## Installation
+### Глобально через npm (рекомендуется)
 
 ```bash
-# From source
+npm install -g micro-models-agent
+
+# Проверка:
+mma --version
+```
+
+### Из исходников
+
+```bash
 git clone <repo>
 cd mma
 npm install
 npm run build
-
-# Link globally
 npm link
 ```
 
-## Quick Start
+## Удаление
 
 ```bash
-# One-shot mode
-mma "create a todo app in React"
+npm uninstall -g micro-models-agent   # удалить пакет
+rm -rf ~/.mma                          # удалить конфиг, кэш, логи, сессии
+```
 
-# Interactive REPL
+> `~/.mma/` можно не удалять — данные останутся на случай повторной установки.
+
+## Быстрый старт
+
+### 1. Добавьте провайдера
+
+Если у вас уже запущен LM Studio на `localhost:1234`:
+
+```bash
+# Провайдер уже есть в конфиге по умолчанию, можно сразу использовать
+mma "Привет! Как тебя зовут?"
+```
+
+Если нужно добавить другого провайдера:
+
+```bash
+# Ollama
+mma provider add ollama http://localhost:11434/v1
+
+# vLLM
+mma provider add vllm http://localhost:8000/v1
+
+# Together AI
+mma provider add together https://api.together.xyz/v1
+```
+
+### 2. Добавьте модель
+
+```bash
+# mma model add <имя_алиас> <model_id> <контекст_в_токенах>
+
+mma model add qwen3.5-9b qwen3.5-9b-instruct 32768
+mma model add qwen2.5-14b qwen2.5-14b-instruct 32768
+mma model add deepseek-coder deepseek-coder-6.7b-instruct 16384
+```
+
+### 3. Используйте
+
+```bash
+# One-shot режим
+mma "Создай React-компонент для формы входа"
+
+# Интерактивный режим (REPL)
 mma
 
-# With specific provider
-mma --provider ollama --model qwen3.5:9b "review this code"
+# С stdin (пайп)
+cat package.json | mma "Опиши зависимости"
+
+# С выбором провайдера/модели
+mma --provider ollama --model qwen3.5:9b "Напиши Dockerfile для Node.js приложения"
 ```
 
-## REPL Commands
-
-| Command | Description |
-|---------|-------------|
-| `/bash <cmd>` | Run shell command |
-| `/read <file>` | Display file with line numbers |
-| `/edit <file> <n>` | Replace line N in file |
-| `/write <file>` | Write file (end with EOF) |
-| `/find <pattern>` | Find files by glob |
-| `/search <pattern>` | Search file contents |
-| `/git <args>` | Git operations |
-| `/memory` | Show memory summary |
-| `/memory add <type> <text>` | Add memory entry |
-| `/memory search <query>` | Search memory |
-| `/skill` | List installed skills |
-| `/sessions` | List saved sessions |
-| `/resume <id>` | Resume a session |
-| `/save [name]` | Save current session |
-| `/clear` | Clear context |
-| `/index [cmd]` | Index status/rebuild/map |
-| `/help` | Show help |
-| `/exit` | Exit MMA |
-
-## @file Syntax
+## Управление провайдерами и моделями
 
 ```bash
-# Load a file
-@src/index.ts -- explain this function
+# Провайдеры
+mma provider list              # Список провайдеров
+mma provider use ollama        # Переключиться на провайдера
+mma provider add <имя> <url>   # Добавить провайдера
+mma provider remove <имя>      # Удалить провайдера
 
-# Multiple files
-@src/auth/login.ts @src/auth/jwt.ts -- compare these
+# Модели
+mma model list                 # Список моделей активного провайдера
+mma model use qwen3.5-9b       # Переключиться на модель
+mma model add <имя> <id> <ctx> # Добавить модель
+mma model remove <имя>         # Удалить модель
+mma model params [имя]         # Параметры модели
+mma model set <имя> k=v        # Изменить параметр (temperature=0.5)
 
-# Line range
-@src/index.ts:10-30 -- what's happening here?
+# Конфиг
+mma config show                # Показать весь конфиг
+mma config reset               # Сбросить настройки
+mma config thinking [on/off]   # Включить/выключить скрытие размышлений модели
 
-# Entire directory
-@src/auth/ -- show module structure
+# Обновления
+mma update                     # Проверить наличие обновлений
+mma update check               # Проверить версию
+mma update install             # Скачать и установить обновление
 ```
 
-## Provider Configuration
+### Параметры моделей
 
-MMA uses `.mmrc` in project root or `~/.mma/config.json` (global).
+По умолчанию:
+- `temperature`: 0.7
+- `max_tokens`: 4096
+- `top_p`: 0.9
+
+Изменить:
+
+```bash
+mma model set qwen3.5-9b temperature=0.3 max_tokens=8192
+mma model set qwen3.5-9b seed=42        # для воспроизводимости
+mma model set qwen3.5-9b seed=null      # сбросить seed
+```
+
+## Конфигурация
+
+Конфиг хранится в `~/.mma/config.json`.
 
 ```json
 {
@@ -89,60 +137,180 @@ MMA uses `.mmrc` in project root or `~/.mma/config.json` (global).
     "lmstudio": {
       "type": "openai-compat",
       "url": "http://localhost:1234/v1",
+      "apiKey": null,
       "models": {
         "qwen3.5-9b": {
           "model": "qwen3.5-9b-instruct",
-          "contextWindow": 32768
+          "contextWindow": 32768,
+          "params": {
+            "temperature": 0.7,
+            "max_tokens": 4096
+          }
         }
       }
     }
   },
-  "active": { "provider": "lmstudio", "model": "qwen3.5-9b" }
+  "active": {
+    "provider": "lmstudio",
+    "model": "qwen3.5-9b"
+  },
+  "agent": {
+    "maxSteps": 50,
+    "autoCompact": true,
+    "compactThreshold": 0.85,
+    "toolTimeout": 120,
+    "maxOutputLength": 2000
+  }
 }
 ```
 
-### CLI Commands
+Можно также создать `.mmrc` в корне проекта — он смержится поверх глобального конфига.
+
+### Переменные окружения
+
+| Переменная | Описание |
+|-----------|----------|
+| `MMA_PROVIDER` | Провайдер по умолчанию |
+| `MMA_MODEL` | Модель по умолчанию |
+| `MMA_STDIN=1` | Принудительное чтение stdin |
+## Режимы запуска
+
+### One-shot
 
 ```bash
-mma provider list              # List providers
-mma provider use ollama        # Switch provider
-mma provider add vllm <url>    # Add provider
-mma model list                 # List models
-mma model use qwen2.5-14b      # Switch model
-mma model params               # Show parameters
-mma config show                # Show config
+mma "Объясни этот код: function fib(n) { return n < 2 ? n : fib(n-1) + fib(n-2); }"
 ```
 
-## Skills
+### Stdin (пайп)
 
-Skills are loaded from:
-- `.claude/skills/<name>/SKILL.md`
-- `.agents/skills/<name>/SKILL.md`
+```bash
+cat main.ts | mma "Найди потенциальные баги"
+curl -s https://api.example.com/data | mma "Проанализируй JSON"
+```
+
+### REPL
+
+```bash
+mma
+```
+
+В REPL доступны команды:
+
+| Команда | Описание |
+|---------|----------|
+| `/read <file>` | Показать файл с нумерацией строк |
+| `/write <file>` | Записать файл (до EOF) |
+| `/edit <file> <n>` | Заменить строку N в файле |
+| `/find <pattern>` | Поиск файлов по glob |
+| `/search <pattern>` | Поиск содержимого |
+| `/bash <cmd>` | Выполнить shell-команду |
+| `/git <args>` | Git-операции |
+| `/memory` | Показать память |
+| `/memory add <type> <text>` | Добавить в память |
+| `/memory search <query>` | Поиск в памяти |
+| `/skill` | Список навыков |
+| `/sessions` | Список сессий |
+| `/resume <id>` | Восстановить сессию |
+| `/save [name]` | Сохранить сессию |
+| `/clear` | Очистить контекст |
+| `/help` | Справка |
+| `/exit` | Выход |
+
+## Синтаксис `@file`
+
+Загружает файлы в контекст агента:
+
+```bash
+mma "@src/index.ts -- объясни эту функцию"
+
+# Несколько файлов
+mma "@src/auth/login.ts @src/auth/jwt.ts -- сравни"
+
+# Диапазон строк
+mma "@src/index.ts:10-30 -- что здесь происходит?"
+
+# Вся директория
+mma "@src/auth/ -- покажи структуру модуля"
+```
+
+## Навыки (Skills)
+
+Навыки — это Markdown-файлы с инструкциями для модели. Загружаются из:
 - `~/.mma/skills/<name>/SKILL.md`
-
-Reference skills in prompts with `@skill-name`:
+- `.agents/skills/<name>/SKILL.md`
+- `.claude/skills/<name>/SKILL.md`
 
 ```bash
-@docker -- help me containerize this app
+# Использовать навык
+mma "@docker -- помоги контейнеризовать приложение"
 ```
 
-## Project Structure
+## Агент: как это работает
 
-```
-src/
-├── index.ts            # Entry point
-├── cli.ts              # Commander CLI
-├── repl.ts             # Interactive REPL
-├── file-loader.ts      # @file parsing
-├── config/             # Configuration
-├── llm/                # LLM provider
-├── tools/              # Bash tool, sanitizer, hooks
-├── agent/              # Agent loop, context, memory
-├── indexer/            # Project map, code index
-├── skills/             # Skills loader
-└── session/            # Session storage
+1. Вы даёте задачу (prompt)
+2. Модель генерирует план и вызывает инструменты через `<tool_call>`
+3. Агент выполняет инструменты и возвращает результат модели
+4. Модель анализирует результат и решает, что делать дальше
+5. Цикл продолжается до завершения задачи (макс. 50 шагов)
+
+### Инструменты агента
+
+| Инструмент | Описание |
+|-----------|----------|
+| `read_file` | Чтение файла с нумерацией строк |
+| `write_file` | Атомарная запись/создание файла |
+| `edit_file` | Find & replace (точное совпадение) |
+| `list_dir` | Список директории |
+| `create_dir` | Рекурсивное создание директории |
+| `delete_file` | Удаление файла/директории |
+| `copy_file` | Копирование |
+| `move_file` | Перемещение/переименование |
+| `file_info` | Метаданные файла |
+| `glob_search` | Поиск по паттерну |
+| `grep_search` | Поиск по содержимому (regex) |
+| `tree` | Дерево директорий |
+| `bash` | Выполнение команд (npm, git, docker) |
+
+## Индексация проекта
+
+Агент автоматически строит карту проекта и индекс кода:
+
+```bash
+# Вручную перестроить
+/build index rebuild
+/build project-map
 ```
 
-## License
+## Работа с сессиями
+
+```bash
+# Автосохранение при выходе
+/save my-session-name
+
+# Список сессий
+/sessions
+
+# Восстановить
+/resume my-session-name
+```
+
+## Разработка
+
+```bash
+npm run build          # Компиляция TypeScript
+npm run dev            # Watch-режим
+npm test               # Тесты
+npm run test:all       # Все тесты
+npm run test:watch     # vitest watch
+```
+
+### Публикация новой версии
+
+```bash
+npm version patch     # или minor, major
+npm publish
+```
+
+## Лицензия
 
 MIT

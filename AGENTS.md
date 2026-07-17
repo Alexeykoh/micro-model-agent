@@ -15,24 +15,33 @@ LLM агент-харнес для маленьких моделей (Qwen3.5-9B
 - **CLI**: `npm run mma` через `tsx src/index.ts`
 - **Цель**: Qwen3.5-9B, 32K-64K контекст
 
+## Установка
+
+```bash
+npm install -g mma              # глобально из npm
+npm link                        # или локально из repo
+```
+
+После установки команда `mma` доступна глобально.
+
 ## Команды
 
 ```bash
-npm run mma "запрос"                 # one-shot
-npm run mma                          # interactive TUI (по умолчанию)
-npm run plain                        # interactive readline (--plain)
-npm run mma -- provider list         # список провайдеров
-npm run mma -- provider add <n> <u>  # добавить провайдер
-npm run mma -- provider remove <n>   # удалить провайдер
-npm run mma -- model list            # список моделей
-npm run mma -- model add <n> <id> <ctx>  # добавить модель
-npm run mma -- model params [n]      # показать параметры
-npm run mma -- model set <n> k=v     # изменить параметры
-npm run mma -- config show           # показать конфиг
-npm run mma -- config reset          # сбросить конфиг
-npm run build                        # tsc
-npm run dev                          # tsx watch
-npm test                             # vitest
+mma "запрос"                     # one-shot
+mma                              # interactive readline (по умолчанию)
+mma --provider ollama --model qwen3.5:9b  # с выбором
+mma provider list                # список провайдеров
+mma provider add <n> <u>        # добавить провайдер
+mma provider remove <n>         # удалить провайдер
+mma model list                   # список моделей
+mma model add <n> <id> <ctx>    # добавить модель
+mma model params [n]            # показать параметры
+mma model set <n> k=v           # изменить параметры
+mma config show                  # показать конфиг
+mma config reset                 # сбросить конфиг
+npm run build                    # tsc
+npm run dev                      # bun --watch
+npm test                         # vitest
 ```
 
 ## Структура
@@ -98,7 +107,6 @@ src/
 │   ├── index.ts            # Factory: createRenderer(mode)
 │   ├── renderer.ts         # OutputRenderer interface + types
 │   ├── readline-renderer.ts # console.log/process.stdout обёртка
-│   ├── opentui-renderer.ts  # @opentui/core split-footer реализация
 │   └── components/
 │       ├── status-bar.ts   # Форматирование строки статуса
 │       └── diff-view.ts    # Парсинг/форматирование diff

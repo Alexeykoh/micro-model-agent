@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import { loadAllMemoryDetailed } from './memory.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
 import { loadAgentsMd, listInstalledSkills, formatSkillsBlock, type Skill } from '../skills/loader.js';
+import { logInfo, logDebug } from '../logger.js';
 
 const TOOL_FORMAT = `CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.
 
@@ -35,6 +36,10 @@ File info: {"name":"file_info","arguments":{"path":"src/index.ts"}}
 Search files: {"name":"glob_search","arguments":{"pattern":"**/*.ts"}}
 Search content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
 Directory tree: {"name":"tree","arguments":{"depth":2}}
+
+## Web tools (search & fetch):
+  {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
+  {"name":"web_fetch","arguments":{"url":"https://example.com"}}
 
 ## Bash (for non-file operations — npm, git, etc):
   {"name":"bash","arguments":{"cmd":"npm test"}}
@@ -137,7 +142,22 @@ const UNIX_RULES = `Unix specifics:
 - Paths use forward slashes: src/index.ts
 - Check file exists: test -f file.md`;
 
+const systemPromptCache = new Map<string, string>();
+
+export function invalidateSystemPromptCache(): void {
+  systemPromptCache.clear();
+}
+
 export function buildSystemPrompt(extraSkills?: Skill[]): string {
+  const start = performance.now();
+  const key = `${process.cwd()}:${extraSkills?.map(s => s.name).sort().join(',') || ''}`;
+  const cached = systemPromptCache.get(key);
+  if (cached) {
+    logDebug('SYSTEM', 'buildSystemPrompt: cache hit');
+    return cached;
+  }
+  logDebug('SYSTEM', 'buildSystemPrompt: building from scratch');
+
   const isWin = os.platform() === 'win32';
   const platformName = isWin ? 'Windows' : os.platform();
   let osVersion = platformName;
@@ -191,5 +211,9 @@ You help with software engineering tasks in the project directory.`;
     : '';
 
   const base = [header, platformBlock, sysInfo, memory, projectMap, agentsBlock, skillsHint].filter(Boolean).join('\n');
-  return base + (extraSkills && extraSkills.length > 0 ? '\n\n' + formatSkillsBlock(extraSkills) : '');
+  const result = base + (extraSkills && extraSkills.length > 0 ? '\n\n' + formatSkillsBlock(extraSkills) : '');
+  const elapsed = (performance.now() - start).toFixed(0);
+  logInfo('SYSTEM', `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`);
+  systemPromptCache.set(key, result);
+  return result;
 }

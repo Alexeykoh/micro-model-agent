@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
+import { join, basename } from 'node:path';
 import { globSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { executeBash } from '../tools/bash.js';
@@ -10,6 +11,7 @@ import { listInstalledSkills } from '../skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from '../session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap, getOrBuildCodeIndex, getOrBuildProjectMap } from '../indexer/cache.js';
 import { getTheme } from '../styling/index.js';
+import { logInfo } from '../logger.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 
 type SlashHandler = (args: string, context: CommandContext) => Promise<void> | void;
@@ -49,6 +51,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'clear', description: 'clear context', handler: cmdClear },
     { name: 'new', description: 'clear context', handler: cmdClear },
     { name: 'stop', description: 'stop agent loop', handler: cmdStop },
+    { name: 'init', description: 'initialize project & create AGENTS.md', handler: cmdInit },
     { name: 'index', description: 'index management', handler: cmdIndex },
     { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
@@ -72,7 +75,7 @@ function cmdExit(_args: string, ctx: CommandContext): void {
 }
 
 function cmdHelp(_args: string, ctx: CommandContext): void {
-  ctx.renderer.writeDim(`
+  ctx.renderer.writeDim(`  ── / commands ──
   /bash <cmd>       — run shell command
   /read <file>      — display file with line numbers
   /edit <file> <n>  — replace line N in file with rest of args
@@ -80,22 +83,31 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /find <pattern>   — find files by glob pattern
   /search <pattern> — search file contents
   /git <args>       — git operations
-  /memory           — show memory summary
-  /memory show <t>  — show memory type content
-  /memory add <t>   — add memory entry
-  /memory search <q> — search memory
-  /memory remove <t> <n> — remove entry N from type
-  /memory export    — export memory to .mma/memory-export.md
+  /memory           — memory management (show/add/search/remove/export)
   /skill            — list installed skills
   /sessions         — list saved sessions
   /resume <id>      — resume a session
   /save [name]      — save current session
   /clear            — clear context (new session)
   /export [mode]    — export session (normal or debug)
+  /init             — analyze project & create AGENTS.md
   /index [cmd]      — index status/rebuild/map
   /stop             — stop agent loop
-  /exit             — exit MMA
-          `);
+  /exit             — exit MMA`);
+  ctx.renderer.writeDim(`  ── CLI commands (exit REPL, then run) ──
+  mma provider list                — list providers
+  mma provider add <name> <url>    — add provider (Ollama, vLLM, Together...)
+  mma provider use <name>          — switch active provider
+  mma provider remove <name>       — remove provider
+  mma model list                   — list models
+  mma model add <name> <id> <ctx>  — add model (e.g. qwen3.5-9b ... 32768)
+  mma model use <name>             — switch active model
+  mma model params [name]          — show model parameters
+  mma model set <name> k=v         — change parameter (temperature=0.3)
+  mma config show                  — show full configuration
+  mma config reset                 — reset to defaults
+  mma update                       — check for updates
+  mma update install               — install latest version`);
 }
 
 async function cmdBash(args: string, ctx: CommandContext): Promise<void> {
@@ -396,6 +408,145 @@ function cmdClear(_args: string, ctx: CommandContext): void {
 function cmdStop(_args: string, ctx: CommandContext): void {
   ctx.renderer.writeDim('  Stopping agent loop...');
   ctx.renderer.destroy();
+}
+
+function cmdInit(_args: string, ctx: CommandContext): void {
+  const theme = getTheme();
+  const cwd = process.cwd();
+  ctx.renderer.writeNewline();
+  ctx.renderer.writeInfo('  Analyzing project...');
+
+  const projectName = basename(cwd);
+  let description = '';
+  let scripts: Record<string, string> = {};
+  let deps: string[] = [];
+  let devDeps: string[] = [];
+
+  const pkgPath = join(cwd, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      description = pkg.description || '';
+      scripts = pkg.scripts || {};
+      deps = Object.keys(pkg.dependencies || {});
+      devDeps = Object.keys(pkg.devDependencies || {});
+    } catch { /* ignore */ }
+  }
+
+  const langCounts: Record<string, number> = {};
+  const exts = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'go', 'rs', 'java', 'rb', 'php', 'c', 'cpp', 'h', 'css', 'scss', 'html', 'vue', 'svelte', 'prisma'];
+  try { walkDirForLangs(cwd, exts, langCounts); } catch { /* ignore */ }
+
+  const mainLang = Object.entries(langCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  let stack = '';
+  if (existsSync(join(cwd, 'tsconfig.json'))) stack += 'TypeScript, ';
+  if (existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.mjs'))) stack += 'Next.js, ';
+  if (existsSync(join(cwd, 'astro.config.mjs'))) stack += 'Astro, ';
+  if (existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js'))) stack += 'Vite, ';
+  if (existsSync(join(cwd, 'vitest.config.ts')) || existsSync(join(cwd, 'vitest.config.js'))) stack += 'Vitest, ';
+  if (existsSync(join(cwd, 'jest.config.js')) || existsSync(join(cwd, 'jest.config.ts'))) stack += 'Jest, ';
+  if (existsSync(join(cwd, '.eslintrc.js')) || existsSync(join(cwd, 'eslint.config.js'))) stack += 'ESLint, ';
+  if (existsSync(join(cwd, 'prisma/schema.prisma'))) stack += 'Prisma, ';
+  if (existsSync(join(cwd, 'Dockerfile'))) stack += 'Docker, ';
+  if (existsSync(join(cwd, 'docker-compose.yml'))) stack += 'Docker Compose, ';
+  if (existsSync(join(cwd, '.github/workflows'))) stack += 'GitHub Actions, ';
+
+  const buildCmd = scripts.build || scripts.compile || '';
+  const testCmd = scripts.test || '';
+  const devCmd = scripts.dev || scripts.start || scripts['dev:watch'] || '';
+
+  let agentsContent = `# ${projectName}\n\n`;
+  agentsContent += `LLM agent instructions for the project \`${projectName}\`.\n\n`;
+
+  if (description) {
+    agentsContent += `## Description\n\n${description}\n\n`;
+  }
+
+  if (stack || mainLang.length > 0) {
+    agentsContent += '## Tech Stack\n\n';
+    if (stack) agentsContent += `- **Framework/Tools**: ${stack.replace(/, $/, '')}\n`;
+    for (const [lang, count] of mainLang) {
+      agentsContent += `- **${lang.toUpperCase()}**: ${count} files\n`;
+    }
+    agentsContent += '\n';
+  }
+
+  if (deps.length > 0 || devDeps.length > 0) {
+    agentsContent += '## Key Dependencies\n\n';
+    if (deps.length > 0) {
+      const core = deps.filter(d => !d.startsWith('@types/')).slice(0, 10);
+      agentsContent += `- Runtime: ${core.join(', ')}\n`;
+    }
+    if (devDeps.length > 0) {
+      const tools = devDeps.filter(d => !d.startsWith('@types/')).slice(0, 10);
+      agentsContent += `- Dev: ${tools.join(', ')}\n`;
+    }
+    agentsContent += '\n';
+  }
+
+  if (buildCmd || testCmd || devCmd) {
+    agentsContent += '## Commands\n\n';
+    if (buildCmd) agentsContent += `\`\`\`bash\n# build\nnpm run build\n\`\`\`\n\n`;
+    if (testCmd) agentsContent += `\`\`\`bash\n# test\nnpm test\n\`\`\`\n\n`;
+    if (devCmd) agentsContent += `\`\`\`bash\n# dev\nnpm run dev\n\`\`\`\n\n`;
+  }
+
+  agentsContent += `## Conventions\n\n`;
+  agentsContent += `- Use \`<tool_call>\` JSON format for tool invocation\n`;
+  agentsContent += `- Use filesystem tools for file operations, bash for npm/git only\n`;
+  if (existsSync(join(cwd, '.gitignore'))) {
+    try {
+      const gitignore = readFileSync(join(cwd, '.gitignore'), 'utf-8');
+      const ignores = gitignore.split('\n').filter(l => l.trim() && !l.startsWith('#')).slice(0, 10);
+      if (ignores.length > 0) {
+        agentsContent += `- Ignored paths: \`${ignores.join('`, `')}\`\n`;
+      }
+    } catch { /* ignore */ }
+  }
+  agentsContent += '\n';
+
+  agentsContent += `## Project Structure\n\n`;
+  try {
+    const top = readdirSync(cwd).filter(f => !f.startsWith('.') && f !== 'node_modules' && f !== 'dist').slice(0, 20);
+    agentsContent += '```\n';
+    for (const f of top) {
+      const stat = existsSync(join(cwd, f)) ? readdirSync(join(cwd, f)).length : 0;
+      try { if (stat) agentsContent += `${f}/\n`; else agentsContent += `${f}\n`; } catch { agentsContent += `${f}\n`; }
+    }
+    agentsContent += '```\n\n';
+  } catch { /* ignore */ }
+
+  const agentsPath = join(cwd, 'AGENTS.md');
+  const existed = existsSync(agentsPath);
+  try {
+    writeFileSync(agentsPath, agentsContent, 'utf-8');
+    const verb = existed ? 'Updated' : 'Created';
+    ctx.renderer.writeSuccess(`  ${verb} ${theme.filePath('AGENTS.md')}`);
+    ctx.renderer.writeNewline();
+    ctx.renderer.writeLine(agentsContent);
+    logInfo('REPL', `AGENTS.md ${verb.toLowerCase()}d: ${agentsPath}`);
+  } catch (e: any) {
+    ctx.renderer.writeError(`  Failed to write AGENTS.md: ${e.message}`);
+  }
+}
+
+function walkDirForLangs(dir: string, exts: string[], counts: Record<string, number>): void {
+  const IGNORE = new Set(['node_modules', '.git', '.mma', 'dist', 'build', '__pycache__', 'target', '.next', '.nuxt', 'coverage', '.cache', 'venv', '.venv', 'env']);
+  let entries: any[];
+  try { entries = readdirSync(dir, { withFileTypes: true }) as any; } catch { return; }
+  for (const entry of entries) {
+    if (IGNORE.has(entry.name) || entry.name.startsWith('.')) continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkDirForLangs(fullPath, exts, counts);
+    } else {
+      const ext = entry.name.split('.').pop()?.toLowerCase() || '';
+      if (exts.includes(ext)) {
+        counts[ext] = (counts[ext] || 0) + 1;
+      }
+    }
+  }
 }
 
 function cmdIndex(args: string, ctx: CommandContext): void {

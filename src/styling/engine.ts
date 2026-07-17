@@ -132,8 +132,10 @@ export class ThemeEngine {
   }
 
   contextBar(pct: number, length = 20): string {
-    const filled = Math.round((pct / 100) * length);
-    const bar = this._icons.barFill.repeat(filled) + this._icons.barEmpty.repeat(length - filled);
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    const filled = Math.round((clamped / 100) * length);
+    const empty = Math.max(0, length - filled);
+    const bar = this._icons.barFill.repeat(filled) + this._icons.barEmpty.repeat(empty);
     return this.c('contextBar')(bar);
   }
 

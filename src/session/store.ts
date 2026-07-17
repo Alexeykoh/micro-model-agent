@@ -8,6 +8,48 @@ const INDEX_FILE = join(SESSIONS_DIR, 'index.json');
 const MAX_SESSIONS = 50;
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
+const WORDS = [
+  'snake', 'base', 'tutorial', 'quick', 'silver', 'golden', 'crimson',
+  'azure', 'emerald', 'amber', 'cobalt', 'jade', 'ruby', 'sapphire',
+  'shadow', 'blade', 'storm', 'stone', 'oak', 'pine', 'maple', 'cedar',
+  'river', 'lake', 'ocean', 'peak', 'valley', 'ridge', 'cove', 'grove',
+  'falcon', 'eagle', 'hawk', 'raven', 'owl', 'dove', 'swan', 'wren',
+  'wolf', 'bear', 'fox', 'deer', 'mole', 'hare', 'lynx', 'stag',
+  'cypher', 'vector', 'matrix', 'pixel', 'vertex', 'proxy', 'relay',
+  'nexus', 'forge', 'helix', 'torch', 'beacon', 'prism', 'mantle',
+  'solar', 'lunar', 'nova', 'comet', 'aster', 'nebula', 'cosmos',
+  'teal', 'mint', 'coral', 'rose', 'swift', 'brave', 'calm', 'eager',
+  'fleet', 'grand', 'keen', 'proud', 'rustic', 'meadow', 'forest',
+  'garden', 'orchard', 'harbor', 'castle', 'anchor', 'bridge', 'cabin',
+  'creek', 'dunes', 'field', 'glade', 'hill', 'lantern', 'marble',
+  'noble', 'palace', 'quarry', 'shrine', 'temple', 'barrel', 'candle',
+  'fable', 'gadget', 'humble', 'jigsaw', 'kettle', 'lagoon', 'mellow',
+  'napkin', 'paddle', 'rabbit', 'saddle', 'tangle', 'walnut', 'zephyr',
+  'acorn', 'beetle', 'cactus', 'echo', 'flute', 'guitar', 'harp',
+  'ivory', 'jazz', 'lute', 'march', 'opera', 'piano', 'sonata',
+  'ukulele', 'viola', 'waltz', 'yodel', 'brisk', 'crisp', 'dusk',
+  'ember', 'frost', 'gleam', 'haze', 'mist', 'shade', 'dawn',
+];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+export function generateReadableId(): string {
+  const counterFile = join(SESSIONS_DIR, '.counter');
+  let num = 1;
+  try {
+    if (existsSync(counterFile)) {
+      num = parseInt(readFileSync(counterFile, 'utf-8').trim(), 10) + 1;
+    }
+  } catch { /* ignore */ }
+  try { writeFileSync(counterFile, String(num), 'utf-8'); } catch { /* ignore */ }
+  const word1 = pick(WORDS);
+  const word2 = pick(WORDS);
+  const word3 = pick(WORDS);
+  return `${String(num).padStart(5, '0')}-${word1}-${word2}-${word3}`;
+}
+
 export interface SessionMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
@@ -53,7 +95,7 @@ function saveIndex(index: SessionIndex): void {
 }
 
 function generateId(): string {
-  return `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  return generateReadableId();
 }
 
 export function saveSession(session: Session): string {
@@ -110,7 +152,7 @@ export function listSessions(): { id: string; name: string; created: string; siz
 
 export function createAutoSession(messages: SessionMessage[], provider: string, cwd: string, context: Session['context']): string {
   const session: Session = {
-    id: `auto_${Date.now().toString(36)}`,
+    id: generateReadableId(),
     name: '',
     created: new Date().toISOString(),
     provider,

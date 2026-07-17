@@ -1,6 +1,9 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
+
+const _require = createRequire(import.meta.url);
 
 export interface SyntaxCheckResult {
   file: string;
@@ -46,7 +49,7 @@ function checkJavaScriptSyntax(filePath: string, cwd: string): SyntaxCheckResult
   try {
     const content = readFileSync(fullPath, 'utf-8');
     // Use esprima to parse
-    const esprima = require('esprima');
+    const esprima = _require('esprima');
     esprima.parseScript(content);
     return { file: filePath, valid: true, errors: [], language: 'javascript' };
   } catch (e: any) {

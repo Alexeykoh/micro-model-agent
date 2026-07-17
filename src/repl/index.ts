@@ -1,20 +1,49 @@
+import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LLMProvider } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { loadAllMemory } from '../agent/memory.js';
-import { createAutoSession } from '../session/store.js';
+import { createAutoSession, generateReadableId } from '../session/store.js';
+import { getCurrentVersion, checkForUpdate, getUpdateCommand } from '../updater.js';
 import { ConversationHistory } from './history.js';
 import { getSlashCommands, parseSlashCommand, isWriteMode, handleWriteLine } from './commands.js';
+import { logREPL, logInfo, logError, initSessionLog, getLogPath } from '../logger.js';
+
+function getEntryPoint(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const distEntry = join(__dirname, '..', '..', 'dist', 'index.js');
+  if (existsSync(distEntry)) return distEntry;
+  return join(__dirname, '..', 'index.ts');
+}
 
 export async function runRepl(
   provider: LLMProvider,
   registry: ToolRegistry,
   modelLabel: string,
   renderer: OutputRenderer,
+  options?: { filterThinking?: boolean },
 ): Promise<void> {
+  const sessionId = generateReadableId();
+  initSessionLog(sessionId);
+
   const memorySummary = loadAllMemory();
 
-  renderer.writeInfo(`  ◉ MMA v0.1 — ${modelLabel}`);
+  const currentVer = getCurrentVersion();
+  logInfo('REPL', `Started MMA v${currentVer} — ${modelLabel} [${sessionId}]`);
+
+  const updateInfo = checkForUpdate();
+  if (updateInfo.available) {
+    renderer.writeWarning(`  ⬆ Update available: v${currentVer} → v${updateInfo.latest}`);
+    renderer.write(`  ${getUpdateCommand()}`);
+    renderer.writeNewline();
+  }
+
+  renderer.writeInfo(`  ◉ MMA v${currentVer} — ${modelLabel}`);
+  renderer.writeDim(`    session: ${sessionId}`);
   if (memorySummary) {
     renderer.writeLine(memorySummary);
   }
@@ -36,6 +65,7 @@ export async function runRepl(
   process.on('SIGINT', sigintHandler);
 
   while (true) {
+    try {
     let line: string;
     try {
       line = await renderer.prompt('MMA> ');
@@ -72,12 +102,34 @@ export async function runRepl(
       continue;
     }
 
+    // Intercept mma CLI commands inside REPL
+    if (line.startsWith('mma ')) {
+      try {
+        const mmaArgs = line.slice(4);
+        renderer.writeDim(`  $ mma ${mmaArgs}`);
+        const output = execSync(`node ${getEntryPoint()} ${mmaArgs}`, {
+          encoding: 'utf-8',
+          windowsHide: true,
+          timeout: 15000,
+        });
+        renderer.write(output.trim());
+      } catch (e: any) {
+        renderer.writeError(`  Error: ${e.stderr?.trim() || e.message}`);
+      }
+      renderer.writeNewline();
+      continue;
+    }
+
     renderer.writeNewline();
     renderer.writeDim('─'.repeat(40));
     renderer.writeBracketTag('user', ` ${line}`);
     renderer.writeDim('─'.repeat(40));
     renderer.writeNewline();
-    const result = await history.send(line, provider, registry, renderer, modelLabel, { quiet: true });
+    logREPL('user', line);
+    const result = await history.send(line, provider, registry, renderer, modelLabel, { filterThinking: options?.filterThinking });
+
+    const lastAssistant = [...result.messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistant) logREPL('assistant', lastAssistant.content);
 
     if (result.questionPending) {
       const { question, choices } = result.questionPending;
@@ -93,7 +145,26 @@ export async function runRepl(
       renderer.writeBracketTag('user', answer);
       history.push('user', answer);
 
-      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel);
+      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel, { filterThinking: options?.filterThinking });
+    }
+    } catch (err: any) {
+      const logPath = getLogPath();
+      logError('REPL', `Unhandled error: ${err.stack || err.message}`);
+      renderer.writeNewline();
+      renderer.writeDim('─'.repeat(40));
+      renderer.writeError('  ❌ Internal error');
+      renderer.writeLine(`  ${err.message}`);
+      renderer.writeDim(`  See log: ${logPath}`);
+      renderer.writeNewline();
+      if (history.length > 0) {
+        try {
+          const saved = createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+          renderer.writeSuccess(`  Session saved: ${saved}`);
+        } catch { /* ignore */ }
+      }
+      renderer.writeNewline();
+      renderer.writeDim('  Type /exit to quit, or continue with another command.');
+      renderer.writeNewline();
     }
   }
 }

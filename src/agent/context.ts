@@ -1,6 +1,7 @@
 import type { ChatMessage } from '../llm/provider.js';
 import { countTokens } from '../llm/token-counter.js';
 import { getTheme } from '../styling/index.js';
+import { logInfo, logDebug } from '../logger.js';
 
 interface ScoredMessage {
   msg: ChatMessage;
@@ -63,6 +64,7 @@ export class ContextManager {
   }
 
   async updateTokens(messages: ChatMessage[]): Promise<void> {
+    const start = performance.now();
     let total = 0;
     this._history = [];
     for (const msg of messages) {
@@ -75,9 +77,13 @@ export class ContextManager {
       this._history.push({ role: msg.role, tokens: t });
     }
     this._totalTokens = total;
+    const elapsed = (performance.now() - start).toFixed(1);
+    logDebug('CONTEXT', `updateTokens: ${messages.length} msgs, ${total} tokens, ${elapsed}ms`);
   }
 
   compact(messages: ChatMessage[]): ChatMessage[] {
+    const start = performance.now();
+    logInfo('CONTEXT', `compact: ${messages.length} messages before`);
     if (messages.length <= 4) return messages;
 
     const systemIdx = messages.findIndex(m => m.role === 'system');
@@ -141,14 +147,16 @@ export class ContextManager {
 
     this.compacted++;
     this.tokenCache = new WeakMap<ChatMessage, number>();
-
-    return [
+    const result: ChatMessage[] = [
       ...system,
       ...keepFirstUser,
-      { role: 'system', content: summary },
+      { role: 'system' as const, content: summary },
       ...importantByScore,
       ...recentMsgs,
     ];
+    const elapsed = (performance.now() - start).toFixed(1);
+    logInfo('CONTEXT', `compact: ${messages.length} → ${result.length} msgs in ${elapsed}ms`);
+    return result;
   }
 
   formatUsage(): string {

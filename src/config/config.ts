@@ -10,10 +10,10 @@ const DEFAULT_CONFIG: AppConfig = {
       url: 'http://localhost:1234/v1',
       apiKey: null,
       models: {
-        'qwen3.5-9b': {
-          model: 'qwen3.5-9b-instruct',
+        'qwen/qwen3.5-9b': {
+          model: 'qwen/qwen3.5-9b',
           contextWindow: 32768,
-          params: { temperature: 0.7, top_p: 0.9, max_tokens: 4096, frequency_penalty: 0.0, presence_penalty: 0.0, seed: null },
+          params: { temperature: 0.7, top_p: 0.9, max_tokens: 4096 },
         },
       },
     },
@@ -30,8 +30,8 @@ const DEFAULT_CONFIG: AppConfig = {
       },
     },
   },
-  active: { provider: 'lmstudio', model: 'qwen3.5-9b' },
-  agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000 },
+  active: { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' },
+  agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, filterThinking: false },
 };
 
 function findProjectRoot(): string | null {

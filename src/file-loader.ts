@@ -3,6 +3,7 @@ import { globSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { countTokens } from './llm/token-counter.js';
 import { getTheme } from './styling/index.js';
+import { logInfo, logDebug } from './logger.js';
 
 interface LoadedFile {
   path: string;
@@ -72,6 +73,7 @@ const MAX_FILE_SIZE = 50 * 1024;
 const MAX_FILE_LINES = 2000;
 
 export async function parseFileRefs(input: string): Promise<ParseResult> {
+  const start = performance.now();
   const files: LoadedFile[] = [];
   const processed: Set<string> = new Set();
 
@@ -142,5 +144,8 @@ export async function parseFileRefs(input: string): Promise<ParseResult> {
     prompt = `${input}\n\n[Загруженные файлы:]\n${fileList}\n${filesSection}`;
   }
 
+  const elapsed = (performance.now() - start).toFixed(1);
+  if (files.length > 0) logInfo('FILELOADER', `parsed ${files.length} file refs in ${elapsed}ms`);
+  logDebug('FILELOADER', `parseFileRefs done: ${elapsed}ms`);
   return { prompt, files };
 }

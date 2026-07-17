@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { logInfo, logDebug } from '../logger.js';
 
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', '.mma', 'dist', 'build', '__pycache__',
@@ -155,6 +156,8 @@ function walkDir(dir: string, baseDir: string, extensions: Set<string>, results:
 }
 
 export function buildCodeIndex(cwd: string): CodeIndex {
+  const start = performance.now();
+  logDebug('INDEXER', 'buildCodeIndex start');
   const index: CodeIndex = {
     language: 'unknown',
     symbols: {},
@@ -201,6 +204,8 @@ export function buildCodeIndex(cwd: string): CodeIndex {
 
   index.language = Object.entries(langCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
 
+  const elapsed = (performance.now() - start).toFixed(0);
+  logInfo('INDEXER', `buildCodeIndex: ${filePaths.length} files, ${Object.keys(index.symbols).length} symbols in ${elapsed}ms`);
   return index;
 }
 
