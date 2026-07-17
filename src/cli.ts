@@ -94,7 +94,7 @@ export function createCli() {
 
   program
     .name('mma')
-    .version('0.2.20')
+    .version('0.2.24')
     .description('Micro Models Agent (MMA) — LLM agent harness for small models');
 
   program
@@ -112,6 +112,13 @@ export function createCli() {
   program.action(async (prompt?: string) => {
     ensureMmaDir();
     ensureThemeDir();
+
+    // First-run setup wizard
+    if (!prompt && process.stdin.isTTY) {
+      const { runSetupWizard } = await import('./setup-wizard.js');
+      await runSetupWizard();
+    }
+
     const config = loadConfig();
     initTheme(config.theme);
 

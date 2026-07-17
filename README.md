@@ -173,6 +173,7 @@ mma model set qwen3.5-9b seed=null      # сбросить seed
 | `MMA_PROVIDER` | Провайдер по умолчанию |
 | `MMA_MODEL` | Модель по умолчанию |
 | `MMA_STDIN=1` | Принудительное чтение stdin |
+
 ## Режимы запуска
 
 ### One-shot
