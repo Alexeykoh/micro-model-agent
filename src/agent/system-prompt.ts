@@ -49,6 +49,16 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
   {"name":"web_fetch","arguments":{"url":"https://example.com"}}
 
+## Theme tool (управление темами):
+  {"name":"theme","arguments":{"action":"list"}}
+  {"name":"theme","arguments":{"action":"switch","name":"dark"}}
+  {"name":"theme","arguments":{"action":"show"}}
+  {"name":"theme","arguments":{"action":"install","name":"monokai","url":"https://example.com/monokai.json"}}
+  {"name":"theme","arguments":{"action":"remove","name":"monokai"}}
+
+Темы в ~/.mma/themes/. Встроенные: light, dark. Можно установить из URL.
+Если пользователь хочет сменить тему — предложи подходящую из списка и переключи.
+
 ## Bash (for non-file operations — npm, git, etc):
   {"name":"bash","arguments":{"cmd":"npm test"}}
   {"name":"bash","arguments":{"cmd":"git status"}}

@@ -14,6 +14,9 @@ import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../t
 import { parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
+import { listThemes, switchTheme } from '../styling/index.js';
+import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js';
+import { loadConfig, saveConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
@@ -93,7 +96,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -563,6 +566,77 @@ export async function runAgentLoop(
           messages,
           questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
         };
+      } else if (parsed.name === 'theme') {
+        const action = String(parsed.arguments.action || 'list');
+        const name = String(parsed.arguments.name || '');
+        const url = String(parsed.arguments.url || '');
+        if (!quiet) {
+          renderer?.writeBracketTag('theme', action);
+        }
+        switch (action) {
+          case 'list': {
+            const allThemes = listThemes();
+            const current = loadThemeConfig().name;
+            toolOutput = `Available themes (${allThemes.length}):\n`;
+            for (const t of allThemes) {
+              toolOutput += `  ${t}${t === current ? ' (active)' : ''}\n`;
+            }
+            break;
+          }
+          case 'show': {
+            const config = loadThemeConfig();
+            toolOutput = `Theme: ${config.name}\nColors: ${JSON.stringify(config.colors, null, 2)}\nIcons: ${JSON.stringify(config.icons, null, 2)}`;
+            break;
+          }
+          case 'switch': {
+            const allThemes = listThemes();
+            if (!allThemes.includes(name)) {
+              toolOutput = `Unknown theme "${name}". Available: ${allThemes.join(', ')}`;
+              toolExitCode = 1;
+              break;
+            }
+            const appConfig = loadConfig();
+            appConfig.theme = name;
+            saveConfig(appConfig);
+            switchTheme(name);
+            try {
+              const { resetInkTheme } = await import('../ui/ink/theme.js');
+              resetInkTheme();
+            } catch { /* not in ink mode */ }
+            toolOutput = `Theme switched to "${name}"`;
+            break;
+          }
+          case 'install': {
+            if (!name || !url) {
+              toolOutput = 'Usage: theme install <name> <url>';
+              toolExitCode = 1;
+              break;
+            }
+            try {
+              const resp = await fetch(url);
+              const text = await resp.text();
+              JSON.parse(text);
+              installTheme(name, text);
+              toolOutput = `Theme "${name}" installed from ${url}`;
+            } catch (e: any) {
+              toolOutput = `Failed to install theme: ${e.message}`;
+              toolExitCode = 1;
+            }
+            break;
+          }
+          case 'remove': {
+            if (!removeTheme(name)) {
+              toolOutput = `Theme "${name}" not found`;
+              toolExitCode = 1;
+              break;
+            }
+            toolOutput = `Theme "${name}" removed`;
+            break;
+          }
+          default:
+            toolOutput = 'Unknown theme action. Use: list, show, switch, install, remove';
+            toolExitCode = 1;
+        }
       } else if (isBash && cmd!.startsWith('plan ')) {
         const planArgs = cmd!.slice(5).trim();
         const { action, params } = parsePlanCommand(planArgs);
