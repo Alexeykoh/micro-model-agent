@@ -1,187 +1,70 @@
 # Micro Models Agent (MMA)
 
-LLM агент-харнес для маленьких моделей (Qwen3.5-9B, 32K-64K контекст).
+LLM agent harness for small models (Qwen3.5-9B, 32K-64K context). TypeScript/Node.js ESM project.
 
-## Статус
-
-Все задачи (M0-M7, P1-P10) выполнены и переведены в статус "На проверке" в Projexify.
-Ink UI integration — готово.
-Built-in skills — 8 встроенных скилов (cli-expert, nodejs-expert, typescript-expert, git-expert, test-driven-development, jest-testing-expert, code-review, systematic-debugging).
-
-## Known issues / next steps
-
-1. Run `bun run src/index.ts --ink` — confirm REPL starts with `MMA>` prompt
-2. Test `/theme list`, `/theme dark` in ink mode
-3. Test agent `theme` tool call (`list`, `switch`, `show`, `install`, `remove`)
-
-## Ключевые решения
-
-- **Стек**: TypeScript/Node.js, ESM (`"type": "module"`)
-- **Архитектура**: fs-tools-first — модель вызывает专用ные файловые инструменты через `<tool_call>` (Hermes format). Bash только для非-файловых операций (npm, git).
-- **Провайдеры**: только OpenAI-совместимые API (LM Studio, Ollama, vLLM, Together). Прямой REST.
-- **Tool calling**: Hermes format `<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>` — не JSON тулы
-- **CLI**: `npm run mma` через `tsx src/index.ts`
-- **Цель**: Qwen3.5-9B, 32K-64K контекст
-
-## Установка
+## Quick commands
 
 ```bash
-npm install -g mma              # глобально из npm
-npm link                        # или локально из repo
+npm run mma              # dev run (bun run src/index.ts)
+npm run build            # tsc + copy built-in skills to dist/
+npm test                 # unit tests (bun test, specific files only)
+npm run test:all         # all tests including integration
+npm run test:watch       # vitest watch mode
+npm run dev              # bun --watch
 ```
 
-После установки команда `mma` доступна глобально.
+## Key commands that trip up agents
 
-## Команды
+- `npm test` runs a **specific subset** of test files (see `package.json` `scripts.test`) — not `bun test` with no args. Use `npm run test:all` for everything.
+- `npm run build` does **two things**: `tsc -p tsconfig.build.json` + copies `src/skills/builtin/` → `dist/skills/builtin/`. Both are required for a working build.
+- The build uses `tsconfig.build.json` (extends `tsconfig.json`, adds `"jsx": "react-jsx"` for Ink UI components). Don't use plain `tsc` for builds.
+- `npm run mma` is the dev shortcut — it uses `bun run src/index.ts`, not the compiled `dist/`.
 
-```bash
-mma "запрос"                     # one-shot
-mma                              # interactive readline (по умолчанию)
-mma --provider ollama --model qwen3.5:9b  # с выбором
-mma provider list                # список провайдеров
-mma provider add <n> <u>        # добавить провайдер
-mma provider remove <n>         # удалить провайдер
-mma model list                   # список моделей
-mma model add <n> <id> <ctx>    # добавить модель
-mma model params [n]            # показать параметры
-mma model set <n> k=v           # изменить параметры
-mma config show                  # показать конфиг
-mma config reset                 # сбросить конфиг
-npm run build                    # tsc -p tsconfig.build.json + копирование built-in скилов в dist/
-npm run dev                      # bun --watch
-npm test                         # bun test (unit: context, sanitizer, code-index, file-loader, commands)
-```
+## Architecture
 
-## Структура
+- **ESM throughout**: `"type": "module"` in package.json. All imports use `.js` extensions (e.g. `'./foo.js'`).
+- **Tool calling format**: Hermes `<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>` — NOT OpenAI JSON tool_calls. The agent loop in `src/agent/loop.ts` parses this format.
+- **fs-tools-first**: 12 dedicated file tools (`read_file`, `write_file`, `edit_file`, etc.) in `src/tools/fs/`. Bash is reserved for non-file operations (npm, git, docker).
+- **LLM providers**: OpenAI-compatible REST only (LM Studio, Ollama, vLLM, Together). No SDK dependencies.
+- **Ink UI**: React-based terminal UI (`src/ui/ink/`). Requires `jsx: "react-jsx"` in tsconfig. Components are `.tsx` files.
+- **Config**: `~/.mma/config.json` globally, `.mmrc` project-local override. Config loads via `src/config/config.ts`.
 
-```
-src/
-├── index.ts            # Точка входа
-├── cli.ts              # Commander CLI + program.action (~100 строк)
-├── cli/                # CLI subcommands
-│   ├── provider.ts     # provider list/use/add/remove
-│   ├── model.ts        # model list/use/add/remove/params/set
-│   └── config.ts       # config show/reset
-├── repl/
-│   ├── index.ts        # runRepl() — основной цикл REPL
-│   ├── commands.ts     # Реестр slash-команд + handlers
-│   └── history.ts      # ConversationHistory — управление историей
-├── file-loader.ts      # @file парсинг
-├── config/
-│   ├── config.ts       # Загрузка/сохранение конфига
-│   └── types.ts        # Типы
-├── llm/
-│   ├── provider.ts     # Интерфейс LLMProvider
-│   ├── openai-compat.ts # OpenAI-совместимый провайдер
-│   └── token-counter.ts # js-tiktoken + fallback
-├── tools/
-│   ├── bash.ts         # Выполнение команд + обрезка
-│   ├── registry.ts     # Реестр инструментов (bash + fs tools)
-│   ├── sanitizer.ts    # Безопасность команд
-│   ├── plan.ts         # Управление планами
-│   ├── todo.ts         # Список задач
-│   ├── question.ts     # Вопросы пользователю
-│   ├── approve.ts      # Запрос одобрения
-│   ├── hooks.ts        # Pre/post хуки
-│   ├── mcp.ts          # MCP интеграция
-│   ├── syntax-check.ts # Проверка синтаксиса
-│   └── fs/             # Файловые инструменты (12 шт)
-│       ├── types.ts        # Типы FsToolResult
-│       ├── path-utils.ts   # Утилиты путей, безопасность
-│       ├── read-file.ts    # Чтение файлов с нумерацией строк
-│       ├── write-file.ts   # Атомарная запись/создание
-│       ├── edit-file.ts    # Find & replace
-│       ├── list-dir.ts     # Список директорий
-│       ├── create-dir.ts   # Создание директорий
-│       ├── delete-file.ts  # Удаление файлов/директорий
-│       ├── copy-file.ts    # Копирование
-│       ├── move-file.ts    # Перемещение/переименование
-│       ├── file-info.ts    # Метаданные файла
-│       ├── glob-search.ts  # Поиск по паттерну
-│       ├── grep-search.ts  # Поиск по regex
-│       └── tree.ts         # Дерево директорий
-├── agent/
-│   ├── loop.ts         # ReAct цикл (~517 строк, без NullRenderer)
-│   ├── system-prompt.ts # Системный промпт + константы
-│   ├── context.ts      # Менеджер контекста (бюджет, compact)
-│   └── memory.ts       # Persistent memory
-├── indexer/
-│   ├── project-map.ts  # Генерация дерева файлов + exports
-│   ├── code-index.ts   # AST-индекс символов (tree-sitter)
-│   └── cache.ts        # Кэш индекса (.mma/index/)
-├── skills/
-│   ├── loader.ts       # Загрузка Skills/AGENTS.md
-│   └── builtin/        # Встроенные скилы (8 шт, всегда доступны)
-│       ├── cli-expert/
-│       ├── code-review/
-│       ├── git-expert/
-│       ├── jest-testing-expert/
-│       ├── nodejs-expert/
-│       ├── systematic-debugging/
-│       ├── test-driven-development/
-│       └── typescript-expert/
-├── ui/
-│   ├── index.ts            # Factory: createRenderer(mode)
-│   ├── renderer.ts         # OutputRenderer interface + types
-│   ├── readline-renderer.ts # console.log/process.stdout обёртка
-│   ├── ink/                # React ink renderer
-│   │   ├── renderer.ts     # InkRenderer class (dispatch bridge, handleReady)
-│   │   ├── theme.ts        # ThemeEngine → ink style props converter
-│   │   └── components/
-│   │       ├── App.tsx          # Root React component + reducer
-│   │       ├── PromptInput.tsx  # Multi-line input, Tab completion, history
-│   │       ├── Conversation.tsx # Message list with streaming
-│   │       ├── StatusBar.tsx    # Footer status bar
-│   │       ├── MessageBlock.tsx # Message display (user/assistant)
-│   │       ├── ToolCallBlock.tsx# Tool call/result display
-│   │       ├── StreamBlock.tsx  # Streaming character animation
-│   │       └── Tags.tsx         # Colored tags
-│   └── components/
-│       ├── status-bar.ts   # Форматирование строки статуса
-│       └── diff-view.ts    # Парсинг/форматирование diff
-├── styling/
-│   ├── index.ts        # getTheme() / initTheme()
-│   ├── engine.ts       # ThemeEngine
-│   ├── loader.ts       # Theme loading
-│   └── types.ts        # ThemeConfig, etc.
-└── session/
-    └── store.ts        # Хранилище сессий (.mma/sessions/)
-```
+## Source layout (what to touch)
 
-## Файловые инструменты
+| Area | Path | Notes |
+|------|------|-------|
+| Entry point | `src/index.ts` → `src/cli.ts` | Commander CLI, registers subcommands |
+| Agent loop | `src/agent/loop.ts` | ReAct cycle, ~845 lines, core logic |
+| Tool registry | `src/tools/registry.ts` | Wires all tools, handles file-change notifications |
+| FS tools | `src/tools/fs/*.ts` | 12 files, one per operation |
+| LLM provider | `src/llm/openai-compat.ts` | Direct REST to OpenAI-compatible endpoints |
+| REPL | `src/repl/index.ts` | Interactive readline loop |
+| Skills | `src/skills/builtin/` | 8 built-in skills, copied to dist/ at build |
+| Theme/styling | `src/styling/` | ThemeEngine, loader, JSON theme files |
+| Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
+| Ink UI | `src/ui/ink/` | React components for terminal UI |
 
-Модель вызывает专用ные инструменты через ``<tool_call>` формат вместо bash-команд:
+## Testing
 
-| Инструмент | Описание | Пример |
-|------------|----------|--------|
-| `read_file` | Чтение файла с нумерацией строк | `{"name":"read_file","arguments":{"path":"src/index.ts"}}` |
-| `write_file` | Атомарная запись/создание | `{"name":"write_file","arguments":{"path":"file.ts","content":"..."}}` |
-| `edit_file` | Find & replace (точное совпадение) | `{"name":"edit_file","arguments":{"path":"file.ts","old_string":"old","new_string":"new"}}` |
-| `list_dir` | Список директории | `{"name":"list_dir","arguments":{"path":"src"}}` |
-| `create_dir` | Рекурсивное создание | `{"name":"create_dir","arguments":{"path":"src/routes"}}` |
-| `delete_file` | Удаление (recursive для dir) | `{"name":"delete_file","arguments":{"path":"old.ts"}}` |
-| `copy_file` | Копирование | `{"name":"copy_file","arguments":{"source":"a.ts","destination":"b.ts"}}` |
-| `move_file` | Перемещение/переименование | `{"name":"move_file","arguments":{"source":"old.ts","destination":"new.ts"}}` |
-| `file_info` | Метаданные файла | `{"name":"file_info","arguments":{"path":"src/index.ts"}}` |
-| `glob_search` | Поиск по паттерну | `{"name":"glob_search","arguments":{"pattern":"**/*.ts"}}` |
-| `grep_search` | Поиск по regex | `{"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}` |
-| `tree` | Дерево директорий | `{"name":"tree","arguments":{"depth":2}}` |
+- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`
+- Integration tests: `tests/llm-integration.test.ts`, `tests/agent-integration.test.ts` (require running LLM server)
+- All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
+- No vitest config file — uses defaults from package.json
 
-**Bash** используется только для非-файловых операций: `npm`, `git`, `docker` и т.д.
+## Conventions
 
-## Конвенции
+- **Language**: Code comments and commit messages in Russian (by project convention).
+- **Plan-driven**: Major changes follow `PLAN.md`. Deviate only with justification.
+- **`.mimocode/`**: Agent runtime directory — do not modify.
+- **`session-*.md`**: Session logs, not part of the project.
+- **`research/`**: Reference research results.
+- **`docs/`**: External API documentation.
+- **Config location**: `~/.mma/config.json` (global), `.mmrc` (project-local).
 
-- План утверждён в `PLAN.md` — прежде чем отступать, обосновать
-- `.mimocode/` — служебная папка агента, не трогать
-- `session-*.md` — логи сессий, не часть проекта
-- `research/` — результаты, можно перечитывать при спорных решениях
-- `docs/` — документация внешних API
-- `AGENTS.md` — периодически обновлять под актуальное состояние проекта
-- `src/setup-wizard.ts` — интерактивный мастер первого запуска (выбор провайдера, тест чата, сохранение конфига)
-- Язык коммитов и документации — русский (по запросу пользователя)
+## Gotchas
 
-## Внешние интеграции
-
-| Сервис | Документация | Токен |
-|--------|-------------|-------|
-| **Projexify** | [`docs/projexify-api.md`](docs/projexify-api.md) | `pxt_ogroc0AvBXZdITpX62ZhJ8uPGgyLwfOStrsASFCU` |
+- The `jsonrepair` dependency is used in the agent loop to fix malformed JSON from small models — don't remove it.
+- `esprima` is used for syntax checking of code blocks before writing files.
+- `execa` is used for shell execution (not raw `child_process`).
+- The project publishes `dist/` + `dist/skills/builtin/` to npm (`files` field in package.json).
+- Built-in skills are in `src/skills/builtin/<name>/SKILL.md` — they must be copied to dist/ at build time.
