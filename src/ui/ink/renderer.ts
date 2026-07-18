@@ -10,10 +10,16 @@ interface CommandInfo {
 
 export class InkRenderer implements OutputRenderer {
   private handle: AppHandle | null = null;
+  private handleReady: Promise<void>;
+  private resolveReady!: () => void;
   private inkResult: { unmount: () => void; clear: () => void } | null = null;
   private _commands: CommandInfo[] = [];
 
   readonly abortSignal: AbortSignal | undefined;
+
+  constructor() {
+    this.handleReady = new Promise((resolve) => { this.resolveReady = resolve; });
+  }
 
   setCommands(cmds: CommandInfo[]): void {
     this._commands = cmds;
@@ -23,8 +29,12 @@ export class InkRenderer implements OutputRenderer {
     this.inkResult = inkRender(
       React.createElement(App, {
         commands: this._commands,
-        onReady: (handle: AppHandle) => { this.handle = handle; },
-      })
+        onReady: (handle: AppHandle) => {
+          this.handle = handle;
+          this.resolveReady();
+        },
+      }),
+      { exitOnCtrlC: false }
     );
   }
 
@@ -34,7 +44,8 @@ export class InkRenderer implements OutputRenderer {
     this.handle = null;
   }
 
-  private dispatch(action: any): void {
+  private async dispatch(action: any): Promise<void> {
+    if (!this.handle) await this.handleReady;
     this.handle?.dispatch(action);
   }
 
