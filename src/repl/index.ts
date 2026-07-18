@@ -85,6 +85,8 @@ export async function runRepl(
       }
     }
 
+    ctx.renderer.updateContextUsage('');
+    ctx.renderer.updateStatus({ contextWindow: ctx.provider.contextWindow });
     ctx.renderer.setMode?.(mode);
   };
 
