@@ -10,7 +10,9 @@ import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, r
 import { listInstalledSkills } from '../skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from '../session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap, getOrBuildCodeIndex, getOrBuildProjectMap } from '../indexer/cache.js';
-import { getTheme } from '../styling/index.js';
+import { getTheme, listThemes, switchTheme } from '../styling/index.js';
+import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js';
+import { loadConfig, saveConfig } from '../config/config.js';
 import { logInfo } from '../logger.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 
@@ -53,6 +55,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'stop', description: 'stop agent loop', handler: cmdStop },
     { name: 'init', description: 'initialize project & create AGENTS.md', handler: cmdInit },
     { name: 'index', description: 'index management', handler: cmdIndex },
+    { name: 'theme', description: 'theme management (list/switch/show/install/create/remove)', handler: cmdTheme },
     { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
 }
@@ -685,4 +688,73 @@ function cmdExport(args: string, ctx: CommandContext): void {
   mkdirSync('.mma', { recursive: true });
   writeFileSync(filename, output, 'utf-8');
   ctx.renderer.writeSuccess(`  Exported to ${filename}`);
+}
+
+async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
+  const theme = getTheme();
+  const parts = args.trim().split(/\s+/);
+  const subcmd = parts[0] || 'list';
+  const name = parts.slice(1).join(' ');
+
+  switch (subcmd) {
+    case 'list': {
+      const allThemes = listThemes();
+      const current = loadThemeConfig().name;
+      ctx.renderer.writeInfo(`  Available themes (${allThemes.length}):`);
+      for (const t of allThemes) {
+        const marker = t === current ? theme.success(' ← active') : '';
+        ctx.renderer.writeLine(`    ${theme.highlight(t)}${marker}`);
+      }
+      break;
+    }
+    case 'show': {
+      const config = loadThemeConfig();
+      ctx.renderer.writeInfo(`  Current theme: ${theme.highlight(config.name)}`);
+      ctx.renderer.writeLine(`    Colors: ${Object.keys(config.colors).length} keys`);
+      ctx.renderer.writeLine(`    Icons: ${Object.keys(config.icons).length} keys`);
+      break;
+    }
+    case 'create': {
+      if (!name) { ctx.renderer.writeInfo('  Usage: /theme create <name>'); break; }
+      const current = loadThemeConfig();
+      current.name = name;
+      const filePath = installTheme(name, JSON.stringify(current, null, 2));
+      ctx.renderer.writeSuccess(`  Theme "${name}" created (${filePath})`);
+      break;
+    }
+    case 'install': {
+      const [themeName, url] = parts.slice(1);
+      if (!themeName || !url) { ctx.renderer.writeInfo('  Usage: /theme install <name> <url>'); break; }
+      ctx.renderer.writeDim(`  Downloading from ${url}...`);
+      try {
+        const resp = execSync(`curl -s "${url}"`, { encoding: 'utf-8', timeout: 10000, windowsHide: true });
+        JSON.parse(resp);
+        const filePath = installTheme(themeName, resp);
+        ctx.renderer.writeSuccess(`  Theme "${themeName}" installed (${filePath})`);
+      } catch (e: any) {
+        ctx.renderer.writeError(`  Failed to install: ${e.message}`);
+      }
+      break;
+    }
+    case 'remove': {
+      if (!name) { ctx.renderer.writeInfo('  Usage: /theme remove <name>'); break; }
+      if (!removeTheme(name)) { ctx.renderer.writeError(`  Theme "${name}" not found`); break; }
+      ctx.renderer.writeSuccess(`  Theme "${name}" removed`);
+      break;
+    }
+    default: {
+      const allThemes = listThemes();
+      if (!allThemes.includes(subcmd)) { ctx.renderer.writeError(`  Unknown theme "${subcmd}". Use /theme list`); break; }
+      const config = loadConfig();
+      config.theme = subcmd;
+      saveConfig(config);
+      switchTheme(subcmd);
+      try {
+        const { resetInkTheme } = await import('../ui/ink/theme.js');
+        resetInkTheme();
+      } catch { /* not in ink mode */ }
+      ctx.renderer.writeSuccess(`  Theme switched to "${subcmd}"`);
+      break;
+    }
+  }
 }
