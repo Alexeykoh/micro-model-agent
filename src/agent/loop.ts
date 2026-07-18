@@ -382,8 +382,9 @@ export async function runAgentLoop(
       break;
     }
 
-    // Auto-load skills if model suggested them in response (disabled in fast mode)
-    if (options?.mode !== 'fast') {
+    // Auto-load skills if the response contains tool calls AND @skill mentions
+    // (only when the agent is actually working, not just describing)
+    if (options?.mode !== 'fast' && response.includes('<tool_call>')) {
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
     const newSkillNames: string[] = [];
     for (const match of suggestedSkillRefs) {
@@ -402,8 +403,7 @@ export async function runAgentLoop(
       skillsAutoLoaded = true;
       renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode) };
-      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working NOW — do NOT wait for user confirmation.]` });
-      // Force model to continue working after skills are loaded
+      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. Continue your work using these skills where relevant.]` });
       continue;
     }
     } // end fast-mode skill block
@@ -413,9 +413,7 @@ export async function runAgentLoop(
       consecutiveEmpty++;
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
-        const retryPrompt = consecutiveEmpty === 1
-          ? 'The tool result is above. Your turn now. Write a response to the user. Do NOT call tools unless there is actual work to do.'
-          : 'You returned an empty response again. You MUST write something now. Just respond to the user — do NOT call tools.';
+        const retryPrompt = consecutiveEmpty <= 2 ? '[continue]' : 'You MUST write something or call a tool. Silence is not allowed.';
         messages.push({ role: 'user', content: retryPrompt });
         if (!quiet) {
           renderer?.writeDim(`  [empty response #${consecutiveEmpty}, retrying]`);
@@ -465,12 +463,19 @@ export async function runAgentLoop(
 
     if (validCalls.length === 0) {
       if (invalidCalls.length > 0) {
-        const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve.`;
-        if (!quiet) {
-          renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
+        // If the response has substantial text outside tool_call tags,
+        // it's a description with examples — not a failed tool call attempt.
+        const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+        if (textOutside.length < 100) {
+          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve.`;
+          if (!quiet) {
+            renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
+          }
+          messages.push({ role: 'tool', content: feedback, tool_call_id: `invalid-${Date.now()}` });
+          continue;
         }
-        messages.push({ role: 'tool', content: feedback, tool_call_id: `invalid-${Date.now()}` });
-        continue;
+        // Text response with example tool calls — just log and proceed
+        logWarn('LOOP', `ignored ${invalidCalls.length} invalid tool call(s) in descriptive text`);
       }
 
       // Nudge model to continue working after a tool result — but only if
