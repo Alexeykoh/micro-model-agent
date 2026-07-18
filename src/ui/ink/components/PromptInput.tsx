@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getInkTheme } from '../theme.js';
 
@@ -6,6 +6,15 @@ interface CommandInfo {
   name: string;
   description: string;
 }
+
+const HINTS = [
+  'Ctrl+C to exit',
+  '/help for commands',
+  'Tab for completion',
+  '↑/↓ for history',
+  'Shift+Enter for newline',
+  'Ask me anything',
+];
 
 export function PromptInput({
   commands,
@@ -22,7 +31,14 @@ export function PromptInput({
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [suggestions, setSuggestions] = useState<CommandInfo[]>([]);
   const [suggestIdx, setSuggestIdx] = useState(0);
+  const [hintIdx, setHintIdx] = useState(0);
   const t = getInkTheme();
+
+  useEffect(() => {
+    if (!disabled) return;
+    const id = setInterval(() => setHintIdx((i) => (i + 1) % HINTS.length), 4000);
+    return () => clearInterval(id);
+  }, [disabled]);
 
   useInput((input: string, key: Record<string, boolean>) => {
     if (disabled) return;
@@ -147,7 +163,7 @@ export function PromptInput({
       <Box width="100%">
         <Text {...(disabled ? t.colors.dim : t.colors.prompt)}>{'MMA> '}</Text>
         {disabled ? (
-          <Text {...t.colors.dim}>{'...'}</Text>
+          <Text {...t.colors.dim}>{HINTS[hintIdx]}</Text>
         ) : (
           <Text>
             {value.slice(0, cursor)}
