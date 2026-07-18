@@ -156,7 +156,7 @@ describe('getGitInfo', () => {
 // ── cmdClear /new ──────────────────────────────────────────
 
 describe('cmdClear', () => {
-  it('clears history array', async () => {
+  it('does not clear history (visual only)', async () => {
     const handler = getSlashCommands().find(c => c.name === 'clear')!.handler;
     const history: { role: 'user' | 'assistant'; content: string }[] = [
       { role: 'user', content: 'msg1' },
@@ -173,7 +173,7 @@ describe('cmdClear', () => {
       modelLabel: 'test',
     });
 
-    expect(history.length).toBe(0);
+    expect(history.length).toBe(2);
   });
 
   it('calls renderer.clear()', async () => {
@@ -194,8 +194,48 @@ describe('cmdClear', () => {
     expect(cleared).toBe(true);
   });
 
-  it('shows info message after clear', async () => {
+  it('does not show any message (silent clear)', async () => {
     const handler = getSlashCommands().find(c => c.name === 'clear')!.handler;
+    let msg = '';
+    const renderer = mockRenderer();
+    renderer.writeInfo = (t: string) => { msg = t; };
+
+    await handler('', {
+      renderer,
+      provider: {} as any,
+      registry: {} as any,
+      history: [],
+      conversationHistory: [],
+      modelLabel: 'test',
+    });
+
+    expect(msg).toBe('');
+  });
+});
+
+describe('cmdNew', () => {
+  it('clears history array', async () => {
+    const handler = getSlashCommands().find(c => c.name === 'new')!.handler;
+    const history: { role: 'user' | 'assistant'; content: string }[] = [
+      { role: 'user', content: 'msg1' },
+      { role: 'assistant', content: 'resp1' },
+    ];
+    const renderer = mockRenderer();
+
+    await handler('', {
+      renderer,
+      provider: {} as any,
+      registry: {} as any,
+      history,
+      conversationHistory: history,
+      modelLabel: 'test',
+    });
+
+    expect(history.length).toBe(0);
+  });
+
+  it('shows info message after new', async () => {
+    const handler = getSlashCommands().find(c => c.name === 'new')!.handler;
     let msg = '';
     const renderer = mockRenderer();
     renderer.writeInfo = (t: string) => { msg = t; };
@@ -211,13 +251,23 @@ describe('cmdClear', () => {
 
     expect(msg).toContain('Context cleared');
   });
-});
 
-describe('cmdNew (alias for clear)', () => {
-  it('behaves identically to clear', async () => {
-    const clearHandler = getSlashCommands().find(c => c.name === 'clear')!.handler;
-    const newHandler = getSlashCommands().find(c => c.name === 'new')!.handler;
-    expect(clearHandler).toBe(newHandler);
+  it('calls renderer.clear()', async () => {
+    const handler = getSlashCommands().find(c => c.name === 'new')!.handler;
+    let cleared = false;
+    const renderer = mockRenderer();
+    renderer.clear = () => { cleared = true; };
+
+    await handler('', {
+      renderer,
+      provider: {} as any,
+      registry: {} as any,
+      history: [{ role: 'user', content: 'msg' }],
+      conversationHistory: [{ role: 'user', content: 'msg' }],
+      modelLabel: 'test',
+    });
+
+    expect(cleared).toBe(true);
   });
 });
 

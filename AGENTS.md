@@ -5,7 +5,8 @@ LLM агент-харнес для маленьких моделей (Qwen3.5-9B
 ## Статус
 
 Все задачи (M0-M7, P1-P10) выполнены и переведены в статус "На проверке" в Projexify.
-Ink UI integration (React-for-CLI renderer) — implemented and ready for first smoke test.
+Ink UI integration — готово.
+Built-in skills — 8 встроенных скилов (cli-expert, nodejs-expert, typescript-expert, git-expert, test-driven-development, jest-testing-expert, code-review, systematic-debugging).
 
 ## Known issues / next steps
 
@@ -46,7 +47,7 @@ mma model params [n]            # показать параметры
 mma model set <n> k=v           # изменить параметры
 mma config show                  # показать конфиг
 mma config reset                 # сбросить конфиг
-npm run build                    # tsc -p tsconfig.build.json (jsx in build config only)
+npm run build                    # tsc -p tsconfig.build.json + копирование built-in скилов в dist/
 npm run dev                      # bun --watch
 npm test                         # bun test (unit: context, sanitizer, code-index, file-loader, commands)
 ```
@@ -109,7 +110,16 @@ src/
 │   ├── code-index.ts   # AST-индекс символов (tree-sitter)
 │   └── cache.ts        # Кэш индекса (.mma/index/)
 ├── skills/
-│   └── loader.ts       # Загрузка Skills/AGENTS.md
+│   ├── loader.ts       # Загрузка Skills/AGENTS.md
+│   └── builtin/        # Встроенные скилы (8 шт, всегда доступны)
+│       ├── cli-expert/
+│       ├── code-review/
+│       ├── git-expert/
+│       ├── jest-testing-expert/
+│       ├── nodejs-expert/
+│       ├── systematic-debugging/
+│       ├── test-driven-development/
+│       └── typescript-expert/
 ├── ui/
 │   ├── index.ts            # Factory: createRenderer(mode)
 │   ├── renderer.ts         # OutputRenderer interface + types

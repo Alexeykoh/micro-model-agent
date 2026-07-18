@@ -1,5 +1,5 @@
 import React from 'react';
-import { Static, Box } from 'ink';
+import { Box } from 'ink';
 import { MessageBlock, type MessageItem } from './MessageBlock.js';
 import { ToolCallBlock, type ToolCallData } from './ToolCallBlock.js';
 import { StreamBlock, SpinnerLine } from './StreamBlock.js';
@@ -23,14 +23,14 @@ export function Conversation({
 }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Static items={entries} style={{ flexDirection: 'column' }}>
-        {(entry: ConversationEntry) => {
+      <Box flexDirection="column">
+        {entries.map((entry: ConversationEntry) => {
           if (entry.kind === 'message') {
             return React.createElement(MessageBlock, { key: entry.id, item: entry.data as MessageItem });
           }
           return React.createElement(ToolCallBlock, { key: entry.id, data: entry.data as ToolCallData });
-        }}
-      </Static>
+        })}
+      </Box>
       {showSpinner && !streaming && <SpinnerLine />}
       {streaming && <StreamBlock content={streamingContent} isReasoning={isReasoning} />}
     </Box>

@@ -1,9 +1,15 @@
 import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { logDebug } from '../logger.js';
 
 const SKILLS_DIR = join(homedir(), '.mma', 'skills');
+
+// Built-in skills bundled with MMA (shipped in dist/skills/builtin/)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const BUILTIN_SKILLS_DIR = join(__dirname, 'builtin');
 
 // Global skill directories searched in order (project-local dirs checked first in loadSkill)
 const SKILLS_GLOBAL_DIRS = [
@@ -45,7 +51,9 @@ export function loadAgentsMd(cwd: string): string | null {
 export function loadSkill(name: string, cwd: string): Skill | null {
   const start = performance.now();
   const candidates = [
-    // Project-local directories first
+    // Built-in skills (bundled with MMA, highest priority)
+    join(BUILTIN_SKILLS_DIR, name, 'SKILL.md'),
+    // Project-local directories
     join(cwd, '.claude', 'skills', name, 'SKILL.md'),
     join(cwd, '.agents', 'skills', name, 'SKILL.md'),
     join(cwd, '.opencode', 'skills', name, 'SKILL.md'),
@@ -84,26 +92,46 @@ export function loadSkillsFromRefs(text: string, cwd: string): Skill[] {
   return skills;
 }
 
-export function listInstalledSkills(): string[] {
-  const skills: string[] = [];
-  const dirs = [SKILLS_DIR, ...SKILLS_GLOBAL_DIRS];
-
-  for (const dir of dirs) {
-    if (!existsSync(dir)) continue;
-    try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const skillPath = join(dir, entry.name, 'SKILL.md');
-          if (existsSync(skillPath) && !skills.includes(entry.name)) {
-            skills.push(entry.name);
-          }
-        }
-      }
-    } catch { /* skip */ }
+function scanDirSkills(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter(e => e.isDirectory() && existsSync(join(dir, e.name, 'SKILL.md')))
+      .map(e => e.name);
+  } catch {
+    return [];
   }
+}
 
-  return skills.sort();
+export interface SkillsBySource {
+  builtin: string[];
+  project: string[];
+  global: string[];
+}
+
+export function listSkillsBySource(cwd: string): SkillsBySource {
+  const builtin = scanDirSkills(BUILTIN_SKILLS_DIR);
+  const builtinSet = new Set(builtin);
+
+  const project = [
+    ...scanDirSkills(join(cwd, '.claude', 'skills')),
+    ...scanDirSkills(join(cwd, '.agents', 'skills')),
+    ...scanDirSkills(join(cwd, '.opencode', 'skills')),
+  ].filter(s => !builtinSet.has(s));
+  const projectSet = new Set(project);
+
+  const global = [
+    ...scanDirSkills(SKILLS_DIR),
+    ...SKILLS_GLOBAL_DIRS.flatMap(d => scanDirSkills(d)),
+  ].filter(s => !builtinSet.has(s) && !projectSet.has(s));
+
+  return { builtin, project, global };
+}
+
+export function listInstalledSkills(cwd?: string): string[] {
+  const bySource = listSkillsBySource(cwd ?? process.cwd());
+  const all = [...new Set([...bySource.builtin, ...bySource.project, ...bySource.global])];
+  return all.sort();
 }
 
 export function installSkillFromUrl(name: string, url: string): boolean {

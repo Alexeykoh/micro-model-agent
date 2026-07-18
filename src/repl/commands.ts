@@ -7,7 +7,7 @@ import type { LLMProvider } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, removeMemoryEntry, exportMemory } from '../agent/memory.js';
-import { listInstalledSkills } from '../skills/loader.js';
+import { listInstalledSkills, listSkillsBySource } from '../skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from '../session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap, getOrBuildCodeIndex, getOrBuildProjectMap } from '../indexer/cache.js';
 import { getTheme, listThemes, switchTheme } from '../styling/index.js';
@@ -50,8 +50,8 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'sessions', description: 'list sessions', handler: cmdSessions },
     { name: 'resume', description: 'resume session', handler: cmdResume },
     { name: 'save', description: 'save session', handler: cmdSave },
-    { name: 'clear', description: 'clear context', handler: cmdClear },
-    { name: 'new', description: 'clear context', handler: cmdClear },
+    { name: 'clear', description: 'clear screen (visual only)', handler: cmdClear },
+    { name: 'new', description: 'reset session (clear context)', handler: cmdNew },
     { name: 'stop', description: 'stop agent loop', handler: cmdStop },
     { name: 'init', description: 'initialize project & create AGENTS.md', handler: cmdInit },
     { name: 'index', description: 'index management', handler: cmdIndex },
@@ -91,7 +91,8 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /sessions         — list saved sessions
   /resume <id>      — resume a session
   /save [name]      — save current session
-  /clear            — clear context (new session)
+  /clear            — clear screen (visual only)
+  /new              — reset session (clear history)
   /export [mode]    — export session (normal or debug)
   /init             — analyze project & create AGENTS.md
   /index [cmd]      — index status/rebuild/map
@@ -342,17 +343,27 @@ function cmdSkill(args: string, ctx: CommandContext): void {
   const subcmd = args.trim() || 'list';
   switch (subcmd) {
     case 'list': {
-      const skills = listInstalledSkills();
-      if (skills.length === 0) {
-        ctx.renderer.writeDim('  No skills installed.');
-        ctx.renderer.writeDim('  Skills are loaded from: ~/.mma/skills/, ~/.claude/skills/, .claude/skills/, .agents/skills/');
-        ctx.renderer.writeDim('  Reference skills in prompts with @skill-name');
-      } else {
-        ctx.renderer.writeInfo(`  Installed skills (${skills.length}):`);
-        for (const s of skills) {
-          ctx.renderer.writeLine(`    @${s}`);
-        }
+      const bySource = listSkillsBySource(process.cwd());
+      const total = bySource.builtin.length + bySource.project.length + bySource.global.length;
+      if (total === 0) {
+        ctx.renderer.writeDim('  No skills available.');
+        ctx.renderer.writeDim('  Place skills in .claude/skills/<name>/SKILL.md or install via npm.');
+        return;
       }
+      ctx.renderer.writeInfo(`  Skills (${total} total):`);
+      if (bySource.builtin.length > 0) {
+        ctx.renderer.writeLine(`    built-in:`);
+        for (const s of bySource.builtin) ctx.renderer.writeLine(`      @${s}`);
+      }
+      if (bySource.project.length > 0) {
+        ctx.renderer.writeLine(`    project:`);
+        for (const s of bySource.project) ctx.renderer.writeLine(`      @${s}`);
+      }
+      if (bySource.global.length > 0) {
+        ctx.renderer.writeLine(`    global:`);
+        for (const s of bySource.global) ctx.renderer.writeLine(`      @${s}`);
+      }
+      ctx.renderer.writeDim('  Reference: @skill-name');
       break;
     }
     default:
@@ -425,6 +436,10 @@ function cmdSave(args: string, ctx: CommandContext): void {
 }
 
 function cmdClear(_args: string, ctx: CommandContext): void {
+  ctx.renderer.clear();
+}
+
+function cmdNew(_args: string, ctx: CommandContext): void {
   ctx.history.length = 0;
   ctx.renderer.clear();
   ctx.renderer.writeInfo('  Context cleared. Starting new session.');
