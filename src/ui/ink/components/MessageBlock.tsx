@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import Markdown from 'ink-markdown-es';
 import { getInkTheme } from '../theme.js';
 import { LineNumbers, BracketTag, DimText } from './Tags.js';
 
@@ -24,11 +25,15 @@ export function MessageBlock({ item }: { item: MessageItem }) {
 
   if (item.role === 'assistant') {
     return (
-      <Box>
-        <Text>{'  '}</Text>
-        <Text bold color="cyan">{'◆'}</Text>
-        <Text>{' '}</Text>
-        <Text>{item.content}</Text>
+      <Box flexDirection="column">
+        <Box>
+          <Text>{'  '}</Text>
+          <Text bold color="cyan">{'◆'}</Text>
+          <Text>{' '}</Text>
+        </Box>
+        <Box marginLeft={4}>
+          <Markdown>{item.content ?? ''}</Markdown>
+        </Box>
       </Box>
     );
   }

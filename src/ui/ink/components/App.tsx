@@ -180,7 +180,7 @@ export function App({ onReady, commands }: AppProps) {
         isReasoning={state.isReasoning}
         showSpinner={state.showSpinner}
       />
-      <Box flexShrink={0}>
+      <Box flexShrink={0} marginTop={1}>
         <PromptInput
           commands={commands}
           disabled={!state.showPrompt}
