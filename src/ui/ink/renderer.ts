@@ -130,9 +130,9 @@ export class InkRenderer implements OutputRenderer {
   }
 
   async prompt(msg: string): Promise<string> {
-    this.dispatch({ type: 'SHOW_PROMPT', message: msg });
+    await this.dispatch({ type: 'SHOW_PROMPT', message: msg });
     return new Promise((resolve) => {
-      this.handle?.setPromptResolve(resolve);
+      this.handle!.setPromptResolve(resolve);
     });
   }
 
