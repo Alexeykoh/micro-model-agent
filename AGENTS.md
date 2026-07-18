@@ -44,9 +44,39 @@ npm run dev              # bun --watch
 | Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
 | Ink UI | `src/ui/ink/` | React components for terminal UI |
 
+## User Profile (`~/.mma/user/profile.md`)
+
+Система автоматического сбора наблюдений о пользователе.
+
+### Что собирается автоматически
+
+| Данные | Когда | Куда |
+|--------|-------|------|
+| OS (platform, version, hostname) | при старте REPL, один раз | секция `OS` |
+| Tech Stack (dependencies из package.json) | при старте REPL | секция `Tech Stack` |
+| Coding Style (indent, кавычки, точки с запятой) | после каждой записи файла агентом | секция `Coding Style` |
+| Время начала/конца сессии | старт/стоп REPL | секция `Session Patterns` |
+
+### Версионирование знаний
+
+Каждая запись имеет дату: `- [2026-07-18] react (UI)`. При повторном обнаружении того же факта дата обновляется — запись считается актуальной. Записи старше 30 дней помечаются в system prompt как `(stale Nd ago)`.
+
+### Как агент использует профиль
+
+Блок `## User Profile` в system prompt содержит инструкцию: *Учитывай эти наблюдения при выборе стека, стиля кода и формата ответа.* Агент может добавлять заметки через инструмент `user_profile` (действия: `show`, `add_note`). Пользователь — через `/profile текст заметки`.
+
+### Где код
+
+- `src/agent/user-profile.ts` — модуль профиля
+- `src/agent/system-prompt.ts` — внедрение в system prompt
+- `src/agent/loop.ts` — native-обработчик + авто-детекция стиля
+- `src/repl/commands.ts` — команда `/profile`
+- `src/repl/index.ts` — авто-сбор при старте/стопе
+- `tests/user-profile.test.ts` — 28 тестов
+
 ## Testing
 
-- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`
+- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `user-profile.test.ts`
 - Integration tests: `tests/llm-integration.test.ts`, `tests/agent-integration.test.ts` (require running LLM server)
 - All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
 - No vitest config file — uses defaults from package.json
