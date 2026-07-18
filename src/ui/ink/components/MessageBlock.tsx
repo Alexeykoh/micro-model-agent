@@ -1,0 +1,58 @@
+import { Box, Text } from 'ink';
+import { getInkTheme } from '../theme.js';
+import { LineNumbers, BracketTag, DimText } from './Tags.js';
+
+export interface MessageItem {
+  type: 'message' | 'info' | 'success' | 'warning' | 'error' | 'dim' | 'heading' | 'bracket';
+  content?: string;
+  tag?: string;
+  message?: string;
+}
+
+const TYPE_COLORS: Record<string, keyof ReturnType<typeof getInkTheme>['colors']> = {
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+  dim: 'dim',
+  heading: 'heading',
+};
+
+export function MessageBlock({ item }: { item: MessageItem }) {
+  const t = getInkTheme();
+
+  if (item.type === 'message') {
+    return (
+      <Box>
+        <Text>{item.content}</Text>
+      </Box>
+    );
+  }
+
+  if (item.type === 'bracket') {
+    return <BracketTag tag={item.tag || ''} message={item.message || ''} />;
+  }
+
+  const colorKey = TYPE_COLORS[item.type];
+  const style = colorKey ? t.colors[colorKey] : {};
+  return (
+    <Box>
+      <Text {...style}>{item.content}</Text>
+    </Box>
+  );
+}
+
+export function FileOutputBlock({ lines, startIndex }: { lines: string[]; startIndex: number }) {
+  return (
+    <Box flexDirection="column">
+      {lines.map((line, i) => {
+        const lineNum = (startIndex + i).toString().padStart(4);
+        return (
+          <Box key={i}>
+            <LineNumbers text={lineNum} /><Text>| {line}</Text>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
