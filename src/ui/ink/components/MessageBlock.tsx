@@ -7,6 +7,7 @@ export interface MessageItem {
   content?: string;
   tag?: string;
   message?: string;
+  role?: 'user' | 'assistant';
 }
 
 const TYPE_COLORS: Record<string, keyof ReturnType<typeof getInkTheme>['colors']> = {
@@ -20,6 +21,28 @@ const TYPE_COLORS: Record<string, keyof ReturnType<typeof getInkTheme>['colors']
 
 export function MessageBlock({ item }: { item: MessageItem }) {
   const t = getInkTheme();
+
+  if (item.role === 'assistant') {
+    return (
+      <Box>
+        <Text>{'  '}</Text>
+        <Text bold color="cyan">{'◆'}</Text>
+        <Text>{' '}</Text>
+        <Text>{item.content}</Text>
+      </Box>
+    );
+  }
+
+  if (item.role === 'user') {
+    return (
+      <Box>
+        <Text>{'  '}</Text>
+        <Text bold color="yellow">{'▶'}</Text>
+        <Text>{' '}</Text>
+        <Text bold>{item.content}</Text>
+      </Box>
+    );
+  }
 
   if (item.type === 'message') {
     return (

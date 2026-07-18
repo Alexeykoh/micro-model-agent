@@ -44,8 +44,11 @@ export type Action =
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'ADD_MESSAGE':
-      return { ...state, entries: [...state.entries, { kind: 'message', data: action.data }] };
+    case 'ADD_MESSAGE': {
+      const data = { ...action.data };
+      if (data.tag === 'user') data.role = 'user';
+      return { ...state, entries: [...state.entries, { kind: 'message', data }] };
+    }
     case 'ADD_TOOL_CALL':
       return {
         ...state,
@@ -87,7 +90,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'STREAM_END': {
       const content = state.streamingContent;
       if (!content) return { ...state, streaming: false, streamingContent: '', isReasoning: false };
-      const newEntry: ConversationEntry = { kind: 'message', data: { type: 'message', content } };
+      const newEntry: ConversationEntry = { kind: 'message', data: { type: 'message', content, role: 'assistant' } };
       return {
         ...state,
         entries: [...state.entries, newEntry],
@@ -168,19 +171,23 @@ export function App({ onReady, commands }: AppProps) {
         {state.streaming && <StreamBlock content={state.streamingContent} isReasoning={state.isReasoning} />}
       </Box>
       {state.showPrompt && (
-        <PromptInput
-          commands={commands}
-          onSubmit={(value) => {
-            const resolve = promptResolveRef.current;
-            if (resolve) {
-              promptResolveRef.current = null;
-              resolve(value);
-            }
-            dispatch({ type: 'HIDE_PROMPT' });
-          }}
-        />
+        <Box flexShrink={0}>
+          <PromptInput
+            commands={commands}
+            onSubmit={(value) => {
+              const resolve = promptResolveRef.current;
+              if (resolve) {
+                promptResolveRef.current = null;
+                resolve(value);
+              }
+              dispatch({ type: 'HIDE_PROMPT' });
+            }}
+          />
+        </Box>
       )}
-      <StatusBar info={state.status} usage={state.contextUsage} />
+      <Box flexShrink={0}>
+        <StatusBar info={state.status} usage={state.contextUsage} />
+      </Box>
     </Box>
   );
 }

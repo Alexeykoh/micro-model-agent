@@ -1,4 +1,4 @@
-import { Text } from 'ink';
+import { Box, Text } from 'ink';
 import { getInkTheme } from '../theme.js';
 
 export function InfoTag({ children }: { children: string }) {
@@ -33,11 +33,12 @@ export function HeadingTag({ children }: { children: string }) {
 
 export function BracketTag({ tag, message }: { tag: string; message: string }) {
   const t = getInkTheme();
+  const tagColor = tag === 'user' ? 'yellow' : 'dim';
   return (
-    <Text>
-      <Text {...t.colors.dim}>[{tag}]</Text>
+    <Box>
+      <Text bold color={tagColor}>[{tag}]</Text>
       <Text> {message}</Text>
-    </Text>
+    </Box>
   );
 }
 
