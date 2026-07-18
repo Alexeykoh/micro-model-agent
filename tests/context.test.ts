@@ -17,6 +17,6 @@ describe('ContextManager', () => {
     const ctx = new ContextManager(32768);
     const usage = ctx.formatUsage();
     expect(usage).toContain('Context:');
-    expect(usage).toContain('tokens');
+    expect(usage).toContain('compacted:');
   });
 });

@@ -162,7 +162,7 @@ export class ContextManager {
   formatUsage(): string {
     const theme = getTheme();
     const pct = this.usagePercent;
-    const barLen = 20;
+    const barLen = 10;
     const bar = theme.contextBar(pct, barLen);
 
     const roleTokens: Record<string, number> = {};
@@ -171,11 +171,9 @@ export class ContextManager {
     }
 
     const breakdown = Object.entries(roleTokens)
-      .map(([role, tokens]) => `${theme.dim(role)}:${tokens}`)
+      .map(([role, tokens]) => `${role}:${tokens}`)
       .join(' ');
 
-    return `Context: ${theme.highlight(this._totalTokens.toLocaleString())} / ${this.contextWindow.toLocaleString()} tokens (${pct.toFixed(0)}%) ${theme.bracket(`compacted:${this.compacted}`)}
-  ${bar}
-  tokens: ${breakdown}`;
+    return `Context: ${this._totalTokens.toLocaleString()} / ${this.contextWindow.toLocaleString()} (${pct.toFixed(0)}%) ${bar} compacted:${this.compacted} ${breakdown}`;
   }
 }
