@@ -5,6 +5,13 @@ LLM агент-харнес для маленьких моделей (Qwen3.5-9B
 ## Статус
 
 Все задачи (M0-M7, P1-P10) выполнены и переведены в статус "На проверке" в Projexify.
+Ink UI integration (React-for-CLI renderer) — implemented and ready for first smoke test.
+
+## Known issues / next steps
+
+1. Run `bun run src/index.ts --ink` — confirm REPL starts with `MMA>` prompt
+2. Test `/theme list`, `/theme dark` in ink mode
+3. Test agent `theme` tool call (`list`, `switch`, `show`, `install`, `remove`)
 
 ## Ключевые решения
 
@@ -39,9 +46,9 @@ mma model params [n]            # показать параметры
 mma model set <n> k=v           # изменить параметры
 mma config show                  # показать конфиг
 mma config reset                 # сбросить конфиг
-npm run build                    # tsc
+npm run build                    # tsc -p tsconfig.build.json (jsx in build config only)
 npm run dev                      # bun --watch
-npm test                         # vitest (unit: context, sanitizer, code-index, file-loader, commands)
+npm test                         # bun test (unit: context, sanitizer, code-index, file-loader, commands)
 ```
 
 ## Структура
@@ -107,6 +114,18 @@ src/
 │   ├── index.ts            # Factory: createRenderer(mode)
 │   ├── renderer.ts         # OutputRenderer interface + types
 │   ├── readline-renderer.ts # console.log/process.stdout обёртка
+│   ├── ink/                # React ink renderer
+│   │   ├── renderer.ts     # InkRenderer class (dispatch bridge, handleReady)
+│   │   ├── theme.ts        # ThemeEngine → ink style props converter
+│   │   └── components/
+│   │       ├── App.tsx          # Root React component + reducer
+│   │       ├── PromptInput.tsx  # Multi-line input, Tab completion, history
+│   │       ├── Conversation.tsx # Message list with streaming
+│   │       ├── StatusBar.tsx    # Footer status bar
+│   │       ├── MessageBlock.tsx # Message display (user/assistant)
+│   │       ├── ToolCallBlock.tsx# Tool call/result display
+│   │       ├── StreamBlock.tsx  # Streaming character animation
+│   │       └── Tags.tsx         # Colored tags
 │   └── components/
 │       ├── status-bar.ts   # Форматирование строки статуса
 │       └── diff-view.ts    # Парсинг/форматирование diff
