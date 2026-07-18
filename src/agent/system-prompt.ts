@@ -131,7 +131,7 @@ const RULES_COMMON = `Rules:
 8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
 9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
 10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.
-11. USER PROFILE: Блок ## User Profile содержит наблюдения о пользователе (имя, стек, стиль). Учитывай их. Если узнал новое (имя, предпочтения, привычки) — СРАЗУ сохраняй через <tool_call>{"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"..."}}</tool_call>. В начале первой сессии спроси имя пользователя и сохрани его.`;
+11. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call user_profile, list_dir, tree, or any other tool just for exploration — only use tools when there is actual work to do.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -151,7 +151,7 @@ const RULES_FAST = `Rules:
    Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
 7. Execute tasks directly. Simple tasks (1-2 steps): just do it without commentary. Complex tasks: break into steps and execute them one by one without creating a formal plan.
 8. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши" or similar waiting phrases. START WORKING IMMEDIATELY.
-9. USER PROFILE: Блок ## User Profile содержит наблюдения о пользователе (имя, стек, стиль). Учитывай их. Если узнал новое (имя, предпочтения, привычки) — СРАЗУ сохраняй через <tool_call>{"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"..."}}</tool_call>. В начале первой сессии спроси имя пользователя и сохрани его.`;
+9. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call tools just for exploration.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

@@ -414,8 +414,8 @@ export async function runAgentLoop(
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
         const retryPrompt = consecutiveEmpty === 1
-          ? 'The tool result is above. Your turn now. Either: (1) call the next tool using <tool_call>{"name":"...","arguments":{...}}</tool_call>, or (2) write a text reply to the user summarizing progress. Do NOT output nothing.'
-          : 'You returned an empty response again. You MUST write something now. Example of what to write: "File created. Now I will create the next file..." or call another tool. Silence is not allowed.';
+          ? 'The tool result is above. Your turn now. Write a response to the user. Do NOT call tools unless there is actual work to do.'
+          : 'You returned an empty response again. You MUST write something now. Just respond to the user — do NOT call tools.';
         messages.push({ role: 'user', content: retryPrompt });
         if (!quiet) {
           renderer?.writeDim(`  [empty response #${consecutiveEmpty}, retrying]`);
@@ -473,16 +473,18 @@ export async function runAgentLoop(
         continue;
       }
 
-      // Nudge model to continue working after a tool result
+      // Nudge model to continue working after a tool result — but only if
+      // the agent didn't already write a meaningful text response.
       if (continuationNudges < 2) {
         const lastThree = messages.slice(-3);
         const hasRecentToolResult = lastThree.some(m => m.role === 'tool');
-        if (hasRecentToolResult) {
+        const alreadyResponded = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim().length > 20;
+        if (hasRecentToolResult && !alreadyResponded) {
           continuationNudges++;
           if (!quiet) {
             renderer?.writeDim(`  [nudge ${continuationNudges}/2: continue working]`);
           }
-          messages.push({ role: 'user', content: '[Tool result received. Continue: call the next tool or write the final summary. Do NOT just repeat the plan — take action.]' });
+          messages.push({ role: 'user', content: '[Tool result received. Write a response to the user. Do NOT call additional tools unless there is actual work to do.]' });
           continue;
         }
       }
