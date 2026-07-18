@@ -1,5 +1,5 @@
 import { ThemeEngine } from './engine.js';
-import { loadTheme } from './loader.js';
+import { loadTheme, loadThemeConfig, listThemes as listThemeNames, ensureThemeDir } from './loader.js';
 
 let _theme: ThemeEngine | null = null;
 
@@ -15,6 +15,19 @@ export function getTheme(): ThemeEngine {
   return _theme;
 }
 
+export function listThemes(): string[] {
+  return listThemeNames();
+}
+
+export function switchTheme(name: string): ThemeEngine {
+  _theme = loadTheme(name);
+  return _theme;
+}
+
+export function resetTheme(): void {
+  _theme = null;
+}
+
 export { ThemeEngine } from './engine.js';
-export { loadTheme, ensureThemeDir } from './loader.js';
+export { loadTheme, loadThemeConfig, ensureThemeDir } from './loader.js';
 export type { ThemeConfig, ThemeColors, ThemeIcons, ThemeFormat } from './types.js';

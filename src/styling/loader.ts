@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ThemeConfig } from './types.js';
@@ -69,11 +69,39 @@ function mergeTheme(base: ThemeConfig, overrides: Partial<ThemeConfig>): ThemeCo
   };
 }
 
+export function loadThemeConfig(name?: string): ThemeConfig {
+  const builtIn = BUILT_IN_THEMES[name || 'light'] || BUILT_IN_THEMES.light;
+  const custom = loadJsonTheme(name || 'light');
+  return custom ? mergeTheme(builtIn, custom) : builtIn;
+}
+
 export function loadTheme(name: string = 'light'): ThemeEngine {
-  const builtIn = BUILT_IN_THEMES[name] || BUILT_IN_THEMES.light;
-  const custom = loadJsonTheme(name);
-  const config = custom ? mergeTheme(builtIn, custom) : builtIn;
-  return new ThemeEngine(config);
+  return new ThemeEngine(loadThemeConfig(name));
+}
+
+export function listThemes(): string[] {
+  const builtIn = Object.keys(BUILT_IN_THEMES);
+  let custom: string[] = [];
+  try {
+    custom = readdirSync(THEMES_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => f.replace('.json', ''));
+  } catch { /* no custom themes dir */ }
+  return [...builtIn, ...custom];
+}
+
+export function installTheme(name: string, content: string): string {
+  ensureThemeDir();
+  const filePath = join(THEMES_DIR, `${name}.json`);
+  writeFileSync(filePath, content, 'utf-8');
+  return filePath;
+}
+
+export function removeTheme(name: string): boolean {
+  const filePath = join(THEMES_DIR, `${name}.json`);
+  if (!existsSync(filePath)) return false;
+  unlinkSync(filePath);
+  return true;
 }
 
 export function ensureThemeDir(): void {
