@@ -146,8 +146,10 @@ export function PromptInput({
     if (key.ctrl && input === 'k') { setValue((v: string) => v.slice(0, cursor)); return; }
     if (key.ctrl && input === 'w') {
       const before = value.slice(0, cursor);
-      const lastSpace = before.lastIndexOf(' ');
-      const keepLen = lastSpace === -1 ? 0 : lastSpace + 1;
+      let i = before.length - 1;
+      while (i >= 0 && before[i] === ' ') i--;
+      while (i >= 0 && before[i] !== ' ') i--;
+      const keepLen = i + 1;
       setValue((v: string) => v.slice(0, keepLen) + v.slice(cursor));
       setCursor(keepLen);
       return;
