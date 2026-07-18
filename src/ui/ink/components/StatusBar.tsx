@@ -26,7 +26,7 @@ export function StatusBar({ info, usage }: { info: StatusInfo; usage?: string })
     parts.push(usage);
   }
 
-  const display = parts.join(' │ ');
+  const display = parts.join(' │ ') || 'MMA';
 
   return (
     <Box borderStyle="single" borderColor="gray" width="100%" paddingX={1}>
