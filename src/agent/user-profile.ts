@@ -267,9 +267,7 @@ export function loadProfileSummary(): string {
 
   if (sections.length === 0) return '';
 
-  const instruction = 'Учитывай эти наблюдения при выборе стека, стиля кода и формата ответа. Если заметил новую деталь — добавь через user_profile.';
-
-  return `\n## User Profile\n${sections.join('\n')}\n${instruction}\n`;
+  return `\n## User Profile\n${sections.join('\n')}\n`;
 }
 
 export function initDefaultProfile(): void {

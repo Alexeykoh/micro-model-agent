@@ -204,7 +204,6 @@ describe('User Profile', () => {
     expect(summary).toContain('## User Profile');
     expect(summary).toContain('OS');
     expect(summary).toContain('Coding Style');
-    expect(summary).toContain('Учитывай эти наблюдения');
     expect(summary).not.toContain('Notes');
   });
 

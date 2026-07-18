@@ -45,6 +45,8 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"todo","arguments":{"action":"list"}}
   {"name":"question","arguments":{"question":"What color?","choices":["Red","Blue"]}}
   {"name":"approve","arguments":{"action":"Delete file foo.ts"}}
+  {"name":"user_profile","arguments":{"action":"show"}}
+  {"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"text"}}
 
 ## Web tools (search & fetch):
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
@@ -127,7 +129,8 @@ const RULES_COMMON = `Rules:
    Example: User: "Создай REST API" → You: plan create REST API init-project create-schemas
 8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
 9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши навыки в следующем сообщении" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
-10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.`;
+10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.
+11. USER PROFILE: Блок ## User Profile содержит наблюдения о пользователе (имя, стек, стиль). Учитывай их. Если узнал новое (имя, предпочтения, привычки) — СРАЗУ сохраняй через <tool_call>{"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"..."}}</tool_call>. В начале первой сессии спроси имя пользователя и сохрани его.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

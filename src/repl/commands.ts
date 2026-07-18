@@ -99,6 +99,8 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /init             — analyze project & create AGENTS.md
   /index [cmd]      — index status/rebuild/map
   /profile [note]   — show profile or add note
+  /profile name <n>  — save your name
+  /profile show     — show profile content
   /stop             — stop agent loop
   /exit             — exit MMA`);
   ctx.renderer.writeDim(`  ── CLI commands (exit REPL, then run) ──
@@ -686,6 +688,28 @@ function cmdProfile(args: string, ctx: CommandContext): void {
     } else {
       ctx.renderer.writeDim('  User profile is empty.');
       ctx.renderer.writeDim('  It will be auto-populated as you work.');
+    }
+    return;
+  }
+
+  const parts = args.trim().split(/\s+/);
+  const subcmd = parts[0];
+  const rest = parts.slice(1).join(' ');
+
+  if (subcmd === 'name' && rest) {
+    appendNote(`Имя пользователя: ${rest}`, 'Notes');
+    ctx.renderer.writeSuccess(`  Name saved: ${rest}`);
+    return;
+  }
+
+  if (subcmd === 'show') {
+    const content = loadProfile();
+    if (content) {
+      ctx.renderer.writeNewline();
+      ctx.renderer.writeLine(content);
+      ctx.renderer.writeNewline();
+    } else {
+      ctx.renderer.writeDim('  Profile is empty.');
     }
     return;
   }
