@@ -412,11 +412,10 @@ export async function runAgentLoop(
       logWarn('LOOP', `empty response #${consecutiveEmpty + 1}`);
       consecutiveEmpty++;
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'tool' && consecutiveEmpty <= 3) {
-        const retryPrompt = consecutiveEmpty <= 2 ? '[continue]' : 'You MUST write something or call a tool. Silence is not allowed.';
-        messages.push({ role: 'user', content: retryPrompt });
+      if (lastMsg?.role === 'user' && consecutiveEmpty <= 2) {
+        messages.push({ role: 'user', content: 'Continue.' });
         if (!quiet) {
-          renderer?.writeDim(`  [empty response #${consecutiveEmpty}, retrying]`);
+          renderer?.writeDim(`  [empty response, retrying]`);
         }
         continue;
       }
@@ -527,7 +526,11 @@ export async function runAgentLoop(
 
       if (pendingSyntaxError && !isBash) {
         const isWriteOp = parsed.name === 'write_file' || parsed.name === 'edit_file';
-        if (isWriteOp && String(parsed.arguments.path ?? '') !== pendingSyntaxError) {
+        const newPath = String(parsed.arguments.path ?? '');
+        // Allow editing config files (tsconfig.json, package.json) since they
+        // can fix syntax errors (e.g. missing jsx flag in tsconfig)
+        const isConfig = newPath === 'tsconfig.json' || newPath === 'package.json';
+        if (isWriteOp && newPath !== pendingSyntaxError && !isConfig) {
           const blocked = `BLOCKED: You have a syntax error in ${pendingSyntaxError}. Fix it first before writing new files.`;
           if (!quiet) {
             renderer?.writeError(`  [blocked: fix syntax error in ${pendingSyntaxError} first]`);
@@ -897,6 +900,13 @@ export async function runAgentLoop(
         role: 'tool',
         content: toolOutput.slice(0, 4000),
         tool_call_id: toolId,
+      });
+
+      // Push a minimal continuation nudge after every tool result
+      // to prevent the model from returning empty responses
+      messages.push({
+        role: 'user',
+        content: 'Continue.',
       });
 
       if (hasSyntaxError) {
