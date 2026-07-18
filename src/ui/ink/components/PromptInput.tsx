@@ -10,9 +10,11 @@ interface CommandInfo {
 export function PromptInput({
   commands,
   onSubmit,
+  disabled,
 }: {
   commands?: CommandInfo[];
   onSubmit: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [value, setValue] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -23,6 +25,7 @@ export function PromptInput({
   const t = getInkTheme();
 
   useInput((input: string, key: Record<string, boolean>) => {
+    if (disabled) return;
     if (key.return && !key.shift) {
       const trimmed = value.trim();
       if (trimmed) {
@@ -142,12 +145,16 @@ export function PromptInput({
         </Box>
       )}
       <Box width="100%">
-        <Text {...t.colors.prompt}>{'MMA> '}</Text>
-        <Text>
-          {value.slice(0, cursor)}
-          <Text inverse>{value[cursor] || ' '}</Text>
-          {value.slice(cursor + 1)}
-        </Text>
+        <Text {...(disabled ? t.colors.dim : t.colors.prompt)}>{'MMA> '}</Text>
+        {disabled ? (
+          <Text {...t.colors.dim}>{'...'}</Text>
+        ) : (
+          <Text>
+            {value.slice(0, cursor)}
+            <Text inverse>{value[cursor] || ' '}</Text>
+            {value.slice(cursor + 1)}
+          </Text>
+        )}
       </Box>
     </Box>
   );

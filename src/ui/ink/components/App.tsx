@@ -170,21 +170,20 @@ export function App({ onReady, commands }: AppProps) {
         {state.showSpinner && !state.streaming && <SpinnerLine />}
         {state.streaming && <StreamBlock content={state.streamingContent} isReasoning={state.isReasoning} />}
       </Box>
-      {state.showPrompt && (
-        <Box flexShrink={0}>
-          <PromptInput
-            commands={commands}
-            onSubmit={(value) => {
-              const resolve = promptResolveRef.current;
-              if (resolve) {
-                promptResolveRef.current = null;
-                resolve(value);
-              }
-              dispatch({ type: 'HIDE_PROMPT' });
-            }}
-          />
-        </Box>
-      )}
+      <Box flexShrink={0}>
+        <PromptInput
+          commands={commands}
+          disabled={!state.showPrompt}
+          onSubmit={(value) => {
+            const resolve = promptResolveRef.current;
+            if (resolve) {
+              promptResolveRef.current = null;
+              resolve(value);
+            }
+            dispatch({ type: 'HIDE_PROMPT' });
+          }}
+        />
+      </Box>
       <Box flexShrink={0}>
         <StatusBar info={state.status} usage={state.contextUsage} />
       </Box>
