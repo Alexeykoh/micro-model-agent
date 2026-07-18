@@ -25,14 +25,24 @@ export function MessageBlock({ item }: { item: MessageItem }) {
 
   if (item.role === 'assistant') {
     return (
-      <Box flexDirection="column">
-        <Box>
-          <Text>{'  '}</Text>
-          <Text bold color="cyan">{'◆'}</Text>
-          <Text>{' '}</Text>
-        </Box>
-        <Box marginLeft={4}>
-          <Markdown>{item.content ?? ''}</Markdown>
+      <Box>
+        <Text>{'  '}</Text>
+        <Box flexGrow={1} flexDirection="column">
+          <Box>
+            <Text bold color="cyan">{'◆ '}</Text>
+            <Markdown
+              styles={{
+                paragraph: { margin: 0 },
+                listItem: { paddingLeft: 2, margin: 0 },
+                code: { marginTop: 0, marginBottom: 0 },
+                h1: { marginBottom: 0 },
+                h2: { marginBottom: 0 },
+                h3: { marginBottom: 0 },
+              }}
+            >
+              {item.content ?? ''}
+            </Markdown>
+          </Box>
         </Box>
       </Box>
     );
