@@ -6,6 +6,7 @@ import { runAgentLoop } from './agent/loop.js';
 import { runRepl } from './repl/index.js';
 import { initTheme, ensureThemeDir } from './styling/index.js';
 import { createRenderer } from './ui/index.js';
+import { getSlashCommands } from './repl/commands.js';
 import { registerProviderCommands } from './cli/provider.js';
 import { registerModelCommands } from './cli/model.js';
 import { registerConfigCommands } from './cli/config.js';
@@ -188,7 +189,8 @@ export function createCli() {
       const renderer = await createRenderer();
       runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
     } else {
-      const renderer = await createRenderer();
+      const commands = getSlashCommands();
+      const renderer = await createRenderer(commands);
       runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking });
     }
   });

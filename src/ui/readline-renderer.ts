@@ -1,18 +1,48 @@
 import { createInterface } from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
+import type { CompleterResult } from 'node:readline'
 import type { OutputRenderer, StatusInfo } from './renderer.js'
 import { getTheme } from '../styling/index.js'
 
 const CLEAR_LINE = '\r\x1b[K'
 
+interface SlashCommandInfo {
+  name: string
+  description: string
+}
+
 export class ReadlineRenderer implements OutputRenderer {
   private rl: ReturnType<typeof createInterface> | null = null
   private closed = false
+  private commands: SlashCommandInfo[] = []
+
+  setCommands(cmds: SlashCommandInfo[]): void {
+    this.commands = cmds
+  }
 
   async start(): Promise<void> {
-    this.rl = createInterface({ input, output, prompt: '' })
+    this.rl = createInterface({
+      input,
+      output,
+      prompt: '',
+      completer: this.makeCompleter(),
+    })
     this.closed = false
     this.rl.on('close', () => { this.closed = true })
+  }
+
+  private makeCompleter(): (line: string) => CompleterResult {
+    return (line: string): CompleterResult => {
+      const hit = line.startsWith('/')
+      if (!hit) return [[], line]
+
+      const partial = line.slice(1)
+      const matches = this.commands
+        .filter(c => c.name.startsWith(partial))
+        .map(c => `/${c.name}`)
+
+      return [matches.length ? matches : [], line]
+    }
   }
 
   private get theme() {

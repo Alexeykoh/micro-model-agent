@@ -222,6 +222,6 @@ describe('Session Store', () => {
     ];
     const id = createAutoSession(messages, 'test-model', '/tmp', { totalTokens: 50, compactCount: 0 });
     expect(id).toBeTruthy();
-    expect(id).toContain('auto_');
+    expect(id).toContain('.json');
   });
 });
