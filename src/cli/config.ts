@@ -21,9 +21,31 @@ export function registerConfigCommands(program: Command): void {
       const theme = getTheme();
       config.providers = {};
       config.active = { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' };
-      config.agent = { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false };
+      config.agent = { maxSteps: 100, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false };
       saveConfig(config);
       console.log(theme.successMsg('Configuration reset to defaults'));
+    });
+
+  configCmd
+    .command('set')
+    .argument('<key>', 'config key, e.g. agent.maxSteps')
+    .argument('<value>', 'new value')
+    .description('Set a config value (e.g. agent.maxSteps 200)')
+    .action((key: string, value: string) => {
+      const config = loadConfig();
+      const theme = getTheme();
+      const keys = key.split('.');
+      let obj: any = config;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!(keys[i] in obj)) obj[keys[i]] = {};
+        obj = obj[keys[i]];
+      }
+      const lastKey = keys[keys.length - 1];
+      const num = Number(value);
+      obj[lastKey] = isFinite(num) ? num : value;
+      saveConfig(config);
+      console.log(theme.successMsg(`  ${key} = ${obj[lastKey]}`));
+      console.log(`  ${theme.dim('Restart MMA for changes to take effect')}`);
     });
 
   configCmd

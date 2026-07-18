@@ -306,6 +306,8 @@ export async function runAgentLoop(
   ];
 
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
+  const config = loadConfig();
+  const maxSteps = config.agent.maxSteps ?? 100;
   let consecutiveEmpty = 0;
   let pendingSyntaxError = '';
   let aborted = false;
@@ -321,16 +323,16 @@ export async function runAgentLoop(
     model: provider.model,
     contextWindow: provider.contextWindow,
     step: 0,
-    maxSteps: 25,
+    maxSteps,
   });
 
-  for (let step = 0; step < 25; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     if (renderer?.abortSignal?.aborted) {
       aborted = true;
       break;
     }
     let skillsAutoLoaded = false;
-    logDebug('LOOP', `step ${step + 1}/25 starting, ${messages.length} messages`);
+    logDebug('LOOP', `step ${step + 1}/${maxSteps} starting, ${messages.length} messages`);
     await ctx.updateTokens(messages);
     const skillNames = loadedSkills.map(s => s.name).join(', ');
     const usageText = ctx.formatUsage() + (skillNames ? ` │ skills: ${skillNames}` : '');
@@ -342,7 +344,7 @@ export async function runAgentLoop(
       tokens: ctx.totalTokens,
       contextWindow: provider.contextWindow,
       step: step + 1,
-      maxSteps: 25,
+      maxSteps,
     });
 
     if (ctx.needsCompact && messages.length > 6) {
