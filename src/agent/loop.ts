@@ -6,6 +6,7 @@ import { ToolRegistry } from '../tools/registry.js';
 import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
 import { autoLearnFromError } from './memory.js';
+import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
@@ -96,7 +97,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -128,6 +129,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     tree: [],
     web_search: ['query'],
     web_fetch: ['url'],
+    user_profile: [],
   };
 
   const required = REQUIRED_ARGS[parsed.name] ?? [];
@@ -568,6 +570,33 @@ export async function runAgentLoop(
           messages,
           questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
         };
+      } else if (parsed.name === 'user_profile') {
+        const action = String(parsed.arguments.action || 'show');
+        if (!quiet) {
+          renderer?.writeBracketTag('user_profile', action);
+        }
+        switch (action) {
+          case 'show': {
+            const content = loadProfile();
+            toolOutput = content || 'User profile is empty.';
+            break;
+          }
+          case 'add_note': {
+            const note = String(parsed.arguments.note || parsed.arguments.text || '');
+            const section = String(parsed.arguments.section || 'Notes');
+            if (!note) {
+              toolOutput = 'Usage: user_profile action=add_note section=Notes note=...';
+              toolExitCode = 1;
+              break;
+            }
+            appendNote(note, section as any);
+            toolOutput = `Note added to "${section}" section.`;
+            break;
+          }
+          default:
+            toolOutput = 'Unknown user_profile action. Use: show, add_note';
+            toolExitCode = 1;
+        }
       } else if (parsed.name === 'theme') {
         const action = String(parsed.arguments.action || 'list');
         const name = String(parsed.arguments.name || '');
@@ -805,6 +834,14 @@ export async function runAgentLoop(
               if (pendingSyntaxError === filePath) {
                 pendingSyntaxError = '';
               }
+            }
+
+            // Auto-detect coding style from file content
+            if (toolExitCode === 0 && filePath) {
+              try {
+                const fullContent = readFileSync(join(process.cwd(), filePath), 'utf-8');
+                collectCodingStyle(filePath, fullContent);
+              } catch { /* ignore */ }
             }
           }
         }

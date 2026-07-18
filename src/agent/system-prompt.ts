@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as os from 'node:os';
 import { loadAllMemoryDetailed } from './memory.js';
+import { loadProfileSummary } from './user-profile.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
 import { loadAgentsMd, listInstalledSkills, formatSkillsBlock, type Skill } from '../skills/loader.js';
 import { logInfo, logDebug } from '../logger.js';
@@ -211,6 +212,7 @@ You help with software engineering tasks in the project directory.`;
   ].join('\n');
 
   const memory = loadAllMemoryDetailed();
+  const userProfile = loadProfileSummary();
 
   let projectMap = '';
   try {
@@ -228,7 +230,7 @@ You help with software engineering tasks in the project directory.`;
     ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): SUGGEST skills FIRST → User loads them → You READ them → Create plan BASED ON skill content.\nDo NOT put @skill-name inside tool_call. Just tell the user which skill to load.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "Рекомендую @typescript-expert @nodejs-expert — напиши их в следующем сообщении."\n  3. User: "@typescript-expert @nodejs-expert"\n  4. Skills injected into this prompt — you READ them\n  5. You create plan BASED ON skill guidance: plan create REST API ...\n  6. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
     : '';
 
-  const base = [header, platformBlock, sysInfo, memory, projectMap, agentsBlock, skillsHint].filter(Boolean).join('\n');
+  const base = [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint].filter(Boolean).join('\n');
   const result = base + (extraSkills && extraSkills.length > 0 ? '\n\n' + formatSkillsBlock(extraSkills) : '');
   const elapsed = (performance.now() - start).toFixed(0);
   logInfo('SYSTEM', `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`);

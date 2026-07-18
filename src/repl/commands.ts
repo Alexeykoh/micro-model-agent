@@ -7,6 +7,7 @@ import type { LLMProvider } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { runAgentLoop } from '../agent/loop.js';
 import { loadMemory, saveMemory, searchMemory, loadAllMemory, ensureMemoryDir, removeMemoryEntry, exportMemory } from '../agent/memory.js';
+import { loadProfile, profileExists, appendNote } from '../agent/user-profile.js';
 import { listInstalledSkills, listSkillsBySource } from '../skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from '../session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap, getOrBuildCodeIndex, getOrBuildProjectMap } from '../indexer/cache.js';
@@ -56,6 +57,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'init', description: 'initialize project & create AGENTS.md', handler: cmdInit },
     { name: 'index', description: 'index management', handler: cmdIndex },
     { name: 'theme', description: 'theme management (list/switch/show/install/create/remove)', handler: cmdTheme },
+    { name: 'profile', description: 'show/edit user profile', handler: cmdProfile },
     { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
 }
@@ -96,6 +98,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /export [mode]    — export session (normal or debug)
   /init             — analyze project & create AGENTS.md
   /index [cmd]      — index status/rebuild/map
+  /profile [note]   — show profile or add note
   /stop             — stop agent loop
   /exit             — exit MMA`);
   ctx.renderer.writeDim(`  ── CLI commands (exit REPL, then run) ──
@@ -670,6 +673,25 @@ function cmdIndex(args: string, ctx: CommandContext): void {
     default:
       ctx.renderer.writeInfo('  Usage: /index [status|rebuild|map]');
   }
+}
+
+function cmdProfile(args: string, ctx: CommandContext): void {
+  const theme = getTheme();
+  if (!args.trim()) {
+    const content = loadProfile();
+    if (content) {
+      ctx.renderer.writeNewline();
+      ctx.renderer.writeLine(content);
+      ctx.renderer.writeNewline();
+    } else {
+      ctx.renderer.writeDim('  User profile is empty.');
+      ctx.renderer.writeDim('  It will be auto-populated as you work.');
+    }
+    return;
+  }
+
+  appendNote(args.trim(), 'Notes');
+  ctx.renderer.writeSuccess('Note added to user profile.');
 }
 
 function cmdExport(args: string, ctx: CommandContext): void {

@@ -7,6 +7,7 @@ import type { ToolRegistry } from '../tools/registry.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { loadAllMemory } from '../agent/memory.js';
 import { createAutoSession, generateReadableId } from '../session/store.js';
+import { initDefaultProfile, collectOS, collectTechStack, collectSessionStart, sessionEnded } from '../agent/user-profile.js';
 import { getCurrentVersion, checkForUpdate, getUpdateCommand } from '../updater.js';
 import { ConversationHistory } from './history.js';
 import { getSlashCommands, parseSlashCommand, isWriteMode, handleWriteLine } from './commands.js';
@@ -29,6 +30,12 @@ export async function runRepl(
 ): Promise<void> {
   const sessionId = generateReadableId();
   initSessionLog(sessionId);
+
+  // Auto-collect user profile data
+  initDefaultProfile();
+  collectOS();
+  collectTechStack();
+  collectSessionStart();
 
   const memorySummary = loadAllMemory();
 
@@ -55,6 +62,7 @@ export async function runRepl(
   const commandMap = new Map(commands.map(c => [c.name, c.handler]));
 
   const sigintHandler = () => {
+    sessionEnded();
     if (history.length > 0) {
       createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
       renderer.writeSuccess('\nSession auto-saved.');
