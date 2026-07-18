@@ -275,6 +275,7 @@ export async function runAgentLoop(
   options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode },
 ): Promise<AgentLoopResult> {
   logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
+  renderer?.resetAbort?.();
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
   logDebug('LOOP', `parseFileRefs: ${files.length} files, prompt len: ${enrichedPrompt.length}`);
   const quiet = options?.quiet ?? false;
@@ -374,6 +375,12 @@ export async function runAgentLoop(
 
     logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}`);
     const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.showThinking);
+
+    // Check if aborted during generation
+    if (renderer?.abortSignal?.aborted) {
+      aborted = true;
+      break;
+    }
 
     // Auto-load skills if model suggested them in response (disabled in fast mode)
     if (options?.mode !== 'fast') {

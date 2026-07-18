@@ -21,11 +21,13 @@ export function PromptInput({
   onSubmit,
   disabled,
   mode,
+  onAbort,
 }: {
   commands?: CommandInfo[];
   onSubmit: (value: string) => void;
   disabled?: boolean;
   mode?: string;
+  onAbort?: () => void;
 }) {
   const [value, setValue] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -43,6 +45,11 @@ export function PromptInput({
   }, [disabled]);
 
   useInput((input: string, key: Record<string, boolean>) => {
+    // Allow Escape to abort even when disabled (agent running)
+    if (key.escape && onAbort) {
+      onAbort();
+      return;
+    }
     if (disabled) return;
     if (key.return && !key.shift) {
       const trimmed = value.trim();

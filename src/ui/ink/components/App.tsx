@@ -1,8 +1,9 @@
 import React, { useReducer, useEffect } from 'react';
-import { Box } from 'ink';
+import { Box, useInput } from 'ink';
 import { Conversation, type ConversationEntry } from './Conversation.js';
 import { StatusBar } from './StatusBar.js';
 import { PromptInput } from './PromptInput.js';
+import { SelectInput } from './SelectInput.js';
 
 interface StatusInfo {
   provider?: string;
@@ -24,6 +25,9 @@ interface AppState {
   contextUsage: string;
   showPrompt: boolean;
   promptMessage: string;
+  showSelect: boolean;
+  selectQuestion: string;
+  selectChoices: string[];
   toolCallIndex: number;
   mode: string;
 }
@@ -41,6 +45,8 @@ export type Action =
   | { type: 'CONTEXT'; text: string }
   | { type: 'SHOW_PROMPT'; message: string }
   | { type: 'HIDE_PROMPT' }
+  | { type: 'SHOW_SELECT'; question: string; choices: string[] }
+  | { type: 'HIDE_SELECT' }
   | { type: 'SET_MODE'; mode: string }
   | { type: 'CLEAR' };
 
@@ -117,6 +123,10 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, showPrompt: true, promptMessage: action.message };
     case 'HIDE_PROMPT':
       return { ...state, showPrompt: false, promptMessage: '' };
+    case 'SHOW_SELECT':
+      return { ...state, showSelect: true, selectQuestion: action.question, selectChoices: action.choices };
+    case 'HIDE_SELECT':
+      return { ...state, showSelect: false, selectQuestion: '', selectChoices: [] };
     case 'SET_MODE':
       return { ...state, mode: action.mode };
     case 'CLEAR':
@@ -131,6 +141,9 @@ function reducer(state: AppState, action: Action): AppState {
         contextUsage: '',
         showPrompt: false,
         promptMessage: '',
+        showSelect: false,
+        selectQuestion: '',
+        selectChoices: [],
         toolCallIndex: -1,
         mode: '',
       };
@@ -150,6 +163,9 @@ const initialState: AppState = {
   contextUsage: '',
   showPrompt: false,
   promptMessage: '',
+  showSelect: false,
+  selectQuestion: '',
+  selectChoices: [],
   toolCallIndex: -1,
   mode: '',
 };
@@ -158,22 +174,50 @@ export interface AppHandle {
   dispatch(action: Action): void;
   setPromptResolve(fn: ((value: string) => void) | null): void;
   getPromptResolve(): ((value: string) => void) | null;
+  setSelectResolve(fn: ((value: string) => void) | null): void;
+  getSelectResolve(): ((value: string) => void) | null;
 }
 
 interface AppProps {
   onReady: (handle: AppHandle) => void;
   commands?: { name: string; description: string }[];
+  onAbort?: () => void;
 }
 
-export function App({ onReady, commands }: AppProps) {
+export function App({ onReady, commands, onAbort }: AppProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const promptResolveRef = React.useRef<((value: string) => void) | null>(null);
+  const selectResolveRef = React.useRef<((value: string) => void) | null>(null);
+  const lastCtrlCTime = React.useRef<number>(0);
+
+  // Handle Escape key to abort agent execution + double Ctrl+C to exit
+  useInput((input: string, key: Record<string, boolean>) => {
+    if (key.escape && onAbort && !state.showPrompt && !state.showSelect) {
+      onAbort();
+      return;
+    }
+    // Double Ctrl+C to exit
+    if (key.ctrl && input === 'c') {
+      const now = Date.now();
+      if (now - lastCtrlCTime.current < 500) {
+        // Double Ctrl+C — exit
+        process.exit(0);
+      }
+      lastCtrlCTime.current = now;
+      // Show hint via dispatch
+      if (!state.showPrompt && !state.showSelect) {
+        dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'dim', content: '  Press Ctrl+C again to exit' } });
+      }
+    }
+  });
 
   useEffect(() => {
     onReady({
       dispatch,
       setPromptResolve(fn) { promptResolveRef.current = fn; },
       getPromptResolve() { return promptResolveRef.current; },
+      setSelectResolve(fn) { selectResolveRef.current = fn; },
+      getSelectResolve() { return selectResolveRef.current; },
     });
   }, []);
 
@@ -187,19 +231,35 @@ export function App({ onReady, commands }: AppProps) {
         showSpinner={state.showSpinner}
       />
       <Box flexShrink={0} marginTop={1}>
-        <PromptInput
-          commands={commands}
-          disabled={!state.showPrompt}
-          mode={state.mode}
-          onSubmit={(value) => {
-            const resolve = promptResolveRef.current;
-            if (resolve) {
-              promptResolveRef.current = null;
-              resolve(value);
-            }
-            dispatch({ type: 'HIDE_PROMPT' });
-          }}
-        />
+        {state.showSelect ? (
+          <SelectInput
+            question={state.selectQuestion}
+            choices={state.selectChoices}
+            onSelect={(value) => {
+              const resolve = selectResolveRef.current;
+              if (resolve) {
+                selectResolveRef.current = null;
+                resolve(value);
+              }
+              dispatch({ type: 'HIDE_SELECT' });
+            }}
+          />
+        ) : (
+          <PromptInput
+            commands={commands}
+            disabled={!state.showPrompt}
+            mode={state.mode}
+            onSubmit={(value) => {
+              const resolve = promptResolveRef.current;
+              if (resolve) {
+                promptResolveRef.current = null;
+                resolve(value);
+              }
+              dispatch({ type: 'HIDE_PROMPT' });
+            }}
+            onAbort={onAbort}
+          />
+        )}
       </Box>
       <Box flexShrink={0}>
         <StatusBar info={state.status} usage={state.contextUsage} />

@@ -36,6 +36,7 @@ export interface OutputRenderer {
   clear(): void
 
   prompt(msg: string): Promise<string>
+  promptWithChoices?(msg: string, choices: string[]): Promise<string>
 
   writeFileOutput(lines: string[], startIndex?: number): void
 
@@ -45,4 +46,6 @@ export interface OutputRenderer {
   destroy(): void
 
   readonly abortSignal?: AbortSignal
+  abort?(): void
+  resetAbort?(): void
 }

@@ -176,15 +176,20 @@ export async function runRepl(
 
     if (result.questionPending) {
       const { question, choices } = result.questionPending;
-      renderer.writeNewline();
-      renderer.writeWarning(`  Question: ${question}`);
-      if (choices && choices.length > 0) {
-        for (let i = 0; i < choices.length; i++) {
-          renderer.writeLine(`    ${i + 1}. ${choices[i]}`);
+      let answer: string;
+      if (choices && choices.length > 0 && renderer.promptWithChoices) {
+        answer = await renderer.promptWithChoices(question, choices);
+      } else {
+        renderer.writeNewline();
+        renderer.writeWarning(`  Question: ${question}`);
+        if (choices && choices.length > 0) {
+          for (let i = 0; i < choices.length; i++) {
+            renderer.writeLine(`    ${i + 1}. ${choices[i]}`);
+          }
         }
+        renderer.writeNewline();
+        answer = await renderer.prompt('  Your answer: ');
       }
-      renderer.writeNewline();
-      const answer = await renderer.prompt('  Your answer: ');
       renderer.writeBracketTag('user', answer);
       history.push('user', answer);
 

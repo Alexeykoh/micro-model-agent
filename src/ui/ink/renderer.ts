@@ -14,15 +14,27 @@ export class InkRenderer implements OutputRenderer {
   private resolveReady!: () => void;
   private inkResult: { unmount: () => void; clear: () => void } | null = null;
   private _commands: CommandInfo[] = [];
+  private abortController: AbortController | null = null;
 
-  readonly abortSignal: AbortSignal | undefined;
+  get abortSignal(): AbortSignal | undefined {
+    return this.abortController?.signal;
+  }
 
   constructor() {
     this.handleReady = new Promise((resolve) => { this.resolveReady = resolve; });
+    this.abortController = new AbortController();
   }
 
   setCommands(cmds: CommandInfo[]): void {
     this._commands = cmds;
+  }
+
+  abort(): void {
+    this.abortController?.abort();
+  }
+
+  resetAbort(): void {
+    this.abortController = new AbortController();
   }
 
   setMode(mode: string): void {
@@ -36,6 +48,9 @@ export class InkRenderer implements OutputRenderer {
         onReady: (handle: AppHandle) => {
           this.handle = handle;
           this.resolveReady();
+        },
+        onAbort: () => {
+          this.abort();
         },
       }),
       { exitOnCtrlC: false }
@@ -137,6 +152,13 @@ export class InkRenderer implements OutputRenderer {
     await this.dispatch({ type: 'SHOW_PROMPT', message: msg });
     return new Promise((resolve) => {
       this.handle!.setPromptResolve(resolve);
+    });
+  }
+
+  async promptWithChoices(msg: string, choices: string[]): Promise<string> {
+    await this.dispatch({ type: 'SHOW_SELECT', question: msg, choices });
+    return new Promise((resolve) => {
+      this.handle!.setSelectResolve(resolve);
     });
   }
 
