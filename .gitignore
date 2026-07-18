@@ -4,3 +4,4 @@ blog_api_test/
 .mma/
 .mimocode/
 *.log
+multi-*.txt

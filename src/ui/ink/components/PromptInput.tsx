@@ -140,6 +140,20 @@ export function PromptInput({
       return;
     }
 
+    if (key.ctrl && input === 'a') { setCursor(0); return; }
+    if (key.ctrl && input === 'e') { setCursor(value.length); return; }
+    if (key.ctrl && input === 'u') { setValue(''); setCursor(0); return; }
+    if (key.ctrl && input === 'k') { setValue((v: string) => v.slice(0, cursor)); return; }
+    if (key.ctrl && input === 'w') {
+      const before = value.slice(0, cursor);
+      const lastSpace = before.lastIndexOf(' ');
+      const keepLen = lastSpace === -1 ? 0 : lastSpace + 1;
+      setValue((v: string) => v.slice(0, keepLen) + v.slice(cursor));
+      setCursor(keepLen);
+      return;
+    }
+    if (key.ctrl && input === 'l') { return; } // clear-screen noop in Ink
+
     if (input && !key.ctrl && !key.meta) {
       setValue((v: string) => v.slice(0, cursor) + input + v.slice(cursor));
       setCursor((c: number) => c + input.length);
