@@ -1,23 +1,38 @@
 import React from 'react';
-import { Box } from 'ink';
+import { Static, Box } from 'ink';
 import { MessageBlock, type MessageItem } from './MessageBlock.js';
 import { ToolCallBlock, type ToolCallData } from './ToolCallBlock.js';
+import { StreamBlock, SpinnerLine } from './StreamBlock.js';
 
 export type ConversationEntry =
-  | { kind: 'message'; data: MessageItem }
-  | { kind: 'tool_call'; data: ToolCallData };
+  | { id: number; kind: 'message'; data: MessageItem }
+  | { id: number; kind: 'tool_call'; data: ToolCallData };
 
-export function Conversation({ entries }: { entries: ConversationEntry[] }) {
-  const visible = entries.slice(-100);
-
+export function Conversation({
+  entries,
+  streaming,
+  streamingContent,
+  isReasoning,
+  showSpinner,
+}: {
+  entries: ConversationEntry[];
+  streaming: boolean;
+  streamingContent: string;
+  isReasoning: boolean;
+  showSpinner: boolean;
+}) {
   return (
-    <Box flexDirection="column" flexGrow={1} overflow="hidden">
-      {visible.map((entry, i) => {
-        if (entry.kind === 'message') {
-          return React.createElement(MessageBlock, { key: i, item: entry.data });
-        }
-        return React.createElement(ToolCallBlock, { key: i, data: entry.data });
-      })}
+    <Box flexDirection="column" flexGrow={1}>
+      <Static items={entries} style={{ flexDirection: 'column' }}>
+        {(entry: ConversationEntry) => {
+          if (entry.kind === 'message') {
+            return React.createElement(MessageBlock, { key: entry.id, item: entry.data as MessageItem });
+          }
+          return React.createElement(ToolCallBlock, { key: entry.id, data: entry.data as ToolCallData });
+        }}
+      </Static>
+      {showSpinner && !streaming && <SpinnerLine />}
+      {streaming && <StreamBlock content={streamingContent} isReasoning={isReasoning} />}
     </Box>
   );
 }

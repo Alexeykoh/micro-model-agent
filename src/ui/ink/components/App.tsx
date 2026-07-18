@@ -1,7 +1,6 @@
 import React, { useReducer, useEffect } from 'react';
 import { Box } from 'ink';
 import { Conversation, type ConversationEntry } from './Conversation.js';
-import { StreamBlock, SpinnerLine } from './StreamBlock.js';
 import { StatusBar } from './StatusBar.js';
 import { PromptInput } from './PromptInput.js';
 
@@ -16,6 +15,7 @@ interface StatusInfo {
 
 interface AppState {
   entries: ConversationEntry[];
+  nextId: number;
   streaming: boolean;
   streamingContent: string;
   isReasoning: boolean;
@@ -47,13 +47,18 @@ function reducer(state: AppState, action: Action): AppState {
     case 'ADD_MESSAGE': {
       const data = { ...action.data };
       if (data.tag === 'user') data.role = 'user';
-      return { ...state, entries: [...state.entries, { kind: 'message', data }] };
+      return {
+        ...state,
+        nextId: state.nextId + 1,
+        entries: [...state.entries, { id: state.nextId, kind: 'message', data }],
+      };
     }
     case 'ADD_TOOL_CALL':
       return {
         ...state,
+        nextId: state.nextId + 1,
         toolCallIndex: state.entries.length,
-        entries: [...state.entries, { kind: 'tool_call', data: { name: action.data.name, args: action.data.args || '', result: '', time: '' } }],
+        entries: [...state.entries, { id: state.nextId, kind: 'tool_call', data: { name: action.data.name, args: action.data.args || '', result: '', time: '' } }],
       };
     case 'TOOL_PREVIEW': {
       const idx = state.toolCallIndex;
@@ -90,9 +95,10 @@ function reducer(state: AppState, action: Action): AppState {
     case 'STREAM_END': {
       const content = state.streamingContent;
       if (!content) return { ...state, streaming: false, streamingContent: '', isReasoning: false };
-      const newEntry: ConversationEntry = { kind: 'message', data: { type: 'message', content, role: 'assistant' } };
+      const newEntry: ConversationEntry = { id: state.nextId, kind: 'message', data: { type: 'message', content, role: 'assistant' } };
       return {
         ...state,
+        nextId: state.nextId + 1,
         entries: [...state.entries, newEntry],
         streaming: false,
         streamingContent: '',
@@ -112,6 +118,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'CLEAR':
       return {
         entries: [],
+        nextId: 1,
         streaming: false,
         streamingContent: '',
         isReasoning: false,
@@ -129,6 +136,7 @@ function reducer(state: AppState, action: Action): AppState {
 
 const initialState: AppState = {
   entries: [],
+  nextId: 1,
   streaming: false,
   streamingContent: '',
   isReasoning: false,
@@ -165,11 +173,13 @@ export function App({ onReady, commands }: AppProps) {
 
   return (
     <Box flexDirection="column" height="100%">
-      <Box flexGrow={1} flexDirection="column" overflow="hidden">
-        <Conversation entries={state.entries} />
-        {state.showSpinner && !state.streaming && <SpinnerLine />}
-        {state.streaming && <StreamBlock content={state.streamingContent} isReasoning={state.isReasoning} />}
-      </Box>
+      <Conversation
+        entries={state.entries}
+        streaming={state.streaming}
+        streamingContent={state.streamingContent}
+        isReasoning={state.isReasoning}
+        showSpinner={state.showSpinner}
+      />
       <Box flexShrink={0}>
         <PromptInput
           commands={commands}
