@@ -39,6 +39,8 @@ export interface OutputRenderer {
 
   writeFileOutput(lines: string[], startIndex?: number): void
 
+  setMode?(mode: string): void
+
   start(): Promise<void>
   destroy(): void
 

@@ -6,6 +6,7 @@ import { loadProfileSummary } from './user-profile.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
 import { loadAgentsMd, listInstalledSkills, formatSkillsBlock, type Skill } from '../skills/loader.js';
 import { logInfo, logDebug } from '../logger.js';
+import type { AgentMode } from '../config/types.js';
 
 const TOOL_FORMAT = `CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.
 
@@ -132,6 +133,26 @@ const RULES_COMMON = `Rules:
 10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.
 11. USER PROFILE: Блок ## User Profile содержит наблюдения о пользователе (имя, стек, стиль). Учитывай их. Если узнал новое (имя, предпочтения, привычки) — СРАЗУ сохраняй через <tool_call>{"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"..."}}</tool_call>. В начале первой сессии спроси имя пользователя и сохрани его.`;
 
+const RULES_FAST = `Rules:
+1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
+2. Always respond in the user's language (Русский или English).
+3. CRITICAL: After every tool call, CHECK the result (exit code + output).
+   If exit code != 0, DO NOT claim success — tell the user about the error.
+   Verify files were created before saying "done".
+4. NEVER return an empty response. After receiving a tool result, you MUST either:
+   a) Call another tool (if more work is needed), OR
+   b) Write a text response to the user (summarize what was done, report errors, ask questions).
+   Staying silent after a tool result is always wrong.
+5. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\".
+   If your command contains double quotes, wrap them in escaped form.
+6. For large files (>200 lines), use offset/limit with read_file:
+   {"name":"read_file","arguments":{"path":"file.ts","offset":1,"limit":100}}
+   {"name":"read_file","arguments":{"path":"file.ts","offset":101,"limit":100}}
+   Or use grep_search to find specific content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
+7. Execute tasks directly. Simple tasks (1-2 steps): just do it without commentary. Complex tasks: break into steps and execute them one by one without creating a formal plan.
+8. NEVER JUST TALK — ALWAYS ACT. Do NOT say "напиши" or similar waiting phrases. START WORKING IMMEDIATELY.
+9. USER PROFILE: Блок ## User Profile содержит наблюдения о пользователе (имя, стек, стиль). Учитывай их. Если узнал новое (имя, предпочтения, привычки) — СРАЗУ сохраняй через <tool_call>{"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"..."}}</tool_call>. В начале первой сессии спроси имя пользователя и сохрани его.`;
+
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
   <tool_call>{"name":"bash","arguments":{"cmd":"Get-Content src\\\\index.ts"}}</tool_call>
@@ -170,9 +191,9 @@ export function invalidateSystemPromptCache(): void {
   systemPromptCache.clear();
 }
 
-export function buildSystemPrompt(extraSkills?: Skill[]): string {
+export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode): string {
   const start = performance.now();
-  const key = `${process.cwd()}:${extraSkills?.map(s => s.name).sort().join(',') || ''}`;
+  const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}`;
   const cached = systemPromptCache.get(key);
   if (cached) {
     logDebug('SYSTEM', 'buildSystemPrompt: cache hit');
@@ -195,9 +216,10 @@ export function buildSystemPrompt(extraSkills?: Skill[]): string {
     try { projectName = JSON.parse(readFileSync(pkgPath, 'utf-8')).name || 'unknown'; } catch { /* ignore */ }
   }
 
+  const rules = mode === 'fast' ? RULES_FAST : RULES_COMMON;
   const platformBlock = isWin
-    ? [TOOL_FORMAT, CONVERSATION_FLOW, POWERSHELL_EXAMPLES, RULES_COMMON, POWERSHELL_RULES].join('\n\n')
-    : [TOOL_FORMAT, CONVERSATION_FLOW, UNIX_EXAMPLES, RULES_COMMON, UNIX_RULES].join('\n\n');
+    ? [TOOL_FORMAT, CONVERSATION_FLOW, POWERSHELL_EXAMPLES, rules, POWERSHELL_RULES].join('\n\n')
+    : [TOOL_FORMAT, CONVERSATION_FLOW, UNIX_EXAMPLES, rules, UNIX_RULES].join('\n\n');
 
   const header = `You are Micro Models Agent (MMA), an AI coding assistant.
 You help with software engineering tasks in the project directory.`;
@@ -233,8 +255,16 @@ You help with software engineering tasks in the project directory.`;
     ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): SUGGEST skills FIRST → User loads them → You READ them → Create plan BASED ON skill content.\nDo NOT put @skill-name inside tool_call. Just tell the user which skill to load.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "Рекомендую @typescript-expert @nodejs-expert — напиши их в следующем сообщении."\n  3. User: "@typescript-expert @nodejs-expert"\n  4. Skills injected into this prompt — you READ them\n  5. You create plan BASED ON skill guidance: plan create REST API ...\n  6. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
     : '';
 
-  const base = [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint].filter(Boolean).join('\n');
-  const result = base + (extraSkills && extraSkills.length > 0 ? '\n\n' + formatSkillsBlock(extraSkills) : '');
+  const modeBlock = mode === 'fast'
+    ? `\n## Mode: Fast\n\u26a1 Fast mode \u2014 execute tasks directly without planning or loading skills. Skills are not available in this mode. Proceed immediately.`
+    : mode === 'pro'
+    ? `\n## Mode: Pro\n\ud83d\udd0d Pro mode — @grill-me skill is pre-loaded. Before starting any task, you MUST first read and run the grill-me skill instructions to clarify requirements. Use it to refine the task before execution. Minimum context window: 64000.`
+    : '';
+
+  const base = mode === 'fast'
+    ? [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, modeBlock].filter(Boolean).join('\n')
+    : [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint, modeBlock].filter(Boolean).join('\n');
+  const result = base + (extraSkills && extraSkills.length > 0 && mode !== 'fast' ? '\n\n' + formatSkillsBlock(extraSkills) : '');
   const elapsed = (performance.now() - start).toFixed(0);
   logInfo('SYSTEM', `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`);
   systemPromptCache.set(key, result);

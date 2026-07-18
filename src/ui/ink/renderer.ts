@@ -25,6 +25,10 @@ export class InkRenderer implements OutputRenderer {
     this._commands = cmds;
   }
 
+  setMode(mode: string): void {
+    this.dispatch({ type: 'SET_MODE', mode });
+  }
+
   async start(): Promise<void> {
     this.inkResult = inkRender(
       React.createElement(App, {

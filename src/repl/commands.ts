@@ -58,6 +58,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'index', description: 'index management', handler: cmdIndex },
     { name: 'theme', description: 'theme management (list/switch/show/install/create/remove)', handler: cmdTheme },
     { name: 'profile', description: 'show/edit user profile', handler: cmdProfile },
+    { name: 'mode', description: 'switch agent mode (fast|base|pro)', handler: () => {} },
     { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
 }
@@ -101,6 +102,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /profile [note]   — show profile or add note
   /profile name <n>  — save your name
   /profile show     — show profile content
+  /mode fast|base|pro — switch agent mode
   /stop             — stop agent loop
   /exit             — exit MMA`);
   ctx.renderer.writeDim(`  ── CLI commands (exit REPL, then run) ──

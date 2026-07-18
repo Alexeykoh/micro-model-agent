@@ -21,6 +21,7 @@ import { loadConfig, saveConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
+import type { AgentMode } from '../config/types.js';
 
 function extractAllToolCalls(response: string): string[] {
   const results: string[] = [];
@@ -271,7 +272,7 @@ export async function runAgentLoop(
   previousMessages?: ChatMessage[],
   renderer?: OutputRenderer,
   providerName?: string,
-  options?: { quiet?: boolean; showThinking?: boolean },
+  options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode },
 ): Promise<AgentLoopResult> {
   logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
@@ -285,6 +286,19 @@ export async function runAgentLoop(
     renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')}`);
   }
 
+  if (options?.mode === 'pro' && !loadedSkillNames.has('grill-me')) {
+    const grill = loadSkill('grill-me', process.cwd());
+    if (grill) {
+      loadedSkills.push(grill);
+      loadedSkillNames.add('grill-me');
+      logInfo('LOOP', 'auto-loaded grill-me skill for pro mode');
+      renderer?.writeInfo('  Auto-loaded @grill-me skill for pro mode');
+    } else {
+      logWarn('LOOP', 'grill-me skill not found for pro mode');
+      renderer?.writeWarning('  Warning: @grill-me skill not found (required for pro mode)');
+    }
+  }
+
   if (files.length > 0) {
     const totalTokens = files.reduce((sum, f) => sum + f.tokens, 0);
     const totalLines = files.reduce((sum, f) => sum + f.content.split('\n').length, 0);
@@ -296,7 +310,7 @@ export async function runAgentLoop(
   setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
   writeStatus('Initializing...');
   const sysStart = performance.now();
-  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined);
+  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode);
   const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
   writeStatus(`Done (${sysElapsed}s)`);
   setStatusWriter(null);
@@ -361,7 +375,8 @@ export async function runAgentLoop(
     logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}`);
     const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.showThinking);
 
-    // Auto-load skills if model suggested them in response
+    // Auto-load skills if model suggested them in response (disabled in fast mode)
+    if (options?.mode !== 'fast') {
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
     const newSkillNames: string[] = [];
     for (const match of suggestedSkillRefs) {
@@ -379,11 +394,12 @@ export async function runAgentLoop(
     if (newSkillNames.length > 0) {
       skillsAutoLoaded = true;
       renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
-      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills) };
+      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode) };
       messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. They are in your context now. IMPORTANT: Use filesystem tools (write_file, create_dir, edit_file, read_file, etc.) for all file operations — NOT bash. Skills show bash examples for reference only. Create a plan and start working NOW — do NOT wait for user confirmation.]` });
       // Force model to continue working after skills are loaded
       continue;
     }
+    } // end fast-mode skill block
 
     if (!response.trim()) {
       logWarn('LOOP', `empty response #${consecutiveEmpty + 1}`);

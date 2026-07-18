@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { OpenAICompat } from '../src/llm/openai-compat.js';
 import { ToolRegistry } from '../src/tools/registry.js';
 import { runAgentLoop } from '../src/agent/loop.js';
+import { buildSystemPrompt } from '../src/agent/system-prompt.js';
 import type { OutputRenderer } from '../src/ui/renderer.js';
 import type { StatusInfo } from '../src/ui/renderer.js';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -126,6 +127,34 @@ describe('Agent loop integration', () => {
     expect(a || b || c).toBe(true);
     cleanup('multi-a.txt', 'multi-b.txt', 'multi-c.txt');
   }, 120000);
+
+  it('fast mode prompt has no skills', async () => {
+    if (!(await isAvailable())) return;
+    const prompt = buildSystemPrompt(undefined, 'fast');
+    expect(prompt).not.toContain('Available Skills');
+    expect(prompt).toContain('Mode: Fast');
+  });
+
+  it('pro mode prompt has grill-me instruction', async () => {
+    if (!(await isAvailable())) return;
+    const prompt = buildSystemPrompt(undefined, 'pro');
+    expect(prompt).toContain('Mode: Pro');
+    expect(prompt).toContain('grill-me');
+  });
+
+  it('model responds in fast mode', async () => {
+    if (!(await isAvailable())) return;
+    const registry = new ToolRegistry();
+    const result = await runAgentLoop(
+      provider, registry,
+      'What is 2+2? Answer in one word.',
+      undefined, undefined, mockRenderer, 'test',
+      { quiet: true, mode: 'fast' },
+    );
+    const lastMsg = result.messages[result.messages.length - 1];
+    expect(lastMsg).toBeDefined();
+    expect(lastMsg.content.toLowerCase()).toContain('4');
+  }, 60000);
 
   it('uses web_search tool', async () => {
     if (!(await isAvailable())) return;

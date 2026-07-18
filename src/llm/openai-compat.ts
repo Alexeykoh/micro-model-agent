@@ -6,7 +6,7 @@ interface OpenAIError {
 
 export class OpenAICompat implements LLMProvider {
   readonly model: string;
-  readonly contextWindow: number;
+  contextWindow: number;
   private baseUrl: string;
   private apiKey: string | null;
 

@@ -25,6 +25,7 @@ interface AppState {
   showPrompt: boolean;
   promptMessage: string;
   toolCallIndex: number;
+  mode: string;
 }
 
 export type Action =
@@ -40,6 +41,7 @@ export type Action =
   | { type: 'CONTEXT'; text: string }
   | { type: 'SHOW_PROMPT'; message: string }
   | { type: 'HIDE_PROMPT' }
+  | { type: 'SET_MODE'; mode: string }
   | { type: 'CLEAR' };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -115,6 +117,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, showPrompt: true, promptMessage: action.message };
     case 'HIDE_PROMPT':
       return { ...state, showPrompt: false, promptMessage: '' };
+    case 'SET_MODE':
+      return { ...state, mode: action.mode };
     case 'CLEAR':
       return {
         entries: [],
@@ -128,6 +132,7 @@ function reducer(state: AppState, action: Action): AppState {
         showPrompt: false,
         promptMessage: '',
         toolCallIndex: -1,
+        mode: '',
       };
     default:
       return state;
@@ -146,6 +151,7 @@ const initialState: AppState = {
   showPrompt: false,
   promptMessage: '',
   toolCallIndex: -1,
+  mode: '',
 };
 
 export interface AppHandle {
@@ -184,6 +190,7 @@ export function App({ onReady, commands }: AppProps) {
         <PromptInput
           commands={commands}
           disabled={!state.showPrompt}
+          mode={state.mode}
           onSubmit={(value) => {
             const resolve = promptResolveRef.current;
             if (resolve) {

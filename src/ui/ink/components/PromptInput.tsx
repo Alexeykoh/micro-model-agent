@@ -20,10 +20,12 @@ export function PromptInput({
   commands,
   onSubmit,
   disabled,
+  mode,
 }: {
   commands?: CommandInfo[];
   onSubmit: (value: string) => void;
   disabled?: boolean;
+  mode?: string;
 }) {
   const [value, setValue] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -160,17 +162,21 @@ export function PromptInput({
           ))}
         </Box>
       )}
-      <Box width="100%">
-        <Text {...(disabled ? t.colors.dim : t.colors.prompt)}>{'MMA> '}</Text>
-        {disabled ? (
-          <Text {...t.colors.dim}>{HINTS[hintIdx]}</Text>
-        ) : (
-          <Text>
-            {value.slice(0, cursor)}
-            <Text inverse>{value[cursor] || ' '}</Text>
-            {value.slice(cursor + 1)}
+      <Box>
+        <Text>
+          <Text {...(disabled ? t.colors.dim : t.colors.prompt)}>
+            {mode ? `[${mode}] ` : ''}{'MMA> '}
           </Text>
-        )}
+          {disabled ? (
+            <Text {...t.colors.dim}>{HINTS[hintIdx]}</Text>
+          ) : (
+            <Text>
+              {value.slice(0, cursor)}
+              <Text inverse>{value[cursor] || ' '}</Text>
+              {value.slice(cursor + 1)}
+            </Text>
+          )}
+        </Text>
       </Box>
     </Box>
   );

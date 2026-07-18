@@ -33,7 +33,10 @@ export interface AgentConfig {
   toolTimeout: number;
   maxOutputLength: number;
   showThinking?: boolean;
+  mode?: AgentMode;
 }
+
+export type AgentMode = 'fast' | 'base' | 'pro';
 
 export interface AppConfig {
   providers: Record<string, ProviderConfig>;

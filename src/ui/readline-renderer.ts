@@ -134,6 +134,10 @@ export class ReadlineRenderer implements OutputRenderer {
     process.stdout.write('\x1Bc')
   }
 
+  setMode(_mode: string): void {
+    // mode is shown via prompt message formatting in REPL
+  }
+
   async prompt(msg: string): Promise<string> {
     if (!this.rl) return ''
     return this.rl.question(msg)
