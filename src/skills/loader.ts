@@ -175,8 +175,41 @@ function fetchSync(url: string): string | null {
   }
 }
 
-export function formatSkillsBlock(skills: Skill[]): string {
+/**
+ * Ограничивает набор скилов по токен-бюджету.
+ * Сортирует по размеру (меньшие优先), обрезает если превышен бюджет.
+ * Возвращает обрезанный список + список отброшенных.
+ */
+export function enforceSkillBudget(
+  skills: Skill[],
+  tokenBudget: number,
+): { allowed: Skill[]; dropped: string[] } {
+  const allowed: Skill[] = [];
+  let usedTokens = 0;
+  const dropped: string[] = [];
+
+  // Сортируем по размеру — preferring smaller, more focused skills
+  const sorted = [...skills].sort((a, b) => a.tokens - b.tokens);
+
+  for (const skill of sorted) {
+    if (usedTokens + skill.tokens <= tokenBudget) {
+      allowed.push(skill);
+      usedTokens += skill.tokens;
+    } else {
+      dropped.push(skill.name);
+    }
+  }
+
+  return { allowed, dropped };
+}
+
+export function formatSkillsBlock(skills: Skill[], maxContentLength?: number): string {
   if (skills.length === 0) return '';
-  const parts = skills.map(s => `### ${s.name}\n${s.content}`);
+  const parts = skills.map(s => {
+    const content = maxContentLength && s.content.length > maxContentLength
+      ? s.content.slice(0, maxContentLength) + '\n\n[...truncated, full skill has ' + s.tokens + ' tokens]'
+      : s.content;
+    return `### ${s.name}\n${content}`;
+  });
   return `## Loaded Skills\n\n${parts.join('\n\n')}`;
 }

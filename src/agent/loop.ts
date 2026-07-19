@@ -7,7 +7,7 @@ import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
 import { autoLearnFromError } from './memory.js';
 import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
-import { loadSkill, loadSkillsFromRefs, formatSkillsBlock } from '../skills/loader.js';
+import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand, getPlanPendingCount } from '../tools/plan.js';
@@ -24,6 +24,41 @@ import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, lo
 import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
+
+/**
+ * Умная обрезка tool-результатов для экономии токенов в контексте.
+ *
+ * Полные результаты сохраняются в файл сессии, в контексте — только
+ * достаточно информации для модели чтобы продолжить работу.
+ *
+ * Лимиты подобраны эмпирически: достаточно для маленьких моделей
+ * понять что произошло, но не занимают весь контекст.
+ */
+function truncateToolOutput(toolName: string, output: string, exitCode: number): string {
+  // Ошибки обрезаем мягче — модели нужен контекст для диагностики
+  if (exitCode !== 0) {
+    return output.length > 3000 ? output.slice(0, 3000) + '\n...[truncated]' : output;
+  }
+
+  // Лимиты для успешных операций (в символах)
+  const LIMITS: Record<string, number> = {
+    read_file: 2000,    // модель может ссылаться на строки
+    write_file: 200,    // достаточно "Written X bytes"
+    edit_file: 300,     // нужно знать что изменилось
+    bash: 1500,         // build output, git status
+    list_dir: 1500,     // структура обычно компактна
+    glob_search: 1000,  // список файлов
+    grep_search: 1500,  // результаты поиска
+    tree: 1500,         // дерево файлов
+    subagent: 500,      // краткое резюме от субагента
+    web_search: 1000,   // результаты поиска
+    web_fetch: 1500,    // контент страницы
+  };
+
+  const limit = LIMITS[toolName] ?? 800;
+  if (output.length <= limit) return output;
+  return output.slice(0, limit) + '\n...[truncated]';
+}
 
 /**
  * Основной цикл ReAct-агента.
@@ -139,6 +174,24 @@ export async function runAgentLoop(
     }
   }
 
+  // Ограничение количества скилов в base mode
+  const config = loadConfig();
+  const maxSkills = options?.mode === 'pro'
+    ? (config.agent.maxSkillsPro ?? 0)
+    : (config.agent.maxSkillsBase ?? 2);
+
+  if (maxSkills > 0 && loadedSkills.length > maxSkills) {
+    const budget = config.agent.skillTokenBudget ?? 4000;
+    const { allowed, dropped } = enforceSkillBudget(loadedSkills, budget);
+    if (dropped.length > 0) {
+      renderer?.writeWarning(`  Skill limit (${maxSkills} max in ${options?.mode || 'base'} mode): dropped ${dropped.join(', ')}`);
+      logInfo('LOOP', `skill limit: dropped ${dropped.join(', ')} (budget: ${budget} tokens)`);
+      loadedSkills.length = 0;
+      loadedSkills.push(...allowed);
+      for (const s of dropped) loadedSkillNames.delete(s);
+    }
+  }
+
   if (files.length > 0) {
     const totalTokens = files.reduce((sum, f) => sum + f.tokens, 0);
     const totalLines = files.reduce((sum, f) => sum + f.content.split('\n').length, 0);
@@ -163,7 +216,6 @@ export async function runAgentLoop(
   ];
 
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
-  const config = loadConfig();
   const maxSteps = config.agent.maxSteps ?? 100;
   let consecutiveEmpty = 0; // счётчик пустых ответов подряд
   let pendingSyntaxError = '';
@@ -194,7 +246,12 @@ export async function runAgentLoop(
     const createdFiles: string[] = []; // отслеживание созданных/изменённых файлов
 
     logDebug('LOOP', `step ${step + 1}/${maxSteps} starting, ${messages.length} messages`);
-    await ctx.updateTokens(messages);
+    // Инкрементальный подсчёт — считаем только новые сообщения (быстрее в ~100x на больших историях)
+    if (step === 0) {
+      await ctx.updateTokens(messages);
+    } else {
+      await ctx.updateTokensIncremental(messages);
+    }
     const skillNames = loadedSkills.map(s => s.name).join(', ');
     const usageText = ctx.formatUsage() + (skillNames ? ` │ skills: ${skillNames}` : '');
     renderer?.updateContextUsage(usageText);
@@ -209,12 +266,22 @@ export async function runAgentLoop(
     });
 
     // ─── Compaction контекста ─────────────────────────────
-    // Если использование контекста превышает порог (85%), компактируем историю
+    // Если использование контекста превышает порог (70%), компактируем историю
     if (ctx.needsCompact && messages.length > 6) {
       const before = messages.length;
       messages.splice(0, messages.length, ...ctx.compact(messages));
       if (!quiet) {
         renderer?.writeBracketTag('compact', `${before} → ${messages.length} messages`);
+      }
+      await ctx.updateTokens(messages);
+    }
+
+    // ─── Emergency compact при переполнении контекста ─────
+    if (ctx.isOverflow) {
+      const before = messages.length;
+      messages.splice(0, messages.length, ...ctx.emergencyCompact(messages));
+      if (!quiet) {
+        renderer?.writeBracketTag('compact', `EMERGENCY: ${before} → ${messages.length}`);
       }
       await ctx.updateTokens(messages);
     }
@@ -250,7 +317,7 @@ export async function runAgentLoop(
       skillsAutoLoaded = true;
       renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode) };
-      messages.push({ role: 'user', content: `[System: Skills loaded: ${newSkillNames.join(', ')}. Continue your work using these skills where relevant.]` });
+      messages.push({ role: 'system', content: `Skills loaded: ${newSkillNames.join(', ')}. Continue your work using these skills where relevant.` });
       continue;
     }
     } // end fast-mode skill block
@@ -260,6 +327,23 @@ export async function runAgentLoop(
     if (!response.trim()) {
       logWarn('LOOP', `empty response #${consecutiveEmpty + 1}`);
       consecutiveEmpty++;
+
+      // После компактинга — более информативное сообщение о пустом ответе
+      if (ctx.compactCount > 0 && consecutiveEmpty <= 3) {
+        let lastUserMsg: ChatMessage | undefined;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') { lastUserMsg = messages[i]; break; }
+        }
+        const contextHint = lastUserMsg
+          ? `[System: You returned an empty response. The conversation was compressed. Continue working on: "${(lastUserMsg.content || '').slice(0, 150)}..."]`
+          : '[System: You returned an empty response. Continue with the task.]';
+        messages.push({ role: 'user', content: contextHint });
+        if (!quiet) {
+          renderer?.writeDim(`  [empty response, retrying with context hint]`);
+        }
+        continue;
+      }
+
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === 'user' && consecutiveEmpty <= 2) {
         messages.push({ role: 'user', content: 'Continue.' });
@@ -418,13 +502,17 @@ export async function runAgentLoop(
         directWriteStreak += writeCount;
         if (directWriteStreak >= 3) {
           const directWrites = validCalls.filter(c => c.parsed.name === 'write_file');
+          // Блокируем ВСЕ write_file, но отправляем ОДИН блокирующий message
+          // чтобы не засорять контекст повторными BLOCKED
           for (const wc of directWrites) {
             const idx = validCalls.indexOf(wc);
             if (idx !== -1) validCalls.splice(idx, 1);
+          }
+          if (directWrites.length > 0) {
             const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
             messages.push({
               role: 'tool',
-              content: `BLOCKED: You're creating file #${directWriteStreak} without subagent. For 3+ new files, use subagent for each one to maintain fresh context. Example: subagent("Create file X. Context: Y already exists.")`,
+              content: `BLOCKED: You're creating file #${directWriteStreak} without subagent. For 3+ new files, use subagent for each one. Example: subagent("Create file X. Context: Y already exists.")`,
               tool_call_id: blockId,
             });
           }
@@ -956,19 +1044,13 @@ export async function runAgentLoop(
 
       messages.push({
         role: 'tool',
-        content: toolOutput.slice(0, 8000),
+        content: truncateToolOutput(parsed.name, toolOutput, toolExitCode),
         tool_call_id: toolId,
       });
 
-      // Push a continuation nudge after every tool result
-      // Include created files list so model doesn't lose track
-      const nudge = createdFiles.length > 0
-        ? `Continue. Created: ${createdFiles.join(', ')}`
-        : 'Continue.';
-      messages.push({
-        role: 'user',
-        content: nudge,
-      });
+      // НЕ добавляем "Continue." после каждого tool-вызова — это нарушает
+      // структуру диалога. Bounded nudge (строка 418) уже покрывает
+      // случай когда модель застряла без tool-вызова.
 
       if (hasSyntaxError) {
         break;

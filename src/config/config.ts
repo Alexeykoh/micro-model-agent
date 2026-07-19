@@ -46,7 +46,11 @@ const DEFAULT_CONFIG: AppConfig = {
     },
   },
   active: { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' },
-  agent: { maxSteps: 100, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base' },
+  agent: {
+    maxSteps: 100, autoCompact: true, compactThreshold: 0.70,
+    toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base',
+    skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0,
+  },
 };
 
 /** Ищет корень проекта (по .mmrc или package.json) */

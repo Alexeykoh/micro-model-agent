@@ -32,7 +32,7 @@ export function registerConfigCommands(program: Command): void {
       const theme = getTheme();
       config.providers = {};
       config.active = { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' };
-      config.agent = { maxSteps: 100, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false };
+      config.agent = { maxSteps: 100, autoCompact: true, compactThreshold: 0.70, toolTimeout: 120, maxOutputLength: 2000, showThinking: false, skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0 };
       saveConfig(config);
       console.log(theme.successMsg('Configuration reset to defaults'));
     });

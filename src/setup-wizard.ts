@@ -359,7 +359,7 @@ function makeDefaultConfig(): AppConfig {
   return {
     providers: {},
     active: { provider: '', model: '' },
-    agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false },
+    agent: { maxSteps: 50, autoCompact: true, compactThreshold: 0.70, toolTimeout: 120, maxOutputLength: 2000, showThinking: false, skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0 },
   };
 }
 

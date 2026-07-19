@@ -51,6 +51,12 @@ export interface AgentConfig {
   maxOutputLength: number;
   showThinking?: boolean;
   mode?: AgentMode;
+  /** Макс. токенов для загруженных скилов в system prompt (default: 4000) */
+  skillTokenBudget?: number;
+  /** Макс. количество скилов в base mode (default: 2, 0 = безлимит) */
+  maxSkillsBase?: number;
+  /** Макс. количество скилов в pro mode (default: 0 = безлимит) */
+  maxSkillsPro?: number;
 }
 
 /** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */
