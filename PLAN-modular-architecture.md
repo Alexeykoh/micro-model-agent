@@ -160,11 +160,130 @@
 
 ---
 
+---
+
+## Фаза 5: ModeRegistry — единый API режимов и оркестрации
+
+### Проблема
+
+Сейчас режимы работы (fast/base/pro) размазаны по 4 файлам (`types.ts`, `system-prompt.ts`, `loop.ts`, `repl/index.ts`). Поведенческие блокировки (plan enforcement, write streak, single-write) — хардкод в loop.ts. Subagent всегда работает в `base` режиме. Нет способа создать новый режим без изменения ядра.
+
+### Задача 5.1: Создать `src/agent/modes/types.ts`
+- [ ] Определить `ModeConfig` интерфейс:
+  ```typescript
+  interface ModeConfig {
+    id: string;                    // 'fast' | 'base' | 'pro' | custom
+    label: string;                 // отображаемое имя
+    systemPromptTemplate: 'fast' | 'base' | 'pro';
+    maxSkills: number;             // 0 = безлимит
+    skillTokenBudget: number;
+    forcedSkills: string[];        // принудительная загрузка
+    allowAutoLoadSkills: boolean;
+    minContextWindow: number;      // минимальный контекст (0 = не ограничен)
+    behaviors: {
+      planEnforcement: boolean;
+      directWriteStreak: boolean;
+      singleWritePerResponse: boolean;
+      readConsolidation: boolean;
+      continuationNudge: boolean;
+      subagentMode: string;        // какой режим наследует subagent
+    };
+    ui: {
+      showThinking: boolean;
+      quiet: boolean;
+      promptPrefix: string;        // "[fast]" / "[pro]" / ""
+    };
+  }
+  ```
+- [ ] Определить `ModeRegistry` интерфейс (register, get, list, switch)
+
+### Задача 5.2: Создать `src/agent/modes/registry.ts`
+- [ ] Класс `ModeRegistry`:
+  - `register(mode: ModeConfig): void` — добавить/переопределить режим
+  - `get(id: string): ModeConfig` — получить конфиг
+  - `list(): ModeConfig[]` — список всех режимов
+  - `getDefault(): string` — id режима по умолчанию
+- [ ] Зарегистрировать встроенные режимы: `fast`, `base`, `pro` (с текущим поведением)
+- [ ] Загружать кастомные режимы из конфига (`config.modes` в `.mmrc`)
+
+### Задача 5.3: Интегрировать ModeRegistry в `src/agent/modes/applier.ts`
+- [ ] Функция `applyMode(config: ModeConfig, context: ModeContext): void`
+- [ ] Применяет режим к:
+  - `system-prompt.ts` — выбор шаблона + секция `## Mode: <label>`
+  - `loop.ts` — выставление поведенческих флагов вместо хардкода
+  - `repl/index.ts` — префикс промпта + renderer.setMode()
+  - `subagent.ts` — наследование режима (subagentMode)
+  - `context.ts` — принудительный minContextWindow
+
+### Задача 5.4: Убрать хардкод режимов из loop.ts
+- [ ] Заменить хардкод поведения на чтение `currentModeConfig.behaviors.*`
+- [ ] `pendingSyntaxError` — оставить (это не режим, а состояние)
+- [ ] `directWriteStreak` — читать `behaviors.directWriteStreak`
+- [ ] `plan enforcement` — читать `behaviors.planEnforcement`
+- [ ] `single-write-per-response` — читать `behaviors.singleWritePerResponse`
+- [ ] `continuation nudge` — читать `behaviors.continuationNudge`
+- [ ] `read consolidation` — читать `behaviors.readConsolidation`
+
+### Задача 5.5: Интегрировать с сессиями и CLI
+- [ ] Сохранять `mode` в сессию (`src/session/store.ts`)
+- [ ] Восстанавливать `mode` при `/resume`
+- [ ] CLI флаг `--mode fast|base|pro|custom` для одноразовых промптов
+- [ ] Команда `/mode` — теперь просто `modeRegistry.switch(id)`
+- [ ] Команда `/mode list` — показать все доступные режимы
+
+### Задача 5.6: Subagent наследует режим
+- [ ] Передавать `modeId` от родительского агента в subagent
+- [ ] Subagent создаёт свой `ModeRegistry` (или копирует конфиг)
+- [ ] Subagent может иметь собственные оверрайды (например, `maxSkills: 0`)
+
+### Задача 5.7: Кастомные режимы через конфиг
+- [ ] Секция `modes` в `.mmrc`:
+  ```json
+  {
+    "modes": {
+      "my-mode": {
+        "extends": "base",
+        "behaviors": { "planEnforcement": false },
+        "ui": { "promptPrefix": "[my]" }
+      }
+    }
+  }
+  ```
+- [ ] ModeRegistry загружает кастомные режимы при старте
+- [ ] Кастомные режимы доступны через `/mode` и `--mode`
+
+**Результат фазы 5:** Все режимы — конфигурируемые объекты. Новый режим = JSON в конфиге + опционально свой шаблон system prompt. Никакого хардкода режимов в loop.ts. Subagent наследует режим. Режим персистентен между сессиями.
+
+---
+
+## Новые файлы (фаза 5)
+
+- `src/agent/modes/types.ts` — тип ModeConfig
+- `src/agent/modes/registry.ts` — ModeRegistry
+- `src/agent/modes/applier.ts` — applyMode
+- `tests/modes.test.ts` — тесты режимов
+
+---
+
+## Изменяемые файлы (фаза 5)
+
+- `src/agent/loop.ts` — читать behaviors из ModeConfig вместо хардкода
+- `src/agent/system-prompt.ts` — принимать ModeConfig для шаблона
+- `src/repl/index.ts` — `/mode` через ModeRegistry, сохранять в сессию
+- `src/repl/commands.ts` — `/mode list` команда
+- `src/session/store.ts` — сохранять/восстанавливать mode
+- `src/cli.ts` — флаг `--mode`
+- `src/tools/subagent.ts` — принимать и наследовать modeId
+- `src/config/types.ts` — обновить тип AgentMode на ModeConfig
+
+---
+
 ## Порядок выполнения
 
 1. Фаза 1 (типы + миграция инструментов) — не меняет поведение, безопасно
 2. Фаза 2 (ToolExecutor) — central dispatch, убирает if-else
 3. Фаза 3 (общий react-loop) — убирает дублирование
 4. Фаза 4 (тесты) — покрытие нового кода
+5. Фаза 5 (ModeRegistry) — унификация режимов, конфигурируемое поведение
 
 Каждую фазу можно отдельно коммитить и тестировать.
