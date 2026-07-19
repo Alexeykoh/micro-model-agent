@@ -499,6 +499,9 @@ export async function runAgentLoop(
       continue;
     }
 
+    // Track consecutive read_file calls to the same file for consolidation
+    let lastReadFile: { path: string; offset: number; limit: number; content: string; toolId: string } | null = null;
+
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
@@ -531,7 +534,7 @@ export async function runAgentLoop(
         // can fix syntax errors (e.g. missing jsx flag in tsconfig)
         const isConfig = newPath === 'tsconfig.json' || newPath === 'package.json';
         if (isWriteOp && newPath !== pendingSyntaxError && !isConfig) {
-          const blocked = `BLOCKED: You have a syntax error in ${pendingSyntaxError}. Fix it first before writing new files.`;
+          const blocked = `BLOCKED: You have a syntax error in ${pendingSyntaxError}. Fix it first before writing new files. If the error is about jsx, module resolution, or missing types — edit tsconfig.json (it is exempt from this block).`;
           if (!quiet) {
             renderer?.writeError(`  [blocked: fix syntax error in ${pendingSyntaxError} first]`);
           }
@@ -817,6 +820,40 @@ export async function runAgentLoop(
 
       runPostToolUseHooks(process.cwd(), parsed.name, hookCmd, toolOutput, toolExitCode);
 
+      // Track sequential read_file calls for consolidation
+      if (!isBash && parsed.name === 'read_file' && toolExitCode === 0) {
+        const filePath = String(parsed.arguments.path ?? '');
+        const offset = Math.max(1, Number(parsed.arguments.offset ?? 1));
+        const limit = Math.max(1, Number(parsed.arguments.limit ?? 500));
+
+        if (lastReadFile && lastReadFile.path === filePath && offset === lastReadFile.offset + lastReadFile.limit) {
+          // Sequential read — merge with previous result
+          lastReadFile.content += '\n' + toolOutput;
+          lastReadFile.offset = offset;
+          lastReadFile.limit = limit;
+          // Replace the last tool message content with merged content
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'tool' && messages[i].tool_call_id === lastReadFile.toolId) {
+              messages[i].content = lastReadFile.content;
+              break;
+            }
+          }
+          // Remove the trailing "Continue." nudge + the new tool result that would be pushed
+          while (messages.length > 0 && messages[messages.length - 1].role === 'user' && messages[messages.length - 1].content === 'Continue.') {
+            messages.pop();
+          }
+          if (!quiet) {
+            renderer?.writeBracketTag('consolidate', `merged read_file chunks for ${filePath}`);
+          }
+          continue; // skip pushing this result separately
+        } else {
+          // New file or non-sequential — start fresh
+          lastReadFile = { path: filePath, offset, limit, content: toolOutput, toolId };
+        }
+      } else if (!isBash && parsed.name !== 'read_file') {
+        lastReadFile = null;
+      }
+
       // Syntax check after file write operations
       let hasSyntaxError = false;
       if (toolExitCode === 0) {
@@ -860,7 +897,21 @@ export async function runAgentLoop(
                 }
               } catch { /* ignore read errors */ }
 
-              toolOutput = `SYNTAX ERROR in ${filePath}:\n${syntaxResult}${contextLines}\n\nDo NOT rewrite the entire file. Use edit_file to fix the specific broken line:\n{"name":"edit_file","arguments":{"path":"${filePath}","old_string":"broken code here","new_string":"fixed code here"}}`;
+              toolOutput = `SYNTAX ERROR in ${filePath}:\n${syntaxResult}${contextLines}`;
+
+              // Detect config-related TS errors (missing jsx, module issues, etc.)
+              const isConfigError = syntaxResult.includes('TS17004')
+                || syntaxResult.includes('TS2307')
+                || syntaxResult.includes('Cannot find module')
+                || syntaxResult.includes('jsx')
+                || syntaxResult.includes('moduleResolution');
+
+              if (isConfigError) {
+                toolOutput += `\n\nThis looks like a tsconfig.json configuration issue, NOT a code syntax error.\nCheck tsconfig.json — you may need to add "jsx": "react-jsx" or fix module settings.\nDo NOT modify the source code to work around config errors. Edit tsconfig.json instead.`;
+              } else {
+                toolOutput += `\n\nDo NOT rewrite the entire file. Use edit_file to fix the specific broken line:\n{"name":"edit_file","arguments":{"path":"${filePath}","old_string":"broken code here","new_string":"fixed code here"}}`;
+              }
+
               hasSyntaxError = true;
               pendingSyntaxError = filePath;
             } else {
@@ -898,7 +949,7 @@ export async function runAgentLoop(
 
       messages.push({
         role: 'tool',
-        content: toolOutput.slice(0, 4000),
+        content: toolOutput.slice(0, 8000),
         tool_call_id: toolId,
       });
 

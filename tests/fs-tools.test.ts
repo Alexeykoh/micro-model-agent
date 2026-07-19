@@ -93,6 +93,21 @@ describe('read_file', () => {
     fail(r);
     expect(r.stderr).toContain('Not found');
   });
+
+  it('sequential reads with offset produce correct chunks', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`).join('\n');
+    writeFileSync(join(tmpDir, 'chunked.txt'), lines, 'utf-8');
+    const r1 = handleReadFile({ path: 'chunked.txt', offset: 1, limit: 5 }, tmpDir);
+    const r2 = handleReadFile({ path: 'chunked.txt', offset: 6, limit: 5 }, tmpDir);
+    ok(r1);
+    ok(r2);
+    expect(r1.stdout).toContain('1: line-1');
+    expect(r1.stdout).toContain('5: line-5');
+    expect(r1.stdout).not.toContain('6: line-6');
+    expect(r2.stdout).toContain('6: line-6');
+    expect(r2.stdout).toContain('10: line-10');
+    expect(r2.stdout).not.toContain('5: line-5');
+  });
 });
 
 describe('edit_file', () => {
@@ -258,6 +273,28 @@ describe('grep_search', () => {
     const r = handleGrepSearch({ pattern: 'zzz' }, tmpDir);
     ok(r);
     expect(r.stdout).toContain('No matches');
+  });
+
+  it('handles escaped dot in pattern (literal dot search)', () => {
+    writeFileSync(join(tmpDir, 'data.txt'), 'config.json is a file\nconfigXjson is not', 'utf-8');
+    const r = handleGrepSearch({ pattern: 'config\\.json' }, tmpDir);
+    ok(r);
+    expect(r.stdout).toContain('config.json');
+    expect(r.stdout).not.toContain('configXjson');
+  });
+
+  it('handles escaped parentheses in pattern', () => {
+    writeFileSync(join(tmpDir, 'code.ts'), 'foo() bar', 'utf-8');
+    const r = handleGrepSearch({ pattern: 'foo\\(\\)' }, tmpDir);
+    ok(r);
+    expect(r.stdout).toContain('foo()');
+  });
+
+  it('handles pattern with no special chars', () => {
+    writeFileSync(join(tmpDir, 'a.ts'), 'export default 42', 'utf-8');
+    const r = handleGrepSearch({ pattern: 'export default' }, tmpDir);
+    ok(r);
+    expect(r.stdout).toContain('export default 42');
   });
 });
 

@@ -130,4 +130,41 @@ describe('Agent modes — негативные сценарии', () => {
     expect(prompt).toContain('test-skill');
     expect(prompt).toContain('Loaded Skills');
   });
+
+  // === Новые правила: list_dir, grep escaping, read_file ===
+
+  it('base mode содержит правило #12 (запрет list_dir для exploration)', () => {
+    const prompt = buildSystemPrompt(undefined, 'base');
+    expect(prompt).toContain('NEVER call list_dir or tree');
+    expect(prompt).toContain('glob_search or grep_search instead');
+  });
+
+  it('fast mode содержит правило #10 (запрет list_dir)', () => {
+    const prompt = buildSystemPrompt(undefined, 'fast');
+    expect(prompt).toContain('NEVER call list_dir or tree');
+  });
+
+  it('base mode содержит guidance по regex escaping в grep_search', () => {
+    const prompt = buildSystemPrompt(undefined, 'base');
+    expect(prompt).toContain('escape regex special chars');
+    expect(prompt).toContain('Do NOT put quotes inside the pattern');
+  });
+
+  it('base mode содержит grep_search-first правило (#6)', () => {
+    const prompt = buildSystemPrompt(undefined, 'base');
+    expect(prompt).toContain('prefer grep_search');
+    expect(prompt).toContain('Do NOT call read_file multiple times');
+  });
+
+  it('TOOL_FORMAT содержит regex-примеры для grep_search', () => {
+    const prompt = buildSystemPrompt(undefined, 'base');
+    expect(prompt).toContain('Search with regex');
+    expect(prompt).toContain('Search literal dot');
+    expect(prompt).toContain('config\\.json');
+  });
+
+  it('TOOL_FORMAT помечает list_dir как "only when user explicitly asks"', () => {
+    const prompt = buildSystemPrompt(undefined, 'base');
+    expect(prompt).toContain('List directory (only when user explicitly asks)');
+  });
 });

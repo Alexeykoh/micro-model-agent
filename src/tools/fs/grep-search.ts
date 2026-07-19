@@ -12,7 +12,7 @@ export const grepSearchDefinition: ToolDefinition = {
     parameters: {
       type: 'object',
       properties: {
-        pattern: { type: 'string', description: 'Regex pattern to search for' },
+        pattern: { type: 'string', description: 'Regex pattern (e.g. "function", "\\.ts$", "import.*from"). Escape special chars: \\. \\( \\) \\[' },
         path: { type: 'string', description: 'Search root directory (default: project root)' },
         include: { type: 'string', description: 'File filter (e.g. "*.ts", "*.py")' },
         max_results: { type: 'number', description: 'Max results (default: 50)' },
