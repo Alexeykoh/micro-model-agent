@@ -76,8 +76,8 @@ npm run dev              # bun --watch
 
 ## Testing
 
-- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `user-profile.test.ts`
-- Integration tests: `tests/llm-integration.test.ts`, `tests/agent-integration.test.ts` (require running LLM server)
+- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `user-profile.test.ts`, `subagent.test.ts`
+- Integration tests: `tests/llm-integration.test.ts`, `tests/agent-integration.test.ts`, `tests/subagent-integration.test.ts` (require running LLM server)
 - All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
 - No vitest config file — uses defaults from package.json
 

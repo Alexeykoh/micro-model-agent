@@ -71,7 +71,25 @@ const WEB_TOOLS = new Map<string, { def: ToolDefinition; handler: (args: Record<
   ['web_fetch', { def: webFetchDefinition, handler: handleWebFetch }],
 ]);
 
-const VALID_TOOL_NAMES = new Set(['bash', ...FS_HANDLERS.keys(), ...WEB_TOOLS.keys()]);
+const NATIVE_TOOL_DEFS: ToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'subagent',
+      description: 'Delegate a task to an isolated agent in a fresh context. Use for EACH file when creating 3+ new files. Arguments: task (required, what to do), existingFiles (optional, comma-separated files for context).',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: 'What the subagent should create/fix/check' },
+          existingFiles: { type: 'string', description: 'Comma-separated files the subagent can read for context (optional)' },
+        },
+        required: ['task'],
+      },
+    },
+  },
+];
+
+const VALID_TOOL_NAMES = new Set(['bash', 'subagent', ...FS_HANDLERS.keys(), ...WEB_TOOLS.keys()]);
 
 export class ToolRegistry {
   constructor(private cwd: string = process.cwd()) {}
@@ -125,6 +143,7 @@ export class ToolRegistry {
 
   getDefinitions(): ToolDefinition[] {
     const defs: ToolDefinition[] = [
+      ...NATIVE_TOOL_DEFS,
       {
         type: 'function',
         function: {

@@ -128,10 +128,20 @@ export async function runScenario(
       const lastAssistant = [...agentResult.messages].reverse().find(m => m.role === 'assistant');
       result.output = lastAssistant?.content || '';
 
-      // Extract tool calls
-      const toolCallMatches = result.output.matchAll(/<tool_call>\{"name":"([^"]+)"/g);
-      for (const match of toolCallMatches) {
-        result.toolCalls.push(match[1]);
+      // Extract tool calls from ALL assistant messages (not just the last one)
+      for (const msg of agentResult.messages) {
+        if (msg.role === 'assistant' && msg.content) {
+          const matches = msg.content.matchAll(/<tool_call>\{"name":"([^"]+)"/g);
+          for (const match of matches) {
+            result.toolCalls.push(match[1]);
+          }
+        }
+      }
+
+      // Log tool usage for debugging
+      if (result.toolCalls.length > 0) {
+        const unique = [...new Set(result.toolCalls)];
+        console.log(`  [tools] ${unique.join(', ')}`);
       }
 
       if (!result.output.trim()) {
@@ -259,6 +269,13 @@ const SCENARIOS: Scenario[] = [
       '@nodejs-expert Создай минималистичный REST API в папке rest-api. Ресурс: users (id, name, email). Эндпоинты: GET /users, GET /users/:id, POST /users, PUT /users/:id, DELETE /users/:id. Uses Express + better-sqlite3. Сделай план и реализуй.',
     ],
   },
+  {
+    name: 'subagent-test',
+    description: 'Массовое создание 5 файлов — должна использовать subagent',
+    prompts: [
+      'Создай 5 файлов в папке multi-file-test: math.ts (add/sub/mul/div), string.ts (capitalize/reverse/truncate), db.ts (sqlite3 init + users table), api.ts (express CRUD users), index.ts (экспорт + server start). SQLite+express уже установлены. Сделай план, затем реализуй каждый файл через subagent.',
+    ],
+  },
 ];
 
 // ─── Analysis ─────────────────────────────────────────────
@@ -289,6 +306,27 @@ function analyzeResults(allResults: TestResult[]) {
     console.log('\nИнструменты:');
     for (const [tool, count] of Object.entries(toolCounts).sort((a, b) => b[1] - a[1])) {
       console.log(`  ${tool}: ${count}`);
+    }
+  }
+
+  // Subagent usage
+  const subagentCalls = allResults.reduce((sum, r) => sum + r.toolCalls.filter(t => t === 'subagent').length, 0);
+  const writeCalls = allResults.reduce((sum, r) => sum + r.toolCalls.filter(t => t === 'write_file').length, 0);
+  console.log(`\nСубагенты: ${subagentCalls} вызовов (write_file: ${writeCalls})`);
+  if (subagentCalls === 0 && writeCalls > 0) {
+    console.log('  ⚠ Модель НЕ использует subagent — пишет файлы напрямую');
+  } else if (subagentCalls > 0) {
+    console.log('  ✅ Модель использует subagent для изоляции');
+  }
+
+  // Subagent-test specific check
+  const subagentTestResults = allResults.filter(r => r.scenario === 'subagent-test');
+  if (subagentTestResults.length > 0) {
+    const hasSubagent = subagentTestResults.some(r => r.toolCalls.includes('subagent'));
+    if (!hasSubagent) {
+      console.log('  ❌ subagent-test: модель НЕ использовала subagent (требуется для 5 файлов)');
+    } else {
+      console.log('  ✅ subagent-test: модель использовала subagent');
     }
   }
 

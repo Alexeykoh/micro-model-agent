@@ -22,8 +22,8 @@
     "prepublishOnly": "npm run build",
     "prepack": "npm run build",
     "dev": "bun --watch src/index.ts",
-    "test": "bun test tests/context.test.ts tests/sanitizer.test.ts tests/code-index.test.ts tests/plan-todo-memory.test.ts tests/file-loader-syntax.test.ts tests/commands.test.ts",
-    "test:integration": "bun test tests/llm-integration.test.ts tests/agent-integration.test.ts",
+    "test": "bun test tests/context.test.ts tests/sanitizer.test.ts tests/code-index.test.ts tests/plan-todo-memory.test.ts tests/file-loader-syntax.test.ts tests/commands.test.ts tests/subagent.test.ts",
+    "test:integration": "bun test tests/llm-integration.test.ts tests/agent-integration.test.ts tests/subagent-integration.test.ts",
     "test:all": "bun test",
     "test:watch": "vitest"
   },

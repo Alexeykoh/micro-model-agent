@@ -14,6 +14,23 @@ To call a tool, output EXACTLY this format (on its own line):
 
 <tool_call>{"name":"tool_name","arguments":{...}}</tool_call>
 
+## Subagent — delegate file creation to isolated agent:
+  Use for EACH separate file when creating multi-file projects (3+ files).
+  One subagent call per file. Subagent has fresh context and works independently.
+
+  Create a single file:
+  {"name":"subagent","arguments":{"task":"Create src/db.ts: better-sqlite3 connection + users table"}}
+
+  Create with context of existing files:
+  {"name":"subagent","arguments":{"task":"Create src/routes/users.ts: Express CRUD for users","existingFiles":"package.json, src/db.ts"}}
+
+  Run verification after all files created:
+  {"name":"subagent","arguments":{"task":"Run tsc --noEmit to check types"}}
+
+  Arguments:
+  - task (required) — what the subagent should create/fix/check
+  - existingFiles (optional) — comma-separated files the subagent can read for context
+
 ## Filesystem Tools (USE THESE for file ops):
 
 Read a file:
@@ -140,9 +157,17 @@ const RULES_COMMON = `Rules:
 12. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead — they give more useful results. Only use list_dir when a user explicitly asks to see a directory listing.
 13. OFF-TOPIC QUESTIONS: If the user asks something unrelated to coding (jokes, space, cooking, etc.), answer briefly and warmly — 1-2 sentences. Do NOT refuse or say "I'm a coding assistant". Just answer, then naturally offer to return to work.
 14. ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.
-15. SUBAGENTS: For tasks with 3+ files, use subagent for EACH file in isolation:
-    subagent("Создай файл db.ts с подключением better-sqlite3 и таблицей users. Контекст: package.json создан (express, better-sqlite3)")
-    Each subagent gets fresh context. Parent only tracks results. After all subagents — verify with tsc --noEmit.`;
+15. SUBAGENTS — delegate file creation for multi-file projects:
+    Use subagent WHEN:
+    - Creating 3+ new files in a project (one subagent call per file)
+    - Any file that depends on another file you haven't created yet
+    - Running verification (tsc --noEmit) after all files created
+    Do NOT use subagent for:
+    - Editing existing files (use edit_file directly)
+    - Single file creation (write_file is fine)
+    - Bash commands like npm install, git, etc. (use bash tool)
+    Example: subagent("Create src/db.ts: sqlite connection + schema")
+    Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -167,7 +192,7 @@ const RULES_FAST = `Rules:
 10. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.
 11. OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.
 12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.
-13. SUBAGENTS: For 3+ files, use subagent for each file: subagent("Создай X.ts. Контекст: Y создан"). Each gets fresh context.`;
+13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. Do NOT use subagent for bash, edits, or single files. Example: subagent("Create X.ts. Existing: Y.ts"). Each gets fresh context.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
