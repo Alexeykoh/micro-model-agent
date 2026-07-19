@@ -517,6 +517,25 @@ export async function runAgentLoop(
     // Track consecutive read_file calls to the same file for consolidation
     let lastReadFile: { path: string; offset: number; limit: number; content: string; toolId: string } | null = null;
 
+    // ENFORCEMENT: one file write at a time — block extra write_file/edit_file calls
+    const writeCalls = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
+    if (writeCalls.length > 1) {
+      // Keep only the first write call, block the rest
+      const blocked = writeCalls.slice(1);
+      validCalls.splice(validCalls.indexOf(blocked[0]), blocked.length);
+      for (const bc of blocked) {
+        const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+        messages.push({
+          role: 'tool',
+          content: `BLOCKED: Only one file write per response is allowed. You wrote ${writeCalls.length} files at once. Complete the first file, then write the next one.`,
+          tool_call_id: blockId,
+        });
+      }
+      if (!quiet) {
+        renderer?.writeWarning(`  [blocked ${blocked.length} extra file writes — one at a time]`);
+      }
+    }
+
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
