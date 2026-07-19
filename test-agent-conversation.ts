@@ -21,7 +21,7 @@ import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
 import type { ChatMessage } from './src/llm/provider.js';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -245,6 +245,13 @@ const SCENARIOS: Scenario[] = [
       'Напиши функцию groupBy на TypeScript которая группирует массив объектов по ключу. Пример: groupBy([{type:"a",v:1},{type:"b",v:2},{type:"a",v:3}], "type") → {a:[...], b:[...]}',
     ],
   },
+  {
+    name: 'react-todo',
+    description: 'Полноценное React TODO приложение — план, файлы, сборка, запуск',
+    prompts: [
+      'Создай минималистичное React TODO приложение в папке todo-app. Нужно: добавить задачу, отметить выполненной, удалить. Uses Vite + React + TypeScript. Сделай план и реализуй.',
+    ],
+  },
 ];
 
 // ─── Analysis ─────────────────────────────────────────────
@@ -304,6 +311,79 @@ function analyzeResults(allResults: TestResult[]) {
     const icon = ok === total ? '✅' : '⚠️';
     console.log(`  ${icon} ${name}: ${ok}/${total} OK`);
   }
+}
+
+// ─── Verification: React TODO app ─────────────────────────
+
+function verifyReactTodo(testDir: string) {
+  console.log('\n' + '═'.repeat(60));
+  console.log('🔍 ВЕРИФИКАЦИЯ: React TODO приложение');
+  console.log('═'.repeat(60));
+
+  const todoDir = join(testDir, 'todo-app');
+  const checks: { name: string; ok: boolean; detail: string }[] = [];
+
+  // 1. Check directory exists
+  const dirExists = existsSync(todoDir);
+  checks.push({ name: 'Папка todo-app существует', ok: dirExists, detail: todoDir });
+
+  if (!dirExists) {
+    for (const c of checks) console.log(`  ${c.ok ? '✅' : '❌'} ${c.name}: ${c.detail}`);
+    return;
+  }
+
+  // 2. Check key files
+  const expectedFiles = ['package.json', 'vite.config.ts', 'tsconfig.json', 'index.html'];
+  const srcFiles = ['src/main.tsx', 'src/App.tsx'];
+  const allExpected = [...expectedFiles, ...srcFiles];
+
+  for (const file of allExpected) {
+    const exists = existsSync(join(todoDir, file));
+    checks.push({ name: `Файл ${file}`, ok: exists, detail: exists ? 'найден' : 'ОТСУТСТВУЕТ' });
+  }
+
+  // 3. Check package.json has react + vite
+  if (existsSync(join(todoDir, 'package.json'))) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(todoDir, 'package.json'), 'utf-8'));
+      const hasReact = !!pkg.dependencies?.react || !!pkg.devDependencies?.react;
+      const hasVite = !!pkg.devDependencies?.vite;
+      const hasScripts = !!pkg.scripts?.dev || !!pkg.scripts?.build;
+      checks.push({ name: 'React в dependencies', ok: hasReact, detail: hasReact ? 'да' : 'НЕТ' });
+      checks.push({ name: 'Vite в devDependencies', ok: hasVite, detail: hasVite ? 'да' : 'НЕТ' });
+      checks.push({ name: 'Скрипты (dev/build)', ok: hasScripts, detail: hasScripts ? 'да' : 'НЕТ' });
+    } catch {
+      checks.push({ name: 'package.json валидный', ok: false, detail: 'ошибка парсинга' });
+    }
+  }
+
+  // 4. Check node_modules
+  const hasModules = existsSync(join(todoDir, 'node_modules'));
+  checks.push({ name: 'node_modules установлены', ok: hasModules, detail: hasModules ? 'да' : 'НЕТ' });
+
+  // 5. Try to build
+  if (hasModules) {
+    try {
+      const buildResult = execSync('npx vite build 2>&1', {
+        cwd: todoDir,
+        encoding: 'utf-8',
+        timeout: 60000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      checks.push({ name: 'vite build проходит', ok: true, detail: 'успех' });
+    } catch (e: any) {
+      const err = (e.stderr || e.stdout || e.message || '').slice(0, 200);
+      checks.push({ name: 'vite build проходит', ok: false, detail: err });
+    }
+  }
+
+  // Print results
+  for (const c of checks) {
+    console.log(`  ${c.ok ? '✅' : '❌'} ${c.name}${c.detail ? ': ' + c.detail : ''}`);
+  }
+
+  const passed = checks.filter(c => c.ok).length;
+  console.log(`\n  Итого: ${passed}/${checks.length} проверок пройдено`);
 }
 
 // ─── Main ─────────────────────────────────────────────────
@@ -378,6 +458,11 @@ async function main() {
     }
 
     analyzeResults(allResults);
+
+    // Verify React TODO app if it was created
+    if (scenarios.some(s => s.name === 'react-todo')) {
+      verifyReactTodo(testDir);
+    }
   } finally {
     // Restore original CWD and cleanup
     process.chdir(origCwd);
