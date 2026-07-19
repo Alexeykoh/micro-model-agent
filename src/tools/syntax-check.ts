@@ -19,8 +19,16 @@ function checkTypeScriptSyntax(filePath: string, cwd: string): SyntaxCheckResult
     return { file: filePath, valid: false, errors: ['File not found'], language: 'typescript' };
   }
 
+  const fileBase = filePath.replace(/\\/g, '/').split('/').pop() || '';
+  const hasTsconfig = existsSync(join(cwd, 'tsconfig.json'));
+
+  // If tsconfig exists, use project-wide check (file-specific causes TS5112)
+  const tscCmd = hasTsconfig
+    ? 'npx tsc --noEmit --pretty false'
+    : `npx tsc --noEmit --pretty false "${fullPath}"`;
+
   try {
-    execSync(`npx tsc --noEmit --pretty false "${fullPath}"`, {
+    execSync(tscCmd, {
       encoding: 'utf-8',
       timeout: 15000,
       cwd,
@@ -29,7 +37,6 @@ function checkTypeScriptSyntax(filePath: string, cwd: string): SyntaxCheckResult
     return { file: filePath, valid: true, errors: [], language: 'typescript' };
   } catch (e: any) {
     const stderr = e.stderr || e.stdout || '';
-    const fileBase = filePath.replace(/\\/g, '/').split('/').pop() || '';
     const errors = stderr
       .split('\n')
       .filter((line: string) => line.includes('error TS') && line.includes(fileBase))

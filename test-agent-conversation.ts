@@ -21,9 +21,10 @@ import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
 import type { ChatMessage } from './src/llm/provider.js';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execSync } from 'node:child_process';
 
 // ─── Config ───────────────────────────────────────────────
 
@@ -220,19 +221,28 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: 'code-quality',
-    description: 'Качество кода: создание, синтаксис, выполнение',
+    description: 'Качество кода: создание и выполнение (агент проверяет сам)',
     prompts: [
-      'Напиши функцию mergeSort на TypeScript. После создания файла — проверь его синтаксис командой tsc --noEmit.',
-      'Создай файл test-run.ts в корне проекта с функцией factorial(n) и вызовом console.log(factorial(5)). Затем выполни его через bun и покажи результат.',
-      'Напиши класс Stack<T> на TypeScript с методами push, pop, peek, size. Убедись что код компилируется без ошибок.',
+      'Напиши функцию mergeSort на TypeScript',
+      'Создай файл test-run.ts с функцией factorial(n) и вызовом console.log(factorial(5)). Выполни через bun.',
+      'Напиши класс Stack<T> на TypeScript с методами push, pop, peek, size',
     ],
   },
   {
     name: 'code-explain',
     description: 'Объяснение кода: агент понимает что написал',
     prompts: [
-      'Напиши функцию memoize на TypeScript. После создания — объясни как она работает и зачем нужна.',
-      'Создай файл async-map.ts с функцией asyncMap, которая применяет async-функцию к массиву параллельно. Затем объясни разницу между параллельным и последовательным подходом.',
+      'Напиши функцию memoize на TypeScript. Объясни как она работает.',
+      'Создай файл async-map.ts с функцией asyncMap (параллельное применение async-функции к массиву). Объясни разницу параллельного и последовательного подхода.',
+    ],
+  },
+  {
+    name: 'auto-fix',
+    description: 'Агент сам ловит и чинит ошибки синтаксиса (без просьбы)',
+    prompts: [
+      'Напиши функцию parseJSON на TypeScript которая принимает строку и возвращает объект. Оберни в try-catch.',
+      'Создай класс LinkedList<T> на TypeScript с методами append, prepend, toArray, size',
+      'Напиши функцию groupBy на TypeScript которая группирует массив объектов по ключу. Пример: groupBy([{type:"a",v:1},{type:"b",v:2},{type:"a",v:3}], "type") → {a:[...], b:[...]}',
     ],
   },
 ];
@@ -348,7 +358,12 @@ async function main() {
   // Set up minimal project structure
   writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test-project', version: '1.0.0', type: 'module' }, null, 2));
   mkdirSync(join(testDir, 'src'), { recursive: true });
-  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'node', strict: true, esModuleInterop: true, skipLibCheck: true } }, null, 2));
+  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, esModuleInterop: true, skipLibCheck: true, jsx: 'react-jsx' } }, null, 2));
+
+  // Install typescript so syntax checking works (tsc --noEmit)
+  try {
+    execSync('npm install typescript --save-dev --silent', { cwd: testDir, stdio: 'pipe', timeout: 30000 });
+  } catch { /* ignore — syntax checks will be skipped if tsc unavailable */ }
 
   console.log(`📁 Test directory: ${testDir}\n`);
 
