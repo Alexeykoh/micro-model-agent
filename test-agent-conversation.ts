@@ -122,7 +122,7 @@ export async function runScenario(
         undefined,
         renderer,
         'lmstudio',
-        { quiet: true, mode: 'base' },
+        { quiet: false, mode: 'base' },
       );
 
       const lastAssistant = [...agentResult.messages].reverse().find(m => m.role === 'assistant');
@@ -249,7 +249,14 @@ const SCENARIOS: Scenario[] = [
     name: 'react-todo',
     description: 'Полноценное React TODO приложение — план, файлы, сборка, запуск',
     prompts: [
-      'Создай минималистичное React TODO приложение в папке todo-app. Нужно: добавить задачу, отметить выполненной, удалить. Uses Vite + React + TypeScript. Сделай план и реализуй. НЕ предлагай скилы — просто делай.',
+      'Создай минималистичное React TODO приложение в папке todo-app. Нужно: добавить задачу, отметить выполненной, удалить. Uses Vite + React + TypeScript. Сделай план и реализуй.',
+    ],
+  },
+  {
+    name: 'rest-api',
+    description: 'REST API CRUD — Express + SQLite, пользователи (name, email)',
+    prompts: [
+      '@nodejs-expert Создай минималистичный REST API в папке rest-api. Ресурс: users (id, name, email). Эндпоинты: GET /users, GET /users/:id, POST /users, PUT /users/:id, DELETE /users/:id. Uses Express + better-sqlite3. Сделай план и реализуй.',
     ],
   },
 ];

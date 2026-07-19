@@ -51,6 +51,9 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"user_profile","arguments":{"action":"show"}}
   {"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"text"}}
 
+## Subagent (isolate a single task in fresh context):
+  {"name":"subagent","arguments":{"task":"Создай файл db.ts с better-sqlite3","existingFiles":"package.json"}}
+
 ## Web tools (search & fetch):
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
   {"name":"web_fetch","arguments":{"url":"https://example.com"}}
@@ -124,8 +127,8 @@ const RULES_COMMON = `Rules:
    Only use read_file with offset/limit when you need to SEE the full file context.
    Do NOT call read_file multiple times on the same file sequentially — use grep first.
 7. SKILLS AND PLANNING: For complex tasks (3+ steps):
-   a. If skills are NOT loaded yet: suggest them: "Рекомендую @skill1 @skill2"
-   b. If skills ARE loaded (you see "Skills loaded" in context): DO NOT suggest skills again — they are already loaded
+   a. AUTOMATICALLY load relevant skills by mentioning them: "@nodejs-expert @typescript-expert"
+   b. Do NOT ask the user — just load and start working
    c. IMMEDIATELY create a plan with SPECIFIC FILE NAMES: plan create TodoApp create-project install-deps write-AppTsx write-TodoListTsx connect-components
    d. Mark current step as in_progress BEFORE writing the file
    e. Mark step as done AFTER syntax check passes and file is complete
@@ -136,7 +139,10 @@ const RULES_COMMON = `Rules:
 11. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call user_profile, list_dir, tree, or any other tool just for exploration — only use tools when there is actual work to do.
 12. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead — they give more useful results. Only use list_dir when a user explicitly asks to see a directory listing.
 13. OFF-TOPIC QUESTIONS: If the user asks something unrelated to coding (jokes, space, cooking, etc.), answer briefly and warmly — 1-2 sentences. Do NOT refuse or say "I'm a coding assistant". Just answer, then naturally offer to return to work.
-14. ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.`;
+14. ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.
+15. SUBAGENTS: For tasks with 3+ files, use subagent for EACH file in isolation:
+    subagent("Создай файл db.ts с подключением better-sqlite3 и таблицей users. Контекст: package.json создан (express, better-sqlite3)")
+    Each subagent gets fresh context. Parent only tracks results. After all subagents — verify with tsc --noEmit.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -160,7 +166,8 @@ const RULES_FAST = `Rules:
 9. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call tools just for exploration.
 10. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.
 11. OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.
-12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.`;
+12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.
+13. SUBAGENTS: For 3+ files, use subagent for each file: subagent("Создай X.ts. Контекст: Y создан"). Each gets fresh context.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

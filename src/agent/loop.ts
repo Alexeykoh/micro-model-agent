@@ -98,7 +98,7 @@ function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: s
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'subagent', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -264,6 +264,125 @@ export interface AgentLoopResult {
   questionPending?: { question: string; choices?: string[] };
 }
 
+export interface IsolatedLoopResult {
+  createdFiles: string[];
+  errors: string[];
+  summary: string;
+}
+
+async function runIsolatedLoop(
+  provider: LLMProvider,
+  registry: ToolRegistry,
+  task: string,
+  existingFiles: string,
+  cwd: string,
+  quiet: boolean,
+  renderer: OutputRenderer,
+): Promise<IsolatedLoopResult> {
+  const createdFiles: string[] = [];
+  const errors: string[] = [];
+
+  // Build minimal system prompt without skills (fresh context)
+  const systemPrompt = buildSystemPrompt(undefined, 'base');
+
+  const contextInfo = existingFiles
+    ? `\n\nСуществующие файлы в проекте:\n${existingFiles}\nПосмотри package.json для списка пакетов.`
+    : '';
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: task + contextInfo },
+  ];
+
+  const ctx = new ContextManager(provider.contextWindow);
+  const maxSteps = 20;
+
+  for (let step = 0; step < maxSteps; step++) {
+    await ctx.updateTokens(messages);
+
+    if (ctx.needsCompact && messages.length > 6) {
+      messages.splice(0, messages.length, ...ctx.compact(messages));
+      await ctx.updateTokens(messages);
+    }
+
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false);
+
+    if (!response.trim()) break;
+
+    messages.push({ role: 'assistant', content: response });
+
+    const allJsonRaw = extractAllToolCalls(response);
+    const validCalls: { parsed: any; cmd?: string }[] = [];
+
+    for (const jsonRaw of allJsonRaw) {
+      let p: any = null;
+      try { p = JSON.parse(jsonrepair(jsonRaw)); } catch {
+        try { p = JSON.parse(jsonRaw); } catch { /* skip */ }
+      }
+      if (p) {
+        const v = validateToolCall(p);
+        if (v.valid) validCalls.push({ parsed: p, cmd: v.cmd });
+      }
+    }
+
+    if (validCalls.length === 0) break;
+
+    // Process tool calls
+    for (const call of validCalls) {
+      const { parsed, cmd } = call;
+      const isBash = parsed.name === 'bash';
+      const toolId = `sub-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+
+      let toolOutput = '';
+      let toolExitCode = 0;
+
+      if (parsed.name === 'subagent') {
+        toolOutput = 'Subagents cannot spawn subagents (max depth 1)';
+        toolExitCode = 1;
+      } else if (!isBash) {
+        const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
+        toolOutput = result.stdout || result.stderr || '(no output)';
+        toolExitCode = result.exitCode;
+
+        // Track created files
+        if (toolExitCode === 0 && (parsed.name === 'write_file' || parsed.name === 'edit_file')) {
+          const filePath = String(parsed.arguments.path ?? '');
+          if (filePath && !createdFiles.includes(filePath)) {
+            createdFiles.push(filePath);
+          }
+        }
+
+        // Syntax check after write
+        if (toolExitCode === 0 && (parsed.name === 'write_file' || parsed.name === 'edit_file')) {
+          const filePath = String(parsed.arguments.path ?? '');
+          if (filePath && /\.(ts|tsx|js|jsx|json)$/.test(filePath)) {
+            const { isAbsolute, relative } = await import('node:path');
+            const relPath = isAbsolute(filePath) ? relative(cwd, filePath).replace(/\\/g, '/') : filePath;
+            const syntaxResult = checkFileSyntax(relPath, cwd);
+            if (syntaxResult !== 'OK') {
+              errors.push(`${filePath}: ${syntaxResult.split('\n')[0]}`);
+              toolOutput += `\nSYNTAX ERROR: ${syntaxResult}`;
+            }
+          }
+        }
+      } else {
+        const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 30 } });
+        toolOutput = result.stdout || result.stderr || '(no output)';
+        toolExitCode = result.exitCode;
+      }
+
+      messages.push({ role: 'tool', content: toolOutput.slice(0, 8000), tool_call_id: toolId });
+      messages.push({ role: 'user', content: 'Continue.' });
+    }
+  }
+
+  const summary = createdFiles.length > 0
+    ? `Subagent created: ${createdFiles.join(', ')}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`
+    : `Subagent completed. No files created.${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`;
+
+  return { createdFiles, errors, summary };
+}
+
 export async function runAgentLoop(
   provider: LLMProvider,
   registry: ToolRegistry,
@@ -384,9 +503,9 @@ export async function runAgentLoop(
       break;
     }
 
-    // Auto-load skills if the response contains tool calls AND @skill mentions
-    // (only when the agent is actually working, not just describing)
-    if (options?.mode !== 'fast' && response.includes('<tool_call>')) {
+    // Auto-load skills if the response contains @skill mentions
+    // Works with or without tool calls — agent can mention skills while working
+    if (options?.mode !== 'fast' && !skillsAutoLoaded) {
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
     const newSkillNames: string[] = [];
     for (const match of suggestedSkillRefs) {
@@ -468,7 +587,7 @@ export async function runAgentLoop(
         // it's a description with examples — not a failed tool call attempt.
         const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
         if (textOutside.length < 100) {
-          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve.`;
+          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve, subagent.`;
           if (!quiet) {
             renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
           }
@@ -737,6 +856,33 @@ export async function runAgentLoop(
           default:
             toolOutput = 'Unknown theme action. Use: list, show, switch, install, remove';
             toolExitCode = 1;
+        }
+      } else if (parsed.name === 'subagent') {
+        // Subagent: isolated context for a single task
+        const task = String(parsed.arguments.task || '');
+        const existingFiles = String(parsed.arguments.existingFiles || '');
+        if (!quiet) {
+          renderer?.writeBracketTag('subagent', task.slice(0, 80));
+        }
+        if (!task) {
+          toolOutput = 'Error: task is required';
+          toolExitCode = 1;
+        } else {
+          try {
+            const childResult = await runIsolatedLoop(
+              provider, registry, task, existingFiles, process.cwd(), quiet, renderer
+            );
+            toolOutput = childResult.summary;
+            if (childResult.createdFiles.length > 0) {
+              // Track files created by subagent in parent
+              for (const f of childResult.createdFiles) {
+                if (!createdFiles.includes(f)) createdFiles.push(f);
+              }
+            }
+          } catch (e: any) {
+            toolOutput = `Subagent error: ${e.message}`;
+            toolExitCode = 1;
+          }
         }
       } else if (isBash && cmd!.startsWith('plan ')) {
         const planArgs = cmd!.slice(5).trim();
