@@ -349,6 +349,8 @@ export async function runAgentLoop(
       break;
     }
     let skillsAutoLoaded = false;
+    // Track files created/modified in this session for completion reporting
+    const createdFiles: string[] = [];
     logDebug('LOOP', `step ${step + 1}/${maxSteps} starting, ${messages.length} messages`);
     await ctx.updateTokens(messages);
     const skillNames = loadedSkills.map(s => s.name).join(', ');
@@ -494,6 +496,19 @@ export async function runAgentLoop(
       }
 
       if (!skillsAutoLoaded) {
+        // If model claims done but has created files, remind about completeness
+        if (createdFiles.length > 0) {
+          const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+          const looksLikeDone = /done|готово|создан|выполн|completed|finished/i.test(textOutside);
+          if (looksLikeDone) {
+            messages.push({
+              role: 'user',
+              content: `Files created: ${createdFiles.join(', ')}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
+            });
+            continuationNudges = 0;
+            continue;
+          }
+        }
         return { messages };
       }
       continue;
@@ -926,6 +941,10 @@ export async function runAgentLoop(
                 const fullContent = readFileSync(join(process.cwd(), filePath), 'utf-8');
                 collectCodingStyle(filePath, fullContent);
               } catch { /* ignore */ }
+              // Track created/modified files for completion reporting
+              if (!hasSyntaxError && !createdFiles.includes(filePath)) {
+                createdFiles.push(filePath);
+              }
             }
           }
         }
@@ -953,11 +972,14 @@ export async function runAgentLoop(
         tool_call_id: toolId,
       });
 
-      // Push a minimal continuation nudge after every tool result
-      // to prevent the model from returning empty responses
+      // Push a continuation nudge after every tool result
+      // Include created files list so model doesn't lose track
+      const nudge = createdFiles.length > 0
+        ? `Continue. Created: ${createdFiles.join(', ')}`
+        : 'Continue.';
       messages.push({
         role: 'user',
-        content: 'Continue.',
+        content: nudge,
       });
 
       if (hasSyntaxError) {
