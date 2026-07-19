@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { logInfo } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -71,14 +72,20 @@ function isNewerVersion(a: string, b: string): boolean {
 }
 
 export function checkForUpdateAsync(): void {
+  const current = getCurrentVersion();
+
   const cached = readCache();
   if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
+    const msg = `v${current} → npm v${cached.latestVersion} (cached)${isNewerVersion(current, cached.latestVersion) ? ' ⬆ update available' : ' ✓ up to date'}`;
+    console.error(`[Update] ${msg}`);
+    logInfo('Update', msg);
     return;
   }
 
-  const current = getCurrentVersion();
-  if (cached && !isNewerVersion(current, cached.latestVersion)) {
-    // stale cache, force re-check
+  console.error(`[Update] Checking v${current} against npm…`);
+  logInfo('Update', `Checking v${current} against npm…`);
+  if (cached) {
+    logInfo('Update', `Cache stale (v${cached.latestVersion} @ ${new Date(cached.checkedAt).toISOString()}), re-checking`);
   }
 
   setTimeout(() => {
@@ -88,8 +95,15 @@ export function checkForUpdateAsync(): void {
         encoding: 'utf-8',
         windowsHide: true,
       });
-      writeCache({ latestVersion: stdout.trim(), checkedAt: Date.now() });
-    } catch { /* ignore */ }
+      const latest = stdout.trim();
+      writeCache({ latestVersion: latest, checkedAt: Date.now() });
+      const msg = `v${current} → npm v${latest}${isNewerVersion(current, latest) ? ' ⬆ update available' : ' ✓ up to date'}`;
+      console.error(`[Update] ${msg}`);
+      logInfo('Update', msg);
+    } catch (e: any) {
+      console.error(`[Update] Check failed: ${e.message}`);
+      logInfo('Update', `npm check failed: ${e.message}`);
+    }
   }, 100);
 }
 
