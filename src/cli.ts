@@ -1,4 +1,7 @@
 import { Command } from 'commander';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, ensureMmaDir } from './config/config.js';
 import { OpenAICompat } from './llm/openai-compat.js';
 import { ToolRegistry } from './tools/registry.js';
@@ -93,9 +96,15 @@ async function createProviderInteractive(config: ReturnType<typeof loadConfig>):
 export function createCli() {
   const program = new Command();
 
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  let pkgVersion = '0.0.0';
+  try {
+    pkgVersion = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')).version;
+  } catch { /* fallback */ }
+
   program
     .name('mma')
-    .version('0.2.25')
+    .version(pkgVersion)
     .description('Micro Models Agent (MMA) — LLM agent harness for small models');
 
   program
@@ -112,6 +121,12 @@ export function createCli() {
   registerUpdateCommand(program);
 
   program.action(async (prompt?: string) => {
+    // Handle --version early (Commander v12 doesn't auto-exit)
+    if (process.argv.slice(2).some(a => a === '--version' || a === '-V')) {
+      console.log(pkgVersion);
+      process.exit(0);
+    }
+
     ensureMmaDir();
     ensureThemeDir();
 
