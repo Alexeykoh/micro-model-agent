@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { OpenAICompat } from '../src/llm/openai-compat.js';
 import { ToolRegistry } from '../src/tools/registry.js';
 import { runAgentLoop } from '../src/agent/loop.js';
 import { buildSystemPrompt } from '../src/agent/system-prompt.js';
+import { clearPlan } from '../src/tools/plan.js';
 import type { OutputRenderer } from '../src/ui/renderer.js';
 import type { StatusInfo } from '../src/ui/renderer.js';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -16,6 +17,11 @@ let provider: OpenAICompat;
 
 beforeAll(() => {
   provider = new OpenAICompat(BASE_URL, MODEL, CTX);
+  clearPlan();
+});
+
+afterAll(() => {
+  clearPlan();
 });
 
 async function isAvailable(): Promise<boolean> {

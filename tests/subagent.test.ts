@@ -186,7 +186,7 @@ describe('buildSubagentContext', () => {
       writeFileSync(join(dir, 'src', 'index.ts'), 'export const x = 1;');
       writeFileSync(join(dir, 'src', 'util.ts'), 'export const y = 2;');
       const result = buildSubagentContext(dir);
-      expect(result).toContain('Existing files');
+      expect(result).toContain('Files in src/');
       expect(result).toContain('index.ts');
       expect(result).toContain('util.ts');
     } finally {
@@ -245,7 +245,7 @@ describe('buildSubagentContext', () => {
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'test', dependencies: { react: '^18' } }));
       writeFileSync(join(dir, 'tsconfig.json'), '{}');
       const result = buildSubagentContext(dir);
-      expect(result).toContain('Existing files');
+      expect(result).toContain('Files in src/');
       expect(result).toContain('main.ts');
       expect(result).toContain('Dependencies');
       expect(result).toContain('react');

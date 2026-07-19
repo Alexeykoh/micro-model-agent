@@ -21,19 +21,34 @@ export interface IsolatedLoopResult {
 export function buildSubagentContext(cwd: string): string {
   const lines: string[] = [];
 
+  // Scan ALL directories for existing source files (not just src/)
   try {
     const { readdirSync, statSync } = require('node:fs');
     const { join } = require('node:path');
-    const srcDir = join(cwd, 'src');
-    if (statSync(srcDir).isDirectory()) {
-      const files = readdirSync(srcDir, { recursive: true })
-        .filter((f: string) => /\.(ts|tsx|js|jsx)$/.test(f))
-        .slice(0, 20);
-      if (files.length > 0) {
-        lines.push('Existing files: ' + files.join(', '));
-      }
+    const entries = readdirSync(cwd, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const dirPath = join(cwd, entry.name);
+      try {
+        const files = readdirSync(dirPath, { recursive: true })
+          .filter((f: string) => /\.(ts|tsx|js|jsx)$/.test(f))
+          .slice(0, 20);
+        if (files.length > 0) {
+          lines.push(`Files in ${entry.name}/: ${files.join(', ')}`);
+        }
+      } catch { /* skip unreadable dirs */ }
     }
-  } catch { /* no src dir */ }
+  } catch { /* no entries */ }
+
+  // Include root-level .ts/.js files too
+  try {
+    const { readdirSync } = require('node:fs');
+    const rootFiles = readdirSync(cwd)
+      .filter((f: string) => /\.(ts|js)$/.test(f) && !f.startsWith('.'));
+    if (rootFiles.length > 0) {
+      lines.push('Root files: ' + rootFiles.join(', '));
+    }
+  } catch { /* skip */ }
 
   try {
     const { readFileSync, existsSync } = require('node:fs');
@@ -297,14 +312,21 @@ export async function runIsolatedLoop(
   const startTime = performance.now();
 
   logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${provider.contextWindow}`);
-  if (existingFiles) {
-    logDebug('SUBAGENT', `context: ${existingFiles.split('\n').length} lines`);
+
+  // Always build auto-context from project, even if model didn't pass existingFiles
+  const autoContext = buildSubagentContext(cwd);
+  const mergedContext = existingFiles
+    ? existingFiles + '\n' + autoContext
+    : autoContext;
+
+  if (mergedContext) {
+    logDebug('SUBAGENT', `context (${mergedContext.split('\n').length} lines):\n${mergedContext}`);
   }
 
   const systemPrompt = buildSystemPrompt(undefined, 'base');
 
-  const contextInfo = existingFiles
-    ? `\n\nСуществующие файлы в проекте:\n${existingFiles}\nПосмотри package.json для списка пакетов.`
+  const contextInfo = mergedContext
+    ? `\n\nКонтекст проекта:\n${mergedContext}\nПосмотри package.json для списка пакетов. Используй read_file для чтения существующих файлов.`
     : '';
 
   const messages: ChatMessage[] = [

@@ -18,18 +18,13 @@ To call a tool, output EXACTLY this format (on its own line):
   Use for EACH separate file when creating multi-file projects (3+ files).
   One subagent call per file. Subagent has fresh context and works independently.
 
-  Create a single file:
   {"name":"subagent","arguments":{"task":"Create src/db.ts: better-sqlite3 connection + users table"}}
-
-  Create with context of existing files:
   {"name":"subagent","arguments":{"task":"Create src/routes/users.ts: Express CRUD for users","existingFiles":"package.json, src/db.ts"}}
-
-  Run verification after all files created:
   {"name":"subagent","arguments":{"task":"Run tsc --noEmit to check types"}}
 
   Arguments:
   - task (required) — what the subagent should create/fix/check
-  - existingFiles (optional) — comma-separated files the subagent can read for context
+  - existingFiles (optional) — comma-separated files for cross-file context
 
 ## Filesystem Tools (USE THESE for file ops):
 
@@ -167,7 +162,8 @@ const RULES_COMMON = `Rules:
     - Single file creation (write_file is fine)
     - Bash commands like npm install, git, etc. (use bash tool)
     Example: subagent("Create src/db.ts: sqlite connection + schema")
-    Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.`;
+    Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.
+16. CHECK BEFORE INSTALLING: Прочитай файл зависимостей проекта. Если пакет уже указан — не устанавливай.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -192,7 +188,9 @@ const RULES_FAST = `Rules:
 10. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.
 11. OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.
 12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.
-13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. Do NOT use subagent for bash, edits, or single files. Example: subagent("Create X.ts. Existing: Y.ts"). Each gets fresh context.`;
+13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. Do NOT use subagent for bash, edits, or single files. Example: subagent("Create X.ts. Existing: Y.ts"). Each gets fresh context.
+14. CHECK BEFORE INSTALLING: Прочитай файл зависимостей проекта перед установкой пакета.
+    Если пакет уже указан — не устанавливай.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

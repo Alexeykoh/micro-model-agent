@@ -155,6 +155,8 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
     return { stdout: '', stderr: 'Blocked: recursive MMA call detected. Use filesystem tools instead.', exitCode: 1, truncated: false };
   }
 
+
+
   cmd = fixCommonPathIssues(cmd);
   cmd = fixJsonContent(cmd);
   cmd = translateToPowerShell(cmd);

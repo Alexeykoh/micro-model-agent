@@ -53,25 +53,26 @@ export interface Scenario {
 
 // ─── Renderer mock (без Ink зависимостей) ─────────────────
 
-function createSilentRenderer() {
+function createVerboseRenderer() {
+  let mdBuf = '';
   return {
-    write: () => {},
-    writeLine: () => {},
-    writeNewline: () => {},
-    writeError: () => {},
-    writeWarning: () => {},
-    writeInfo: () => {},
-    writeSuccess: () => {},
-    writeDim: () => {},
-    writeBracketTag: () => {},
-    writeHeading: () => {},
-    writeToolHeader: () => {},
-    writeToolPreview: () => {},
-    writeToolResult: () => {},
-    writeMarkdownChunk: () => {},
+    write: (text: string) => process.stdout.write(text),
+    writeLine: (text?: string) => process.stdout.write((text || '') + '\n'),
+    writeNewline: () => process.stdout.write('\n'),
+    writeError: (text: string) => process.stdout.write(`  ❌ ${text}\n`),
+    writeWarning: (text: string) => process.stdout.write(`  ⚠ ${text}\n`),
+    writeInfo: (text: string) => process.stdout.write(`  ℹ ${text}\n`),
+    writeSuccess: (text: string) => process.stdout.write(`  ✅ ${text}\n`),
+    writeDim: (text: string) => process.stdout.write(`  ${text}\n`),
+    writeBracketTag: (tag: string, msg: string) => process.stdout.write(`  [${tag}] ${msg}\n`),
+    writeHeading: (text: string) => process.stdout.write(`\n  ${text}\n`),
+    writeToolHeader: (name: string) => process.stdout.write(`\n  🔧 ${name}\n`),
+    writeToolPreview: (toolName: string, argsJson: string) => process.stdout.write(`  → ${toolName}(${argsJson.slice(0, 100)})\n`),
+    writeToolResult: (time: string, exitCode?: number) => process.stdout.write(`  ← ${time} (code: ${exitCode ?? '?'})\n`),
+    writeMarkdownChunk: (chunk: string) => { mdBuf += chunk; process.stdout.write(chunk); },
     writeSpinner: () => {},
     clearSpinner: () => {},
-    commitMarkdown: () => {},
+    commitMarkdown: () => { if (mdBuf.trim()) process.stdout.write('\n'); mdBuf = ''; },
     updateContextUsage: () => {},
     updateStatus: () => {},
     clear: () => {},
@@ -109,7 +110,8 @@ export async function runScenario(
       issues: [],
     };
 
-    const renderer = createSilentRenderer();
+    process.stdout.write(`\n── Prompt: ${prompt.slice(0, 100)}\n`);
+    const renderer = createVerboseRenderer();
     const ctx = new ContextManager(CTX);
 
     result.turns++;
