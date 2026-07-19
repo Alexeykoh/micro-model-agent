@@ -102,8 +102,11 @@ export class ReadlineRenderer implements OutputRenderer {
     console.log(`  ${this.theme.dim(argsJson)}`)
   }
 
-  writeToolResult(time: string, exitCode?: number): void {
+  writeToolResult(time: string, exitCode?: number, result?: string): void {
     console.log(this.theme.timingLine(time, exitCode))
+    if (result) {
+      console.log(`  ${this.theme.dim(result)}`)
+    }
   }
 
   writeMarkdownChunk(chunk: string): void {

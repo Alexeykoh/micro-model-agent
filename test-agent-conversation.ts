@@ -68,7 +68,10 @@ function createVerboseRenderer() {
     writeHeading: (text: string) => process.stdout.write(`\n  ${text}\n`),
     writeToolHeader: (name: string) => process.stdout.write(`\n  🔧 ${name}\n`),
     writeToolPreview: (toolName: string, argsJson: string) => process.stdout.write(`  → ${toolName}(${argsJson.slice(0, 100)})\n`),
-    writeToolResult: (time: string, exitCode?: number) => process.stdout.write(`  ← ${time} (code: ${exitCode ?? '?'})\n`),
+    writeToolResult: (time: string, exitCode?: number, result?: string) => {
+      process.stdout.write(`  ← ${time} (code: ${exitCode ?? '?'})\n`);
+      if (result) process.stdout.write(`    ${result.slice(0, 200)}\n`);
+    },
     writeMarkdownChunk: (chunk: string) => { mdBuf += chunk; process.stdout.write(chunk); },
     writeSpinner: () => {},
     clearSpinner: () => {},

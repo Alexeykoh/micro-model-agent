@@ -597,14 +597,10 @@ export async function runAgentLoop(
       } else if (parsed.name === 'subagent') {
         // Subagent: isolated context for a single task
         const task = String(parsed.arguments.task || '');
-        if (!quiet) {
-          renderer?.writeBracketTag('subagent', task.slice(0, 80));
-        }
         if (!task) {
           toolOutput = 'Error: task is required';
           toolExitCode = 1;
         } else {
-          // Auto-detect existing files and packages for context
           const autoContext = buildSubagentContext(process.cwd());
           logInfo('AGENT', `spawning subagent | task: "${task.slice(0, 150)}"`);
           try {
@@ -623,6 +619,10 @@ export async function runAgentLoop(
             toolExitCode = 1;
             logError('AGENT', `subagent error: ${e.message}`);
           }
+        }
+        const subTime = ((performance.now() - toolStart) / 1000).toFixed(1);
+        if (!quiet) {
+          renderer?.writeToolResult(subTime, toolExitCode, toolOutput.slice(0, 300));
         }
       } else if (isBash && cmd!.startsWith('plan ')) {
         const planArgs = cmd!.slice(5).trim();

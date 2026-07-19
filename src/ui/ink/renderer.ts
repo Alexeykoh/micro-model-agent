@@ -116,8 +116,8 @@ export class InkRenderer implements OutputRenderer {
     this.dispatch({ type: 'TOOL_PREVIEW', data: { args: argsJson } });
   }
 
-  writeToolResult(time: string, exitCode?: number): void {
-    this.dispatch({ type: 'TOOL_END', data: { time, exitCode } });
+  writeToolResult(time: string, exitCode?: number, result?: string): void {
+    this.dispatch({ type: 'TOOL_END', data: { time, exitCode, result } });
   }
 
   writeMarkdownChunk(chunk: string): void {
