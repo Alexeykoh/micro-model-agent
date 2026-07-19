@@ -10,7 +10,7 @@ import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
-import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } from '../tools/plan.js';
+import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand, getPlanPendingCount } from '../tools/plan.js';
 import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../tools/todo.js';
 import { parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
@@ -23,6 +23,7 @@ import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
+import { SubagentRenderer } from '../ui/subagent-renderer.js';
 
 /**
  * Основной цикл ReAct-агента.
@@ -143,7 +144,6 @@ export async function runAgentLoop(
     const totalLines = files.reduce((sum, f) => sum + f.content.split('\n').length, 0);
     logInfo('LOOP', `loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`);
     renderer?.writeInfo(`  Loaded ${files.length} files (${totalLines} lines, ~${totalTokens} tokens)`);
-    renderer?.writeNewline();
   }
 
   setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
@@ -346,18 +346,33 @@ export async function runAgentLoop(
       }
 
       if (!skillsAutoLoaded) {
-        // If model claims done but has created files, remind about completeness
-        if (createdFiles.length > 0) {
-          const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
-          const looksLikeDone = /done|готово|создан|выполн|completed|finished/i.test(textOutside);
-          if (looksLikeDone) {
-            messages.push({
-              role: 'user',
-              content: `Files created: ${createdFiles.join(', ')}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
-            });
-            continuationNudges = 0;
-            continue;
+        const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+        const looksLikeDone = /done|готово|создан|выполн|completed|finished/i.test(textOutside);
+
+        // Проверка: план с незавершёнными шагами — не даём агенту остановиться
+        const pendingSteps = getPlanPendingCount();
+        if (pendingSteps > 0 && looksLikeDone) {
+          const planText = showPlan();
+          const pendingList = planText.split('\n').filter(l => l.includes('○') || l.includes('►')).join('\n');
+          if (!quiet) {
+            renderer?.writeWarning(`  [plan has ${pendingSteps} incomplete steps — pushing agent to continue]`);
           }
+          messages.push({
+            role: 'user',
+            content: `Plan is NOT complete! ${pendingSteps} step(s) remaining:\n${pendingList}\n\nContinue with the next step. Do NOT stop until all plan steps are done.`,
+          });
+          continuationNudges = 0;
+          continue;
+        }
+
+        // Если модель claim-ит done но есть созданные файлы — напоминаем о полноте
+        if (createdFiles.length > 0 && looksLikeDone) {
+          messages.push({
+            role: 'user',
+            content: `Files created: ${createdFiles.join(', ')}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
+          });
+          continuationNudges = 0;
+          continue;
         }
         return { messages };
       }
@@ -509,7 +524,6 @@ export async function runAgentLoop(
           toolOutput += `This prevents context loss. Do NOT use write_file directly — delegate to subagents.`;
         }
         if (!quiet && toolOutput) {
-          renderer?.writeNewline();
           renderer?.writeLine(toolOutput);
         }
       } else if (parsed.name === 'todo') {
@@ -526,7 +540,6 @@ export async function runAgentLoop(
           default: toolOutput = 'Unknown todo action. Use: add, done, remove, list'; toolExitCode = 1;
         }
         if (!quiet && toolExitCode === 0 && toolOutput) {
-          renderer?.writeNewline();
           renderer?.writeLine(toolOutput);
         }
       } else if (parsed.name === 'question') {
@@ -665,9 +678,11 @@ export async function runAgentLoop(
         } else {
           const autoContext = buildSubagentContext(process.cwd());
           logInfo('AGENT', `spawning subagent | task: "${task.slice(0, 150)}"`);
+          // Создаём буферизированный рендерер для субагента
+          const subRenderer = new SubagentRenderer();
           try {
             const childResult = await runIsolatedLoop(
-              provider, registry, task, autoContext, process.cwd(), quiet, renderer!
+              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer
             );
             toolOutput = childResult.summary;
             logInfo('AGENT', `subagent returned | files: ${childResult.createdFiles.length} | turns: ${childResult.turns} | errors: ${childResult.errors.length}`);
@@ -675,6 +690,11 @@ export async function runAgentLoop(
               for (const f of childResult.createdFiles) {
                 if (!createdFiles.includes(f)) createdFiles.push(f);
               }
+            }
+            // Отправляем буфер субагента в UI для отображения в ToolCallBlock
+            const buf = subRenderer.getBuffer();
+            if (!quiet && renderer?.writeToolBuffer) {
+              renderer.writeToolBuffer({ lines: buf.lines, toolCalls: buf.toolCalls });
             }
           } catch (e: any) {
             toolOutput = `Subagent error: ${e.message}`;
@@ -923,7 +943,6 @@ export async function runAgentLoop(
       if (isBash && cmd!.startsWith('plan ') && toolExitCode === 0) {
         const planOutput = showPlan();
         if (planOutput && !planOutput.startsWith('No active plan')) {
-          renderer?.writeNewline();
           renderer?.writeLine(planOutput);
         }
       }
@@ -931,7 +950,6 @@ export async function runAgentLoop(
       if (isBash && cmd!.startsWith('todo ') && toolExitCode === 0) {
         const todoOutput = listTodos();
         if (todoOutput) {
-          renderer?.writeNewline();
           renderer?.writeLine(todoOutput);
         }
       }

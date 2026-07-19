@@ -98,6 +98,13 @@ export function clearPlan(): string {
   return `Plan "${plan.name}" cleared.`;
 }
 
+/** Возвращает количество незавершённых шагов плана (0 = все готово или нет плана) */
+export function getPlanPendingCount(): number {
+  const plan = loadPlan();
+  if (!plan) return 0;
+  return plan.steps.filter(s => s.status !== 'done' && s.status !== 'skipped').length;
+}
+
 /** Форматирует план для отображения (с иконками и прогрессом) */
 function formatPlan(plan: Plan): string {
   const theme = getTheme();

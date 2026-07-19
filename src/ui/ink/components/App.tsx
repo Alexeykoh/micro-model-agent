@@ -50,6 +50,7 @@ export type Action =
   | { type: 'ADD_TOOL_CALL'; data: any }
   | { type: 'TOOL_PREVIEW'; data: any }
   | { type: 'TOOL_END'; data: any }
+  | { type: 'TOOL_BUFFER'; data: { lines: string[]; toolCalls: { name: string; args: string; result: string }[] } }
   | { type: 'STREAM_CHUNK'; chunk: string }
   | { type: 'STREAM_REASONING'; text: string }
   | { type: 'STREAM_END' }
@@ -103,6 +104,22 @@ function reducer(state: AppState, action: Action): AppState {
           result: action.data.result || '',
           time: action.data.time || '',
           exitCode: action.data.exitCode,
+        },
+      };
+      const entries = [...state.entries];
+      entries[idx] = updated;
+      return { ...state, entries };
+    }
+    case 'TOOL_BUFFER': {
+      const idx = state.toolCallIndex;
+      if (idx < 0 || idx >= state.entries.length) return state;
+      const entry = state.entries[idx];
+      if (entry.kind !== 'tool_call') return state;
+      const updated = {
+        ...entry,
+        data: {
+          ...entry.data,
+          subagentBuffer: action.data,
         },
       };
       const entries = [...state.entries];

@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import Markdown from 'ink-markdown-es';
+// import Markdown from 'ink-markdown-es'; // TODO: вернуть когда стабилизируем форматирование
 import { getInkTheme } from '../theme.js';
 import { LineNumbers, BracketTag, DimText } from './Tags.js';
 
@@ -43,18 +43,7 @@ export function MessageBlock({ item }: { item: MessageItem }) {
         <Box flexGrow={1} flexDirection="column">
           <Box>
             <Text bold color="cyan">{'◆ '}</Text>
-            <Markdown
-              styles={{
-                paragraph: { margin: 0 },
-                listItem: { paddingLeft: 2, margin: 0 },
-                code: { marginTop: 0, marginBottom: 0 },
-                h1: { marginBottom: 0 },
-                h2: { marginBottom: 0 },
-                h3: { marginBottom: 0 },
-              }}
-            >
-              {item.content ?? ''}
-            </Markdown>
+            <Text wrap="wrap">{item.content ?? ''}</Text>
           </Box>
         </Box>
       </Box>

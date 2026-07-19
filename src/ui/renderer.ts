@@ -40,6 +40,7 @@ export interface OutputRenderer {
   writeToolHeader(name: string): void
   writeToolPreview(toolName: string, argsJson: string): void
   writeToolResult(time: string, exitCode?: number, result?: string): void
+  writeToolBuffer?(data: { lines: string[]; toolCalls: { name: string; args: string; result: string }[] }): void
 
   writeMarkdownChunk(chunk: string): void
   commitMarkdown(): void

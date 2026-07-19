@@ -133,6 +133,10 @@ export class InkRenderer implements OutputRenderer {
     this.dispatch({ type: 'TOOL_END', data: { time, exitCode, result } });
   }
 
+  writeToolBuffer(data: { lines: string[]; toolCalls: { name: string; args: string; result: string }[] }): void {
+    this.dispatch({ type: 'TOOL_BUFFER', data });
+  }
+
   writeMarkdownChunk(chunk: string): void {
     this.dispatch({ type: 'STREAM_CHUNK', chunk });
   }

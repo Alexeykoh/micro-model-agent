@@ -20,6 +20,10 @@ export interface ToolCallData {
   result: string;
   time: string;
   exitCode?: number;
+  subagentBuffer?: {
+    lines: string[];
+    toolCalls: { name: string; args: string; result: string }[];
+  };
 }
 
 const SUBAGENT_TOOLS = new Set(['subagent']);
@@ -41,6 +45,26 @@ export function ToolCallBlock({ data }: { data: ToolCallData }) {
           <Text {...t.colors.dim}>{data.args.slice(0, 120)}{data.args.length > 120 ? '...' : ''}</Text>
         </Box>
       ) : null}
+      {/* Отображение буфера субагента */}
+      {data.subagentBuffer ? (
+        <Box flexDirection="column" marginLeft={1} marginTop={1}>
+          {data.subagentBuffer.toolCalls.map((tc, i) => (
+            <Box key={i} flexDirection="column">
+              <Text {...t.colors.dim}>  [{tc.name}] {tc.args.slice(0, 80)}{tc.args.length > 80 ? '...' : ''}</Text>
+              {tc.result ? (
+                <Text color="green">    {tc.result.slice(0, 150)}{tc.result.length > 150 ? '...' : ''}</Text>
+              ) : null}
+            </Box>
+          ))}
+          {data.subagentBuffer.lines.length > 0 ? (
+            <Box flexDirection="column" marginTop={1}>
+              {data.subagentBuffer.lines.slice(-15).map((line, i) => (
+                <Text key={i} {...t.colors.dim}>{line.slice(0, 120)}{line.length > 120 ? '...' : ''}</Text>
+              ))}
+            </Box>
+          ) : null}
+        </Box>
+      ) : null}
       {data.result ? (
         <Box flexDirection="column" marginLeft={1} marginTop={1}>
           <Text bold color={toolExitCodeStyle(data.exitCode).color}>{toolExitCodeStyle(data.exitCode).icon} {data.result.slice(0, 300)}</Text>
@@ -48,7 +72,7 @@ export function ToolCallBlock({ data }: { data: ToolCallData }) {
         </Box>
       ) : null}
       {data.time ? (
-        <Box marginTop={isSub && data.result ? 0 : 0}>
+        <Box marginTop={0}>
           <Text {...t.colors.timing}>⏱ {data.time}{data.exitCode !== undefined ? ` · exit ${data.exitCode === 0 ? 'ok' : data.exitCode}` : ''}</Text>
         </Box>
       ) : null}
