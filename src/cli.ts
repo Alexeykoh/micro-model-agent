@@ -7,7 +7,7 @@ import { OpenAICompat } from './llm/openai-compat.js';
 import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
 import { runRepl } from './repl/index.js';
-import { initTheme, ensureThemeDir } from './styling/index.js';
+import { initTheme, ensureThemeDir, getTheme } from './styling/index.js';
 import { createRenderer } from './ui/index.js';
 import { getSlashCommands } from './repl/commands.js';
 import { registerProviderCommands } from './cli/provider.js';
@@ -134,6 +134,54 @@ export function createCli() {
   registerModelCommands(program);
   registerConfigCommands(program);
   registerUpdateCommand(program);
+
+  // Top-level `use <name>` — быстрое переключение модели
+  program
+    .command('use')
+    .argument('<name>', 'model name (e.g. mistralai/ministral-3-3b)')
+    .description('Switch to a model (auto-detect or add to current provider)')
+    .action((name: string) => {
+      const config = loadConfig();
+      const theme = getTheme();
+      // 1. Exact match in any provider
+      for (const [pName, p] of Object.entries(config.providers)) {
+        if (p.models[name]) {
+          config.active.provider = pName;
+          config.active.model = name;
+          saveConfig(config);
+          console.log(theme.successMsg(`Switched to ${pName}/${name} (${p.models[name].contextWindow}K)`));
+          console.log(`  ${theme.dim('Provider:')} ${pName}`);
+          console.log(`  ${theme.dim('ID:')}      ${p.models[name].model}`);
+          return;
+        }
+      }
+      // 2. provider/model syntax: check if first part is a known provider
+      const slashIdx = name.indexOf('/');
+      if (slashIdx > 0) {
+        const pName = name.slice(0, slashIdx);
+        const mName = name.slice(slashIdx + 1);
+        if (config.providers[pName]?.models[mName]) {
+          config.active.provider = pName;
+          config.active.model = mName;
+          saveConfig(config);
+          console.log(theme.successMsg(`Switched to ${pName}/${mName}`));
+          return;
+        }
+      }
+      // 3. Not found — add to current provider with defaults
+      const curProvider = config.active.provider;
+      const modelKey = slashIdx > 0 ? name.slice(slashIdx + 1) : name;
+      config.providers[curProvider].models[modelKey] = {
+        model: modelKey,
+        contextWindow: 32768,
+        params: { temperature: 0.7, max_tokens: 4096 },
+      };
+      config.active.model = modelKey;
+      saveConfig(config);
+      console.log(theme.successMsg(`Added model "${modelKey}" to ${curProvider} and set active`));
+      console.log(`  ${theme.dim('Context:')} 32768K (default)`);
+      console.log(`  ${theme.dim('Tune:')}   mma model params ${modelKey}`);
+    });
 
   program.action(async (prompt?: string) => {
     // Handle --version early (Commander v12 doesn't auto-exit)
