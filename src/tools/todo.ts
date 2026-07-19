@@ -3,9 +3,19 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * Управление todo-задачами агента.
+ *
+ * Простой список задач со статусами (pending/done).
+ * Хранится в ~/.mma/state/todos.json.
+ *
+ * @module tools/todo
+ */
+
 const STATE_DIR = join(homedir(), '.mma', 'state');
 const TODO_FILE = join(STATE_DIR, 'todos.json');
 
+/** Задача в списке todo */
 export interface TodoItem {
   id: number;
   text: string;
@@ -13,15 +23,18 @@ export interface TodoItem {
   createdAt: string;
 }
 
+/** Список задач */
 export interface TodoList {
   items: TodoItem[];
   nextId: number;
 }
 
+/** Создаёт директорию для состояния если не существует */
 function ensureDir(): void {
   if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
 }
 
+/** Загружает список задач из файла */
 function loadTodos(): TodoList {
   try {
     if (existsSync(TODO_FILE)) {
@@ -31,11 +44,13 @@ function loadTodos(): TodoList {
   return { items: [], nextId: 1 };
 }
 
+/** Сохраняет список задач в файл */
 function saveTodos(todos: TodoList): void {
   ensureDir();
   writeFileSync(TODO_FILE, JSON.stringify(todos, null, 2), 'utf-8');
 }
 
+/** Добавляет новую задачу в список */
 export function addTodo(text: string): string {
   const todos = loadTodos();
   todos.items.push({
@@ -48,6 +63,7 @@ export function addTodo(text: string): string {
   return formatTodos(todos);
 }
 
+/** Отмечает задачу как выполненную (по ID или тексту) */
 export function doneTodo(idOrText: string): string {
   const todos = loadTodos();
   const id = parseInt(idOrText);
@@ -67,6 +83,7 @@ export function doneTodo(idOrText: string): string {
   return formatTodos(todos);
 }
 
+/** Удаляет задачу из списка (по ID или тексту) */
 export function removeTodo(idOrText: string): string {
   const todos = loadTodos();
   const id = parseInt(idOrText);
@@ -85,10 +102,12 @@ export function removeTodo(idOrText: string): string {
   return formatTodos(todos);
 }
 
+/** Показывает все задачи с прогрессом */
 export function listTodos(): string {
   return formatTodos(loadTodos());
 }
 
+/** Форматирует список задач для отображения */
 function formatTodos(todos: TodoList): string {
   const theme = getTheme();
   if (todos.items.length === 0) {
@@ -115,6 +134,7 @@ function formatTodos(todos: TodoList): string {
   return lines.join('\n');
 }
 
+/** Парсит аргументы команды todo (add, done, remove, list) */
 export function parseTodoCommand(args: string): { action: string; params: string } {
   const spaceIdx = args.indexOf(' ');
   const action = spaceIdx === -1 ? args.trim() : args.slice(0, spaceIdx).trim();

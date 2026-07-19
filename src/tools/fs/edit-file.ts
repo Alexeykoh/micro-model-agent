@@ -4,6 +4,15 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент редактирования файла (find & replace).
+ * Точное строковое совпадение (не regex).
+ * Ошибка если old_string не найден или найден несколько раз
+ * (если не указан replace_all).
+ *
+ * @module tools/fs/edit-file
+ */
+
 export const editFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

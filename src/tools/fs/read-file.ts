@@ -3,6 +3,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, truncateOutput, normalizePath } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
+/**
+ * Инструмент чтения файла с номерами строк.
+ * Поддерживает offset/limit для больших файлов.
+ *
+ * @module tools/fs/read-file
+ */
+
 export const readFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

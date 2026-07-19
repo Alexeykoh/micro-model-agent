@@ -14,6 +14,20 @@ import { ConversationHistory } from './history.js';
 import { getSlashCommands, parseSlashCommand, isWriteMode, handleWriteLine, type CommandContext } from './commands.js';
 import { logREPL, logInfo, logError, initSessionLog, getLogPath } from '../logger.js';
 
+/**
+ * Основной цикл REPL (readline).
+ *
+ * Управляет:
+ * - Вводом/выводом пользовательского ввода
+ * - Обработкой слэш-команд
+ * - Отправкой сообщений агенту
+ * - Автосохранением сессий
+ * - Сбором профиля пользователя
+ *
+ * @module repl/index
+ */
+
+/** Определяет точку входа (dist/index.js или src/index.ts) */
 function getEntryPoint(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
@@ -22,6 +36,10 @@ function getEntryPoint(): string {
   return join(__dirname, '..', 'index.ts');
 }
 
+/**
+ * Запуск REPL-цикла.
+ * Инициализирует сессию, профиль пользователя и обрабатывает ввод.
+ */
 export async function runRepl(
   provider: LLMProvider,
   registry: ToolRegistry,

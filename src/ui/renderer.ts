@@ -1,3 +1,19 @@
+/**
+ * Интерфейс рендерера вывода.
+ *
+ * Определяет контракт для всех рендереров (readline, Ink):
+ * - Вывод текста (write, writeLine, writeError)
+ * - Вывод инструментов (writeToolHeader, writeToolResult)
+ * - Streaming markdown (writeMarkdownChunk)
+ * - Спиннер (writeSpinner)
+ * - Статус-бар (updateContextUsage, updateStatus)
+ * - Ввод (prompt, promptWithChoices)
+ * - Прерывание (abort, abortSignal)
+ *
+ * @module ui/renderer
+ */
+
+/** Информация о статусе для отображения в status bar */
 export interface StatusInfo {
   provider?: string
   model?: string
@@ -7,6 +23,7 @@ export interface StatusInfo {
   maxSteps?: number
 }
 
+/** Интерфейс рендерера вывода (абстракция над readline/Ink) */
 export interface OutputRenderer {
   write(text: string): void
   writeLine(text?: string): void

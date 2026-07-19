@@ -3,15 +3,28 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * Управление планами агента.
+ *
+ * План — это список шагов со статусами (pending/in_progress/done/skipped).
+ * Хранится в ~/.mma/state/current-plan.json.
+ *
+ * Используется агентом для структурирования сложных задач (3+ шагов).
+ *
+ * @module tools/plan
+ */
+
 const PLAN_DIR = join(homedir(), '.mma', 'state');
 const PLAN_FILE = join(PLAN_DIR, 'current-plan.json');
 
+/** Шаг плана */
 export interface PlanStep {
   id: number;
   title: string;
   status: 'pending' | 'in_progress' | 'done' | 'skipped';
 }
 
+/** План агента */
 export interface Plan {
   name: string;
   steps: PlanStep[];
@@ -19,10 +32,12 @@ export interface Plan {
   updatedAt: string;
 }
 
+/** Создаёт директорию для планов если не существует */
 function ensureDir(): void {
   if (!existsSync(PLAN_DIR)) mkdirSync(PLAN_DIR, { recursive: true });
 }
 
+/** Загружает текущий план из файла */
 function loadPlan(): Plan | null {
   try {
     if (existsSync(PLAN_FILE)) {
@@ -32,11 +47,13 @@ function loadPlan(): Plan | null {
   return null;
 }
 
+/** Сохраняет план в файл */
 function savePlan(plan: Plan): void {
   ensureDir();
   writeFileSync(PLAN_FILE, JSON.stringify(plan, null, 2), 'utf-8');
 }
 
+/** Создаёт новый план с указанными шагами */
 export function createPlan(name: string, steps: string[]): string {
   const plan: Plan = {
     name,
@@ -52,6 +69,7 @@ export function createPlan(name: string, steps: string[]): string {
   return formatPlan(plan);
 }
 
+/** Обновляет статус шага плана */
 export function updatePlanStep(stepId: number, status: PlanStep['status']): string {
   const plan = loadPlan();
   if (!plan) return 'No active plan. Create one first with plan(create).';
@@ -65,12 +83,14 @@ export function updatePlanStep(stepId: number, status: PlanStep['status']): stri
   return formatPlan(plan);
 }
 
+/** Показывает текущий план с прогрессом */
 export function showPlan(): string {
   const plan = loadPlan();
   if (!plan) return 'No active plan. Create one with plan(create).';
   return formatPlan(plan);
 }
 
+/** Удаляет текущий план */
 export function clearPlan(): string {
   const plan = loadPlan();
   if (!plan) return 'No active plan to clear.';
@@ -78,6 +98,7 @@ export function clearPlan(): string {
   return `Plan "${plan.name}" cleared.`;
 }
 
+/** Форматирует план для отображения (с иконками и прогрессом) */
 function formatPlan(plan: Plan): string {
   const theme = getTheme();
   const done = plan.steps.filter(s => s.status === 'done').length;
@@ -96,6 +117,7 @@ function formatPlan(plan: Plan): string {
   return lines.join('\n');
 }
 
+/** Парсит аргументы команды plan (create, done, progress, show, clear) */
 export function parsePlanCommand(args: string): { action: string; params: string[] } {
   const parts = args.trim().split(/\s+/);
   const action = parts[0] || 'show';

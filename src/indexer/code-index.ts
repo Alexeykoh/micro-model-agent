@@ -2,6 +2,24 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join } from 'node:path';
 import { logInfo, logDebug } from '../logger.js';
 
+/**
+ * Индекс кода проекта (AST-based).
+ *
+ * Строит индекс символов, импортов и ссылок для файлов:
+ * - TypeScript/JavaScript (export function/class/type/...)
+ * - Python (class/def)
+ * - Go (func)
+ * - Rust (pub fn/struct/enum/trait)
+ * - Java (public class/interface)
+ * - Ruby (class/def/module)
+ * - PHP (class/interface/function)
+ * - C (void/int/char функции)
+ *
+ * Индекс кэшируется и перестраивается при изменении файлов.
+ *
+ * @module indexer/code-index
+ */
+
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', '.mma', 'dist', 'build', '__pycache__',
   'vendor', '.next', '.nuxt', 'coverage', '.cache', 'target',

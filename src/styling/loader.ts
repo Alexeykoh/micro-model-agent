@@ -9,6 +9,18 @@ import { dirname } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Загрузчик и менеджер тем.
+ *
+ * Управляет:
+ * - Встроенными темами (light, dark)
+ * - Пользовательскими темами из ~/.mma/themes/
+ * - Установкой/удалением тем из URL
+ * - Переключением активной темы
+ *
+ * @module styling/loader
+ */
+
 const MMA_DIR = join(homedir(), '.mma');
 const THEMES_DIR = join(MMA_DIR, 'themes');
 

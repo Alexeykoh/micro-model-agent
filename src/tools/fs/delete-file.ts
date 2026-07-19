@@ -3,6 +3,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент удаления файлов и директорий.
+ * Директории требуют recursive: true.
+ *
+ * @module tools/fs/delete-file
+ */
+
 export const deleteFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

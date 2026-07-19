@@ -3,11 +3,24 @@ import React from 'react';
 import type { OutputRenderer, StatusInfo } from '../renderer.js';
 import { App, type AppHandle } from './components/App.js';
 
+/**
+ * Ink-рендерер — React-based рендерер с rich UI.
+ *
+ * Использует Ink (React для терминалов) для отображения:
+ * - Streaming markdown с подсветкой синтаксиса
+ * - Интерактивного ввода с автодополнением
+ * - Status bar с контекстом и прогрессом
+ * - Спиннера во время генерации
+ *
+ * @module ui/ink/renderer
+ */
+
 interface CommandInfo {
   name: string;
   description: string;
 }
 
+/** Ink-рендерер — React-based rich UI для терминала */
 export class InkRenderer implements OutputRenderer {
   private handle: AppHandle | null = null;
   private handleReady: Promise<void>;

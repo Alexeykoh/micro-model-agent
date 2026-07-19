@@ -4,6 +4,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, formatSize, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
+/**
+ * Инструмент просмотра содержимого директории.
+ * Показывает размеры и типы файлов/папок.
+ *
+ * @module tools/fs/list-dir
+ */
+
 export const listDirDefinition: ToolDefinition = {
   type: 'function',
   function: {

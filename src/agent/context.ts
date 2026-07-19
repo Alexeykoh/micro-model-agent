@@ -3,18 +3,44 @@ import { countTokens } from '../llm/token-counter.js';
 import { getTheme } from '../styling/index.js';
 import { logInfo, logDebug } from '../logger.js';
 
+/**
+ * Менеджер контекста агента.
+ *
+ * Отвечает за:
+ * - Хранение истории сообщений (пользователь + ассистент)
+ * - Автоматическую компактификацию при приближении к лимиту токенов
+ * - Оценку важности сообщений (scoring heuristic)
+ * - Буфер обновлений для отложенной компактификации
+ *
+ * Стратегия компактификации:
+ * - Каждое сообщение получает score (base 50 + role bonus + recency bonus)
+ * - Сохраняются топ-6 по score + последние 6 по позиции
+ * - Остальные сообщения суммируются в блок "[Ранее в разговоре (сжато):]"
+ *
+ * @module agent/context
+ */
+
+/** Сообщение с оценкой важности и количеством токенов */
 interface ScoredMessage {
   msg: ChatMessage;
   score: number;
   tokens: number;
 }
 
+/**
+ * Менеджер контекста — управляет историей сообщений и компактификацией.
+ * Создаётся один раз на сессию агента.
+ */
 export class ContextManager {
-  private tokenCache = new WeakMap<ChatMessage, number>();
-  private compacted = 0;
-  private _totalTokens = 0;
-  private _history: { role: string; tokens: number }[] = [];
+  private tokenCache = new WeakMap<ChatMessage, number>(); // кэш подсчёта токенов
+  private compacted = 0; // количество компактификаций за сессию
+  private _totalTokens = 0; // общее количество токенов в истории
+  private _history: { role: string; tokens: number }[] = []; // история по ролям
 
+  /**
+   * @param contextWindow - размер контекстного окна модели (в токенах)
+   * @param compactThreshold - порог компактификации (по умолчанию 85%)
+   */
   constructor(
     private contextWindow: number,
     private compactThreshold: number = 0.85,
@@ -32,10 +58,23 @@ export class ContextManager {
     return this.usagePercent >= this.compactThreshold * 100;
   }
 
+  /**
+   * Оценивает важность сообщения для компактификации.
+   *
+   * Алгоритм:
+   * - System: 100 (всегда сохраняется отдельно)
+   * - Tool с ошибкой: 90 (важно для диагностики)
+   * - User с "важно"/"critical": 85
+   * - Tool с успехом: 70
+   * - Assistant с ошибкой/решением: 70-75
+   * - User-вопрос: 65
+   * - Обычный user/assistant: 40-60
+   * + Recency bonus: (index/total) * 20
+   */
   private scoreMessage(msg: ChatMessage, index: number, total: number): number {
-    let score = 50; // base
+    let score = 50; // базовая оценка
 
-    // Role-based scoring
+    // Оценка по роли сообщения
     if (msg.role === 'system') score = 100;
     else if (msg.role === 'tool') {
       const content = msg.content || '';
@@ -56,13 +95,17 @@ export class ContextManager {
       else score = 40;
     }
 
-    // Recency bonus (more recent = higher)
+    // Бонус за свежесть: чем позже сообщение, тем выше бонус
     const recencyBonus = (index / total) * 20;
     score += recencyBonus;
 
     return score;
   }
 
+  /**
+   * Обновляет подсчёт токенов для всех сообщений.
+   * Использует WeakMap для кэширования — повторный подсчёт не выполняется.
+   */
   async updateTokens(messages: ChatMessage[]): Promise<void> {
     const start = performance.now();
     let total = 0;
@@ -81,11 +124,25 @@ export class ContextManager {
     logDebug('CONTEXT', `updateTokens: ${messages.length} msgs, ${total} tokens, ${elapsed}ms`);
   }
 
+  /**
+   * Компактификация истории сообщений.
+   *
+   * Стратегия:
+   * 1. Сохраняем system prompt (всегда первый)
+   * 2. Сохраняем первое user-сообщение (контекст задачи)
+   * 3. Остальные сообщения оцениваем по score
+   * 4. Сохраняем топ-6 по score + последние 6 по позиции
+   * 5. Остальные суммируем в "[Ранее в разговоре (сжато):]"
+   *
+   * @param messages - полная история сообщений
+   * @returns Сжатая история
+   */
   compact(messages: ChatMessage[]): ChatMessage[] {
     const start = performance.now();
     logInfo('CONTEXT', `compact: ${messages.length} messages before`);
     if (messages.length <= 4) return messages;
 
+    // Извлекаем system prompt и первое user-сообщение
     const systemIdx = messages.findIndex(m => m.role === 'system');
     const system = systemIdx >= 0 ? [messages[systemIdx]] : [];
 
@@ -101,17 +158,17 @@ export class ContextManager {
       }
     }
 
-    // Score all messages
+    // Оцениваем все оставшиеся сообщения
     const scored: ScoredMessage[] = remaining.map((msg, i) => ({
       msg,
       score: this.scoreMessage(msg, i, remaining.length),
       tokens: this.tokenCache.get(msg) || 0,
     }));
 
-    // Sort by score descending
+    // Сортируем по убыванию score
     scored.sort((a, b) => b.score - a.score);
 
-    // Keep top 6 by score + last 6 by position
+    // Сохраняем топ-6 по score + последние 6 по позиции
     const recentMsgs = remaining.slice(-6);
     const recentIds = new Set(recentMsgs.map(m => m));
 
@@ -120,10 +177,12 @@ export class ContextManager {
       .slice(0, 6)
       .map(s => s.msg);
 
+    // Сообщения, которые будут сжаты в summary
     const toCompact = remaining.filter(m => !recentMsgs.includes(m) && !importantByScore.includes(m));
 
     if (toCompact.length === 0) return messages;
 
+    // Формируем краткую сводку из сжатых сообщений
     const compactedPairs: string[] = [];
     let i = 0;
     while (i < toCompact.length) {
@@ -159,6 +218,7 @@ export class ContextManager {
     return result;
   }
 
+  /** Форматирует строку использования контекста для отображения в UI */
   formatUsage(): string {
     const theme = getTheme();
     const pct = this.usagePercent;

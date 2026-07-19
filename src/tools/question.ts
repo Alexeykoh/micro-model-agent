@@ -1,5 +1,15 @@
 import { getTheme } from '../styling/index.js';
 
+/**
+ * Инструмент вопроса пользователю.
+ *
+ * Позволяет агенту задавать вопросы с вариантами ответов.
+ * Используется когда агенту нужен выбор или уточнение.
+ *
+ * @module tools/question
+ */
+
+/** Состояние вопроса */
 export interface QuestionState {
   active: boolean;
   question: string;
@@ -9,6 +19,7 @@ export interface QuestionState {
 
 let currentQuestion: QuestionState | null = null;
 
+/** Создаёт новый вопрос для пользователя */
 export function askQuestion(question: string, choices?: string[]): QuestionState {
   currentQuestion = {
     active: true,
@@ -18,10 +29,12 @@ export function askQuestion(question: string, choices?: string[]): QuestionState
   return currentQuestion;
 }
 
+/** Возвращает текущий активный вопрос */
 export function getQuestion(): QuestionState | null {
   return currentQuestion;
 }
 
+/** Записывает ответ пользователя на вопрос */
 export function answerQuestion(response: string): void {
   if (currentQuestion) {
     currentQuestion.response = response;
@@ -29,10 +42,12 @@ export function answerQuestion(response: string): void {
   }
 }
 
+/** Проверяет есть ли активный вопрос */
 export function hasActiveQuestion(): boolean {
   return currentQuestion?.active === true;
 }
 
+/** Форматирует вопрос для отображения (без цвета) */
 export function formatQuestion(q: QuestionState): string {
   const lines: string[] = [];
   lines.push(`Question: ${q.question}`);
@@ -49,6 +64,7 @@ export function formatQuestion(q: QuestionState): string {
   return lines.join('\n');
 }
 
+/** Форматирует вопрос с цветом (Ink UI) */
 export function formatQuestionColored(q: QuestionState): string {
   const theme = getTheme();
   const lines: string[] = [];
@@ -64,8 +80,9 @@ export function formatQuestionColored(q: QuestionState): string {
   return lines.join('\n');
 }
 
+/** Парсит аргументы команды question (формат: text | choice1 | choice2) */
 export function parseQuestionCommand(args: string): { question: string; choices: string[] } {
-  // Format: question text | choice1 | choice2 | ...
+  // Формат: question text | choice1 | choice2 | ...
   const parts = args.split('|').map(s => s.trim());
   const question = parts[0] || '';
   const choices = parts.slice(1).filter(Boolean);

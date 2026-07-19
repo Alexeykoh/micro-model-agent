@@ -1,6 +1,19 @@
 import { Box, Text } from 'ink';
 import { getInkTheme } from '../theme.js';
 
+/**
+ * Компонент отображения вызова инструмента.
+ *
+ * Показывает:
+ * - Имя инструмента
+ * - Превью аргументов
+ * - Результат (с кодом возврата)
+ * - Время выполнения
+ *
+ * @module ui/ink/components/ToolCallBlock
+ */
+
+/** Данные вызова инструмента */
 export interface ToolCallData {
   name: string;
   args: string;

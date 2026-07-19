@@ -2,12 +2,33 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
+/**
+ * Управление памятью агента.
+ *
+ * Память хранится в ~/.mma/memory/ в виде markdown-файлов:
+ * - project.md — информация о проекте
+ * - conventions.md — обнаруженные паттерны кодирования
+ * - decisions.md — принятые решения
+ * - errors.md — ошибки и их решения (автообучение)
+ * - history.md — история действий
+ *
+ * Возможности:
+ * - Автономное обучение из ошибок (autoLearnFromError)
+ * - Автономное обучение из редактирования файлов (autoLearnFromEdit)
+ * - Поиск по записям (searchMemory)
+ * - Компактификация при превышении бюджета токенов (trimMemoryToBudget)
+ *
+ * @module agent/memory
+ */
+
+// ─── Константы ──────────────────────────────────────────
 const MEMORY_DIR = join(homedir(), '.mma', 'memory');
 const MEMORY_FILES = ['project.md', 'conventions.md', 'decisions.md', 'errors.md', 'history.md'];
 const ARCHIVE_DIR = join(MEMORY_DIR, 'archive');
-const MAX_MEMORY_TOKENS = 2000;
-const ARCHIVE_DAYS = 30;
+const MAX_MEMORY_TOKENS = 2000; // максимальный бюджет токенов для памяти
+const ARCHIVE_DAYS = 30; // дни хранения записей до архивации
 
+/** Единица памяти агента */
 export interface MemoryEntry {
   type: string;
   date: string;
@@ -15,10 +36,16 @@ export interface MemoryEntry {
   content: string;
 }
 
+/** Создаёт директорию памяти если не существует */
 export function ensureMemoryDir(): void {
   if (!existsSync(MEMORY_DIR)) mkdirSync(MEMORY_DIR, { recursive: true });
 }
 
+/**
+ * Возвращает путь к файлу памяти по типу.
+ * Маппит типы (project, conventions, decisions, errors, history)
+ * на реальные имена файлов.
+ */
 export function getMemoryPath(type: string): string {
   const fileMap: Record<string, string> = {
     project: 'project.md',
@@ -30,6 +57,7 @@ export function getMemoryPath(type: string): string {
   return join(MEMORY_DIR, fileMap[type] || `${type}.md`);
 }
 
+/** Загружает содержимое файла памяти по типу */
 export function loadMemory(type: string): string {
   const path = getMemoryPath(type);
   try {
@@ -39,6 +67,7 @@ export function loadMemory(type: string): string {
   }
 }
 
+/** Добавляет новую запись в файл памяти */
 export function saveMemory(type: string, title: string, content: string): void {
   ensureMemoryDir();
   const path = getMemoryPath(type);
@@ -53,6 +82,7 @@ export function saveMemory(type: string, title: string, content: string): void {
   }
 }
 
+/** Поиск по всем файлам памяти (регистронезависимый) */
 export function searchMemory(query: string): { type: string; match: string }[] {
   const results: { type: string; match: string }[] = [];
   const lower = query.toLowerCase();
@@ -78,6 +108,7 @@ export function searchMemory(query: string): { type: string; match: string }[] {
   return results.slice(0, 20);
 }
 
+/** Загружает краткую сводку по всем файлам памяти (для system prompt) */
 export function loadAllMemory(): string {
   ensureMemoryDir();
   const parts: string[] = [];
@@ -154,6 +185,22 @@ export function exportMemory(): string | null {
   return exportPath;
 }
 
+/**
+ * Автономное обучение из ошибок.
+ *
+ * Анализирует stderr/stdout и автоматически сохраняет
+ * известные паттерны ошибок с решениями:
+ * - Cannot find module → npm install
+ * - ENOENT → проверить путь
+ * - SyntaxError → исправить синтаксис
+ * - TypeError → проверить типы
+ * - EACCES → права доступа
+ * - EADDRINUSE → порт занят
+ *
+ * @param command - выполненная команда
+ * @param stderr - вывод ошибок
+ * @param stdout - стандартный вывод
+ */
 export function autoLearnFromError(command: string, stderr: string, stdout: string): void {
   const errorText = stderr || stdout;
   if (!errorText || errorText.length < 10) return;
@@ -180,6 +227,17 @@ export function autoLearnFromError(command: string, stderr: string, stdout: stri
   }
 }
 
+/**
+ * Автономное обучение из редактирования файлов.
+ *
+ * Анализирует содержимое файла и извлекает паттерны кодирования:
+ * - export default function/class
+ * - named exports / arrow functions
+ * - type exports
+ * - import patterns
+ * - console usage
+ * - error handling patterns
+ */
 export function autoLearnFromEdit(filePath: string, content: string): void {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   const patterns: { re: RegExp; convention: string }[] = [
@@ -207,6 +265,7 @@ export function autoLearnFromEdit(filePath: string, content: string): void {
   }
 }
 
+/** Оценивает количество токенов в файлах памяти (~4 символа на токен) */
 export function getMemoryTokenEstimate(): number {
   let totalChars = 0;
   for (const file of MEMORY_FILES) {
@@ -219,11 +278,17 @@ export function getMemoryTokenEstimate(): number {
   return Math.ceil(totalChars / 4);
 }
 
+/**
+ * Компактификация памяти при превышении бюджета токенов.
+ * Удаляет 25% самых старых записей из каждого файла.
+ *
+ * @returns true если были удалены записи
+ */
 export function trimMemoryToBudget(): boolean {
   const estimate = getMemoryTokenEstimate();
   if (estimate <= MAX_MEMORY_TOKENS) return false;
 
-  // Remove oldest entries from each file until under budget
+  // Удаляем oldest 25% записей из каждого файла
   for (const file of MEMORY_FILES) {
     const path = join(MEMORY_DIR, file);
     if (!existsSync(path)) continue;
@@ -244,6 +309,7 @@ export function trimMemoryToBudget(): boolean {
   return getMemoryTokenEstimate() < estimate;
 }
 
+/** Загружает детальную сводку по памяти (включая количество записей и токены) */
 export function loadAllMemoryDetailed(): string {
   ensureMemoryDir();
   const parts: string[] = [];

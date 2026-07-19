@@ -8,9 +8,18 @@ import { logInfo } from './logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * Проверка и установка обновлений MMA.
+ *
+ * Кэширует результат проверки на 24 часа.
+ * Сравнивает текущую версию с последней в npm.
+ *
+ * @module updater
+ */
+
 const MMA_DIR = join(homedir(), '.mma');
 const CACHE_FILE = join(MMA_DIR, 'update-check.json');
-const CACHE_TTL = 86_400_000; // 24h
+const CACHE_TTL = 86_400_000; // 24 часа
 const PKG_NAME = 'micro-models-agent';
 
 interface UpdateCache {

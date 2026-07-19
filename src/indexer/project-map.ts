@@ -2,6 +2,24 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { logInfo, logWarn, logDebug } from '../logger.js';
 
+/**
+ * Карта проекта — структурное описание файловой системы.
+ *
+ * Анализирует директории и определяет:
+ * - Язык проекта (по расширениям и конфигам)
+ * - Экспортируемые символы
+ * - Структуру файлов
+ *
+ * Определяет тип проекта по конфигурационным файлам:
+ * - package.json → TypeScript/JavaScript
+ * - pyproject.toml → Python
+ * - go.mod → Go
+ * - Cargo.toml → Rust
+ * - pom.xml → Java
+ *
+ * @module indexer/project-map
+ */
+
 const maxFilesPerProject = new Map<string, number>();
 
 const IGNORE_DIRS = new Set([

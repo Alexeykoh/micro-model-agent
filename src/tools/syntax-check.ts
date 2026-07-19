@@ -5,6 +5,23 @@ import { createRequire } from 'node:module';
 
 const _require = createRequire(import.meta.url);
 
+/**
+ * Проверка синтаксиса кода перед записью в файл.
+ *
+ * Поддерживаемые языки:
+ * - TypeScript/JavaScript (tsc --noEmit)
+ * - JavaScript (esprima парсер)
+ * - JSON (JSON.parse)
+ * - Python (pyright)
+ * - HTML (базовая проверка)
+ * - CSS (базовая проверка)
+ *
+ * Используется агентом для проверки файлов после записи.
+ *
+ * @module tools/syntax-check
+ */
+
+/** Результат проверки синтаксиса */
 export interface SyntaxCheckResult {
   file: string;
   valid: boolean;

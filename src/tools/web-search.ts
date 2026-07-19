@@ -1,5 +1,14 @@
 import type { ToolDefinition } from './registry.js';
 
+/**
+ * Веб-поиск через DuckDuckGo Lite.
+ *
+ * Возвращает результаты с заголовками, URL и сниппетами.
+ * Используется для поиска информации в интернете.
+ *
+ * @module tools/web-search
+ */
+
 export const webSearchDefinition: ToolDefinition = {
   type: 'function',
   function: {

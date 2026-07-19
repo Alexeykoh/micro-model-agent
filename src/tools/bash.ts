@@ -5,6 +5,20 @@ import { homedir } from 'node:os';
 import { sanitize } from './sanitizer.js';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * Исполнение shell-команд.
+ *
+ * Особенности:
+ * - Автоматическая трансляция Unix-команд в PowerShell на Windows
+ * - Санитайзинг опасных паттернов (rm -rf, fork bomb и т.д.)
+ * - Автосоздание директорий для Set-Content
+ * - Ограничение длины вывода (8000 символов)
+ * - Логирование в файл для отладки
+ *
+ * @module tools/bash
+ */
+
+/** Результат выполнения bash-команды */
 export interface BashResult {
   stdout: string;
   stderr: string;
@@ -12,9 +26,11 @@ export interface BashResult {
   truncated: boolean;
 }
 
-const MAX_OUTPUT_LENGTH = 8000;
+const MAX_OUTPUT_LENGTH = 8000; // максимальная длина вывода (обрезается)
 const CACHE_DIR = join(homedir(), '.mma', 'cache');
 
+// ─── Трансляция Unix → PowerShell ─────────────────────────
+// Автоматически конвертирует стандартные Unix-команды в PowerShell-эквиваленты
 const UNIX_TO_PWSH: [RegExp, string | ((match: RegExpMatchArray) => string)][] = [
   [/^ls\s+-la/, 'dir'],
   [/^ls\s+/, 'dir '],

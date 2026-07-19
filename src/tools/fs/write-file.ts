@@ -4,6 +4,14 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент записи файла.
+ * Создаёт родительские директории автоматически.
+ * Атомарная запись через временный файл (crash-safe).
+ *
+ * @module tools/fs/write-file
+ */
+
 export const writeFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

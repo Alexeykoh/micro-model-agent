@@ -3,6 +3,21 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { AppConfig } from './types.js';
 
+/**
+ * Загрузка и сохранение конфигурации.
+ *
+ * Конфигурация собирается из трёх источников (в порядке приоритета):
+ * 1. DEFAULT_CONFIG — встроенные значения по умолчанию
+ * 2. ~/.mma/config.json — глобальная конфигурация пользователя
+ * 3. .mmrc — проектная конфигурация (перезаписывает глобальную)
+ *
+ * Также поддерживаются переменные окружения:
+ * - MMA_PROVIDER — провайдер
+ * - MMA_MODEL — модель
+ *
+ * @module config/config
+ */
+
 const DEFAULT_CONFIG: AppConfig = {
   providers: {
     lmstudio: {
@@ -34,6 +49,7 @@ const DEFAULT_CONFIG: AppConfig = {
   agent: { maxSteps: 100, autoCompact: true, compactThreshold: 0.85, toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base' },
 };
 
+/** Ищет корень проекта (по .mmrc или package.json) */
 function findProjectRoot(): string | null {
   let dir = resolve(process.cwd());
   while (true) {
@@ -44,6 +60,7 @@ function findProjectRoot(): string | null {
   }
 }
 
+/** Рекурсивное слияние объектов (deep merge) */
 function deepAssign(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const key of Object.keys(source)) {
     const tv = target[key];
@@ -56,6 +73,10 @@ function deepAssign(target: Record<string, unknown>, source: Record<string, unkn
   }
 }
 
+/**
+ * Загружает конфигурацию из всех источников.
+ * Приоритет: DEFAULT < global < project < env vars.
+ */
 export function loadConfig(): AppConfig {
   const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
 
@@ -86,12 +107,14 @@ export function loadConfig(): AppConfig {
 
 const MMA_DIR = join(homedir(), '.mma');
 
+/** Создаёт директории ~/.mma/, state/, cache/, index/ если не существуют */
 export function ensureMmaDir(): void {
   for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index')]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 }
 
+/** Сохраняет конфигурацию в ~/.mma/config.json */
 export function saveConfig(config: AppConfig): void {
   const globalPath = join(MMA_DIR, 'config.json');
   ensureMmaDir();

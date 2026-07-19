@@ -5,6 +5,16 @@ import type { AgentMode } from '../config/types.js';
 import { runAgentLoop, type AgentLoopResult } from '../agent/loop.js';
 import { logInfo } from '../logger.js';
 
+/**
+ * История диалога REPL.
+ *
+ * Хранит сообщения пользователя и ассистента.
+ * При отправке нового сообщения передаёт историю в runAgentLoop.
+ *
+ * @module repl/history
+ */
+
+/** История диалога */
 export class ConversationHistory {
   private messages: { role: 'user' | 'assistant'; content: string }[] = [];
 

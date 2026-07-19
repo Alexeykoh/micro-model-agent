@@ -2,6 +2,19 @@ import { appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
+/**
+ * Логирование в файл.
+ *
+ * Все логи пишутся в ~/.mma/logs/:
+ * - Сессионные логи: <sessionId>.log
+ * - Дневные логи: YYYY-MM-DD.log
+ *
+ * Уровни: INFO, WARN, ERROR, DEBUG.
+ * Специальные логи: LLM request/response, tool calls.
+ *
+ * @module logger
+ */
+
 const LOGS_DIR = join(homedir(), '.mma', 'logs');
 
 let _sessionLogPath: string | null = null;

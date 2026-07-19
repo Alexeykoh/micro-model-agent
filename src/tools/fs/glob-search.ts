@@ -4,6 +4,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
+/**
+ * Инструмент поиска файлов по glob-паттерну.
+ * Поддерживает * и ** wildcard'ы.
+ *
+ * @module tools/fs/glob-search
+ */
+
 export const globSearchDefinition: ToolDefinition = {
   type: 'function',
   function: {
@@ -20,6 +27,7 @@ export const globSearchDefinition: ToolDefinition = {
   },
 };
 
+/** Конвертирует glob-паттерн в regex */
 function globToRegex(pattern: string): RegExp {
   let re = '^';
   let i = 0;

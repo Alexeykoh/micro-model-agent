@@ -2,6 +2,17 @@ import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config/config.js';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * CLI-команды управления моделями.
+ *
+ * Команды:
+ * - mma model list — список моделей
+ * - mma model use <name> — переключение модели
+ * - mma model info — информация о текущей модели
+ *
+ * @module cli/model
+ */
+
 export function registerModelCommands(program: Command): void {
   const modelCmd = program.command('model').description('Manage models');
 

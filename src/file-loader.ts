@@ -5,6 +5,15 @@ import { countTokens } from './llm/token-counter.js';
 import { getTheme } from './styling/index.js';
 import { logInfo, logDebug } from './logger.js';
 
+/**
+ * Загрузчик файлов по ссылкам @path/to/file.
+ *
+ * Парсит промпт пользователя и загружает файлы,
+ * указанные через @path/to/file. Поддерживает glob-паттерны.
+ *
+ * @module file-loader
+ */
+
 interface LoadedFile {
   path: string;
   content: string;

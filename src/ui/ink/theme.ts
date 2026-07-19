@@ -1,5 +1,14 @@
 import { loadThemeConfig } from '../../styling/loader.js';
 
+/**
+ * Конвертация темы picocolors → Ink-стили.
+ *
+ * Конвертирует имена цветов (dim, bold, red и т.д.)
+ * в формат Ink: { color: 'red', bold: true }.
+ *
+ * @module ui/ink/theme
+ */
+
 interface InkStyle {
   color?: string;
   backgroundColor?: string;

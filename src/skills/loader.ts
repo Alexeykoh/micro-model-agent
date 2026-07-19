@@ -4,6 +4,20 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { logDebug } from '../logger.js';
 
+/**
+ * Загрузчик скилов агента.
+ *
+ * Скилы загружаются из нескольких источников (в порядке приоритета):
+ * 1. Проектные скилы (.agents/skills/, .claude/skills/)
+ * 2. Глобальные скилы (~/.claude/skills/, ~/.agents/skills/, ~/.mimocode/skills/)
+ * 3. Встроенные скилы (dist/skills/builtin/)
+ *
+ * Каждый скил — это markdown-файл SKILL.md с инструкциями.
+ * Скилы добавляются в system prompt агента.
+ *
+ * @module skills/loader
+ */
+
 const SKILLS_DIR = join(homedir(), '.mma', 'skills');
 
 // Built-in skills bundled with MMA (shipped in dist/skills/builtin/)

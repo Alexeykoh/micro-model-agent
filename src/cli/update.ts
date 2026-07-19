@@ -8,6 +8,16 @@ import { checkForUpdate, getUpdateCommand } from '../updater.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/**
+ * CLI-команда обновления MMA.
+ *
+ * Команды:
+ * - mma update check — проверить наличие обновлений
+ * - mma update install — установить последнюю версию
+ *
+ * @module cli/update
+ */
+
 export function registerUpdateCommand(program: Command): void {
   const updateCmd = program.command('update')
     .description('Check for updates and install the latest version');

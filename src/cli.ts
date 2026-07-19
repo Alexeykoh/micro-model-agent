@@ -18,6 +18,21 @@ import { checkForUpdateAsync } from './updater.js';
 import { checkProjectSize, setMaxFilesForProject } from './indexer/cache.js';
 import { logInfo } from './logger.js';
 
+/**
+ * CLI агента MMA.
+ *
+ * Регистрирует команды:
+ * - mma — запуск REPL (по умолчанию)
+ * - mma "prompt" — одноразовый запрос
+ * - mma model list/use/info — управление моделями
+ * - mma provider list/use — управление провайдерами
+ * - mma config show/reset/set — управление конфигурацией
+ * - mma update check/install — обновление
+ *
+ * @module cli
+ */
+
+/** Интерактивное создание провайдера (с выбором модели) */
 async function createProviderInteractive(config: ReturnType<typeof loadConfig>): Promise<{ provider: OpenAICompat; modelLabel: string }> {
   const theme = initTheme(config.theme);
   const providerName = config.active.provider;

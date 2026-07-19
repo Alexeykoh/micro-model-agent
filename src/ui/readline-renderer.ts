@@ -4,6 +4,18 @@ import type { CompleterResult } from 'node:readline'
 import type { OutputRenderer, StatusInfo } from './renderer.js'
 import { getTheme } from '../styling/index.js'
 
+/**
+ * Readline-рендерер — простой текстовый вывод в терминал.
+ *
+ * Используется по умолчанию. Поддерживает:
+ * - Автодополнение слэш-команд (Tab)
+ * - Streaming markdown (пошаговый вывод)
+ * - Спиннер (анимированный индикатор)
+ * - Status bar (обновление в реальном времени)
+ *
+ * @module ui/readline-renderer
+ */
+
 const CLEAR_LINE = '\r\x1b[K'
 
 interface SlashCommandInfo {

@@ -1,5 +1,17 @@
 import type { OutputRenderer, StatusInfo } from './renderer.js'
 
+/**
+ * Фабрика рендереров.
+ *
+ * Создаёт рендерер в зависимости от режима:
+ * - readline (по умолчанию) — простой терминальный ввод
+ * - ink — React-based рендерер с rich UI
+ *
+ * Режим выбирается через INK_MODE=1 или опцию mode.
+ *
+ * @module ui/index
+ */
+
 export interface SlashCommandInfo {
   name: string
   description: string
@@ -7,6 +19,7 @@ export interface SlashCommandInfo {
 
 export type { OutputRenderer, StatusInfo } from './renderer.js'
 
+/** Создаёт рендерер (readline или Ink в зависимости от режима) */
 export async function createRenderer(
   commands?: SlashCommandInfo[],
   options?: { mode?: 'readline' | 'ink' }

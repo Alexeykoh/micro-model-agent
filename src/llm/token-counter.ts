@@ -1,3 +1,12 @@
+/**
+ * Подсчёт токенов.
+ *
+ * Использует js-tiktoken (если доступен) для точного подсчёта.
+ * Fallback: ~4 символа на токен.
+ *
+ * @module llm/token-counter
+ */
+
 let tiktoken: any = null;
 
 async function loadTiktoken(): Promise<void> {

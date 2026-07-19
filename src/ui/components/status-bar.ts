@@ -1,5 +1,14 @@
 import type { StatusInfo } from '../renderer.js'
 
+/**
+ * Форматирование строки статуса.
+ *
+ * Формат: <model> │ step N/M
+ *
+ * @module ui/components/status-bar
+ */
+
+/** Форматирует строку статуса для отображения в терминале */
 export function formatStatusLine(info: StatusInfo): string {
   const parts: string[] = []
   if (info.model) {

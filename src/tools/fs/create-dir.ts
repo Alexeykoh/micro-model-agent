@@ -3,6 +3,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент создания директорий.
+ * Создаёт одну или несколько директорий по указанному пути.
+ *
+ * @module tools/fs/create-dir
+ */
+
 export const createDirDefinition: ToolDefinition = {
   type: 'function',
   function: {

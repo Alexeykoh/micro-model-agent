@@ -5,6 +5,19 @@ import { generateProjectMap, formatProjectMap, collectSourceFiles, setMaxFilesFo
 import { buildCodeIndex, formatCodeIndex, type CodeIndex } from './code-index.js';
 import { logInfo, logWarn, logDebug, writeStatus } from '../logger.js';
 
+/**
+ * Кэш индексатора проекта.
+ *
+ * Управляет кэшированием:
+ * - Карты проекта (project-map)
+ * - Индекса кода (code-index)
+ *
+ * Кэш хранится в ~/.mma/index/.
+ * Инвалидация по хэшам файлов.
+ *
+ * @module indexer/cache
+ */
+
 const CACHE_DIR = join(homedir(), '.mma', 'index');
 
 function ensureCacheDir(): void {

@@ -3,11 +3,28 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * Хранение сессий агента.
+ *
+ * Сессии сохраняются в ~/.mma/sessions/ в виде JSON-файлов.
+ * Индекс сессий в ~/.mma/sessions/index.json.
+ *
+ * Особенности:
+ * - Читаемые ID (00001-snake-base-tutorial)
+ * - Автосохранение при завершении
+ * - Ограничение: 50 сессий, 10MB каждая
+ * - Автообрезка при превышении лимита
+ *
+ * @module session/store
+ */
+
+// ─── Константы ──────────────────────────────────────────
 const SESSIONS_DIR = join(homedir(), '.mma', 'sessions');
 const INDEX_FILE = join(SESSIONS_DIR, 'index.json');
 const MAX_SESSIONS = 50;
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
+// ─── Словарь для генерации читаемых ID ───────────────────
 const WORDS = [
   'snake', 'base', 'tutorial', 'quick', 'silver', 'golden', 'crimson',
   'azure', 'emerald', 'amber', 'cobalt', 'jade', 'ruby', 'sapphire',
@@ -31,10 +48,15 @@ const WORDS = [
   'ember', 'frost', 'gleam', 'haze', 'mist', 'shade', 'dawn',
 ];
 
+/** Выбирает случайный элемент из массива */
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/**
+ * Генерирует читаемый ID сессии: 00001-snake-base-tutorial.
+ * Формат: номер-слово-слово-слово.
+ */
 export function generateReadableId(): string {
   const counterFile = join(SESSIONS_DIR, '.counter');
   let num = 1;
@@ -50,12 +72,14 @@ export function generateReadableId(): string {
   return `${String(num).padStart(5, '0')}-${word1}-${word2}-${word3}`;
 }
 
+/** Сообщение сессии */
 export interface SessionMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   tool_call_id?: string;
 }
 
+/** Сессия агента */
 export interface Session {
   id: string;
   name: string;
@@ -73,12 +97,14 @@ interface SessionIndex {
   sessions: { id: string; name: string; created: string; size: number }[];
 }
 
+/** Создаёт директорию сессий если не существует */
 function ensureDir(): void {
   if (!existsSync(SESSIONS_DIR)) {
     mkdirSync(SESSIONS_DIR, { recursive: true });
   }
 }
 
+/** Загружает индекс сессий */
 function loadIndex(): SessionIndex {
   ensureDir();
   try {
@@ -89,6 +115,7 @@ function loadIndex(): SessionIndex {
   return { sessions: [] };
 }
 
+/** Сохраняет индекс сессий */
 function saveIndex(index: SessionIndex): void {
   ensureDir();
   writeFileSync(INDEX_FILE, JSON.stringify(index, null, 2), 'utf-8');
@@ -98,6 +125,7 @@ function generateId(): string {
   return generateReadableId();
 }
 
+/** Сохраняет сессию в файл. Автосокращение при превышении 10MB. */
 export function saveSession(session: Session): string {
   ensureDir();
 
@@ -135,6 +163,7 @@ export function saveSession(session: Session): string {
   return filePath;
 }
 
+/** Загружает сессию по ID */
 export function loadSession(id: string): Session | null {
   const filePath = join(SESSIONS_DIR, `${id}.json`);
   if (!existsSync(filePath)) return null;
@@ -146,10 +175,12 @@ export function loadSession(id: string): Session | null {
   }
 }
 
+/** Возвращает список всех сессий из индекса */
 export function listSessions(): { id: string; name: string; created: string; size: number }[] {
   return loadIndex().sessions;
 }
 
+/** Создаёт автосессию (без имени, при завершении REPL) */
 export function createAutoSession(messages: SessionMessage[], provider: string, cwd: string, context: Session['context']): string {
   const session: Session = {
     id: generateReadableId(),
@@ -163,6 +194,7 @@ export function createAutoSession(messages: SessionMessage[], provider: string, 
   return saveSession(session);
 }
 
+/** Создаёт именованную сессию (при команде /save) */
 export function createNamedSession(name: string, messages: SessionMessage[], provider: string, cwd: string, context: Session['context']): string {
   const session: Session = {
     id: generateId(),
@@ -176,6 +208,7 @@ export function createNamedSession(name: string, messages: SessionMessage[], pro
   return saveSession(session);
 }
 
+/** Форматирует список сессий для отображения */
 export function formatSessionList(sessions: { id: string; name: string; created: string; size: number }[]): string {
   const theme = getTheme();
   if (sessions.length === 0) return theme.dim('  No saved sessions.');

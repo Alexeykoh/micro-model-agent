@@ -2,6 +2,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, formatSize, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент получения метаданных файла/директории.
+ * Показывает размер, даты создания/изменения, права доступа.
+ *
+ * @module tools/fs/file-info
+ */
+
 export const fileInfoDefinition: ToolDefinition = {
   type: 'function',
   function: {

@@ -2,11 +2,29 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, platform, version as osVersion, hostname } from 'node:os';
 
+/**
+ * Профиль пользователя — автоматический сбор наблюдений.
+ *
+ * Собирает данные:
+ * - OS (platform, version, hostname) — при старте REPL
+ * - Tech Stack (dependencies из package.json) — при старте REPL
+ * - Coding Style (indent, quotes, semicolons) — после записи файлов
+ * - Session Patterns (время начала/конца сессии) — старт/стоп REPL
+ *
+ * Записи версионируются с датой: [2026-07-18] content
+ * При повторном обнаружении того же факта дата обновляется.
+ * Записи старше 30 дней помечаются как (stale Nd ago).
+ *
+ * @module agent/user-profile
+ */
+
+// ─── Константы ──────────────────────────────────────────
 const USER_DIR = join(homedir(), '.mma', 'user');
 const PROFILE_FILE = join(USER_DIR, 'profile.md');
 const COUNTER_FILE = join(USER_DIR, '.counter');
-const STALE_DAYS = 30;
+const STALE_DAYS = 30; // дни до пометки записи как stale
 
+/** Секции профиля пользователя */
 type Section =
   | 'OS'
   | 'Tech Stack'
@@ -14,10 +32,12 @@ type Section =
   | 'Session Patterns'
   | 'Notes';
 
+/** Создаёт директорию профиля если не существует */
 export function ensureUserDir(): void {
   if (!existsSync(USER_DIR)) mkdirSync(USER_DIR, { recursive: true });
 }
 
+/** Загружает содержимое профиля пользователя */
 export function loadProfile(): string {
   ensureUserDir();
   try {
@@ -27,11 +47,13 @@ export function loadProfile(): string {
   }
 }
 
+/** Проверяет существует ли файл профиля */
 export function profileExists(): boolean {
   ensureUserDir();
   return existsSync(PROFILE_FILE);
 }
 
+/** Внутренняя: загружает профиль или создаёт заголовок по умолчанию */
 function getProfile(): string {
   ensureUserDir();
   try {
@@ -41,25 +63,30 @@ function getProfile(): string {
   }
 }
 
+/** Внутренняя: записывает содержимое профиля */
 function writeProfile(content: string): void {
   ensureUserDir();
   writeFileSync(PROFILE_FILE, content, 'utf-8');
 }
 
+/** Возвращает сегодняшнюю дату в формате YYYY-MM-DD */
 function today(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+/** Считает количество дней между датой и текущим моментом */
 function daysAgo(dateStr: string): number {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return Infinity;
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
+/** Удаляет дату из строки записи для сравнения содержимого */
 function stripDate(line: string): string {
   return line.replace(/^-\s*\[\d{4}-\d{2}-\d{2}\]\s*/, '- ').trim();
 }
 
+/** Проверяет содержит ли строка дату в формате [YYYY-MM-DD] */
 function hasDate(line: string): boolean {
   return /^-\s*\[\d{4}-\d{2}-\d{2}\]/.test(line);
 }
@@ -105,10 +132,12 @@ export function upsertEntry(section: string, content: string): void {
   writeProfile(before + '\n' + updated.join('\n') + '\n' + after);
 }
 
+/** Добавляет заметку в указанную секцию профиля */
 export function appendNote(note: string, section: Section = 'Notes'): void {
   upsertEntry(section, note);
 }
 
+/** Собирает информацию об ОС (вызывается при старте REPL, один раз) */
 export function collectOS(): void {
   const existing = loadProfile();
   if (existing.includes('## OS')) return;
@@ -122,6 +151,11 @@ export function collectOS(): void {
   upsertEntry('OS', `Node.js: ${process.version}`);
 }
 
+/**
+ * Собирает информацию о технологическом стеке из package.json.
+ * Классифицирует зависимости по категориям:
+ * Runtime, Framework, UI, Styling, Database, Build, Testing, Lint
+ */
 export function collectTechStack(): void {
   const pkgPath = join(process.cwd(), 'package.json');
   if (!existsSync(pkgPath)) return;
@@ -158,6 +192,13 @@ export function collectTechStack(): void {
   }
 }
 
+/**
+ * Собирает информацию о стиле кодирования из записанного файла.
+ * Определяет:
+ * - Индентацию (табуляция / N пробелов)
+ * - Тип кавычек (одинарные / двойные)
+ * - Наличие точек с запятой
+ */
 export function collectCodingStyle(filePath: string, content: string): void {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   if (!['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) return;
@@ -197,6 +238,7 @@ export function collectCodingStyle(filePath: string, content: string): void {
   }
 }
 
+/** Регистрирует начало сессии (вызывается при старте REPL) */
 export function collectSessionStart(): void {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
@@ -212,6 +254,7 @@ export function collectSessionStart(): void {
   try { writeFileSync(COUNTER_FILE, String(counter), 'utf-8'); } catch {}
 }
 
+/** Регистрирует завершение сессии (вызывается при остановке REPL) */
 export function sessionEnded(): void {
   const timeStr = new Date().toLocaleTimeString('ru-RU');
   upsertEntry('Session Patterns', `Сессия завершена: ${timeStr}`);
@@ -270,6 +313,7 @@ export function loadProfileSummary(): string {
   return `\n## User Profile\n${sections.join('\n')}\n`;
 }
 
+/** Создаёт пустой профиль если не существует */
 export function initDefaultProfile(): void {
   ensureUserDir();
   if (existsSync(PROFILE_FILE)) return;

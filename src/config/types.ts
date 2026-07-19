@@ -1,9 +1,23 @@
+/**
+ * Типы конфигурации приложения.
+ *
+ * Определяют структуру конфигов:
+ * - Провайдеры и модели
+ * - Активная конфигурация
+ * - Параметры агента
+ * - Режимы работы (fast/base/pro)
+ *
+ * @module config/types
+ */
+
+/** Конфигурация модели */
 export interface ModelConfig {
   model: string;
   contextWindow: number;
   params: ModelParams;
 }
 
+/** Параметры генерации модели */
 export interface ModelParams {
   temperature?: number;
   top_p?: number;
@@ -14,6 +28,7 @@ export interface ModelParams {
   [key: string]: unknown;
 }
 
+/** Конфигурация провайдера LLM */
 export interface ProviderConfig {
   type: string;
   url: string;
@@ -21,11 +36,13 @@ export interface ProviderConfig {
   models: Record<string, ModelConfig>;
 }
 
+/** Активная конфигурация (провайдер + модель) */
 export interface ActiveConfig {
   provider: string;
   model: string;
 }
 
+/** Параметры агента */
 export interface AgentConfig {
   maxSteps: number;
   autoCompact: boolean;
@@ -36,8 +53,10 @@ export interface AgentConfig {
   mode?: AgentMode;
 }
 
+/** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */
 export type AgentMode = 'fast' | 'base' | 'pro';
 
+/** Полная конфигурация приложения */
 export interface AppConfig {
   providers: Record<string, ProviderConfig>;
   active: ActiveConfig;

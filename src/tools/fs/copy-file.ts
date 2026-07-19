@@ -4,6 +4,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент копирования файлов.
+ * Создаёт родительские директории автоматически.
+ *
+ * @module tools/fs/copy-file
+ */
+
 export const copyFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

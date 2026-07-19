@@ -1,6 +1,16 @@
 import pc from 'picocolors';
 import type { ThemeConfig, ThemeColors, ThemeIcons, ThemeFormat } from './types.js';
 
+/**
+ * Движок тем — применяет цвета и иконки из конфигурации темы.
+ *
+ * Использует picocolors для terminal-цветов.
+ * Все методы возвращают стилизованные строки.
+ *
+ * @module styling/engine
+ */
+
+// ─── Маппинг имён цветов к функциям picocolors ───────────
 const COLOR_FN: Record<string, (s: string) => string> = {
   dim: pc.dim,
   bold: pc.bold,
@@ -26,6 +36,7 @@ const COLOR_FN: Record<string, (s: string) => string> = {
   bgWhite: pc.bgWhite,
 };
 
+/** Движок темы — предоставляет методы для стилизации вывода */
 export class ThemeEngine {
   private _color: Record<string, (s: string) => string>;
   private _icons: ThemeIcons;

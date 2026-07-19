@@ -1,5 +1,18 @@
 import type { LLMProvider, ChatMessage, ChatOptions, Chunk } from './provider.js';
 
+/**
+ * OpenAI-совместимый LLM-провайдер.
+ *
+ * Работает с любым сервером, реализующим OpenAI Chat Completions API:
+ * - LM Studio (localhost:1234)
+ * - Ollama (localhost:11434)
+ * - vLLM, Together, Groq и др.
+ *
+ * Поддерживает streaming-ответы (SSE).
+ *
+ * @module llm/openai-compat
+ */
+
 interface OpenAIError {
   error?: { message?: string };
 }

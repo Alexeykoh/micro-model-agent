@@ -18,8 +18,26 @@ import { invalidateSystemPromptCache } from '../agent/system-prompt.js';
 import { webSearchDefinition, handleWebSearch } from './web-search.js';
 import { webFetchDefinition, handleWebFetch } from './web-fetch.js';
 
+/**
+ * Реестр всех инструментов агента.
+ *
+ * Управляет:
+ * - Файловыми инструментами (read, write, edit, list, search и т.д.)
+ * - Bash-командами
+ * - Веб-инструментами (search, fetch)
+ * - Нативными инструментами (subagent)
+ *
+ * При записи файлов автоматически:
+ * - Уведомляет indexer об изменениях (notifyFileChanged)
+ * - Инвалидирует кэш system prompt
+ *
+ * @module tools/registry
+ */
+
+// Инструменты, которые модифицируют файловую систему
 const MODIFYING_TOOLS = new Set(['write_file', 'edit_file', 'delete_file', 'copy_file', 'move_file']);
 
+/** Извлекает пути изменённых файлов из аргументов инструмента */
 function getChangedFilePaths(toolName: string, args: Record<string, unknown>): string[] {
   const normalize = (p: unknown) => String(p ?? '').replace(/\\/g, '/');
   switch (toolName) {
@@ -91,9 +109,17 @@ const NATIVE_TOOL_DEFS: ToolDefinition[] = [
 
 const VALID_TOOL_NAMES = new Set(['bash', 'subagent', ...FS_HANDLERS.keys(), ...WEB_TOOLS.keys()]);
 
+/**
+ * Реестр инструментов — центральная точка регистрации и исполнения.
+ * Все инструменты регистрируются здесь и вызываются через execute().
+ */
 export class ToolRegistry {
   constructor(private cwd: string = process.cwd()) {}
 
+  /**
+   * Исполняет tool call: определяет тип инструмента и вызывает handler.
+   * После успешной модификации файла уведомляет indexer и инвалидирует кэш.
+   */
   async execute(toolCall: ToolCall): Promise<ToolResult> {
     const start = performance.now();
     const preview = JSON.stringify(toolCall.arguments).slice(0, 120);
@@ -141,6 +167,7 @@ export class ToolRegistry {
     return { stdout: '', stderr: `Unknown tool: ${toolCall.name}`, exitCode: 1, truncated: false };
   }
 
+  /** Возвращает определения всех доступных инструментов для system prompt */
   getDefinitions(): ToolDefinition[] {
     const defs: ToolDefinition[] = [
       ...NATIVE_TOOL_DEFS,

@@ -5,6 +5,19 @@ import { StatusBar } from './StatusBar.js';
 import { PromptInput } from './PromptInput.js';
 import { SelectInput } from './SelectInput.js';
 
+/**
+ * Главный компонент Ink-приложения.
+ *
+ * Управляет:
+ * - Состоянием диалога (входы, tool calls, streaming)
+ * - Статус-баром (модель, шаги, токены)
+ * - Вводом пользователя (с автодополнением)
+ * - Выбором (question tool)
+ * - Прерыванием (double ESC)
+ *
+ * @module ui/ink/components/App
+ */
+
 interface StatusInfo {
   provider?: string;
   model?: string;

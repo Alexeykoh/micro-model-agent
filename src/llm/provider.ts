@@ -1,3 +1,16 @@
+/**
+ * Интерфейсы для LLM-провайдеров.
+ *
+ * Определяет контракт для всех провайдеров:
+ * - chat() — streaming-запрос к модели
+ * - countTokens() — подсчёт токенов
+ * - model — имя модели
+ * - contextWindow — размер контекстного окна
+ *
+ * @module llm/provider
+ */
+
+/** Интерфейс LLM-провайдера (OpenAI-совместимый) */
 export interface LLMProvider {
   chat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<Chunk>;
   countTokens(text: string): Promise<number>;
@@ -5,6 +18,7 @@ export interface LLMProvider {
   contextWindow: number;
 }
 
+/** Сообщение в диалоге с LLM */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
@@ -12,6 +26,7 @@ export interface ChatMessage {
   name?: string;
 }
 
+/** Опции для запроса к LLM */
 export interface ChatOptions {
   temperature?: number;
   top_p?: number;
@@ -24,6 +39,7 @@ export interface ChatOptions {
   showThinking?: boolean;
 }
 
+/** Streaming-чанк ответа LLM */
 export interface Chunk {
   content: string;
   reasoning?: string;

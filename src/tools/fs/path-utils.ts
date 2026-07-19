@@ -2,12 +2,29 @@ import { resolve, relative, normalize, join, isAbsolute } from 'node:path';
 import { existsSync, statSync, readdirSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 
+/**
+ * Утилиты для работы с путями в fs-инструментах.
+ *
+ * Обеспечивают:
+ * - Безопасное разрешение путей (относительно cwd)
+ * - Предотвращение выхода за пределы проекта (path traversal)
+ * - Форматирование размера файлов
+ * - Обрезка вывода по лимитам
+ *
+ * @module tools/fs/path-utils
+ */
+
+// Игнорируемые директории (не сканируются)
 export const IGNORE_DIRS = new Set([
   'node_modules', '.git', '.mma', 'dist', 'build', '__pycache__',
   'vendor', '.next', '.nuxt', 'coverage', '.cache', 'target',
   'out', '.output', '.turbo',
 ]);
 
+/**
+ * Безопасно разрешает путь относительно cwd.
+ * Предотвращает path traversal (выход за пределы проекта).
+ */
 export function resolvePath(
   userPath: string,
   cwd: string,
@@ -27,6 +44,7 @@ export function resolvePath(
   return { ok: true, abs, rel: rel.replace(/\\/g, '/') };
 }
 
+/** Проверяет существование файла/директории и его тип */
 export function assertExists(
   abs: string,
   expectedType?: 'file' | 'dir',
@@ -47,16 +65,19 @@ export function assertExists(
   return { ok: true, stat };
 }
 
+/** Форматирует размер файла (B, KB, MB) */
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Нормализует путь (заменяет обратные слэши на прямые) */
 export function normalizePath(p: string): string {
   return p.replace(/\\/g, '/');
 }
 
+/** Обрезает вывод по лимиту символов */
 export function truncateOutput(text: string, maxChars: number): { text: string; truncated: boolean } {
   if (text.length <= maxChars) return { text, truncated: false };
   return {
@@ -65,6 +86,7 @@ export function truncateOutput(text: string, maxChars: number): { text: string; 
   };
 }
 
+/** Читает записи директории (с обработкой ошибок) */
 export function readDirEntries(dir: string): Dirent[] {
   try {
     return readdirSync(dir, { withFileTypes: true }) as unknown as Dirent[];
@@ -73,6 +95,7 @@ export function readDirEntries(dir: string): Dirent[] {
   }
 }
 
+/** Рекурсивно обходит директорию, пропуская IGNORE_DIRS и скрытые папки */
 export function walkDirFiltered(
   dir: string,
   baseDir: string,

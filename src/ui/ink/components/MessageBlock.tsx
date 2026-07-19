@@ -3,6 +3,19 @@ import Markdown from 'ink-markdown-es';
 import { getInkTheme } from '../theme.js';
 import { LineNumbers, BracketTag, DimText } from './Tags.js';
 
+/**
+ * Компонент отображения сообщений.
+ *
+ * Поддерживает:
+ * - Markdown с подсветкой синтаксиса
+ * - Сообщения разных типов (info, success, warning, error)
+ * - Номера строк
+ * - Bracket tags (inline-теги)
+ *
+ * @module ui/ink/components/MessageBlock
+ */
+
+/** Элемент сообщения */
 export interface MessageItem {
   type: 'message' | 'info' | 'success' | 'warning' | 'error' | 'dim' | 'heading' | 'bracket';
   content?: string;

@@ -7,8 +7,24 @@ import { checkFileSyntax } from './syntax-check.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { logInfo, logDebug, logWarn, logLLMRequest, logLLMResponse, logToolCall } from '../logger.js';
 
+/**
+ * Изолированный цикл агента для субагентов.
+ *
+ * Субагенты работают в изолированном контексте — они не видят
+ * историю родительского агента, но получают информацию о структуре
+ * проекта (файлы, зависимости, tsconfig).
+ *
+ * Используется для:
+ * - Создания отдельных файлов в multi-file проектах
+ * - Запуска верификации (tsc --noEmit)
+ * - Изоляции задач для предотвращения потери контекста
+ *
+ * @module tools/subagent
+ */
+
 // ─── Types ────────────────────────────────────────────────
 
+/** Результат выполнения изолированного цикла субагента */
 export interface IsolatedLoopResult {
   createdFiles: string[];
   errors: string[];
@@ -18,6 +34,13 @@ export interface IsolatedLoopResult {
 
 // ─── Context builder ──────────────────────────────────────
 
+/**
+ * Собирает контекст для субагента: список файлов, зависимости, tsconfig.
+ * Сканирует все директории проекта (не только src/).
+ *
+ * @param cwd - корневая директория проекта
+ * @returns Текстовый контекст для system prompt субагента
+ */
 export function buildSubagentContext(cwd: string): string {
   const lines: string[] = [];
 
@@ -76,8 +99,15 @@ export function buildSubagentContext(cwd: string): string {
   return lines.join('\n');
 }
 
-// ─── Tool call parsing (duplicated from loop.ts) ───────────
+// ─── Tool call parsing ───────────────────────────────────
 
+/**
+ * Извлекает все JSON-блоки из тегов <tool_call>...</tool_call>.
+ * Дублируется из loop.ts для изоляции субагентов.
+ *
+ * @param response - ответ модели
+ * @returns Массив JSON-строк из tool calls
+ */
 export function extractAllToolCalls(response: string): string[] {
   const results: string[] = [];
   let text = response;
@@ -127,6 +157,12 @@ export function extractAllToolCalls(response: string): string[] {
   return results;
 }
 
+/**
+ * Валидация tool call: проверка имени инструмента и обязательных аргументов.
+ *
+ * @param parsed - распарсенный JSON из tool call
+ * @returns Результат валидации с именем инструмента и командой (для bash)
+ */
 export function validateToolCall(parsed: any): { valid: boolean; name?: string; cmd?: string; error?: string } {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, error: 'Not an object' };
@@ -180,8 +216,20 @@ export function validateToolCall(parsed: any): { valid: boolean; name?: string; 
   return { valid: true, name: parsed.name };
 }
 
-// ─── LLM call (duplicated from loop.ts) ───────────────────
+// ─── LLM call ───────────────────────────────────────────
 
+/**
+ * Отправка запроса к LLM с streaming-ответом.
+ * Поддерживает retry при ошибках и отображение "мышления" модели.
+ *
+ * @param provider - провайдер LLM
+ * @param messages - история сообщений
+ * @param renderer - рендерер для отображения streaming
+ * @param signal - сигнал прерывания
+ * @param retries - количество повторных попыток
+ * @param showThinking - показывать ли "мышление" модели
+ * @param caller - кто вызвал (main/subagent)
+ */
 export async function doChat(
   provider: LLMProvider,
   messages: ChatMessage[],
@@ -298,6 +346,18 @@ export async function doChat(
 
 // ─── Isolated agent loop ──────────────────────────────────
 
+/**
+ * Запуск изолированного цикла агента (субагент).
+ *
+ * Субагент:
+ * - Получает свежий контекст (system prompt + задача + info о проекте)
+ * - Работает максимум 20 ходов
+ * - Не может создавать вложенных субагентов (max depth 1)
+ * - Автоматически компактирует контекст при необходимости
+ * - Отслеживает созданные файлы и ошибки
+ *
+ * @returns Результат: созданные файлы, ошибки, краткое описание, количество ходов
+ */
 export async function runIsolatedLoop(
   provider: LLMProvider,
   registry: ToolRegistry,

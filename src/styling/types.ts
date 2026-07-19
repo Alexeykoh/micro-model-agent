@@ -1,3 +1,15 @@
+/**
+ * Типы тем оформления.
+ *
+ * Определяют структуру конфигурации тем:
+ * - Цвета для различных элементов UI
+ * - Иконки для статусов и разделителей
+ * - Форматирование (отступы)
+ *
+ * @module styling/types
+ */
+
+/** Цвета темы */
 export interface ThemeColors {
   prompt: string;
   success: string;
@@ -18,6 +30,7 @@ export interface ThemeColors {
   bracket: string;
 }
 
+/** Иконки темы */
 export interface ThemeIcons {
   success: string;
   failure: string;
@@ -35,11 +48,13 @@ export interface ThemeIcons {
   pipe: string;
 }
 
+/** Форматирование темы */
 export interface ThemeFormat {
   indent: string;
   indentSize: number;
 }
 
+/** Полная конфигурация темы */
 export interface ThemeConfig {
   name: string;
   colors: ThemeColors;

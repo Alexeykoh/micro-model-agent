@@ -24,8 +24,32 @@ import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, lo
 import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 
-// extractAllToolCalls moved to src/tools/subagent.ts
+/**
+ * Основной цикл ReAct-агента.
+ *
+ * Архитектура цикла:
+ * 1. Сборка system prompt (кэшируется на время сессии)
+ * 2. Отправка запроса к LLM с историей сообщений
+ * 3. Парсинг tool calls из ответа модели (формат <tool_call>)
+ * 4. Валидация и исполнение каждого tool call
+ * 5. Добавление результата в историю
+ * 6. Повтор до завершения (нет tool calls) или лимита ходов
+ *
+ * Особенности:
+ * - Fallback-парсинг при невалидном JSON от маленьких моделей
+ * - Автоматическое компактирование контекста при приближении к лимиту
+ * - Retry с увеличением temperature при пустых ответах
+ * - Автодобавление скилов при обнаружении релевантных паттернов
+ *
+ * @module agent/loop
+ */
 
+/**
+ * Fallback-извлечение bash-команды из ответа модели.
+ * Используется когда основной парсинг tool calls не сработал
+ * (маленькие модели часто генерируют невалидный JSON).
+ * Применяет три regex-паттерна для поиска команды bash.
+ */
 function extractToolCallFallback(response: string): { name: string; cmd: string } | null {
   const patterns = [
     /"name"\s*:\s*"bash"\s*,\s*"arguments"\s*:\s*\{\s*"cmd"\s*:\s*"((?:[^"\\]|\\.)*)"/,
@@ -44,15 +68,38 @@ function extractToolCallFallback(response: string): { name: string; cmd: string 
   return null;
 }
 
-// validateToolCall moved to src/tools/subagent.ts
-
-// doChat, IsolatedLoopResult, buildSubagentContext, runIsolatedLoop moved to src/tools/subagent.ts
-
+/**
+ * Результат выполнения цикла агента.
+ * Содержит всю историю сообщений и опциональный pending-вопрос
+ * (если агент вызвал инструмент question и ждёт ответа пользователя).
+ */
 export interface AgentLoopResult {
   messages: ChatMessage[];
   questionPending?: { question: string; choices?: string[] };
 }
 
+/**
+ * Запускает основной цикл ReAct-агента.
+ *
+ * Цикл работает до тех пор, пока:
+ * - Агент не перестанет вызывать инструменты (финальный текстовый ответ)
+ * - Не будет достигнут лимит ходов (maxSteps из конфига)
+ * - Пользователь не прервёт выполнение (abort signal)
+ *
+ * Стратегия обработки ошибок:
+ * - Пустые ответы: retry до 3 раз с подсказкой "Continue."
+ * - Невалидные tool calls: отправка обратной связи модели
+ * - Пустые ответы подряд >3: остановка цикла
+ *
+ * @param provider - провайдер LLM (OpenAI-совместимый)
+ * @param registry - реестр доступных инструментов
+ * @param prompt - начальный промпт пользователя
+ * @param contextManager - менеджер контекста (опциональный, создаётся новый если не передан)
+ * @param previousMessages - предыдущие сообщения для восстановления сессии
+ * @param renderer - рендерер вывода (Ink или readline)
+ * @param providerName - имя провайдера для отображения
+ * @param options - дополнительные опции (quiet, showThinking, mode)
+ */
 export async function runAgentLoop(
   provider: LLMProvider,
   registry: ToolRegistry,
@@ -65,10 +112,12 @@ export async function runAgentLoop(
 ): Promise<AgentLoopResult> {
   logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
   renderer?.resetAbort?.();
+  // Парсинг ссылок на файлы в промпте (формат @path/to/file)
   const { prompt: enrichedPrompt, files } = await parseFileRefs(prompt);
   logDebug('LOOP', `parseFileRefs: ${files.length} files, prompt len: ${enrichedPrompt.length}`);
   const quiet = options?.quiet ?? false;
 
+  // Автозагрузка скилов из промпта (если пользователь указал @skill-name)
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
   if (loadedSkills.length > 0) {
@@ -99,12 +148,14 @@ export async function runAgentLoop(
 
   setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
   writeStatus('Initializing...');
+  // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память)
   const sysStart = performance.now();
   const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode);
   const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
   writeStatus(`Done (${sysElapsed}s)`);
   setStatusWriter(null);
 
+  // Начальное состояние истории: system prompt + предыдущие сообщения + текущий промпт
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     ...(previousMessages || []),
@@ -114,11 +165,11 @@ export async function runAgentLoop(
   const ctx = contextManager ?? new ContextManager(provider.contextWindow);
   const config = loadConfig();
   const maxSteps = config.agent.maxSteps ?? 100;
-  let consecutiveEmpty = 0;
+  let consecutiveEmpty = 0; // счётчик пустых ответов подряд
   let pendingSyntaxError = '';
   let aborted = false;
-  let continuationNudges = 0;
-  let directWriteStreak = 0; // consecutive write_file calls without subagent (across steps)
+  let continuationNudges = 0; // счётчик подсказок "продолжай работать"
+  let directWriteStreak = 0; // количество прямых write_file без subagent
 
   // Reset abort signal for this run
   if (renderer?.abortSignal === undefined) {
@@ -133,14 +184,15 @@ export async function runAgentLoop(
     maxSteps,
   });
 
+  // ─── Основной цикл ReAct ────────────────────────────────
   for (let step = 0; step < maxSteps; step++) {
     if (renderer?.abortSignal?.aborted) {
       aborted = true;
       break;
     }
     let skillsAutoLoaded = false;
-    // Track files created/modified in this session for completion reporting
-    const createdFiles: string[] = [];
+    const createdFiles: string[] = []; // отслеживание созданных/изменённых файлов
+
     logDebug('LOOP', `step ${step + 1}/${maxSteps} starting, ${messages.length} messages`);
     await ctx.updateTokens(messages);
     const skillNames = loadedSkills.map(s => s.name).join(', ');
@@ -156,6 +208,8 @@ export async function runAgentLoop(
       maxSteps,
     });
 
+    // ─── Compaction контекста ─────────────────────────────
+    // Если использование контекста превышает порог (85%), компактируем историю
     if (ctx.needsCompact && messages.length > 6) {
       const before = messages.length;
       messages.splice(0, messages.length, ...ctx.compact(messages));
@@ -165,17 +219,18 @@ export async function runAgentLoop(
       await ctx.updateTokens(messages);
     }
 
+    // ─── Запрос к LLM ────────────────────────────────────
     logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}`);
     const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.showThinking);
 
-    // Check if aborted during generation
+    // Проверка прерывания во время генерации
     if (renderer?.abortSignal?.aborted) {
       aborted = true;
       break;
     }
 
-    // Auto-load skills if the response contains @skill mentions
-    // Works with or without tool calls — agent can mention skills while working
+    // ─── Автозагрузка скилов по @упоминаниям ─────────────
+    // Если ответ содержит @skill-name, загружаем скил и пересобираем system prompt
     if (options?.mode !== 'fast' && !skillsAutoLoaded) {
     const suggestedSkillRefs = response.matchAll(/@(\w[\w-]*)/g);
     const newSkillNames: string[] = [];
@@ -200,6 +255,8 @@ export async function runAgentLoop(
     }
     } // end fast-mode skill block
 
+    // ─── Обработка пустых ответов ────────────────────────
+    // Маленькие модели иногда возвращают пустой ответ — повторяем с подсказкой
     if (!response.trim()) {
       logWarn('LOOP', `empty response #${consecutiveEmpty + 1}`);
       consecutiveEmpty++;
@@ -220,6 +277,8 @@ export async function runAgentLoop(
 
     messages.push({ role: 'assistant', content: response });
 
+    // ─── Парсинг tool calls ─────────────────────────────
+    // Извлекаем JSON из тегов <tool_call>...</tool_call> и валидируем
     const allJsonRaw = extractAllToolCalls(response);
 
     const validCalls: { parsed: any; cmd?: string }[] = [];
@@ -242,6 +301,7 @@ export async function runAgentLoop(
       }
     }
 
+    // ─── Fallback: regex-извлечение при невалидном JSON ───
     if (validCalls.length === 0) {
       const fallback = extractToolCallFallback(response);
       if (fallback) {
@@ -304,10 +364,11 @@ export async function runAgentLoop(
       continue;
     }
 
-    // Track consecutive read_file calls to the same file for consolidation
+    // ─── Enforce: лимиты на запись файлов ────────────────
+    // Отслеживание повторных чтений одного файла для консолидации
     let lastReadFile: { path: string; offset: number; limit: number; content: string; toolId: string } | null = null;
 
-    // ENFORCEMENT: if plan has 3+ steps, block write_file and force subagent
+    // Блокировка прямых write_file когда есть план с 3+ шагами —.force subagent
     const planSteps = showPlan();
     const hasMultiStepPlan = !planSteps.startsWith('No active plan') && (planSteps.match(/\n/g) || []).length >= 3;
     if (hasMultiStepPlan) {
@@ -365,7 +426,7 @@ export async function runAgentLoop(
       }
     }
 
-    // ENFORCEMENT: one file write at a time — block extra write_file/edit_file calls
+    // Блокировка нескольких записей файлов за один ответ — максимум одна
     const writeCalls = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
     if (writeCalls.length > 1) {
       // Keep only the first write call, block the rest
@@ -384,6 +445,7 @@ export async function runAgentLoop(
       }
     }
 
+    // ─── Исполнение tool calls ──────────────────────────
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
@@ -429,7 +491,7 @@ export async function runAgentLoop(
       let toolExitCode = 0;
       const toolStart = performance.now();
 
-      // Native tool calls: plan/todo/question/approve
+      // ─── Нативные инструменты (plan/todo/question/approve) ──
       if (parsed.name === 'plan') {
         const planName = String(parsed.arguments.TaskName || parsed.arguments.name || parsed.arguments.plan || 'Untitled');
         const stepsRaw = parsed.arguments.Steps || parsed.arguments.steps || [];
@@ -595,7 +657,7 @@ export async function runAgentLoop(
             toolExitCode = 1;
         }
       } else if (parsed.name === 'subagent') {
-        // Subagent: isolated context for a single task
+        // ─── Субагент: изолированный контекст для задачи ──
         const task = String(parsed.arguments.task || '');
         if (!task) {
           toolOutput = 'Error: task is required';
@@ -705,6 +767,7 @@ export async function runAgentLoop(
           messages,
           questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
         };
+      // ─── MCP-инструменты ────────────────────────────────
       } else if (isBash && isMCPCommand(cmd!)) {
         const mcpCmd = parseMCPCommand(cmd!);
         if (mcpCmd) {
@@ -716,10 +779,12 @@ export async function runAgentLoop(
           toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
           toolExitCode = 1;
         }
+      // ─── Файловые инструменты (не bash) ─────────────────
       } else if (!isBash) {
         const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
+      // ─── Bash: выполнение shell-команд ──────────────────
       } else {
         const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 120 } });
         toolOutput = result.stdout || result.stderr || '(no output)';
@@ -774,7 +839,7 @@ export async function runAgentLoop(
         lastReadFile = null;
       }
 
-      // Syntax check after file write operations
+      // ─── Проверка синтаксиса после записи файлов ────────
       let hasSyntaxError = false;
       if (toolExitCode === 0) {
         const isWriteOp = isBash
@@ -840,7 +905,7 @@ export async function runAgentLoop(
               }
             }
 
-            // Auto-detect coding style from file content
+            // Автодетекция стиля кодирования из содержимого файла
             if (toolExitCode === 0 && filePath) {
               try {
                 const fullContent = readFileSync(join(process.cwd(), filePath), 'utf-8');

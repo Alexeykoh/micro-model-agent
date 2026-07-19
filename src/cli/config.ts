@@ -2,6 +2,17 @@ import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config/config.js';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * CLI-команды управления конфигурацией.
+ *
+ * Команды:
+ * - mma config show — показать конфигурацию
+ * - mma config reset — сбросить к_defaults
+ * - mma config set <key> <value> — установить значение
+ *
+ * @module cli/config
+ */
+
 export function registerConfigCommands(program: Command): void {
   const configCmd = program.command('config').description('Manage configuration');
 

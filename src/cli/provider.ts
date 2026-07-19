@@ -2,6 +2,16 @@ import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config/config.js';
 import { getTheme } from '../styling/index.js';
 
+/**
+ * CLI-команды управления провайдерами LLM.
+ *
+ * Команды:
+ * - mma provider list — список провайдеров
+ * - mma provider use <name> — переключение провайдера
+ *
+ * @module cli/provider
+ */
+
 export function registerProviderCommands(program: Command): void {
   const providerCmd = program.command('provider').description('Manage providers');
 

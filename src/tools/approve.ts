@@ -1,3 +1,13 @@
+/**
+ * Инструмент подтверждения действия (Yes/No).
+ *
+ * Позволяет агенту запросить подтверждение перед потенциально
+ * опасными операциями (удаление файлов, git push и т.д.).
+ *
+ * @module tools/approve
+ */
+
+/** Состояние подтверждения */
 export interface ApproveState {
   active: boolean;
   action: string;
@@ -6,6 +16,7 @@ export interface ApproveState {
 
 let currentApprove: ApproveState | null = null;
 
+/** Создаёт запрос подтверждения */
 export function askApprove(action: string): ApproveState {
   currentApprove = {
     active: true,
@@ -14,10 +25,12 @@ export function askApprove(action: string): ApproveState {
   return currentApprove;
 }
 
+/** Возвращает текущий активный запрос подтверждения */
 export function getApprove(): ApproveState | null {
   return currentApprove;
 }
 
+/** Записывает ответ пользователя (true = Yes, false = No) */
 export function answerApprove(response: boolean): void {
   if (currentApprove) {
     currentApprove.response = response;
@@ -25,6 +38,7 @@ export function answerApprove(response: boolean): void {
   }
 }
 
+/** Проверяет есть ли активный запрос подтверждения */
 export function hasActiveApprove(): boolean {
   return currentApprove?.active === true;
 }
@@ -40,6 +54,7 @@ export function formatApproveColored(a: ApproveState): string {
   return `${theme.warning(`  ${theme.icon.separator} Approve: ${a.action}`)}\n\n    ${theme.highlight('1')}. Yes\n    ${theme.highlight('2')}. No`;
 }
 
+/** Парсит аргументы команды approve */
 export function parseApproveCommand(args: string): string {
   return args.trim();
 }

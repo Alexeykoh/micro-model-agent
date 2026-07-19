@@ -8,6 +8,26 @@ import { loadAgentsMd, listInstalledSkills, formatSkillsBlock, type Skill } from
 import { logInfo, logDebug } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
 
+/**
+ * Построение system prompt для LLM-агента.
+ *
+ * System prompt собирается из нескольких блоков:
+ * - Основные инструкции поведения агента
+ * - Информация о проекте (package.json, зависимости)
+ * - Технологический стек проекта
+ * - Установленные скилы
+ * - Профиль пользователя (наблюдения агента)
+ * - Память агента (долгосрочные знания)
+ * - Правила безопасного поведения
+ *
+ * System prompt кэшируется: при неизменном контексте
+ * повторно не пересобирается (инвалидация по hash).
+ *
+ * @module agent/system-prompt
+ */
+
+// ─── Формат инструментов ───────────────────────────────
+// Блок system prompt, описывающий формат вызова инструментов
 const TOOL_FORMAT = `CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.
 
 To call a tool, output EXACTLY this format (on its own line):
@@ -86,6 +106,8 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
 
 NEVER output tool calls in any other format. ALWAYS use <tool_call> tags.`;
 
+// ─── Поток диалога ──────────────────────────────────────
+// Блок system prompt, объясняющий агенту как работает цикл диалога
 const CONVERSATION_FLOW = `## How This Works (IMPORTANT — read this carefully)
 
 You are in a loop. Each turn works like this:
@@ -224,14 +246,37 @@ const UNIX_RULES = `Unix specifics:
 - Paths use forward slashes: src/index.ts
 - Check file exists: test -f file.md`;
 
+// ─── Кэш system prompt ─────────────────────────────────
+// Кэширует собранный prompt по ключу (cwd + mode + skills)
 const systemPromptCache = new Map<string, string>();
 
+/** Инвалидация кэша system prompt (вызывается при изменении конфига) */
 export function invalidateSystemPromptCache(): void {
   systemPromptCache.clear();
 }
 
+/**
+ * Собирает system prompt из всех блоков.
+ *
+ * Алгоритм:
+ * 1. Проверка кэша по ключу (cwd + mode + имена скилов)
+ * 2. Сборка заголовка (имя агента, описание)
+ * 3. Платформо-зависимые блоки (PowerShell/Unix примеры + правила)
+ * 4. Системная информация (дата, ОС, путь, проект)
+ * 5. Память агента + профиль пользователя
+ * 6. Карта проекта (indexer)
+ * 7. Инструкции из AGENTS.md
+ * 8. Хинт о доступных скилах
+ * 9. Блок текущего режима (fast/pro/base)
+ * 10. Контент загруженных скилов
+ *
+ * @param extraSkills - дополнительные скилы из промпта пользователя
+ * @param mode - режим работы (fast/pro/base)
+ * @returns Собранный system prompt строкой
+ */
 export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode): string {
   const start = performance.now();
+  // Ключ кэша: текущий каталог + режим + имена скилов (sorted)
   const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}`;
   const cached = systemPromptCache.get(key);
   if (cached) {
@@ -275,9 +320,11 @@ You help with software engineering tasks in the project directory.`;
     '',
   ].join('\n');
 
+  // ─── Память и профиль пользователя ───────────────────
   const memory = loadAllMemoryDetailed();
   const userProfile = loadProfileSummary();
 
+  // ─── Карта проекта (из indexer) ──────────────────────
   let projectMap = '';
   try {
     const { formatted, fromCache } = getOrBuildProjectMap(process.cwd());
@@ -286,20 +333,24 @@ You help with software engineering tasks in the project directory.`;
     }
   } catch { /* ignore */ }
 
+  // ─── Инструкции проекта (AGENTS.md) ──────────────────
   const agentsMd = loadAgentsMd(process.cwd());
   const agentsBlock = agentsMd ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}` : '';
 
+  // ─── Хинт о доступных скилах ─────────────────────────
   const allSkills = listInstalledSkills();
   const skillsHint = allSkills.length > 0
     ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): SUGGEST skills FIRST → User loads them → You READ them → Create plan BASED ON skill content.\nDo NOT put @skill-name inside tool_call. Just tell the user which skill to load.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "Рекомендую @typescript-expert @nodejs-expert — напиши их в следующем сообщении."\n  3. User: "@typescript-expert @nodejs-expert"\n  4. Skills injected into this prompt — you READ them\n  5. You create plan BASED ON skill guidance: plan create REST API ...\n  6. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
     : '';
 
+  // ─── Блок режима работы ──────────────────────────────
   const modeBlock = mode === 'fast'
     ? `\n## Mode: Fast\n\u26a1 Fast mode \u2014 execute tasks directly without planning or loading skills. Skills are not available in this mode. Proceed immediately.`
     : mode === 'pro'
     ? `\n## Mode: Pro\n\ud83d\udd0d Pro mode — @grill-me skill is pre-loaded. Before starting any task, you MUST first read and run the grill-me skill instructions to clarify requirements. Use it to refine the task before execution. Minimum context window: 64000.`
     : '';
 
+  // ─── Сборка финального prompt ────────────────────────
   const base = mode === 'fast'
     ? [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, modeBlock].filter(Boolean).join('\n')
     : [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint, modeBlock].filter(Boolean).join('\n');

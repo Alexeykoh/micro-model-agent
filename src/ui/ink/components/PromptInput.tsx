@@ -2,11 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getInkTheme } from '../theme.js';
 
+/**
+ * Компонент ввода промпта.
+ *
+ * Поддерживает:
+ * - Многострочный ввод (Shift+Enter)
+ * - Автодополнение слэш-команд (Tab)
+ * - Историю ввода (↑/↓)
+ * - Прерывание (double Ctrl+C)
+ *
+ * @module ui/ink/components/PromptInput
+ */
+
 interface CommandInfo {
   name: string;
   description: string;
 }
 
+// ─── Подсказки ──────────────────────────────────────────
 const HINTS = [
   'Ctrl+C to exit',
   '/help for commands',

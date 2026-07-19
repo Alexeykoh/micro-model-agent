@@ -4,6 +4,14 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, truncateOutput, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
+/**
+ * Инструмент поиска по содержимому файлов (grep).
+ * Возвращает совпадающие строки с указанием файла и номера строки.
+ * Поддерживает regex-паттерны и фильтрацию по расширению.
+ *
+ * @module tools/fs/grep-search
+ */
+
 export const grepSearchDefinition: ToolDefinition = {
   type: 'function',
   function: {
@@ -22,6 +30,7 @@ export const grepSearchDefinition: ToolDefinition = {
   },
 };
 
+/** Конвертирует glob-паттерн в regex */
 function globToRegex(pattern: string): RegExp {
   let re = '^';
   let i = 0;

@@ -1,6 +1,15 @@
 import type { ToolDefinition } from './registry.js';
 import { logInfo } from '../logger.js';
 
+/**
+ * Загрузка содержимого URL.
+ *
+ * Получает содержимое веб-страницы и возвращает его как текст.
+ * Автоматически удаляет HTML-теги. Ограничение: 100KB.
+ *
+ * @module tools/web-fetch
+ */
+
 export const webFetchDefinition: ToolDefinition = {
   type: 'function',
   function: {

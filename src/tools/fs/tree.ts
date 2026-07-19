@@ -3,6 +3,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
+/**
+ * Инструмент отображения дерева директорий.
+ * Показывает структуру файлов с ограничением глубины.
+ *
+ * @module tools/fs/tree
+ */
+
 export const treeDefinition: ToolDefinition = {
   type: 'function',
   function: {
@@ -19,6 +26,7 @@ export const treeDefinition: ToolDefinition = {
   },
 };
 
+/** Рекурсивно строит дерево директорий */
 function buildTree(
   dir: string,
   baseDir: string,

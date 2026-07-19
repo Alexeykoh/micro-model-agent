@@ -2,6 +2,18 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
+/**
+ * Интеграция с MCP (Model Context Protocol) серверами.
+ *
+ * Позволяет агенту вызывать инструменты внешних MCP-серверов.
+ * Конфигурация в .mma/mcp.json или .mmrc (секция mcp).
+ *
+ * Формат вызова: bash "mcp <server> <tool> [args_json]"
+ *
+ * @module tools/mcp
+ */
+
+/** Определение MCP-сервера */
 export interface MCPServer {
   name: string;
   command: string;
@@ -9,6 +21,7 @@ export interface MCPServer {
   env?: Record<string, string>;
 }
 
+/** Определение MCP-инструмента */
 export interface MCPTool {
   name: string;
   description: string;
@@ -20,6 +33,7 @@ interface MCPConfig {
   servers: MCPServer[];
 }
 
+/** Загружает конфигурацию MCP из .mma/mcp.json или .mmrc */
 function loadMCPConfig(cwd: string): MCPConfig {
   // Check .mma/mcp.json
   const localPath = join(cwd, '.mma', 'mcp.json');
@@ -41,10 +55,12 @@ function loadMCPConfig(cwd: string): MCPConfig {
   return { servers: [] };
 }
 
+/** Возвращает список MCP-серверов из конфигурации */
 export function listMCPServers(cwd: string): MCPServer[] {
   return loadMCPConfig(cwd).servers;
 }
 
+/** Вызывает инструмент MCP-сервера через npx mcp-client */
 export function callMCPTool(cwd: string, serverName: string, toolName: string, args: Record<string, unknown>): string {
   const config = loadMCPConfig(cwd);
   const server = config.servers.find(s => s.name === serverName);

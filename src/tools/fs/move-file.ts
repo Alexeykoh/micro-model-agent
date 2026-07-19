@@ -4,6 +4,13 @@ import type { ToolDefinition } from '../registry.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
+/**
+ * Инструмент переменования/переименования файлов.
+ * Создаёт родительские директории автоматически.
+ *
+ * @module tools/fs/move-file
+ */
+
 export const moveFileDefinition: ToolDefinition = {
   type: 'function',
   function: {

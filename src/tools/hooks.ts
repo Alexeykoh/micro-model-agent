@@ -2,12 +2,36 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
+/**
+ * Хуки жизненного цикла инструментов.
+ *
+ * Позволяют выполнять пользовательские команды до/после вызова инструментов:
+ * - preToolUse: перед вызовом любого инструмента
+ * - postToolUse: после вызова любого инструмента
+ * - postEdit: после записи/редактирования файла
+ *
+ * Конфигурация в .mma/hooks.json или .mmrc (секция hooks).
+ * Хуки могут блокировать выполнение (exit code 1).
+ *
+ * Доступные переменные в шаблонах:
+ * - {{tool}} — имя инструмента
+ * - {{cmd}} — команда/аргументы
+ * - {{file}} — путь к файлу
+ * - {{output}} — вывод (postToolUse)
+ * - {{exitCode}} — код возврата (postToolUse)
+ * - {{cwd}} — текущая директория
+ *
+ * @module tools/hooks
+ */
+
+/** Конфигурация хуков из .mma/hooks.json */
 export interface HookConfig {
   preToolUse?: string[];
   postToolUse?: string[];
   postEdit?: string[];
 }
 
+/** Результат выполнения хука: continue (продолжить) или блокировка */
 interface HookResult {
   continue: boolean;
   message?: string;
@@ -15,6 +39,7 @@ interface HookResult {
 
 const DEFAULT_HOOKS: HookConfig = {};
 
+/** Загружает конфигурацию хуков из .mma/hooks.json или .mmrc */
 function loadHooksConfig(cwd: string): HookConfig {
   // Check .mma/hooks.json
   const localPath = join(cwd, '.mma', 'hooks.json');
@@ -36,6 +61,7 @@ function loadHooksConfig(cwd: string): HookConfig {
   return DEFAULT_HOOKS;
 }
 
+/** Выполняет одну hook-команду с подстановкой переменных */
 function runHook(command: string, context: Record<string, string>): HookResult {
   try {
     // Replace {{variable}} placeholders
@@ -61,6 +87,7 @@ function runHook(command: string, context: Record<string, string>): HookResult {
   }
 }
 
+/** Запуск хуков перед вызовом инструмента. Возвращает false для блокировки. */
 export function runPreToolUseHooks(cwd: string, toolName: string, cmd: string): HookResult {
   const config = loadHooksConfig(cwd);
   if (!config.preToolUse || config.preToolUse.length === 0) {
@@ -79,6 +106,7 @@ export function runPreToolUseHooks(cwd: string, toolName: string, cmd: string): 
   return { continue: true };
 }
 
+/** Запуск хуков после вызова инструмента (с выводом и кодом возврата) */
 export function runPostToolUseHooks(cwd: string, toolName: string, cmd: string, output: string, exitCode: number): HookResult {
   const config = loadHooksConfig(cwd);
   if (!config.postToolUse || config.postToolUse.length === 0) {
@@ -104,6 +132,7 @@ export function runPostToolUseHooks(cwd: string, toolName: string, cmd: string, 
   return { continue: true };
 }
 
+/** Запуск хуков после записи/редактирования файла */
 export function runPostEditHooks(cwd: string, filePath: string): HookResult {
   const config = loadHooksConfig(cwd);
   if (!config.postEdit || config.postEdit.length === 0) {
@@ -122,6 +151,7 @@ export function runPostEditHooks(cwd: string, filePath: string): HookResult {
   return { continue: true };
 }
 
+/** Возвращает список всех зарегистрированных хуков */
 export function listHooks(cwd: string): string[] {
   const config = loadHooksConfig(cwd);
   const hooks: string[] = [];

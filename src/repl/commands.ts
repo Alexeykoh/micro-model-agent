@@ -17,8 +17,24 @@ import { loadConfig, saveConfig } from '../config/config.js';
 import { logInfo } from '../logger.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 
+/**
+ * Слэш-команды REPL.
+ *
+ * Все команды, доступные пользователю через префикс /:
+ * - Навигация: exit, quit, help, clear, new, stop
+ * - Файлы: read, write, edit, find, search
+ * - Git: git
+ * - Агент: memory, skill, sessions, resume, save
+ * - Проект: init, index
+ * - UI: theme, profile, mode
+ * - Экспорт: export
+ *
+ * @module repl/commands
+ */
+
 type SlashHandler = (args: string, context: CommandContext) => Promise<void> | void;
 
+/** Контекст для выполнения слэш-команд */
 export interface CommandContext {
   renderer: OutputRenderer;
   provider: LLMProvider;
@@ -28,12 +44,14 @@ export interface CommandContext {
   modelLabel: string;
 }
 
+/** Определение слэш-команды */
 export interface SlashCommand {
   name: string;
   description: string;
   handler: SlashHandler;
 }
 
+/** Возвращает список всех доступных слэш-команд */
 export function getSlashCommands(): SlashCommand[] {
   return [
     { name: 'exit', description: 'exit MMA', handler: cmdExit },
@@ -63,6 +81,7 @@ export function getSlashCommands(): SlashCommand[] {
   ];
 }
 
+/** Парсит строку ввода на слэш-команду и аргументы */
 export function parseSlashCommand(line: string): { cmd: string; args: string } | null {
   if (!line.startsWith('/')) return null;
   const spaceIdx = line.indexOf(' ');
