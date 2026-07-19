@@ -84,7 +84,12 @@ export function checkForUpdateAsync(): void {
   const current = getCurrentVersion();
 
   const cached = readCache();
-  if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
+  const cacheValid = cached && Date.now() - cached.checkedAt < CACHE_TTL;
+  // Если текущая версия совпадает с кэшированной — значит обновление не проверялось
+  // (пользователь не обновлял пакет). Проверяем заново.
+  const shouldForceCheck = cached && cached.latestVersion === current && isNewerVersion(current, cached.latestVersion) === false;
+
+  if (cacheValid && !shouldForceCheck) {
     const msg = `v${current} → npm v${cached.latestVersion} (cached)${isNewerVersion(current, cached.latestVersion) ? ' ⬆ update available' : ' ✓ up to date'}`;
     console.error(`[Update] ${msg}`);
     logInfo('Update', msg);
@@ -94,7 +99,7 @@ export function checkForUpdateAsync(): void {
   console.error(`[Update] Checking v${current} against npm…`);
   logInfo('Update', `Checking v${current} against npm…`);
   if (cached) {
-    logInfo('Update', `Cache stale (v${cached.latestVersion} @ ${new Date(cached.checkedAt).toISOString()}), re-checking`);
+    logInfo('Update', `Cache ${shouldForceCheck ? 'same version as current' : 'stale'} (v${cached.latestVersion} @ ${new Date(cached.checkedAt).toISOString()}), re-checking`);
   }
 
   setTimeout(() => {
