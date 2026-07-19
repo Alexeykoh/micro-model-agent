@@ -20,7 +20,7 @@ import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js
 import { loadConfig, saveConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { logInfo, logWarn, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
+import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 
@@ -606,11 +606,13 @@ export async function runAgentLoop(
         } else {
           // Auto-detect existing files and packages for context
           const autoContext = buildSubagentContext(process.cwd());
+          logInfo('AGENT', `spawning subagent | task: "${task.slice(0, 150)}"`);
           try {
             const childResult = await runIsolatedLoop(
               provider, registry, task, autoContext, process.cwd(), quiet, renderer!
             );
             toolOutput = childResult.summary;
+            logInfo('AGENT', `subagent returned | files: ${childResult.createdFiles.length} | turns: ${childResult.turns} | errors: ${childResult.errors.length}`);
             if (childResult.createdFiles.length > 0) {
               for (const f of childResult.createdFiles) {
                 if (!createdFiles.includes(f)) createdFiles.push(f);
@@ -619,6 +621,7 @@ export async function runAgentLoop(
           } catch (e: any) {
             toolOutput = `Subagent error: ${e.message}`;
             toolExitCode = 1;
+            logError('AGENT', `subagent error: ${e.message}`);
           }
         }
       } else if (isBash && cmd!.startsWith('plan ')) {

@@ -51,15 +51,17 @@ export function logWarn(tag: string, message: string): void { log('WARN', tag, m
 export function logError(tag: string, message: string): void { log('ERROR', tag, message); }
 export function logDebug(tag: string, message: string): void { log('DEBUG', tag, message); }
 
-export function logLLMRequest(model: string, messagesCount: number, promptPreview: string): void {
-  logInfo('LLM', `→ ${model} | ${messagesCount} messages | "${promptPreview.slice(0, 100)}"`);
+export function logLLMRequest(model: string, messagesCount: number, promptPreview: string, caller?: string): void {
+  const tag = caller ? `LLM/${caller}` : 'LLM';
+  logInfo(tag, `→ ${model} | ${messagesCount} messages | "${promptPreview.slice(0, 100)}"`);
 }
 
-export function logLLMResponse(model: string, responseLength: number, genTimeMs: number, error?: string): void {
+export function logLLMResponse(model: string, responseLength: number, genTimeMs: number, error?: string, caller?: string): void {
+  const tag = caller ? `LLM/${caller}` : 'LLM';
   if (error) {
-    logError('LLM', `← ${model} | ${responseLength} chars | ${genTimeMs}ms | ERROR: ${error}`);
+    logError(tag, `← ${model} | ${responseLength} chars | ${genTimeMs}ms | ERROR: ${error}`);
   } else {
-    logInfo('LLM', `← ${model} | ${responseLength} chars | ${genTimeMs}ms`);
+    logInfo(tag, `← ${model} | ${responseLength} chars | ${genTimeMs}ms`);
   }
 }
 

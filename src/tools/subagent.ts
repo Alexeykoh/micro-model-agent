@@ -5,7 +5,7 @@ import { ContextManager } from '../agent/context.js';
 import { buildSystemPrompt } from '../agent/system-prompt.js';
 import { checkFileSyntax } from './syntax-check.js';
 import type { OutputRenderer } from '../ui/renderer.js';
-import { logLLMRequest, logLLMResponse } from '../logger.js';
+import { logInfo, logDebug, logWarn, logLLMRequest, logLLMResponse, logToolCall } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -174,6 +174,7 @@ export async function doChat(
   signal?: AbortSignal,
   retries = 1,
   showThinking = false,
+  caller: 'main' | 'subagent' = 'main',
 ): Promise<{ response: string; genTimeMs: number }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
@@ -184,7 +185,7 @@ export async function doChat(
     if (signal?.aborted) return { response: '', genTimeMs: 0 };
 
     const lastMsg = messages[messages.length - 1];
-    logLLMRequest(provider.model, messages.length, lastMsg?.content || '');
+    logLLMRequest(provider.model, messages.length, lastMsg?.content || '', caller);
 
     renderer.writeSpinner();
 
@@ -254,10 +255,10 @@ export async function doChat(
 
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        logLLMResponse(provider.model, 0, performance.now() - startTime, 'Aborted');
+        logLLMResponse(provider.model, 0, performance.now() - startTime, 'Aborted', caller);
         return { response: '', genTimeMs: 0 };
       }
-      logLLMResponse(provider.model, 0, performance.now() - startTime, e.message);
+      logLLMResponse(provider.model, 0, performance.now() - startTime, e.message, caller);
       renderer.writeError(`\n[LLM] ${e.message}`);
       renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
       return { response: '', genTimeMs: 0 };
@@ -268,7 +269,7 @@ export async function doChat(
     renderer.commitMarkdown();
 
     if (response.trim()) {
-      logLLMResponse(provider.model, response.length, genTimeMs);
+      logLLMResponse(provider.model, response.length, genTimeMs, undefined, caller);
       return { response, genTimeMs };
     }
 
@@ -293,6 +294,12 @@ export async function runIsolatedLoop(
 ): Promise<IsolatedLoopResult> {
   const createdFiles: string[] = [];
   const errors: string[] = [];
+  const startTime = performance.now();
+
+  logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${provider.contextWindow}`);
+  if (existingFiles) {
+    logDebug('SUBAGENT', `context: ${existingFiles.split('\n').length} lines`);
+  }
 
   const systemPrompt = buildSystemPrompt(undefined, 'base');
 
@@ -307,18 +314,28 @@ export async function runIsolatedLoop(
 
   const ctx = new ContextManager(provider.contextWindow);
   const maxSteps = 20;
+  let toolCallCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     await ctx.updateTokens(messages);
 
-    if (ctx.needsCompact && messages.length > 6) {
-      messages.splice(0, messages.length, ...ctx.compact(messages));
-      await ctx.updateTokens(messages);
+    if (step === 0 || step % 5 === 0) {
+      logDebug('SUBAGENT', `step ${step} | ${messages.length} msgs | ${ctx.totalTokens} tokens (${ctx.usagePercent.toFixed(1)}%)`);
     }
 
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false);
+    if (ctx.needsCompact && messages.length > 6) {
+      logInfo('SUBAGENT', `COMPACT at step ${step} | ${ctx.totalTokens} tokens (${ctx.usagePercent.toFixed(1)}%)`);
+      messages.splice(0, messages.length, ...ctx.compact(messages));
+      await ctx.updateTokens(messages);
+      logInfo('SUBAGENT', `after compact | ${messages.length} msgs | ${ctx.totalTokens} tokens`);
+    }
 
-    if (!response.trim()) break;
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent');
+
+    if (!response.trim()) {
+      logDebug('SUBAGENT', `empty response at step ${step}, stopping`);
+      break;
+    }
 
     messages.push({ role: 'assistant', content: response });
 
@@ -336,12 +353,16 @@ export async function runIsolatedLoop(
       }
     }
 
-    if (validCalls.length === 0) break;
+    if (validCalls.length === 0) {
+      logDebug('SUBAGENT', `no valid tool calls at step ${step}, stopping`);
+      break;
+    }
 
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
       const toolId = `sub-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+      toolCallCount++;
 
       let toolOutput = '';
       let toolExitCode = 0;
@@ -349,15 +370,28 @@ export async function runIsolatedLoop(
       if (parsed.name === 'subagent') {
         toolOutput = 'Subagents cannot spawn subagents (max depth 1)';
         toolExitCode = 1;
+        logWarn('SUBAGENT', `nested subagent blocked at step ${step}`);
       } else if (!isBash) {
+        const preview = parsed.name === 'write_file'
+          ? String(parsed.arguments.path ?? '').slice(-60)
+          : parsed.name === 'edit_file'
+            ? String(parsed.arguments.path ?? '').slice(-60)
+            : JSON.stringify(parsed.arguments).slice(0, 80);
+        logToolCall(`sub:${parsed.name}`, preview);
+
         const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
+
+        if (toolExitCode !== 0) {
+          logDebug('SUBAGENT', `tool ${parsed.name} failed: exit ${toolExitCode} | ${toolOutput.slice(0, 200)}`);
+        }
 
         if (toolExitCode === 0 && (parsed.name === 'write_file' || parsed.name === 'edit_file')) {
           const filePath = String(parsed.arguments.path ?? '');
           if (filePath && !createdFiles.includes(filePath)) {
             createdFiles.push(filePath);
+            logInfo('SUBAGENT', `created: ${filePath}`);
           }
         }
 
@@ -370,13 +404,20 @@ export async function runIsolatedLoop(
             if (syntaxResult !== 'OK') {
               errors.push(`${filePath}: ${syntaxResult.split('\n')[0]}`);
               toolOutput += `\nSYNTAX ERROR: ${syntaxResult}`;
+              logWarn('SUBAGENT', `syntax error in ${filePath}: ${syntaxResult.split('\n')[0]}`);
             }
           }
         }
       } else {
+        logToolCall('sub:bash', String(cmd).slice(0, 80));
+
         const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 30 } });
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
+
+        if (toolExitCode !== 0) {
+          logDebug('SUBAGENT', `bash failed: exit ${toolExitCode} | ${toolOutput.slice(0, 200)}`);
+        }
       }
 
       messages.push({ role: 'tool', content: toolOutput.slice(0, 8000), tool_call_id: toolId });
@@ -385,9 +426,17 @@ export async function runIsolatedLoop(
   }
 
   const turns = messages.filter(m => m.role === 'assistant').length;
+  const elapsedMs = performance.now() - startTime;
+
+  await ctx.updateTokens(messages);
+  const finalTokens = ctx.totalTokens;
+  const finalUsage = ctx.usagePercent;
+
+  logInfo('SUBAGENT', `DONE | ${turns} turns | ${toolCallCount} tool calls | ${createdFiles.length} files created | ${errors.length} errors | ${finalTokens} tokens (${finalUsage.toFixed(1)}%) | ${(elapsedMs / 1000).toFixed(1)}s`);
+
   const summary = createdFiles.length > 0
-    ? `[Subagent done — ${createdFiles.length} file(s), ${turns} turns]\nFiles: ${createdFiles.join(', ')}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`
-    : `[Subagent done — no files, ${turns} turns]${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`;
+    ? `[Subagent done — ${createdFiles.length} file(s), ${turns} turns, ${finalTokens} tokens]\nFiles: ${createdFiles.join(', ')}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`
+    : `[Subagent done — no files, ${turns} turns, ${finalTokens} tokens]${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`;
 
   return { createdFiles, errors, summary, turns };
 }
