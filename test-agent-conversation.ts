@@ -21,6 +21,9 @@ import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
 import type { ChatMessage } from './src/llm/provider.js';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // ─── Config ───────────────────────────────────────────────
 
@@ -336,16 +339,41 @@ async function main() {
   }
 
   const provider = new OpenAICompat(BASE_URL, MODEL, CTX);
-  const registry = new ToolRegistry(process.cwd());
+
+  // Create isolated temp directory for testing
+  const testDir = mkdtempSync(join(tmpdir(), 'mma-test-'));
+  const origCwd = process.cwd();
+  process.chdir(testDir);
+
+  // Set up minimal project structure
+  writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test-project', version: '1.0.0', type: 'module' }, null, 2));
+  mkdirSync(join(testDir, 'src'), { recursive: true });
+  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'node', strict: true, esModuleInterop: true, skipLibCheck: true } }, null, 2));
+
+  console.log(`📁 Test directory: ${testDir}\n`);
+
+  const registry = new ToolRegistry(testDir);
   const allResults: TestResult[] = [];
 
-  for (const scenario of scenarios) {
-    console.log(`━━━ ${scenario.name}: ${scenario.description} ━━━`);
-    const results = await runScenario(provider, registry, scenario, true);
-    allResults.push(...results);
+  try {
+    for (const scenario of scenarios) {
+      console.log(`━━━ ${scenario.name}: ${scenario.description} ━━━`);
+      const results = await runScenario(provider, registry, scenario, true);
+      allResults.push(...results);
+    }
+
+    analyzeResults(allResults);
+  } finally {
+    // Restore original CWD and cleanup
+    process.chdir(origCwd);
+    if (args.includes('--keep')) {
+      console.log(`\n📂 Files kept in: ${testDir}`);
+    } else {
+      rmSync(testDir, { recursive: true, force: true });
+      console.log(`\n🧹 Cleaned up: ${testDir}`);
+    }
   }
 
-  analyzeResults(allResults);
   console.log('\n✅ Готово');
 }
 
