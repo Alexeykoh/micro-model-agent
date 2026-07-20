@@ -19,7 +19,7 @@ const __dirname = dirname(__filename);
 
 const MMA_DIR = join(homedir(), '.mma');
 const CACHE_FILE = join(MMA_DIR, 'update-check.json');
-const CACHE_TTL = 86_400_000; // 24 часа
+const CACHE_TTL = 0; // кэш отключён — всегда проверяем актуальную версию
 const PKG_NAME = 'micro-models-agent';
 
 interface UpdateCache {
