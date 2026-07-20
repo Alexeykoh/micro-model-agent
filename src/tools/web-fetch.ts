@@ -1,4 +1,5 @@
 import type { ToolDefinition } from './registry.js';
+import type { ToolHandler } from './types.js';
 import { logInfo } from '../logger.js';
 
 /**
@@ -94,3 +95,11 @@ function stripHtml(html: string): string {
     .replace(/^\s+|\s+$/gm, '')
     .trim();
 }
+
+export const webFetchHandler: ToolHandler = {
+  name: 'web_fetch',
+  definition: webFetchDefinition,
+  async execute(args) {
+    return handleWebFetch(args);
+  },
+};

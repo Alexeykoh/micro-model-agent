@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { sanitize } from './sanitizer.js';
 import { getTheme } from '../styling/index.js';
+import type { ToolDefinition } from './registry.js';
+import type { ToolHandler } from './types.js';
 
 /**
  * Исполнение shell-команд.
@@ -237,3 +239,29 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
 
   return { stdout, stderr, exitCode, truncated };
 }
+
+export const bashDefinition: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'bash',
+    description: 'Execute a shell command. Use for non-file operations (npm, git, etc).',
+    parameters: {
+      type: 'object',
+      properties: {
+        cmd: { type: 'string', description: 'The command to execute' },
+        timeout: { type: 'number', description: 'Seconds before timeout (default 120, max 600)' },
+      },
+      required: ['cmd'],
+    },
+  },
+};
+
+export const bashHandler: ToolHandler = {
+  name: 'bash',
+  definition: bashDefinition,
+  async execute(args) {
+    const cmd = String(args.cmd ?? '');
+    const timeout = Math.min(600, Math.max(1, Number(args.timeout ?? 120)));
+    return executeBash(cmd, timeout);
+  },
+};

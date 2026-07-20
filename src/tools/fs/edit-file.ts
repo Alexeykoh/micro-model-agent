@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, unlinkSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -97,3 +98,11 @@ function writeAndReport(
 
   return fsOk(`${verb} ${count} occurrence(s) in ${normalizePath(relPath)}`);
 }
+
+export const editFileHandler: ToolHandler = {
+  name: 'edit_file',
+  definition: editFileDefinition,
+  async execute(args, ctx) {
+    return handleEditFile(args, ctx.cwd);
+  },
+};

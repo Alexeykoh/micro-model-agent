@@ -1,6 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
@@ -110,3 +111,11 @@ export function handleGlobSearch(
 
   return fsOk(`${results.length} match(es) for "${pattern}":\n${output}${suffix}`, truncated);
 }
+
+export const globSearchHandler: ToolHandler = {
+  name: 'glob_search',
+  definition: globSearchDefinition,
+  async execute(args, ctx) {
+    return handleGlobSearch(args, ctx.cwd);
+  },
+};

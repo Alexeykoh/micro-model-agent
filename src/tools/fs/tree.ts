@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
@@ -102,3 +103,11 @@ export function handleTree(
 
   return fsOk(output, counter.count >= maxFiles);
 }
+
+export const treeHandler: ToolHandler = {
+  name: 'tree',
+  definition: treeDefinition,
+  async execute(args, ctx) {
+    return handleTree(args, ctx.cwd);
+  },
+};

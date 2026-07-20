@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, IGNORE_DIRS, normalizePath, truncateOutput, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
@@ -129,3 +130,11 @@ export function handleGrepSearch(
 
   return fsOk(`${results.length} match(es) for "${pattern}":\n${text}`, truncated || truncatedOutput);
 }
+
+export const grepSearchHandler: ToolHandler = {
+  name: 'grep_search',
+  definition: grepSearchDefinition,
+  async execute(args, ctx) {
+    return handleGrepSearch(args, ctx.cwd);
+  },
+};

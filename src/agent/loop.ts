@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ToolRegistry } from '../tools/registry.js';
+import type { ParsedToolCall } from '../tools/types.js';
 import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
 import { autoLearnFromError } from './memory.js';
@@ -10,13 +11,11 @@ import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
-import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand, getPlanPendingCount } from '../tools/plan.js';
-import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../tools/todo.js';
+import { showPlan, getPlanPendingCount } from '../tools/plan.js';
+import { listTodos } from '../tools/todo.js';
 import { parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
-import { listThemes, switchTheme } from '../styling/index.js';
-import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js';
 import { loadConfig, saveConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -24,6 +23,28 @@ import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, lo
 import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
+import { ToolExecutor } from './tool-executor.js';
+import { planHandler } from '../tools/native/plan.js';
+import { todoHandler } from '../tools/native/todo.js';
+import { questionHandler } from '../tools/native/question.js';
+import { approveHandler } from '../tools/native/approve.js';
+import { userProfileHandler } from '../tools/native/user-profile.js';
+import { themeHandler } from '../tools/native/theme.js';
+import { bashHandler } from '../tools/bash.js';
+import { readFileHandler } from '../tools/fs/read-file.js';
+import { writeFileHandler } from '../tools/fs/write-file.js';
+import { editFileHandler } from '../tools/fs/edit-file.js';
+import { listDirHandler } from '../tools/fs/list-dir.js';
+import { createDirHandler } from '../tools/fs/create-dir.js';
+import { deleteFileHandler } from '../tools/fs/delete-file.js';
+import { copyFileHandler } from '../tools/fs/copy-file.js';
+import { moveFileHandler } from '../tools/fs/move-file.js';
+import { fileInfoHandler } from '../tools/fs/file-info.js';
+import { globSearchHandler } from '../tools/fs/glob-search.js';
+import { grepSearchHandler } from '../tools/fs/grep-search.js';
+import { treeHandler } from '../tools/fs/tree.js';
+import { webSearchHandler } from '../tools/web-search.js';
+import { webFetchHandler } from '../tools/web-fetch.js';
 
 /**
  * Умная обрезка tool-результатов для экономии токенов в контексте.
@@ -222,6 +243,17 @@ export async function runAgentLoop(
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
   let directWriteStreak = 0; // количество прямых write_file без subagent
+
+  // ─── ToolExecutor: единый диспетчер инструментов ──
+  const toolExecutor = new ToolExecutor();
+  toolExecutor.registerAll([
+    planHandler, todoHandler, questionHandler, approveHandler,
+    userProfileHandler, themeHandler, bashHandler,
+    readFileHandler, writeFileHandler, editFileHandler, listDirHandler,
+    createDirHandler, deleteFileHandler, copyFileHandler, moveFileHandler,
+    fileInfoHandler, globSearchHandler, grepSearchHandler, treeHandler,
+    webSearchHandler, webFetchHandler,
+  ]);
 
   // Reset abort signal for this run
   if (renderer?.abortSignal === undefined) {
@@ -594,171 +626,8 @@ export async function runAgentLoop(
       let toolExitCode = 0;
       const toolStart = performance.now();
 
-      // ─── Нативные инструменты (plan/todo/question/approve) ──
-      if (parsed.name === 'plan') {
-        const planName = String(parsed.arguments.TaskName || parsed.arguments.name || parsed.arguments.plan || 'Untitled');
-        const stepsRaw = parsed.arguments.Steps || parsed.arguments.steps || [];
-        const steps = Array.isArray(stepsRaw) ? stepsRaw : String(stepsRaw).split('\n').filter((s: string) => s.trim());
-        if (!quiet) {
-          renderer?.writeBracketTag('plan', 'create');
-        }
-        toolOutput = createPlan(planName, steps);
-        // If plan has 3+ steps, suggest using subagent for isolation
-        if (steps.length >= 3) {
-          toolOutput += `\n\nIMPORTANT: Plan has ${steps.length} steps. Use subagent tool for EACH step to work in isolation:\n`;
-          for (let i = 0; i < steps.length; i++) {
-            toolOutput += `subagent("Step ${i + 1}: ${steps[i]}. List existing files and packages.")\n`;
-          }
-          toolOutput += `This prevents context loss. Do NOT use write_file directly — delegate to subagents.`;
-        }
-        if (!quiet && toolOutput) {
-          renderer?.writeLine(toolOutput);
-        }
-      } else if (parsed.name === 'todo') {
-        const action = String(parsed.arguments.action || 'list');
-        const text = String(parsed.arguments.text || '');
-        if (!quiet) {
-          renderer?.writeBracketTag('todo', action);
-        }
-        switch (action) {
-          case 'add': toolOutput = addTodo(text); break;
-          case 'done': toolOutput = doneTodo(text); break;
-          case 'remove': case 'rm': toolOutput = removeTodo(text); break;
-          case 'list': case 'ls': toolOutput = listTodos(); break;
-          default: toolOutput = 'Unknown todo action. Use: add, done, remove, list'; toolExitCode = 1;
-        }
-        if (!quiet && toolExitCode === 0 && toolOutput) {
-          renderer?.writeLine(toolOutput);
-        }
-      } else if (parsed.name === 'question') {
-        const question = String(parsed.arguments.question || parsed.arguments.text || '');
-        const choicesArr = Array.isArray(parsed.arguments.choices) ? parsed.arguments.choices : [];
-        if (!quiet) {
-          renderer?.writeBracketTag('question', question);
-        }
-        messages.push({
-          role: 'tool',
-          content: `Question asked: ${question}`,
-          tool_call_id: toolId,
-        });
-        return {
-          messages,
-          questionPending: { question, choices: choicesArr.length > 0 ? choicesArr : undefined },
-        };
-      } else if (parsed.name === 'approve') {
-        const action = String(parsed.arguments.action || parsed.arguments.text || '');
-        if (!quiet) {
-          renderer?.writeBracketTag('approve', action);
-        }
-        messages.push({
-          role: 'tool',
-          content: `Approval requested: ${action}`,
-          tool_call_id: toolId,
-        });
-        return {
-          messages,
-          questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
-        };
-      } else if (parsed.name === 'user_profile') {
-        const action = String(parsed.arguments.action || 'show');
-        if (!quiet) {
-          renderer?.writeBracketTag('user_profile', action);
-        }
-        switch (action) {
-          case 'show': {
-            const content = loadProfile();
-            toolOutput = content || 'User profile is empty.';
-            break;
-          }
-          case 'add_note': {
-            const note = String(parsed.arguments.note || parsed.arguments.text || '');
-            const section = String(parsed.arguments.section || 'Notes');
-            if (!note) {
-              toolOutput = 'Usage: user_profile action=add_note section=Notes note=...';
-              toolExitCode = 1;
-              break;
-            }
-            appendNote(note, section as any);
-            toolOutput = `Note added to "${section}" section.`;
-            break;
-          }
-          default:
-            toolOutput = 'Unknown user_profile action. Use: show, add_note';
-            toolExitCode = 1;
-        }
-      } else if (parsed.name === 'theme') {
-        const action = String(parsed.arguments.action || 'list');
-        const name = String(parsed.arguments.name || '');
-        const url = String(parsed.arguments.url || '');
-        if (!quiet) {
-          renderer?.writeBracketTag('theme', action);
-        }
-        switch (action) {
-          case 'list': {
-            const allThemes = listThemes();
-            const current = loadThemeConfig().name;
-            toolOutput = `Available themes (${allThemes.length}):\n`;
-            for (const t of allThemes) {
-              toolOutput += `  ${t}${t === current ? ' (active)' : ''}\n`;
-            }
-            break;
-          }
-          case 'show': {
-            const config = loadThemeConfig();
-            toolOutput = `Theme: ${config.name}\nColors: ${JSON.stringify(config.colors, null, 2)}\nIcons: ${JSON.stringify(config.icons, null, 2)}`;
-            break;
-          }
-          case 'switch': {
-            const allThemes = listThemes();
-            if (!allThemes.includes(name)) {
-              toolOutput = `Unknown theme "${name}". Available: ${allThemes.join(', ')}`;
-              toolExitCode = 1;
-              break;
-            }
-            const appConfig = loadConfig();
-            appConfig.theme = name;
-            saveConfig(appConfig);
-            switchTheme(name);
-            try {
-              const { resetInkTheme } = await import('../ui/ink/theme.js');
-              resetInkTheme();
-            } catch { /* not in ink mode */ }
-            toolOutput = `Theme switched to "${name}"`;
-            break;
-          }
-          case 'install': {
-            if (!name || !url) {
-              toolOutput = 'Usage: theme install <name> <url>';
-              toolExitCode = 1;
-              break;
-            }
-            try {
-              const resp = await fetch(url);
-              const text = await resp.text();
-              JSON.parse(text);
-              installTheme(name, text);
-              toolOutput = `Theme "${name}" installed from ${url}`;
-            } catch (e: any) {
-              toolOutput = `Failed to install theme: ${e.message}`;
-              toolExitCode = 1;
-            }
-            break;
-          }
-          case 'remove': {
-            if (!removeTheme(name)) {
-              toolOutput = `Theme "${name}" not found`;
-              toolExitCode = 1;
-              break;
-            }
-            toolOutput = `Theme "${name}" removed`;
-            break;
-          }
-          default:
-            toolOutput = 'Unknown theme action. Use: list, show, switch, install, remove';
-            toolExitCode = 1;
-        }
-      } else if (parsed.name === 'subagent') {
-        // ─── Субагент: изолированный контекст для задачи ──
+      // ─── Субагент: изолированный контекст для задачи ──
+      if (parsed.name === 'subagent') {
         const task = String(parsed.arguments.task || '');
         if (!task) {
           toolOutput = 'Error: task is required';
@@ -766,11 +635,10 @@ export async function runAgentLoop(
         } else {
           const autoContext = buildSubagentContext(process.cwd());
           logInfo('AGENT', `spawning subagent | task: "${task.slice(0, 150)}"`);
-          // Создаём буферизированный рендерер для субагента
           const subRenderer = new SubagentRenderer();
           try {
             const childResult = await runIsolatedLoop(
-              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer
+              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer, toolExecutor
             );
             toolOutput = childResult.summary;
             logInfo('AGENT', `subagent returned | files: ${childResult.createdFiles.length} | turns: ${childResult.turns} | errors: ${childResult.errors.length}`);
@@ -779,7 +647,6 @@ export async function runAgentLoop(
                 if (!createdFiles.includes(f)) createdFiles.push(f);
               }
             }
-            // Отправляем буфер субагента в UI для отображения в ToolCallBlock
             const buf = subRenderer.getBuffer();
             if (!quiet && renderer?.writeToolBuffer) {
               renderer.writeToolBuffer({ lines: buf.lines, toolCalls: buf.toolCalls });
@@ -794,88 +661,7 @@ export async function runAgentLoop(
         if (!quiet) {
           renderer?.writeToolResult(subTime, toolExitCode, toolOutput.slice(0, 300));
         }
-      } else if (isBash && cmd!.startsWith('plan ')) {
-        const planArgs = cmd!.slice(5).trim();
-        const { action, params } = parsePlanCommand(planArgs);
-        if (!quiet) {
-          renderer?.writeBracketTag('plan', action);
-        }
-        switch (action) {
-          case 'create':
-            toolOutput = createPlan(params[0] || 'Untitled Plan', params.slice(1));
-            break;
-          case 'done':
-            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'done');
-            break;
-          case 'progress':
-            toolOutput = updatePlanStep(parseInt(params[0]) || 0, 'in_progress');
-            break;
-          case 'show':
-            toolOutput = showPlan();
-            break;
-          case 'clear':
-            toolOutput = clearPlan();
-            break;
-          default:
-            toolOutput = 'Unknown plan action. Use: create, done, progress, show, clear';
-            toolExitCode = 1;
-        }
-      } else if (isBash && cmd!.startsWith('todo ')) {
-        const todoArgs = cmd!.slice(5).trim();
-        const { action, params } = parseTodoCommand(todoArgs);
-        if (!quiet) {
-          renderer?.writeBracketTag('todo', action);
-        }
-        switch (action) {
-          case 'add':
-            toolOutput = addTodo(params);
-            break;
-          case 'done':
-            toolOutput = doneTodo(params);
-            break;
-          case 'remove':
-          case 'rm':
-            toolOutput = removeTodo(params);
-            break;
-          case 'list':
-          case 'ls':
-            toolOutput = listTodos();
-            break;
-          default:
-            toolOutput = 'Unknown todo action. Use: add, done, remove, list';
-            toolExitCode = 1;
-        }
-      } else if (isBash && cmd!.startsWith('question ')) {
-        const qArgs = cmd!.slice(9).trim();
-        const { question, choices } = parseQuestionCommand(qArgs);
-        if (!quiet) {
-          renderer?.writeBracketTag('question', question);
-        }
-        messages.push({
-          role: 'tool',
-          content: `Question asked: ${question}`,
-          tool_call_id: toolId,
-        });
-        return {
-          messages,
-          questionPending: { question, choices: choices.length > 0 ? choices : undefined },
-        };
-      } else if (isBash && cmd!.startsWith('approve ')) {
-        const approveArgs = cmd!.slice(8).trim();
-        const action = parseApproveCommand(approveArgs);
-        if (!quiet) {
-          renderer?.writeBracketTag('approve', action);
-        }
-        messages.push({
-          role: 'tool',
-          content: `Approval requested: ${action}`,
-          tool_call_id: toolId,
-        });
-        return {
-          messages,
-          questionPending: { question: `Approve: ${action}?`, choices: ['Yes', 'No'] },
-        };
-      // ─── MCP-инструменты ────────────────────────────────
+      // ─── MCP: внешние tool-серверы ────────────────────────
       } else if (isBash && isMCPCommand(cmd!)) {
         const mcpCmd = parseMCPCommand(cmd!);
         if (mcpCmd) {
@@ -887,17 +673,40 @@ export async function runAgentLoop(
           toolOutput = 'Invalid MCP command. Format: mcp <server> <tool> [args_json]';
           toolExitCode = 1;
         }
-      // ─── Файловые инструменты (не bash) ─────────────────
-      } else if (!isBash) {
-        const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
-        toolOutput = result.stdout || result.stderr || '(no output)';
-        toolExitCode = result.exitCode;
-      // ─── Bash: выполнение shell-команд ──────────────────
+      // ─── Все инструменты через ToolExecutor ──────────────
       } else {
-        const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 120 } });
+        // Определяем инструмент и аргументы для executor'а
+        let executorName = parsed.name;
+        let executorArgs = parsed.arguments;
+
+        // Bash-команды
+        if (isBash) {
+          executorName = 'bash';
+          executorArgs = { cmd, timeout: parsed.arguments?.timeout ?? 120 };
+        }
+
+        const hookCmd = isBash ? cmd! : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
+        const executorCall: ParsedToolCall = { id: toolId, name: executorName, arguments: executorArgs };
+        const toolCtx = { cwd: process.cwd(), renderer, quiet };
+        const { result, elapsed } = await toolExecutor.execute(executorCall, toolCtx, hookCmd);
+
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
+
+        // Обработка question/approve: приостанавливаем цикл
+        if (result.questionPending) {
+          messages.push({
+            role: 'tool',
+            content: toolOutput,
+            tool_call_id: toolId,
+          });
+          return {
+            messages,
+            questionPending: { question: toolOutput, choices: undefined },
+          };
+        }
       }
+
 
       const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
       logToolCall(parsed.name, preview, toolExitCode !== 0 ? `exit:${toolExitCode} ${toolOutput.slice(0, 100)}` : `ok (${toolTime}s)`);

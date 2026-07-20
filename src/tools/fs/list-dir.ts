@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, formatSize, normalizePath, readDirEntries } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
@@ -78,3 +79,11 @@ export function handleListDir(
 
   return fsOk(result);
 }
+
+export const listDirHandler: ToolHandler = {
+  name: 'list_dir',
+  definition: listDirDefinition,
+  async execute(args, ctx) {
+    return handleListDir(args, ctx.cwd);
+  },
+};

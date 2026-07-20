@@ -1,4 +1,5 @@
 import type { ToolDefinition } from './registry.js';
+import type { ToolHandler } from './types.js';
 
 /**
  * Веб-поиск через DuckDuckGo Lite.
@@ -106,3 +107,11 @@ function parseDuckDuckGoResults(html: string, max: number): SearchResult[] {
 
   return results;
 }
+
+export const webSearchHandler: ToolHandler = {
+  name: 'web_search',
+  definition: webSearchDefinition,
+  async execute(args) {
+    return handleWebSearch(args);
+  },
+};

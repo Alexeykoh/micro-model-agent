@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, formatSize, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -48,3 +49,11 @@ export function handleFileInfo(
 
   return fsOk(info.join('\n'));
 }
+
+export const fileInfoHandler: ToolHandler = {
+  name: 'file_info',
+  definition: fileInfoDefinition,
+  async execute(args, ctx) {
+    return handleFileInfo(args, ctx.cwd);
+  },
+};

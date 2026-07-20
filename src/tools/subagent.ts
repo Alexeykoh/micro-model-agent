@@ -1,6 +1,8 @@
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ToolRegistry } from './registry.js';
+import type { ParsedToolCall } from './types.js';
+import type { ToolExecutor } from '../agent/tool-executor.js';
 import { ContextManager } from '../agent/context.js';
 import { buildSystemPrompt } from '../agent/system-prompt.js';
 import { checkFileSyntax } from './syntax-check.js';
@@ -366,6 +368,7 @@ export async function runIsolatedLoop(
   cwd: string,
   quiet: boolean,
   renderer: OutputRenderer,
+  toolExecutor?: ToolExecutor,
 ): Promise<IsolatedLoopResult> {
   const createdFiles: string[] = [];
   const errors: string[] = [];
@@ -461,7 +464,9 @@ export async function runIsolatedLoop(
             : JSON.stringify(parsed.arguments).slice(0, 80);
         logToolCall(`sub:${parsed.name}`, preview);
 
-        const result = await registry.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments });
+        const hookCmd = isBash ? String(cmd) : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
+        const execResult = toolExecutor ? await toolExecutor.execute({ id: toolId, name: parsed.name, arguments: parsed.arguments } as any, { cwd, quiet: false }, hookCmd) : null;
+        const result = execResult?.result ?? { stdout: '', stderr: 'ToolExecutor not available', exitCode: 1, truncated: false };
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
 
@@ -493,7 +498,8 @@ export async function runIsolatedLoop(
       } else {
         logToolCall('sub:bash', String(cmd).slice(0, 80));
 
-        const result = await registry.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 30 } });
+        const bashExecResult = toolExecutor ? await toolExecutor.execute({ id: toolId, name: 'bash', arguments: { cmd, timeout: parsed.arguments?.timeout ?? 30 } } as any, { cwd, quiet: false }, String(cmd)) : null;
+        const result = bashExecResult?.result ?? { stdout: '', stderr: 'ToolExecutor not available', exitCode: 1, truncated: false };
         toolOutput = result.stdout || result.stderr || '(no output)';
         toolExitCode = result.exitCode;
 

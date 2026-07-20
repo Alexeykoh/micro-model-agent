@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { handleWebSearch, webSearchDefinition } from '../src/tools/web-search.js';
-import { handleWebFetch, webFetchDefinition } from '../src/tools/web-fetch.js';
+import { handleWebSearch, webSearchDefinition, webSearchHandler } from '../src/tools/web-search.js';
+import { handleWebFetch, webFetchDefinition, webFetchHandler } from '../src/tools/web-fetch.js';
 import { ToolRegistry } from '../src/tools/registry.js';
+import { ToolExecutor } from '../src/agent/tool-executor.js';
 
 let originalFetch: typeof globalThis.fetch;
 let mockFetch: typeof globalThis.fetch;
@@ -180,12 +181,13 @@ describe('ToolRegistry web tools dispatch', () => {
     `;
     mockResponse({ text: html });
 
-    const registry = new ToolRegistry();
-    const result = await registry.execute({
-      id: 'test-1',
-      name: 'web_search',
-      arguments: { query: 'test', maxResults: 1 },
-    });
+    const executor = new ToolExecutor();
+    executor.register(webSearchHandler);
+    const { result } = await executor.execute(
+      { id: 'test-1', name: 'web_search', arguments: { query: 'test', maxResults: 1 } },
+      { cwd: process.cwd() },
+      'web_search test',
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Test Result');
@@ -194,12 +196,13 @@ describe('ToolRegistry web tools dispatch', () => {
   it('dispatches web_fetch through registry.execute', async () => {
     mockResponse({ text: 'Plain text content', contentType: 'text/plain' });
 
-    const registry = new ToolRegistry();
-    const result = await registry.execute({
-      id: 'test-2',
-      name: 'web_fetch',
-      arguments: { url: 'https://example.com' },
-    });
+    const executor = new ToolExecutor();
+    executor.register(webFetchHandler);
+    const { result } = await executor.execute(
+      { id: 'test-2', name: 'web_fetch', arguments: { url: 'https://example.com' } },
+      { cwd: process.cwd() },
+      'web_fetch https://example.com',
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Plain text content');

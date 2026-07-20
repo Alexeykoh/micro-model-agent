@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, truncateOutput, normalizePath } from './path-utils.js';
 import { fsError, fsOk, MAX_OUTPUT_CHARS } from './types.js';
 
@@ -66,3 +67,11 @@ export function handleReadFile(
 
   return fsOk(text, truncated);
 }
+
+export const readFileHandler: ToolHandler = {
+  name: 'read_file',
+  definition: readFileDefinition,
+  async execute(args, ctx) {
+    return handleReadFile(args, ctx.cwd);
+  },
+};

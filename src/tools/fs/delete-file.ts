@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -51,3 +52,11 @@ export function handleDeleteFile(
 
   return fsOk(`Deleted: ${normalizePath(path)}`);
 }
+
+export const deleteFileHandler: ToolHandler = {
+  name: 'delete_file',
+  definition: deleteFileDefinition,
+  async execute(args, ctx) {
+    return handleDeleteFile(args, ctx.cwd);
+  },
+};

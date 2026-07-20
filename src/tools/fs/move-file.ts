@@ -1,6 +1,7 @@
 import { renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -52,3 +53,11 @@ export function handleMoveFile(
 
   return fsOk(`Moved ${normalizePath(source)} → ${normalizePath(dest)}`);
 }
+
+export const moveFileHandler: ToolHandler = {
+  name: 'move_file',
+  definition: moveFileDefinition,
+  async execute(args, ctx) {
+    return handleMoveFile(args, ctx.cwd);
+  },
+};

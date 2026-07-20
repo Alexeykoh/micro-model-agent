@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync, renameSync, unlinkSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -66,3 +67,11 @@ export function handleWriteFile(
   const lines = content.split('\n').length;
   return fsOk(`Written ${content.length} bytes (${lines} lines) to ${normalizePath(path)}`);
 }
+
+export const writeFileHandler: ToolHandler = {
+  name: 'write_file',
+  definition: writeFileDefinition,
+  async execute(args, ctx) {
+    return handleWriteFile(args, ctx.cwd);
+  },
+};

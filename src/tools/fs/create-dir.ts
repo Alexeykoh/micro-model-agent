@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -41,3 +42,11 @@ export function handleCreateDir(
 
   return fsOk(`Created directory: ${normalizePath(path)}`);
 }
+
+export const createDirHandler: ToolHandler = {
+  name: 'create_dir',
+  definition: createDirDefinition,
+  async execute(args, ctx) {
+    return handleCreateDir(args, ctx.cwd);
+  },
+};

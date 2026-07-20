@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
+import type { ToolHandler } from '../types.js';
 import { resolvePath, assertExists, normalizePath } from './path-utils.js';
 import { fsError, fsOk } from './types.js';
 
@@ -52,3 +53,11 @@ export function handleCopyFile(
 
   return fsOk(`Copied ${normalizePath(source)} → ${normalizePath(dest)}`);
 }
+
+export const copyFileHandler: ToolHandler = {
+  name: 'copy_file',
+  definition: copyFileDefinition,
+  async execute(args, ctx) {
+    return handleCopyFile(args, ctx.cwd);
+  },
+};
