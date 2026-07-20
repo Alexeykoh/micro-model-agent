@@ -37,6 +37,8 @@ export interface ChatOptions {
   seed?: number;
   signal?: AbortSignal;
   showThinking?: boolean;
+  /** Включить thinking/reasoning у reasoning-моделей (Qwen3.5, DeepSeek-R1 и др.) */
+  enableThinking?: boolean;
 }
 
 /** Streaming-чанк ответа LLM */

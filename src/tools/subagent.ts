@@ -246,6 +246,9 @@ export async function doChat(
     const fullText: string[] = [];
     let started = false;
     let reasoningBuf: string | false = false;
+    let lastFinishReason: string | null = null;
+    let reasoningChunksCount = 0;
+    let contentChunksCount = 0;
 
     if (signal?.aborted) return { response: '', genTimeMs: 0 };
 
@@ -256,9 +259,24 @@ export async function doChat(
 
     try {
       let buf = '';
-      for await (const chunk of provider.chat(messages, { temperature: 0.7, max_tokens: 8192, signal, showThinking })) {
+      for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking: true })) {
+        if (!chunk.content && !chunk.reasoning && !chunk.finish_reason) continue;
+
+        // Трекаем finish_reason для диагностики пустых ответов
+        if (chunk.finish_reason) {
+          lastFinishReason = chunk.finish_reason;
+        }
+
+        if (chunk.content) {
+          fullText.push(chunk.content);
+          contentChunksCount++;
+        }
+
+        if (chunk.reasoning) {
+          reasoningChunksCount++;
+        }
+
         if (!chunk.content && !chunk.reasoning) continue;
-        if (chunk.content) fullText.push(chunk.content);
 
         if (!started) {
           renderer.clearSpinner();
@@ -336,6 +354,15 @@ export async function doChat(
     if (response.trim()) {
       logLLMResponse(provider.model, response.length, genTimeMs, undefined, caller);
       return { response, genTimeMs };
+    }
+
+    // Диагностика пустого ответа — логируем причину
+    const reason = lastFinishReason ?? 'unknown';
+    logWarn('DOCHAT', `empty response #${attempt + 1}: finish_reason=${reason}, reasoning_chunks=${reasoningChunksCount}, content_chunks=${contentChunksCount}`);
+    if (lastFinishReason === 'length') {
+      renderer.writeWarning(`  [empty response: model hit max_tokens during reasoning (${reasoningChunksCount} reasoning chunks, 0 content chunks)]`);
+    } else if (reasoningChunksCount > 0 && contentChunksCount === 0) {
+      renderer.writeWarning(`  [empty response: model produced ${reasoningChunksCount} reasoning chunks but no content]`);
     }
 
     if (attempt < retries) {

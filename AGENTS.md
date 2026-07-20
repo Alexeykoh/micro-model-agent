@@ -28,58 +28,42 @@ npm run dev              # bun --watch
 - **LLM providers**: OpenAI-compatible REST only (LM Studio, Ollama, vLLM, Together). No SDK dependencies.
 - **Ink UI**: React-based terminal UI (`src/ui/ink/`). Requires `jsx: "react-jsx"` in tsconfig. Components are `.tsx` files.
 - **Config**: `~/.mma/config.json` globally, `.mmrc` project-local override. Config loads via `src/config/config.ts`.
+- **ToolHandler interface**: All 20 tools (12 FS + bash + 2 web + 6 native) implement `ToolHandler` from `src/tools/types.ts`. ToolExecutor dispatches: pre-hooks → execute → post-hooks → truncate.
+- **ModeRegistry**: Data-driven mode configs (fast/base/pro) in `src/agent/modes/`. Custom modes via `AppConfig.modes`.
+- **Plugin system**: Lifecycle events in `src/plugins/`. Plugins subscribe via `AgentPlugin` interface with events like `tool:before/after`.
+- **React-loop**: Shared ReAct cycle in `src/agent/react-loop.ts` with callbacks. Used by subagent.ts; loop.ts has its own inline cycle (domain logic too tightly coupled).
 
 ## Source layout (what to touch)
 
 | Area | Path | Notes |
 |------|------|-------|
 | Entry point | `src/index.ts` → `src/cli.ts` | Commander CLI, registers subcommands |
-| Agent loop | `src/agent/loop.ts` | ReAct cycle, ~845 lines, core logic |
+| Agent loop | `src/agent/loop.ts` | ReAct cycle, ~884 lines, core logic |
+| Tool executor | `src/agent/tool-executor.ts` | ToolExecutor: pure dispatcher pipeline |
+| React-loop | `src/agent/react-loop.ts` | Shared ReAct cycle (193 lines) |
+| Tool types | `src/tools/types.ts` | ToolHandler interface, ToolContext, ToolResult |
 | Tool registry | `src/tools/registry.ts` | Wires all tools, handles file-change notifications |
-| FS tools | `src/tools/fs/*.ts` | 12 files, one per operation |
+| Native tools | `src/tools/native/*.ts` | plan, todo, question, approve, theme, user-profile |
+| FS tools | `src/tools/fs/*.ts` | 14 files (12 tools + path-utils + types) |
+| Modes | `src/agent/modes/` | ModeRegistry, ModeConfig, applier |
+| Plugins | `src/plugins/` | PluginManager with event bus |
 | LLM provider | `src/llm/openai-compat.ts` | Direct REST to OpenAI-compatible endpoints |
+| System prompt | `src/agent/system-prompt.ts` | All prompt constants and buildSystemPrompt() |
 | REPL | `src/repl/index.ts` | Interactive readline loop |
-| Skills | `src/skills/builtin/` | 8 built-in skills, copied to dist/ at build |
+| REPL commands | `src/repl/commands.ts` | Slash command registry + handlers |
+| Skills | `src/skills/builtin/` | 10 built-in skills (grill-me, typescript-expert, etc.), copied to dist/ at build |
 | Theme/styling | `src/styling/` | ThemeEngine, loader, JSON theme files |
 | Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
 | Ink UI | `src/ui/ink/` | React components for terminal UI |
 
-## User Profile (`~/.mma/user/profile.md`)
-
-Система автоматического сбора наблюдений о пользователе.
-
-### Что собирается автоматически
-
-| Данные | Когда | Куда |
-|--------|-------|------|
-| OS (platform, version, hostname) | при старте REPL, один раз | секция `OS` |
-| Tech Stack (dependencies из package.json) | при старте REPL | секция `Tech Stack` |
-| Coding Style (indent, кавычки, точки с запятой) | после каждой записи файла агентом | секция `Coding Style` |
-| Время начала/конца сессии | старт/стоп REPL | секция `Session Patterns` |
-
-### Версионирование знаний
-
-Каждая запись имеет дату: `- [2026-07-18] react (UI)`. При повторном обнаружении того же факта дата обновляется — запись считается актуальной. Записи старше 30 дней помечаются в system prompt как `(stale Nd ago)`.
-
-### Как агент использует профиль
-
-Блок `## User Profile` в system prompt содержит инструкцию: *Учитывай эти наблюдения при выборе стека, стиля кода и формата ответа.* Агент может добавлять заметки через инструмент `user_profile` (действия: `show`, `add_note`). Пользователь — через `/profile текст заметки`.
-
-### Где код
-
-- `src/agent/user-profile.ts` — модуль профиля
-- `src/agent/system-prompt.ts` — внедрение в system prompt
-- `src/agent/loop.ts` — native-обработчик + авто-детекция стиля
-- `src/repl/commands.ts` — команда `/profile`
-- `src/repl/index.ts` — авто-сбор при старте/стопе
-- `tests/user-profile.test.ts` — 28 тестов
-
 ## Testing
 
-- Unit tests: `tests/context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `user-profile.test.ts`, `subagent.test.ts`
-- Integration tests: `tests/llm-integration.test.ts`, `tests/agent-integration.test.ts`, `tests/subagent-integration.test.ts` (require running LLM server)
+- Unit tests (in `npm test`): `context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `subagent.test.ts`
+- Additional unit tests (in `test:all`): `tool-executor.test.ts`, `native-tools.test.ts`, `react-loop.test.ts`, `web-tools.test.ts`, `modes.test.ts`, `fs-tools.test.ts`, `user-profile.test.ts`
+- Integration tests: `llm-integration.test.ts`, `agent-integration.test.ts`, `subagent-integration.test.ts` (require running LLM server)
 - All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
 - No vitest config file — uses defaults from package.json
+- `native-tools.test.ts` has mock isolation issues — keep out of `npm test` script. Run individually or via `test:all`.
 
 ## Conventions
 
@@ -98,3 +82,12 @@ npm run dev              # bun --watch
 - `execa` is used for shell execution (not raw `child_process`).
 - The project publishes `dist/` + `dist/skills/builtin/` to npm (`files` field in package.json).
 - Built-in skills are in `src/skills/builtin/<name>/SKILL.md` — they must be copied to dist/ at build time.
+- **Tool output truncation is smart**: `truncateToolOutput()` in loop.ts applies per-tool limits (read_file=2000, bash=1500, etc.), not a flat cap. Full output persists in session store.
+- **Context compaction at 70%**: Score-based importance pruning keeps top-6 important + last-6 recent. Model has ~4K token buffer for response.
+- **Skills limited to 4000 tokens in system prompt**: `enforceSkillBudget()` sorts by size, keeps smaller first. Fast mode excludes skills entirely.
+- **Temperature 0.3 recommended**: User found 0.3 improves code quality and rule following for Qwen3.5-9B.
+- **Model ID format**: LM Studio uses `qwen/qwen3.5-9b` (org/model), not `qwen3.5-9b-instruct`.
+- **Question/approve pause mechanism**: `ToolResult.questionPending`/`breakLoop` flags. Handlers set `questionPending=true`; loop.ts returns early with questionPending object.
+- **Loop.ts still has inline ReAct cycle**: Despite react-loop.ts existing, loop.ts keeps its own cycle because domain logic (skills, plan enforcement, read_file consolidation, syntax check) is too tightly coupled. react-loop.ts is used by subagent.ts only.
+- **Config defaults must be synced across 3 files**: `config/config.ts` DEFAULT_CONFIG, `cli/config.ts` reset handler, and `setup-wizard.ts`. Changing one requires updating all three.
+- **Small models hallucinate file contents**: Qwen3.5-9B generates plausible file descriptions without calling tools. Prompt guidance alone insufficient; code-level enforcement needed.

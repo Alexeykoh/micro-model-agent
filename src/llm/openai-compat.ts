@@ -17,6 +17,27 @@ interface OpenAIError {
   error?: { message?: string };
 }
 
+/** Паттерны моделей, поддерживающих reasoning/thinking */
+const REASONING_MODEL_PATTERNS = [
+  /qwen.*3\.5/i,
+  /qwen.*3.*thinking/i,
+  /deepseek.*r1/i,
+  /deepseek.*reason/i,
+  /\br1\b.*7b/i,
+  /\br1\b.*14b/i,
+  /\br1\b.*32b/i,
+  /\br1\b.*70b/i,
+];
+
+/**
+ * Проверяет, является ли модель reasoning-моделью.
+ * Reasoning-модели отправляют reasoning_content перед content,
+ * и нуждаются в большем max_tokens и enable_thinking.
+ */
+function isReasoningModel(model: string): boolean {
+  return REASONING_MODEL_PATTERNS.some(p => p.test(model));
+}
+
 export class OpenAICompat implements LLMProvider {
   readonly model: string;
   contextWindow: number;
@@ -31,6 +52,11 @@ export class OpenAICompat implements LLMProvider {
   }
 
   async *chat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<Chunk> {
+    const reasoning = isReasoningModel(this.model);
+
+    // Reasoning-модели требуют больший budget — reasoning токены потребляют часть max_tokens
+    const defaultMaxTokens = reasoning ? 16384 : 4096;
+
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(m => {
@@ -39,11 +65,17 @@ export class OpenAICompat implements LLMProvider {
       }),
       stream: true,
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.max_tokens ?? 4096,
+      max_tokens: options?.max_tokens ?? defaultMaxTokens,
     };
 
     if (options?.top_p !== undefined) body.top_p = options.top_p;
     if (options?.stop !== undefined) body.stop = options.stop;
+
+    // Reasoning-модели: включаем thinking если поддерживается
+    if (options?.enableThinking && reasoning) {
+      // Qwen3.5 (LM Studio / vLLM): chat_template_kwargs с enable_thinking=true
+      body.chat_template_kwargs = { enable_thinking: true };
+    }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
