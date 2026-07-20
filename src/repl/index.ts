@@ -116,7 +116,7 @@ export async function runRepl(
   const sigintHandler = () => {
     sessionEnded();
     if (history.length > 0) {
-      createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+      createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 }, currentMode);
       renderer.writeSuccess('\nSession auto-saved.');
     }
     renderer.destroy();
@@ -153,6 +153,7 @@ export async function runRepl(
           history: history.all,
           conversationHistory: history.all,
           modelLabel,
+          currentMode,
         });
         if (result instanceof Promise) await result;
         if (shouldStop) return;
@@ -224,7 +225,7 @@ export async function runRepl(
       renderer.writeNewline();
       if (history.length > 0) {
         try {
-          const saved = createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
+          const saved = createAutoSession(history.all, modelLabel, process.cwd(), { totalTokens: 0, compactCount: 0 }, currentMode);
           renderer.writeSuccess(`  Session saved: ${saved}`);
         } catch { /* ignore */ }
       }

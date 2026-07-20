@@ -8,6 +8,8 @@ import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
 import { autoLearnFromError } from './memory.js';
 import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
+import { ModeRegistry } from './modes/registry.js';
+import { applyMode } from './modes/applier.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
@@ -174,6 +176,11 @@ export async function runAgentLoop(
   logDebug('LOOP', `parseFileRefs: ${files.length} files, prompt len: ${enrichedPrompt.length}`);
   const quiet = options?.quiet ?? false;
 
+  // ─── ModeRegistry: конфигурация режима ──
+  const modeRegistry = new ModeRegistry();
+  const modeConfig = modeRegistry.getOrFallback(options?.mode || 'base');
+  const applied = applyMode(modeConfig, { quiet, showThinking: options?.showThinking });
+
   // Автозагрузка скилов из промпта (если пользователь указал @skill-name)
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
@@ -182,16 +189,19 @@ export async function runAgentLoop(
     renderer?.writeInfo(`  Loaded ${loadedSkills.length} skill(s): ${loadedSkills.map(s => s.name).join(', ')}`);
   }
 
-  if (options?.mode === 'pro' && !loadedSkillNames.has('grill-me')) {
-    const grill = loadSkill('grill-me', process.cwd());
-    if (grill) {
-      loadedSkills.push(grill);
-      loadedSkillNames.add('grill-me');
-      logInfo('LOOP', 'auto-loaded grill-me skill for pro mode');
-      renderer?.writeInfo('  Auto-loaded @grill-me skill for pro mode');
-    } else {
-      logWarn('LOOP', 'grill-me skill not found for pro mode');
-      renderer?.writeWarning('  Warning: @grill-me skill not found (required for pro mode)');
+  // Принудительная загрузка скилов из ModeConfig
+  for (const skillName of applied.forcedSkills) {
+    if (!loadedSkillNames.has(skillName)) {
+      const skill = loadSkill(skillName, process.cwd());
+      if (skill) {
+        loadedSkills.push(skill);
+        loadedSkillNames.add(skillName);
+        logInfo('LOOP', `auto-loaded ${skillName} skill for ${modeConfig.id} mode`);
+        renderer?.writeInfo(`  Auto-loaded @${skillName} skill for ${modeConfig.id} mode`);
+      } else {
+        logWarn('LOOP', `${skillName} skill not found for ${modeConfig.id} mode`);
+        renderer?.writeWarning(`  Warning: @${skillName} skill not found (required for ${modeConfig.id} mode)`);
+      }
     }
   }
 
@@ -202,10 +212,10 @@ export async function runAgentLoop(
     : (config.agent.maxSkillsBase ?? 2);
 
   if (maxSkills > 0 && loadedSkills.length > maxSkills) {
-    const budget = config.agent.skillTokenBudget ?? 4000;
+    const budget = applied.skillTokenBudget;
     const { allowed, dropped } = enforceSkillBudget(loadedSkills, budget);
     if (dropped.length > 0) {
-      renderer?.writeWarning(`  Skill limit (${maxSkills} max in ${options?.mode || 'base'} mode): dropped ${dropped.join(', ')}`);
+      renderer?.writeWarning(`  Skill limit (${maxSkills} max in ${modeConfig.id} mode): dropped ${dropped.join(', ')}`);
       logInfo('LOOP', `skill limit: dropped ${dropped.join(', ')} (budget: ${budget} tokens)`);
       loadedSkills.length = 0;
       loadedSkills.push(...allowed);

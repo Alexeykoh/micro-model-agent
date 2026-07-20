@@ -91,6 +91,8 @@ export interface Session {
     totalTokens: number;
     compactCount: number;
   };
+  /** Режим агента (fast/base/pro/custom) */
+  mode?: string;
 }
 
 interface SessionIndex {
@@ -181,7 +183,7 @@ export function listSessions(): { id: string; name: string; created: string; siz
 }
 
 /** Создаёт автосессию (без имени, при завершении REPL) */
-export function createAutoSession(messages: SessionMessage[], provider: string, cwd: string, context: Session['context']): string {
+export function createAutoSession(messages: SessionMessage[], provider: string, cwd: string, context: Session['context'], mode?: string): string {
   const session: Session = {
     id: generateReadableId(),
     name: '',
@@ -190,12 +192,13 @@ export function createAutoSession(messages: SessionMessage[], provider: string, 
     cwd,
     messages,
     context,
+    mode,
   };
   return saveSession(session);
 }
 
 /** Создаёт именованную сессию (при команде /save) */
-export function createNamedSession(name: string, messages: SessionMessage[], provider: string, cwd: string, context: Session['context']): string {
+export function createNamedSession(name: string, messages: SessionMessage[], provider: string, cwd: string, context: Session['context'], mode?: string): string {
   const session: Session = {
     id: generateId(),
     name,
@@ -204,6 +207,7 @@ export function createNamedSession(name: string, messages: SessionMessage[], pro
     cwd,
     messages,
     context,
+    mode,
   };
   return saveSession(session);
 }

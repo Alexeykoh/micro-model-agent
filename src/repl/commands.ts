@@ -42,6 +42,7 @@ export interface CommandContext {
   history: { role: 'user' | 'assistant'; content: string }[];
   conversationHistory: { role: 'user' | 'assistant'; content: string }[];
   modelLabel: string;
+  currentMode?: string;
 }
 
 /** Определение слэш-команды */

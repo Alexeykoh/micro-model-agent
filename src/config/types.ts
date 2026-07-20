@@ -50,12 +50,13 @@ export interface AgentConfig {
   toolTimeout: number;
   maxOutputLength: number;
   showThinking?: boolean;
+  /** @deprecated Используйте ModeRegistry вместо этого */
   mode?: AgentMode;
   /** Макс. токенов для загруженных скилов в system prompt (default: 4000) */
   skillTokenBudget?: number;
-  /** Макс. количество скилов в base mode (default: 2, 0 = безлимит) */
+  /** @deprecated Используйте ModeRegistry.maxSkills вместо этого */
   maxSkillsBase?: number;
-  /** Макс. количество скилов в pro mode (default: 0 = безлимит) */
+  /** @deprecated Используйте ModeRegistry.maxSkills вместо этого */
   maxSkillsPro?: number;
 }
 
@@ -68,4 +69,6 @@ export interface AppConfig {
   active: ActiveConfig;
   agent: AgentConfig;
   theme?: string;
+  /** Кастомные режимы (overrides для ModeRegistry) */
+  modes?: Record<string, Record<string, unknown>>;
 }

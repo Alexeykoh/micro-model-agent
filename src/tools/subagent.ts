@@ -369,6 +369,7 @@ export async function runIsolatedLoop(
   quiet: boolean,
   renderer: OutputRenderer,
   toolExecutor?: ToolExecutor,
+  mode?: string,
 ): Promise<IsolatedLoopResult> {
   const createdFiles: string[] = [];
   const errors: string[] = [];
@@ -386,7 +387,7 @@ export async function runIsolatedLoop(
     logDebug('SUBAGENT', `context (${mergedContext.split('\n').length} lines):\n${mergedContext}`);
   }
 
-  const systemPrompt = buildSystemPrompt(undefined, 'base');
+  const systemPrompt = buildSystemPrompt(undefined, (mode || "base") as any);
 
   const contextInfo = mergedContext
     ? `\n\nКонтекст проекта:\n${mergedContext}\nПосмотри package.json для списка пакетов. Используй read_file для чтения существующих файлов.`
