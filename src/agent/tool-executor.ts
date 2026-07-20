@@ -2,6 +2,7 @@ import type { ToolHandler, ToolResult, ToolContext, ParsedToolCall } from '../to
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { notifyFileChanged } from '../indexer/cache.js';
 import { invalidateSystemPromptCache } from './system-prompt.js';
+import type { PluginManager } from '../plugins/manager.js';
 
 /**
  * Диспетчер инструментов с пайплайном: pre-hooks → execute → post-hooks → truncate.
@@ -76,6 +77,12 @@ export interface ExecutorResult {
  */
 export class ToolExecutor {
   private handlers: Map<string, ToolHandler> = new Map();
+  private pluginManager?: PluginManager;
+
+  /** Установка менеджера плагинов */
+  setPluginManager(pm: PluginManager): void {
+    this.pluginManager = pm;
+  }
 
   /** Регистрация обработчика инструмента */
   register(handler: ToolHandler): void {
@@ -133,6 +140,20 @@ export class ToolExecutor {
       };
     }
 
+    // 1.5. Plugin: tool:before
+    if (this.pluginManager) {
+      try {
+        await this.pluginManager.emit('tool:before', call.name, call.arguments);
+      } catch (e: any) {
+        if (e.name === 'PluginError') {
+          return {
+            result: { stdout: '', stderr: 'Plugin blocked: ' + e.message, exitCode: 1, truncated: false },
+            elapsed: (performance.now() - start) / 1000,
+          };
+        }
+      }
+    }
+
     // 2. Execute handler
     const handler = this.handlers.get(call.name);
     if (!handler) {
@@ -161,6 +182,13 @@ export class ToolExecutor {
 
     // 3. Post-hooks
     runPostToolUseHooks(context.cwd, call.name, hookCmd, result.stdout, result.exitCode);
+
+    // 3.5. Plugin: tool:after
+    if (this.pluginManager) {
+      try {
+        await this.pluginManager.emit('tool:after', call.name, result);
+      } catch { /* plugin errors non-fatal in post */ }
+    }
 
     // 4. Notify indexer (для модифицирующих инструментов)
     if (result.exitCode === 0 && MODIFYING_TOOLS.has(call.name)) {
