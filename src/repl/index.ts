@@ -73,12 +73,12 @@ export async function runRepl(
 
   renderer.writeInfo(`  ◉ MMA v${currentVer} — ${modelLabel}`);
   renderer.writeDim(`    session: ${sessionId}`);
-  // Show active plugins
+  // Show all loaded plugins (builtin + project + user from config)
   const tmpPm = new PluginManager();
   const tmpInfos = await loadAllPluginsWithInfo(tmpPm);
-  const activeNames = tmpInfos.filter(p => p.active || p.source === 'builtin').map(p => p.name);
-  if (activeNames.length > 0) {
-    renderer.writeDim(`    plugins: ${activeNames.join(', ')}`);
+  const allNames = tmpInfos.map(p => p.name);
+  if (allNames.length > 0) {
+    renderer.writeDim(`    plugins: ${allNames.join(', ')}`);
   }
   if (memorySummary) {
     renderer.writeLine(memorySummary);
