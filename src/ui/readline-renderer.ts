@@ -149,6 +149,10 @@ export class ReadlineRenderer implements OutputRenderer {
     process.stdout.write('\x1Bc')
   }
 
+  undoLastMessage(): void {
+    // readline mode — no-op, printed text cannot be undone
+  }
+
   setMode(_mode: string): void {
     // mode is shown via prompt message formatting in REPL
   }

@@ -106,6 +106,10 @@ export class SubagentRenderer implements OutputRenderer {
     this.clearBuffer();
   }
 
+  undoLastMessage(): void {
+    // subagent buffer — no-op, streaming content is internal
+  }
+
   // ── Ввод (не используется в субагентах) ──
   async prompt(_msg: string): Promise<string> { return ''; }
   async promptWithChoices(_msg: string, _choices: string[]): Promise<string> { return ''; }

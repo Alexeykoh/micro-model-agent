@@ -62,7 +62,8 @@ export type Action =
   | { type: 'SHOW_SELECT'; question: string; choices: string[] }
   | { type: 'HIDE_SELECT' }
   | { type: 'SET_MODE'; mode: string }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  | { type: 'UNDO_LAST_MESSAGE' };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -177,6 +178,16 @@ function reducer(state: AppState, action: Action): AppState {
         toolCallIndex: -1,
         mode: '',
       };
+    case 'UNDO_LAST_MESSAGE': {
+      if (state.entries.length === 0) return state;
+      const lastEntry = state.entries[state.entries.length - 1];
+      if (lastEntry.kind !== 'message' || lastEntry.data?.role !== 'assistant') return state;
+      return {
+        ...state,
+        entries: state.entries.slice(0, -1),
+        nextId: state.nextId - 1,
+      };
+    }
     default:
       return state;
   }

@@ -428,6 +428,12 @@ export async function runAgentLoop(
 
       renderer?.writeInfo(`  Auto-loaded ${loadedSkills.filter(s => newSkillNames.includes(s.name)).length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections) };
+      // Удаляем первый ответ ассистента — он был сгенерирован без загруженных скилов
+      // и будет перегенерирован после пересборки system prompt
+      if (messages[messages.length - 1]?.role === 'assistant') {
+        messages.pop();
+        renderer?.undoLastMessage();
+      }
       continue;
     }
     } // end fast-mode skill block

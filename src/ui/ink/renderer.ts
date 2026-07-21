@@ -169,6 +169,10 @@ export class InkRenderer implements OutputRenderer {
     this.dispatch({ type: 'CLEAR' });
   }
 
+  undoLastMessage(): void {
+    this.dispatch({ type: 'UNDO_LAST_MESSAGE' });
+  }
+
   async prompt(msg: string): Promise<string> {
     await this.dispatch({ type: 'SHOW_PROMPT', message: msg });
     return new Promise((resolve) => {

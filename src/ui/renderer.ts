@@ -52,6 +52,7 @@ export interface OutputRenderer {
   updateStatus(info: StatusInfo): void
 
   clear(): void
+  undoLastMessage(): void
 
   prompt(msg: string): Promise<string>
   promptWithChoices?(msg: string, choices: string[]): Promise<string>
