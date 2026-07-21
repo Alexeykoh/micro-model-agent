@@ -139,7 +139,7 @@ export async function loadAllPluginsWithInfo(manager: PluginManager): Promise<Pl
 
       const plugin = await loadPluginFromDir(pluginDir);
       if (plugin) {
-        manager.register(plugin);
+        manager.register(plugin, source);
         infos.push({
           name: plugin.name,
           version: plugin.version || manifest.version,
