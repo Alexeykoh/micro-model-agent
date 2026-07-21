@@ -14,6 +14,8 @@ import { getCurrentVersion, checkForUpdate, getUpdateCommand } from '../updater.
 import { ConversationHistory } from './history.js';
 import { getSlashCommands, parseSlashCommand, isWriteMode, handleWriteLine, type CommandContext } from './commands.js';
 import { logREPL, logInfo, logError, initSessionLog, getLogPath } from '../logger.js';
+import { loadAllPluginsWithInfo } from '../plugins/loader.js';
+import { PluginManager } from '../plugins/manager.js';
 
 /**
  * Основной цикл REPL (readline).
@@ -71,6 +73,13 @@ export async function runRepl(
 
   renderer.writeInfo(`  ◉ MMA v${currentVer} — ${modelLabel}`);
   renderer.writeDim(`    session: ${sessionId}`);
+  // Show active plugins
+  const tmpPm = new PluginManager();
+  const tmpInfos = await loadAllPluginsWithInfo(tmpPm);
+  const activeNames = tmpInfos.filter(p => p.active || p.source === 'builtin').map(p => p.name);
+  if (activeNames.length > 0) {
+    renderer.writeDim(`    plugins: ${activeNames.join(', ')}`);
+  }
   if (memorySummary) {
     renderer.writeLine(memorySummary);
   }

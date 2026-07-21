@@ -1,26 +1,35 @@
-import { existsSync, readFileSync, readdirSync, watch } from 'node:fs';
+﻿import { existsSync, readFileSync, readdirSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { AgentPlugin, PluginManifest } from './types.js';
+import { fileURLToPath } from 'node:url';
+import type { AgentPlugin, PluginManifest, PluginInfo, PluginSource } from './types.js';
 import type { PluginManager } from './manager.js';
 import { logInfo, logWarn, logError } from '../logger.js';
 
 /**
  * Загрузчик плагинов.
  *
- * Discovery:
- * - ~/.mma/plugins/ — глобальные
- * - .mma/plugins/ — проектные
+ * Discovery (в порядке приоритета):
+ * 1. Builtin — src/plugins/builtin/ (сборка копирует в dist/)
+ * 2. Project — .mma/plugins/ (локально проекта)
+ * 3. User — ~/.mma/plugins/ (публичные пользователя)
  *
  * Hot-reload: fs.watch на директорию плагина.
  *
  * @module plugins/loader
  */
 
-/** Директории поиска плагинов */
-const PLUGIN_DIRS = [
-  join(process.env.HOME || process.env.USERPROFILE || '', '.mma', 'plugins'),
-  '.mma/plugins',
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = join(__filename, '..', '..');
+
+/** Builtin плагины (bundled с MMA) */
+const BUILTIN_PLUGINS_DIR = join(__dirname, 'plugins', 'builtin');
+
+/** Директории поиска плагинов (source → dir) */
+const PLUGIN_SCAN_DIRS: { source: PluginSource; dir: string }[] = [
+  { source: 'builtin', dir: BUILTIN_PLUGINS_DIR },
+  { source: 'project', dir: '.mma/plugins' },
+  { source: 'user', dir: join(process.env.HOME || process.env.USERPROFILE || '', '.mma', 'plugins') },
 ];
 
 /**
@@ -102,7 +111,7 @@ async function loadPluginFromDir(pluginDir: string): Promise<AgentPlugin | null>
  * Загружает все плагины из директорий поиска.
  */
 export async function loadAllPlugins(manager: PluginManager): Promise<void> {
-  for (const dir of PLUGIN_DIRS) {
+  for (const { dir } of PLUGIN_SCAN_DIRS) {
     const pluginDirs = scanPluginDir(dir);
     for (const pluginDir of pluginDirs) {
       const plugin = await loadPluginFromDir(pluginDir);
@@ -111,6 +120,39 @@ export async function loadAllPlugins(manager: PluginManager): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * Загружает все плагины и возвращает информацию о них (с источником).
+ * Используется для отображения при старте сессии.
+ */
+export async function loadAllPluginsWithInfo(manager: PluginManager): Promise<PluginInfo[]> {
+  const infos: PluginInfo[] = [];
+  const seen = new Set<string>();
+
+  for (const { source, dir } of PLUGIN_SCAN_DIRS) {
+    const pluginDirs = scanPluginDir(dir);
+    for (const pluginDir of pluginDirs) {
+      const manifest = loadManifest(pluginDir);
+      if (!manifest || seen.has(manifest.name)) continue;
+      seen.add(manifest.name);
+
+      const plugin = await loadPluginFromDir(pluginDir);
+      if (plugin) {
+        manager.register(plugin);
+        infos.push({
+          name: plugin.name,
+          version: plugin.version || manifest.version,
+          description: plugin.description || manifest.description,
+          active: false,
+          events: manifest.events || [],
+          source,
+        });
+      }
+    }
+  }
+
+  return infos;
 }
 
 /**

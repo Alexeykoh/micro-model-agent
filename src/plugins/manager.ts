@@ -1,4 +1,4 @@
-import type { AgentPlugin, PluginEvent, PluginHandler, PluginContext, PluginInfo } from './types.js';
+﻿import type { AgentPlugin, PluginEvent, PluginHandler, PluginContext, PluginInfo, PluginSource } from './types.js';
 import { logInfo, logWarn, logError } from '../logger.js';
 
 /**
@@ -35,11 +35,13 @@ export class PluginManager {
   private plugins: Map<string, AgentPlugin> = new Map();
   private listeners: Map<PluginEvent, Map<string, PluginHandler>> = new Map();
   private active: Set<string> = new Set();
+  private sources: Map<string, PluginSource> = new Map();
 
   /** Регистрация плагина */
-  register(plugin: AgentPlugin): void {
+  register(plugin: AgentPlugin, source: PluginSource = 'user'): void {
     this.plugins.set(plugin.name, plugin);
-    logInfo('PLUGIN', `registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''}`);
+    this.sources.set(plugin.name, source);
+    logInfo('PLUGIN', `registered: ${plugin.name}${plugin.version ? ` v${plugin.version}` : ''} (${source})`);
   }
 
   /** Активация плагина */
@@ -197,8 +199,14 @@ export class PluginManager {
       version: plugin.version,
       description: plugin.description,
       active: this.active.has(name),
-      events: [], // TODO: track registered events
+      events: [],
+      source: this.sources.get(name) || 'user',
     }));
+  }
+
+  /** Получить список активных плагинов (имена) */
+  getActivePluginNames(): string[] {
+    return Array.from(this.active);
   }
 
   /** Проверка активности плагина */

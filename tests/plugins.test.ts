@@ -148,4 +148,49 @@ describe('PluginManager', () => {
     const behaviors = await pm.getBehaviors();
     expect(behaviors).toEqual({ myBehavior: true, priority: 10 });
   });
+
+  it('register with source', () => {
+    const pm = new PluginManager();
+    const p = createMockPlugin('src-plugin');
+    pm.register(p, 'builtin');
+    const list = pm.listPlugins();
+    expect(list).toHaveLength(1);
+    expect(list[0].source).toBe('builtin');
+  });
+
+  it('listPlugins includes source', () => {
+    const pm = new PluginManager();
+    const p1 = createMockPlugin('a');
+    const p2 = createMockPlugin('b');
+    pm.register(p1, 'builtin');
+    pm.register(p2, 'user');
+    const list = pm.listPlugins();
+    const srcA = list.find(p => p.name === 'a');
+    const srcB = list.find(p => p.name === 'b');
+    expect(srcA?.source).toBe('builtin');
+    expect(srcB?.source).toBe('user');
+  });
+
+  it('getActivePluginNames', async () => {
+    const pm = new PluginManager();
+    const p1 = createMockPlugin('act-1');
+    const p2 = createMockPlugin('act-2');
+    pm.register(p1);
+    pm.register(p2);
+    const ctx = createMockContext();
+    await pm.activate('act-1', ctx);
+    await pm.activate('act-2', ctx);
+    expect(pm.getActivePluginNames()).toEqual(['act-1', 'act-2']);
+  });
+
+  it('getActivePluginNames excludes inactive', async () => {
+    const pm = new PluginManager();
+    const p1 = createMockPlugin('ia-1');
+    const p2 = createMockPlugin('ia-2');
+    pm.register(p1);
+    pm.register(p2);
+    await pm.activate('ia-1', createMockContext());
+    // ia-2 NOT activated
+    expect(pm.getActivePluginNames()).toEqual(['ia-1']);
+  });
 });

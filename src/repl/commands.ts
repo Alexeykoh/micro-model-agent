@@ -16,6 +16,8 @@ import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js
 import { loadConfig, saveConfig } from '../config/config.js';
 import { logInfo } from '../logger.js';
 import type { OutputRenderer } from '../ui/renderer.js';
+import { PluginManager } from '../plugins/manager.js';
+import { loadAllPluginsWithInfo } from '../plugins/loader.js';
 
 /**
  * Слэш-команды REPL.
@@ -67,6 +69,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'git', description: 'git operations', handler: cmdGit },
     { name: 'memory', description: 'memory management', handler: cmdMemory },
     { name: 'skill', description: 'list skills', handler: cmdSkill },
+    { name: 'plugins', description: 'list plugins', handler: cmdPlugins },
     { name: 'sessions', description: 'list sessions', handler: cmdSessions },
     { name: 'resume', description: 'resume session', handler: cmdResume },
     { name: 'save', description: 'save session', handler: cmdSave },
@@ -110,6 +113,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /git <args>       — git operations
   /memory           — memory management (show/add/search/remove/export)
   /skill            — list installed skills
+  /plugins          — list plugins
   /sessions         — list saved sessions
   /resume <id>      — resume a session
   /save [name]      — save current session
@@ -394,6 +398,25 @@ function cmdSkill(args: string, ctx: CommandContext): void {
     }
     default:
       ctx.renderer.writeInfo('  Usage: /skill [list]');
+  }
+}
+
+async function cmdPlugins(_args: string, ctx: CommandContext): Promise<void> {
+  const pluginManager = new PluginManager();
+  await loadAllPluginsWithInfo(pluginManager);
+  const plugins = pluginManager.listPlugins();
+
+  if (plugins.length === 0) {
+    ctx.renderer.writeDim('  No plugins available.');
+    ctx.renderer.writeDim('  Place plugins in .mma/plugins/<name>/');
+    return;
+  }
+
+  ctx.renderer.writeInfo(`  Available plugins (${plugins.length}):`);
+  for (const p of plugins) {
+    const version = p.version ? ` v${p.version}` : '';
+    const status = p.active ? 'active' : 'inactive';
+    ctx.renderer.writeLine(`    ${p.name}${version}  [${p.source}]  ${status}`);
   }
 }
 

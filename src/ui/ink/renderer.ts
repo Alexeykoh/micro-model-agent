@@ -113,6 +113,10 @@ export class InkRenderer implements OutputRenderer {
     this.dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'dim', content: text } });
   }
 
+  writePlugins(names: string[]): void {
+    this.dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'plugins', content: names.join(', ') } });
+  }
+
   writeBracketTag(tag: string, message: string): void {
     this.dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'bracket', tag, message } });
   }

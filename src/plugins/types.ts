@@ -1,4 +1,4 @@
-import type { ToolResult, ParsedToolCall } from '../tools/types.js';
+﻿import type { ToolResult, ParsedToolCall } from '../tools/types.js';
 
 /**
  * Типы системы плагинов.
@@ -100,6 +100,9 @@ export interface PluginManifest {
   config?: Record<string, unknown>;
 }
 
+/** Источник плагина */
+export type PluginSource = 'builtin' | 'project' | 'user';
+
 /** Информация о загруженном плагине */
 export interface PluginInfo {
   name: string;
@@ -107,4 +110,5 @@ export interface PluginInfo {
   description?: string;
   active: boolean;
   events: PluginEvent[];
+  source: PluginSource;
 }

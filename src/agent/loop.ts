@@ -25,7 +25,9 @@ import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllTo
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
 import { PluginManager } from '../plugins/manager.js';
-import { loadAllPlugins } from '../plugins/loader.js';
+import { loadAllPluginsWithInfo } from '../plugins/loader.js';
+import { handleToolAfter as lintHandleToolAfter } from '../plugins/builtin/lint-on-write/index.js';
+import { handleAgentDone, handleToolBlocked, handleToolAfter as notifyHandleToolAfter } from '../plugins/builtin/notify/index.js';
 import { planHandler } from '../tools/native/plan.js';
 import { todoHandler } from '../tools/native/todo.js';
 import { questionHandler } from '../tools/native/question.js';
@@ -242,14 +244,38 @@ export async function runAgentLoop(
 
   // ─── PluginManager: загрузка и активация плагинов ──
   const pluginManager = new PluginManager();
-  await loadAllPlugins(pluginManager);
+  const pluginLogger = { info: logInfo.bind(null, 'PLUGIN'), warn: logWarn.bind(null, 'PLUGIN'), error: logError.bind(null, 'PLUGIN'), debug: logDebug.bind(null, 'PLUGIN') };
+  const pluginCtx = { cwd: process.cwd(), config: {}, logger: pluginLogger };
+
+  // Загружаем все плагины (builtin + project + user)
+  const pluginInfos = await loadAllPluginsWithInfo(pluginManager);
+
+  // Активируем плагины из modeConfig (кастомные)
   if (modeConfig.plugins?.length) {
-    await pluginManager.activateAll(modeConfig.plugins, {
-      cwd: process.cwd(),
-      config: {},
-      logger: { info: logInfo.bind(null, 'PLUGIN'), warn: logWarn.bind(null, 'PLUGIN'), error: logError.bind(null, 'PLUGIN'), debug: logDebug.bind(null, 'PLUGIN') },
+    await pluginManager.activateAll(modeConfig.plugins, pluginCtx);
+  }
+
+  // Авто-активация builtin плагинов
+  const builtinPlugins = pluginInfos.filter(p => p.source === 'builtin');
+  for (const bp of builtinPlugins) {
+    if (bp.name === 'lint-on-write' && options?.mode === 'fast') continue;
+    if (!pluginManager.isActive(bp.name)) {
+      await pluginManager.activate(bp.name, pluginCtx);
+    }
+  }
+
+  // Регистрация обработчиков событий для builtin плагинов
+  if (pluginManager.isActive('lint-on-write')) {
+    pluginManager.on('tool:after', 'lint-on-write', (toolName: string, args: any, result: any) => {
+      return lintHandleToolAfter(toolName, args, result, process.cwd(), '.lint-detected');
     });
   }
+  if (pluginManager.isActive('notify')) {
+    pluginManager.on('agent:done', 'notify', () => handleAgentDone());
+    pluginManager.on('tool:blocked', 'notify', (toolName: string, args: any) => handleToolBlocked(toolName, args));
+    pluginManager.on('tool:after', 'notify', (toolName: string, args: any, result: any) => notifyHandleToolAfter(toolName, args, result));
+  }
+
   const pluginSections = await pluginManager.getPromptSections();
 
   // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память, плагины)
@@ -899,5 +925,11 @@ export async function runAgentLoop(
     renderer?.writeWarning('Agent stopped (double ESC)');
   }
   logInfo('LOOP', `runAgentLoop done: ${messages.length} total messages, aborted=${aborted}`);
+
+  // Agent:done event for notify plugin
+  if (pluginManager.isActive('notify')) {
+    pluginManager.emit('agent:done').catch(() => {});
+  }
+
   return { messages };
 }

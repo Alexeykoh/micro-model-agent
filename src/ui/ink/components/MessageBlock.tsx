@@ -17,7 +17,7 @@ import { LineNumbers, BracketTag, DimText } from './Tags.js';
 
 /** Элемент сообщения */
 export interface MessageItem {
-  type: 'message' | 'info' | 'success' | 'warning' | 'error' | 'dim' | 'heading' | 'bracket';
+  type: 'message' | 'info' | 'success' | 'warning' | 'error' | 'dim' | 'heading' | 'bracket' | 'plugins';
   content?: string;
   tag?: string;
   message?: string;
@@ -71,6 +71,14 @@ export function MessageBlock({ item }: { item: MessageItem }) {
 
   if (item.type === 'bracket') {
     return <BracketTag tag={item.tag || ''} message={item.message || ''} />;
+  }
+
+  if (item.type === 'plugins') {
+    return (
+      <Box>
+        <Text dimColor>{`    plugins: ${item.content}`}</Text>
+      </Box>
+    );
   }
 
   const colorKey = TYPE_COLORS[item.type];
