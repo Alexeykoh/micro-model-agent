@@ -340,7 +340,7 @@ You help with software engineering tasks in the project directory.`;
   // ─── Хинт о доступных скилах ─────────────────────────
   const allSkills = listInstalledSkills();
   const skillsHint = allSkills.length > 0
-    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): SUGGEST skills FIRST → User loads them → You READ them → Create plan BASED ON skill content.\nDo NOT put @skill-name inside tool_call. Just tell the user which skill to load.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "Рекомендую @typescript-expert @nodejs-expert — напиши их в следующем сообщении."\n  3. User: "@typescript-expert @nodejs-expert"\n  4. Skills injected into this prompt — you READ them\n  5. You create plan BASED ON skill guidance: plan create REST API ...\n  6. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
+    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): mention @skill-name in your response — skills will be auto-loaded into context.\nDo NOT put @skill-name inside tool_call. Just mention them naturally in your text.\nWorkflow:\n  1. User asks: "Создай REST API"\n  2. You: "I'll use @typescript-expert @nodejs-expert for this task." (skills auto-load on next turn)\n  3. You create plan BASED ON skill guidance: plan create REST API ...\n  4. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
     : '';
 
   // ─── Блок режима работы ──────────────────────────────

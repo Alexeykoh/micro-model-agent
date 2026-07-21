@@ -214,11 +214,9 @@ export async function runAgentLoop(
     }
   }
 
-  // Ограничение количества скилов в base mode
+  // Ограничение количества скилов из ModeConfig (не deprecated config)
   const config = loadConfig();
-  const maxSkills = options?.mode === 'pro'
-    ? (config.agent.maxSkillsPro ?? 0)
-    : (config.agent.maxSkillsBase ?? 2);
+  const maxSkills = modeConfig.constraints.maxSkills;
 
   if (maxSkills > 0 && loadedSkills.length > maxSkills) {
     const budget = applied.skillTokenBudget;
@@ -381,9 +379,22 @@ export async function runAgentLoop(
     }
     if (newSkillNames.length > 0) {
       skillsAutoLoaded = true;
-      renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
+
+      // Применяем бюджет скилов после автозагрузки (Баг 1 fix)
+      const autoBudget = applied.skillTokenBudget;
+      if (autoBudget > 0 && loadedSkills.length > 0) {
+        const { allowed, dropped } = enforceSkillBudget(loadedSkills, autoBudget);
+        if (dropped.length > 0) {
+          renderer?.writeWarning(`  Auto-load budget: dropped ${dropped.join(', ')} (budget: ${autoBudget} tokens)`);
+          logInfo('LOOP', `auto-load budget: dropped ${dropped.join(', ')} (budget: ${autoBudget} tokens)`);
+          loadedSkills.length = 0;
+          loadedSkills.push(...allowed);
+          for (const s of dropped) loadedSkillNames.delete(s);
+        }
+      }
+
+      renderer?.writeInfo(`  Auto-loaded ${loadedSkills.filter(s => newSkillNames.includes(s.name)).length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections) };
-      messages.push({ role: 'system', content: `Skills loaded: ${newSkillNames.join(', ')}. Continue your work using these skills where relevant.` });
       continue;
     }
     } // end fast-mode skill block
