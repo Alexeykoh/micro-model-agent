@@ -1,5 +1,5 @@
 import React, { useReducer, useEffect } from 'react';
-import { Box, useInput } from 'ink';
+import { Box, useInput, type Key } from 'ink';
 import { Conversation, type ConversationEntry } from './Conversation.js';
 import { StatusBar } from './StatusBar.js';
 import { PromptInput } from './PromptInput.js';
@@ -221,7 +221,7 @@ export function App({ onReady, commands, onAbort }: AppProps) {
   const lastCtrlCTime = React.useRef<number>(0);
 
   // Handle Escape key to abort agent execution + double Ctrl+C to exit
-  useInput((input: string, key: Record<string, boolean>) => {
+  useInput((input: string, key: Key) => {
     if (key.escape && onAbort && !state.showPrompt && !state.showSelect) {
       onAbort();
       return;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, type Key } from 'ink';
 import { getInkTheme } from '../theme.js';
 
 /**
@@ -57,7 +57,7 @@ export function PromptInput({
     return () => clearInterval(id);
   }, [disabled]);
 
-  useInput((input: string, key: Record<string, boolean>) => {
+  useInput((input: string, key: Key) => {
     // Allow Escape to abort even when disabled (agent running)
     if (key.escape && onAbort) {
       onAbort();

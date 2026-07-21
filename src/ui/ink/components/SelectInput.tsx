@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, type Key } from 'ink';
 import { getInkTheme } from '../theme.js';
 
 interface SelectInputProps {
@@ -12,7 +12,7 @@ export function SelectInput({ question, choices, onSelect }: SelectInputProps) {
   const [selected, setSelected] = useState(0);
   const t = getInkTheme();
 
-  useInput((input: string, key: Record<string, boolean>) => {
+  useInput((input: string, key: Key) => {
     if (key.upArrow) {
       setSelected((i) => (i > 0 ? i - 1 : choices.length - 1));
       return;
