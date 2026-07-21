@@ -60,6 +60,8 @@ export interface AgentConfig {
   maxSkillsPro?: number;
   /** Параметры LLM: retry, thinking, max_tokens */
   llm?: LLMConfig;
+  /** Auto-specialist конфигурация */
+  specialist?: SpecialistConfig;
   /** Список плагинов для активации (имена через запятую) */
   plugins?: string[];
 }
@@ -72,7 +74,7 @@ export interface LLMConfig {
   retryWithoutThinking?: boolean;
   /** Fallback: использовать reasoning как content при пустом ответе (default: true) */
   fallbackToReasoning?: boolean;
-  /** max_tokens для reasoning-моделей (default: 16384) */
+  /** max_tokens для reasoning-моделей (default: 32768) */
   maxTokensReasoning?: number;
   /** max_tokens для обычных моделей (default: 4096) */
   maxTokensDefault?: number;
@@ -80,6 +82,20 @@ export interface LLMConfig {
   maxTokensAfterTool?: number;
   /** Мин. количество reasoning chunks для триггера retry (default: 10) */
   emptyResponseThreshold?: number;
+  /** Модель для tool execution в subagent (default: undefined = тот же模型) */
+  toolModel?: string;
+}
+
+/** Конфигурация auto-specialist (автоделегирование при повторяющихся ошибках) */
+export interface SpecialistConfig {
+  /** Включить auto-specialist (default: true) */
+  enabled?: boolean;
+  /** Кол-во одинаковых ошибок до триггера (default: 2) */
+  triggerThreshold?: number;
+  /** Макс. ходов specialist'а (default: 10) */
+  maxSteps?: number;
+  /** Мин. длина текста ошибки для триггера — отсекает trivia (default: 15) */
+  minErrorLength?: number;
 }
 
 /** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */

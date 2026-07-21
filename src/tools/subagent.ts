@@ -1,5 +1,6 @@
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
+import { OpenAICompat } from '../llm/openai-compat.js';
 import { ToolRegistry } from './registry.js';
 import type { ParsedToolCall } from './types.js';
 import type { ToolExecutor } from '../agent/tool-executor.js';
@@ -100,6 +101,68 @@ export function buildSubagentContext(cwd: string): string {
   } catch { /* no tsconfig */ }
 
   return lines.join('\n');
+}
+
+/**
+ * Контекст для specialist'а — фокусированное описание ошибки.
+ *
+ * @param toolName - имя упавшего инструмента
+ * @param toolArgs - аргументы которые были переданы
+ * @param errorOutput - текст ошибки
+ * @param userTask - исходный запрос пользователя (краткое описание)
+ * @param attemptCount - сколько раз ошибка повторилась
+ * @returns Текст задачи для specialist'а
+ */
+export function buildSpecialistTask(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  errorOutput: string,
+  userTask: string,
+  attemptCount: number,
+): string {
+  const argsStr = JSON.stringify(toolArgs, null, 2);
+  return [
+    `The tool "${toolName}" has failed ${attemptCount} times with the same error while working on: "${userTask.slice(0, 200)}"`,
+    '',
+    `Failed tool call:`,
+    `  Tool: ${toolName}`,
+    `  Arguments: ${argsStr}`,
+    '',
+    `Error output:`,
+    `  ${errorOutput.slice(0, 500)}`,
+    '',
+    `Your task: Diagnose WHY this tool call fails and FIX the underlying problem.`,
+    `  - Read the relevant files to understand the actual state`,
+    `  - Fix the root cause (wrong path, missing file, syntax error, etc.)`,
+    `  - If the tool call arguments are wrong, correct them`,
+    `  - If the file doesn't exist, create it`,
+    `  - Return a clear summary of what you found and what you fixed`,
+  ].join('\n');
+}
+
+/** Паттерны ошибок которые НЕ триггерят specialist (trivial) */
+const TRIVIAL_ERROR_PATTERNS = [
+  /no results? found/i,
+  /pattern .* matched 0 results/i,
+  /0 files? matched/i,
+  /command not found.*grep/i,
+  /not a directory/i,
+];
+
+/**
+ * Проверяет является ли ошибка тривиальной (не требует specialist).
+ */
+export function isTrivialError(toolName: string, errorOutput: string): boolean {
+  // grep_search/glob_search с 0 результатами — нормальное поведение
+  if (toolName === 'grep_search' || toolName === 'glob_search') {
+    if (/0 results|0 files|no match/i.test(errorOutput) && errorOutput.length < 200) {
+      return true;
+    }
+  }
+  // Любая ошибка < 10 символов — скорее всего trivia
+  if (errorOutput.length < 10) return true;
+
+  return TRIVIAL_ERROR_PATTERNS.some(p => p.test(errorOutput));
 }
 
 // ─── Tool call parsing ───────────────────────────────────
@@ -393,6 +456,22 @@ export async function doChat(
     }
   }
 
+  // Phase 2.5: Emergency — принудительно генерируем content с низкой температурой
+  // Когда reasoning есть, но content пустой — модель "застряла" в thinking loop
+  if (lastReasoningText.trim()) {
+    logInfo('DOCHAT', `emergency: forcing content with low temperature`);
+    renderer.writeDim(`[emergency: forcing content with temperature=0.1]`);
+    const emergencyMessages: ChatMessage[] = [
+      ...messages,
+      { role: 'user', content: '[System] You MUST produce a response now. Do NOT use thinking tags. Reply with a tool call or a direct answer. Any response is better than empty.' },
+    ];
+    const emergencyResult = await doChatOnce(provider, emergencyMessages, renderer, signal, false, showThinking, caller, maxTokens, 0.1);
+    if (emergencyResult.response.trim()) {
+      logInfo('DOCHAT', `emergency succeeded: ${emergencyResult.response.length} chars`);
+      return emergencyResult;
+    }
+  }
+
   // Phase 3: Fallback — используем reasoning как content
   if (llmCfg.fallbackToReasoning && lastReasoningText.trim()) {
     logInfo('DOCHAT', `fallback: using reasoning as content (${lastReasoningText.length} chars)`);
@@ -416,6 +495,7 @@ async function doChatOnce(
   showThinking = false,
   caller: 'main' | 'subagent' = 'main',
   maxTokens?: number,
+  temperature = 0.7,
 ): Promise<{ response: string; genTimeMs: number }> {
   const startTime = performance.now();
   const fullText: string[] = [];
@@ -427,7 +507,7 @@ async function doChatOnce(
 
   try {
     let buf = '';
-    for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking, max_tokens: maxTokens })) {
+    for await (const chunk of provider.chat(messages, { temperature, signal, showThinking, enableThinking, max_tokens: maxTokens })) {
       if (!chunk.content && !chunk.finish_reason) continue;
 
       if (chunk.content) {
@@ -511,12 +591,26 @@ export async function runIsolatedLoop(
   renderer: OutputRenderer,
   toolExecutor?: ToolExecutor,
   mode?: string,
+  toolModel?: string,
+  maxStepsParam?: number,
 ): Promise<IsolatedLoopResult> {
   const createdFiles: string[] = [];
   const errors: string[] = [];
   const startTime = performance.now();
 
-  logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${provider.contextWindow}`);
+  // Two-model pipeline: если toolModel задана, создаём отдельный провайдер
+  let effectiveProvider = provider;
+  if (toolModel && provider instanceof OpenAICompat) {
+    effectiveProvider = new OpenAICompat(
+      (provider as any).baseUrl,
+      toolModel,
+      provider.contextWindow,
+      (provider as any).apiKey,
+    );
+    logInfo('SUBAGENT', `using tool model: ${toolModel} (main: ${provider.model})`);
+  }
+
+  logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${effectiveProvider.contextWindow}`);
 
   // Always build auto-context from project, even if model didn't pass existingFiles
   const autoContext = buildSubagentContext(cwd);
@@ -539,8 +633,8 @@ export async function runIsolatedLoop(
     { role: 'user', content: task + contextInfo },
   ];
 
-  const ctx = new ContextManager(provider.contextWindow);
-  const maxSteps = 20;
+  const ctx = new ContextManager(effectiveProvider.contextWindow);
+  const maxSteps = maxStepsParam ?? 20;
   let toolCallCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -562,7 +656,7 @@ export async function runIsolatedLoop(
     const llmCfg = getLLMConfig();
     const maxTokens = hasToolResult ? llmCfg.maxTokensAfterTool : undefined;
 
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent', maxTokens);
+    const { response } = await doChat(effectiveProvider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent', maxTokens);
 
     if (!response.trim()) {
       logDebug('SUBAGENT', `empty response at step ${step}, stopping`);
@@ -699,11 +793,11 @@ export const subagentDefinition: ToolDefinition = {
   type: 'function',
   function: {
     name: 'subagent',
-    description: 'Delegate a task to an isolated agent in a fresh context. Use for EACH file when creating 3+ new files. Arguments: task (required, what to do), existingFiles (optional, comma-separated files for context).',
+    description: 'Delegate a task to an isolated agent with a FRESH context (no history of prior errors). Use for: (1) each file when creating 3+ new files, (2) any task where you are stuck or making repeated errors, (3) simple single-step operations (bash, file read/write). The subagent has all tools and starts clean — ideal when accumulated context is causing confusion.',
     parameters: {
       type: 'object',
       properties: {
-        task: { type: 'string', description: 'What the subagent should create/fix/check' },
+        task: { type: 'string', description: 'What the subagent should do — be specific and include file paths' },
         existingFiles: { type: 'string', description: 'Comma-separated files the subagent can read for context (optional)' },
       },
       required: ['task'],

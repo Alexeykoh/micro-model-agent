@@ -16,12 +16,12 @@ import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { showPlan, getPlanPendingCount } from '../tools/plan.js';
 
 import { checkFileSyntax } from '../tools/syntax-check.js';
-import { loadConfig, saveConfig, getLLMConfig } from '../config/config.js';
+import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
-import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
+import { IsolatedLoopResult, buildSubagentContext, buildSpecialistTask, isTrivialError, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
 import { PluginManager } from '../plugins/manager.js';
@@ -137,6 +137,71 @@ function extractToolCallFallback(response: string): { name: string; cmd: string 
 export interface AgentLoopResult {
   messages: ChatMessage[];
   questionPending?: { question: string; choices?: string[] };
+}
+
+/**
+ * Параметры для specialist'а — изолированного суб-агента,
+ * который решает повторяющуюся ошибку инструмента.
+ *
+ * Собраны в один объект чтобы не передавать 15+ аргументов в функцию.
+ */
+interface SpecialistParams {
+  provider: LLMProvider; registry: ToolRegistry; toolExecutor: ToolExecutor;
+  modeConfig: any; llmCfg: any; specialistCfg: any;
+  quiet: boolean; renderer: any; messages: ChatMessage[];
+  toolId: string; createdFiles: string[];
+  toolName: string; toolArgs: Record<string, unknown>;
+  errorOutput: string; errorCount: number; enrichedPrompt: string;
+}
+
+/**
+ * Запускает specialist'а для решения повторяющейся ошибки.
+ *
+ * Specialist — это изолированный суб-агент со свежим контекстом,
+ * который получает задачу "диагностируй и исправь ошибку инструмента X".
+ *
+ * Алгоритм:
+ * 1. Формирует задачу через buildSpecialistTask()
+ * 2. Собирает контекст проекта через buildSubagentContext()
+ * 3. Запускает runIsolatedLoop() с ограничением maxSteps
+ * 4. Заменяет результат ошибки в messages[] на результат specialist'а
+ * 5. Трекает созданные specialist'ом файлы
+ *
+ * @returns true если specialist отработал (основной цикл должен continue),
+ *          false если specialist упал (ошибка остаётся в messages)
+ */
+async function spawnSpecialist(p: SpecialistParams): Promise<boolean> {
+  if (!p.quiet) {
+    p.renderer?.writeBracketTag('specialist', `solving '${p.errorOutput.slice(0, 60).replace(/\n/g, ' ')}' error...`);
+  }
+  const task = buildSpecialistTask(p.toolName, p.toolArgs, p.errorOutput, p.enrichedPrompt, p.errorCount);
+  const ctx = buildSubagentContext(process.cwd());
+  const sub = new SubagentRenderer();
+  try {
+    logInfo('LOOP', `spawning specialist for ${p.toolName} (attempt #${p.errorCount})`);
+    const r = await runIsolatedLoop(
+      p.provider, p.registry, task, ctx, process.cwd(),
+      p.quiet, sub, p.toolExecutor, p.modeConfig.subagentMode, p.llmCfg.toolModel, p.specialistCfg.maxSteps,
+    );
+    for (let i = p.messages.length - 1; i >= 0; i--) {
+      if (p.messages[i].role === 'tool' && p.messages[i].tool_call_id === p.toolId) {
+        const text = r.errors.length > 0
+          ? `[Specialist attempted to fix "${p.toolName}" but failed:\n${r.errors.join('\n')}\n${r.summary}]\nTry a different approach.`
+          : `[Specialist resolved "${p.toolName}" error.\n${r.summary}]\nContinue with the task.`;
+        p.messages[i].content = truncateToolOutput(p.toolName, text, 0);
+        break;
+      }
+    }
+    for (const f of r.createdFiles) { if (!p.createdFiles.includes(f)) p.createdFiles.push(f); }
+    const buf = sub.getBuffer();
+    if (!p.quiet && p.renderer?.writeToolBuffer) p.renderer.writeToolBuffer({ lines: buf.lines, toolCalls: buf.toolCalls });
+    logInfo('LOOP', `specialist done | files: ${r.createdFiles.length} | turns: ${r.turns} | errors: ${r.errors.length}`);
+    return true;
+  } catch (e: any) {
+    logError('LOOP', `specialist error: ${e.message}`);
+    if (!p.quiet) p.renderer?.writeError(`  [specialist failed: ${e.message}]`);
+    return false;
+  }
 }
 
 /**
@@ -306,6 +371,14 @@ export async function runAgentLoop(
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
   let directWriteStreak = 0; // количество прямых write_file без subagent
+  /** Трекер повторяющихся tool errors: { normalizedError → count } */
+  const consecutiveToolErrors = new Map<string, number>();
+  /** Общий счётчик ошибок за сессию */
+  let totalToolErrors = 0;
+  /** Стратегия обработки ошибок: 'normal' | 'subagent-hint' | 'force-subagent' */
+  let errorStrategy: 'normal' | 'subagent-hint' | 'force-subagent' = 'normal';
+  /** Флаг: specialist уже был запущен для текущей ошибки (чтобы не дублировать) */
+  let specialistSpawnedFor: string | null = null;
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
@@ -720,7 +793,8 @@ export async function runAgentLoop(
           try {
             const childResult = await runIsolatedLoop(
               provider, registry, task, autoContext, process.cwd(), quiet, subRenderer, toolExecutor,
-              modeConfig.subagentMode
+              modeConfig.subagentMode,
+              llmCfg.toolModel,
             );
             toolOutput = childResult.summary;
             logInfo('AGENT', `subagent returned | files: ${childResult.createdFiles.length} | turns: ${childResult.turns} | errors: ${childResult.errors.length}`);
@@ -924,6 +998,62 @@ export async function runAgentLoop(
         content: truncateToolOutput(parsed.name, toolOutput, toolExitCode),
         tool_call_id: toolId,
       });
+
+      // ─── Error escalation + specialist auto-delegation ──────────
+      if (toolExitCode !== 0 && toolOutput) {
+        totalToolErrors++;
+        const errKey = `${parsed.name}::${toolOutput.slice(0, 100).replace(/[A-Z]:\\[^\s"']+/gi, '<PATH>').replace(/\/[^\s"']+/g, '<PATH>')}`;
+        const prevCount = consecutiveToolErrors.get(errKey) ?? 0;
+        consecutiveToolErrors.set(errKey, prevCount + 1);
+        const errorCount = prevCount + 1;
+
+        // ── Specialist: авто-делегация при повторяющихся ошибках ──
+        const specialistCfg = getSpecialistConfig(config);
+        if (
+          specialistCfg.enabled &&
+          errorCount === specialistCfg.triggerThreshold &&
+          specialistSpawnedFor !== errKey &&
+          !isTrivialError(parsed.name, toolOutput) &&
+          toolOutput.length >= specialistCfg.minErrorLength
+        ) {
+          specialistSpawnedFor = errKey;
+          const spawned = await spawnSpecialist({
+            provider, registry, toolExecutor, modeConfig, llmCfg, specialistCfg,
+            quiet, renderer, messages, toolId, createdFiles,
+            toolName: parsed.name, toolArgs: parsed.arguments,
+            errorOutput: toolOutput, errorCount, enrichedPrompt,
+          });
+          if (spawned) continue;
+        }
+
+        // ── Escalation: hint / strategy switch / block ──
+        if (errorCount > specialistCfg.triggerThreshold) {
+          const msg = errorCount === specialistCfg.triggerThreshold + 1
+            ? `[System: Tool "${parsed.name}" failed with the SAME error ${errorCount} times. Read the error message carefully. The input is likely wrong — try a completely different approach, or use subagent for a fresh context.]`
+            : `[System: Tool "${parsed.name}" failed ${errorCount} times with the same error. STOP. Do NOT retry the same call. Use subagent(task="...") for a fresh context, or tell the user you're stuck.]`;
+          messages.push({ role: 'user', content: msg });
+          if (!quiet) renderer?.writeWarning(`  [error escalation: ${parsed.name} failed ${errorCount} times]`);
+        }
+
+        if (totalToolErrors >= 5 && errorStrategy === 'normal') {
+          errorStrategy = 'subagent-hint';
+          messages.push({ role: 'user', content: `[System: ${totalToolErrors} tool errors. Use subagent(task="...") for a fresh context.]` });
+          if (!quiet) renderer?.writeWarning(`  [strategy: subagent-hint after ${totalToolErrors} errors]`);
+        }
+
+        if (errorCount >= 4) {
+          const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+          messages.push({ role: 'tool', content: `BLOCKED: Tool "${parsed.name}" failed ${errorCount} times. Temporarily blocked.`, tool_call_id: blockId });
+          const idx = validCalls.indexOf(call);
+          if (idx !== -1) validCalls.splice(idx, 1);
+          if (!quiet) renderer?.writeWarning(`  [blocked ${parsed.name}: too many repeated errors]`);
+        }
+      } else {
+        for (const [key] of consecutiveToolErrors) {
+          if (key.startsWith(parsed.name + '::')) consecutiveToolErrors.delete(key);
+        }
+        specialistSpawnedFor = null;
+      }
 
       // НЕ добавляем "Continue." после каждого tool-вызова — это нарушает
       // структуру диалога. Bounded nudge (строка 418) уже покрывает

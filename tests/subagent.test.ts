@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractAllToolCalls, validateToolCall, buildSubagentContext, subagentDefinition } from '../src/tools/subagent.js';
+import { extractAllToolCalls, validateToolCall, buildSubagentContext, buildSpecialistTask, isTrivialError, subagentDefinition } from '../src/tools/subagent.js';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -293,5 +293,78 @@ describe('subagentDefinition', () => {
     const params = subagentDefinition.function.parameters as any;
     expect(params.properties.existingFiles.type).toBe('string');
     expect(params.required).not.toContain('existingFiles');
+  });
+});
+
+// ─── buildSpecialistTask ────────────────────────────────────
+
+describe('buildSpecialistTask', () => {
+
+  it('includes tool name and error count', () => {
+    const result = buildSpecialistTask('bash', { cmd: 'ls' }, 'permission denied', 'delete files', 2);
+    expect(result).toContain('bash');
+    expect(result).toContain('2 times');
+    expect(result).toContain('permission denied');
+  });
+
+  it('includes tool arguments as JSON', () => {
+    const args = { path: '/foo/bar', content: 'hello' };
+    const result = buildSpecialistTask('write_file', args, 'file not found', 'write a file', 1);
+    expect(result).toContain('/foo/bar');
+    expect(result).toContain('write_file');
+  });
+
+  it('includes user task (truncated to 200 chars)', () => {
+    const longTask = 'x'.repeat(100) + 'y'.repeat(200);
+    const result = buildSpecialistTask('read_file', { path: 'x' }, 'error', longTask, 1);
+    expect(result).toContain('x'.repeat(100) + 'y'.repeat(100));
+    expect(result).not.toContain('y'.repeat(101) + 'y');
+  });
+
+  it('truncates error output to 500 chars', () => {
+    const longError = 'x'.repeat(600);
+    const result = buildSpecialistTask('bash', {}, longError, 'task', 1);
+    expect(result).toContain('x'.repeat(500));
+    expect(result).not.toContain('x'.repeat(501));
+  });
+
+  it('contains diagnostic instructions', () => {
+    const result = buildSpecialistTask('bash', { cmd: 'rm' }, 'no such file', 'clean up', 3);
+    expect(result).toContain('Diagnose WHY');
+    expect(result).toContain('FIX the underlying problem');
+    expect(result).toContain('root cause');
+  });
+});
+
+// ─── isTrivialError ─────────────────────────────────────────
+
+describe('isTrivialError', () => {
+
+  it('returns true for grep 0 results', () => {
+    expect(isTrivialError('grep_search', '0 results found for pattern "xyz"')).toBe(true);
+  });
+
+  it('returns true for glob 0 matches', () => {
+    expect(isTrivialError('glob_search', '0 files matched')).toBe(true);
+  });
+
+  it('returns true for very short errors', () => {
+    expect(isTrivialError('bash', 'err')).toBe(true);
+  });
+
+  it('returns false for path-not-found errors', () => {
+    expect(isTrivialError('read_file', 'Cannot find path E:\\foo because it does not exist.')).toBe(false);
+  });
+
+  it('returns false for real bash errors', () => {
+    expect(isTrivialError('bash', 'npm ERR! code ENOENT\nnpm ERR! enoent')).toBe(false);
+  });
+
+  it('returns false for write_file errors', () => {
+    expect(isTrivialError('write_file', 'Permission denied: /etc/passwd')).toBe(false);
+  });
+
+  it('returns true for no results found pattern', () => {
+    expect(isTrivialError('grep_search', 'no results found')).toBe(true);
   });
 });

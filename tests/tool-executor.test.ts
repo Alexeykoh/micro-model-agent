@@ -197,4 +197,106 @@ describe('ToolExecutor', () => {
       expect(result2.stdout).toContain('[truncated]');
     });
   });
+
+  describe('path-not-found enrichment', () => {
+    it('appends parent directory listing on path-not-found error', async () => {
+      const executor = new ToolExecutor();
+      const ctx = createCtx();
+
+      // Handler that returns "path not found" error
+      const failingHandler = createTestHandler('read_file', {
+        stdout: '', stderr: "Cannot find path 'E:\\foo\\bar.ts' because it does not exist.", exitCode: 1, truncated: false,
+      });
+      executor.register(failingHandler);
+
+      // list_dir handler that returns directory contents
+      const listDirHandler = createTestHandler('list_dir', {
+        stdout: 'file1.ts\nfile2.ts', stderr: '', exitCode: 0, truncated: false,
+      });
+      executor.register(listDirHandler);
+
+      const { result } = await executor.execute(
+        { id: '1', name: 'read_file', arguments: { path: 'E:\\foo\\bar.ts' } },
+        ctx, 'read_file',
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('[ENRICHMENT]');
+      expect(result.stderr).toContain('file1.ts');
+    });
+
+    it('does not enrich non-path errors', async () => {
+      const executor = new ToolExecutor();
+      const ctx = createCtx();
+
+      const handler = createTestHandler('bash', {
+        stdout: '', stderr: 'npm ERR! code ENOENT', exitCode: 1, truncated: false,
+      });
+      executor.register(handler);
+
+      const { result } = await executor.execute(
+        { id: '1', name: 'bash', arguments: { cmd: 'npm test' } },
+        ctx, 'bash',
+      );
+      expect(result.stderr).not.toContain('[ENRICHMENT]');
+    });
+  });
+
+  describe('error pattern detection', () => {
+    it('adds HINT on 2nd same error', async () => {
+      const executor = new ToolExecutor();
+      const ctx = createCtx();
+      const handler = createTestHandler('bash', {
+        stdout: '', stderr: 'permission denied: /tmp/test', exitCode: 1, truncated: false,
+      });
+      executor.register(handler);
+
+      // First error — no hint
+      const r1 = await executor.execute({ id: '1', name: 'bash', arguments: { cmd: 'rm' } }, ctx, 'bash');
+      expect(r1.result.stderr).not.toContain('[HINT]');
+      // Second error — HINT
+      const r2 = await executor.execute({ id: '2', name: 'bash', arguments: { cmd: 'rm' } }, ctx, 'bash');
+      expect(r2.result.stderr).toContain('[HINT]');
+      expect(r2.result.stderr).toContain('2 times');
+    });
+
+    it('adds WARNING on 3rd same error', async () => {
+      const executor = new ToolExecutor();
+      const ctx = createCtx();
+      const handler = createTestHandler('bash', {
+        stdout: '', stderr: 'permission denied: /tmp/test', exitCode: 1, truncated: false,
+      });
+      executor.register(handler);
+
+      await executor.execute({ id: '1', name: 'bash', arguments: { cmd: 'rm' } }, ctx, 'bash');
+      await executor.execute({ id: '2', name: 'bash', arguments: { cmd: 'rm' } }, ctx, 'bash');
+      const r3 = await executor.execute({ id: '3', name: 'bash', arguments: { cmd: 'rm' } }, ctx, 'bash');
+      expect(r3.result.stderr).toContain('[WARNING]');
+      expect(r3.result.stderr).toContain('3 times');
+    });
+
+    it('resets error count on success', async () => {
+      const executor = new ToolExecutor();
+      const ctx = createCtx();
+      const failHandler = createTestHandler('bash', {
+        stdout: '', stderr: 'error occurred', exitCode: 1, truncated: false,
+      });
+      const okHandler = createTestHandler('bash', {
+        stdout: 'ok', stderr: '', exitCode: 0, truncated: false,
+      });
+      executor.register(failHandler);
+
+      // Error twice
+      await executor.execute({ id: '1', name: 'bash', arguments: { cmd: 'fail' } }, ctx, 'bash');
+      await executor.execute({ id: '2', name: 'bash', arguments: { cmd: 'fail' } }, ctx, 'bash');
+
+      // Success — should reset
+      executor.register(okHandler);
+      await executor.execute({ id: '3', name: 'bash', arguments: { cmd: 'ok' } }, ctx, 'bash');
+
+      // New error — should start fresh (no HINT)
+      executor.register(failHandler);
+      const r4 = await executor.execute({ id: '4', name: 'bash', arguments: { cmd: 'fail' } }, ctx, 'bash');
+      expect(r4.result.stderr).not.toContain('[HINT]');
+    });
+  });
 });

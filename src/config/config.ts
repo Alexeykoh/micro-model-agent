@@ -54,10 +54,16 @@ const DEFAULT_CONFIG: AppConfig = {
       retries: 1,
       retryWithoutThinking: true,
       fallbackToReasoning: true,
-      maxTokensReasoning: 16384,
+      maxTokensReasoning: 32768,
       maxTokensDefault: 4096,
       maxTokensAfterTool: 24576,
       emptyResponseThreshold: 10,
+    },
+    specialist: {
+      enabled: true,
+      triggerThreshold: 2,
+      maxSteps: 10,
+      minErrorLength: 15,
     },
   },
 };
@@ -139,10 +145,11 @@ const LLM_DEFAULTS = {
   retries: 1,
   retryWithoutThinking: true,
   fallbackToReasoning: true,
-  maxTokensReasoning: 16384,
+  maxTokensReasoning: 32768,
   maxTokensDefault: 4096,
   maxTokensAfterTool: 24576,
   emptyResponseThreshold: 10,
+  toolModel: undefined as string | undefined,
 };
 
 /** Получить LLM конфиг с заполненными defaults */
@@ -157,5 +164,26 @@ export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
     maxTokensDefault: src.maxTokensDefault ?? LLM_DEFAULTS.maxTokensDefault,
     maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
     emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
+    toolModel: src.toolModel ?? LLM_DEFAULTS.toolModel,
+  };
+}
+
+/** Specialist config defaults */
+const SPECIALIST_DEFAULTS = {
+  enabled: true,
+  triggerThreshold: 2,
+  maxSteps: 10,
+  minErrorLength: 15,
+};
+
+/** Получить specialist конфиг с заполненными defaults */
+export function getSpecialistConfig(config?: AppConfig): typeof SPECIALIST_DEFAULTS {
+  const src = config?.agent?.specialist;
+  if (!src) return { ...SPECIALIST_DEFAULTS };
+  return {
+    enabled: src.enabled ?? SPECIALIST_DEFAULTS.enabled,
+    triggerThreshold: src.triggerThreshold ?? SPECIALIST_DEFAULTS.triggerThreshold,
+    maxSteps: src.maxSteps ?? SPECIALIST_DEFAULTS.maxSteps,
+    minErrorLength: src.minErrorLength ?? SPECIALIST_DEFAULTS.minErrorLength,
   };
 }

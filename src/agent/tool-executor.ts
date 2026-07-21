@@ -3,6 +3,7 @@ import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { notifyFileChanged } from '../indexer/cache.js';
 import { invalidateSystemPromptCache } from './system-prompt.js';
 import type { PluginManager } from '../plugins/manager.js';
+import { resolve, dirname } from 'node:path';
 
 /**
  * Диспетчер инструментов с пайплайном: pre-hooks → execute → post-hooks → truncate.
@@ -48,6 +49,31 @@ const TRUNCATION_LIMITS: Record<string, number> = {
 const DEFAULT_LIMIT = 800;
 const ERROR_LIMIT = 3000;
 
+/** Паттерны ошибок "path not found" */
+const PATH_NOT_FOUND_PATTERNS = [
+  /cannot find path/i,
+  /no such file/i,
+  /does not exist/i,
+  /not found/i,
+  /enoent/i,
+];
+
+/** Проверяет, является ли ошибка ошибкой "path not found" */
+function isPathNotFoundError(stderr: string): boolean {
+  return PATH_NOT_FOUND_PATTERNS.some(p => p.test(stderr));
+}
+
+/** Извлекает путь из ошибки */
+function extractPathFromError(stderr: string): string | null {
+  // Windows: "Cannot find path 'E:\foo\bar' because it does not exist."
+  const winMatch = stderr.match(/(?:cannot find path|no such file|does not exist)['"]\s*['"]?([A-Z]:\\[^'"]+)['"]?/i);
+  if (winMatch) return winMatch[1];
+  // Unix: "No such file or directory '/foo/bar'"
+  const unixMatch = stderr.match(/['"]?(\/[^\s'"]+)['"]?\s*(?:because|no such)/i);
+  if (unixMatch) return unixMatch[1];
+  return null;
+}
+
 /** Обрезка вывода инструмента для экономии токенов */
 function truncateOutput(toolName: string, output: string, exitCode: number): string {
   if (exitCode !== 0) {
@@ -75,9 +101,26 @@ export interface ExecutorResult {
  * 4. Уведомление indexer (для модифицирующих инструментов)
  * 5. Обрезка вывода (truncateOutput)
  */
+/**
+ * Хэш ошибки для детекции повторяющихся паттернов.
+ * Нормализует stderr, убирая вариативные части (пути, timestamps).
+ */
+function hashError(toolName: string, stderr: string): string {
+  // Убираем пути файлов, numbers, timestamps для нормализации
+  const normalized = stderr
+    .replace(/[A-Z]:\\[^\s"']+/gi, '<PATH>')
+    .replace(/\/[^\s"']+/g, '<PATH>')
+    .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/g, '<TS>')
+    .replace(/\b\d{10,13}\b/g, '<ID>')
+    .trim();
+  return `${toolName}::${normalized}`;
+}
+
 export class ToolExecutor {
   private handlers: Map<string, ToolHandler> = new Map();
   private pluginManager?: PluginManager;
+  /** Повторяющиеся ошибки: hash → { count, lastStderr } */
+  private recentErrors: Map<string, { count: number; lastStderr: string }> = new Map();
 
   /** Установка менеджера плагинов */
   setPluginManager(pm: PluginManager): void {
@@ -201,7 +244,54 @@ export class ToolExecutor {
 
     // 5. Truncate output
     const truncatedStdout = truncateOutput(call.name, result.stdout, result.exitCode);
-    const truncatedStderr = truncateOutput(call.name, result.stderr, result.exitCode);
+    let truncatedStderr = truncateOutput(call.name, result.stderr, result.exitCode);
+
+    // 5.5. Path-not-found enrichment — показываем содержимое родительской директории
+    if (result.exitCode !== 0 && isPathNotFoundError(result.stderr)) {
+      const errPath = extractPathFromError(result.stderr) ?? (call.arguments as any)?.path;
+      if (errPath) {
+        const parentDir = dirname(String(errPath));
+        const listDirHandler = this.handlers.get('list_dir');
+        if (listDirHandler) {
+          try {
+            const dirResult = await listDirHandler.execute({ path: parentDir }, context);
+            if (dirResult.exitCode === 0 && dirResult.stdout.trim()) {
+              truncatedStderr += `\n\n[ENRICHMENT] Contents of ${parentDir}:\n${dirResult.stdout}`;
+            } else {
+              truncatedStderr += `\n\n[ENRICHMENT] Parent directory ${parentDir} is empty or inaccessible.`;
+            }
+          } catch { /* enrichment is best-effort */ }
+        }
+      }
+    }
+
+    // 6. Error pattern detection — обогащение при повторяющихся ошибках
+    if (result.exitCode !== 0 && truncatedStderr) {
+      const errHash = hashError(call.name, truncatedStderr);
+      const prev = this.recentErrors.get(errHash);
+      if (prev) {
+        prev.count++;
+        if (prev.count === 2) {
+          truncatedStderr += `\n[HINT] This error occurred ${prev.count} times. The input is likely wrong — double-check arguments before retrying.`;
+        } else if (prev.count >= 3) {
+          truncatedStderr += `\n[WARNING] Same error ${prev.count} times in a row. STOP retrying this exact call. Try a different approach or ask for help.`;
+        }
+      } else {
+        this.recentErrors.set(errHash, { count: 1, lastStderr: truncatedStderr });
+      }
+      // Ограничиваем размер карты
+      if (this.recentErrors.size > 50) {
+        const first = this.recentErrors.keys().next().value!;
+        this.recentErrors.delete(first);
+      }
+    } else if (result.exitCode === 0) {
+      // При успехе — сбрасываем счётчик для этого инструмента
+      for (const [key] of this.recentErrors) {
+        if (key.startsWith(call.name + '::')) {
+          this.recentErrors.delete(key);
+        }
+      }
+    }
 
     const elapsed = (performance.now() - start) / 1000;
 
