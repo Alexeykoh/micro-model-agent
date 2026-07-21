@@ -387,10 +387,15 @@ export async function runAgentLoop(
       }
 
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'user' && consecutiveEmpty <= 2) {
-        messages.push({ role: 'user', content: 'Continue.' });
+      if ((lastMsg?.role === 'user' || lastMsg?.role === 'system') && consecutiveEmpty <= 2) {
+        // После system-сообщений (например "Skills loaded") — более конкретная подсказка
+        const isAfterSystem = lastMsg?.role === 'system';
+        const hint = isAfterSystem
+          ? '[System: You returned an empty response. The skills are loaded. Now create a plan and start working on the task. Do NOT wait for further instructions.]'
+          : 'Continue.';
+        messages.push({ role: 'user', content: hint });
         if (!quiet) {
-          renderer?.writeDim(`  [empty response, retrying]`);
+          renderer?.writeDim(`  [empty response, retrying${isAfterSystem ? ' with skills hint' : ''}]`);
         }
         continue;
       }

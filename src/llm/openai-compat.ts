@@ -96,6 +96,10 @@ export class OpenAICompat implements LLMProvider {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // Накапливаем нативные tool_calls из delta для конвертации в текстовый формат
+    const nativeToolCalls: Map<number, { id?: string; name?: string; arguments: string }> = new Map();
+    let hasContent = false;
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -113,14 +117,53 @@ export class OpenAICompat implements LLMProvider {
         try {
           const parsed = JSON.parse(data);
           const delta = parsed.choices?.[0]?.delta;
+
+          // Нативные tool_calls: накапливаем и конвертируем в <tool_call> текст
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!nativeToolCalls.has(idx)) {
+                nativeToolCalls.set(idx, { id: tc.id, name: tc.function?.name, arguments: '' });
+              }
+              const existing = nativeToolCalls.get(idx)!;
+              if (tc.id) existing.id = tc.id;
+              if (tc.function?.name) existing.name = tc.function.name;
+              if (tc.function?.arguments) existing.arguments += tc.function.arguments;
+            }
+          }
+
           if (delta?.content) {
+            hasContent = true;
             yield { content: delta.content, finish_reason: null };
           } else if (delta?.reasoning_content) {
             yield { content: '', reasoning: delta.reasoning_content, finish_reason: null };
           }
           const finish = parsed.choices?.[0]?.finish_reason;
           if (finish) {
-            yield { content: '', finish_reason: finish };
+            // Если finish_reason=tool_calls но контента не было — конвертируем нативные tool_calls в текст
+            if (finish === 'tool_calls' && !hasContent && nativeToolCalls.size > 0) {
+              const toolCallTexts: string[] = [];
+              for (const [, tc] of nativeToolCalls) {
+                if (tc.name) {
+                  let argsStr = tc.arguments;
+                  // Парсим arguments если это JSON — оборачиваем в валидный JSON
+                  try {
+                    JSON.parse(argsStr);
+                  } catch {
+                    // Если arguments не валидный JSON, оборачиваем как строку
+                    argsStr = JSON.stringify(argsStr);
+                  }
+                  toolCallTexts.push(`<tool_call>{"name":"${tc.name}","arguments":${argsStr}}</tool_call>`);
+                }
+              }
+              if (toolCallTexts.length > 0) {
+                yield { content: toolCallTexts.join('\n'), finish_reason: finish };
+              } else {
+                yield { content: '', finish_reason: finish };
+              }
+            } else {
+              yield { content: '', finish_reason: finish };
+            }
           }
         } catch { /* skip malformed chunk */ }
       }

@@ -84,7 +84,7 @@ npm run dev              # bun --watch
 - Built-in skills are in `src/skills/builtin/<name>/SKILL.md` — they must be copied to dist/ at build time.
 - **Tool output truncation is smart**: `truncateToolOutput()` in loop.ts applies per-tool limits (read_file=2000, bash=1500, etc.), not a flat cap. Full output persists in session store.
 - **Context compaction at 70%**: Score-based importance pruning keeps top-6 important + last-6 recent. Model has ~4K token buffer for response.
-- **Skills limited to 4000 tokens in system prompt**: `enforceSkillBudget()` sorts by size, keeps smaller first. Fast mode excludes skills entirely.
+- **Skills limited to 4000 tokens in system prompt**: `enforceSkillBudget()` sorts by size, keeps smaller first. In fast mode, skills are excluded entirely.
 - **Temperature 0.3 recommended**: User found 0.3 improves code quality and rule following for Qwen3.5-9B.
 - **Model ID format**: LM Studio uses `qwen/qwen3.5-9b` (org/model), not `qwen3.5-9b-instruct`.
 - **Question/approve pause mechanism**: `ToolResult.questionPending`/`breakLoop` flags. Handlers set `questionPending=true`; loop.ts returns early with questionPending object.
