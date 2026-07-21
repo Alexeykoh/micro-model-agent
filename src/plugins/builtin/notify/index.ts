@@ -1,4 +1,7 @@
-﻿import { execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { platform } from 'node:os';
 import type { AgentPlugin, PluginContext } from '../../types.js';
 
@@ -11,9 +14,6 @@ import type { AgentPlugin, PluginContext } from '../../types.js';
  * - tool:after (question) — агент ждёт ответа
  *
  * Zero-dependency: shell-out по платформе.
- * - win32: PowerShell NotifyIcon balloon tip
- * - darwin: osascript display notification
- * - linux: notify-send
  *
  * @module plugins/builtin/notify
  */
@@ -22,13 +22,27 @@ function sendNotification(title: string, body: string): void {
   const p = platform();
   try {
     if (p === 'win32') {
-      // PowerShell: System.Windows.Forms.NotifyIcon balloon tip
-      const psScript = `Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(5000, '${title.replace(/'/g, "''")}', '${body.replace(/'/g, "''")}', [System.Windows.Forms.ToolTipIcon]::Info)`;
-      execSync(`powershell -Command "${psScript}"`, {
-        timeout: 5000,
-        windowsHide: true,
-        stdio: 'pipe',
-      });
+      // Write temp .ps1 file to avoid $ escaping issues in shell
+      const safeTitle = title.replace(/'/g, "''");
+      const safeBody = body.replace(/'/g, "''");
+      const psScript = `Add-Type -AssemblyName System.Windows.Forms
+$n = New-Object System.Windows.Forms.NotifyIcon
+$n.Icon = [System.Drawing.SystemIcons]::Information
+$n.Visible = $true
+$n.ShowBalloonTip(5000, '${safeTitle}', '${safeBody}', [System.Windows.Forms.ToolTipIcon]::Info)
+Start-Sleep -Seconds 2
+$n.Dispose()`;
+      const tmpFile = join(tmpdir(), `mma-notify-${Date.now()}.ps1`);
+      writeFileSync(tmpFile, psScript, 'utf-8');
+      try {
+        execSync(`powershell -ExecutionPolicy Bypass -File "${tmpFile}"`, {
+          timeout: 8000,
+          windowsHide: true,
+          stdio: 'pipe',
+        });
+      } finally {
+        try { unlinkSync(tmpFile); } catch { /* ignore */ }
+      }
     } else if (p === 'darwin') {
       execSync(`osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"'`, {
         timeout: 5000,
@@ -42,7 +56,7 @@ function sendNotification(title: string, body: string): void {
       });
     }
   } catch {
-    // Best-effort — если уведомление не отправлено, не крашимся
+    // Best-effort
   }
 }
 
@@ -57,7 +71,6 @@ export default function createNotify(): AgentPlugin {
 
     onActivate(pluginCtx: PluginContext) {
       ctx = pluginCtx;
-      // Мержим конфиг из manifest + user override
       if (pluginCtx.config) {
         config = { ...config, ...pluginCtx.config as Record<string, unknown> } as typeof config;
       }
@@ -76,7 +89,6 @@ export default function createNotify(): AgentPlugin {
 
 /**
  * Обработчики событий — вызываются извне через PluginManager.on().
- * Экспортируются для регистрации в loop.ts.
  */
 export function handleAgentDone(): void {
   sendNotification('MMA', 'Agent finished the task');
@@ -87,7 +99,6 @@ export function handleToolBlocked(toolName: string, _args: unknown): void {
 }
 
 export function handleToolAfter(toolName: string, _args: unknown, result: { exitCode: number }): void {
-  // Question tool — агент ждёт ответа
   if (toolName === 'question') {
     sendNotification('MMA', 'Agent needs your answer');
   }

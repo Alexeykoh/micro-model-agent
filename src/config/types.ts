@@ -60,6 +60,8 @@ export interface AgentConfig {
   maxSkillsPro?: number;
   /** Параметры LLM: retry, thinking, max_tokens */
   llm?: LLMConfig;
+  /** Список плагинов для активации (имена через запятую) */
+  plugins?: string[];
 }
 
 /** Параметры LLM для tuning (пустые значения = использовать defaults) */

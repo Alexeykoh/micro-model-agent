@@ -255,16 +255,23 @@ export async function runAgentLoop(
     await pluginManager.activateAll(modeConfig.plugins, pluginCtx);
   }
 
-  // Авто-активация builtin плагинов
+  // Авто-активация builtin плагинов (все моды)
   const builtinPlugins = pluginInfos.filter(p => p.source === 'builtin');
   for (const bp of builtinPlugins) {
-    if (bp.name === 'lint-on-write' && options?.mode === 'fast') continue;
     if (!pluginManager.isActive(bp.name)) {
       await pluginManager.activate(bp.name, pluginCtx);
     }
   }
 
-  // Регистрация обработчиков событий для builtin плагинов
+  // Активация плагинов из config.agent.plugins
+  const configPlugins = config.agent?.plugins || [];
+  for (const pluginName of configPlugins) {
+    if (!pluginManager.isActive(pluginName)) {
+      await pluginManager.activate(pluginName, pluginCtx);
+    }
+  }
+
+  // Регистрация обработчиков событий для всех активных плагинов
   if (pluginManager.isActive('lint-on-write')) {
     pluginManager.on('tool:after', 'lint-on-write', (toolName: string, args: any, result: any) => {
       return lintHandleToolAfter(toolName, args, result, process.cwd(), '.lint-detected');
