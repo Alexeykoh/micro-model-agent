@@ -37,6 +37,9 @@ export interface ModeConfig {
   /** Поведения ( Record для расширяемости) */
   behaviors: Record<string, unknown>;
 
+  /** Плагины, активируемые в этом режиме */
+  plugins?: string[];
+
   /** UI настройки */
   ui: {
     showThinking: boolean;

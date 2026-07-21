@@ -86,6 +86,7 @@ const BUILTIN_MODES: ModeConfig[] = [
       promptPrefix: '[pro]',
     },
     subagentMode: 'base',
+    plugins: ['hooks-adapter'],
   },
 ];
 

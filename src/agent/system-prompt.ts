@@ -274,10 +274,10 @@ export function invalidateSystemPromptCache(): void {
  * @param mode - режим работы (fast/pro/base)
  * @returns Собранный system prompt строкой
  */
-export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode): string {
+export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, pluginSections?: string[]): string {
   const start = performance.now();
   // Ключ кэша: текущий каталог + режим + имена скилов (sorted)
-  const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}`;
+  const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}:${pluginSections?.length || 0}`;
   const cached = systemPromptCache.get(key);
   if (cached) {
     logDebug('SYSTEM', 'buildSystemPrompt: cache hit');
@@ -354,7 +354,9 @@ You help with software engineering tasks in the project directory.`;
   const base = mode === 'fast'
     ? [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, modeBlock].filter(Boolean).join('\n')
     : [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint, modeBlock].filter(Boolean).join('\n');
-  const result = base + (extraSkills && extraSkills.length > 0 && mode !== 'fast' ? '\n\n' + formatSkillsBlock(extraSkills) : '');
+  const result = base
+    + (extraSkills && extraSkills.length > 0 && mode !== 'fast' ? '\n\n' + formatSkillsBlock(extraSkills) : '')
+    + (pluginSections?.length ? '\n\n' + pluginSections.join('\n\n') : '');
   const elapsed = (performance.now() - start).toFixed(0);
   logInfo('SYSTEM', `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`);
   systemPromptCache.set(key, result);

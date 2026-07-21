@@ -14,9 +14,7 @@ import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } 
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { showPlan, getPlanPendingCount } from '../tools/plan.js';
-import { listTodos } from '../tools/todo.js';
-import { parseQuestionCommand } from '../tools/question.js';
-import { parseApproveCommand } from '../tools/approve.js';
+
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { loadConfig, saveConfig, getLLMConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
@@ -26,6 +24,8 @@ import type { AgentMode } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
+import { PluginManager } from '../plugins/manager.js';
+import { loadAllPlugins } from '../plugins/loader.js';
 import { planHandler } from '../tools/native/plan.js';
 import { todoHandler } from '../tools/native/todo.js';
 import { questionHandler } from '../tools/native/question.js';
@@ -181,6 +181,15 @@ export async function runAgentLoop(
   const modeConfig = modeRegistry.getOrFallback(options?.mode || 'base');
   const applied = applyMode(modeConfig, { quiet, showThinking: options?.showThinking });
 
+  // ─── Behaviors из ModeConfig ──────────────────────────
+  const behaviors = modeConfig.behaviors;
+  const planEnforcement = behaviors.planEnforcement !== false;
+  const directWriteStreakMax = typeof behaviors.directWriteStreakLimit === 'number'
+    ? behaviors.directWriteStreakLimit : (behaviors.directWriteStreak !== false ? 3 : Infinity);
+  const continuationNudgeMax = typeof behaviors.continuationNudgeLimit === 'number'
+    ? behaviors.continuationNudgeLimit : (behaviors.continuationNudge !== false ? 2 : 0);
+  const readConsolidation = behaviors.readConsolidation !== false;
+
   // Автозагрузка скилов из промпта (если пользователь указал @skill-name)
   const loadedSkills = loadSkillsFromRefs(prompt, process.cwd());
   const loadedSkillNames = new Set(loadedSkills.map(s => s.name));
@@ -232,9 +241,22 @@ export async function runAgentLoop(
 
   setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
   writeStatus('Initializing...');
-  // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память)
+
+  // ─── PluginManager: загрузка и активация плагинов ──
+  const pluginManager = new PluginManager();
+  await loadAllPlugins(pluginManager);
+  if (modeConfig.plugins?.length) {
+    await pluginManager.activateAll(modeConfig.plugins, {
+      cwd: process.cwd(),
+      config: {},
+      logger: { info: logInfo.bind(null, 'PLUGIN'), warn: logWarn.bind(null, 'PLUGIN'), error: logError.bind(null, 'PLUGIN'), debug: logDebug.bind(null, 'PLUGIN') },
+    });
+  }
+  const pluginSections = await pluginManager.getPromptSections();
+
+  // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память, плагины)
   const sysStart = performance.now();
-  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode);
+  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode, pluginSections);
   const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
   writeStatus(`Done (${sysElapsed}s)`);
   setStatusWriter(null);
@@ -256,6 +278,7 @@ export async function runAgentLoop(
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
+  toolExecutor.setPluginManager(pluginManager);
   toolExecutor.registerAll([
     planHandler, todoHandler, questionHandler, approveHandler,
     userProfileHandler, themeHandler, bashHandler,
@@ -359,7 +382,7 @@ export async function runAgentLoop(
     if (newSkillNames.length > 0) {
       skillsAutoLoaded = true;
       renderer?.writeInfo(`  Auto-loaded ${newSkillNames.length} skill(s): ${newSkillNames.join(', ')}`);
-      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode) };
+      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections) };
       messages.push({ role: 'system', content: `Skills loaded: ${newSkillNames.join(', ')}. Continue your work using these skills where relevant.` });
       continue;
     }
@@ -463,14 +486,14 @@ export async function runAgentLoop(
 
       // Nudge model to continue working after a tool result — but only if
       // the agent didn't already write a meaningful text response.
-      if (continuationNudges < 2) {
+      if (continuationNudgeMax > 0 && continuationNudges < continuationNudgeMax) {
         const lastThree = messages.slice(-3);
         const hasRecentToolResult = lastThree.some(m => m.role === 'tool');
         const alreadyResponded = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim().length > 20;
         if (hasRecentToolResult && !alreadyResponded) {
           continuationNudges++;
           if (!quiet) {
-            renderer?.writeDim(`  [nudge ${continuationNudges}/2: continue working]`);
+            renderer?.writeDim(`  [nudge ${continuationNudges}/${continuationNudgeMax}: continue working]`);
           }
           messages.push({ role: 'user', content: '[Tool result received. Write a response to the user. Do NOT call additional tools unless there is actual work to do.]' });
           continue;
@@ -515,9 +538,9 @@ export async function runAgentLoop(
     // Отслеживание повторных чтений одного файла для консолидации
     let lastReadFile: { path: string; offset: number; limit: number; content: string; toolId: string } | null = null;
 
-    // Блокировка прямых write_file когда есть план с 3+ шагами —.force subagent
+    // Блокировка прямых write_file когда есть план с 3+ шагами — force subagent
     const planSteps = showPlan();
-    const hasMultiStepPlan = !planSteps.startsWith('No active plan') && (planSteps.match(/\n/g) || []).length >= 3;
+    const hasMultiStepPlan = planEnforcement && !planSteps.startsWith('No active plan') && (planSteps.match(/\n/g) || []).length >= 3;
     if (hasMultiStepPlan) {
       const directWrites = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
       const hasSubagent = validCalls.some(c => c.parsed.name === 'subagent');
@@ -539,8 +562,8 @@ export async function runAgentLoop(
       }
     }
 
-    // ESCALATION: block write_file when creating 3+ files without subagent (no plan case)
-    if (!hasMultiStepPlan) {
+    // ESCALATION: block write_file when creating N+ files without subagent (no plan case)
+    if (directWriteStreakMax < Infinity && !hasMultiStepPlan) {
       const hasWrite = validCalls.some(c => c.parsed.name === 'write_file');
       const hasSubagentNow = validCalls.some(c => c.parsed.name === 'subagent');
       if (hasSubagentNow) {
@@ -548,10 +571,8 @@ export async function runAgentLoop(
       } else if (hasWrite) {
         const writeCount = validCalls.filter(c => c.parsed.name === 'write_file').length;
         directWriteStreak += writeCount;
-        if (directWriteStreak >= 3) {
+        if (directWriteStreak >= directWriteStreakMax) {
           const directWrites = validCalls.filter(c => c.parsed.name === 'write_file');
-          // Блокируем ВСЕ write_file, но отправляем ОДИН блокирующий message
-          // чтобы не засорять контекст повторными BLOCKED
           for (const wc of directWrites) {
             const idx = validCalls.indexOf(wc);
             if (idx !== -1) validCalls.splice(idx, 1);
@@ -567,12 +588,6 @@ export async function runAgentLoop(
           if (!quiet) {
             renderer?.writeWarning(`  [blocked ${directWrites.length} writes: ${directWriteStreak} files without subagent — use subagent for multi-file projects]`);
           }
-        }
-      } else {
-        // Non-write tool calls don't reset the counter but also don't increment
-        const hasNonWriteTool = validCalls.length > 0 && !hasWrite;
-        if (hasNonWriteTool && directWriteStreak > 0) {
-          // New file creations should not be penalized across different operation types
         }
       }
     }
@@ -654,7 +669,8 @@ export async function runAgentLoop(
           const subRenderer = new SubagentRenderer();
           try {
             const childResult = await runIsolatedLoop(
-              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer, toolExecutor
+              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer, toolExecutor,
+              modeConfig.subagentMode
             );
             toolOutput = childResult.summary;
             logInfo('AGENT', `subagent returned | files: ${childResult.createdFiles.length} | turns: ${childResult.turns} | errors: ${childResult.errors.length}`);
@@ -739,7 +755,7 @@ export async function runAgentLoop(
       runPostToolUseHooks(process.cwd(), parsed.name, hookCmd, toolOutput, toolExitCode);
 
       // Track sequential read_file calls for consolidation
-      if (!isBash && parsed.name === 'read_file' && toolExitCode === 0) {
+      if (readConsolidation && !isBash && parsed.name === 'read_file' && toolExitCode === 0) {
         const filePath = String(parsed.arguments.path ?? '');
         const offset = Math.max(1, Number(parsed.arguments.offset ?? 1));
         const limit = Math.max(1, Number(parsed.arguments.limit ?? 500));
@@ -850,20 +866,6 @@ export async function runAgentLoop(
               }
             }
           }
-        }
-      }
-
-      if (isBash && cmd!.startsWith('plan ') && toolExitCode === 0) {
-        const planOutput = showPlan();
-        if (planOutput && !planOutput.startsWith('No active plan')) {
-          renderer?.writeLine(planOutput);
-        }
-      }
-
-      if (isBash && cmd!.startsWith('todo ') && toolExitCode === 0) {
-        const todoOutput = listTodos();
-        if (todoOutput) {
-          renderer?.writeLine(todoOutput);
         }
       }
 

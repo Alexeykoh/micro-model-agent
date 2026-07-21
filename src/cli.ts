@@ -126,6 +126,7 @@ export function createCli() {
     .argument('[prompt]', 'prompt to execute')
     .option('--model <model>', 'model to use')
     .option('--provider <provider>', 'provider to use')
+    .option('--mode <mode>', 'agent mode (fast|base|pro)')
     .option('--stdin', 'force read from stdin (for piped mode)')
     .option('--ink', 'use ink renderer (React terminal UI)')
     .option('--max-files <count>', 'max source files for project map', parseInt);
@@ -134,6 +135,58 @@ export function createCli() {
   registerModelCommands(program);
   registerConfigCommands(program);
   registerUpdateCommand(program);
+
+  // ─── Plugin management ─────────────────────────────────
+  const pluginCmd = program.command('plugin').description('plugin management');
+  pluginCmd
+    .command('list')
+    .description('list installed plugins')
+    .action(async () => {
+      const { PluginManager } = await import('./plugins/manager.js');
+      const { loadAllPlugins } = await import('./plugins/loader.js');
+      const pm = new PluginManager();
+      await loadAllPlugins(pm);
+      const plugins = pm.listPlugins();
+      const theme = getTheme();
+      if (plugins.length === 0) {
+        console.log(theme.dim('  No plugins installed.'));
+        console.log(theme.dim('  Place plugins in ~/.mma/plugins/ or .mma/plugins/'));
+        return;
+      }
+      console.log(theme.info(`  Installed plugins (${plugins.length}):`));
+      for (const p of plugins) {
+        const status = p.active ? theme.successMsg('active') : theme.dim('inactive');
+        const ver = p.version ? ` v${p.version}` : '';
+        console.log(`    ${theme.highlight(p.name)}${ver} — ${status}`);
+        if (p.description) console.log(`      ${theme.dim(p.description)}`);
+      }
+    });
+
+  pluginCmd
+    .command('create')
+    .argument('<name>', 'plugin name')
+    .description('scaffold a new plugin in .mma/plugins/')
+    .action(async (name: string) => {
+      const { writeFileSync, mkdirSync, existsSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const theme = getTheme();
+      const pluginDir = join('.mma', 'plugins', name);
+      if (existsSync(pluginDir)) {
+        console.log(theme.error(`  Plugin "${name}" already exists at ${pluginDir}`));
+        return;
+      }
+      mkdirSync(pluginDir, { recursive: true });
+      const manifest = {
+        name,
+        version: '0.1.0',
+        description: `${name} plugin`,
+        entry: 'index.ts',
+      };
+      writeFileSync(join(pluginDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+      writeFileSync(join(pluginDir, 'index.ts'), `import type { AgentPlugin } from '../../src/plugins/types.js';\n\nexport default function createPlugin(): AgentPlugin {\n  return {\n    name: '${name}',\n    version: '0.1.0',\n    async onActivate(ctx) {\n      ctx.logger.info('${name}: activated');\n    },\n  };\n}\n`);
+      console.log(theme.successMsg(`  Plugin "${name}" created at ${pluginDir}`));
+      console.log(theme.dim(`  Files: manifest.json, index.ts`));
+    });
 
   // Top-level `use <name>` — быстрое переключение модели
   program
@@ -207,6 +260,7 @@ export function createCli() {
 
     const providerOpt = program.getOptionValue('provider');
     const modelOpt = program.getOptionValue('model');
+    const modeOpt = program.getOptionValue('mode');
     if (providerOpt) config.active.provider = providerOpt;
     if (modelOpt) config.active.model = modelOpt;
     const maxFilesOpt = program.getOptionValue('maxFiles');
@@ -269,11 +323,11 @@ export function createCli() {
 
     if (prompt) {
       const renderer = await createRenderer(undefined, renderOptions);
-      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
+      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking, mode: modeOpt });
     } else {
       const commands = getSlashCommands();
       const renderer = await createRenderer(commands, renderOptions);
-      runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking });
+      runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking, mode: modeOpt });
     }
   });
 
