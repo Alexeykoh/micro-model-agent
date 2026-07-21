@@ -1,4 +1,5 @@
 import type { LLMProvider, ChatMessage, ChatOptions, Chunk } from './provider.js';
+import { getLLMConfig } from '../config/config.js';
 
 /**
  * OpenAI-совместимый LLM-провайдер.
@@ -53,9 +54,10 @@ export class OpenAICompat implements LLMProvider {
 
   async *chat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<Chunk> {
     const reasoning = isReasoningModel(this.model);
+    const llmCfg = getLLMConfig();
 
     // Reasoning-модели требуют больший budget — reasoning токены потребляют часть max_tokens
-    const defaultMaxTokens = reasoning ? 16384 : 4096;
+    const defaultMaxTokens = reasoning ? llmCfg.maxTokensReasoning : llmCfg.maxTokensDefault;
 
     const body: Record<string, unknown> = {
       model: this.model,

@@ -50,6 +50,15 @@ const DEFAULT_CONFIG: AppConfig = {
     maxSteps: 100, autoCompact: true, compactThreshold: 0.70,
     toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base',
     skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0,
+    llm: {
+      retries: 1,
+      retryWithoutThinking: true,
+      fallbackToReasoning: true,
+      maxTokensReasoning: 16384,
+      maxTokensDefault: 4096,
+      maxTokensAfterTool: 24576,
+      emptyResponseThreshold: 10,
+    },
   },
 };
 
@@ -123,4 +132,30 @@ export function saveConfig(config: AppConfig): void {
   const globalPath = join(MMA_DIR, 'config.json');
   ensureMmaDir();
   writeFileSync(globalPath, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+/** LLM config defaults */
+const LLM_DEFAULTS = {
+  retries: 1,
+  retryWithoutThinking: true,
+  fallbackToReasoning: true,
+  maxTokensReasoning: 16384,
+  maxTokensDefault: 4096,
+  maxTokensAfterTool: 24576,
+  emptyResponseThreshold: 10,
+};
+
+/** Получить LLM конфиг с заполненными defaults */
+export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
+  const src = config?.agent?.llm;
+  if (!src) return { ...LLM_DEFAULTS };
+  return {
+    retries: src.retries ?? LLM_DEFAULTS.retries,
+    retryWithoutThinking: src.retryWithoutThinking ?? LLM_DEFAULTS.retryWithoutThinking,
+    fallbackToReasoning: src.fallbackToReasoning ?? LLM_DEFAULTS.fallbackToReasoning,
+    maxTokensReasoning: src.maxTokensReasoning ?? LLM_DEFAULTS.maxTokensReasoning,
+    maxTokensDefault: src.maxTokensDefault ?? LLM_DEFAULTS.maxTokensDefault,
+    maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
+    emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
+  };
 }

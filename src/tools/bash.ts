@@ -1,9 +1,11 @@
 import { execa, ExecaError } from 'execa';
+import { execSync } from 'node:child_process';
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { sanitize } from './sanitizer.js';
 import { getTheme } from '../styling/index.js';
+import { logInfo } from '../logger.js';
 import type { ToolDefinition } from './registry.js';
 import type { ToolHandler } from './types.js';
 
@@ -30,6 +32,47 @@ export interface BashResult {
 
 const MAX_OUTPUT_LENGTH = 8000; // максимальная длина вывода (обрезается)
 const CACHE_DIR = join(homedir(), '.mma', 'cache');
+
+// ─── Detection shell ──────────────────────────────────────
+// Определяем доступную shell-программу: pwsh → powershell.exe → cmd.exe
+interface ShellInfo {
+  executable: string;
+  args: string[];
+  isPowerShell: boolean;
+}
+
+let _detectedShell: ShellInfo | null = null;
+
+function detectShell(): ShellInfo {
+  if (_detectedShell) return _detectedShell;
+
+  if (process.platform !== 'win32') {
+    _detectedShell = { executable: 'sh', args: ['-c'], isPowerShell: false };
+    logInfo('SHELL', `detected: sh (unix)`);
+    return _detectedShell;
+  }
+
+  // Попытка 1: pwsh (PowerShell Core 7+)
+  try {
+    execSync('pwsh --version', { stdio: 'pipe', timeout: 3000, windowsHide: true });
+    _detectedShell = { executable: 'pwsh', args: ['-NoProfile', '-EncodedCommand'], isPowerShell: true };
+    logInfo('SHELL', 'detected: pwsh (PowerShell Core)');
+    return _detectedShell;
+  } catch { /* pwsh not found */ }
+
+  // Попытка 2: powershell.exe (Windows PowerShell 5.1, встроенная)
+  try {
+    execSync('powershell.exe -Version 5.1 -Command "echo ok"', { stdio: 'pipe', timeout: 3000, windowsHide: true });
+    _detectedShell = { executable: 'powershell.exe', args: ['-NoProfile', '-EncodedCommand'], isPowerShell: true };
+    logInfo('SHELL', 'detected: powershell.exe (Windows PowerShell 5.1)');
+    return _detectedShell;
+  } catch { /* powershell.exe not found */ }
+
+  // Попытка 3: cmd.exe (fallback)
+  _detectedShell = { executable: 'cmd.exe', args: ['/c'], isPowerShell: false };
+  logInfo('SHELL', 'detected: cmd.exe (fallback)');
+  return _detectedShell;
+}
 
 // ─── Трансляция Unix → PowerShell ─────────────────────────
 // Автоматически конвертирует стандартные Unix-команды в PowerShell-эквиваленты
@@ -197,17 +240,42 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
   let stderr = '';
   let exitCode = 0;
 
-  const encoded = encodePowerShellCommand(cmd);
+  const shell = detectShell();
 
   try {
-    const result = await execa('pwsh', ['-NoProfile', '-EncodedCommand', encoded], {
-      timeout: timeoutSeconds * 1000,
-      maxBuffer: 10 * 1024 * 1024,
-      windowsHide: true,
-      cwd: process.cwd(),
-      env: process.env as Record<string, string>,
-      encoding: 'utf8',
-    });
+    let result;
+    if (shell.isPowerShell) {
+      // PowerShell: используем -EncodedCommand для корректной передачи Unicode
+      const encoded = encodePowerShellCommand(cmd);
+      result = await execa(shell.executable, [...shell.args, encoded], {
+        timeout: timeoutSeconds * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+        encoding: 'utf8',
+      });
+    } else if (shell.executable === 'cmd.exe') {
+      // cmd.exe: передаём команду напрямую
+      result = await execa(shell.executable, [...shell.args, cmd], {
+        timeout: timeoutSeconds * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+        encoding: 'utf8',
+      });
+    } else {
+      // sh (unix): передаём команду напрямую
+      result = await execa(shell.executable, [...shell.args, cmd], {
+        timeout: timeoutSeconds * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+        encoding: 'utf8',
+      });
+    }
     stdout = result.stdout;
     stderr = result.stderr;
     exitCode = result.exitCode ?? 0;

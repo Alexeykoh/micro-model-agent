@@ -75,6 +75,35 @@ npm run dev              # bun --watch
 - **`docs/`**: External API documentation.
 - **Config location**: `~/.mma/config.json` (global), `.mmrc` (project-local).
 
+## LLM tuning (`agent.llm` in config)
+
+Config section for tuning empty-response handling and model behavior:
+
+```json
+{
+  "agent": {
+    "llm": {
+      "retries": 1,
+      "retryWithoutThinking": true,
+      "fallbackToReasoning": true,
+      "maxTokensReasoning": 16384,
+      "maxTokensDefault": 4096,
+      "maxTokensAfterTool": 24576,
+      "emptyResponseThreshold": 10
+    }
+  }
+}
+```
+
+- `retries` — retry attempts for empty responses (default: 1)
+- `retryWithoutThinking` — retry with `enableThinking: false` when reasoning chunks but no content (default: true)
+- `fallbackToReasoning` — use reasoning text as content fallback (default: true)
+- `maxTokensReasoning` / `maxTokensDefault` — model-dependent token limits
+- `maxTokensAfterTool` — increased limit after tool calls in subagent
+- `emptyResponseThreshold` — min reasoning chunks to trigger retry
+
+Config loaded via `getLLMConfig()` from `src/config/config.ts`. Used in `doChat()`, `openai-compat.ts`, `subagent.ts`.
+
 ## Gotchas
 
 - The `jsonrepair` dependency is used in the agent loop to fix malformed JSON from small models — don't remove it.

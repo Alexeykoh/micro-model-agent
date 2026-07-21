@@ -72,6 +72,23 @@ function createVerboseRenderer() {
       process.stdout.write(`  ← ${time} (code: ${exitCode ?? '?'})\n`);
       if (result) process.stdout.write(`    ${result.slice(0, 200)}\n`);
     },
+    writeToolBuffer: (data: { lines: string[]; toolCalls: { name: string; args: string; result: string }[] }) => {
+      if (data.toolCalls.length > 0) {
+        process.stdout.write(`  [subagent tools] ${data.toolCalls.map(t => t.name).join(', ')}\n`);
+        for (const tc of data.toolCalls.slice(-5)) {
+          const argsShort = tc.args.slice(0, 80);
+          process.stdout.write(`    → ${tc.name}(${argsShort})\n`);
+          if (tc.result) process.stdout.write(`    ← ${tc.result.slice(0, 150)}\n`);
+        }
+      }
+      if (data.lines.length > 0) {
+        const lastLines = data.lines.slice(-10);
+        process.stdout.write(`  [subagent output] ${lastLines.length} lines:\n`);
+        for (const line of lastLines) {
+          process.stdout.write(`    ${line.slice(0, 120)}\n`);
+        }
+      }
+    },
     writeMarkdownChunk: (chunk: string) => { mdBuf += chunk; process.stdout.write(chunk); },
     writeSpinner: () => {},
     clearSpinner: () => {},

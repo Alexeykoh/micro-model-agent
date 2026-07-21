@@ -58,6 +58,26 @@ export interface AgentConfig {
   maxSkillsBase?: number;
   /** @deprecated Используйте ModeRegistry.maxSkills вместо этого */
   maxSkillsPro?: number;
+  /** Параметры LLM: retry, thinking, max_tokens */
+  llm?: LLMConfig;
+}
+
+/** Параметры LLM для tuning (пустые значения = использовать defaults) */
+export interface LLMConfig {
+  /** Количество повторных попыток при пустом ответе (default: 1) */
+  retries?: number;
+  /** Retry без thinking при пустом ответе с reasoning chunks (default: true) */
+  retryWithoutThinking?: boolean;
+  /** Fallback: использовать reasoning как content при пустом ответе (default: true) */
+  fallbackToReasoning?: boolean;
+  /** max_tokens для reasoning-моделей (default: 16384) */
+  maxTokensReasoning?: number;
+  /** max_tokens для обычных моделей (default: 4096) */
+  maxTokensDefault?: number;
+  /** max_tokens после tool call в subagent (default: 24576) */
+  maxTokensAfterTool?: number;
+  /** Мин. количество reasoning chunks для триггера retry (default: 10) */
+  emptyResponseThreshold?: number;
 }
 
 /** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */

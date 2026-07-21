@@ -18,7 +18,7 @@ import { listTodos } from '../tools/todo.js';
 import { parseQuestionCommand } from '../tools/question.js';
 import { parseApproveCommand } from '../tools/approve.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
-import { loadConfig, saveConfig } from '../config/config.js';
+import { loadConfig, saveConfig, getLLMConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
@@ -329,8 +329,9 @@ export async function runAgentLoop(
     }
 
     // ─── Запрос к LLM ────────────────────────────────────
-    logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}`);
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, options?.showThinking);
+    const llmCfg = getLLMConfig(config);
+    logInfo('LOOP', `calling doChat, messages: ${messages.length}, options.showThinking: ${options?.showThinking}, retries: ${llmCfg.retries}`);
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, llmCfg.retries, options?.showThinking);
 
     // Проверка прерывания во время генерации
     if (renderer?.abortSignal?.aborted) {

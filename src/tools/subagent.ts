@@ -8,6 +8,7 @@ import { buildSystemPrompt } from '../agent/system-prompt.js';
 import { checkFileSyntax } from './syntax-check.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { logInfo, logDebug, logWarn, logLLMRequest, logLLMResponse, logToolCall } from '../logger.js';
+import { getLLMConfig } from '../config/config.js';
 
 /**
  * Изолированный цикл агента для субагентов.
@@ -240,12 +241,17 @@ export async function doChat(
   retries = 1,
   showThinking = false,
   caller: 'main' | 'subagent' = 'main',
+  maxTokens?: number,
 ): Promise<{ response: string; genTimeMs: number }> {
+  let lastReasoningText = '';
+
+  // Phase 1: Normal attempts with thinking enabled
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
     const fullText: string[] = [];
     let started = false;
     let reasoningBuf: string | false = false;
+    let currentReasoning = ''; // накопленный reasoning текст для этого attempt
     let lastFinishReason: string | null = null;
     let reasoningChunksCount = 0;
     let contentChunksCount = 0;
@@ -259,10 +265,9 @@ export async function doChat(
 
     try {
       let buf = '';
-      for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking: true })) {
+      for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking: true, max_tokens: maxTokens })) {
         if (!chunk.content && !chunk.reasoning && !chunk.finish_reason) continue;
 
-        // Трекаем finish_reason для диагностики пустых ответов
         if (chunk.finish_reason) {
           lastFinishReason = chunk.finish_reason;
         }
@@ -274,6 +279,7 @@ export async function doChat(
 
         if (chunk.reasoning) {
           reasoningChunksCount++;
+          currentReasoning += chunk.reasoning;
         }
 
         if (!chunk.content && !chunk.reasoning) continue;
@@ -295,7 +301,7 @@ export async function doChat(
           continue;
         }
 
-        if (reasoningBuf !== false) {
+        if (reasoningBuf !== false && typeof reasoningBuf === 'string') {
           renderer.writeNewline();
           renderer.writeDim(reasoningBuf);
           reasoningBuf = false;
@@ -331,10 +337,14 @@ export async function doChat(
           }
         }
       }
-    if (reasoningBuf !== false) {
-      renderer.writeNewline();
-      renderer.writeDim(reasoningBuf);
-    }
+      if (reasoningBuf !== false && typeof reasoningBuf === 'string') {
+        renderer.writeNewline();
+        renderer.writeDim(reasoningBuf);
+      }
+      // Сохраняем reasoning для fallback
+      if (currentReasoning) {
+        lastReasoningText = currentReasoning;
+      }
 
     } catch (e: any) {
       if (e.name === 'AbortError') {
@@ -356,7 +366,7 @@ export async function doChat(
       return { response, genTimeMs };
     }
 
-    // Диагностика пустого ответа — логируем причину
+    // Диагностика пустого ответа
     const reason = lastFinishReason ?? 'unknown';
     logWarn('DOCHAT', `empty response #${attempt + 1}: finish_reason=${reason}, reasoning_chunks=${reasoningChunksCount}, content_chunks=${contentChunksCount}`);
     if (lastFinishReason === 'length') {
@@ -370,7 +380,111 @@ export async function doChat(
     }
   }
 
+  const llmCfg = getLLMConfig();
+
+  // Phase 2: Retry WITHOUT thinking — модель генерирует content напрямую
+  if (llmCfg.retryWithoutThinking && lastReasoningText.trim()) {
+    logInfo('DOCHAT', `retrying without thinking (had ${lastReasoningText.length} reasoning chars)`);
+    renderer.writeDim(`[retry without thinking]`);
+    const retryResult = await doChatOnce(provider, messages, renderer, signal, false, showThinking, caller, maxTokens);
+    if (retryResult.response.trim()) {
+      logInfo('DOCHAT', `retry without thinking succeeded: ${retryResult.response.length} chars`);
+      return retryResult;
+    }
+  }
+
+  // Phase 3: Fallback — используем reasoning как content
+  if (llmCfg.fallbackToReasoning && lastReasoningText.trim()) {
+    logInfo('DOCHAT', `fallback: using reasoning as content (${lastReasoningText.length} chars)`);
+    renderer.writeWarning(`  [fallback: using reasoning as content]`);
+    return { response: lastReasoningText, genTimeMs: 0 };
+  }
+
   return { response: '', genTimeMs: 0 };
+}
+
+/**
+ * Одиночный вызов LLM без retry логики.
+ * Используется для retry с другими параметрами (например, enableThinking: false).
+ */
+async function doChatOnce(
+  provider: LLMProvider,
+  messages: ChatMessage[],
+  renderer: OutputRenderer,
+  signal?: AbortSignal,
+  enableThinking = true,
+  showThinking = false,
+  caller: 'main' | 'subagent' = 'main',
+  maxTokens?: number,
+): Promise<{ response: string; genTimeMs: number }> {
+  const startTime = performance.now();
+  const fullText: string[] = [];
+  let started = false;
+
+  if (signal?.aborted) return { response: '', genTimeMs: 0 };
+
+  renderer.writeSpinner();
+
+  try {
+    let buf = '';
+    for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking, max_tokens: maxTokens })) {
+      if (!chunk.content && !chunk.finish_reason) continue;
+
+      if (chunk.content) {
+        fullText.push(chunk.content);
+      }
+
+      if (!chunk.content) continue;
+
+      if (!started) {
+        renderer.clearSpinner();
+        started = true;
+      }
+
+      buf += chunk.content;
+
+      while (buf.length > 0) {
+        const tcStart = buf.indexOf('<tool_call>');
+        const tcEnd = buf.indexOf('</tool_call>');
+
+        if (tcStart === -1 && tcEnd === -1) {
+          if (buf) renderer.writeMarkdownChunk(buf);
+          buf = '';
+          break;
+        }
+
+        if (tcStart !== -1 && (tcEnd === -1 || tcStart < tcEnd)) {
+          if (tcStart > 0) {
+            renderer.writeMarkdownChunk(buf.slice(0, tcStart));
+          }
+          buf = buf.slice(tcStart);
+          const closeIdx = buf.indexOf('</tool_call>');
+          if (closeIdx !== -1) {
+            buf = buf.slice(closeIdx + '</tool_call>'.length);
+          }
+          break;
+        }
+
+        if (tcEnd !== -1 && (tcStart === -1 || tcEnd < tcStart)) {
+          renderer.writeMarkdownChunk(buf.slice(0, tcEnd));
+          buf = buf.slice(tcEnd + '</tool_call>'.length);
+        }
+      }
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      return { response: '', genTimeMs: 0 };
+    }
+    renderer.writeError(`\n[LLM] ${e.message}`);
+    return { response: '', genTimeMs: 0 };
+  }
+
+  const genTimeMs = performance.now() - startTime;
+  const response = fullText.join('');
+  renderer.commitMarkdown();
+
+  logLLMResponse(provider.model, response.length, genTimeMs, undefined, caller);
+  return { response, genTimeMs };
 }
 
 // ─── Isolated agent loop ──────────────────────────────────
@@ -443,7 +557,12 @@ export async function runIsolatedLoop(
       logInfo('SUBAGENT', `after compact | ${messages.length} msgs | ${ctx.totalTokens} tokens`);
     }
 
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent');
+    // После tool call увеличиваем max_tokens чтобы модель успела сгенерировать контент после reasoning
+    const hasToolResult = messages.some(m => m.role === 'tool');
+    const llmCfg = getLLMConfig();
+    const maxTokens = hasToolResult ? llmCfg.maxTokensAfterTool : undefined;
+
+    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent', maxTokens);
 
     if (!response.trim()) {
       logDebug('SUBAGENT', `empty response at step ${step}, stopping`);
@@ -533,6 +652,10 @@ export async function runIsolatedLoop(
 
         if (toolExitCode !== 0) {
           logDebug('SUBAGENT', `bash failed: exit ${toolExitCode} | ${toolOutput.slice(0, 200)}`);
+          // Если bash падает из-за отсутствия shell —提示 модель использовать write_file
+          if (/pwsh|powershell|not recognized|not found/i.test(toolOutput)) {
+            toolOutput += '\n\n[HINT] Shell unavailable on this system. Use write_file tool to create files manually. Do NOT retry bash commands.';
+          }
         }
       }
 
@@ -550,9 +673,20 @@ export async function runIsolatedLoop(
 
   logInfo('SUBAGENT', `DONE | ${turns} turns | ${toolCallCount} tool calls | ${createdFiles.length} files created | ${errors.length} errors | ${finalTokens} tokens (${finalUsage.toFixed(1)}%) | ${(elapsedMs / 1000).toFixed(1)}s`);
 
+  // Собираем список использованных инструментов из истории
+  const toolsUsed = [...new Set(
+    messages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => {
+        const calls = m.content.matchAll(/<tool_call>\{"name":"([^"]+)"/g);
+        return [...calls].map(c => c[1]);
+      })
+  )];
+  const toolsStr = toolsUsed.length > 0 ? `\nTools used: ${toolsUsed.join(', ')}` : '';
+
   const summary = createdFiles.length > 0
-    ? `[Subagent done — ${createdFiles.length} file(s), ${turns} turns, ${finalTokens} tokens]\nFiles: ${createdFiles.join(', ')}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`
-    : `[Subagent done — no files, ${turns} turns, ${finalTokens} tokens]${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`;
+    ? `[Subagent done — ${createdFiles.length} file(s), ${turns} turns]\nFiles: ${createdFiles.join(', ')}${toolsStr}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`
+    : `[Subagent done — no files, ${turns} turns]${toolsStr}${errors.length > 0 ? `\nErrors: ${errors.join('; ')}` : ''}`;
 
   return { createdFiles, errors, summary, turns };
 }
