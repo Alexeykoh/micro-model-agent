@@ -1,6 +1,6 @@
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
-import { OpenAICompat } from '../llm/openai-compat.js';
+import { LMStudioNative } from '../llm/lmstudio-native.js';
 import { ToolRegistry } from './registry.js';
 import type { ParsedToolCall } from './types.js';
 import type { ToolExecutor } from '../agent/tool-executor.js';
@@ -616,12 +616,11 @@ export async function runIsolatedLoop(
 
   // Two-model pipeline: если toolModel задана, создаём отдельный провайдер
   let effectiveProvider = provider;
-  if (toolModel && provider instanceof OpenAICompat) {
-    effectiveProvider = new OpenAICompat(
+  if (toolModel && provider instanceof LMStudioNative) {
+    effectiveProvider = new LMStudioNative(
       (provider as any).baseUrl,
       toolModel,
       provider.contextWindow,
-      (provider as any).apiKey,
     );
     logInfo('SUBAGENT', `using tool model: ${toolModel} (main: ${provider.model})`);
   }

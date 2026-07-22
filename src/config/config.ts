@@ -54,7 +54,7 @@ const DEFAULT_CONFIG: AppConfig = {
       retries: 1,
       retryWithoutThinking: true,
       fallbackToReasoning: true,
-      maxTokensReasoning: 48000,
+      maxTokensReasoning: 32768,
       maxTokensDefault: 4096,
       maxTokensAfterTool: 24576,
       emptyResponseThreshold: 10,

@@ -16,7 +16,7 @@
  *   MMA_LLM_MODEL=qwen/qwen3.5-9b
  *   MMA_CTX=32768
  */
-import { OpenAICompat } from './src/llm/openai-compat.js';
+import { LMStudioNative } from './src/llm/lmstudio-native.js';
 import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
@@ -495,7 +495,7 @@ async function main() {
     process.exit(1);
   }
 
-  const provider = new OpenAICompat(BASE_URL, MODEL, CTX);
+  const provider = new LMStudioNative(BASE_URL, MODEL, CTX);
 
   // Create isolated temp directory for testing
   const testDir = mkdtempSync(join(tmpdir(), 'mma-test-'));

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, ensureMmaDir } from './config/config.js';
-import { OpenAICompat } from './llm/openai-compat.js';
+import { LMStudioNative } from './llm/lmstudio-native.js';
 import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
 import { runRepl } from './repl/index.js';
@@ -33,7 +33,7 @@ import { logInfo } from './logger.js';
  */
 
 /** Интерактивное создание провайдера (с выбором модели) */
-async function createProviderInteractive(config: ReturnType<typeof loadConfig>): Promise<{ provider: OpenAICompat; modelLabel: string }> {
+async function createProviderInteractive(config: ReturnType<typeof loadConfig>): Promise<{ provider: LMStudioNative; modelLabel: string }> {
   const theme = initTheme(config.theme);
   const providerName = config.active.provider;
   const providerCfg = config.providers[providerName];
@@ -103,7 +103,7 @@ async function createProviderInteractive(config: ReturnType<typeof loadConfig>):
   }
 
   return {
-    provider: new OpenAICompat(providerCfg.url, modelCfg!.model, modelCfg!.contextWindow, providerCfg.apiKey),
+    provider: new LMStudioNative(providerCfg.url, modelCfg!.model, modelCfg!.contextWindow),
     modelLabel: `${config.active.provider}/${modelName}`,
   };
 }

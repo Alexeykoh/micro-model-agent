@@ -9,7 +9,7 @@
  *   bun run test-agent-eval.ts --scenario code --verbose
  *   bun run test-agent-eval.ts --list
  */
-import { OpenAICompat } from './src/llm/openai-compat.js';
+import { LMStudioNative } from './src/llm/lmstudio-native.js';
 import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
@@ -501,7 +501,7 @@ async function main() {
     process.exit(1);
   }
 
-  const provider = new OpenAICompat(BASE_URL, MODEL, CTX);
+  const provider = new LMStudioNative(BASE_URL, MODEL, CTX);
 
   // Create isolated temp directory
   const testDir = mkdtempSync(join(tmpdir(), 'mma-eval-'));
