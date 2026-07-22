@@ -433,6 +433,16 @@ export async function doChat(
       }
       logLLMResponse(provider.model, 0, performance.now() - startTime, e.message, caller);
       renderer.writeError(`\n[LLM] ${e.message}`);
+
+      // Сетевые ошибки (fetch failed, ECONNREFUSED и т.д.) — retry с задержкой
+      const isNetworkError = !e.message?.includes('API ') && !e.message?.includes('status');
+      if (isNetworkError && attempt < retries) {
+        const delay = Math.min(2000 * (attempt + 1), 10000);
+        renderer.writeWarning(`[LLM] Network error, retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
       renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
       return { response: '', genTimeMs: 0 };
     }
