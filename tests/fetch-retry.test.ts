@@ -145,7 +145,7 @@ describe('doChat', () => {
     await doChat(provider, messages, renderer, undefined, 1, false);
 
     const warnings = (renderer.writeWarning as any).mock.calls.map((c: any) => c[0]);
-    expect(warnings.some((w: string) => w.includes('Check that your server'))).toBe(true);
+    expect(warnings.some((w: string) => w.includes('Check that your'))).toBe(true);
   });
 
   it('does not retry API errors (status codes)', async () => {

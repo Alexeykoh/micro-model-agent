@@ -28,7 +28,7 @@ npm run dev              # bun --watch
 - **LLM providers**: OpenAI-compatible REST only (LM Studio, Ollama, vLLM, Together). No SDK dependencies.
 - **Ink UI**: React-based terminal UI (`src/ui/ink/`). Requires `jsx: "react-jsx"` in tsconfig. Components are `.tsx` files.
 - **Config**: `~/.mma/config.json` globally, `.mmrc` project-local override. Config loads via `src/config/config.ts`.
-- **ToolHandler interface**: All 20 tools (12 FS + bash + 2 web + 6 native) implement `ToolHandler` from `src/tools/types.ts`. ToolExecutor dispatches: pre-hooks → execute → post-hooks → truncate.
+- **ToolHandler interface**: All 21 tools (12 FS + bash + 3 web + 6 native) implement `ToolHandler` from `src/tools/types.ts`. ToolExecutor dispatches: pre-hooks → execute → post-hooks → truncate.
 - **ModeRegistry**: Data-driven mode configs (fast/base/pro) in `src/agent/modes/`. Custom modes via `AppConfig.modes`.
 - **Plugin system**: Lifecycle events in `src/plugins/`. Plugins subscribe via `AgentPlugin` interface with events like `tool:before/after`.
 - **React-loop**: Shared ReAct cycle in `src/agent/react-loop.ts` with callbacks. Used by subagent.ts; loop.ts has its own inline cycle (domain logic too tightly coupled).
@@ -54,11 +54,12 @@ npm run dev              # bun --watch
 | Skills | `src/skills/builtin/` | 10 built-in skills (grill-me, typescript-expert, etc.), copied to dist/ at build |
 | Theme/styling | `src/styling/` | ThemeEngine, loader, JSON theme files |
 | Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
+| Web tools | `src/tools/web-*.ts` | web_search, web_fetch, web_browse (Playwright headless) |
 | Ink UI | `src/ui/ink/` | React components for terminal UI |
 
 ## Testing
 
-- Unit tests (in `npm test`): `context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `subagent.test.ts`
+- Unit tests (in `npm test`): `context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `subagent.test.ts`, `web-browse.test.ts`
 - Additional unit tests (in `test:all`): `tool-executor.test.ts`, `native-tools.test.ts`, `react-loop.test.ts`, `web-tools.test.ts`, `modes.test.ts`, `fs-tools.test.ts`, `user-profile.test.ts`
 - Integration tests: `llm-integration.test.ts`, `agent-integration.test.ts`, `subagent-integration.test.ts` (require running LLM server)
 - All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
@@ -120,3 +121,5 @@ Config loaded via `getLLMConfig()` from `src/config/config.ts`. Used in `doChat(
 - **Loop.ts still has inline ReAct cycle**: Despite react-loop.ts existing, loop.ts keeps its own cycle because domain logic (skills, plan enforcement, read_file consolidation, syntax check) is too tightly coupled. react-loop.ts is used by subagent.ts only.
 - **Config defaults must be synced across 3 files**: `config/config.ts` DEFAULT_CONFIG, `cli/config.ts` reset handler, and `setup-wizard.ts`. Changing one requires updating all three.
 - **Small models hallucinate file contents**: Qwen3.5-9B generates plausible file descriptions without calling tools. Prompt guidance alone insufficient; code-level enforcement needed.
+- **web_browse requires Node.js**: Playwright CDP pipe has issues with Bun's child process handling. The tool works correctly with Node.js (production runtime). `npm run mma` (Bun) may not launch the browser — use `node dist/index.js` for browser tasks.
+- **Playwright browsers**: Run `npx playwright install chromium` after first install. Browsers are cached in `~/.cache/ms-playwright/`.

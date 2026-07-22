@@ -16,6 +16,7 @@ import { treeDefinition } from './fs/tree.js';
 import { bashDefinition } from './bash.js';
 import { webSearchDefinition } from './web-search.js';
 import { webFetchDefinition } from './web-fetch.js';
+import { webBrowseDefinition } from './web-browse.js';
 import type { BashResult } from './bash.js';
 
 /**
@@ -84,6 +85,7 @@ const ALL_DEFINITIONS: ToolDefinition[] = [
   // Web
   webSearchDefinition,
   webFetchDefinition,
+  webBrowseDefinition,
 ];
 
 const VALID_TOOL_NAMES = new Set(ALL_DEFINITIONS.map(d => d.function.name));

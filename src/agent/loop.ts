@@ -51,6 +51,7 @@ import { grepSearchHandler } from '../tools/fs/grep-search.js';
 import { treeHandler } from '../tools/fs/tree.js';
 import { webSearchHandler } from '../tools/web-search.js';
 import { webFetchHandler } from '../tools/web-fetch.js';
+import { webBrowseHandler } from '../tools/web-browse.js';
 
 /**
  * Умная обрезка tool-результатов для экономии токенов в контексте.
@@ -80,6 +81,7 @@ function truncateToolOutput(toolName: string, output: string, exitCode: number):
     subagent: 500,      // краткое резюме от субагента
     web_search: 1000,   // результаты поиска
     web_fetch: 1500,    // контент страницы
+    web_browse: 2000,   // browser interaction results
   };
 
   const limit = LIMITS[toolName] ?? 800;
@@ -418,7 +420,7 @@ export async function runAgentLoop(
     readFileHandler, writeFileHandler, editFileHandler, listDirHandler,
     createDirHandler, deleteFileHandler, copyFileHandler, moveFileHandler,
     fileInfoHandler, globSearchHandler, grepSearchHandler, treeHandler,
-    webSearchHandler, webFetchHandler,
+    webSearchHandler, webFetchHandler, webBrowseHandler,
   ]);
 
   // Reset abort signal for this run

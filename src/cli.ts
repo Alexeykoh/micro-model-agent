@@ -4,6 +4,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, ensureMmaDir } from './config/config.js';
 import { LMStudioNative } from './llm/lmstudio-native.js';
+import { OpenAICompat } from './llm/openai-compat.js';
+import type { LLMProvider } from './llm/provider.js';
 import { ToolRegistry } from './tools/registry.js';
 import { runAgentLoop } from './agent/loop.js';
 import { runRepl } from './repl/index.js';
@@ -33,7 +35,7 @@ import { logInfo } from './logger.js';
  */
 
 /** Интерактивное создание провайдера (с выбором модели) */
-async function createProviderInteractive(config: ReturnType<typeof loadConfig>): Promise<{ provider: LMStudioNative; modelLabel: string }> {
+async function createProviderInteractive(config: ReturnType<typeof loadConfig>): Promise<{ provider: LLMProvider; modelLabel: string }> {
   const theme = initTheme(config.theme);
   const providerName = config.active.provider;
   const providerCfg = config.providers[providerName];
@@ -57,10 +59,14 @@ async function createProviderInteractive(config: ReturnType<typeof loadConfig>):
       }
       console.log('');
     }
-    console.log(theme.dim('To use a model from LM Studio:'));
-    console.log(theme.dim('  1. Open LM Studio → Local Server tab'));
-    console.log(theme.dim('  2. Select a model from the dropdown'));
-    console.log(theme.dim('  3. Copy the model ID (e.g. "qwen/qwen3.5-9b")'));
+    if (providerName === 'lmstudio') {
+      console.log(theme.dim('To use a model from LM Studio:'));
+      console.log(theme.dim('  1. Open LM Studio → Local Server tab'));
+      console.log(theme.dim('  2. Select a model from the dropdown'));
+      console.log(theme.dim('  3. Copy the model ID (e.g. "qwen/qwen3.5-9b")'));
+    } else {
+      console.log(theme.dim(`Enter the model name for provider "${providerName}"`));
+    }
     console.log('');
 
     const { createInterface } = await import('node:readline/promises');
@@ -94,16 +100,25 @@ async function createProviderInteractive(config: ReturnType<typeof loadConfig>):
     }
   } else if (!modelCfg) {
     console.error(theme.error(`Model "${modelName}" not found for "${providerName}"`));
-    console.log(theme.dim('To use a model from LM Studio:'));
-    console.log(theme.dim('  1. Open LM Studio → Local Server tab'));
-    console.log(theme.dim('  2. Select a model from the dropdown'));
-    console.log(theme.dim('  3. Copy the model ID'));
-    console.log(theme.dim('  4. Run: mma model add <alias> <model-id> <context>'));
+    if (providerName === 'lmstudio') {
+      console.log(theme.dim('To use a model from LM Studio:'));
+      console.log(theme.dim('  1. Open LM Studio → Local Server tab'));
+      console.log(theme.dim('  2. Select a model from the dropdown'));
+      console.log(theme.dim('  3. Copy the model ID'));
+      console.log(theme.dim('  4. Run: mma model add <alias> <model-id> <context>'));
+    } else {
+      console.log(theme.dim(`Run: mma model add <alias> <model-id> <context-window>`));
+    }
     process.exit(1);
   }
 
+  const useLMStudioNative = providerCfg.type === 'lmstudio' || providerName === 'lmstudio';
+  const provider: LLMProvider = useLMStudioNative
+    ? new LMStudioNative(providerCfg.url, modelCfg!.model, modelCfg!.contextWindow)
+    : new OpenAICompat(providerCfg.url, modelCfg!.model, modelCfg!.contextWindow, providerCfg.apiKey);
+
   return {
-    provider: new LMStudioNative(providerCfg.url, modelCfg!.model, modelCfg!.contextWindow),
+    provider,
     modelLabel: `${config.active.provider}/${modelName}`,
   };
 }

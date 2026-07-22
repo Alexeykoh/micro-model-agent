@@ -92,6 +92,19 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
   {"name":"web_fetch","arguments":{"url":"https://example.com"}}
 
+## Web Browse (interactive headless browser):
+  {"name":"web_browse","arguments":{"action":"navigate","url":"https://example.com"}}
+  {"name":"web_browse","arguments":{"action":"click","selector":"button.submit"}}
+  {"name":"web_browse","arguments":{"action":"type","selector":"#search","value":"hello"}}
+  {"name":"web_browse","arguments":{"action":"extract","format":"text"}}
+  {"name":"web_browse","arguments":{"action":"extract","selector":".content","format":"html"}}
+  {"name":"web_browse","arguments":{"action":"screenshot"}}
+  {"name":"web_browse","arguments":{"action":"scroll","direction":"down"}}
+  {"name":"web_browse","arguments":{"action":"wait","selector":"#result","timeout":5000}}
+  {"name":"web_browse","arguments":{"action":"get_links"}}
+  {"name":"web_browse","arguments":{"action":"evaluate","value":"document.title"}}
+  {"name":"web_browse","arguments":{"action":"close"}}
+
 ## Theme tool (theme management):
   {"name":"theme","arguments":{"action":"list"}}
   {"name":"theme","arguments":{"action":"switch","name":"dark"}}

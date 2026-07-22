@@ -44,6 +44,7 @@ const TRUNCATION_LIMITS: Record<string, number> = {
   subagent: 500,
   web_search: 1000,
   web_fetch: 1500,
+  web_browse: 2000,
 };
 
 const DEFAULT_LIMIT = 800;

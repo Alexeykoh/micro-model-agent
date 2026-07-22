@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppConfig } from './types.js';
 
 /**
@@ -126,10 +127,51 @@ export function loadConfig(): AppConfig {
 
 const MMA_DIR = join(homedir(), '.mma');
 
-/** Создаёт директории ~/.mma/, state/, cache/, index/ если не существуют */
+/** Создаёт директории ~/.mma/ + subdirs если не существуют */
 export function ensureMmaDir(): void {
-  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index')]) {
+  const pluginsDir = join(MMA_DIR, 'plugins');
+  const isFirstRun = !existsSync(pluginsDir);
+
+  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index'), pluginsDir]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  }
+
+  if (isFirstRun) {
+    const __filename = fileURLToPath(import.meta.url);
+    const rootDir = resolve(dirname(__filename), '..', '..');
+    const docsSrc = join(rootDir, 'docs', 'PLUGINS.md');
+    try {
+      copyFileSync(docsSrc, join(pluginsDir, 'PLUGINS.md'));
+    } catch {
+      /* docs могут отсутствовать в некоторых установках */
+    }
+
+    const testPluginDir = join(pluginsDir, 'test-plugin');
+    mkdirSync(testPluginDir, { recursive: true });
+    writeFileSync(
+      join(testPluginDir, 'manifest.json'),
+      JSON.stringify({
+        name: 'test-plugin',
+        version: '0.1.0',
+        description: 'Тестовый плагин (ничего не делает)',
+        entry: 'index.ts',
+      }, null, 2),
+    );
+    writeFileSync(
+      join(testPluginDir, 'index.ts'),
+      `import type { AgentPlugin } from 'micro-models-agent';
+
+export default function createPlugin(): AgentPlugin {
+  return {
+    name: 'test-plugin',
+    version: '0.1.0',
+    onActivate() {
+      // Ничего не делает
+    },
+  };
+}
+`,
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { LMStudioNative } from '../llm/lmstudio-native.js';
+import { OpenAICompat } from '../llm/openai-compat.js';
 import { ToolRegistry } from './registry.js';
 import type { ParsedToolCall } from './types.js';
 import type { ToolExecutor } from '../agent/tool-executor.js';
@@ -447,7 +448,12 @@ export async function doChat(
         continue;
       }
 
-      renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
+      const providerHint = provider instanceof LMStudioNative
+        ? 'Check that LM Studio is running on localhost:1234'
+        : provider instanceof OpenAICompat
+          ? 'Check that your API server is running and the API key is correct'
+          : 'Check that your LLM server is running';
+      renderer.writeWarning(`[LLM] ${providerHint}`);
       return { response: '', genTimeMs: 0 };
     }
 
