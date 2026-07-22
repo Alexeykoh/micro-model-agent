@@ -10,7 +10,7 @@ import { autoLearnFromError } from './memory.js';
 import { appendNote, collectCodingStyle, loadProfile } from './user-profile.js';
 import { ModeRegistry } from './modes/registry.js';
 import { applyMode } from './modes/applier.js';
-import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
+import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget, preloadSkillsByKeywords, isSkillRequest, listInstalledSkills } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { showPlan, getPlanPendingCount, clearPlan, getNextPendingStep, updatePlanStep, getPlanStepTitle, extractDirFromStepTitle } from '../tools/plan.js';
@@ -296,6 +296,25 @@ export async function runAgentLoop(
       loadedSkills.length = 0;
       loadedSkills.push(...allowed);
       for (const s of dropped) loadedSkillNames.delete(s);
+    }
+  }
+
+  // Pre-load скиллов по ключевым словам (без language-specific хардкода)
+  if (loadedSkills.length === 0 && options?.mode !== 'fast') {
+    const keywordSkills = preloadSkillsByKeywords(prompt, process.cwd());
+    for (const skill of keywordSkills) {
+      if (!loadedSkillNames.has(skill.name)) {
+        loadedSkills.push(skill);
+        loadedSkillNames.add(skill.name);
+        logInfo('LOOP', `keyword preloaded skill: ${skill.name}`);
+        renderer?.writeInfo(`  Auto-loaded @${skill.name} (keyword match)`);
+      }
+    }
+
+    // Если пользователь явно просит "используй скилл", но ничего не нашлось — подсказываем
+    if (keywordSkills.length === 0 && isSkillRequest(prompt)) {
+      const allSkills = listInstalledSkills(process.cwd());
+      renderer?.writeWarning(`  You asked for a skill but none matched. Use @skill-name in your prompt to load one. Installed: ${allSkills.slice(0, 10).map(s => '@' + s).join(', ')}... (${allSkills.length} total)`);
     }
   }
 

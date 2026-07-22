@@ -203,6 +203,125 @@ export function enforceSkillBudget(
   return { allowed, dropped };
 }
 
+// ─── Keyword-based skill preloading (pre-load по ключевым словам) ──
+
+let skillIndexCache: Map<string, string[]> | null = null;
+
+/**
+ * Извлекает ключевые слова из скилла: сегменты имени + слова из описания (frontmatter).
+ */
+function getSkillKeywords(name: string, cwd: string): string[] {
+  const keywords = new Set<string>();
+
+  for (const seg of name.split('-')) {
+    if (seg.length > 1) keywords.add(seg.toLowerCase());
+  }
+
+  const skill = loadSkill(name, cwd);
+  if (skill) {
+    const fmMatch = skill.content.match(/^---\n([\s\S]*?)\n---/);
+    if (fmMatch) {
+      const descLine = fmMatch[1].split('\n').find(l => l.startsWith('description:'));
+      if (descLine) {
+        const desc = descLine.replace(/^description:\s*"?([^"]*)"?\s*$/, '$1').trim();
+        const words = desc.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
+        for (const w of words) keywords.add(w);
+      }
+    }
+  }
+
+  return [...keywords];
+}
+
+function buildSkillIndex(cwd: string): Map<string, string[]> {
+  if (skillIndexCache) return skillIndexCache;
+
+  const names = listInstalledSkills(cwd);
+  const index = new Map<string, string[]>();
+
+  logDebug('SKILLS', `building keyword index for ${names.length} skills...`);
+  for (const name of names) {
+    index.set(name, getSkillKeywords(name, cwd));
+  }
+  logDebug('SKILLS', `keyword index built`);
+
+  skillIndexCache = index;
+  return index;
+}
+
+/**
+ * Извлекает поисковые термы из текста — просто слова, никакой лингвистики.
+ * Матчинг работает по совпадению слов в одном языке.
+ * Для английских запросов совпадает с английскими описаниями скиллов.
+ */
+function extractSearchTerms(text: string): Set<string> {
+  const terms = new Set<string>();
+  const words = text.toLowerCase().match(/[\wа-яё]+/g) || [];
+  for (const word of words) {
+    terms.add(word);
+  }
+  return terms;
+}
+
+/**
+ * Проверяет, просит ли пользователь явно "используй скилл".
+ */
+export function isSkillRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return /\b(skill|скилл|скил|навык|плаг(ин|ина?))\b/.test(lower);
+}
+
+/**
+ * Pre-загружает скиллы на основе совпадения ключевых слов в запросе.
+ *
+ * Решает проблему: пользователь просит "используй скилл для дизайна",
+ * но модель не догадывается упомянуть @ui-ux-pro-max в ответе.
+ *
+ * Алгоритм:
+ * 1. Строит индекс ключевых слов (имя + описание) для всех скиллов (кэш)
+ * 2. Извлекает термы из запроса (с русско-английским переводом)
+ * 3. Ищет пересечение: совпадение в имени = +2 балла, в описании = +1
+ * 4. Возвращает топ-3 скилла с наибольшим скором
+ */
+export function preloadSkillsByKeywords(text: string, cwd: string): Skill[] {
+  const index = buildSkillIndex(cwd);
+  const searchTerms = extractSearchTerms(text);
+
+  logDebug('SKILLS', `keyword preload: "${text.slice(0, 60)}" (${searchTerms.size} terms)`);
+
+  if (searchTerms.size === 0) return [];
+
+  const matched: { name: string; score: number }[] = [];
+
+  for (const [name, keywords] of index) {
+    let score = 0;
+
+    for (const term of searchTerms) {
+      if (name.includes(term)) {
+        score += 2;
+      }
+      if (keywords.includes(term)) {
+        score += 1;
+      }
+    }
+
+    if (score > 0) {
+      matched.push({ name, score });
+    }
+  }
+
+  matched.sort((a, b) => b.score - a.score);
+  const top = matched.slice(0, 3);
+
+  if (top.length > 0) {
+    logDebug('SKILLS', `keyword preload matched: ${top.map(m => `${m.name}(${m.score})`).join(', ')}`);
+  }
+
+  return top
+    .map(m => loadSkill(m.name, cwd))
+    .filter((s): s is Skill => s !== null);
+}
+
 export function formatSkillsBlock(skills: Skill[], maxContentLength?: number): string {
   if (skills.length === 0) return '';
   const parts = skills.map(s => {
