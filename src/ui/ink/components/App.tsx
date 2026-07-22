@@ -264,14 +264,16 @@ export function App({ onReady, commands, onAbort }: AppProps) {
 
   return (
     <Box flexDirection="column" height="100%">
-      <Conversation
-        entries={state.entries}
-        streaming={state.streaming}
-        streamingContent={state.streamingContent}
-        isReasoning={state.isReasoning}
-        showSpinner={state.showSpinner}
-      />
-      <Box flexShrink={0} marginTop={1}>
+      <Box flexGrow={1} flexDirection="column">
+        <Conversation
+          entries={state.entries}
+          streaming={state.streaming}
+          streamingContent={state.streamingContent}
+          isReasoning={state.isReasoning}
+          showSpinner={state.showSpinner}
+        />
+      </Box>
+      <Box flexShrink={0} flexDirection="column">
         {state.showSelect ? (
           <SelectInput
             question={state.selectQuestion}

@@ -2,24 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, type Key } from 'ink';
 import { getInkTheme } from '../theme.js';
 
-/**
- * Компонент ввода промпта.
- *
- * Поддерживает:
- * - Многострочный ввод (Shift+Enter)
- * - Автодополнение слэш-команд (Tab)
- * - Историю ввода (↑/↓)
- * - Прерывание (double Ctrl+C)
- *
- * @module ui/ink/components/PromptInput
- */
-
 interface CommandInfo {
   name: string;
   description: string;
 }
 
-// ─── Подсказки ──────────────────────────────────────────
 const HINTS = [
   'Ctrl+C to exit',
   '/help for commands',
@@ -58,7 +45,6 @@ export function PromptInput({
   }, [disabled]);
 
   useInput((input: string, key: Key) => {
-    // Allow Escape to abort even when disabled (agent running)
     if (key.escape && onAbort) {
       onAbort();
       return;
@@ -174,7 +160,7 @@ export function PromptInput({
       setCursor(keepLen);
       return;
     }
-    if (key.ctrl && input === 'l') { return; } // clear-screen noop in Ink
+    if (key.ctrl && input === 'l') { return; }
 
     if (input && !key.ctrl && !key.meta) {
       setValue((v: string) => v.slice(0, cursor) + input + v.slice(cursor));
@@ -191,28 +177,28 @@ export function PromptInput({
         <Box flexDirection="column" marginLeft={1} marginBottom={1}>
           {suggestions.map((s: CommandInfo, i: number) => (
             <Box key={i}>
-              <Text inverse={i === suggestIdx} {...t.colors.dim}>
-                /{s.name} — {s.description}
-              </Text>
+              {i === suggestIdx ? (
+                <Text bold color="cyan">  /{s.name}</Text>
+              ) : (
+                <Text {...t.colors.dim}>{'  '}/{s.name}</Text>
+              )}
+              <Text {...t.colors.dim}> — {s.description}</Text>
             </Box>
           ))}
         </Box>
       )}
       <Box>
-        <Text>
-          <Text {...(disabled ? t.colors.dim : t.colors.prompt)}>
-            {mode ? `[${mode}] ` : ''}{'MMA> '}
+        <Text bold color="cyan">{'▸ '}</Text>
+        {mode ? <Text color="magenta">[{mode}] </Text> : null}
+        {disabled ? (
+          <Text {...t.colors.dim}>{HINTS[hintIdx]}</Text>
+        ) : (
+          <Text>
+            {value.slice(0, cursor)}
+            <Text inverse>{value[cursor] || ' '}</Text>
+            {value.slice(cursor + 1)}
           </Text>
-          {disabled ? (
-            <Text {...t.colors.dim}>{HINTS[hintIdx]}</Text>
-          ) : (
-            <Text>
-              {value.slice(0, cursor)}
-              <Text inverse>{value[cursor] || ' '}</Text>
-              {value.slice(cursor + 1)}
-            </Text>
-          )}
-        </Text>
+        )}
       </Box>
     </Box>
   );

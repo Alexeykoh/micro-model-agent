@@ -6,12 +6,14 @@ export function StreamBlock({ content, isReasoning }: { content: string; isReaso
   if (isReasoning) {
     return (
       <Box flexDirection="column" marginLeft={1}>
+        <Text color="cyan">{'> '}</Text>
         <Text {...t.colors.dim} italic>{content}</Text>
       </Box>
     );
   }
   return (
     <Box marginLeft={1}>
+      <Text color="cyan">{'> '}</Text>
       <Text>{content}</Text>
     </Box>
   );
@@ -20,9 +22,9 @@ export function StreamBlock({ content, isReasoning }: { content: string; isReaso
 export function SpinnerLine({ text }: { text?: string }) {
   const t = getInkTheme();
   return (
-    <Text>
-      <Text {...t.colors.dim}>⏳</Text>
-      {text ? <Text> {text}</Text> : null}
-    </Text>
+    <Box marginLeft={1}>
+      <Text color="cyan">{'▸ '}</Text>
+      <Text {...t.colors.dim}>{text || 'thinking…'}</Text>
+    </Box>
   );
 }

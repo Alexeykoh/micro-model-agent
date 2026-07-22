@@ -25,7 +25,6 @@ export function SelectInput({ question, choices, onSelect }: SelectInputProps) {
       onSelect(choices[selected]);
       return;
     }
-    // Number keys for quick selection
     const num = parseInt(input, 10);
     if (num >= 1 && num <= choices.length) {
       onSelect(choices[num - 1]);
@@ -35,24 +34,22 @@ export function SelectInput({ question, choices, onSelect }: SelectInputProps) {
 
   return (
     <Box flexDirection="column" marginLeft={1}>
-      <Text {...t.colors.warning}>
-        {question}
-      </Text>
+      <Text bold color="yellow">{'> '}{question}</Text>
       <Box marginTop={1} flexDirection="column">
         {choices.map((choice, i) => (
           <Box key={i}>
             <Text>
               {i === selected ? (
-                <Text inverse> {choice} </Text>
+                <Text bold color="yellow">{'  ▸ '}{choice}{' '}</Text>
               ) : (
-                <Text>  {choice}  </Text>
+                <Text {...t.colors.dim}>{`  ${i + 1}. ${choice}  `}</Text>
               )}
             </Text>
           </Box>
         ))}
       </Box>
       <Box marginTop={1}>
-        <Text {...t.colors.dim}>  Use arrows to navigate, Enter to select</Text>
+        <Text {...t.colors.dim}>{'  '}↑↓ navigate · Enter select · 1-9 quick</Text>
       </Box>
     </Box>
   );
