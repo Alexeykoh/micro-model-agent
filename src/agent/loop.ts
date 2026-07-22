@@ -627,7 +627,7 @@ export async function runAgentLoop(
         // it's a description with examples — not a failed tool call attempt.
         const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
         if (textOutside.length < 100) {
-          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve, subagent, scaffold.`;
+          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, web_browse, plan, todo, question, approve, subagent, scaffold.`;
           if (!quiet) {
             renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
           }
