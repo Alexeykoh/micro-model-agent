@@ -31,9 +31,18 @@ const IGNORE_DIRS = new Set([
 ]);
 
 const EXT_MAP: Record<string, string> = {
+  // Source code
   ts: 'ts', tsx: 'ts', js: 'js', jsx: 'js', mjs: 'js', cjs: 'js',
   py: 'py', go: 'go', rs: 'rs', java: 'java', kt: 'java',
   rb: 'rb', php: 'php', c: 'c', cpp: 'c', h: 'c', hpp: 'c',
+  // Config & markup
+  json: 'json', html: 'html', htm: 'html', xml: 'html', yaml: 'yaml', yml: 'yaml',
+  // Styles
+  css: 'css', scss: 'css', less: 'css',
+  // Docs
+  md: 'md', mdx: 'md',
+  // Other
+  toml: 'toml', ini: 'ini', env: 'env', sh: 'sh', bash: 'sh',
 };
 
 export function getLangKeyFromExt(ext: string): string {
@@ -50,6 +59,11 @@ const EXPORT_PATTERNS: Record<string, RegExp> = {
   rb: /(?:class|def|module)\s+(\w+)/g,
   php: /(?:class|interface|enum|function)\s+(\w+)/g,
   c: /(?:void|int|char|bool|float|double|unsigned|static|extern|inline)\s+(\w+)\s*\(/g,
+  html: /<title>([^<]+)<\/title>/g,
+  json: /"(?:name|main|module|exports|scripts)":\s*"([^"]+)"/g,
+  css: /^\.([a-zA-Z_-]+)\s*\{/gm,
+  yaml: /^(?:name|version|description):\s*(.+)/gm,
+  md: /^#\s+(.+)/gm,
 };
 
 const CONFIG_FILES: Record<string, string> = {
