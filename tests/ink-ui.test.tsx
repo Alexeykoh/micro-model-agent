@@ -299,3 +299,40 @@ describe('Conversation', () => {
     expect(lastFrame()).not.toContain('thinking');
   });
 });
+
+// ─── PromptInput ───────────────────────────────────────
+
+import { PromptInput } from '../src/ui/ink/components/PromptInput.js';
+
+describe('PromptInput', () => {
+  it('renders prompt indicator', () => {
+    const { lastFrame } = render(
+      <PromptInput onSubmit={() => {}} disabled={false} />
+    );
+    expect(lastFrame()).toContain('▸');
+  });
+
+  it('shows hints when disabled', () => {
+    const { lastFrame } = render(
+      <PromptInput onSubmit={() => {}} disabled={true} />
+    );
+    // Should show one of the hints
+    const frame = lastFrame();
+    expect(
+      frame.includes('Ctrl+C') ||
+      frame.includes('/help') ||
+      frame.includes('Tab') ||
+      frame.includes('@file') ||
+      frame.includes('↑/↓') ||
+      frame.includes('Shift+Enter') ||
+      frame.includes('Ask me')
+    ).toBe(true);
+  });
+
+  it('shows mode badge when provided', () => {
+    const { lastFrame } = render(
+      <PromptInput onSubmit={() => {}} disabled={false} mode="fast" />
+    );
+    expect(lastFrame()).toContain('[fast]');
+  });
+});
