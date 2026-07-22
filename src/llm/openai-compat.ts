@@ -66,7 +66,7 @@ export class OpenAICompat implements LLMProvider {
         return msg;
       }),
       stream: true,
-      temperature: options?.temperature ?? 0.7,
+      temperature: options?.temperature ?? 0.3,
       max_tokens: options?.max_tokens ?? defaultMaxTokens,
     };
 

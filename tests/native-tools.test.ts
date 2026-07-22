@@ -47,14 +47,21 @@ const ctx: ToolContext = { cwd: '/tmp/test', quiet: true };
 
 describe('plan handler', () => {
   it('creates a plan', async () => {
-    const result = await planHandler.execute({ name: 'Test Plan', steps: ['s1', 's2'] }, ctx);
+    const result = await planHandler.execute({ action: 'create', name: 'Test Plan', steps: ['s1', 's2'] }, ctx);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Plan');
   });
 
   it('suggests subagent for 3+ steps', async () => {
-    const result = await planHandler.execute({ name: 'Big', steps: ['s1', 's2', 's3'] }, ctx);
+    const result = await planHandler.execute({ action: 'create', name: 'Big', steps: ['s1', 's2', 's3'] }, ctx);
     expect(result.stdout).toContain('subagent');
+  });
+
+  it('marks step as done', async () => {
+    await planHandler.execute({ action: 'create', name: 'Done Test', steps: ['step1', 'step2'] }, ctx);
+    const result = await planHandler.execute({ action: 'done', step: 1 }, ctx);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('done');
   });
 
   it('has correct definition', () => {

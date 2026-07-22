@@ -13,7 +13,7 @@ import { applyMode } from './modes/applier.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
-import { showPlan, getPlanPendingCount } from '../tools/plan.js';
+import { showPlan, getPlanPendingCount, clearPlan } from '../tools/plan.js';
 
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig } from '../config/config.js';
@@ -379,6 +379,8 @@ export async function runAgentLoop(
   let errorStrategy: 'normal' | 'subagent-hint' | 'force-subagent' = 'normal';
   /** Флаг: specialist уже был запущен для текущей ошибки (чтобы не дублировать) */
   let specialistSpawnedFor: string | null = null;
+  /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
+  let uselessActionCount = 0;
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
@@ -631,16 +633,43 @@ export async function runAgentLoop(
         const pendingSteps = getPlanPendingCount();
         if (pendingSteps > 0 && looksLikeDone) {
           const planText = showPlan();
-          const pendingList = planText.split('\n').filter(l => l.includes('○') || l.includes('►')).join('\n');
+          const pendingLines = planText.split('\n').filter(l => l.includes('○') || l.includes('►'));
+          const nextStep = pendingLines[0] || '';
+          const nextStepMatch = nextStep.match(/\d+\.\s*(.+)/);
+          const nextStepTitle = nextStepMatch ? nextStepMatch[1].trim() : '';
           if (!quiet) {
             renderer?.writeWarning(`  [plan has ${pendingSteps} incomplete steps — pushing agent to continue]`);
           }
-          messages.push({
-            role: 'user',
-            content: `Plan is NOT complete! ${pendingSteps} step(s) remaining:\n${pendingList}\n\nContinue with the next step. Do NOT stop until all plan steps are done.`,
-          });
+          const nudge = nextStepTitle
+            ? `Plan is NOT complete! ${pendingSteps} step(s) remaining.\nNext step: ${nextStepTitle}\nUse subagent to execute this step, then mark done: plan({action:"done", step:N})`
+            : `Plan is NOT complete! ${pendingSteps} step(s) remaining:\n${pendingLines.join('\n')}\n\nContinue with the next step using subagent.`;
+          messages.push({ role: 'user', content: nudge });
           continuationNudges = 0;
           continue;
+        }
+
+        // Stuck detection: если модель делает бесполезные действия
+        const isUselessAction = validCalls.some(c =>
+          c.parsed.name === 'list_dir' || c.parsed.name === 'tree' ||
+          (c.parsed.name === 'todo' && c.parsed.arguments?.action === 'list')
+        );
+        if (isUselessAction && pendingSteps > 0) {
+          uselessActionCount++;
+          if (uselessActionCount >= 3) {
+            if (!quiet) {
+              renderer?.writeWarning(`  [agent stuck: ${uselessActionCount} useless actions — clearing plan]`);
+            }
+            clearPlan();
+            messages.push({
+              role: 'user',
+              content: `[System: You are stuck in a loop. The plan has been cleared. Complete the remaining work directly using write_file/subagent, then report to the user.]`,
+            });
+            uselessActionCount = 0;
+            continuationNudges = 0;
+            continue;
+          }
+        } else if (validCalls.some(c => c.parsed.name === 'subagent' || c.parsed.name === 'write_file' || c.parsed.name === 'bash')) {
+          uselessActionCount = 0;
         }
 
         // Если модель claim-ит done но есть созданные файлы — напоминаем о полноте
@@ -675,7 +704,7 @@ export async function runAgentLoop(
           const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
           messages.push({
             role: 'tool',
-            content: `BLOCKED: You have a plan with multiple steps. Use subagent tool instead of write_file. Example: subagent("Create file X. Context: Y already exists.") Each subagent gets fresh context and works independently.`,
+            content: `BLOCKED: Multi-step plan active. Use subagent for each step. Example: subagent({task:"Create file X", existingFiles:"Y.ts"}). After subagent completes, mark step done: plan({action:"done", step:N})`,
             tool_call_id: blockId,
           });
         }

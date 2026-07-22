@@ -74,8 +74,10 @@ Search literal dot: {"name":"grep_search","arguments":{"pattern":"config\\.json"
 Directory tree: {"name":"tree","arguments":{"depth":2}}
 
 ## Plan / Todo / Question / Approve (native tools):
-  {"name":"plan","arguments":{"name":"Todo App","steps":["Step 1","Step 2"]}}
-  {"name":"plan","arguments":{"TaskName":"Todo App","Steps":"1. Init\n2. Create\n3. Test"}}
+  {"name":"plan","arguments":{"action":"create","name":"Todo App","steps":["Step 1","Step 2"]}}
+  {"name":"plan","arguments":{"action":"done","step":1}}
+  {"name":"plan","arguments":{"action":"show"}}
+  {"name":"plan","arguments":{"action":"clear"}}
   {"name":"todo","arguments":{"action":"add","text":"Implement feature X"}}
   {"name":"todo","arguments":{"action":"list"}}
   {"name":"question","arguments":{"question":"What color?","choices":["Red","Blue"]}}
@@ -163,9 +165,9 @@ const RULES_COMMON = `Rules:
 7. SKILLS AND PLANNING: For complex tasks (3+ steps):
    a. AUTOMATICALLY load relevant skills by mentioning them: "@nodejs-expert @typescript-expert"
    b. Do NOT ask the user — just load and start working
-   c. IMMEDIATELY create a plan with SPECIFIC FILE NAMES: plan create TodoApp create-project install-deps write-AppTsx write-TodoListTsx connect-components
-   d. Mark current step as in_progress BEFORE writing the file
-   e. Mark step as done AFTER syntax check passes and file is complete
+   c. Create a plan with SPECIFIC STEP NAMES: plan({action:"create", name:"TodoApp", steps:["Create package.json and install deps", "Create src/App.tsx", "Create src/main.tsx", "Verify with tsc --noEmit"]})
+   d. For each step: use subagent to create the file, then mark step done: plan({action:"done", step:1})
+   e. Do NOT use write_file directly when a plan is active — delegate to subagents
    f. ONE FILE PER STEP — never combine multiple files in one step
 8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
 9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "write skills in the next message" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
