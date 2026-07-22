@@ -40,6 +40,11 @@ export const planHandler: ToolHandler = {
 
     switch (action) {
       case 'create': {
+        const existingPlan = showPlan();
+        if (!existingPlan.startsWith('No active plan')) {
+          output = `ERROR: A plan already exists!\n${existingPlan}\n\nDo NOT create a new plan. Use the existing plan. If you need to modify it, use plan({action:"clear"}) first.`;
+          break;
+        }
         const planName = String(args.name || 'Untitled');
         const stepsRaw = args.steps || [];
         const steps = Array.isArray(stepsRaw) ? stepsRaw.map(String) : String(stepsRaw).split('\n').filter((s: string) => s.trim());
@@ -62,7 +67,14 @@ export const planHandler: ToolHandler = {
         if (!stepNum || stepNum < 1) {
           output = 'Usage: plan({action:"done", step:1}) — marks step 1 as done.';
         } else {
-          output = updatePlanStep(stepNum, 'done');
+          const result = updatePlanStep(stepNum, 'done');
+          if (result.includes('not found')) {
+            // Step doesn't exist — show current plan so agent can see valid step numbers
+            const currentPlan = showPlan();
+            output = `ERROR: ${result}\n\nCurrent plan:\n${currentPlan}\n\nCheck the step numbers above and use the correct one.`;
+          } else {
+            output = result;
+          }
         }
         break;
       }

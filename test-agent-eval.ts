@@ -14,10 +14,9 @@ import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
 import type { ChatMessage } from './src/llm/provider.js';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execSync } from 'node:child_process';
 
 // ─── Config ───────────────────────────────────────────────
 
@@ -509,14 +508,6 @@ async function main() {
   process.chdir(testDir);
 
   writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'eval-project', version: '1.0.0', type: 'module' }, null, 2));
-  mkdirSync(join(testDir, 'src'), { recursive: true });
-  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({
-    compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, esModuleInterop: true, skipLibCheck: true, jsx: 'react-jsx' },
-  }, null, 2));
-
-  try {
-    execSync('npm install typescript --save-dev --silent', { cwd: testDir, stdio: 'pipe', timeout: 30000 });
-  } catch { /* ignore */ }
 
   console.log(`📁 Test dir: ${testDir}\n`);
 

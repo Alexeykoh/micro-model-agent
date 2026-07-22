@@ -502,15 +502,8 @@ async function main() {
   const origCwd = process.cwd();
   process.chdir(testDir);
 
-  // Set up minimal project structure
+  // Set up minimal project structure (just package.json for npm)
   writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test-project', version: '1.0.0', type: 'module' }, null, 2));
-  mkdirSync(join(testDir, 'src'), { recursive: true });
-  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, esModuleInterop: true, skipLibCheck: true, jsx: 'react-jsx' } }, null, 2));
-
-  // Install typescript so syntax checking works (tsc --noEmit)
-  try {
-    execSync('npm install typescript --save-dev --silent', { cwd: testDir, stdio: 'pipe', timeout: 30000 });
-  } catch { /* ignore — syntax checks will be skipped if tsc unavailable */ }
 
   console.log(`📁 Test directory: ${testDir}\n`);
 

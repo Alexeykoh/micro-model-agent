@@ -102,6 +102,14 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
 Themes are in ~/.mma/themes/. Built-in: light, dark. Can install from URL.
 If the user wants to switch themes — suggest a matching one from the list and switch.
 
+## Scaffold (create complete project structure programmatically):
+  {"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"todo-app"}}
+  {"name":"scaffold","arguments":{"template":"vite-vanilla-ts","dir":"my-app"}}
+  {"name":"scaffold","arguments":{"template":"node-express-ts","dir":"api-server"}}
+
+  Templates: vite-react-ts (React+TypeScript), vite-vanilla-ts (vanilla TS), node-express-ts (Express+TS)
+  Use scaffold INSTEAD of creating project files manually. It creates all config files correctly.
+
 ## Bash (for non-file operations — npm, git, etc):
   {"name":"bash","arguments":{"cmd":"npm test"}}
   {"name":"bash","arguments":{"cmd":"git status"}}

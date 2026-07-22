@@ -3,6 +3,7 @@ import { readFileDefinition } from './fs/read-file.js';
 import { writeFileDefinition } from './fs/write-file.js';
 import { editFileDefinition } from './fs/edit-file.js';
 import { listDirDefinition } from './fs/list-dir.js';
+import { scaffoldDefinition } from './native/scaffold.js';
 import { createDirDefinition } from './fs/create-dir.js';
 import { deleteFileDefinition } from './fs/delete-file.js';
 import { copyFileDefinition } from './fs/copy-file.js';
@@ -62,6 +63,8 @@ const ALL_DEFINITIONS: ToolDefinition[] = [
   },
   // Bash
   bashDefinition,
+  // Scaffold
+  scaffoldDefinition,
   // FS
   readFileDefinition,
   writeFileDefinition,

@@ -34,6 +34,7 @@ import { questionHandler } from '../tools/native/question.js';
 import { approveHandler } from '../tools/native/approve.js';
 import { userProfileHandler } from '../tools/native/user-profile.js';
 import { themeHandler } from '../tools/native/theme.js';
+import { scaffoldHandler } from '../tools/native/scaffold.js';
 import { bashHandler } from '../tools/bash.js';
 import { readFileHandler } from '../tools/fs/read-file.js';
 import { writeFileHandler } from '../tools/fs/write-file.js';
@@ -387,7 +388,7 @@ export async function runAgentLoop(
   toolExecutor.setPluginManager(pluginManager);
   toolExecutor.registerAll([
     planHandler, todoHandler, questionHandler, approveHandler,
-    userProfileHandler, themeHandler, bashHandler,
+    userProfileHandler, themeHandler, scaffoldHandler, bashHandler,
     readFileHandler, writeFileHandler, editFileHandler, listDirHandler,
     createDirHandler, deleteFileHandler, copyFileHandler, moveFileHandler,
     fileInfoHandler, globSearchHandler, grepSearchHandler, treeHandler,
