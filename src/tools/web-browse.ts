@@ -106,9 +106,14 @@ async function actionNavigate(page: import('playwright').Page, args: Record<stri
   }
 
   const response = await page.goto(url, {
-    waitUntil: 'networkidle',
+    waitUntil: 'domcontentloaded',
     timeout: NAV_TIMEOUT_MS,
   });
+
+  // Дожидаемся появления контента в body (для динамических страниц)
+  await page.waitForSelector('body', { timeout: 5000 }).catch(() => {});
+  // Дополнительное ожидание для JS-рендеринга
+  await page.waitForTimeout(1000);
 
   const status = response?.status() ?? 0;
   const title = await page.title();
@@ -174,7 +179,7 @@ async function actionExtract(page: import('playwright').Page, args: Record<strin
         content = await page.textContent(selector, { timeout: 10_000 }) ?? '';
       }
     } catch (e: any) {
-      return `Error: could not extract from "${selector}": ${e.message}`;
+      return `Error: could not extract from "${selector}": ${e.message}. Hint: extract the full page first (no selector) to see the actual structure, then choose the right selector.`;
     }
   } else {
     // Извлечение всей страницы
@@ -247,14 +252,22 @@ async function actionScroll(page: import('playwright').Page, args: Record<string
 
 async function actionWait(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
   const selector = String(args.selector ?? '').trim();
+  const condition = String(args.condition ?? '').trim();
   const timeout = Number(args.timeout) || 5000;
 
-  if (selector) {
+  if (condition) {
+    try {
+      await page.waitForFunction(condition, { timeout });
+      return `Condition "${condition}" met`;
+    } catch {
+      return `Timeout: condition "${condition}" not met within ${timeout}ms`;
+    }
+  } else if (selector) {
     try {
       await page.waitForSelector(selector, { state: 'visible', timeout });
       return `Element "${selector}" appeared`;
     } catch {
-      return `Timeout: element "${selector}" not found within ${timeout}ms`;
+      return `Timeout: element "${selector}" not found within ${timeout}ms. Hint: extract the full page first (no selector) to see the actual structure.`;
     }
   } else {
     await page.waitForTimeout(timeout);
@@ -326,6 +339,7 @@ export const webBrowseDefinition: ToolDefinition = {
         format: { type: 'string', enum: ['text', 'html'], description: 'Extract format (default: text)' },
         maxChars: { type: 'number', description: 'Max characters to extract (default: 10000)' },
         timeout: { type: 'number', description: 'Timeout in ms for wait action (default: 5000)' },
+        condition: { type: 'string', description: 'JS expression to wait for (e.g. "document.querySelectorAll(\\\'.item\\\').length > 0") — for wait action only' },
       },
       required: ['action'],
     },

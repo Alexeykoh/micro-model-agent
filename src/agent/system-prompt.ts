@@ -101,6 +101,7 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_browse","arguments":{"action":"screenshot"}}
   {"name":"web_browse","arguments":{"action":"scroll","direction":"down"}}
   {"name":"web_browse","arguments":{"action":"wait","selector":"#result","timeout":5000}}
+  {"name":"web_browse","arguments":{"action":"wait","condition":"document.querySelectorAll('.item').length > 0","timeout":10000}}
   {"name":"web_browse","arguments":{"action":"get_links"}}
   {"name":"web_browse","arguments":{"action":"evaluate","value":"document.title"}}
   {"name":"web_browse","arguments":{"action":"close"}}
@@ -239,7 +240,16 @@ const RULES_COMMON = `Rules:
     - existingFiles: files already created in this session (prevents duplicates)
     - The task description should say "Create ONLY file X" — not "Create file X and related files"
     Example: subagent({task:"Create ONLY src/api.ts with Express CRUD", existingFiles:"src/db.ts,src/types.ts"})
-    The subagent will see the project context and should NOT create files beyond what's in the task.`;
+    The subagent will see the project context and should NOT create files beyond what's in the task.
+22. WEB TOOLS STRATEGY:
+    a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
+    b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
+    c. When using web_browse:
+       - After navigate, ALWAYS extract the full page (no selector, format="text") to see the structure.
+       - Inspect the output to find real CSS classes/selectors.
+       - THEN extract with specific selectors based on what you found.
+       - If a selector times out, use wait with condition ("document.querySelectorAll('.actual-class').length > 0") to wait for dynamic content.
+    d. NEVER guess CSS selectors — always inspect the actual page HTML first.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -272,7 +282,16 @@ const RULES_FAST = `Rules:
 16. USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. USE THIS ANSWER and proceed with the task. NEVER ask the same question again. NEVER call question tool with {"action":"show"} — it is invalid.
 17. PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory, that's where the actual project lives — work inside that subdirectory.
 18. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
-19. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task. Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})`;
+19. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task.     Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})
+22. WEB TOOLS STRATEGY:
+    a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
+    b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
+    c. When using web_browse:
+       - After navigate, ALWAYS extract the full page (no selector, format="text") to see the structure.
+       - Inspect the output to find real CSS classes/selectors.
+       - THEN extract with specific selectors based on what you found.
+       - If a selector times out, use wait with condition ("document.querySelectorAll('.actual-class').length > 0") to wait for dynamic content.
+    d. NEVER guess CSS selectors — always inspect the actual page HTML first.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
