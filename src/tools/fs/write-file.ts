@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, renameSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, renameSync, unlinkSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { ToolDefinition } from '../registry.js';
 import type { ToolHandler } from '../types.js';
@@ -51,6 +51,17 @@ export function handleWriteFile(
     return fsError(`Cannot create directory: ${e.message}`);
   }
 
+  // Если файл уже существует — предупреждаем (используй edit_file)
+  let overwriteWarning = '';
+  if (existsSync(resolved.abs)) {
+    try {
+      const existing = readFileSync(resolved.abs, 'utf-8');
+      if (existing.trim().length > 0) {
+        overwriteWarning = ` [WARN: File "${normalizePath(path)}" already exists (${existing.split('\n').length} lines). Consider using edit_file instead of overwriting.]`;
+      }
+    } catch { /* файл не читается — продолжаем с записью */ }
+  }
+
   const tmpPath = resolved.abs + '.mma.tmp';
   try {
     writeFileSync(tmpPath, content, 'utf-8');
@@ -65,7 +76,7 @@ export function handleWriteFile(
   }
 
   const lines = content.split('\n').length;
-  return fsOk(`Written ${content.length} bytes (${lines} lines) to ${normalizePath(path)}`);
+  return fsOk(`Written ${content.length} bytes (${lines} lines) to ${normalizePath(path)}${overwriteWarning}`);
 }
 
 export const writeFileHandler: ToolHandler = {

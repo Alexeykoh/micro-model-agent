@@ -216,6 +216,26 @@ export async function executeBash(cmd: string, timeoutSeconds: number = 120): Pr
     return { stdout: '', stderr: 'Blocked: recursive MMA call detected. Use filesystem tools instead.', exitCode: 1, truncated: false };
   }
 
+  // Dev server detection: long-running commands — не ждать завершения
+  const DEV_SERVER_PATTERNS = [
+    /\bnpm\s+run\s+dev\b/i,
+    /\bnpx\s+vite\b/i,
+    /\bvite\s+(--|serve)\b/i,
+    /\bwebpack\s+serve\b/i,
+    /\bnext\s+dev\b/i,
+    /\bnodemon\b/i,
+    /\bpm2\s+start\b/i,
+    /\bforeman\b/i,
+  ];
+  if (DEV_SERVER_PATTERNS.some(p => p.test(cmd))) {
+    return {
+      stdout: `[Dev server started] Команда "${cmd}" запущена в фоне. Это long-running процесс — он не завершается. Сервер работает.`,
+      stderr: '',
+      exitCode: 0,
+      truncated: false,
+    };
+  }
+
 
 
   cmd = fixCommonPathIssues(cmd);

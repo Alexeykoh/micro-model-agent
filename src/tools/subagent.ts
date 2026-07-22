@@ -149,10 +149,26 @@ const TRIVIAL_ERROR_PATTERNS = [
   /not a directory/i,
 ];
 
+/** Паттерны ошибок которые ВСЕГДА требуют specialist (не trivial) */
+const NON_TRIVIAL_ERROR_PATTERNS = [
+  /unexpected token/i,
+  /syntaxerror/i,
+  /cannot find module/i,
+  /module not found/i,
+  /permission denied/i,
+  /enoent/i,
+  /eacces/i,
+];
+
 /**
  * Проверяет является ли ошибка тривиальной (не требует specialist).
  */
 export function isTrivialError(toolName: string, errorOutput: string): boolean {
+  // Синтаксические и критические ошибки — ВСЕГДА не trivial
+  if (NON_TRIVIAL_ERROR_PATTERNS.some(p => p.test(errorOutput))) {
+    return false;
+  }
+
   // grep_search/glob_search с 0 результатами — нормальное поведение
   if (toolName === 'grep_search' || toolName === 'glob_search') {
     if (/0 results|0 files|no match/i.test(errorOutput) && errorOutput.length < 200) {

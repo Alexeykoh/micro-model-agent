@@ -367,4 +367,30 @@ describe('isTrivialError', () => {
   it('returns true for no results found pattern', () => {
     expect(isTrivialError('grep_search', 'no results found')).toBe(true);
   });
+
+  // ── Non-trivial: syntax errors always require specialist ──
+
+  it('returns false for Unexpected token (syntax error)', () => {
+    expect(isTrivialError('bash', 'Unexpected token')).toBe(false);
+  });
+
+  it('returns false for SyntaxError', () => {
+    expect(isTrivialError('write_file', 'SyntaxError: Unexpected token')).toBe(false);
+  });
+
+  it('returns false for cannot find module', () => {
+    expect(isTrivialError('bash', "Cannot find module './App.tsx'")).toBe(false);
+  });
+
+  it('returns false for permission denied', () => {
+    expect(isTrivialError('bash', 'Permission denied: /etc/passwd')).toBe(false);
+  });
+
+  it('returns false for ENOENT', () => {
+    expect(isTrivialError('bash', 'ENOENT: no such file or directory')).toBe(false);
+  });
+
+  it('still returns true for grep 0 results despite short length', () => {
+    expect(isTrivialError('grep_search', '0 results')).toBe(true);
+  });
 });
