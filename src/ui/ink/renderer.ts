@@ -154,7 +154,7 @@ export class InkRenderer implements OutputRenderer {
   }
 
   writeSpinner(text?: string): void {
-    this.dispatch({ type: 'SPINNER', show: true });
+    this.dispatch({ type: 'SPINNER', show: true, text });
   }
 
   clearSpinner(): void {

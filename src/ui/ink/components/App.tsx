@@ -34,6 +34,7 @@ interface AppState {
   streamingContent: string;
   isReasoning: boolean;
   showSpinner: boolean;
+  spinnerText: string;
   status: StatusInfo;
   contextUsage: string;
   showPrompt: boolean;
@@ -54,7 +55,7 @@ export type Action =
   | { type: 'STREAM_CHUNK'; chunk: string }
   | { type: 'STREAM_REASONING'; text: string }
   | { type: 'STREAM_END' }
-  | { type: 'SPINNER'; show: boolean }
+  | { type: 'SPINNER'; show: boolean; text?: string }
   | { type: 'STATUS'; info: StatusInfo }
   | { type: 'CONTEXT'; text: string }
   | { type: 'SHOW_PROMPT'; message: string }
@@ -147,7 +148,7 @@ function reducer(state: AppState, action: Action): AppState {
       };
     }
     case 'SPINNER':
-      return { ...state, showSpinner: action.show };
+      return { ...state, showSpinner: action.show, spinnerText: action.text || '' };
     case 'STATUS':
       return { ...state, status: { ...state.status, ...action.info } };
     case 'CONTEXT':
@@ -170,6 +171,7 @@ function reducer(state: AppState, action: Action): AppState {
         streamingContent: '',
         isReasoning: false,
         showSpinner: false,
+        spinnerText: '',
         status: {},
         contextUsage: '',
         showPrompt: false,
@@ -202,6 +204,7 @@ const initialState: AppState = {
   streamingContent: '',
   isReasoning: false,
   showSpinner: false,
+  spinnerText: '',
   status: {},
   contextUsage: '',
   showPrompt: false,
@@ -273,6 +276,7 @@ export function App({ onReady, commands, onAbort }: AppProps) {
           streamingContent={state.streamingContent}
           isReasoning={state.isReasoning}
           showSpinner={state.showSpinner}
+          spinnerText={state.spinnerText}
         />
       </Box>
       <Box flexShrink={0} flexDirection="column">

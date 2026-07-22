@@ -14,12 +14,14 @@ export function Conversation({
   streamingContent,
   isReasoning,
   showSpinner,
+  spinnerText,
 }: {
   entries: ConversationEntry[];
   streaming: boolean;
   streamingContent: string;
   isReasoning: boolean;
   showSpinner: boolean;
+  spinnerText: string;
 }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -30,7 +32,7 @@ export function Conversation({
           <ToolCallBlock key={entry.id} data={entry.data as ToolCallData} />
         )
       ))}
-      {showSpinner && !streaming && <SpinnerLine />}
+      {showSpinner && !streaming && <SpinnerLine text={spinnerText} />}
       {streaming && <StreamBlock content={streamingContent} isReasoning={isReasoning} />}
     </Box>
   );

@@ -937,6 +937,11 @@ export async function runAgentLoop(
 
           const autoContext = buildSubagentContext(process.cwd());
           logInfo('AGENT', `spawning subagent | task: "${finalTask.slice(0, 150)}"`);
+          // Показываем спиннер на основном рендерере пока субагент работает
+          if (!quiet) {
+            const taskPreview = finalTask.length > 60 ? finalTask.slice(0, 57) + '...' : finalTask;
+            renderer?.writeSpinner(` [subagent] ${taskPreview}`);
+          }
           const subRenderer = new SubagentRenderer();
           try {
             const childResult = await runIsolatedLoop(
@@ -982,6 +987,7 @@ export async function runAgentLoop(
         }
         const subTime = ((performance.now() - toolStart) / 1000).toFixed(1);
         if (!quiet) {
+          renderer?.clearSpinner();
           renderer?.writeToolResult(subTime, toolExitCode, toolOutput.slice(0, 300));
         }
       // ─── MCP: внешние tool-серверы ────────────────────────

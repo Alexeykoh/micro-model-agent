@@ -36,7 +36,7 @@ export function ToolCallBlock({ data }: { data: ToolCallData }) {
       {/* Аргументы */}
       {data.args ? (
         <Box marginLeft={2}>
-          <Text {...t.colors.dim}>{data.args.slice(0, 120)}{data.args.length > 120 ? '…' : ''}</Text>
+          <Text {...t.colors.dim}>{formatArgs(data.name, data.args)}</Text>
         </Box>
       ) : null}
 
@@ -89,4 +89,18 @@ function exitIcon(code?: number): string {
 
 function exitColor(code?: number): string {
   return code === undefined || code === 0 ? 'green' : 'red';
+}
+
+function formatArgs(toolName: string, argsJson: string): string {
+  if (toolName === 'subagent') {
+    try {
+      const args = JSON.parse(argsJson);
+      const task = args.task || '';
+      const files = args.existingFiles || '';
+      let result = task.length > 100 ? task.slice(0, 97) + '…' : task;
+      if (files) result += ` ← ${files}`;
+      return result;
+    } catch { /* fall through */ }
+  }
+  return argsJson.length > 120 ? argsJson.slice(0, 117) + '…' : argsJson;
 }

@@ -113,7 +113,8 @@ export class ReadlineRenderer implements OutputRenderer {
   }
 
   writeToolPreview(toolName: string, argsJson: string): void {
-    console.log(`  ${this.theme.dim(argsJson)}`)
+    const preview = formatToolArgs(toolName, argsJson);
+    console.log(`  ${this.theme.dim(preview)}`)
   }
 
   writeToolResult(time: string, exitCode?: number, result?: string): void {
@@ -203,4 +204,18 @@ export class ReadlineRenderer implements OutputRenderer {
     }
     this.rl = null
   }
+}
+
+function formatToolArgs(toolName: string, argsJson: string): string {
+  if (toolName === 'subagent') {
+    try {
+      const args = JSON.parse(argsJson);
+      const task = args.task || '';
+      const files = args.existingFiles || '';
+      let result = task.length > 100 ? task.slice(0, 97) + '…' : task;
+      if (files) result += ` ← ${files}`;
+      return result;
+    } catch { /* fall through */ }
+  }
+  return argsJson.length > 120 ? argsJson.slice(0, 117) + '…' : argsJson;
 }
