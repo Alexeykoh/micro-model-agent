@@ -1,6 +1,6 @@
 import type { ToolDefinition } from '../registry.js';
 import type { ToolHandler, ToolResult } from '../types.js';
-import { createPlan, updatePlanStep, showPlan, clearPlan } from '../plan.js';
+import { createPlan, updatePlanStep, showPlan, clearPlan, getPlanStepTitle, getNextPendingStep } from '../plan.js';
 
 /**
  * Native plan tool — task plan management.
@@ -16,7 +16,7 @@ export const planDefinition: ToolDefinition = {
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['create', 'done', 'progress', 'show', 'clear'], description: 'Action: create (with name+steps), done (mark step N done), progress (show plan), show (same as progress), clear (delete plan)' },
+        action: { type: 'string', enum: ['create', 'done', 'skip', 'progress', 'show', 'clear'], description: 'Action: create (with name+steps), done (mark step N done), skip (skip step N), progress (show plan), show (same as progress), clear (delete plan)' },
         name: { type: 'string', description: 'Plan name (required for create)' },
         steps: { type: 'array', items: { type: 'string' }, description: 'List of steps (required for create)' },
         step: { type: 'number', description: 'Step number to mark as done (required for done)' },
@@ -67,13 +67,34 @@ export const planHandler: ToolHandler = {
         if (!stepNum || stepNum < 1) {
           output = 'Usage: plan({action:"done", step:1}) — marks step 1 as done.';
         } else {
-          const result = updatePlanStep(stepNum, 'done');
-          if (result.includes('not found')) {
+          const stepTitle = getPlanStepTitle(stepNum);
+          if (stepTitle === null) {
             // Step doesn't exist — show current plan so agent can see valid step numbers
             const currentPlan = showPlan();
-            output = `ERROR: ${result}\n\nCurrent plan:\n${currentPlan}\n\nCheck the step numbers above and use the correct one.`;
+            output = `ERROR: Step ${stepNum} not found.\n\nCurrent plan:\n${currentPlan}\n\nCheck the step numbers above and use the correct one.`;
           } else {
+            // Auto-mark next pending step as in_progress if this one is pending
+            const nextPending = getNextPendingStep();
+            if (nextPending && nextPending.id === stepNum) {
+              updatePlanStep(stepNum, 'in_progress');
+            }
+            const result = updatePlanStep(stepNum, 'done');
             output = result;
+          }
+        }
+        break;
+      }
+      case 'skip': {
+        const stepNum = Number(args.step);
+        if (!stepNum || stepNum < 1) {
+          output = 'Usage: plan({action:"skip", step:N}) — marks step N as skipped.';
+        } else {
+          const stepTitle = getPlanStepTitle(stepNum);
+          if (stepTitle === null) {
+            const currentPlan = showPlan();
+            output = `ERROR: Step ${stepNum} not found.\n\nCurrent plan:\n${currentPlan}`;
+          } else {
+            output = updatePlanStep(stepNum, 'skipped');
           }
         }
         break;

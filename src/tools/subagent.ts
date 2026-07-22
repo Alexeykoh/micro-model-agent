@@ -250,7 +250,7 @@ export function validateToolCall(parsed: any): { valid: boolean; name?: string; 
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'subagent', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'subagent', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch', 'scaffold']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };

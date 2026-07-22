@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
@@ -13,7 +13,7 @@ import { applyMode } from './modes/applier.js';
 import { loadSkill, loadSkillsFromRefs, formatSkillsBlock, enforceSkillBudget } from '../skills/loader.js';
 import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
-import { showPlan, getPlanPendingCount, clearPlan } from '../tools/plan.js';
+import { showPlan, getPlanPendingCount, clearPlan, getNextPendingStep, updatePlanStep, getPlanStepTitle, extractDirFromStepTitle } from '../tools/plan.js';
 
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig } from '../config/config.js';
@@ -382,6 +382,10 @@ export async function runAgentLoop(
   let specialistSpawnedFor: string | null = null;
   /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
   let uselessActionCount = 0;
+  /** История последних чтений файлов для.detect повторных чтений */
+  const recentReadFiles: string[] = [];
+  /** История последних grep-запросов для detect повторных поисков */
+  const recentGrepPatterns: string[] = [];
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
@@ -599,7 +603,7 @@ export async function runAgentLoop(
         // it's a description with examples — not a failed tool call attempt.
         const textOutside = response.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
         if (textOutside.length < 100) {
-          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve, subagent.`;
+          const feedback = `[Tool call error(s)]\n${invalidCalls.join('\n')}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, plan, todo, question, approve, subagent, scaffold.`;
           if (!quiet) {
             renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
           }
@@ -649,12 +653,71 @@ export async function runAgentLoop(
           continue;
         }
 
+        // Phase 4.1: Аудит файлов при завершении плана
+        if (pendingSteps === 0 && looksLikeDone) {
+          const plan = showPlan();
+          if (!plan.startsWith('No active plan')) {
+            // Извлекаем заголовки шагов и проверяем наличие файлов
+            const stepLines = plan.split('\n').filter(l => l.match(/\d+\.\s/));
+            const missingFiles: string[] = [];
+            for (const line of stepLines) {
+              const titleMatch = line.match(/\d+\.\s*(.+)/);
+              if (!titleMatch) continue;
+              const title = titleMatch[1].trim();
+              // Извлекаем имя файла из заголовка (паттерн: "Create file.ext" или "file.ext")
+              const fileMatch = title.match(/(?:Create|Создать|Add|Добавить)\s+(\S+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i)
+                || title.match(/(\w+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i);
+              if (fileMatch) {
+                const fileName = fileMatch[1];
+                if (!existsSync(fileName) && !createdFiles.some(f => f.endsWith(fileName))) {
+                  missingFiles.push(fileName);
+                }
+              }
+            }
+            if (missingFiles.length > 0) {
+              if (!quiet) {
+                renderer?.writeWarning(`  [plan complete but missing files: ${missingFiles.join(', ')}]`);
+              }
+              messages.push({
+                role: 'user',
+                content: `Plan claims all steps done, but these files are missing: ${missingFiles.join(', ')}. Create them before finishing.`,
+              });
+              continuationNudges = 0;
+              continue;
+            }
+          }
+        }
+
         // Stuck detection: если модель делает бесполезные действия
         const isUselessAction = validCalls.some(c =>
           c.parsed.name === 'list_dir' || c.parsed.name === 'tree' ||
           (c.parsed.name === 'todo' && c.parsed.arguments?.action === 'list')
         );
-        if (isUselessAction && pendingSteps > 0) {
+
+        // Phase 5.1: Расширенное detect — повторные чтения и поиски
+        let isRepeatedRead = false;
+        let isRepeatedSearch = false;
+        for (const c of validCalls) {
+          if (c.parsed.name === 'read_file') {
+            const filePath = String(c.parsed.arguments?.path || '');
+            if (recentReadFiles.includes(filePath)) {
+              isRepeatedRead = true;
+            }
+            recentReadFiles.push(filePath);
+            if (recentReadFiles.length > 5) recentReadFiles.shift();
+          }
+          if (c.parsed.name === 'grep_search') {
+            const pattern = String(c.parsed.arguments?.pattern || '');
+            if (recentGrepPatterns.includes(pattern)) {
+              isRepeatedSearch = true;
+            }
+            recentGrepPatterns.push(pattern);
+            if (recentGrepPatterns.length > 5) recentGrepPatterns.shift();
+          }
+        }
+
+        const isStuckAction = isUselessAction || isRepeatedRead || isRepeatedSearch;
+        if (isStuckAction && pendingSteps > 0) {
           uselessActionCount++;
           if (uselessActionCount >= 3) {
             if (!quiet) {
@@ -671,6 +734,8 @@ export async function runAgentLoop(
           }
         } else if (validCalls.some(c => c.parsed.name === 'subagent' || c.parsed.name === 'write_file' || c.parsed.name === 'bash')) {
           uselessActionCount = 0;
+          recentReadFiles.length = 0;
+          recentGrepPatterns.length = 0;
         }
 
         // Если модель claim-ит done но есть созданные файлы — напоминаем о полноте
@@ -819,12 +884,28 @@ export async function runAgentLoop(
           toolOutput = 'Error: task is required';
           toolExitCode = 1;
         } else {
+          // Авто-пометка следующего pending шага как in_progress
+          const nextPending = getNextPendingStep();
+          if (nextPending) {
+            updatePlanStep(nextPending.id, 'in_progress');
+          }
+
+          // Phase 2.3: Авто-подстановка полного пути в задачу subagent
+          let finalTask = task;
+          if (nextPending) {
+            const expectedDir = extractDirFromStepTitle(nextPending.title);
+            if (expectedDir && !task.includes(expectedDir + '/')) {
+              finalTask = `${task} (directory: ${expectedDir}/)`;
+              logInfo('AGENT', `injected dir path into subagent task: "${expectedDir}"`);
+            }
+          }
+
           const autoContext = buildSubagentContext(process.cwd());
-          logInfo('AGENT', `spawning subagent | task: "${task.slice(0, 150)}"`);
+          logInfo('AGENT', `spawning subagent | task: "${finalTask.slice(0, 150)}"`);
           const subRenderer = new SubagentRenderer();
           try {
             const childResult = await runIsolatedLoop(
-              provider, registry, task, autoContext, process.cwd(), quiet, subRenderer, toolExecutor,
+              provider, registry, finalTask, autoContext, process.cwd(), quiet, subRenderer, toolExecutor,
               modeConfig.subagentMode,
               llmCfg.toolModel,
             );
@@ -835,6 +916,25 @@ export async function runAgentLoop(
                 if (!createdFiles.includes(f)) createdFiles.push(f);
               }
             }
+
+            // Phase 2.1: Валидация путей созданных файлов
+            if (nextPending && childResult.createdFiles.length > 0) {
+              const expectedDir = extractDirFromStepTitle(nextPending.title);
+              if (expectedDir) {
+                const wrongDirFiles = childResult.createdFiles.filter(f =>
+                  !f.startsWith(expectedDir + '/') && !f.startsWith(expectedDir + '\\')
+                );
+                if (wrongDirFiles.length > 0) {
+                  const correction = `⚠ Files created in wrong directory: ${wrongDirFiles.join(', ')}. ` +
+                    `They should be in ${expectedDir}/. Use write_file with full path: ${expectedDir}/${wrongDirFiles[0]}`;
+                  toolOutput += '\n\n' + correction;
+                  if (!quiet) {
+                    renderer?.writeWarning(`  [subagent created files in wrong directory: ${wrongDirFiles.join(', ')}]`);
+                  }
+                }
+              }
+            }
+
             const buf = subRenderer.getBuffer();
             if (!quiet && renderer?.writeToolBuffer) {
               renderer.writeToolBuffer({ lines: buf.lines, toolCalls: buf.toolCalls });
