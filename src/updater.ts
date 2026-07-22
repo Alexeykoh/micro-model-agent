@@ -125,6 +125,49 @@ export function getUpdateCommand(): string {
   return `npm install -g ${PKG_NAME}`;
 }
 
+/**
+ * Проверяет patch-обновление и автоматически устанавливает.
+ * Работает только для patch-версий (третье число).
+ * Например: 0.2.74 → 0.2.76 (авто), 0.3.0 → не трогает.
+ */
+export function autoUpdatePatch(): void {
+  const current = getCurrentVersion();
+
+  setTimeout(() => {
+    try {
+      const stdout = execSync(`npm view ${PKG_NAME} version`, {
+        timeout: 5000,
+        encoding: 'utf-8',
+        windowsHide: true,
+      });
+      const latest = stdout.trim();
+
+      if (!isNewerVersion(current, latest)) return;
+
+      const cur = current.split('.').map(Number);
+      const lat = latest.split('.').map(Number);
+
+      // Только patch: major и minor должны совпадать
+      if (cur[0] !== lat[0] || cur[1] !== lat[1]) return;
+
+      console.error(`[Update] Auto-updating patch: v${current} → v${latest}…`);
+      logInfo('Update', `Auto-updating patch: v${current} → v${latest}`);
+
+      execSync(`npm install -g ${PKG_NAME}@${latest}`, {
+        timeout: 60000,
+        stdio: 'pipe',
+        windowsHide: true,
+      });
+
+      console.error(`[Update] Updated to v${latest}. Restart recommended.`);
+      logInfo('Update', `Updated to v${latest}`);
+    } catch (e: any) {
+      console.error(`[Update] Auto-update failed: ${e.message}`);
+      logInfo('Update', `Auto-update failed: ${e.message}`);
+    }
+  }, 200);
+}
+
 function readCache(): UpdateCache | null {
   try {
     if (!existsSync(CACHE_FILE)) return null;

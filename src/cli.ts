@@ -14,7 +14,7 @@ import { registerProviderCommands } from './cli/provider.js';
 import { registerModelCommands } from './cli/model.js';
 import { registerConfigCommands } from './cli/config.js';
 import { registerUpdateCommand } from './cli/update.js';
-import { checkForUpdateAsync } from './updater.js';
+import { checkForUpdateAsync, autoUpdatePatch } from './updater.js';
 import { checkProjectSize, setMaxFilesForProject } from './indexer/cache.js';
 import { logInfo } from './logger.js';
 
@@ -135,6 +135,15 @@ export function createCli() {
   registerModelCommands(program);
   registerConfigCommands(program);
   registerUpdateCommand(program);
+
+  // ─── Setup wizard (re-run) ────────────────────────────
+  program
+    .command('init')
+    .description('Run setup wizard (configure provider and model)')
+    .action(async () => {
+      const { runSetupWizard } = await import('./setup-wizard.js');
+      await runSetupWizard(true);
+    });
 
   // ─── Plugin management ─────────────────────────────────
   const pluginCmd = program.command('plugin').description('plugin management');
@@ -257,6 +266,9 @@ export function createCli() {
 
     // Background version check (non-blocking)
     checkForUpdateAsync();
+
+    // Auto-update patch versions (0.2.74 → 0.2.76)
+    autoUpdatePatch();
 
     const providerOpt = program.getOptionValue('provider');
     const modelOpt = program.getOptionValue('model');

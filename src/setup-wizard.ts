@@ -363,9 +363,9 @@ function makeDefaultConfig(): AppConfig {
   };
 }
 
-export async function runSetupWizard(): Promise<AppConfig> {
+export async function runSetupWizard(force = false): Promise<AppConfig> {
   const globalPath = join(homedir(), '.mma', 'config.json');
-  if (existsSync(globalPath)) {
+  if (!force && existsSync(globalPath)) {
     return makeDefaultConfig();
   }
 
@@ -373,7 +373,7 @@ export async function runSetupWizard(): Promise<AppConfig> {
 
   console.clear();
   console.log(pc.cyan(pc.bold(`\n  ⚡ Micro Models Agent (MMA) v${getVersion()}`)));
-  console.log(pc.dim('  Первый запуск — давай настроим агента'));
+  console.log(pc.dim(force ? '  Настройка провайдера и модели' : '  Первый запуск — давай настроим агента'));
   separator();
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
