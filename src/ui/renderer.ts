@@ -44,6 +44,7 @@ export interface OutputRenderer {
 
   writeMarkdownChunk(chunk: string): void
   commitMarkdown(): void
+  setStreamRole?(role: 'assistant' | 'subagent' | 'expert' | null): void
 
   writeSpinner(text?: string): void
   clearSpinner(): void

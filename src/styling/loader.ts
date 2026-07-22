@@ -33,6 +33,7 @@ const BUILT_IN_THEMES: Record<string, ThemeConfig> = {
       contextBar: 'cyan', highlight: 'bold', lineNumbers: 'dim',
       filePath: 'cyan', link: 'underline', heading: 'bold',
       symbolName: 'yellow', symbolType: 'dim', bracket: 'dim',
+      user: 'yellow', assistant: 'blue', subagent: 'magenta', expert: 'green',
     },
     icons: {
       success: '✓', failure: '✗', spinner: '⏳', inProgress: '~',
@@ -50,6 +51,7 @@ const BUILT_IN_THEMES: Record<string, ThemeConfig> = {
       contextBar: 'cyan', highlight: 'bold', lineNumbers: 'dim',
       filePath: 'cyan', link: 'underline', heading: 'bold',
       symbolName: 'yellow', symbolType: 'dim', bracket: 'dim',
+      user: 'yellow', assistant: 'cyan', subagent: 'magenta', expert: 'green',
     },
     icons: {
       success: '✓', failure: '✗', spinner: '⏳', inProgress: '~',

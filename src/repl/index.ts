@@ -204,9 +204,7 @@ export async function runRepl(
     }
 
     renderer.writeNewline();
-    renderer.writeDim('─'.repeat(40));
     renderer.writeBracketTag('user', ` ${line}`);
-    renderer.writeDim('─'.repeat(40));
     renderer.writeNewline();
     logREPL('user', line);
     const result = await history.send(line, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking, mode: currentMode });

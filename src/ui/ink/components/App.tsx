@@ -70,6 +70,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'ADD_MESSAGE': {
       const data = { ...action.data };
       if (data.tag === 'user') data.role = 'user';
+      else if (data.tag === 'subagent') data.role = 'subagent';
+      else if (data.tag === 'expert' || data.tag === 'specialist') data.role = 'expert';
       return {
         ...state,
         nextId: state.nextId + 1,

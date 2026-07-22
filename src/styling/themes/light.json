@@ -17,7 +17,11 @@
     "heading": "bold",
     "symbolName": "yellow",
     "symbolType": "dim",
-    "bracket": "dim"
+    "bracket": "dim",
+    "user": "yellow",
+    "assistant": "blue",
+    "subagent": "magenta",
+    "expert": "green"
   },
   "icons": {
     "success": "✓",

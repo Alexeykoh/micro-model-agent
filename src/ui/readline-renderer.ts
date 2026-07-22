@@ -27,6 +27,8 @@ export class ReadlineRenderer implements OutputRenderer {
   private rl: ReturnType<typeof createInterface> | null = null
   private closed = false
   private commands: SlashCommandInfo[] = []
+  private _streamRole: 'assistant' | 'subagent' | 'expert' | null = null
+  private _streamStarted = false
 
   setCommands(cmds: SlashCommandInfo[]): void {
     this.commands = cmds
@@ -121,11 +123,37 @@ export class ReadlineRenderer implements OutputRenderer {
     }
   }
 
+  setStreamRole(role: 'assistant' | 'subagent' | 'expert' | null): void {
+    this._streamRole = role
+    this._streamStarted = false
+  }
+
   writeMarkdownChunk(chunk: string): void {
-    process.stdout.write(chunk)
+    if (!this._streamStarted && this._streamRole) {
+      const prefix = this.theme.bracketTag(this._streamRole, '')
+      process.stdout.write(`\n${prefix}\n`)
+      this._streamStarted = true
+    }
+    if (this._streamRole) {
+      const colored = this.streamColor(this._streamRole, chunk)
+      process.stdout.write(colored)
+    } else {
+      process.stdout.write(chunk)
+    }
+  }
+
+  private streamColor(role: string, text: string): string {
+    switch (role) {
+      case 'assistant': return this.theme.assistantRole(text)
+      case 'subagent': return this.theme.subagentRole(text)
+      case 'expert': return this.theme.expertRole(text)
+      default: return text
+    }
   }
 
   commitMarkdown(): void {
+    this._streamRole = null
+    this._streamStarted = false
     console.log()
   }
 

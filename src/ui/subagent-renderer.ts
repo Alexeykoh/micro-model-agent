@@ -83,6 +83,10 @@ export class SubagentRenderer implements OutputRenderer {
     }
   }
 
+  setStreamRole(_role: 'assistant' | 'subagent' | 'expert' | null): void {
+    // Subagent buffers output — no-op
+  }
+
   // ── Streaming ──
   writeMarkdownChunk(chunk: string): void {
     this.buffer.streaming += chunk;

@@ -7,7 +7,7 @@ export interface MessageItem {
   content?: string;
   tag?: string;
   message?: string;
-  role?: 'user' | 'assistant';
+  role?: 'user' | 'assistant' | 'subagent' | 'expert';
 }
 
 const TYPE_STYLES: Record<string, { prefix: string; colorKey: string; icon: string }> = {
@@ -22,7 +22,6 @@ const TYPE_STYLES: Record<string, { prefix: string; colorKey: string; icon: stri
 export function MessageBlock({ item }: { item: MessageItem }) {
   const t = getInkTheme();
 
-  // ─── Ассистент ─────────────────────────────────────
   if (item.role === 'assistant') {
     return (
       <Box>
@@ -34,13 +33,34 @@ export function MessageBlock({ item }: { item: MessageItem }) {
     );
   }
 
-  // ─── Пользователь ──────────────────────────────────
   if (item.role === 'user') {
     return (
       <Box>
         <Text color="yellow">{'  │ '}</Text>
         <Box flexGrow={1}>
           <Text bold color="yellow">{item.content}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (item.role === 'subagent') {
+    return (
+      <Box>
+        <Text color="magenta">{'  │ '}</Text>
+        <Box flexGrow={1}>
+          <Text color="magenta">{item.content ?? ''}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (item.role === 'expert') {
+    return (
+      <Box>
+        <Text color="green">{'  │ '}</Text>
+        <Box flexGrow={1}>
+          <Text color="green">{item.content ?? ''}</Text>
         </Box>
       </Box>
     );

@@ -32,9 +32,17 @@ export function HeadingTag({ children }: { children: string }) {
   return <Text bold>{children}</Text>;
 }
 
+const ROLE_TAG_STYLES: Record<string, { color: string; bold?: boolean }> = {
+  user: { color: 'yellow', bold: true },
+  assistant: { color: 'cyan' },
+  subagent: { color: 'magenta' },
+  expert: { color: 'green' },
+  specialist: { color: 'green' },
+};
+
 export function BracketTag({ tag, message }: { tag: string; message: string }) {
   const t = getInkTheme();
-  const tagStyle = tag === 'user' ? { color: 'yellow' as const, bold: true } : { ...t.colors.info, bold: true };
+  const tagStyle = ROLE_TAG_STYLES[tag] ?? { ...t.colors.info, bold: true };
   return (
     <Box>
       <Text {...tagStyle}>[{tag}]</Text>

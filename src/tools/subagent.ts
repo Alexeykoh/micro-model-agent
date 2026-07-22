@@ -341,6 +341,10 @@ export async function doChat(
     const lastMsg = messages[messages.length - 1];
     logLLMRequest(provider.model, messages.length, lastMsg?.content || '', caller);
 
+    if (caller === 'main') {
+      renderer.setStreamRole?.('assistant');
+    }
+
     renderer.writeSpinner();
 
     try {
@@ -529,6 +533,10 @@ async function doChatOnce(
   let started = false;
 
   if (signal?.aborted) return { response: '', genTimeMs: 0 };
+
+  if (caller === 'main') {
+    renderer.setStreamRole?.('assistant');
+  }
 
   renderer.writeSpinner();
 
