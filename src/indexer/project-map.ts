@@ -80,7 +80,7 @@ function detectLanguage(cwd: string): string[] {
   return langs;
 }
 
-function walkDir(dir: string, baseDir: string, extensions: Set<string>, results: string[]): void {
+function walkDir(dir: string, baseDir: string, extensions: Set<string>, files: string[], dirs: string[]): void {
   let entries: any[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
@@ -91,12 +91,14 @@ function walkDir(dir: string, baseDir: string, extensions: Set<string>, results:
 
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      walkDir(fullPath, baseDir, extensions, results);
+      const relDir = fullPath.slice(baseDir.length + 1).replace(/\\/g, '/');
+      if (relDir) dirs.push(relDir);
+      walkDir(fullPath, baseDir, extensions, files, dirs);
     } else if (entry.isFile()) {
       const ext = entry.name.split('.').pop()?.toLowerCase() || '';
       if (extensions.has(ext)) {
         const rel = fullPath.slice(baseDir.length + 1).replace(/\\/g, '/');
-        results.push(rel);
+        files.push(rel);
       }
     }
   }
@@ -126,6 +128,8 @@ export interface ProjectFile {
 export interface ProjectMap {
   projectName: string;
   files: ProjectFile[];
+  /** Все директории проекта (включая пустые) */
+  directories: string[];
   generatedAt: string;
 }
 
@@ -138,9 +142,26 @@ export function collectSourceFiles(cwd: string): string[] {
     }
   }
   const filePaths: string[] = [];
-  walkDir(cwd, cwd, extensions, filePaths);
+  const _dirs: string[] = [];
+  walkDir(cwd, cwd, extensions, filePaths, _dirs);
   filePaths.sort();
   return filePaths;
+}
+
+/** Собирает все директории проекта (включая пустые) */
+export function collectDirectories(cwd: string): string[] {
+  const langs = detectLanguage(cwd);
+  const extensions = new Set<string>();
+  for (const lang of langs) {
+    for (const [ext, langKey] of Object.entries(EXT_MAP)) {
+      if (langKey === lang) extensions.add(ext);
+    }
+  }
+  const _files: string[] = [];
+  const dirs: string[] = [];
+  walkDir(cwd, cwd, extensions, _files, dirs);
+  dirs.sort();
+  return dirs;
 }
 
 export function setMaxFilesForProject(cwd: string, max: number): void {
@@ -165,9 +186,10 @@ export function generateProjectMap(cwd: string, maxFiles?: number): ProjectMap {
   const effectiveMax = maxFiles ?? maxFilesPerProject.get(cwd) ?? 5000;
 
   const filePaths = collectSourceFiles(cwd);
+  const directories = collectDirectories(cwd);
   if (effectiveMax === 0) {
     logInfo('INDEXER', 'Project map indexing skipped');
-    return { projectName, files: [], generatedAt: new Date().toISOString() };
+    return { projectName, files: [], directories, generatedAt: new Date().toISOString() };
   }
   const total = filePaths.length;
   if (total > effectiveMax) {
@@ -188,10 +210,11 @@ export function generateProjectMap(cwd: string, maxFiles?: number): ProjectMap {
   }
 
   const elapsed = (performance.now() - start).toFixed(0);
-  logInfo('INDEXER', `generateProjectMap: ${allFiles.length} files in ${elapsed}ms`);
+  logInfo('INDEXER', `generateProjectMap: ${allFiles.length} files, ${directories.length} dirs in ${elapsed}ms`);
   return {
     projectName,
     files: allFiles,
+    directories,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -202,8 +225,34 @@ export function formatProjectMap(map: ProjectMap): string {
   const theme = getTheme();
   const lines: string[] = [];
   lines.push(theme.heading(`PROJECT: ${map.projectName}`));
-  lines.push(theme.dim(`Files: ${map.files.length} | Generated: ${map.generatedAt}`));
+  lines.push(theme.dim(`Files: ${map.files.length} | Dirs: ${map.directories.length} | Generated: ${map.generatedAt}`));
   lines.push('');
+
+  // Собираем все директории из файлов
+  const dirsFromFiles = new Set<string>();
+  for (const file of map.files) {
+    const parts = file.path.split('/');
+    if (parts.length > 1) {
+      // Добавляем все родительские директории
+      for (let i = 1; i < parts.length; i++) {
+        dirsFromFiles.add(parts.slice(0, i).join('/'));
+      }
+    }
+  }
+
+  // Добавляем пустые директории
+  const emptyDirs = (map.directories || []).filter(d => !dirsFromFiles.has(d));
+  const allDirs = [...dirsFromFiles, ...emptyDirs].sort();
+
+  // Показываем директории без файлов
+  for (const dir of allDirs) {
+    const hasFiles = map.files.some(f => f.path.startsWith(dir + '/'));
+    if (!hasFiles) {
+      lines.push(`${theme.dim(theme.icon.bullet)} ${theme.filePath(dir + '/')} ${theme.dim('(empty)')}`);
+    }
+  }
+
+  if (allDirs.length > 0 && map.files.length > 0) lines.push('');
 
   let currentDir = '';
   for (const file of map.files) {

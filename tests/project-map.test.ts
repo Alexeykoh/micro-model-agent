@@ -25,6 +25,7 @@ const mockGetOrBuild = vi.fn(() => ({
   map: {
     projectName: 'test-project',
     files: mockFiles,
+    directories: ['src'],
     generatedAt: new Date().toISOString(),
   },
   formatted: mockFormatted,
@@ -43,6 +44,7 @@ describe('project_map handler', () => {
       map: {
         projectName: 'test-project',
         files: mockFiles,
+        directories: ['src'],
         generatedAt: new Date().toISOString(),
       },
       formatted: mockFormatted,
@@ -99,7 +101,7 @@ describe('project_map handler', () => {
 
     it('returns empty message for empty project', async () => {
       mockGetOrBuild.mockReturnValue({
-        map: { projectName: 'empty', files: [], generatedAt: '' },
+        map: { projectName: 'empty', files: [], directories: [], generatedAt: '' },
         formatted: '',
       });
       const result = await projectMapHandler.execute({ action: 'list' }, ctx);
@@ -204,7 +206,7 @@ describe('project_map handler', () => {
         lines: 10,
       }));
       mockGetOrBuild.mockReturnValue({
-        map: { projectName: 'big', files: manyFiles, generatedAt: '' },
+        map: { projectName: 'big', files: manyFiles, directories: ['dir'], generatedAt: '' },
         formatted: '',
       });
       const result = await projectMapHandler.execute({ action: 'info', path: 'nope.ts' }, ctx);
