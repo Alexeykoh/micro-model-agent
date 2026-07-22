@@ -135,7 +135,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /new              — reset session (clear history)
   /export [mode]    — export session (normal or debug)
   /init             — analyze project & create AGENTS.md
-  /index [cmd]      — index status/rebuild/map
+  /index [cmd]      — index status/show/map/rebuild
   /profile [note]   — show profile or add note
   /profile name <n>  — save your name
   /profile show     — show profile content
@@ -722,6 +722,14 @@ function cmdIndex(args: string, ctx: CommandContext): void {
       ctx.renderer.writeSuccess('Project map rebuilt');
       break;
     }
+    case 'show': {
+      const { formatted, fromCache } = getOrBuildProjectMap(process.cwd());
+      ctx.renderer.writeLine(formatted);
+      if (fromCache) {
+        ctx.renderer.writeDim('  (from cache)');
+      }
+      break;
+    }
     case 'status': {
       const { formatted: mapFormatted } = getOrBuildProjectMap(process.cwd());
       const { formatted: idxFormatted } = getOrBuildCodeIndex(process.cwd());
@@ -731,7 +739,7 @@ function cmdIndex(args: string, ctx: CommandContext): void {
       break;
     }
     default:
-      ctx.renderer.writeInfo('  Usage: /index [status|rebuild|map]');
+      ctx.renderer.writeInfo('  Usage: /index [status|show|map|rebuild]');
   }
 }
 
