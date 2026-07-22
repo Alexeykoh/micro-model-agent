@@ -696,6 +696,7 @@ export async function runAgentLoop(
     if (hasMultiStepPlan) {
       const directWrites = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
       const hasSubagent = validCalls.some(c => c.parsed.name === 'subagent');
+      const hasBash = validCalls.some(c => c.parsed.name === 'bash');
       if (directWrites.length > 0 && !hasSubagent) {
         // Block direct writes — model must use subagent
         for (const wc of directWrites) {
@@ -712,6 +713,7 @@ export async function runAgentLoop(
           renderer?.writeWarning(`  [blocked ${directWrites.length} direct writes — use subagent for multi-step plans]`);
         }
       }
+      // Allow bash for verification (tsc --noEmit, npm run build) — don't block these
     }
 
     // ESCALATION: block write_file when creating N+ files without subagent (no plan case)

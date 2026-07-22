@@ -46,11 +46,14 @@ export const planHandler: ToolHandler = {
         output = createPlan(planName, steps);
 
         if (steps.length >= 3) {
-          output += `\n\nIMPORTANT: Plan has ${steps.length} steps. Use subagent tool for EACH step to work in isolation:\n`;
+          output += `\n\nIMPORTANT: Plan has ${steps.length} steps. For EACH step, use subagent with STRICT task scope:\n`;
           for (let i = 0; i < steps.length; i++) {
-            output += `subagent("Step ${i + 1}: ${steps[i].replace(/^\d+\.\s*/, '')}. List existing files and packages.")\n`;
+            const stepTitle = steps[i].replace(/^\d+\.\s*/, '');
+            output += `Step ${i + 1}: subagent({task:"Create ONLY ${stepTitle}", existingFiles:"<files from previous steps>"})\n`;
           }
-          output += `After each subagent completes, mark the step done: plan({action:'done', step:${1}})`;
+          output += `\nCRITICAL: Each subagent creates ONLY what its task says. Do NOT let subagent create extra files.\n`;
+          output += `After each subagent completes, mark the step done: plan({action:"done", step:1})\n`;
+          output += `Plan steps: ${steps.map((s, i) => `${i+1}. ${s.replace(/^\d+\.\s*/, '')}`).join(' | ')}`;
         }
         break;
       }

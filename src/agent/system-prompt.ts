@@ -176,19 +176,37 @@ const RULES_COMMON = `Rules:
 12. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead — they give more useful results. Only use list_dir when a user explicitly asks to see a directory listing.
 13. OFF-TOPIC QUESTIONS: If the user asks something unrelated to coding (jokes, space, cooking, etc.), answer briefly and warmly — 1-2 sentences. Do NOT refuse or say "I'm a coding assistant". Just answer, then naturally offer to return to work.
 14. ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.
-15. SUBAGENTS — delegate file creation for multi-file projects:
-    Use subagent WHEN:
-    - Creating 3+ new files in a project (one subagent call per file)
-    - Any file that depends on another file you haven't created yet
-    - Running verification (tsc --noEmit) after all files created
+15. SUBAGENTS — strict delegation for multi-file projects:
+    ABSOLUTE RULE: 1 FILE = 1 SUBAGENT CALL. No exceptions.
+    - Every file in the plan gets its OWN subagent call.
+    - NEVER combine multiple files in one subagent task.
+    - If plan has 5 files → 5 separate subagent calls.
+    - Task description MUST include the FULL path: "Create ONLY todo-app/package.json" not just "Create package.json".
+    CRITICAL RULES FOR SUBAGENT:
+    - Subagent MUST create ONLY what is in the task description. Do NOT create extra files.
+    - If task says "Create todo-app/package.json" — create ONLY todo-app/package.json. Nothing else.
+    - NEVER let subagent "help" by creating additional files beyond the task scope.
+    - After subagent completes, parent checks what was created and verifies it matches the plan.
+    Example: subagent({task:"Create ONLY todo-app/src/db.ts with sqlite connection", existingFiles:"todo-app/package.json"})
     Do NOT use subagent for:
     - Editing existing files (use edit_file directly)
-    - Single file creation (write_file is fine)
     - Bash commands like npm install, git, etc. (use bash tool)
-    Example: subagent("Create src/db.ts: sqlite connection + schema")
     Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.
 16. CHECK BEFORE INSTALLING: Read the project dependency file. If the package is already listed — do not install it.
-17. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports (import X from './Y.tsx') into a .jsx file. If the project uses TypeScript — all files must be .tsx/.ts. If JavaScript — all files must be .jsx/.js. Check existing files to determine which stack the project uses.`;
+17. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports (import X from './Y.tsx') into a .jsx file. If the project uses TypeScript — all files must be .tsx/.ts. If JavaScript — all files must be .jsx/.js. Check existing files to determine which stack the project uses.
+18. VITE PROJECTS: When creating a Vite + React + TypeScript project, ALWAYS create these files in order:
+    a. package.json (with react, react-dom, vite, @vitejs/plugin-react, typescript)
+    b. vite.config.ts (import react plugin, defineConfig)
+    c. tsconfig.json (jsx: "react-jsx", strict: true)
+    d. index.html (<!DOCTYPE html>, <div id="root">, <script type="module" src="/src/main.tsx">)
+    e. src/main.tsx (import React, ReactDOM, App, index.css; ReactDOM.createRoot)
+    f. src/App.tsx (the actual component)
+    NEVER skip index.html or vite.config.ts — Vite won't work without them.
+19. SUBAGENT CONTEXT: When calling subagent, ALWAYS pass:
+    - existingFiles: files already created in this session (prevents duplicates)
+    - The task description should say "Create ONLY file X" — not "Create file X and related files"
+    Example: subagent({task:"Create ONLY src/api.ts with Express CRUD", existingFiles:"src/db.ts,src/types.ts"})
+    The subagent will see the project context and should NOT create files beyond what's in the task.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -213,10 +231,13 @@ const RULES_FAST = `Rules:
 10. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.
 11. OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.
 12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.
-13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. Do NOT use subagent for bash, edits, or single files. Example: subagent("Create X.ts. Existing: Y.ts"). Each gets fresh context.
+13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. CRITICAL: Subagent MUST create ONLY what is in the task. If task says "Create X.ts" — create ONLY X.ts. Do NOT create extra files. Do NOT use subagent for bash, edits, or single files.
+13. SUBAGENTS: ABSOLUTE RULE: 1 FILE = 1 SUBAGENT CALL. Every file gets its own subagent. NEVER combine multiple files in one task. If plan has 5 files → 5 subagent calls. Task MUST include FULL path (e.g. "Create ONLY todo-app/package.json"). Do NOT use subagent for bash or edits.
 14. CHECK BEFORE INSTALLING: Read the project dependency file before installing a package.
     If the package is already listed — do not install it.
-15. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports into .jsx files. Check existing files to determine the stack.`;
+15. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports into .jsx files. Check existing files to determine the stack.
+16. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
+17. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task. Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
@@ -225,6 +246,10 @@ const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"Set-Content -Path file.md -Value 'Hello World'"}}</tool_call>`;
 
 const POWERSHELL_RULES = `PowerShell specifics:
+- NEVER use && in commands — PowerShell doesn't support it. Use ; instead, or make separate bash calls.
+  WRONG: cd todo-app && npm install
+  RIGHT: npm install (run from todo-app directory)
+  RIGHT: Set-Location todo-app; npm install
 - Create/write files: Set-Content -Path file.md -Value "content"
 - Append to file: Add-Content -Path file.md -Value "line"
 - Read files: Get-Content file.md
