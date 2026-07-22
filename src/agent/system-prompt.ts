@@ -102,6 +102,16 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
 Themes are in ~/.mma/themes/. Built-in: light, dark. Can install from URL.
 If the user wants to switch themes — suggest a matching one from the list and switch.
 
+## Project Map tool (project structure):
+  {"name":"project_map","arguments":{"action":"list"}}
+  {"name":"project_map","arguments":{"action":"find","pattern":"*.tsx"}}
+  {"name":"project_map","arguments":{"action":"info","path":"src/App.tsx"}}
+
+CRITICAL: Use project_map FIRST before reading any files. It shows what files exist.
+- action="list" — show all files in the project
+- action="find" — search files by glob pattern
+- action="info" — get details about specific file (path, exports, lines)
+
 ## Scaffold (create complete project structure programmatically):
   {"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"todo-app"}}
   {"name":"scaffold","arguments":{"template":"vite-vanilla-ts","dir":"my-app"}}
@@ -202,7 +212,9 @@ const RULES_COMMON = `Rules:
     Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.
 16. CHECK BEFORE INSTALLING: Read the project dependency file. If the package is already listed — do not install it.
 17. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports (import X from './Y.tsx') into a .jsx file. If the project uses TypeScript — all files must be .tsx/.ts. If JavaScript — all files must be .jsx/.js. Check existing files to determine which stack the project uses.
-18. VITE PROJECTS: When creating a Vite + React + TypeScript project, ALWAYS create these files in order:
+18. USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. USE THIS ANSWER and proceed with the task. NEVER ask the same question again. NEVER call question tool with {"action":"show"} — it is invalid. If you already asked a question and got an answer, MOVE ON to the next step.
+19. PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory (e.g. parfymerie-landing/src/App.tsx), that's where the actual project lives — work inside that subdirectory.
+20. VITE PROJECTS: When creating a Vite + React + TypeScript project, ALWAYS create these files in order:
     a. package.json (with react, react-dom, vite, @vitejs/plugin-react, typescript)
     b. vite.config.ts (import react plugin, defineConfig)
     c. tsconfig.json (jsx: "react-jsx", strict: true)
@@ -210,7 +222,7 @@ const RULES_COMMON = `Rules:
     e. src/main.tsx (import React, ReactDOM, App, index.css; ReactDOM.createRoot)
     f. src/App.tsx (the actual component)
     NEVER skip index.html or vite.config.ts — Vite won't work without them.
-19. SUBAGENT CONTEXT: When calling subagent, ALWAYS pass:
+21. SUBAGENT CONTEXT: When calling subagent, ALWAYS pass:
     - existingFiles: files already created in this session (prevents duplicates)
     - The task description should say "Create ONLY file X" — not "Create file X and related files"
     Example: subagent({task:"Create ONLY src/api.ts with Express CRUD", existingFiles:"src/db.ts,src/types.ts"})
@@ -244,8 +256,10 @@ const RULES_FAST = `Rules:
 14. CHECK BEFORE INSTALLING: Read the project dependency file before installing a package.
     If the package is already listed — do not install it.
 15. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports into .jsx files. Check existing files to determine the stack.
-16. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
-17. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task. Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})`;
+16. USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. USE THIS ANSWER and proceed with the task. NEVER ask the same question again. NEVER call question tool with {"action":"show"} — it is invalid.
+17. PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory, that's where the actual project lives — work inside that subdirectory.
+18. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
+19. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task. Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>

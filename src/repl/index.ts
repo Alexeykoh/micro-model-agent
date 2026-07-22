@@ -174,6 +174,7 @@ export async function runRepl(
           conversationHistory: history.all,
           modelLabel,
           currentMode,
+          sessionId,
         });
         if (result instanceof Promise) await result;
         if (shouldStop) return;

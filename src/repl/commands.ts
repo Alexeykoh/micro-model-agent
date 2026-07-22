@@ -45,6 +45,7 @@ export interface CommandContext {
   conversationHistory: { role: 'user' | 'assistant'; content: string }[];
   modelLabel: string;
   currentMode?: string;
+  sessionId?: string;
 }
 
 /** Определение слэш-команды */
@@ -103,6 +104,19 @@ function cmdExit(_args: string, ctx: CommandContext): void {
 }
 
 function cmdHelp(_args: string, ctx: CommandContext): void {
+  const theme = getTheme();
+  const msgCount = ctx.conversationHistory.length;
+  const cwd = process.cwd();
+
+  ctx.renderer.writeDim(`  ── session info ──`);
+  if (ctx.sessionId) {
+    ctx.renderer.writeDim(`  session:   ${ctx.sessionId}`);
+  }
+  ctx.renderer.writeDim(`  model:     ${ctx.modelLabel}`);
+  ctx.renderer.writeDim(`  mode:      ${ctx.currentMode || 'base'}`);
+  ctx.renderer.writeDim(`  messages:  ${msgCount}`);
+  ctx.renderer.writeDim(`  cwd:       ${cwd}`);
+  ctx.renderer.writeNewline();
   ctx.renderer.writeDim(`  ── / commands ──
   /bash <cmd>       — run shell command
   /read <file>      — display file with line numbers

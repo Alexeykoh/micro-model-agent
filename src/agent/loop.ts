@@ -35,6 +35,7 @@ import { approveHandler } from '../tools/native/approve.js';
 import { userProfileHandler } from '../tools/native/user-profile.js';
 import { themeHandler } from '../tools/native/theme.js';
 import { scaffoldHandler } from '../tools/native/scaffold.js';
+import { projectMapHandler } from '../tools/native/project-map.js';
 import { bashHandler } from '../tools/bash.js';
 import { readFileHandler } from '../tools/fs/read-file.js';
 import { writeFileHandler } from '../tools/fs/write-file.js';
@@ -386,13 +387,15 @@ export async function runAgentLoop(
   const recentReadFiles: string[] = [];
   /** История последних grep-запросов для detect повторных поисков */
   const recentGrepPatterns: string[] = [];
+  /** История последних вопросов для detect повторных вопросов */
+  const recentQuestions: string[] = [];
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
   toolExecutor.setPluginManager(pluginManager);
   toolExecutor.registerAll([
     planHandler, todoHandler, questionHandler, approveHandler,
-    userProfileHandler, themeHandler, scaffoldHandler, bashHandler,
+    userProfileHandler, themeHandler, scaffoldHandler, projectMapHandler, bashHandler,
     readFileHandler, writeFileHandler, editFileHandler, listDirHandler,
     createDirHandler, deleteFileHandler, copyFileHandler, moveFileHandler,
     fileInfoHandler, globSearchHandler, grepSearchHandler, treeHandler,
@@ -691,12 +694,14 @@ export async function runAgentLoop(
         // Stuck detection: если модель делает бесполезные действия
         const isUselessAction = validCalls.some(c =>
           c.parsed.name === 'list_dir' || c.parsed.name === 'tree' ||
-          (c.parsed.name === 'todo' && c.parsed.arguments?.action === 'list')
+          (c.parsed.name === 'todo' && c.parsed.arguments?.action === 'list') ||
+          (c.parsed.name === 'question' && !c.parsed.arguments?.question)
         );
 
-        // Phase 5.1: Расширенное detect — повторные чтения и поиски
+        // Phase 5.1: Расширенное detect — повторные чтения, поиски и вопросы
         let isRepeatedRead = false;
         let isRepeatedSearch = false;
+        let isRepeatedQuestion = false;
         for (const c of validCalls) {
           if (c.parsed.name === 'read_file') {
             const filePath = String(c.parsed.arguments?.path || '');
@@ -714,19 +719,27 @@ export async function runAgentLoop(
             recentGrepPatterns.push(pattern);
             if (recentGrepPatterns.length > 5) recentGrepPatterns.shift();
           }
+          if (c.parsed.name === 'question') {
+            const questionText = String(c.parsed.arguments?.question || '');
+            if (recentQuestions.includes(questionText)) {
+              isRepeatedQuestion = true;
+            }
+            recentQuestions.push(questionText);
+            if (recentQuestions.length > 3) recentQuestions.shift();
+          }
         }
 
-        const isStuckAction = isUselessAction || isRepeatedRead || isRepeatedSearch;
-        if (isStuckAction && pendingSteps > 0) {
+        const isStuckAction = isUselessAction || isRepeatedRead || isRepeatedSearch || isRepeatedQuestion;
+        if (isStuckAction) {
           uselessActionCount++;
           if (uselessActionCount >= 3) {
             if (!quiet) {
-              renderer?.writeWarning(`  [agent stuck: ${uselessActionCount} useless actions — clearing plan]`);
+              renderer?.writeWarning(`  [agent stuck: ${uselessActionCount} useless actions]`);
             }
             clearPlan();
             messages.push({
               role: 'user',
-              content: `[System: You are stuck in a loop. The plan has been cleared. Complete the remaining work directly using write_file/subagent, then report to the user.]`,
+              content: `[System: You are stuck in a loop. STOP calling the same tool. The user already answered your question — use their answer and proceed with the task. Do NOT ask the same question again.]`,
             });
             uselessActionCount = 0;
             continuationNudges = 0;
@@ -736,6 +749,7 @@ export async function runAgentLoop(
           uselessActionCount = 0;
           recentReadFiles.length = 0;
           recentGrepPatterns.length = 0;
+          recentQuestions.length = 0;
         }
 
         // Если модель claim-ит done но есть созданные файлы — напоминаем о полноте
