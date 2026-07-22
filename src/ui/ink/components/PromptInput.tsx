@@ -205,14 +205,8 @@ export function PromptInput({
 
       setCmdSuggestions([]);
       setFileSuggestions([]);
-      return;
-    }
-
-    // При вводе символа — сбросить подсказки
-    if (!key.tab && (cmdSuggestions.length > 0 || fileSuggestions.length > 0)) {
-      setCmdSuggestions([]);
-      setFileSuggestions([]);
       setSuggestIdx(0);
+      return;
     }
 
     if (key.upArrow) {
@@ -258,6 +252,19 @@ export function PromptInput({
       if (cursor > 0) {
         setValue((v: string) => v.slice(0, cursor - 1) + v.slice(cursor));
         setCursor((c: number) => c - 1);
+        // Обновить подсказки после удаления
+        const newBefore = value.slice(0, cursor - 1);
+        const atMatch = newBefore.match(/@([^\s"'|;]*)$/);
+        if (atMatch) {
+          const files = findFiles(atMatch[1]);
+          setFileSuggestions(files);
+          setCmdSuggestions([]);
+          setSuggestIdx(0);
+        } else {
+          setCmdSuggestions([]);
+          setFileSuggestions([]);
+          setSuggestIdx(0);
+        }
       }
       return;
     }
@@ -286,6 +293,19 @@ export function PromptInput({
     if (input && !key.ctrl && !key.meta) {
       setValue((v: string) => v.slice(0, cursor) + input + v.slice(cursor));
       setCursor((c: number) => c + input.length);
+      // При вводе после @ — обновить подсказки файлов
+      const newBefore = value.slice(0, cursor) + input;
+      const atMatch = newBefore.match(/@([^\s"'|;]*)$/);
+      if (atMatch) {
+        const files = findFiles(atMatch[1]);
+        setFileSuggestions(files);
+        setCmdSuggestions([]);
+        setSuggestIdx(0);
+      } else {
+        setCmdSuggestions([]);
+        setFileSuggestions([]);
+        setSuggestIdx(0);
+      }
     }
   });
 
