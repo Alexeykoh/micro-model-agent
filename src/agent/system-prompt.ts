@@ -94,8 +94,11 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
 
 ## Web Browse (interactive headless browser):
   {"name":"web_browse","arguments":{"action":"navigate","url":"https://example.com"}}
+  {"name":"web_browse","arguments":{"action":"discover"}}
   {"name":"web_browse","arguments":{"action":"click","selector":"button.submit"}}
   {"name":"web_browse","arguments":{"action":"type","selector":"#search","value":"hello"}}
+  {"name":"web_browse","arguments":{"action":"evaluate","value":"document.title"}}
+  {"name":"web_browse","arguments":{"action":"evaluate","value":"JSON.stringify(Array.from(document.querySelectorAll('a[href]')).filter(a => a.href.includes('/product')).slice(0,5).map(a => ({href: a.href, cls: a.closest('div[class]')?.className})))"}}
   {"name":"web_browse","arguments":{"action":"extract","format":"text"}}
   {"name":"web_browse","arguments":{"action":"extract","selector":".content","format":"html"}}
   {"name":"web_browse","arguments":{"action":"screenshot"}}
@@ -103,7 +106,6 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_browse","arguments":{"action":"wait","selector":"#result","timeout":5000}}
   {"name":"web_browse","arguments":{"action":"wait","condition":"document.querySelectorAll('.item').length > 0","timeout":10000}}
   {"name":"web_browse","arguments":{"action":"get_links"}}
-  {"name":"web_browse","arguments":{"action":"evaluate","value":"document.title"}}
   {"name":"web_browse","arguments":{"action":"close"}}
 
 ## Theme tool (theme management):
@@ -244,12 +246,12 @@ const RULES_COMMON = `Rules:
 22. WEB TOOLS STRATEGY:
     a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
     b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    c. When using web_browse:
-       - After navigate, ALWAYS extract the full page (no selector, format="text") to see the structure.
-       - Inspect the output to find real CSS classes/selectors.
-       - THEN extract with specific selectors based on what you found.
-       - If a selector times out, use wait with condition ("document.querySelectorAll('.actual-class').length > 0") to wait for dynamic content.
-    d. NEVER guess CSS selectors — always inspect the actual page HTML first.`;
+    c. When using web_browse — 4-step pattern:
+       Step 1: navigate(url)
+       Step 2: discover → find REAL CSS selectors (use action:"discover", or evaluate to find links/classes)
+       Step 3: evaluate → extract data via JSON (one call, Array.from + map + JSON.stringify)
+       Step 4: write_file → save result
+    d. NEVER guess CSS selectors — always use discover first. extract is LAST RESORT (returns raw HTML, wastes tokens).`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -286,12 +288,12 @@ const RULES_FAST = `Rules:
 22. WEB TOOLS STRATEGY:
     a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
     b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    c. When using web_browse:
-       - After navigate, ALWAYS extract the full page (no selector, format="text") to see the structure.
-       - Inspect the output to find real CSS classes/selectors.
-       - THEN extract with specific selectors based on what you found.
-       - If a selector times out, use wait with condition ("document.querySelectorAll('.actual-class').length > 0") to wait for dynamic content.
-    d. NEVER guess CSS selectors — always inspect the actual page HTML first.`;
+    c. When using web_browse — 4-step pattern:
+       Step 1: navigate(url)
+       Step 2: discover → find REAL CSS selectors (use action:"discover", or evaluate to find links/classes)
+       Step 3: evaluate → extract data via JSON (one call, Array.from + map + JSON.stringify)
+       Step 4: write_file → save result
+    d. NEVER guess CSS selectors — always use discover first. extract is LAST RESORT (returns raw HTML, wastes tokens).`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
