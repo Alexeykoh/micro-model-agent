@@ -298,6 +298,14 @@ const SCENARIOS: Scenario[] = [
       'Создай 5 файлов в папке multi-file-test: math.ts (add/sub/mul/div), string.ts (capitalize/reverse/truncate), db.ts (sqlite3 init + users table), api.ts (express CRUD users), index.ts (экспорт + server start). SQLite+express уже установлены. Сделай план, затем реализуй каждый файл через subagent.',
     ],
   },
+  {
+    name: 'web-scraping',
+    description: 'Парсинг товаров с сайта + поиск в интернете',
+    prompts: [
+      'Спарси 10-15 велосипедов Specialized с https://tvojvelik.by/catalog/velosipedy/specialized/ и запиши результат в файл specialized-bikes.md. Используй 4-step паттерн: navigate → discover → evaluate → write_file.',
+      'Найди в интернете велосипед Specialized ROCKHOPPER SPORT — все что найдешь: характеристики, цены, обзоры. Запиши всё в файл rockhopper-sport.md.',
+    ],
+  },
 ];
 
 // ─── Analysis ─────────────────────────────────────────────
@@ -377,6 +385,23 @@ function analyzeResults(allResults: TestResult[]) {
     const total = results.length;
     const icon = ok === total ? '✅' : '⚠️';
     console.log(`  ${icon} ${name}: ${ok}/${total} OK`);
+  }
+
+  // Web scraping specific checks
+  const webResults = allResults.filter(r => r.scenario === 'web-scraping');
+  if (webResults.length > 0) {
+    console.log('\nWeb scraping verification:');
+    for (const r of webResults) {
+      const usedDiscover = r.toolCalls.includes('discover');
+      const usedWebBrowse = r.toolCalls.includes('web_browse');
+      const usedWebSearch = r.toolCalls.includes('web_search');
+      const usedWriteFile = r.toolCalls.includes('write_file');
+      console.log(`  [${r.input.slice(0, 60)}...]`);
+      console.log(`    web_browse: ${usedWebBrowse ? '✅' : '❌'} | discover: ${usedDiscover ? '✅' : '❌'} | web_search: ${usedWebSearch ? '✅' : '❌'} | write_file: ${usedWriteFile ? '✅' : '❌'}`);
+      if (!usedDiscover && usedWebBrowse) {
+        console.log(`    ⚠️  Модель НЕ использовала discover — угадывала селекторы`);
+      }
+    }
   }
 }
 

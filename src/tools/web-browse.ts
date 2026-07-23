@@ -123,7 +123,51 @@ async function actionNavigate(page: import('playwright').Page, args: Record<stri
   const title = await page.title();
   const finalUrl = page.url();
 
-  return `Navigated to: ${finalUrl}\nTitle: ${title}\nStatus: ${status}`;
+  // Краткая сводка страницы — ссылки + ключевые классы
+  let summary = '';
+  try {
+    const info = await page.evaluate(() => {
+      // Ссылки (до 10)
+      const links = Array.from(document.querySelectorAll('a[href]'))
+        .filter((a): a is HTMLAnchorElement => a instanceof HTMLAnchorElement)
+        .filter(a => !a.href.startsWith('javascript:') && !a.href.startsWith('#'))
+        .slice(0, 10)
+        .map(a => ({
+          text: (a.textContent ?? '').trim().substring(0, 60),
+          href: a.href,
+          parentClass: a.closest('div[class], li[class], article[class], section[class]')?.className?.substring(0, 40) ?? '',
+        }));
+
+      // Ключевые классы (уникальные, содержат слова-маркеры)
+      const allElements = document.querySelectorAll('*');
+      const classSet = new Set<string>();
+      for (const el of allElements) {
+        for (const cls of el.classList) {
+          if (cls.length > 2 && cls.length < 50) classSet.add(cls);
+        }
+      }
+      const classes = Array.from(classSet).sort();
+
+      return { links, classes, totalElements: allElements.length };
+    }, );
+
+    if (info.links.length > 0 || info.classes.length > 0) {
+      summary = `\n\nPage summary (${info.totalElements} elements):`;
+      if (info.links.length > 0) {
+        summary += `\nLinks (${info.links.length} shown):`;
+        for (const link of info.links.slice(0, 8)) {
+          summary += `\n  "${link.text || '(no text)'}" → ${link.href}`;
+          if (link.parentClass) summary += ` [${link.parentClass}]`;
+        }
+      }
+      if (info.classes.length > 0) {
+        summary += `\nKey classes: ${info.classes.slice(0, 15).join(', ')}${info.classes.length > 15 ? ` (+${info.classes.length - 15} more)` : ''}`;
+      }
+      summary += `\nUse discover for full structure, or extract to get content.`;
+    }
+  } catch { /* ignore — summary is optional */ }
+
+  return `Navigated to: ${finalUrl}\nTitle: ${title}\nStatus: ${status}${summary}`;
 }
 
 async function actionClick(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
@@ -348,9 +392,23 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
   if (!code) return 'Error: value (JS code) is required for evaluate';
 
   try {
+    // Двойной eval() в page.evaluate():
+    // 1. Пробуем eval(code) напрямую — работает для выражений (document.title)
+    // 2. Если SyntaxError из-за return — оборачиваем в IIFE: (function(){ code })()
+    // Это позволяет модели использовать И выражения, И return-стейтменты.
     const result = await page.evaluate((script) => {
       // eslint-disable-next-line no-eval
-      const raw = eval(script);
+      let raw;
+      try {
+        raw = eval(script);
+      } catch (e: any) {
+        if (e instanceof SyntaxError && /\breturn\b/.test(script)) {
+          // Оборачиваем в IIFE чтобы return работал
+          raw = eval('(function(){ ' + script + ' })()');
+        } else {
+          throw e;
+        }
+      }
 
       // Автоматически конвертируем NodeList/HTMLCollection в Array для JSON
       if (raw instanceof NodeList || raw instanceof HTMLCollection) {
@@ -369,8 +427,16 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
     if (msg.includes('slice is not a function')) {
       return `Error: ${msg}\nHint: use Array.from(document.querySelectorAll(...)).slice(...) instead of document.querySelectorAll(...).slice(...)`;
     }
+    if (msg.includes('SyntaxError') && msg.includes('return')) {
+      return `Error: ${msg}\nHint: "return" works but code must be valid JS inside a function body. Check for syntax errors in your code.\n  Example: return document.title\n  Example: return Array.from(document.querySelectorAll('a')).map(a => a.href)`;
+    }
     if (msg.includes('SyntaxError')) {
-      return `Error: JS syntax error — ${msg}\nHint: check parentheses, quotes, and semicolons in your JS code`;
+      return `Error: JS syntax error — ${msg}\nHint: check parentheses, quotes, and semicolons. evaluate runs JS in browser context.`;
+    }
+    // Ошибки "null/undefined" — скорее всего селектор не найден
+    if (msg.includes('Cannot read propert') || msg.includes('is null') || msg.includes('is undefined')
+        || msg.includes('null') || msg.includes('undefined')) {
+      return `Error: ${msg}\nHint: A selector likely returned null. Use web_browse(action:"discover") to find real CSS selectors on this page, then retry with the correct selector.`;
     }
     return `Error: evaluate failed: ${msg}`;
   }

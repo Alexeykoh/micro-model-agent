@@ -122,6 +122,21 @@ export function buildSpecialistTask(
   attemptCount: number,
 ): string {
   const argsStr = JSON.stringify(toolArgs, null, 2);
+
+  // Специфичные подсказки для web_browse evaluate
+  let webHints = '';
+  if (toolName === 'web_browse' && String(toolArgs?.action) === 'evaluate') {
+    const code = String(toolArgs?.value ?? toolArgs?.code ?? '');
+    webHints = [
+      '',
+      'web_browse evaluate: "value" is JS code executed in browser context.',
+      '- Expressions work: document.title, document.querySelectorAll(".item").length',
+      '- return statements work: return document.title',
+      '- Multi-line with return: return Array.from(document.querySelectorAll("a")).map(a => a.href)',
+      `- Current code that failed: ${code.slice(0, 300)}`,
+    ].join('\n');
+  }
+
   return [
     `The tool "${toolName}" has failed ${attemptCount} times with the same error while working on: "${userTask.slice(0, 200)}"`,
     '',
@@ -131,6 +146,7 @@ export function buildSpecialistTask(
     '',
     `Error output:`,
     `  ${errorOutput.slice(0, 500)}`,
+    webHints,
     '',
     `Your task: Diagnose WHY this tool call fails and FIX the underlying problem.`,
     `  - Read the relevant files to understand the actual state`,

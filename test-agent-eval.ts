@@ -75,6 +75,14 @@ const SCENARIOS = [
       'Create 3 files in multi-file-test: math.ts (add/sub/mul), string.ts (capitalize/reverse), index.ts (re-exports). Make a plan, then implement each file via subagent.',
     ],
   },
+  {
+    name: 'web-scraping',
+    description: 'Parse products from site + search the internet',
+    prompts: [
+      'Scrape 10-15 Specialized bicycles from https://tvojvelik.by/catalog/velosipedy/specialized/ and save to specialized-bikes.md. Use 4-step pattern: navigate → discover → evaluate → write_file.',
+      'Search the internet for Specialized ROCKHOPPER SPORT bicycle — all info: specs, prices, reviews. Save everything to rockhopper-sport.md.',
+    ],
+  },
 ];
 
 // ─── Renderer that captures EVERYTHING ────────────────────
@@ -452,6 +460,30 @@ function gradeScenarioResults(name: string, results: any[]) {
   if (name === 'subagent-heavy' && !hasSubagent) {
     grade = 'D';
     issues.push('Did not use subagents');
+  }
+
+  // Web scraping specific grading
+  if (name === 'web-scraping') {
+    const allToolCalls = results.flatMap(r => r.toolCalls);
+    const usedDiscover = allToolCalls.includes('discover');
+    const usedWebBrowse = allToolCalls.includes('web_browse');
+    const usedWebSearch = allToolCalls.includes('web_search');
+    const usedWriteFile = allToolCalls.includes('write_file');
+
+    console.log(`\n  🔍 Web scraping details:`);
+    console.log(`     discover used: ${usedDiscover ? '✅' : '❌'}`);
+    console.log(`     web_browse used: ${usedWebBrowse ? '✅' : '❌'}`);
+    console.log(`     web_search used: ${usedWebSearch ? '✅' : '❌'}`);
+    console.log(`     write_file used: ${usedWriteFile ? '✅' : '❌'}`);
+
+    if (!usedDiscover && usedWebBrowse) {
+      issues.push('Did not use discover — guessed selectors');
+      if (grade === 'A') grade = 'B';
+    }
+    if (!usedWriteFile) {
+      issues.push('Did not write output files');
+      grade = 'D';
+    }
   }
 
   console.log(`\n  🏆 Scenario Grade: ${grade}`);
