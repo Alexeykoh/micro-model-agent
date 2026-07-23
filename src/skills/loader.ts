@@ -210,6 +210,20 @@ let skillIndexCache: Map<string, string[]> | null = null;
 /**
  * Извлекает ключевые слова из скилла: сегменты имени + слова из описания (frontmatter).
  */
+/**
+ * Разбивает текст на слова через Intl.Segmenter — корректно для всех языков.
+ */
+function splitWords(text: string): string[] {
+  const segmenter = new Intl.Segmenter('any', { granularity: 'word' });
+  const words: string[] = [];
+  for (const { segment, isWordLike } of segmenter.segment(text.toLowerCase())) {
+    if (isWordLike && segment.length > 1) {
+      words.push(segment);
+    }
+  }
+  return words;
+}
+
 function getSkillKeywords(name: string, cwd: string): string[] {
   const keywords = new Set<string>();
 
@@ -224,8 +238,7 @@ function getSkillKeywords(name: string, cwd: string): string[] {
       const descLine = fmMatch[1].split('\n').find(l => l.startsWith('description:'));
       if (descLine) {
         const desc = descLine.replace(/^description:\s*"?([^"]*)"?\s*$/, '$1').trim();
-        const words = desc.toLowerCase().match(/\b[a-z]{3,}\b/g) || [];
-        for (const w of words) keywords.add(w);
+        for (const w of splitWords(desc)) keywords.add(w);
       }
     }
   }
@@ -252,15 +265,10 @@ function buildSkillIndex(cwd: string): Map<string, string[]> {
 /**
  * Извлекает поисковые термы из текста — просто слова, никакой лингвистики.
  * Матчинг работает по совпадению слов в одном языке.
- * Для английских запросов совпадает с английскими описаниями скиллов.
+ * Поддерживает все языки через Intl.Segmenter.
  */
 function extractSearchTerms(text: string): Set<string> {
-  const terms = new Set<string>();
-  const words = text.toLowerCase().match(/[\wа-яё]+/g) || [];
-  for (const word of words) {
-    terms.add(word);
-  }
-  return terms;
+  return new Set(splitWords(text));
 }
 
 /**

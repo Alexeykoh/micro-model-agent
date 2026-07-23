@@ -1,6 +1,6 @@
 {
   "name": "micro-models-agent",
-  "version": "0.2.78",
+  "version": "0.2.79",
   "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context)",
   "type": "module",
   "bin": {
