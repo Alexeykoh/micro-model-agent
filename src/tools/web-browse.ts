@@ -604,10 +604,9 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
   if (!code) return 'Error: value (JS code) is required for evaluate';
 
   try {
-    // Двойной eval() в page.evaluate():
-    // 1. Пробуем eval(code) напрямую — работает для выражений (document.title)
-    // 2. Если SyntaxError из-за return — оборачиваем в IIFE: (function(){ code })()
-    // Это позволяет модели использовать И выражения, И return-стейтменты.
+    // eval() в контексте страницы с IIFE-fallback для return-стейтментов.
+    // Автоматически подменяет querySelectorAll чтобы возвращал Array (а не NodeList).
+    // Это решает проблему "slice is not a function" для маленьких моделей.
     const result = await page.evaluate((script) => {
       // eslint-disable-next-line no-eval
       let raw;
@@ -617,6 +616,17 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
         if (e instanceof SyntaxError && /\breturn\b/.test(script)) {
           // Оборачиваем в IIFE чтобы return работал
           raw = eval('(function(){ ' + script + ' })()');
+        } else if (e instanceof TypeError && /slice is not a function/i.test(e.message)) {
+          // querySelectorAll вернул NodeList — подменяем querySelectorAll чтобы возвращал Array
+          const wrapped = `
+            (function(){
+              var _origQSA = document.querySelectorAll.bind(document);
+              document.querySelectorAll = function(s){ return Array.from(_origQSA(s)); };
+              var _origQE = document.querySelector.bind(document);
+              ${script}
+            })()
+          `;
+          raw = eval(wrapped);
         } else {
           throw e;
         }
@@ -637,7 +647,7 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
     const msg = e.message ?? String(e);
     // Подсказка при типичных ошибках
     if (msg.includes('slice is not a function')) {
-      return `Error: ${msg}\nHint: use Array.from(document.querySelectorAll(...)).slice(...) instead of document.querySelectorAll(...).slice(...)`;
+      return `Error: ${msg}\nHint: querySelectorAll returns NodeList, not Array. Use Array.from():\n  WRONG: document.querySelectorAll('.item').slice(0,5)\n  RIGHT: Array.from(document.querySelectorAll('.item')).slice(0,5)\n  RIGHT: [...document.querySelectorAll('.item')].slice(0,5)`;
     }
     if (msg.includes('SyntaxError') && msg.includes('return')) {
       return `Error: ${msg}\nHint: "return" works but code must be valid JS inside a function body. Check for syntax errors in your code.\n  Example: return document.title\n  Example: return Array.from(document.querySelectorAll('a')).map(a => a.href)`;
