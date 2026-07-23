@@ -26,7 +26,7 @@ import { loadAllPluginsWithInfo } from '../plugins/loader.js';
  * - Навигация: exit, quit, help, clear, new, stop
  * - Файлы: read, write, edit, find, search
  * - Git: git
- * - Агент: memory, skill, sessions, resume, save
+ * - Агент: memory, skill, tools, sessions, resume, save
  * - Проект: init, index
  * - UI: theme, profile, mode
  * - Экспорт: export
@@ -81,6 +81,7 @@ export function getSlashCommands(): SlashCommand[] {
     { name: 'index', description: 'index management', handler: cmdIndex },
     { name: 'theme', description: 'theme management (list/switch/show/install/create/remove)', handler: cmdTheme },
     { name: 'profile', description: 'show/edit user profile', handler: cmdProfile },
+    { name: 'tools', description: 'list available agent tools', handler: cmdTools },
     { name: 'export', description: 'export session (normal or debug)', handler: cmdExport },
   ];
 }
@@ -128,6 +129,7 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   /memory           — memory management (show/add/search/remove/export)
   /skill            — list installed skills
   /plugins          — list plugins
+  /tools            — list agent tools
   /sessions         — list saved sessions
   /resume <id>      — resume a session
   /save [name]      — save current session
@@ -431,6 +433,14 @@ async function cmdPlugins(_args: string, ctx: CommandContext): Promise<void> {
     const version = p.version ? ` v${p.version}` : '';
     const status = p.active ? 'active' : 'inactive';
     ctx.renderer.writeLine(`    ${p.name}${version}  [${p.source}]  ${status}`);
+  }
+}
+
+function cmdTools(_args: string, ctx: CommandContext): void {
+  const defs = ctx.registry.getDefinitions();
+  ctx.renderer.writeInfo(`  Available tools (${defs.length}):`);
+  for (const d of defs) {
+    ctx.renderer.writeLine(`    ${d.function.name}  — ${d.function.description.split('\n')[0]}`);
   }
 }
 
