@@ -98,6 +98,183 @@ async function checkIdle(): Promise<void> {
 
 // ─── Actions ─────────────────────────────────────────────
 
+/**
+ * Универсальный scrape: navigate + auto-scroll + discover + извлечение данных.
+ * Одним вызовом代替ует 4-шаговый паттерн (navigate → discover → evaluate → write_file).
+ *
+ * Алгоритм:
+ * 1. Navigate (если страница не активна)
+ * 2. Auto-scroll для lazy-контента
+ * 3. Discover — найти элементы по паттерну классов
+ * 4. Извлечь данные из каждого элемента (текст, ссылки, дочерние элементы)
+ * 5. Вернуть структурированный JSON
+ */
+async function actionScrape(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
+  const url = String(args.url ?? '').trim();
+  const pattern = String(args.pattern ?? 'product|card|item|goods|bike|velosiped').trim();
+  const maxItems = Math.min(Number(args.maxItems) || 10, 50);
+  const extractFields = String(args.fields ?? '').trim(); // e.g. "title,price,href"
+
+  // Шаг 1: Navigate (если нет активной страницы или указан URL)
+  if (url) {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return 'Error: URL must start with http:// or https://';
+    }
+    const navResult = await actionNavigate(page, args);
+    if (navResult.startsWith('Error')) return navResult;
+  }
+
+  if (!page || page.isClosed()) {
+    return 'Error: No active page. Provide a URL to navigate to.';
+  }
+
+  // Шаг 2: Auto-scroll (если не был сделан в navigate)
+  try {
+    const currentScroll = await page.evaluate(() => window.scrollY);
+    if (currentScroll === 0) {
+      // Navigate уже скроллил, но если мы здесь — скроллим ещё раз
+      let prevCount = await page.evaluate(() => document.querySelectorAll('*').length);
+      for (let i = 0; i < 5; i++) {
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(1500);
+        const newCount = await page.evaluate(() => document.querySelectorAll('*').length);
+        if (newCount === prevCount) break;
+        prevCount = newCount;
+      }
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
+    }
+  } catch { /* ignore */ }
+
+  // Шаг 3: Discover — найти элементы по паттерну
+  const patternRegex = new RegExp(pattern, 'i');
+  const scrapeResult = await page.evaluate(({ pat, max }) => {
+    const regex = new RegExp(pat, 'i');
+
+    // Собираем все элементы с классами
+    const allElements = Array.from(document.querySelectorAll('*'));
+    const candidates: { el: Element; score: number; className: string }[] = [];
+
+    for (const el of allElements) {
+      if (!el.className || typeof el.className !== 'string') continue;
+      const cls = el.className;
+      // Считаем совпадения паттерна в классах
+      const matches = cls.match(regex);
+      if (!matches) continue;
+      // Оценка: количество совпадений + длина текста (продукты обычно имеют текст)
+      const text = (el.textContent ?? '').trim();
+      const score = matches.length * 10 + Math.min(text.length / 10, 20);
+      candidates.push({ el, score, className: cls });
+    }
+
+    // Сортируем по score, берём топ
+    candidates.sort((a, b) => b.score - a.score);
+
+    // Группируем похожие элементы (одинаковый тег + похожие классы)
+    const groups: { tag: string; className: string; count: number; elements: Element[] }[] = [];
+    for (const c of candidates.slice(0, max * 3)) {
+      const tag = c.el.tagName;
+      const existing = groups.find(g => g.tag === tag && g.className === c.className);
+      if (existing) {
+        existing.count++;
+        existing.elements.push(c.el);
+      } else {
+        groups.push({ tag, className: c.className, count: 1, elements: [c.el] });
+      }
+    }
+
+    // Берём группу с наибольшим количеством элементов (это карточки товаров)
+    groups.sort((a, b) => b.count - a.count);
+    const bestGroup = groups[0];
+    if (!bestGroup || bestGroup.count < 2) {
+      // Нет подходящих групп — возвращаем все кандидаты как есть
+      return {
+        found: false,
+        message: `No elements matching pattern "${pat}" found. Page classes: ${candidates.slice(0, 20).map(c => c.className).join(', ')}`,
+        items: [],
+      };
+    }
+
+    // Извлекаем данные из элементов лучшей группы
+    const items = bestGroup.elements.slice(0, max).map(el => {
+      const data: Record<string, string> = {};
+
+      // Текст элемента
+      const fullText = (el.textContent ?? '').trim().substring(0, 500);
+      data.text = fullText;
+
+      // Ссылки внутри элемента
+      const links = Array.from(el.querySelectorAll('a[href]'))
+        .filter((a): a is HTMLAnchorElement => a instanceof HTMLAnchorElement)
+        .map(a => ({ text: (a.textContent ?? '').trim().substring(0, 100), href: a.href }));
+      if (links.length > 0) data.links = JSON.stringify(links);
+
+      // Изображения
+      const imgs = Array.from(el.querySelectorAll('img[src]'))
+        .map(img => (img as HTMLImageElement).src)
+        .slice(0, 3);
+      if (imgs.length > 0) data.images = JSON.stringify(imgs);
+
+      // Дочерние элементы с有意义ными классами
+      const children = Array.from(el.querySelectorAll('[class]'))
+        .filter(c => c !== el && c.className && typeof c.className === 'string')
+        .slice(0, 10)
+        .map(c => ({
+          tag: c.tagName,
+          class: (c.className as string).substring(0, 60),
+          text: (c.textContent ?? '').trim().substring(0, 100),
+        }));
+      if (children.length > 0) data.children = JSON.stringify(children);
+
+      return data;
+    });
+
+    return {
+      found: true,
+      groupTag: bestGroup.tag,
+      groupClass: bestGroup.className,
+      totalInGroup: bestGroup.count,
+      items,
+    };
+  }, { pat: pattern, max: maxItems });
+
+  if (!scrapeResult.found) {
+    return `Scrape: ${scrapeResult.message}\n\nTry a different pattern or use discover to see page structure.`;
+  }
+
+  // Форматируем вывод
+  let output = `Scrape results: ${scrapeResult.totalInGroup} items found (showing ${scrapeResult.items.length})\n`;
+  output += `Selector: <${scrapeResult.groupTag} class="${scrapeResult.groupClass}">\n\n`;
+
+  for (let i = 0; i < scrapeResult.items.length; i++) {
+    const item = scrapeResult.items[i];
+    output += `--- Item ${i + 1} ---\n`;
+    if (item.text) output += `Text: ${item.text}\n`;
+    if (item.links) {
+      const links = JSON.parse(item.links);
+      for (const link of links) {
+        output += `Link: ${link.text} → ${link.href}\n`;
+      }
+    }
+    if (item.images) {
+      const imgs = JSON.parse(item.images);
+      for (const img of imgs) {
+        output += `Image: ${img}\n`;
+      }
+    }
+    if (item.children) {
+      const children = JSON.parse(item.children);
+      for (const child of children) {
+        output += `  <${child.tag} class="${child.class}"> ${child.text}\n`;
+      }
+    }
+    output += '\n';
+  }
+
+  return output;
+}
+
 async function actionNavigate(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
   const url = String(args.url ?? '').trim();
   if (!url) return 'Error: url is required for navigate';
@@ -489,7 +666,7 @@ export const webBrowseDefinition: ToolDefinition = {
       properties: {
         action: {
           type: 'string',
-          enum: ['navigate', 'click', 'type', 'extract', 'screenshot', 'scroll', 'wait', 'get_links', 'evaluate', 'discover', 'close'],
+          enum: ['navigate', 'click', 'type', 'extract', 'screenshot', 'scroll', 'wait', 'get_links', 'evaluate', 'discover', 'scrape', 'close'],
           description: 'Action to perform on the page',
         },
         url: { type: 'string', description: 'URL to navigate to (for navigate action)' },
@@ -500,6 +677,9 @@ export const webBrowseDefinition: ToolDefinition = {
         maxChars: { type: 'number', description: 'Max characters to extract (default: 10000)' },
         timeout: { type: 'number', description: 'Timeout in ms for wait action (default: 5000)' },
         condition: { type: 'string', description: 'JS expression to wait for (e.g. "document.querySelectorAll(\\\'.item\\\').length > 0") — for wait action only' },
+        pattern: { type: 'string', description: 'Regex pattern to match element classes (for scrape, default: "product|card|item|goods")' },
+        maxItems: { type: 'number', description: 'Max items to scrape (default: 10, max: 50)' },
+        fields: { type: 'string', description: 'Comma-separated fields to extract (for scrape, e.g. "title,price,href")' },
       },
       required: ['action'],
     },
@@ -542,6 +722,18 @@ export const webBrowseHandler: ToolHandler = {
         return { stdout: result, stderr: '', exitCode: 0, truncated: false };
       }
 
+      // Scrape тоже может навигировать сам (если указан URL)
+      if (action === 'scrape') {
+        const url = String(args.url ?? '').trim();
+        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+          return { stdout: '', stderr: 'URL must start with http:// or https://', exitCode: 1, truncated: false };
+        }
+        const page = await ensureBrowser();
+        const result = await actionScrape(page, args);
+        const exitCode = result.startsWith('Error') ? 1 : 0;
+        return { stdout: result, stderr: '', exitCode, truncated: false };
+      }
+
       // Все остальные action'ы требуют активную страницу
       if (!state.page || state.page.isClosed()) {
         return {
@@ -563,6 +755,7 @@ export const webBrowseHandler: ToolHandler = {
         case 'get_links': result = await actionGetLinks(state.page, args); break;
         case 'discover':  result = await actionDiscover(state.page, args); break;
         case 'evaluate':  result = await actionEvaluate(state.page, args); break;
+        case 'scrape':    result = await actionScrape(state.page, args); break;
         default:
           return { stdout: '', stderr: `Unknown action: ${action}`, exitCode: 1, truncated: false };
       }

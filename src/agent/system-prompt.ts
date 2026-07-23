@@ -108,6 +108,13 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_browse","arguments":{"action":"get_links"}}
   {"name":"web_browse","arguments":{"action":"close"}}
 
+## Web Scrape (one-call product/card extraction):
+  Use for: parsing products, cards, items, listings from any website.
+  Instead of navigate → discover → evaluate → write_file (4 calls), use ONE call:
+  {"name":"web_browse","arguments":{"action":"scrape","url":"https://example.com/catalog","pattern":"product|card|item","maxItems":10}}
+  {"name":"web_browse","arguments":{"action":"scrape","url":"https://shop.com/bikes","pattern":"bike|velosiped","maxItems":15}}
+  Parameters: url (required), pattern (regex for class matching, default: "product|card|item|goods"), maxItems (default: 10)
+
 ## Theme tool (theme management):
   {"name":"theme","arguments":{"action":"list"}}
   {"name":"theme","arguments":{"action":"switch","name":"dark"}}
@@ -244,14 +251,15 @@ const RULES_COMMON = `Rules:
     Example: subagent({task:"Create ONLY src/api.ts with Express CRUD", existingFiles:"src/db.ts,src/types.ts"})
     The subagent will see the project context and should NOT create files beyond what's in the task.
 22. WEB TOOLS STRATEGY:
-    a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
-    b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    c. When using web_browse — 4-step pattern:
+    a. For scraping products/cards/items: use web_browse(action:"scrape") — ONE call does everything.
+    b. For any other URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
+    c. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
+    d. When using web_browse manually — 4-step pattern:
        Step 1: navigate(url)
-       Step 2: discover → find REAL CSS selectors (use action:"discover", or evaluate to find links/classes)
-       Step 3: evaluate → extract data via JSON (one call, Array.from + map + JSON.stringify)
+       Step 2: discover → find REAL CSS selectors
+       Step 3: evaluate → extract data via JSON
        Step 4: write_file → save result
-    d. NEVER guess CSS selectors — always use discover first. extract is LAST RESORT (returns raw HTML, wastes tokens).`;
+    e. NEVER guess CSS selectors — always use discover or scrape first.`;
 
 const RULES_FAST = `Rules:
 1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
@@ -286,14 +294,15 @@ const RULES_FAST = `Rules:
 18. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
 19. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task.     Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})
 22. WEB TOOLS STRATEGY:
-    a. For any URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
-    b. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    c. When using web_browse — 4-step pattern:
+    a. For scraping products/cards/items: use web_browse(action:"scrape") — ONE call does everything.
+    b. For any other URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
+    c. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
+    d. When using web_browse manually — 4-step pattern:
        Step 1: navigate(url)
-       Step 2: discover → find REAL CSS selectors (use action:"discover", or evaluate to find links/classes)
-       Step 3: evaluate → extract data via JSON (one call, Array.from + map + JSON.stringify)
+       Step 2: discover → find REAL CSS selectors
+       Step 3: evaluate → extract data via JSON
        Step 4: write_file → save result
-    d. NEVER guess CSS selectors — always use discover first. extract is LAST RESORT (returns raw HTML, wastes tokens).`;
+    e. NEVER guess CSS selectors — always use discover or scrape first.`;
 
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
