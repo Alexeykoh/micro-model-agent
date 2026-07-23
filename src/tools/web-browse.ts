@@ -119,6 +119,41 @@ async function actionNavigate(page: import('playwright').Page, args: Record<stri
   // Доп. ожидание для тяжёлых JS-страниц
   await page.waitForTimeout(2000);
 
+  // Универсальный автоскролл: скроллим пока DOM стабилизируется
+  // (нет новых элементов после скролла) или до лимита (8 скроллов).
+  // Покрывает: lazy loading, infinite scroll, AJAX-каталоги.
+  try {
+    let prevCount = await page.evaluate(() => document.querySelectorAll('*').length);
+    const maxScrolls = 8;
+    let scrollsDone = 0;
+
+    for (let i = 0; i < maxScrolls; i++) {
+      // Скроллим вниз на высоту вьюпорта
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      scrollsDone++;
+
+      // Ждём загрузки контента (networkidle + фиксированная пауза)
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+
+      // Проверяем стабилизацию DOM
+      const newCount = await page.evaluate(() => document.querySelectorAll('*').length);
+      if (newCount === prevCount) {
+        // DOM стабилизировался — пробуем ещё раз для надёжности
+        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+        await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(1000);
+        const finalCount = await page.evaluate(() => document.querySelectorAll('*').length);
+        if (finalCount === prevCount) break; // Стабильно — выходим
+      }
+      prevCount = newCount;
+    }
+
+    // Вернуться наверх
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(500);
+  } catch { /* ignore — scroll is best-effort */ }
+
   const status = response?.status() ?? 0;
   const title = await page.title();
   const finalUrl = page.url();
