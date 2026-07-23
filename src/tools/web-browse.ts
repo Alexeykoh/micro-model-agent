@@ -110,10 +110,14 @@ async function actionNavigate(page: import('playwright').Page, args: Record<stri
     timeout: NAV_TIMEOUT_MS,
   });
 
-  // Дожидаемся появления контента в body (для динамических страниц)
+  // Ждём появления body
   await page.waitForSelector('body', { timeout: 5000 }).catch(() => {});
-  // Дополнительное ожидание для JS-рендеринга
-  await page.waitForTimeout(1000);
+
+  // Ждём networkidle для AJAX-страниц (макс 8 сек)
+  await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+
+  // Доп. ожидание для тяжёлых JS-страниц
+  await page.waitForTimeout(2000);
 
   const status = response?.status() ?? 0;
   const title = await page.title();
@@ -275,6 +279,47 @@ async function actionWait(page: import('playwright').Page, args: Record<string, 
   }
 }
 
+async function actionDiscover(page: import('playwright').Page, _args: Record<string, unknown>): Promise<string> {
+  const result = await page.evaluate(() => {
+    // Все уникальные CSS-классы на странице
+    const allElements = document.querySelectorAll('*');
+    const classSet = new Set<string>();
+    for (const el of allElements) {
+      for (const cls of el.classList) {
+        if (cls.length > 1 && cls.length < 60) classSet.add(cls);
+      }
+    }
+    const classes = Array.from(classSet).sort();
+
+    // Все ссылки (до 50)
+    const links = Array.from(document.querySelectorAll('a[href]'))
+      .filter((a): a is HTMLAnchorElement => a instanceof HTMLAnchorElement)
+      .filter(a => !a.href.startsWith('javascript:') && !a.href.startsWith('#'))
+      .slice(0, 50)
+      .map(a => ({
+        text: (a.textContent ?? '').trim().substring(0, 100),
+        href: a.href,
+        parentClass: a.closest('div[class], li[class], article[class], section[class]')?.className ?? '',
+      }));
+
+    return { classes, links };
+  });
+
+  let output = `=== DISCOVER: ${result.classes.length} unique classes, ${result.links.length} links ===\n\n`;
+
+  if (result.links.length > 0) {
+    output += '--- Links (first 20) ---\n';
+    for (const link of result.links.slice(0, 20)) {
+      output += `  "${link.text || '(no text)'}" → ${link.href}\n  parent: ${link.parentClass}\n`;
+    }
+  }
+
+  output += `\n--- All classes (${result.classes.length}) ---\n`;
+  output += result.classes.join(', ');
+
+  return output;
+}
+
 async function actionGetLinks(page: import('playwright').Page, _args: Record<string, unknown>): Promise<string> {
   const links = await page.$$eval('a[href]', (anchors) =>
     anchors.map((a) => ({
@@ -305,7 +350,13 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
   try {
     const result = await page.evaluate((script) => {
       // eslint-disable-next-line no-eval
-      return eval(script);
+      const raw = eval(script);
+
+      // Автоматически конвертируем NodeList/HTMLCollection в Array для JSON
+      if (raw instanceof NodeList || raw instanceof HTMLCollection) {
+        return Array.from(raw);
+      }
+      return raw;
     }, code);
 
     if (result === undefined) return '(undefined)';
@@ -313,7 +364,15 @@ async function actionEvaluate(page: import('playwright').Page, args: Record<stri
     if (typeof result === 'object') return JSON.stringify(result, null, 2);
     return String(result);
   } catch (e: any) {
-    return `Error: evaluate failed: ${e.message}`;
+    const msg = e.message ?? String(e);
+    // Подсказка при типичных ошибках
+    if (msg.includes('slice is not a function')) {
+      return `Error: ${msg}\nHint: use Array.from(document.querySelectorAll(...)).slice(...) instead of document.querySelectorAll(...).slice(...)`;
+    }
+    if (msg.includes('SyntaxError')) {
+      return `Error: JS syntax error — ${msg}\nHint: check parentheses, quotes, and semicolons in your JS code`;
+    }
+    return `Error: evaluate failed: ${msg}`;
   }
 }
 
@@ -329,7 +388,7 @@ export const webBrowseDefinition: ToolDefinition = {
       properties: {
         action: {
           type: 'string',
-          enum: ['navigate', 'click', 'type', 'extract', 'screenshot', 'scroll', 'wait', 'get_links', 'evaluate', 'close'],
+          enum: ['navigate', 'click', 'type', 'extract', 'screenshot', 'scroll', 'wait', 'get_links', 'evaluate', 'discover', 'close'],
           description: 'Action to perform on the page',
         },
         url: { type: 'string', description: 'URL to navigate to (for navigate action)' },
@@ -401,6 +460,7 @@ export const webBrowseHandler: ToolHandler = {
         case 'scroll':    result = await actionScroll(state.page, args); break;
         case 'wait':      result = await actionWait(state.page, args); break;
         case 'get_links': result = await actionGetLinks(state.page, args); break;
+        case 'discover':  result = await actionDiscover(state.page, args); break;
         case 'evaluate':  result = await actionEvaluate(state.page, args); break;
         default:
           return { stdout: '', stderr: `Unknown action: ${action}`, exitCode: 1, truncated: false };

@@ -1201,9 +1201,15 @@ export async function runAgentLoop(
 
         // ── Escalation: hint / strategy switch / block ──
         if (errorCount > specialistCfg.triggerThreshold) {
+          // Веб-специфичные подсказки
+          let webHint = '';
+          if (parsed.name === 'web_browse' && String(parsed.arguments?.action) === 'evaluate') {
+            webHint = ' For web scraping: use web_browse(action:"discover") to find real CSS selectors, or web_browse(action:"get_links") to see all links, or web_browse(action:"extract", format:"html") to inspect the page structure.';
+          }
+
           const msg = errorCount === specialistCfg.triggerThreshold + 1
-            ? `[System: Tool "${parsed.name}" failed with the SAME error ${errorCount} times. Read the error message carefully. The input is likely wrong — try a completely different approach, or use subagent for a fresh context.]`
-            : `[System: Tool "${parsed.name}" failed ${errorCount} times with the same error. STOP. Do NOT retry the same call. Use subagent(task="...") for a fresh context, or tell the user you're stuck.]`;
+            ? `[System: Tool "${parsed.name}" failed with the SAME error ${errorCount} times. Read the error message carefully. The input is likely wrong — try a completely different approach, or use subagent for a fresh context.]${webHint}`
+            : `[System: Tool "${parsed.name}" failed ${errorCount} times with the same error. STOP. Do NOT retry the same call. Use subagent(task="...") for a fresh context, or tell the user you're stuck.]${webHint}`;
           messages.push({ role: 'user', content: msg });
           if (!quiet) renderer?.writeWarning(`  [error escalation: ${parsed.name} failed ${errorCount} times]`);
         }

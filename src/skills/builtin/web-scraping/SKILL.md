@@ -1,75 +1,127 @@
 ---
 name: web-scraping
-description: Web scraping and data extraction using headless browser (Playwright) and HTTP fetch. Use for parsing product catalogs, extracting structured data from websites, scraping articles, tables, and any web content. Handles dynamic SPA pages, authentication (cookies/tokens), anti-bot measures, lazy loading. Trigger on mentions of "parse", "scrape", "extract data from website", "парсинг", "спарсить", "вытасти данные с сайта".
+description: Web scraping and data extraction using headless browser (Playwright) and HTTP fetch. Use for parsing product catalogs, extracting structured data from websites, scraping articles, tables, and any web content. Handles dynamic SPA pages, authentication (cookies/tokens), anti-bot measures, lazy loading. Trigger on mentions of "parse", "scrape", "extract data from website".
 ---
 
 # Web Scraping & Data Extraction
 
-高效的 web-парсинг через headless browser (Playwright) и HTTP fetch. Минимум ходов — максимум данных.
+Efficient web scraping via headless browser (Playwright) and HTTP fetch. Minimal turns — maximum data.
 
-## Core Rule: 3-Step Pattern
+## Core Rule: 4-Step Pattern
 
-Любая задача парсинга сводится к 3 шагам:
+Every scraping task reduces to 4 steps:
 
 ```
-Step 1: navigate → открыть страницу
-Step 2: evaluate  → извлечь данные через JS
-Step 3: write_file → сохранить результат
+Step 1: navigate  → open the page
+Step 2: discover  → find REAL CSS selectors on the page
+Step 3: evaluate  → extract data via JS
+Step 4: write_file → save the result
 ```
 
-**Никогда не используйте** extract без предварительного evaluate. extract возвращает сырой HTML/text — вы тратите токены на обработку того, что JavaScript делает за 1 строку.
+**Step 2 (discover) is MANDATORY.** Never guess selectors — look at the actual HTML.
+
+**Never use** extract without a prior evaluate. Extract returns raw HTML/text — you spend tokens on processing what JavaScript does in 1 line.
 
 ## Decision: web_fetch vs web_browse
 
 ```
-web_fetch(url)          — простой GET, нет JS-рендеринга, нет кук/авторизации
-web_browse(navigate)    — нужен JS, куки, авторизация, динамический контент
+web_fetch(url)          — simple GET, no JS rendering, no cookies/auth
+web_browse(navigate)    — need JS, cookies, auth, dynamic content
 ```
 
-**Правило**: если сайт — SPA (React/Vue/Angular) или требует куки/авторизации → **всегда web_browse**. web_fetch вернёт пустой HTML.
+**Rule**: if the site is SPA (React/Vue/Angular) or requires cookies/auth → **always web_browse**. web_fetch will return empty HTML.
 
 ## Playwright: Key Facts
 
-1. **Stateful session**: `navigate` открывает страницу, все последующие action'ы работают с ней. Закрой `close` когда закончишь.
-2. **Headless Chromium**: страница рендерится как в обычном браузере. JS выполняется.
-3. **Auto-wait**: `navigate` ждёт `domcontentloaded` + 1с. Для тяжёлых страниц — добавляй `wait` после navigate.
-4. **5-minute idle timeout**: если сессия неактивна > 5 минут, браузер закроется.
-5. **Viewport 1280x720**:某些 элементы могут скрываться за `@media` запросами.
+1. **Stateful session**: `navigate` opens the page, all subsequent actions work with it. Call `close` when done.
+2. **Headless Chromium**: page renders like in a regular browser. JS executes.
+3. **Auto-wait**: `navigate` waits for `domcontentloaded` + 1s. For heavy pages — add `wait` after navigate.
+4. **5-minute idle timeout**: if session is inactive > 5 minutes, browser closes.
+5. **Viewport 1280x720**: some elements may be hidden behind `@media` queries.
 
-## Workflow: Product Catalog (товары)
+## Step 2: Discover — Find Real Selectors
+
+**Mandatory step.** Don't guess classes — look at the HTML.
+
+### Approach A: Quick discover (recommended)
+
+```javascript
+// 1. Find all product links
+web_browse evaluate: JSON.stringify(
+  Array.from(document.querySelectorAll('a[href]'))
+    .filter(a => a.href.includes('/product') || a.href.includes('/catalog/'))
+    .slice(0, 5)
+    .map(a => ({href: a.href, text: a.textContent.trim().substring(0, 80), parent: a.parentElement?.className}))
+)
+```
+
+The result shows: what classes the parents have, what URL pattern products use.
+
+### Approach B: discover action (if available)
+
+```javascript
+web_browse discover
+```
+
+Returns all unique CSS classes on the page + links.
+
+### Approach C: HTML analysis (last resort)
+
+```javascript
+// Look at structure around product links
+web_browse evaluate: document.querySelector('a[href*="/product"]')?.parentElement?.parentElement?.outerHTML?.substring(0, 2000)
+```
+
+### After discover: verify the selector
+
+```javascript
+web_browse evaluate: document.querySelectorAll('your_real_selector').length
+// Must be > 0, otherwise — try another selector
+```
+
+## Workflow: Product Catalog
 
 ```
 1. web_browse navigate(url)
-2. web_browse evaluate: document.querySelectorAll('.selector').length  // проверить сколько элементов
-3. web_browse evaluate: извлечь данные через JSON
-4. write_file результат
+2. web_browse discover (or evaluate to find links/classes)
+3. web_browse evaluate: verify selector (.length > 0)
+4. web_browse evaluate: extract data via JSON
+5. write_file result
 ```
 
-### Шаблон извлечения товаров
+### Product extraction template
 
 ```javascript
-// Step 2: найти селектор
-document.querySelectorAll('.product-card, .item, .goods-item').length
-
-// Step 3: извлечь данные (один вызов — все товары)
+// Step 2: discover — find real links/classes
 JSON.stringify(
-  Array.from(document.querySelectorAll('.product-card')).slice(0, 10).map(el => ({
-    name: el.querySelector('.title, .name, h2, h3')?.textContent?.trim(),
-    price: el.querySelector('.price, .cost')?.textContent?.trim(),
+  Array.from(document.querySelectorAll('a[href]'))
+    .filter(a => a.href.includes('/product'))
+    .slice(0, 3)
+    .map(a => ({href: a.href, cls: a.closest('div[class]')?.className}))
+)
+
+// Step 3: verify selector
+document.querySelectorAll('.the_class_you_found').length
+
+// Step 4: extract data (one call — all products)
+JSON.stringify(
+  Array.from(document.querySelectorAll('.the_class_you_found')).slice(0, 10).map(el => ({
+    name: el.querySelector('a')?.textContent?.trim() || el.querySelector('h2, h3, .title')?.textContent?.trim(),
+    price: el.querySelector('.price, .cost, [class*="price"]')?.textContent?.trim(),
     link: el.querySelector('a')?.href,
     image: el.querySelector('img')?.src,
   }))
 )
 ```
 
-**Ключевой момент**: один `evaluate` с `querySelectorAll` + `map` + `JSON.stringify` экономит 5-10 ходов по сравнению с `extract`.
+**Key point**: one `evaluate` with `querySelectorAll` + `map` + `JSON.stringify` saves 5-10 turns compared to `extract`.
 
 ## Workflow: Article / Blog Post
 
 ```
 1. web_browse navigate(url)
 2. web_browse evaluate: document.querySelector('article, .post-content, .entry-content')?.innerText
-3. write_file результат
+3. write_file result
 ```
 
 ## Workflow: Table Data
@@ -82,7 +134,7 @@ JSON.stringify(
     Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent.trim())
   )
 )
-3. write_file результат
+3. write_file result
 ```
 
 ## Authentication & Cookies
@@ -112,7 +164,7 @@ web_browse navigate: https://example.com/dashboard
 4. web_browse click(selector: 'button[type="submit"]')
 5. web_browse wait(condition: "window.location.href.includes('dashboard')")
 6. web_browse navigate(target_url_to_scrape)
-7. web_browse evaluate: извлечь данные
+7. web_browse evaluate: extract data
 ```
 
 ### Token-based auth (Authorization header)
@@ -142,11 +194,11 @@ web_browse evaluate: document.querySelector('.captcha, #challenge, [data-testid=
 
 ### Rate limiting
 
-Не делай больше 5 navigate подряд без паузы. Если получаешь 429/503:
+Don't make more than 5 navigate calls in a row without a pause. If you get 429/503:
 
 ```
-web_browse wait(timeout: 5000)   // подождать 5 секунд
-web_bavigate navigate(url)        // повторить
+web_browse wait(timeout: 5000)   // wait 5 seconds
+web_browse navigate(url)         // retry
 ```
 
 ### Cloudflare / JS challenges
@@ -162,8 +214,8 @@ web_browse wait(condition: "document.querySelector('#challenge-running') === nul
 
 ```
 1. web_browse navigate(url)
-2. web_browse wait(selector: '.product-card', timeout: 10000)  // ждём пока появятся товары
-3. web_browse evaluate: извлечь данные
+2. web_browse wait(selector: '.product-card', timeout: 10000)  // wait for products to load
+3. web_browse evaluate: extract data
 ```
 
 ### Infinite scroll
@@ -173,10 +225,10 @@ web_browse wait(condition: "document.querySelector('#challenge-running') === nul
 web_browse scroll(direction: 'down')
 web_browse scroll(direction: 'down')
 web_browse wait(condition: "document.querySelectorAll('.item').length >= 20", timeout: 10000)
-web_browse evaluate: извлечь все данные
+web_browse evaluate: extract all data
 ```
 
-### AJAX/API data (получить данные из network)
+### AJAX/API data (get data from network)
 
 ```javascript
 // Intercept XHR responses
@@ -197,92 +249,174 @@ web_browse evaluate: `
 `
 ```
 
-## Common Mistakes (Чего НЕ делать)
+## Fallback Strategy (when selectors don't work)
+
+### If evaluate with selector returned 0 elements:
+
+```
+1. web_browse get_links → find all links, check URL patterns
+2. If product links found → extract data from href + text of links
+3. If nothing found → web_browse extract(format: 'html', maxChars: 3000) → analyze HTML
+```
+
+### If get_links is also empty (AJAX page):
+
+```
+1. web_browse wait(selector: 'a[href]', timeout: 15000)  // wait for load
+2. web_browse get_links → retry search
+3. If still empty → web_browse scroll(down) 2-3 times → retry get_links
+```
+
+### If nothing works:
+
+```
+1. web_browse screenshot → see what actually renders
+2. web_browse evaluate: document.body.innerHTML.substring(0, 3000) → raw HTML
+3. Analyze HTML and look for data-attributes, JSON in <script>, or API calls
+```
+
+## CMS-Agnostic Approach
+
+Different CMS use different classes. Don't rely on typical names:
+
+| CMS | Typical product classes |
+|-----|------------------------|
+| WooCommerce | `.product`, `.woocommerce-loop-product__title` |
+| 1C-Bitrix | `.catalog-section-item`, `.product-item` |
+| OpenCart | `.product-layout`, `.product-thumb` |
+| Shopify | `.product-card`, `.grid-product` |
+| WordPress/WPShop | `.product-item`, `.woocommerce` |
+
+**Rule**: always start with `discover` (find links/classes), not with guessing.
+
+## Evaluate: Safe JavaScript
+
+### NodeList is NOT an Array
+
+`querySelectorAll` returns `NodeList` — `.slice()`, `.map()` do **NOT work** on it.
+
+```javascript
+// BAD:
+document.querySelectorAll('.item').slice(0, 10)
+
+// CORRECT:
+Array.from(document.querySelectorAll('.item')).slice(0, 10)
+```
+
+### One call — all data
+
+```javascript
+// BAD — 10 evaluate calls:
+web_browse evaluate: document.querySelectorAll('.item')[0]?.textContent
+web_browse evaluate: document.querySelectorAll('.item')[1]?.textContent
+// ...
+
+// CORRECT — 1 evaluate:
+JSON.stringify(Array.from(document.querySelectorAll('.item')).slice(0, 10).map(el => el.textContent.trim()))
+```
+
+### Safe optional chaining
+
+```javascript
+// If element might not exist:
+el.querySelector('.price')?.textContent?.trim() ?? 'N/A'
+// NOT:
+el.querySelector('.price').textContent.trim()  // TypeError if null
+```
+
+## Common Mistakes (What NOT to do)
 
 ### DON'T: extract without knowing the structure
 
 ```
-# ПЛОХО — тратишь токены на сырой HTML
+# BAD — spending tokens on raw HTML
 web_browse extract(format: 'html')
 web_browse extract(format: 'text')
-web_browse scroll(direction: 'down')  # зачем?
-web_browse scroll(direction: 'down')  # и ещё раз?
+web_browse scroll(direction: 'down')  # why?
+web_browse scroll(direction: 'down')  # and again?
 ```
 
 ### DON'T: write Node.js scripts for simple tasks
 
 ```
-# ПЛОХО — npm init, npm install, write_file скрипта, syntax error, ...
+# BAD — npm init, npm install, write_file script, syntax error, ...
 bash: npm init -y
 bash: npm install axios
 write_file: parse.js  // SyntaxError: missing /
 ```
 
-### DON'T: extract with wrong selectors repeatedly
+### DON'T: guess selectors without discovering
 
 ```
-# ПЛОХО — пробуешь 5 разных селекторов
-web_browse extract(selector: '.product-card')
-web_browse extract(selector: '.item')
-web_browse extract(selector: '.goods')
-web_browse extract(selector: '.product')
+# BAD — trying 5 different selectors blindly
+web_browse evaluate: document.querySelectorAll('.product-card').length  // 0
+web_browse evaluate: document.querySelectorAll('.item').length  // 0
+web_browse evaluate: document.querySelectorAll('.goods').length  // 0
+web_browse evaluate: document.querySelectorAll('.product').length  // 0
+web_browse evaluate: document.querySelectorAll('.goods-item').length  // 0
+# 5 turns wasted!
 ```
 
-### RIGHT: discover structure once, extract smart
+### RIGHT: discover once, then extract
 
 ```
-# ПРАВИЛЬНО — 1 navigate + 1 evaluate для структуры + 1 evaluate для данных
+# CORRECT — discover → verify → extract
 web_browse navigate(url)
-web_browse evaluate: document.querySelector('body').innerHTML.substring(0, 500)  // посмотреть структуру
-web_browse evaluate: JSON.stringify(Array.from(document.querySelectorAll('...')).map(...))
+web_browse evaluate: JSON.stringify(Array.from(document.querySelectorAll('a[href]')).filter(a => a.href.includes('/product')).slice(0,3).map(a => ({href: a.href, cls: a.closest('div[class]')?.className})))
+# → see real classes
+web_browse evaluate: document.querySelectorAll('.real_class').length  // 27
+web_browse evaluate: JSON.stringify(Array.from(document.querySelectorAll('.real_class')).slice(0,10).map(...))
 ```
 
 ## File Writing Rules
 
-- **1 файл за ход**: если нужно создать несколько файлов — используй subagent
-- **write_file блокируется** если > 3 файлов написано без subagent
-- Если write_file заблокирован из-за синтаксической ошибки — **перепиши файл целиком**, не edit
-- Для больших данных: сначала `evaluate` верни JSON, потом `write_file` сформатированный результат
+- **1 file per turn**: if you need to create multiple files — use a subagent
+- **write_file is blocked** if > 3 files written without subagent
+- If write_file is blocked due to syntax error — **rewrite the file entirely**, don't edit
+- For large data: first `evaluate` returns JSON, then `write_file` formats the result
 
-## Debugging: Если данные не извлекаются
+## Debugging: If data is not extracted
 
-1. **Проверь что страница загрузилась**: `web_browse evaluate: document.title`
-2. **Проверь структуру**: `web_browse evaluate: document.querySelector('body').children.length`
-3. **Проверь конкретный селектор**: `web_browse evaluate: document.querySelectorAll('.your-selector').length`
-4. **Посмотри raw HTML**: `web_browse extract(format: 'html', maxChars: 2000)`
-5. **Проверь есть ли JS-ошибки**: `web_browse evaluate: window.onerror || 'no errors'`
+1. **Check page loaded**: `web_browse evaluate: document.title`
+2. **Check structure**: `web_browse evaluate: document.querySelector('body').children.length`
+3. **Check specific selector**: `web_browse evaluate: document.querySelectorAll('.your-selector').length`
+4. **Look at raw HTML**: `web_browse extract(format: 'html', maxChars: 2000)`
+5. **Check for JS errors**: `web_browse evaluate: window.onerror || 'no errors'`
 
 ## Quick Reference: Actions
 
-| Action | Когда использовать | Параметры |
-|--------|-------------------|-----------|
-| `navigate` | Открыть страницу | `url` |
-| `evaluate` | Выполнить JS, получить данные | `value` (JS code) |
-| `extract` | Получить text/html (редко!) | `selector`, `format`, `maxChars` |
-| `click` | Кликнуть по элементу | `selector` |
-| `type` | Ввести текст в поле | `selector`, `value` |
-| `scroll` | Прокрутить страницу | `direction` |
-| `wait` | Ждать появления элемента | `selector` или `condition`, `timeout` |
-| `get_links` | Получить все ссылки | — |
-| `screenshot` | Скриншот страницы | `selector` |
-| `close` | Закрыть браузер | — |
+| Action | When to use | Parameters |
+|--------|-------------|------------|
+| `navigate` | Open a page | `url` |
+| `evaluate` | Execute JS, get data | `value` (JS code) |
+| `extract` | Get text/html (rarely!) | `selector`, `format`, `maxChars` |
+| `click` | Click an element | `selector` |
+| `type` | Type text into a field | `selector`, `value` |
+| `scroll` | Scroll the page | `direction` |
+| `wait` | Wait for element to appear | `selector` or `condition`, `timeout` |
+| `get_links` | Get all links | — |
+| `discover` | Find all CSS classes + links | — |
+| `screenshot` | Screenshot the page | `selector` |
+| `close` | Close the browser | — |
 
 ## Example: Real Task
 
-**Задача**: Спарсить 10 велосипедов с каталога, записать в .md
+**Task**: Scrape 10 bikes from a catalog, save to .md
 
 ```
 1. web_browse navigate: https://shop.com/bikes
-2. web_browse evaluate: document.querySelectorAll('.product-card').length
-   → "27" (значит селектор правильный)
-3. web_browse evaluate: JSON.stringify(Array.from(document.querySelectorAll('.product-card')).slice(0, 10).map(el => ({
-     name: el.querySelector('.title')?.textContent?.trim(),
+2. web_browse discover
+   → see real class names (e.g., ".catalog-item", ".product-layout")
+3. web_browse evaluate: document.querySelectorAll('.catalog-item').length
+   → "27" (selector is correct)
+4. web_browse evaluate: JSON.stringify(Array.from(document.querySelectorAll('.catalog-item')).slice(0, 10).map(el => ({
+     name: el.querySelector('.item-title a')?.textContent?.trim(),
      price: el.querySelector('.price')?.textContent?.trim(),
      link: el.querySelector('a')?.href
    })))
-   → JSON с 10 товарами
-4. write_file: bikes.md (отформатированный результат)
-5. web_browse close
+   → JSON with 10 products
+5. write_file: bikes.md (formatted result)
+6. web_browse close
 ```
 
-**Итого: 5 ходов** вместо 30+ как в логе выше.
+**Total: 6 turns** instead of 30+ as in the log above.
