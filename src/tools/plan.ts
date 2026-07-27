@@ -121,7 +121,7 @@ export function getNextPendingStep(): PlanStep | null {
 }
 
 /** Извлекает ожидаемую директорию из заголовка шага.
- *  Например: "Create todo-app/package.json" → "todo-app"
+ *  Например: "Create src/db.ts" → "src"
  *            "Создать index.html в src/" → "src"
  *  Возвращает null если директория не найдена. */
 export function extractDirFromStepTitle(title: string): string | null {

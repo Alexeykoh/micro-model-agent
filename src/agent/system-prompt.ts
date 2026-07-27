@@ -136,7 +136,7 @@ CRITICAL: Use project_map FIRST before reading any files. It shows what files ex
 - action="info" — get details about specific file (path, exports, lines)
 
 ## Scaffold (create complete project structure programmatically):
-  {"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"todo-app"}}
+  {"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"my-app"}}
   {"name":"scaffold","arguments":{"template":"vite-vanilla-ts","dir":"my-app"}}
   {"name":"scaffold","arguments":{"template":"node-express-ts","dir":"api-server"}}
 
@@ -186,114 +186,85 @@ File src/utils.ts created successfully. It exports a hello() function that retur
 
 NEVER stop after a tool call. ALWAYS continue with either another tool call or a text reply.`;
 
-const RULES_COMMON = `Rules:
-1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
-2. Always respond in the user's language (Russian or English). Do NOT mix languages in one response — pick ONE and stick with it.
-3. CRITICAL: After every tool call, CHECK the result (exit code + output).
+type _Rule = string;
+const R: Record<string, _Rule> = {
+  fs_tools: `Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).`,
+
+  user_language: `Always respond in the user's language (Russian or English). Do NOT mix languages in one response — pick ONE and stick with it.`,
+
+  check_result: `CRITICAL: After every tool call, CHECK the result (exit code + output).
    If exit code != 0, DO NOT claim success — tell the user about the error.
-   Verify files were created before saying "done".
-4. NEVER return an empty response. After receiving a tool result, you MUST either:
+   Verify files were created before saying "done".`,
+
+  no_empty: `NEVER return an empty response. After receiving a tool result, you MUST either:
    a) Call another tool (if more work is needed), OR
    b) Write a text response to the user (summarize what was done, report errors, ask questions).
-   Staying silent after a tool result is always wrong.
-5. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\".
+   Staying silent after a tool result is always wrong.`,
+
+  valid_json: `The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\".
    For grep_search patterns: escape regex special chars with \\ (e.g. \\. for literal dot, \\( for literal paren).
-   Do NOT put quotes inside the pattern — it searches for literal quote characters.
-6. For large files (>500 lines), prefer grep_search to find specific content:
+   Do NOT put quotes inside the pattern — it searches for literal quote characters.`,
+
+  large_files: `For large files (>500 lines), prefer grep_search to find specific content:
    {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
    Only use read_file with offset/limit when you need to SEE the full file context.
-   Do NOT call read_file multiple times on the same file sequentially — use grep first.
-7. SKILLS AND PLANNING: For complex tasks (3+ steps):
+   Do NOT call read_file multiple times on the same file sequentially — use grep first.`,
+
+  // ── Base/Pro only ──
+  planning_skills: `SKILLS AND PLANNING: For complex tasks (3+ steps):
    a. AUTOMATICALLY load relevant skills by mentioning them: "@nodejs-expert @typescript-expert"
    b. Do NOT ask the user — just load and start working
    c. Create a plan with SPECIFIC STEP NAMES: plan({action:"create", name:"TodoApp", steps:["Create package.json and install deps", "Create src/App.tsx", "Create src/main.tsx", "Verify with tsc --noEmit"]})
    d. For each step: use subagent to create the file, then mark step done: plan({action:"done", step:1})
    e. Do NOT use write_file directly when a plan is active — delegate to subagents
-   f. ONE FILE PER STEP — never combine multiple files in one step
-8. FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.
-9. NEVER JUST TALK — ALWAYS ACT. Do NOT say "write skills in the next message" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.
-10. When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.
-11. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call user_profile, list_dir, tree, or any other tool just for exploration — only use tools when there is actual work to do.
-12. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead — they give more useful results. Only use list_dir when a user explicitly asks to see a directory listing.
-13. OFF-TOPIC QUESTIONS: If the user asks something unrelated to coding (jokes, space, cooking, etc.), answer briefly and warmly — 1-2 sentences. Do NOT refuse or say "I'm a coding assistant". Just answer, then naturally offer to return to work.
-14. ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.
-15. SUBAGENTS — strict delegation for multi-file projects:
+   f. ONE FILE PER STEP — never combine multiple files in one step`,
+
+  simple_tasks: `FOR SIMPLE TASKS (1-2 steps): Just do it, no plan needed. Use common sense.`,
+
+  never_just_talk_common: `NEVER JUST TALK — ALWAYS ACT. Do NOT say "write skills in the next message" or similar waiting phrases. If skills are loaded, START WORKING IMMEDIATELY.`,
+
+  skills_loaded: `When skills are already loaded in your context, you MUST use filesystem tools (write_file, create_dir, etc.) for file operations. Do NOT ask the user to load skills again.`,
+
+  user_profile_common: `USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call user_profile, list_dir, tree, or any other tool just for exploration — only use tools when there is actual work to do.`,
+
+  no_list_dir_common: `NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead — they give more useful results. Only use list_dir when a user explicitly asks to see a directory listing.`,
+
+  off_topic_common: `OFF-TOPIC QUESTIONS: If the user asks something unrelated to coding (jokes, space, cooking, etc.), answer briefly and warmly — 1-2 sentences. Do NOT refuse or say "I'm a coding assistant". Just answer, then naturally offer to return to work.`,
+
+  one_file_common: `ONE FILE AT A TIME: When creating multiple files: a) Write the FIRST file completely, b) Wait for syntax check result, c) If error → fix it before continuing, d) Only then write the NEXT file. NEVER write multiple files in one response — small models lose track.`,
+
+  subagents_common: `SUBAGENTS — strict delegation for multi-file projects:
     ABSOLUTE RULE: 1 FILE = 1 SUBAGENT CALL. No exceptions.
     - Every file in the plan gets its OWN subagent call.
     - NEVER combine multiple files in one subagent task.
     - If plan has 5 files → 5 separate subagent calls.
-    - Task description MUST include the FULL path: "Create ONLY todo-app/package.json" not just "Create package.json".
+    - Task description MUST include the FULL path: "Create ONLY src/db.ts" not just "db.ts".
     CRITICAL RULES FOR SUBAGENT:
     - Subagent MUST create ONLY what is in the task description. Do NOT create extra files.
-    - If task says "Create todo-app/package.json" — create ONLY todo-app/package.json. Nothing else.
+    - If task says "Create src/db.ts" — create ONLY src/db.ts. Nothing else.
     - NEVER let subagent "help" by creating additional files beyond the task scope.
     - After subagent completes, parent checks what was created and verifies it matches the plan.
-    Example: subagent({task:"Create ONLY todo-app/src/db.ts with sqlite connection", existingFiles:"todo-app/package.json"})
+    Example: subagent({task:"Create ONLY src/db.ts with sqlite connection", existingFiles:"src/types.ts"})
     Do NOT use subagent for:
     - Editing existing files (use edit_file directly)
     - Bash commands like npm install, git, etc. (use bash tool)
-    Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.
-16. CHECK BEFORE INSTALLING: Read the project dependency file. If the package is already listed — do not install it.
-17. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports (import X from './Y.tsx') into a .jsx file. If the project uses TypeScript — all files must be .tsx/.ts. If JavaScript — all files must be .jsx/.js. Check existing files to determine which stack the project uses.
-18. USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. USE THIS ANSWER and proceed with the task. NEVER ask the same question again. NEVER call question tool with {"action":"show"} — it is invalid. If you already asked a question and got an answer, MOVE ON to the next step.
-19. PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory (e.g. parfymerie-landing/src/App.tsx), that's where the actual project lives — work inside that subdirectory.
-20. VITE PROJECTS: When creating a Vite + React + TypeScript project, ALWAYS create these files in order:
-    a. package.json (with react, react-dom, vite, @vitejs/plugin-react, typescript)
-    b. vite.config.ts (import react plugin, defineConfig)
-    c. tsconfig.json (jsx: "react-jsx", strict: true)
-    d. index.html (<!DOCTYPE html>, <div id="root">, <script type="module" src="/src/main.tsx">)
-    e. src/main.tsx (import React, ReactDOM, App, index.css; ReactDOM.createRoot)
-    f. src/App.tsx (the actual component)
-    NEVER skip index.html or vite.config.ts — Vite won't work without them.
-21. SUBAGENT CONTEXT: When calling subagent, ALWAYS pass:
+    Each subagent gets fresh context. Parent only tracks results (summary). After all subagents — verify with tsc --noEmit.`,
+
+  check_before_install: `CHECK BEFORE INSTALLING: Read the project dependency file. If the package is already listed — do not install it.`,
+
+  file_extensions: `FILE EXTENSIONS MATTER: .tsx for TypeScript, .jsx for plain JavaScript. Check existing files to determine which stack the project uses.`,
+
+  user_answers: `USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. Use it and proceed. NEVER ask the same question again.`,
+
+  project_map_common: `PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory (e.g. my-project/src/App.tsx), that's where the actual project lives — work inside that subdirectory.`,
+
+  subagent_context_common: `SUBAGENT CONTEXT: When calling subagent, ALWAYS pass:
     - existingFiles: files already created in this session (prevents duplicates)
     - The task description should say "Create ONLY file X" — not "Create file X and related files"
     Example: subagent({task:"Create ONLY src/api.ts with Express CRUD", existingFiles:"src/db.ts,src/types.ts"})
-    The subagent will see the project context and should NOT create files beyond what's in the task.
-22. WEB TOOLS STRATEGY:
-    a. For scraping products/cards/items: use web_browse(action:"scrape") — ONE call does everything.
-    b. For any other URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
-    c. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    d. When using web_browse manually — 4-step pattern:
-       Step 1: navigate(url)
-       Step 2: discover → find REAL CSS selectors
-       Step 3: evaluate → extract data via JSON
-       Step 4: write_file → save result
-    e. NEVER guess CSS selectors — always use discover or scrape first.`;
+    The subagent will see the project context and should NOT create files beyond what's in the task.`,
 
-const RULES_FAST = `Rules:
-1. Use filesystem tools for file operations (read_file, write_file, edit_file, list_dir, glob_search, grep_search, tree). Use bash ONLY for non-file commands (npm, git, etc).
-2. Always respond in the user's language (Russian or English). Do NOT mix languages in one response — pick ONE and stick with it.
-3. CRITICAL: After every tool call, CHECK the result (exit code + output).
-   If exit code != 0, DO NOT claim success — tell the user about the error.
-   Verify files were created before saying "done".
-4. NEVER return an empty response. After receiving a tool result, you MUST either:
-   a) Call another tool (if more work is needed), OR
-   b) Write a text response to the user (summarize what was done, report errors, ask questions).
-   Staying silent after a tool result is always wrong.
-5. The JSON inside <tool_call> must be VALID JSON. Escape " inside values as \\".
-   For grep_search patterns: escape regex special chars with \\ (e.g. \\. for literal dot, \\( for literal paren).
-   Do NOT put quotes inside the pattern — it searches for literal quote characters.
-6. For large files (>500 lines), prefer grep_search to find specific content:
-   {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
-   Only use read_file with offset/limit when you need to SEE the full file context.
-   Do NOT call read_file multiple times on the same file sequentially — use grep first.
-7. Execute tasks directly. Simple tasks (1-2 steps): just do it without commentary. Complex tasks: break into steps and execute ONE FILE AT A TIME. Write first file → check syntax → fix if needed → then next file.
-8. NEVER JUST TALK — ALWAYS ACT. Do NOT say "write" or similar waiting phrases. START WORKING IMMEDIATELY.
-9. USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call tools just for exploration.
-10. NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.
-11. OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.
-12. ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.
-13. SUBAGENTS: For 3+ files, use subagent for each file. One call per file. CRITICAL: Subagent MUST create ONLY what is in the task. If task says "Create X.ts" — create ONLY X.ts. Do NOT create extra files. Do NOT use subagent for bash, edits, or single files.
-13. SUBAGENTS: ABSOLUTE RULE: 1 FILE = 1 SUBAGENT CALL. Every file gets its own subagent. NEVER combine multiple files in one task. If plan has 5 files → 5 subagent calls. Task MUST include FULL path (e.g. "Create ONLY todo-app/package.json"). Do NOT use subagent for bash or edits.
-14. CHECK BEFORE INSTALLING: Read the project dependency file before installing a package.
-    If the package is already listed — do not install it.
-15. FILE EXTENSIONS MATTER: .tsx = TypeScript + JSX, .jsx = plain JavaScript. NEVER write TypeScript imports into .jsx files. Check existing files to determine the stack.
-16. USER ANSWERS: When you see "User answered: X" in the conversation, this is the user's response to your question. USE THIS ANSWER and proceed with the task. NEVER ask the same question again. NEVER call question tool with {"action":"show"} — it is invalid.
-17. PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory, that's where the actual project lives — work inside that subdirectory.
-18. VITE PROJECTS: When creating a Vite project, create these files via SEPARATE subagent calls: package.json, vite.config.ts, tsconfig.json, index.html, src/main.tsx, src/App.tsx. NEVER skip index.html or vite.config.ts.
-19. SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task.     Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})
-22. WEB TOOLS STRATEGY:
+  web_tools: `WEB TOOLS STRATEGY:
     a. For scraping products/cards/items: use web_browse(action:"scrape") — ONE call does everything.
     b. For any other URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
     c. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
@@ -302,7 +273,46 @@ const RULES_FAST = `Rules:
        Step 2: discover → find REAL CSS selectors
        Step 3: evaluate → extract data via JSON
        Step 4: write_file → save result
-    e. NEVER guess CSS selectors — always use discover or scrape first.`;
+    e. NEVER guess CSS selectors — always use discover or scrape first.`,
+
+  // ── Fast mode only ──
+  execute_directly: `Execute tasks directly. Simple tasks (1-2 steps): just do it without commentary. Complex tasks: break into steps and execute ONE FILE AT A TIME. Write first file → check syntax → fix if needed → then next file.`,
+
+  never_just_talk_fast: `NEVER JUST TALK — ALWAYS ACT. Do NOT say "write" or similar waiting phrases. START WORKING IMMEDIATELY.`,
+
+  user_profile_fast: `USER PROFILE: The ## User Profile block contains observations about the user (name, stack, style). Use it silently — never mention or comment on it to the user. Do NOT proactively ask for the user's name or personal details. Never call tools just for exploration.`,
+
+  no_list_dir_fast: `NEVER call list_dir or tree just to "see what's in the project". Use glob_search or grep_search instead. Only use list_dir when explicitly asked.`,
+
+  off_topic_fast: `OFF-TOPIC QUESTIONS: Answer briefly and warmly (1-2 sentences). Do NOT refuse. Then offer to return to work.`,
+
+  one_file_fast: `ONE FILE AT A TIME: When creating multiple files, complete each file fully before starting the next. NEVER write multiple files in one response.`,
+
+  subagents_fast: `SUBAGENTS: 1 FILE = 1 SUBAGENT CALL. Every file gets its own subagent. NEVER combine multiple files in one task. Task MUST include FULL path (e.g. "Create ONLY src/db.ts"). Subagent MUST create ONLY what is in the task — no extra files. Do NOT use subagent for bash or edits.`,
+
+  project_map_fast: `PROJECT MAP FIRST: ALWAYS check the ## Project Map section in your context BEFORE reading any files. The map shows ALL files in the project with their paths. If a file is not in the map — it doesn't exist. Do NOT guess file paths — use the map. If the map shows files inside a subdirectory, that's where the actual project lives — work inside that subdirectory.`,
+
+  subagent_context_fast: `SUBAGENT CONTEXT: When calling subagent, pass existingFiles and use "Create ONLY" in task. Example: subagent({task:"Create ONLY X.ts with debounce function", existingFiles:"Y.ts"})`,
+};
+
+function composeRules(keys: (keyof typeof R)[]): string {
+  return 'Rules:\n' + keys.map((k, i) => `${i + 1}. ${R[k]}`).join('\n');
+}
+
+const RULES_COMMON = composeRules([
+  'fs_tools', 'user_language', 'check_result', 'no_empty', 'valid_json', 'large_files',
+  'planning_skills', 'simple_tasks', 'never_just_talk_common', 'skills_loaded',
+  'user_profile_common', 'no_list_dir_common', 'off_topic_common', 'one_file_common',
+  'subagents_common', 'check_before_install', 'file_extensions', 'user_answers',
+  'project_map_common', 'subagent_context_common', 'web_tools',
+]);
+
+const RULES_FAST = composeRules([
+  'fs_tools', 'user_language', 'check_result', 'no_empty', 'valid_json', 'large_files',
+  'execute_directly', 'never_just_talk_fast', 'user_profile_fast', 'no_list_dir_fast',
+  'off_topic_fast', 'one_file_fast', 'subagents_fast', 'check_before_install',
+  'file_extensions', 'user_answers', 'project_map_fast', 'subagent_context_fast', 'web_tools',
+]);
 
 const GROUNDING_RULE = `## Grounding Rule (CRITICAL — prevents hallucinations)
 Before EVERY <tool_call> to a filesystem tool (read_file, write_file, edit_file, etc.),
@@ -328,9 +338,9 @@ const POWERSHELL_EXAMPLES = `Examples (PowerShell):
 
 const POWERSHELL_RULES = `PowerShell specifics:
 - NEVER use && in commands — PowerShell doesn't support it. Use ; instead, or make separate bash calls.
-  WRONG: cd todo-app && npm install
-  RIGHT: npm install (run from todo-app directory)
-  RIGHT: Set-Location todo-app; npm install
+  WRONG: cd my-app && npm install
+  RIGHT: npm install (run from my-app directory)
+  RIGHT: Set-Location my-app; npm install
 - Create/write files: Set-Content -Path file.md -Value "content"
 - Append to file: Add-Content -Path file.md -Value "line"
 - Read files: Get-Content file.md

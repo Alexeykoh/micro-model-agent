@@ -225,7 +225,7 @@ export const scaffoldDefinition: ToolDefinition = {
         },
         dir: {
           type: 'string',
-          description: 'Directory name for the project (e.g. "todo-app")',
+          description: 'Directory name for the project (e.g. "my-app")',
         },
       },
       required: ['template', 'dir'],
@@ -244,7 +244,7 @@ export const scaffoldHandler: ToolHandler = {
       return fsError(`Unknown template: "${template}". Available: ${Object.keys(TEMPLATES).join(', ')}`);
     }
     if (!dir) {
-      return fsError('dir is required. Usage: scaffold({template:"vite-react-ts", dir:"todo-app"})');
+      return fsError('dir is required. Usage: scaffold({template:"vite-react-ts", dir:"my-app"})');
     }
 
     const resolved = resolvePath(dir, ctx.cwd);
