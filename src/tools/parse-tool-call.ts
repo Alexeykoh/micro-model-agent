@@ -2,7 +2,7 @@ import { jsonrepair } from 'jsonrepair';
 import { validateToolCall } from './subagent.js';
 
 export interface ParsedCall {
-  parsed: Record<string, unknown>;
+  parsed: any;
   cmd?: string;
 }
 

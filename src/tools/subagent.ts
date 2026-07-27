@@ -11,6 +11,8 @@ import { checkFileSyntax } from './syntax-check.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { logInfo, logDebug, logWarn, logLLMRequest, logLLMResponse, logToolCall } from '../logger.js';
 import { getLLMConfig } from '../config/config.js';
+import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Изолированный цикл агента для субагентов.
@@ -51,14 +53,12 @@ export function buildSubagentContext(cwd: string): string {
 
   // Scan ALL directories for existing source files (not just src/)
   try {
-    const { readdirSync, statSync } = require('node:fs');
-    const { join } = require('node:path');
     const entries = readdirSync(cwd, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
       const dirPath = join(cwd, entry.name);
       try {
-        const files = readdirSync(dirPath, { recursive: true })
+        const files = (readdirSync(dirPath, { recursive: true }) as string[])
           .filter((f: string) => /\.(ts|tsx|js|jsx)$/.test(f))
           .slice(0, 20);
         if (files.length > 0) {
@@ -70,7 +70,6 @@ export function buildSubagentContext(cwd: string): string {
 
   // Include root-level .ts/.js files too
   try {
-    const { readdirSync } = require('node:fs');
     const rootFiles = readdirSync(cwd)
       .filter((f: string) => /\.(ts|js)$/.test(f) && !f.startsWith('.'));
     if (rootFiles.length > 0) {
@@ -79,8 +78,6 @@ export function buildSubagentContext(cwd: string): string {
   } catch { /* skip */ }
 
   try {
-    const { readFileSync, existsSync } = require('node:fs');
-    const { join } = require('node:path');
     const pkgPath = join(cwd, 'package.json');
     if (existsSync(pkgPath)) {
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
@@ -93,8 +90,6 @@ export function buildSubagentContext(cwd: string): string {
   } catch { /* no package.json */ }
 
   try {
-    const { readFileSync, existsSync } = require('node:fs');
-    const { join } = require('node:path');
     const tsconfigPath = join(cwd, 'tsconfig.json');
     if (existsSync(tsconfigPath)) {
       lines.push('Has tsconfig.json');
