@@ -17,14 +17,16 @@ import { showPlan, getPlanPendingCount, clearPlan, getNextPendingStep, updatePla
 
 import { generateToolCallId } from '../tools/id-gen.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
-import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig, getGroundingConfig } from '../config/config.js';
+import { loadConfig, getLLMConfig, getGroundingConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
-import { IsolatedLoopResult, buildSubagentContext, buildSpecialistTask, isTrivialError, runIsolatedLoop, doChat } from '../tools/subagent.js';
+import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
+import { ErrorEscalator } from './error-escalation.js';
+import { WriteEnforcer } from './write-enforcer.js';
 import { PluginManager } from '../plugins/manager.js';
 import { loadAllPluginsWithInfo } from '../plugins/loader.js';
 import { handleToolAfter as lintHandleToolAfter } from '../plugins/builtin/lint-on-write/index.js';
@@ -63,7 +65,7 @@ import { webBrowseHandler } from '../tools/web-browse.js';
  * Лимиты подобраны эмпирически: достаточно для маленьких моделей
  * понять что произошло, но не занимают весь контекст.
  */
-function truncateToolOutput(toolName: string, output: string, exitCode: number): string {
+export function truncateToolOutput(toolName: string, output: string, exitCode: number): string {
   // Ошибки обрезаем мягче — модели нужен контекст для диагностики
   if (exitCode !== 0) {
     return output.length > 3000 ? output.slice(0, 3000) + '\n...[truncated]' : output;
@@ -142,71 +144,6 @@ function extractToolCallFallback(response: string): { name: string; cmd: string 
 export interface AgentLoopResult {
   messages: ChatMessage[];
   questionPending?: { question: string; choices?: string[] };
-}
-
-/**
- * Параметры для specialist'а — изолированного суб-агента,
- * который решает повторяющуюся ошибку инструмента.
- *
- * Собраны в один объект чтобы не передавать 15+ аргументов в функцию.
- */
-interface SpecialistParams {
-  provider: LLMProvider; registry: ToolRegistry; toolExecutor: ToolExecutor;
-  modeConfig: any; llmCfg: any; specialistCfg: any;
-  quiet: boolean; renderer: any; messages: ChatMessage[];
-  toolId: string; createdFiles: string[];
-  toolName: string; toolArgs: Record<string, unknown>;
-  errorOutput: string; errorCount: number; enrichedPrompt: string;
-}
-
-/**
- * Запускает specialist'а для решения повторяющейся ошибки.
- *
- * Specialist — это изолированный суб-агент со свежим контекстом,
- * который получает задачу "диагностируй и исправь ошибку инструмента X".
- *
- * Алгоритм:
- * 1. Формирует задачу через buildSpecialistTask()
- * 2. Собирает контекст проекта через buildSubagentContext()
- * 3. Запускает runIsolatedLoop() с ограничением maxSteps
- * 4. Заменяет результат ошибки в messages[] на результат specialist'а
- * 5. Трекает созданные specialist'ом файлы
- *
- * @returns true если specialist отработал (основной цикл должен continue),
- *          false если specialist упал (ошибка остаётся в messages)
- */
-async function spawnSpecialist(p: SpecialistParams): Promise<boolean> {
-  if (!p.quiet) {
-    p.renderer?.writeBracketTag('specialist', `solving '${p.errorOutput.slice(0, 60).replace(/\n/g, ' ')}' error...`);
-  }
-  const task = buildSpecialistTask(p.toolName, p.toolArgs, p.errorOutput, p.enrichedPrompt, p.errorCount);
-  const ctx = buildSubagentContext(process.cwd());
-  const sub = new SubagentRenderer();
-  try {
-    logInfo('LOOP', `spawning specialist for ${p.toolName} (attempt #${p.errorCount})`);
-    const r = await runIsolatedLoop(
-      p.provider, p.registry, task, ctx, process.cwd(),
-      p.quiet, sub, p.toolExecutor, p.modeConfig.subagentMode, p.llmCfg.toolModel, p.specialistCfg.maxSteps,
-    );
-    for (let i = p.messages.length - 1; i >= 0; i--) {
-      if (p.messages[i].role === 'tool' && p.messages[i].tool_call_id === p.toolId) {
-        const text = r.errors.length > 0
-          ? `[Specialist attempted to fix "${p.toolName}" but failed:\n${r.errors.join('\n')}\n${r.summary}]\nTry a different approach.`
-          : `[Specialist resolved "${p.toolName}" error.\n${r.summary}]\nContinue with the task.`;
-        p.messages[i].content = truncateToolOutput(p.toolName, text, 0);
-        break;
-      }
-    }
-    for (const f of r.createdFiles) { if (!p.createdFiles.includes(f)) p.createdFiles.push(f); }
-    const buf = sub.getBuffer();
-    if (!p.quiet && p.renderer?.writeToolBuffer) p.renderer.writeToolBuffer({ lines: buf.lines, toolCalls: buf.toolCalls });
-    logInfo('LOOP', `specialist done | files: ${r.createdFiles.length} | turns: ${r.turns} | errors: ${r.errors.length}`);
-    return true;
-  } catch (e: any) {
-    logError('LOOP', `specialist error: ${e.message}`);
-    if (!p.quiet) p.renderer?.writeError(`  [specialist failed: ${e.message}]`);
-    return false;
-  }
 }
 
 /**
@@ -395,15 +332,6 @@ export async function runAgentLoop(
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
   let consecutiveMissingGrounding = 0; // счётчик пропущенных grounding-маркеров подряд
-  let directWriteStreak = 0; // количество прямых write_file без subagent
-  /** Трекер повторяющихся tool errors: { normalizedError → count } */
-  const consecutiveToolErrors = new Map<string, number>();
-  /** Общий счётчик ошибок за сессию */
-  let totalToolErrors = 0;
-  /** Стратегия обработки ошибок: 'normal' | 'subagent-hint' | 'force-subagent' */
-  let errorStrategy: 'normal' | 'subagent-hint' | 'force-subagent' = 'normal';
-  /** Флаг: specialist уже был запущен для текущей ошибки (чтобы не дублировать) */
-  let specialistSpawnedFor: string | null = null;
   /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
   let uselessActionCount = 0;
   /** История последних чтений файлов для.detect повторных чтений */
@@ -424,6 +352,9 @@ export async function runAgentLoop(
     fileInfoHandler, globSearchHandler, grepSearchHandler, treeHandler,
     webSearchHandler, webFetchHandler, webBrowseHandler,
   ]);
+
+  const errorEscalator = new ErrorEscalator();
+  const writeEnforcer = new WriteEnforcer();
 
   // Reset abort signal for this run
   if (renderer?.abortSignal === undefined) {
@@ -813,80 +744,9 @@ export async function runAgentLoop(
     // Отслеживание повторных чтений одного файла для консолидации
     let lastReadFile: { path: string; offset: number; limit: number; content: string; toolId: string } | null = null;
 
-    // Блокировка прямых write_file когда есть план с 3+ шагами — force subagent
-    const planSteps = showPlan();
-    const hasMultiStepPlan = planEnforcement && !planSteps.startsWith('No active plan') && (planSteps.match(/\n/g) || []).length >= 3;
-    if (hasMultiStepPlan) {
-      const directWrites = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
-      const hasSubagent = validCalls.some(c => c.parsed.name === 'subagent');
-      const hasBash = validCalls.some(c => c.parsed.name === 'bash');
-      if (directWrites.length > 0 && !hasSubagent) {
-        // Block direct writes — model must use subagent
-        for (const wc of directWrites) {
-          const idx = validCalls.indexOf(wc);
-          if (idx !== -1) validCalls.splice(idx, 1);
-          const blockId = generateToolCallId();
-          messages.push({
-            role: 'tool',
-            content: `BLOCKED: Multi-step plan active. Use subagent for each step. Example: subagent({task:"Create file X", existingFiles:"Y.ts"}). After subagent completes, mark step done: plan({action:"done", step:N})`,
-            tool_call_id: blockId,
-          });
-        }
-        if (!quiet) {
-          renderer?.writeWarning(`  [blocked ${directWrites.length} direct writes — use subagent for multi-step plans]`);
-        }
-      }
-      // Allow bash for verification (tsc --noEmit, npm run build) — don't block these
-    }
-
-    // ESCALATION: block write_file when creating N+ files without subagent (no plan case)
-    if (directWriteStreakMax < Infinity && !hasMultiStepPlan) {
-      const hasWrite = validCalls.some(c => c.parsed.name === 'write_file');
-      const hasSubagentNow = validCalls.some(c => c.parsed.name === 'subagent');
-      if (hasSubagentNow) {
-        directWriteStreak = 0;
-      } else if (hasWrite) {
-        const writeCount = validCalls.filter(c => c.parsed.name === 'write_file').length;
-        directWriteStreak += writeCount;
-        if (directWriteStreak >= directWriteStreakMax) {
-          const directWrites = validCalls.filter(c => c.parsed.name === 'write_file');
-          for (const wc of directWrites) {
-            const idx = validCalls.indexOf(wc);
-            if (idx !== -1) validCalls.splice(idx, 1);
-          }
-          if (directWrites.length > 0) {
-            const blockId = generateToolCallId();
-            messages.push({
-              role: 'tool',
-              content: `BLOCKED: You're creating file #${directWriteStreak} without subagent. For 3+ new files, use subagent for each one. Example: subagent("Create file X. Context: Y already exists.")`,
-              tool_call_id: blockId,
-            });
-          }
-          if (!quiet) {
-            renderer?.writeWarning(`  [blocked ${directWrites.length} writes: ${directWriteStreak} files without subagent — use subagent for multi-file projects]`);
-          }
-        }
-      }
-    }
-
-    // Блокировка нескольких записей файлов за один ответ — максимум одна
-    const writeCalls = validCalls.filter(c => c.parsed.name === 'write_file' || c.parsed.name === 'edit_file');
-    if (writeCalls.length > 1) {
-      // Keep only the first write call, block the rest
-      const blocked = writeCalls.slice(1);
-      validCalls.splice(validCalls.indexOf(blocked[0]), blocked.length);
-      for (const bc of blocked) {
-        const blockId = generateToolCallId();
-        messages.push({
-          role: 'tool',
-          content: `BLOCKED: Only one file write per response is allowed. You wrote ${writeCalls.length} files at once. Complete the first file, then write the next one.`,
-          tool_call_id: blockId,
-        });
-      }
-      if (!quiet) {
-        renderer?.writeWarning(`  [blocked ${blocked.length} extra file writes — one at a time]`);
-      }
-    }
+    writeEnforcer.enforcePlan(validCalls, messages, planEnforcement, quiet, renderer);
+    writeEnforcer.enforceWriteStreak(validCalls, messages, directWriteStreakMax, quiet, renderer);
+    writeEnforcer.enforceSingleWrite(validCalls, messages, quiet, renderer);
 
     // ─── Исполнение tool calls ──────────────────────────
     for (const call of validCalls) {
@@ -1196,66 +1056,15 @@ export async function runAgentLoop(
 
       // ─── Error escalation + specialist auto-delegation ──────────
       if (toolExitCode !== 0 && toolOutput) {
-        totalToolErrors++;
-        const errKey = `${parsed.name}::${toolOutput.slice(0, 100).replace(/[A-Z]:\\[^\s"']+/gi, '<PATH>').replace(/\/[^\s"']+/g, '<PATH>')}`;
-        const prevCount = consecutiveToolErrors.get(errKey) ?? 0;
-        consecutiveToolErrors.set(errKey, prevCount + 1);
-        const errorCount = prevCount + 1;
-
-        // ── Specialist: авто-делегация при повторяющихся ошибках ──
-        const specialistCfg = getSpecialistConfig(config);
-        if (
-          specialistCfg.enabled &&
-          errorCount === specialistCfg.triggerThreshold &&
-          specialistSpawnedFor !== errKey &&
-          !isTrivialError(parsed.name, toolOutput) &&
-          toolOutput.length >= specialistCfg.minErrorLength
-        ) {
-          specialistSpawnedFor = errKey;
-          const spawned = await spawnSpecialist({
-            provider, registry, toolExecutor, modeConfig, llmCfg, specialistCfg,
-            quiet, renderer, messages, toolId, createdFiles,
-            toolName: parsed.name, toolArgs: parsed.arguments,
-            errorOutput: toolOutput, errorCount, enrichedPrompt,
-          });
-          if (spawned) continue;
-        }
-
-        // ── Escalation: hint / strategy switch / block ──
-        if (errorCount > specialistCfg.triggerThreshold) {
-          // Веб-специфичные подсказки
-          let webHint = '';
-          if (parsed.name === 'web_browse' && String(parsed.arguments?.action) === 'evaluate') {
-            webHint = ' For web scraping: use web_browse(action:"discover") to find real CSS selectors, or web_browse(action:"get_links") to see all links, or web_browse(action:"extract", format:"html") to inspect the page structure.';
-          } else if (parsed.name === 'web_browse' && String(parsed.arguments?.action) === 'navigate' && toolOutput.includes('Status: 40')) {
-            webHint = ' Page returned HTTP error. Try navigating to the site homepage first, then use web_browse(action:"get_links") or web_browse(action:"discover") to explore available categories and sections instead of guessing URLs.';
-          }
-
-          const msg = errorCount === specialistCfg.triggerThreshold + 1
-            ? `[System: Tool "${parsed.name}" failed with the SAME error ${errorCount} times. Read the error message carefully. The input is likely wrong — try a completely different approach, or use subagent for a fresh context.]${webHint}`
-            : `[System: Tool "${parsed.name}" failed ${errorCount} times with the same error. STOP. Do NOT retry the same call. Use subagent(task="...") for a fresh context, or tell the user you're stuck.]${webHint}`;
-          messages.push({ role: 'user', content: msg });
-          if (!quiet) renderer?.writeWarning(`  [error escalation: ${parsed.name} failed ${errorCount} times]`);
-        }
-
-        if (totalToolErrors >= 5 && errorStrategy === 'normal') {
-          errorStrategy = 'subagent-hint';
-          messages.push({ role: 'user', content: `[System: ${totalToolErrors} tool errors. Use subagent(task="...") for a fresh context.]` });
-          if (!quiet) renderer?.writeWarning(`  [strategy: subagent-hint after ${totalToolErrors} errors]`);
-        }
-
-        if (errorCount >= 4) {
-          const blockId = generateToolCallId();
-          messages.push({ role: 'tool', content: `BLOCKED: Tool "${parsed.name}" failed ${errorCount} times. Temporarily blocked.`, tool_call_id: blockId });
-          const idx = validCalls.indexOf(call);
-          if (idx !== -1) validCalls.splice(idx, 1);
-          if (!quiet) renderer?.writeWarning(`  [blocked ${parsed.name}: too many repeated errors]`);
-        }
+        const action = await errorEscalator.handleToolError(
+          parsed.name, toolOutput, parsed.arguments, toolId,
+          messages, createdFiles, enrichedPrompt,
+          renderer, quiet, provider, registry, toolExecutor,
+          modeConfig, llmCfg,
+        );
+        if (action === 'continue') continue;
       } else {
-        for (const [key] of consecutiveToolErrors) {
-          if (key.startsWith(parsed.name + '::')) consecutiveToolErrors.delete(key);
-        }
-        specialistSpawnedFor = null;
+        errorEscalator.resetForTool(parsed.name);
       }
 
       // НЕ добавляем "Continue." после каждого tool-вызова — это нарушает
