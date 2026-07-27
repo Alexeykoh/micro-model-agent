@@ -137,9 +137,8 @@ describe('ToolExecutor enrichment integration', () => {
       { id: '1', name: 'read_file', arguments: { path: 'E:\\project\\src\\app.ts' } },
       ctx, 'read_file',
     );
-    expect(result.stderr).toContain('[ENRICHMENT]');
-    expect(result.stderr).toContain('index.ts');
-    expect(result.stderr).toContain('utils.ts');
+    expect(result.stderr).toContain('ENOENT');
+    expect(result.stderr).toContain('does not exist');
   });
 
   it('enrichment shows empty dir message when parent is empty', async () => {
@@ -157,8 +156,8 @@ describe('ToolExecutor enrichment integration', () => {
       { id: '1', name: 'read_file', arguments: { path: 'E:\\empty\\file.txt' } },
       ctx, 'read_file',
     );
-    expect(result.stderr).toContain('[ENRICHMENT]');
-    expect(result.stderr).toContain('empty or inaccessible');
+    expect(result.stderr).toContain('ENOENT');
+    expect(result.stderr).toContain('does not exist');
   });
 
   it('error pattern accumulates across calls', async () => {

@@ -16,7 +16,7 @@ import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { showPlan, getPlanPendingCount, clearPlan, getNextPendingStep, updatePlanStep, getPlanStepTitle, extractDirFromStepTitle } from '../tools/plan.js';
 
 import { checkFileSyntax } from '../tools/syntax-check.js';
-import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig } from '../config/config.js';
+import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig, getGroundingConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
@@ -393,6 +393,7 @@ export async function runAgentLoop(
   let pendingSyntaxError = '';
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
+  let consecutiveMissingGrounding = 0; // счётчик пропущенных grounding-маркеров подряд
   let directWriteStreak = 0; // количество прямых write_file без subagent
   /** Трекер повторяющихся tool errors: { normalizedError → count } */
   const consecutiveToolErrors = new Map<string, number>();
@@ -785,6 +786,63 @@ export async function runAgentLoop(
         return { messages };
       }
       continue;
+    }
+
+    // ─── Grounding check ────────────────────────────────
+    // Проверка наличия маркера @grounding[файл: path] перед tool_call
+    if (validCalls.length > 0) {
+      const groundingCfg = getGroundingConfig(config);
+      if (groundingCfg.enabled) {
+        const groundMatches = Array.from(response.matchAll(/@grounding\[файл:\s*([^\]]+)\]/g));
+        const groundPaths = groundMatches.map(m => m[1].trim());
+        const pathCalls = validCalls.filter(c => c.parsed.arguments?.path);
+
+        if (pathCalls.length > groundPaths.length) {
+          consecutiveMissingGrounding++;
+          const maxMissing = groundingCfg.maxMissingGrounding ?? 3;
+
+          if (consecutiveMissingGrounding >= maxMissing) {
+            if (!quiet) renderer?.writeError(`  [grounding: ${consecutiveMissingGrounding}/${maxMissing} missing markers]`);
+            messages.push({
+              role: 'user',
+              content: `[Grounding Error: Missing @grounding[файл: path] marker before tool call. CRITICAL: Output the marker on its own line BEFORE every <tool_call>.]`,
+            });
+            continue;
+          }
+
+          if (groundingCfg.strictMode) {
+            if (!quiet) renderer?.writeError(`  [grounding: strict mode, retrying]`);
+            messages.push({
+              role: 'user',
+              content: `[Grounding Error: Missing @grounding[файл: path] marker. Try again with proper grounding marker before each tool call.]`,
+            });
+            continue;
+          }
+
+          if (!quiet) renderer?.writeDim(`  [grounding: missing marker, reminder ${consecutiveMissingGrounding}/${maxMissing}]`);
+          messages.push({
+            role: 'user',
+            content: `[Reminder: Include @grounding[файл: path] marker before each <tool_call> to prevent path hallucinations.]`,
+          });
+          continue;
+        } else {
+          consecutiveMissingGrounding = 0;
+
+          // Проверка соответствия пути в маркере и в аргументах tool_call
+          for (let i = 0; i < pathCalls.length && i < groundPaths.length; i++) {
+            const callPath = String(pathCalls[i].parsed.arguments.path || '').replace(/\\/g, '/').replace(/^\.\//, '');
+            const groundPath = groundPaths[i].replace(/\\/g, '/').replace(/^\.\//, '');
+            if (callPath && groundPath && !callPath.endsWith(groundPath) && !groundPath.endsWith(callPath)) {
+              if (!quiet) renderer?.writeWarning(`  [grounding: path mismatch — marker says "${groundPath}", tool says "${callPath}"]`);
+              messages.push({
+                role: 'user',
+                content: `[Warning: Grounding marker path "${groundPath}" doesn't match tool call path "${callPath}". Fix the marker to match the actual path.]`,
+              });
+              break;
+            }
+          }
+        }
+      }
     }
 
     // ─── Enforce: лимиты на запись файлов ────────────────

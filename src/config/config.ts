@@ -66,6 +66,12 @@ const DEFAULT_CONFIG: AppConfig = {
       maxSteps: 10,
       minErrorLength: 15,
     },
+    grounding: {
+      enabled: true,
+      strictMode: false,
+      checkFiles: true,
+      maxMissingGrounding: 3,
+    },
   },
 };
 
@@ -207,6 +213,26 @@ export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
     maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
     emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
     toolModel: src.toolModel ?? LLM_DEFAULTS.toolModel,
+  };
+}
+
+/** Grounding config defaults */
+const GROUNDING_DEFAULTS = {
+  enabled: true,
+  strictMode: false,
+  checkFiles: true,
+  maxMissingGrounding: 3,
+};
+
+/** Получить grounding конфиг с заполненными defaults */
+export function getGroundingConfig(config?: AppConfig): typeof GROUNDING_DEFAULTS {
+  const src = config?.agent?.grounding;
+  if (!src) return { ...GROUNDING_DEFAULTS };
+  return {
+    enabled: src.enabled ?? GROUNDING_DEFAULTS.enabled,
+    strictMode: src.strictMode ?? GROUNDING_DEFAULTS.strictMode,
+    checkFiles: src.checkFiles ?? GROUNDING_DEFAULTS.checkFiles,
+    maxMissingGrounding: src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
   };
 }
 

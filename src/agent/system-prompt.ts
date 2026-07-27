@@ -304,6 +304,22 @@ const RULES_FAST = `Rules:
        Step 4: write_file → save result
     e. NEVER guess CSS selectors — always use discover or scrape first.`;
 
+const GROUNDING_RULE = `## Grounding Rule (CRITICAL — prevents hallucinations)
+Before EVERY <tool_call> to a filesystem tool (read_file, write_file, edit_file, etc.),
+you MUST output a grounding marker on its own line:
+  @grounding[файл: <target-path>]
+where <target-path> is the file path from the tool call arguments.
+This proves you know which file you are operating on and prevents path hallucinations.
+
+Examples:
+  @grounding[файл: src/index.ts]
+  <tool_call>{"name":"read_file","arguments":{"path":"src/index.ts"}}</tool_call>
+
+  @grounding[файл: src/utils.ts]
+  <tool_call>{"name":"write_file","arguments":{"path":"src/utils.ts","content":"..."}}</tool_call>
+
+If you cannot determine the exact file path — do NOT call the tool. Ask the user for clarification first.`;
+
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
   <tool_call>{"name":"bash","arguments":{"cmd":"Get-Content src\\\\index.ts"}}</tool_call>
@@ -396,8 +412,8 @@ export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, plugi
 
   const rules = mode === 'fast' ? RULES_FAST : RULES_COMMON;
   const platformBlock = isWin
-    ? [TOOL_FORMAT, CONVERSATION_FLOW, POWERSHELL_EXAMPLES, rules, POWERSHELL_RULES].join('\n\n')
-    : [TOOL_FORMAT, CONVERSATION_FLOW, UNIX_EXAMPLES, rules, UNIX_RULES].join('\n\n');
+    ? [TOOL_FORMAT, CONVERSATION_FLOW, GROUNDING_RULE, POWERSHELL_EXAMPLES, rules, POWERSHELL_RULES].join('\n\n')
+    : [TOOL_FORMAT, CONVERSATION_FLOW, GROUNDING_RULE, UNIX_EXAMPLES, rules, UNIX_RULES].join('\n\n');
 
   const header = `You are Micro Models Agent (MMA), an AI coding assistant.
 You help with software engineering tasks in the project directory.`;

@@ -4,6 +4,8 @@ import { notifyFileChanged } from '../indexer/cache.js';
 import { invalidateSystemPromptCache } from './system-prompt.js';
 import type { PluginManager } from '../plugins/manager.js';
 import { resolve, dirname } from 'node:path';
+import { existsSync } from 'node:fs';
+import { getGroundingConfig } from '../config/config.js';
 
 /**
  * Диспетчер инструментов с пайплайном: pre-hooks → execute → post-hooks → truncate.
@@ -14,6 +16,15 @@ import { resolve, dirname } from 'node:path';
  *
  * @module agent/tool-executor
  */
+
+/** Инструменты, требующие path validation: путь должен существовать */
+const FS_TOOLS_REQUIRE_EXIST = new Set(['read_file', 'edit_file', 'delete_file', 'file_info']);
+
+/** Инструменты, для которых проверяем только родительскую директорию */
+const FS_TOOLS_CHECK_PARENT = new Set(['write_file', 'create_dir']);
+
+/** Инструменты с source/destination */
+const FS_TOOLS_COPY_MOVE = new Set(['copy_file', 'move_file']);
 
 /** Инструменты, которые модифицируют файловую систему */
 const MODIFYING_TOOLS = new Set(['write_file', 'edit_file', 'delete_file', 'copy_file', 'move_file']);
@@ -155,6 +166,49 @@ export class ToolExecutor {
     return Array.from(this.handlers.values()).map(h => h.definition);
   }
 
+  /** Pre-flight проверка существования пути для FS-тулов */
+  private preFlightCheck(name: string, args: Record<string, unknown>, cwd: string): string | null {
+    const groundingCfg = getGroundingConfig();
+    if (!groundingCfg.checkFiles) return null;
+
+    const pathArg = String(args.path ?? '');
+    const sourceArg = String(args.source ?? '');
+    const destArg = String(args.destination ?? '');
+
+    if (FS_TOOLS_REQUIRE_EXIST.has(name) && pathArg) {
+      const resolved = resolve(cwd, pathArg);
+      if (!existsSync(resolved)) {
+        return `ENOENT: path not found — "${pathArg}" does not exist.\nCheck the path with glob_search before calling ${name}.`;
+      }
+    }
+
+    if (FS_TOOLS_CHECK_PARENT.has(name) && pathArg) {
+      const resolved = resolve(cwd, pathArg);
+      const parent = dirname(resolved);
+      if (parent !== resolved && !existsSync(parent)) {
+        return `ENOENT: parent directory "${dirname(pathArg)}" does not exist.\nCreate it first with create_dir before calling ${name}.`;
+      }
+    }
+
+    if (FS_TOOLS_COPY_MOVE.has(name)) {
+      if (sourceArg) {
+        const resolvedSource = resolve(cwd, sourceArg);
+        if (!existsSync(resolvedSource)) {
+          return `ENOENT: source path not found — "${sourceArg}" does not exist.\nCheck the source path with glob_search before calling ${name}.`;
+        }
+      }
+      if (destArg && name === 'copy_file') {
+        const resolvedDest = resolve(cwd, destArg);
+        const parent = dirname(resolvedDest);
+        if (parent !== resolvedDest && !existsSync(parent)) {
+          return `ENOENT: parent directory of destination "${dirname(destArg)}" does not exist.\nCreate it first with create_dir.`;
+        }
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Выполнение tool call через пайплайн.
    *
@@ -208,6 +262,15 @@ export class ToolExecutor {
           exitCode: 1,
           truncated: false,
         },
+        elapsed: (performance.now() - start) / 1000,
+      };
+    }
+
+    // 2.5 Pre-flight validation путей для FS-тулов
+    const preFlightError = this.preFlightCheck(call.name, call.arguments, context.cwd);
+    if (preFlightError) {
+      return {
+        result: { stdout: '', stderr: preFlightError, exitCode: 1, truncated: false },
         elapsed: (performance.now() - start) / 1000,
       };
     }

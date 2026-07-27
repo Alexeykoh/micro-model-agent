@@ -64,6 +64,8 @@ export interface AgentConfig {
   specialist?: SpecialistConfig;
   /** Список плагинов для активации (имена через запятую) */
   plugins?: string[];
+  /** Grounding-конфигурация (борьба с галлюцинациями) */
+  grounding?: GroundingConfig;
 }
 
 /** Параметры LLM для tuning (пустые значения = использовать defaults) */
@@ -84,6 +86,18 @@ export interface LLMConfig {
   emptyResponseThreshold?: number;
   /** Модель для tool execution в subagent (default: undefined = тот же模型) */
   toolModel?: string;
+}
+
+/** Конфигурация grounding-проверок (борьба с галлюцинациями) */
+export interface GroundingConfig {
+  /** Включить grounding-проверки (default: true) */
+  enabled?: boolean;
+  /** strict=retry LLM, false=только reminder (default: false) */
+  strictMode?: boolean;
+  /** Pre-flight валидация путей (default: true) */
+  checkFiles?: boolean;
+  /** Сколько раз можно пропустить токен до retry (default: 3) */
+  maxMissingGrounding?: number;
 }
 
 /** Конфигурация auto-specialist (автоделегирование при повторяющихся ошибках) */

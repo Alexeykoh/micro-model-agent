@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getSpecialistConfig, getLLMConfig } from '../src/config/config.js';
+import { getSpecialistConfig, getLLMConfig, getGroundingConfig } from '../src/config/config.js';
 import type { AppConfig } from '../src/config/types.js';
 
 describe('getSpecialistConfig', () => {
@@ -50,6 +50,56 @@ describe('getSpecialistConfig', () => {
     expect(result.triggerThreshold).toBe(2); // default
     expect(result.maxSteps).toBe(10); // default
     expect(result.minErrorLength).toBe(15); // default
+  });
+});
+
+describe('getGroundingConfig', () => {
+  it('returns defaults when no config provided', () => {
+    const result = getGroundingConfig();
+    expect(result.enabled).toBe(true);
+    expect(result.strictMode).toBe(false);
+    expect(result.checkFiles).toBe(true);
+    expect(result.maxMissingGrounding).toBe(3);
+  });
+
+  it('returns defaults for empty config', () => {
+    const config = {} as AppConfig;
+    const result = getGroundingConfig(config);
+    expect(result.enabled).toBe(true);
+    expect(result.checkFiles).toBe(true);
+  });
+
+  it('overrides with user config', () => {
+    const config = {
+      agent: {
+        grounding: {
+          enabled: false,
+          strictMode: true,
+          checkFiles: false,
+          maxMissingGrounding: 5,
+        },
+      },
+    } as AppConfig;
+    const result = getGroundingConfig(config);
+    expect(result.enabled).toBe(false);
+    expect(result.strictMode).toBe(true);
+    expect(result.checkFiles).toBe(false);
+    expect(result.maxMissingGrounding).toBe(5);
+  });
+
+  it('partial override fills missing fields with defaults', () => {
+    const config = {
+      agent: {
+        grounding: {
+          enabled: false,
+        },
+      },
+    } as AppConfig;
+    const result = getGroundingConfig(config);
+    expect(result.enabled).toBe(false);
+    expect(result.strictMode).toBe(false); // default
+    expect(result.checkFiles).toBe(true); // default
+    expect(result.maxMissingGrounding).toBe(3); // default
   });
 });
 
