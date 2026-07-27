@@ -400,7 +400,14 @@ export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, plugi
   let projectName = 'unknown';
   const pkgPath = resolve(process.cwd(), 'package.json');
   if (existsSync(pkgPath)) {
-    try { projectName = JSON.parse(readFileSync(pkgPath, 'utf-8')).name || 'unknown'; } catch { /* ignore */ }
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      // Читаем ТОЛЬКО имя проекта — никакие другие поля package.json
+      // не должны попадать в system prompt (возможны токены, apiKey и т.д.)
+      if (typeof pkg.name === 'string' && pkg.name) {
+        projectName = pkg.name;
+      }
+    } catch { /* ignore */ }
   }
 
   const rules = mode === 'fast' ? RULES_FAST : RULES_COMMON;
