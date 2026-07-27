@@ -91,7 +91,9 @@ function deepAssign(target: Record<string, unknown>, source: Record<string, unkn
   for (const key of Object.keys(source)) {
     const tv = target[key];
     const sv = source[key];
-    if (tv && typeof tv === 'object' && !Array.isArray(tv) && sv && typeof sv === 'object' && !Array.isArray(sv)) {
+    if (Array.isArray(tv) || Array.isArray(sv)) {
+      target[key] = sv;
+    } else if (tv && typeof tv === 'object' && sv && typeof sv === 'object') {
       deepAssign(tv as Record<string, unknown>, sv as Record<string, unknown>);
     } else {
       target[key] = sv;
