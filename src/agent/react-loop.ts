@@ -1,7 +1,7 @@
-import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ContextManager } from './context.js';
-import { extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
+import { doChat } from '../tools/subagent.js';
+import { parseToolCalls } from '../tools/parse-tool-call.js';
 import { logDebug, logInfo, logWarn } from '../logger.js';
 
 /**
@@ -137,20 +137,7 @@ export async function reactLoop(
     lastResponse = finalResponse;
     messages.push({ role: 'assistant', content: finalResponse });
 
-    // Parse tool calls
-    const allJsonRaw = extractAllToolCalls(finalResponse);
-    const validCalls: { parsed: Record<string, unknown>; cmd?: string }[] = [];
-
-    for (const jsonRaw of allJsonRaw) {
-      let p: Record<string, unknown> | null = null;
-      try { p = JSON.parse(jsonrepair(jsonRaw)); } catch {
-        try { p = JSON.parse(jsonRaw); } catch { /* skip */ }
-      }
-      if (p) {
-        const v = validateToolCall(p);
-        if (v.valid) validCalls.push({ parsed: p, cmd: v.cmd });
-      }
-    }
+    const { validCalls } = parseToolCalls(finalResponse);
 
     // No tool calls — done
     if (validCalls.length === 0) {

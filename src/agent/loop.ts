@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ToolRegistry } from '../tools/registry.js';
+import { parseToolCalls } from '../tools/parse-tool-call.js';
 import type { ParsedToolCall } from '../tools/types.js';
 import { parseFileRefs } from '../file-loader.js';
 import { ContextManager } from './context.js';
@@ -21,7 +21,7 @@ import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
-import { IsolatedLoopResult, buildSubagentContext, buildSpecialistTask, isTrivialError, runIsolatedLoop, extractAllToolCalls, validateToolCall, doChat } from '../tools/subagent.js';
+import { IsolatedLoopResult, buildSubagentContext, buildSpecialistTask, isTrivialError, runIsolatedLoop, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
 import { PluginManager } from '../plugins/manager.js';
@@ -583,40 +583,7 @@ export async function runAgentLoop(
 
     messages.push({ role: 'assistant', content: response });
 
-    // ─── Парсинг tool calls ─────────────────────────────
-    // Извлекаем JSON из тегов <tool_call>...</tool_call> и валидируем
-    const allJsonRaw = extractAllToolCalls(response);
-
-    const validCalls: { parsed: any; cmd?: string }[] = [];
-    const invalidCalls: string[] = [];
-    for (const jsonRaw of allJsonRaw) {
-      let p: any = null;
-      try {
-        p = JSON.parse(jsonrepair(jsonRaw));
-      } catch {
-        try { p = JSON.parse(jsonRaw); } catch { /* continue */ }
-      }
-
-      if (p) {
-        const v = validateToolCall(p);
-        if (v.valid) {
-          validCalls.push({ parsed: p, cmd: v.cmd });
-        } else if (v.error) {
-          invalidCalls.push(v.error);
-        }
-      }
-    }
-
-    // ─── Fallback: regex-извлечение при невалидном JSON ───
-    if (validCalls.length === 0) {
-      const fallback = extractToolCallFallback(response);
-      if (fallback) {
-        validCalls.push({ parsed: { name: 'bash', arguments: { cmd: fallback.cmd } }, cmd: fallback.cmd });
-        if (!quiet) {
-          renderer?.writeBracketTag('fallback', 'regex extracted command');
-        }
-      }
-    }
+    const { validCalls, invalidCalls } = parseToolCalls(response);
 
     if (validCalls.length === 0) {
       if (invalidCalls.length > 0) {

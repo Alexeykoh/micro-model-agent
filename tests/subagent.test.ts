@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { extractAllToolCalls, validateToolCall, buildSubagentContext, buildSpecialistTask, isTrivialError, subagentDefinition } from '../src/tools/subagent.js';
+import { extractAllToolCalls } from '../src/tools/parse-tool-call.js';
+import { validateToolCall, buildSubagentContext, buildSpecialistTask, isTrivialError, subagentDefinition } from '../src/tools/subagent.js';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

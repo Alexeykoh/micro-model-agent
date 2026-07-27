@@ -1,4 +1,4 @@
-import { jsonrepair } from 'jsonrepair';
+import { parseToolCalls } from './parse-tool-call.js';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { LMStudioNative } from '../llm/lmstudio-native.js';
 import { OpenAICompat } from '../llm/openai-compat.js';
@@ -199,62 +199,6 @@ export function isTrivialError(toolName: string, errorOutput: string): boolean {
 }
 
 // ─── Tool call parsing ───────────────────────────────────
-
-/**
- * Извлекает все JSON-блоки из тегов <tool_call>...</tool_call>.
- * Дублируется из loop.ts для изоляции субагентов.
- *
- * @param response - ответ модели
- * @returns Массив JSON-строк из tool calls
- */
-export function extractAllToolCalls(response: string): string[] {
-  const results: string[] = [];
-  let text = response;
-
-  while (true) {
-    const tcStart = text.indexOf('<tool_call>');
-    if (tcStart === -1) break;
-
-    const tcEnd = text.indexOf('</tool_call>', tcStart);
-    let block: string;
-    if (tcEnd !== -1) {
-      block = text.slice(tcStart + '<tool_call>'.length, tcEnd);
-      text = text.slice(tcEnd + '</tool_call>'.length);
-    } else {
-      block = text.slice(tcStart + '<tool_call>'.length);
-      text = '';
-    }
-
-    block = block.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
-
-    const jsonStart = block.indexOf('{');
-    if (jsonStart === -1) continue;
-
-    let depth = 0;
-    let inStr = false;
-    let esc = false;
-
-    for (let i = jsonStart; i < block.length; i++) {
-      const ch = block[i];
-      if (esc) { esc = false; continue; }
-      if (ch === '\\' && inStr) { esc = true; continue; }
-      if (ch === '"') { inStr = !inStr; continue; }
-      if (inStr) continue;
-      if (ch === '{') depth++;
-      if (ch === '}') depth--;
-      if (depth === 0) {
-        results.push(block.slice(jsonStart, i + 1));
-        break;
-      }
-    }
-
-    if (depth > 0 && jsonStart < block.length) {
-      results.push(block.slice(jsonStart));
-    }
-  }
-
-  return results;
-}
 
 /**
  * Валидация tool call: проверка имени инструмента и обязательных аргументов.
@@ -721,19 +665,7 @@ export async function runIsolatedLoop(
 
     messages.push({ role: 'assistant', content: response });
 
-    const allJsonRaw = extractAllToolCalls(response);
-    const validCalls: { parsed: any; cmd?: string }[] = [];
-
-    for (const jsonRaw of allJsonRaw) {
-      let p: any = null;
-      try { p = JSON.parse(jsonrepair(jsonRaw)); } catch {
-        try { p = JSON.parse(jsonRaw); } catch { /* skip */ }
-      }
-      if (p) {
-        const v = validateToolCall(p);
-        if (v.valid) validCalls.push({ parsed: p, cmd: v.cmd });
-      }
-    }
+    const { validCalls } = parseToolCalls(response);
 
     if (validCalls.length === 0) {
       logDebug('SUBAGENT', `no valid tool calls at step ${step}, stopping`);
