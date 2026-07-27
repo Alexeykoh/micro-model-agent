@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import type { CompleterResult } from 'node:readline'
 import type { OutputRenderer, StatusInfo } from './renderer.js'
 import { getTheme } from '../styling/index.js'
+import { MdStreamFormatter } from './md-formatter.js'
 
 /**
  * Readline-рендерер — простой текстовый вывод в терминал.
@@ -29,6 +30,7 @@ export class ReadlineRenderer implements OutputRenderer {
   private commands: SlashCommandInfo[] = []
   private _streamRole: 'assistant' | 'subagent' | 'expert' | null = null
   private _streamStarted = false
+  private _mdFormatter = new MdStreamFormatter()
 
   setCommands(cmds: SlashCommandInfo[]): void {
     this.commands = cmds
@@ -127,6 +129,7 @@ export class ReadlineRenderer implements OutputRenderer {
   setStreamRole(role: 'assistant' | 'subagent' | 'expert' | null): void {
     this._streamRole = role
     this._streamStarted = false
+    this._mdFormatter.reset()
   }
 
   writeMarkdownChunk(chunk: string): void {
@@ -135,26 +138,21 @@ export class ReadlineRenderer implements OutputRenderer {
       process.stdout.write(`\n${prefix}\n`)
       this._streamStarted = true
     }
-    if (this._streamRole) {
-      const colored = this.streamColor(this._streamRole, chunk)
-      process.stdout.write(colored)
-    } else {
-      process.stdout.write(chunk)
-    }
-  }
 
-  private streamColor(role: string, text: string): string {
-    switch (role) {
-      case 'assistant': return this.theme.assistantRole(text)
-      case 'subagent': return this.theme.subagentRole(text)
-      case 'expert': return this.theme.expertRole(text)
-      default: return text
+    const formatted = this._mdFormatter.push(chunk)
+    if (formatted) {
+      process.stdout.write(formatted)
     }
   }
 
   commitMarkdown(): void {
+    const flushed = this._mdFormatter.flush()
+    if (flushed) {
+      process.stdout.write(flushed)
+    }
     this._streamRole = null
     this._streamStarted = false
+    this._mdFormatter.reset()
     console.log()
   }
 

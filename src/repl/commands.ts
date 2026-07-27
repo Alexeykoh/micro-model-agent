@@ -11,7 +11,7 @@ import { loadProfile, profileExists, appendNote } from '../agent/user-profile.js
 import { listInstalledSkills, listSkillsBySource } from '../skills/loader.js';
 import { listSessions, loadSession, createNamedSession, createAutoSession, formatSessionList } from '../session/store.js';
 import { rebuildCodeIndex, rebuildProjectMap, getOrBuildCodeIndex, getOrBuildProjectMap } from '../indexer/cache.js';
-import { getTheme, listThemes, switchTheme } from '../styling/index.js';
+import { getTheme, listThemes, switchTheme, ThemeEngine } from '../styling/index.js';
 import { loadThemeConfig, installTheme, removeTheme } from '../styling/loader.js';
 import { loadConfig, saveConfig } from '../config/config.js';
 import { logInfo } from '../logger.js';
@@ -104,6 +104,17 @@ function cmdExit(_args: string, ctx: CommandContext): void {
   ctx.renderer.destroy();
 }
 
+type HelpEntry = { cmd: string; desc: string };
+
+function formatHelpCmd(theme: ThemeEngine, cmd: string): string {
+  const parts = cmd.split(/\s+/);
+  const cmdName = parts[0];
+  const rest = parts.slice(1).join(' ');
+  const styled = cmdName.startsWith('/') ? theme.toolName(cmdName) : theme.toolName(cmdName);
+  if (!rest) return styled;
+  return `${styled} ${theme.dim(rest)}`;
+}
+
 function cmdHelp(_args: string, ctx: CommandContext): void {
   const theme = getTheme();
   const msgCount = ctx.conversationHistory.length;
@@ -118,46 +129,62 @@ function cmdHelp(_args: string, ctx: CommandContext): void {
   ctx.renderer.writeDim(`  messages:  ${msgCount}`);
   ctx.renderer.writeDim(`  cwd:       ${cwd}`);
   ctx.renderer.writeNewline();
-  ctx.renderer.writeDim(`  ── / commands ──
-  /bash <cmd>       — run shell command
-  /read <file>      — display file with line numbers
-  /edit <file> <n>  — replace line N in file with rest of args
-  /write <file>     — write file (end with EOF on its own line)
-  /find <pattern>   — find files by glob pattern
-  /search <pattern> — search file contents
-  /git <args>       — git operations
-  /memory           — memory management (show/add/search/remove/export)
-  /skill            — list installed skills
-  /plugins          — list plugins
-  /tools            — list agent tools
-  /sessions         — list saved sessions
-  /resume <id>      — resume a session
-  /save [name]      — save current session
-  /clear            — clear screen (visual only)
-  /new              — reset session (clear history)
-  /export [mode]    — export session (normal or debug)
-  /init             — analyze project & create AGENTS.md
-  /index [cmd]      — index status/show/map/rebuild
-  /profile [note]   — show profile or add note
-  /profile name <n>  — save your name
-  /profile show     — show profile content
-  /mode fast|base|pro — switch agent mode
-  /stop             — stop agent loop
-  /exit             — exit MMA`);
-  ctx.renderer.writeDim(`  ── CLI commands (exit REPL, then run) ──
-  mma provider list                — list providers
-  mma provider add <name> <url>    — add provider (Ollama, vLLM, Together...)
-  mma provider use <name>          — switch active provider
-  mma provider remove <name>       — remove provider
-  mma model list                   — list models
-  mma model add <name> <id> <ctx>  — add model (e.g. qwen3.5-9b ... 32768)
-  mma model use <name>             — switch active model
-  mma model params [name]          — show model parameters
-  mma model set <name> k=v         — change parameter (temperature=0.3)
-  mma config show                  — show full configuration
-  mma config reset                 — reset to defaults
-  mma update                       — check for updates
-  mma update install               — install latest version`);
+
+  const slashHelp: HelpEntry[] = [
+    { cmd: '/bash <cmd>', desc: 'run shell command' },
+    { cmd: '/read <file>', desc: 'display file with line numbers' },
+    { cmd: '/edit <file> <n>', desc: "replace line N in file with rest of args" },
+    { cmd: '/write <file>', desc: 'write file (end with EOF on its own line)' },
+    { cmd: '/find <pattern>', desc: 'find files by glob pattern' },
+    { cmd: '/search <pattern>', desc: 'search file contents' },
+    { cmd: '/git <args>', desc: 'git operations' },
+    { cmd: '/memory', desc: 'memory management (show/add/search/remove/export)' },
+    { cmd: '/skill', desc: 'list installed skills' },
+    { cmd: '/plugins', desc: 'list plugins' },
+    { cmd: '/tools', desc: 'list agent tools' },
+    { cmd: '/sessions', desc: 'list saved sessions' },
+    { cmd: '/resume <id>', desc: 'resume a session' },
+    { cmd: '/save [name]', desc: 'save current session' },
+    { cmd: '/clear', desc: 'clear screen (visual only)' },
+    { cmd: '/new', desc: 'reset session (clear history)' },
+    { cmd: '/export [mode]', desc: 'export session (normal or debug)' },
+    { cmd: '/init', desc: 'analyze project & create AGENTS.md' },
+    { cmd: '/index [cmd]', desc: 'index status/show/map/rebuild' },
+    { cmd: '/profile [note]', desc: 'show profile or add note' },
+    { cmd: '/profile name <n>', desc: 'save your name' },
+    { cmd: '/profile show', desc: 'show profile content' },
+    { cmd: '/mode fast|base|pro', desc: 'switch agent mode' },
+    { cmd: '/stop', desc: 'stop agent loop' },
+    { cmd: '/exit', desc: 'exit MMA' },
+  ];
+
+  ctx.renderer.writeLine(`  ${theme.highlight('/ commands')}`);
+  for (const entry of slashHelp) {
+    ctx.renderer.writeLine(`  ${formatHelpCmd(theme, entry.cmd)} ${theme.dim(`— ${entry.desc}`)}`);
+  }
+
+  ctx.renderer.writeNewline();
+
+  const cliHelp: HelpEntry[] = [
+    { cmd: 'mma provider list', desc: 'list providers' },
+    { cmd: 'mma provider add <name> <url>', desc: 'add provider (Ollama, vLLM, Together...)' },
+    { cmd: 'mma provider use <name>', desc: 'switch active provider' },
+    { cmd: 'mma provider remove <name>', desc: 'remove provider' },
+    { cmd: 'mma model list', desc: 'list models' },
+    { cmd: 'mma model add <name> <id> <ctx>', desc: 'add model (e.g. qwen3.5-9b ... 32768)' },
+    { cmd: 'mma model use <name>', desc: 'switch active model' },
+    { cmd: 'mma model params [name]', desc: 'show model parameters' },
+    { cmd: 'mma model set <name> k=v', desc: 'change parameter (temperature=0.3)' },
+    { cmd: 'mma config show', desc: 'show full configuration' },
+    { cmd: 'mma config reset', desc: 'reset to defaults' },
+    { cmd: 'mma update', desc: 'check for updates' },
+    { cmd: 'mma update install', desc: 'install latest version' },
+  ];
+
+  ctx.renderer.writeLine(`  ${theme.highlight('CLI commands')} ${theme.dim('(exit REPL, then run)')}`);
+  for (const entry of cliHelp) {
+    ctx.renderer.writeLine(`  ${formatHelpCmd(theme, entry.cmd)} ${theme.dim(`— ${entry.desc}`)}`);
+  }
 }
 
 async function cmdBash(args: string, ctx: CommandContext): Promise<void> {
@@ -266,17 +293,23 @@ function cmdFind(args: string, ctx: CommandContext): void {
 function cmdSearch(args: string, ctx: CommandContext): void {
   try {
     const result = execSync(`findstr /s /n /c:"${args}" *.ts *.js *.tsx *.jsx *.json *.md`, { encoding: 'utf-8', timeout: 10000 });
-    const lines = result.trim().split('\n').slice(0, 30);
+    const allLines = result.trim().split('\n');
+    const lines = allLines.slice(0, 30);
     if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) {
       ctx.renderer.writeDim('  No matches');
       return;
     }
     const theme = getTheme();
     for (const line of lines) {
-      ctx.renderer.writeLine(`${theme.indent}${line}`);
+      const match = line.match(/^([^:]+):(\d+):(.*)/);
+      if (match) {
+        ctx.renderer.writeLine(`  ${theme.filePath(match[1])}${theme.dim(':')}${theme.lineNumbers(match[2])}${theme.dim(':')}${match[3]}`);
+      } else {
+        ctx.renderer.writeLine(`${theme.indent}${line}`);
+      }
     }
-    if (result.trim().split('\n').length > 30) {
-      ctx.renderer.writeDim(`  ... (${result.trim().split('\n').length - 30} more)`);
+    if (allLines.length > 30) {
+      ctx.renderer.writeDim(`  ... (${allLines.length - 30} more)`);
     }
   } catch (e: any) {
     if ((e as any).status === 1) {
@@ -332,7 +365,7 @@ function cmdMemory(args: string, ctx: CommandContext): void {
         return;
       }
       saveMemory(type, text.slice(0, 60), text);
-      ctx.renderer.writeSuccess(`Saved to .mma/memory/${type}.md`);
+      ctx.renderer.writeSuccess(`Saved to ${theme.filePath(`.mma/memory/${type}.md`)}`);
       break;
     }
     case 'search': {
@@ -347,7 +380,7 @@ function cmdMemory(args: string, ctx: CommandContext): void {
       }
       ctx.renderer.writeInfo(`  Found ${results.length} matches:`);
       for (const r of results) {
-        ctx.renderer.writeLine(`  [${r.type}] ${r.match}`);
+        ctx.renderer.writeLine(`  ${theme.highlight(`[${r.type}]`)} ${theme.dim(r.match)}`);
       }
       break;
     }
@@ -364,7 +397,7 @@ function cmdMemory(args: string, ctx: CommandContext): void {
       }
       const removed = removeMemoryEntry(type, lineNum);
       if (removed) {
-        ctx.renderer.writeSuccess(`Entry removed from ${type}.md`);
+        ctx.renderer.writeSuccess(`Entry removed from ${theme.filePath(`${type}.md`)}`);
       } else {
         ctx.renderer.writeError('  Could not remove entry (line number out of range?)');
       }
@@ -373,7 +406,7 @@ function cmdMemory(args: string, ctx: CommandContext): void {
     case 'export': {
       const exported = exportMemory();
       if (exported) {
-        ctx.renderer.writeSuccess(`Memory exported to ${exported}`);
+        ctx.renderer.writeSuccess(`Memory exported to ${theme.filePath(exported)}`);
       } else {
         ctx.renderer.writeDim('  No memory to export');
       }
@@ -387,6 +420,7 @@ function cmdMemory(args: string, ctx: CommandContext): void {
 
 function cmdSkill(args: string, ctx: CommandContext): void {
   const subcmd = args.trim() || 'list';
+  const theme = getTheme();
   switch (subcmd) {
     case 'list': {
       const bySource = listSkillsBySource(process.cwd());
@@ -398,18 +432,18 @@ function cmdSkill(args: string, ctx: CommandContext): void {
       }
       ctx.renderer.writeInfo(`  Skills (${total} total):`);
       if (bySource.builtin.length > 0) {
-        ctx.renderer.writeLine(`    built-in:`);
-        for (const s of bySource.builtin) ctx.renderer.writeLine(`      @${s}`);
+        ctx.renderer.writeLine(`    ${theme.info('built-in:')}`);
+        for (const s of bySource.builtin) ctx.renderer.writeLine(`      ${theme.toolName(`@${s}`)}`);
       }
       if (bySource.project.length > 0) {
-        ctx.renderer.writeLine(`    project:`);
-        for (const s of bySource.project) ctx.renderer.writeLine(`      @${s}`);
+        ctx.renderer.writeLine(`    ${theme.info('project:')}`);
+        for (const s of bySource.project) ctx.renderer.writeLine(`      ${theme.toolName(`@${s}`)}`);
       }
       if (bySource.global.length > 0) {
-        ctx.renderer.writeLine(`    global:`);
-        for (const s of bySource.global) ctx.renderer.writeLine(`      @${s}`);
+        ctx.renderer.writeLine(`    ${theme.info('global:')}`);
+        for (const s of bySource.global) ctx.renderer.writeLine(`      ${theme.toolName(`@${s}`)}`);
       }
-      ctx.renderer.writeDim('  Reference: @skill-name');
+      ctx.renderer.writeDim(`  ${theme.dim('Reference:')} ${theme.symbolName('@skill-name')}`);
       break;
     }
     default:
@@ -421,6 +455,7 @@ async function cmdPlugins(_args: string, ctx: CommandContext): Promise<void> {
   const pluginManager = new PluginManager();
   await loadAllPluginsWithInfo(pluginManager);
   const plugins = pluginManager.listPlugins();
+  const theme = getTheme();
 
   if (plugins.length === 0) {
     ctx.renderer.writeDim('  No plugins available.');
@@ -430,18 +465,49 @@ async function cmdPlugins(_args: string, ctx: CommandContext): Promise<void> {
 
   ctx.renderer.writeInfo(`  Available plugins (${plugins.length}):`);
   for (const p of plugins) {
-    const version = p.version ? ` v${p.version}` : '';
-    const status = p.active ? 'active' : 'inactive';
-    ctx.renderer.writeLine(`    ${p.name}${version}  [${p.source}]  ${status}`);
+    const version = p.version ? ` ${theme.dim(`v${p.version}`)}` : '';
+    const source = theme.dim(`[${p.source}]`);
+    const status = p.active ? theme.success('active') : theme.dim('inactive');
+    ctx.renderer.writeLine(`    ${theme.highlight(p.name)}${version}  ${source}  ${status}`);
   }
 }
 
 function cmdTools(_args: string, ctx: CommandContext): void {
   const defs = ctx.registry.getDefinitions();
-  ctx.renderer.writeInfo(`  Available tools (${defs.length}):`);
-  for (const d of defs) {
-    ctx.renderer.writeLine(`    ${d.function.name}  — ${d.function.description.split('\n')[0]}`);
+  const theme = getTheme();
+
+  const categories: Record<string, { names: Set<string>; color: (s: string) => string }> = {
+    native: { names: new Set(['subagent', 'scaffold', 'project_map']), color: (s) => theme.toolName(s) },
+    bash: { names: new Set(['bash']), color: (s) => theme.symbolName(s) },
+    fs: { names: new Set(['read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree']), color: (s) => theme.filePath(s) },
+    web: { names: new Set(['web_search', 'web_fetch', 'web_browse']), color: (s) => theme.link(s) },
+  };
+
+  const categoryMeta = [
+    { key: 'native', label: 'native' },
+    { key: 'bash',   label: 'exec' },
+    { key: 'fs',     label: 'files' },
+    { key: 'web',    label: 'web' },
+  ];
+
+  ctx.renderer.writeNewline();
+  ctx.renderer.writeInfo(`  tools (${defs.length}):`);
+
+  for (const meta of categoryMeta) {
+    const cat = categories[meta.key];
+    const items = defs.filter(d => cat.names.has(d.function.name));
+    if (items.length === 0) continue;
+
+    ctx.renderer.writeLine(`  ${theme.dim(meta.label + ':')}`);
+    for (const d of items) {
+      const desc = d.function.description.split('\n')[0];
+      const shortDesc = desc.length > 55 ? desc.slice(0, 52) + '…' : desc;
+      ctx.renderer.writeLine(`    ${cat.color(d.function.name)} ${theme.dim('—')} ${theme.dim(shortDesc)}`);
+    }
   }
+
+  ctx.renderer.writeNewline();
+  ctx.renderer.writeLine(theme.dim(`  details: /help`));
 }
 
 function cmdSessions(_args: string, ctx: CommandContext): void {
@@ -450,6 +516,7 @@ function cmdSessions(_args: string, ctx: CommandContext): void {
 }
 
 async function cmdResume(args: string, ctx: CommandContext): Promise<void> {
+  const theme = getTheme();
   if (!args.trim()) {
     ctx.renderer.writeInfo('  Usage: /resume <session-id>');
     ctx.renderer.writeInfo('  Use /sessions to see available sessions.');
@@ -457,12 +524,12 @@ async function cmdResume(args: string, ctx: CommandContext): Promise<void> {
   }
   const session = loadSession(args.trim());
   if (!session) {
-    ctx.renderer.writeError(`  Session "${args.trim()}" not found.`);
+    ctx.renderer.writeError(`  Session ${theme.highlight(args.trim())} not found.`);
     return;
   }
 
   ctx.renderer.clear();
-  ctx.renderer.writeInfo(`  Resumed session: ${session.id} (${session.messages.length} messages)`);
+  ctx.renderer.writeInfo(`  Resumed session: ${theme.highlight(session.id)} (${session.messages.length} messages)`);
   ctx.renderer.writeDim(`  Provider: ${session.provider}`);
   ctx.renderer.writeNewline();
 
@@ -505,7 +572,8 @@ function cmdSave(args: string, ctx: CommandContext): void {
   const providerLabel = `${ctx.provider.model}`;
   const filePath = createNamedSession(name, ctx.history, providerLabel, process.cwd(), { totalTokens: 0, compactCount: 0 });
   const id = filePath.split(/[/\\]/).pop()?.replace('.json', '') || '';
-  ctx.renderer.writeSuccess(`Session saved: ${id}${name ? ` (${name})` : ''}`);
+  const theme = getTheme();
+  ctx.renderer.writeSuccess(`Session saved: ${theme.highlight(id)}${name ? ` (${theme.dim(name)})` : ''}`);
 }
 
 function cmdClear(_args: string, ctx: CommandContext): void {
@@ -774,7 +842,7 @@ function cmdProfile(args: string, ctx: CommandContext): void {
 
   if (subcmd === 'name' && rest) {
     appendNote(`Имя пользователя: ${rest}`, 'Notes');
-    ctx.renderer.writeSuccess(`  Name saved: ${rest}`);
+    ctx.renderer.writeSuccess(`  Name saved: ${theme.highlight(rest)}`);
     return;
   }
 
@@ -824,7 +892,8 @@ function cmdExport(args: string, ctx: CommandContext): void {
   const filename = `.mma/export-${Date.now()}.md`;
   mkdirSync('.mma', { recursive: true });
   writeFileSync(filename, output, 'utf-8');
-  ctx.renderer.writeSuccess(`  Exported to ${filename}`);
+  const theme = getTheme();
+  ctx.renderer.writeSuccess(`  Exported to ${theme.filePath(filename)}`);
 }
 
 async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
@@ -847,8 +916,8 @@ async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
     case 'show': {
       const config = loadThemeConfig();
       ctx.renderer.writeInfo(`  Current theme: ${theme.highlight(config.name)}`);
-      ctx.renderer.writeLine(`    Colors: ${Object.keys(config.colors).length} keys`);
-      ctx.renderer.writeLine(`    Icons: ${Object.keys(config.icons).length} keys`);
+      ctx.renderer.writeLine(`    ${theme.dim('Colors:')} ${theme.highlight(String(Object.keys(config.colors).length))} keys`);
+      ctx.renderer.writeLine(`    ${theme.dim('Icons:')} ${theme.highlight(String(Object.keys(config.icons).length))} keys`);
       break;
     }
     case 'create': {
@@ -856,18 +925,18 @@ async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
       const current = loadThemeConfig();
       current.name = name;
       const filePath = installTheme(name, JSON.stringify(current, null, 2));
-      ctx.renderer.writeSuccess(`  Theme "${name}" created (${filePath})`);
+      ctx.renderer.writeSuccess(`  Theme ${theme.highlight(name)} created (${theme.filePath(filePath)})`);
       break;
     }
     case 'install': {
       const [themeName, url] = parts.slice(1);
       if (!themeName || !url) { ctx.renderer.writeInfo('  Usage: /theme install <name> <url>'); break; }
-      ctx.renderer.writeDim(`  Downloading from ${url}...`);
+      ctx.renderer.writeDim(`  Downloading from ${theme.link(url)}...`);
       try {
         const resp = execSync(`curl -s "${url}"`, { encoding: 'utf-8', timeout: 10000, windowsHide: true });
         JSON.parse(resp);
         const filePath = installTheme(themeName, resp);
-        ctx.renderer.writeSuccess(`  Theme "${themeName}" installed (${filePath})`);
+        ctx.renderer.writeSuccess(`  Theme ${theme.highlight(themeName)} installed (${theme.filePath(filePath)})`);
       } catch (e: any) {
         ctx.renderer.writeError(`  Failed to install: ${e.message}`);
       }
@@ -875,13 +944,13 @@ async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
     }
     case 'remove': {
       if (!name) { ctx.renderer.writeInfo('  Usage: /theme remove <name>'); break; }
-      if (!removeTheme(name)) { ctx.renderer.writeError(`  Theme "${name}" not found`); break; }
-      ctx.renderer.writeSuccess(`  Theme "${name}" removed`);
+      if (!removeTheme(name)) { ctx.renderer.writeError(`  Theme ${theme.highlight(name)} not found`); break; }
+      ctx.renderer.writeSuccess(`  Theme ${theme.highlight(name)} removed`);
       break;
     }
     default: {
       const allThemes = listThemes();
-      if (!allThemes.includes(subcmd)) { ctx.renderer.writeError(`  Unknown theme "${subcmd}". Use /theme list`); break; }
+      if (!allThemes.includes(subcmd)) { ctx.renderer.writeError(`  Unknown theme ${theme.highlight(subcmd)}. Use /theme list`); break; }
       const config = loadConfig();
       config.theme = subcmd;
       saveConfig(config);
