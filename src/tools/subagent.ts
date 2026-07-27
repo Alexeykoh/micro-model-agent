@@ -1,3 +1,4 @@
+import { generateSubagentToolCallId } from './id-gen.js';
 import { parseToolCalls } from './parse-tool-call.js';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { LMStudioNative } from '../llm/lmstudio-native.js';
@@ -670,7 +671,7 @@ export async function runIsolatedLoop(
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
-      const toolId = `sub-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+      const toolId = generateSubagentToolCallId();
       toolCallCount++;
 
       let toolOutput = '';

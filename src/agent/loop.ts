@@ -15,6 +15,7 @@ import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
 import { isMCPCommand, parseMCPCommand, callMCPTool } from '../tools/mcp.js';
 import { showPlan, getPlanPendingCount, clearPlan, getNextPendingStep, updatePlanStep, getPlanStepTitle, extractDirFromStepTitle } from '../tools/plan.js';
 
+import { generateToolCallId } from '../tools/id-gen.js';
 import { checkFileSyntax } from '../tools/syntax-check.js';
 import { loadConfig, saveConfig, getLLMConfig, getSpecialistConfig, getGroundingConfig } from '../config/config.js';
 import type { OutputRenderer } from '../ui/renderer.js';
@@ -824,7 +825,7 @@ export async function runAgentLoop(
         for (const wc of directWrites) {
           const idx = validCalls.indexOf(wc);
           if (idx !== -1) validCalls.splice(idx, 1);
-          const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+          const blockId = generateToolCallId();
           messages.push({
             role: 'tool',
             content: `BLOCKED: Multi-step plan active. Use subagent for each step. Example: subagent({task:"Create file X", existingFiles:"Y.ts"}). After subagent completes, mark step done: plan({action:"done", step:N})`,
@@ -854,7 +855,7 @@ export async function runAgentLoop(
             if (idx !== -1) validCalls.splice(idx, 1);
           }
           if (directWrites.length > 0) {
-            const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+            const blockId = generateToolCallId();
             messages.push({
               role: 'tool',
               content: `BLOCKED: You're creating file #${directWriteStreak} without subagent. For 3+ new files, use subagent for each one. Example: subagent("Create file X. Context: Y already exists.")`,
@@ -875,7 +876,7 @@ export async function runAgentLoop(
       const blocked = writeCalls.slice(1);
       validCalls.splice(validCalls.indexOf(blocked[0]), blocked.length);
       for (const bc of blocked) {
-        const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+        const blockId = generateToolCallId();
         messages.push({
           role: 'tool',
           content: `BLOCKED: Only one file write per response is allowed. You wrote ${writeCalls.length} files at once. Complete the first file, then write the next one.`,
@@ -894,7 +895,7 @@ export async function runAgentLoop(
       const preview = isBash
         ? (cmd!.length > 200 ? cmd!.slice(0, 200) + '...' : cmd!)
         : JSON.stringify(parsed.arguments);
-      const toolId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+      const toolId = generateToolCallId();
 
       logToolCall(parsed.name, preview);
 
@@ -1244,7 +1245,7 @@ export async function runAgentLoop(
         }
 
         if (errorCount >= 4) {
-          const blockId = `call-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+          const blockId = generateToolCallId();
           messages.push({ role: 'tool', content: `BLOCKED: Tool "${parsed.name}" failed ${errorCount} times. Temporarily blocked.`, tool_call_id: blockId });
           const idx = validCalls.indexOf(call);
           if (idx !== -1) validCalls.splice(idx, 1);

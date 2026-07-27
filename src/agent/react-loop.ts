@@ -1,6 +1,7 @@
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ContextManager } from './context.js';
 import { doChat } from '../tools/subagent.js';
+import { generateReactToolCallId } from '../tools/id-gen.js';
 import { parseToolCalls } from '../tools/parse-tool-call.js';
 import { logDebug, logInfo, logWarn } from '../logger.js';
 
@@ -150,7 +151,7 @@ export async function reactLoop(
     for (const call of validCalls) {
       const { parsed, cmd } = call;
       const isBash = parsed.name === 'bash';
-      const toolId = `${caller || 'react'}-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 6)}`;
+      const toolId = generateReactToolCallId();
 
       const result = await handlers.onToolCall?.(step, parsed, cmd, isBash, toolId);
       if (result) {
