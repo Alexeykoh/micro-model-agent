@@ -14,8 +14,15 @@ import { getTheme } from '../styling/index.js';
  * @module tools/plan
  */
 
-const PLAN_DIR = join(homedir(), '.mma', 'state');
-const PLAN_FILE = join(PLAN_DIR, 'current-plan.json');
+/** Директория для хранения плана (может быть переопределена через setPlanDir или env PLAN_DIR) */
+let PLAN_DIR = process.env.PLAN_DIR || join(homedir(), '.mma', 'state');
+let PLAN_FILE = join(PLAN_DIR, 'current-plan.json');
+
+/** Переопределяет директорию хранения плана (для тестов) */
+export function setPlanDir(dir: string): void {
+  PLAN_DIR = dir;
+  PLAN_FILE = join(PLAN_DIR, 'current-plan.json');
+}
 
 /** Шаг плана */
 export interface PlanStep {

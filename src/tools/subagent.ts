@@ -355,14 +355,16 @@ export async function doChat(
           const tcEnd = buf.indexOf('</tool_call>');
 
           if (tcStart === -1 && tcEnd === -1) {
-            if (buf) renderer.writeMarkdownChunk(buf);
+            const clean = buf.replace(/@grounding\[файл:\s*[^\]]*\]\n?/g, '');
+            if (clean) renderer.writeMarkdownChunk(clean);
             buf = '';
             break;
           }
 
           if (tcStart !== -1 && (tcEnd === -1 || tcStart < tcEnd)) {
             if (tcStart > 0) {
-              renderer.writeMarkdownChunk(buf.slice(0, tcStart));
+              const clean = buf.slice(0, tcStart).replace(/@grounding\[файл:\s*[^\]]*\]\n?/g, '');
+              if (clean) renderer.writeMarkdownChunk(clean);
             }
             buf = buf.slice(tcStart);
             const closeIdx = buf.indexOf('</tool_call>');
@@ -373,7 +375,8 @@ export async function doChat(
           }
 
           if (tcEnd !== -1 && (tcStart === -1 || tcEnd < tcStart)) {
-            renderer.writeMarkdownChunk(buf.slice(0, tcEnd));
+            const clean = buf.slice(0, tcEnd).replace(/@grounding\[файл:\s*[^\]]*\]\n?/g, '');
+            if (clean) renderer.writeMarkdownChunk(clean);
             buf = buf.slice(tcEnd + '</tool_call>'.length);
           }
         }

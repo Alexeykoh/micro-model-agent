@@ -12,8 +12,15 @@ import { getTheme } from '../styling/index.js';
  * @module tools/todo
  */
 
-const STATE_DIR = join(homedir(), '.mma', 'state');
-const TODO_FILE = join(STATE_DIR, 'todos.json');
+/** Директория для хранения todo (может быть переопределена через setTodoDir или env TODO_DIR) */
+let STATE_DIR = process.env.TODO_DIR || join(homedir(), '.mma', 'state');
+let TODO_FILE = join(STATE_DIR, 'todos.json');
+
+/** Переопределяет директорию хранения todo (для тестов) */
+export function setTodoDir(dir: string): void {
+  STATE_DIR = dir;
+  TODO_FILE = join(STATE_DIR, 'todos.json');
+}
 
 /** Задача в списке todo */
 export interface TodoItem {

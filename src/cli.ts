@@ -16,7 +16,7 @@ import { registerProviderCommands } from './cli/provider.js';
 import { registerModelCommands } from './cli/model.js';
 import { registerConfigCommands } from './cli/config.js';
 import { registerUpdateCommand } from './cli/update.js';
-import { checkForUpdateAsync, autoUpdatePatch } from './updater.js';
+
 import { checkProjectSize, setMaxFilesForProject } from './indexer/cache.js';
 import { logInfo } from './logger.js';
 
@@ -278,11 +278,7 @@ export function createCli() {
     const config = loadConfig();
     initTheme(config.theme);
 
-    // Background version check (non-blocking)
-    checkForUpdateAsync();
-
-    // Auto-update patch versions (0.2.74 → 0.2.76)
-    autoUpdatePatch();
+    // Update check is handled inside runRepl (updater.ts checkForUpdate via renderer)
 
     const providerOpt = program.getOptionValue('provider');
     const modelOpt = program.getOptionValue('model');

@@ -1,21 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 
 // --- Plan tests ---
-import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand } from '../src/tools/plan.js';
+import { createPlan, updatePlanStep, showPlan, clearPlan, parsePlanCommand, setPlanDir } from '../src/tools/plan.js';
 // --- Todo tests ---
-import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand } from '../src/tools/todo.js';
+import { addTodo, doneTodo, removeTodo, listTodos, parseTodoCommand, setTodoDir } from '../src/tools/todo.js';
 // --- Memory tests ---
 import { saveMemory, loadMemory, searchMemory, exportMemory } from '../src/agent/memory.js';
 
 // --- Session tests ---
 import { saveSession, loadSession, listSessions, createAutoSession } from '../src/session/store.js';
 
-const STATE_DIR = join(homedir(), '.mma', 'state');
-const PLAN_FILE = join(STATE_DIR, 'current-plan.json');
-const TODO_FILE = join(STATE_DIR, 'todos.json');
+const TEST_DIR = join(tmpdir(), 'mma-test-' + Date.now());
+const PLAN_FILE = join(TEST_DIR, 'current-plan.json');
+const TODO_FILE = join(TEST_DIR, 'todos.json');
+
+function setupTestDir() {
+  mkdirSync(TEST_DIR, { recursive: true });
+  setPlanDir(TEST_DIR);
+  setTodoDir(TEST_DIR);
+}
 
 function cleanupState() {
   try { rmSync(PLAN_FILE); } catch {}
@@ -23,8 +29,8 @@ function cleanupState() {
 }
 
 describe('Plan', () => {
-  beforeAll(cleanupState);
-  afterAll(cleanupState);
+  beforeAll(setupTestDir);
+  afterAll(() => { try { rmSync(TEST_DIR, { recursive: true }); } catch {} });
 
   it('creates a plan with steps', () => {
     const result = createPlan('TestProject', ['step1', 'step2', 'step3']);
