@@ -1,7 +1,7 @@
 /**
  * Интерфейс рендерера вывода.
  *
- * Определяет контракт для всех рендереров (readline, Ink):
+ * Определяет контракт для readline-рендерера:
  * - Вывод текста (write, writeLine, writeError)
  * - Вывод инструментов (writeToolHeader, writeToolResult)
  * - Streaming markdown (writeMarkdownChunk)
@@ -23,7 +23,7 @@ export interface StatusInfo {
   maxSteps?: number
 }
 
-/** Интерфейс рендерера вывода (абстракция над readline/Ink) */
+/** Интерфейс readline-рендерера */
 export interface OutputRenderer {
   write(text: string): void
   writeLine(text?: string): void

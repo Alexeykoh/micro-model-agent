@@ -17,7 +17,7 @@ npm run dev              # bun --watch
 
 - `npm test` runs a **specific subset** of test files (see `package.json` `scripts.test`) — not `bun test` with no args. Use `npm run test:all` for everything.
 - `npm run build` does **two things**: `tsc -p tsconfig.build.json` + copies `src/skills/builtin/` → `dist/skills/builtin/`. Both are required for a working build.
-- The build uses `tsconfig.build.json` (extends `tsconfig.json`, adds `"jsx": "react-jsx"` for Ink UI components). Don't use plain `tsc` for builds.
+- The build uses `tsconfig.build.json` (extends `tsconfig.json`). Don't use plain `tsc` for builds.
 - `npm run mma` is the dev shortcut — it uses `bun run src/index.ts`, not the compiled `dist/`.
 
 ## Architecture
@@ -26,7 +26,7 @@ npm run dev              # bun --watch
 - **Tool calling format**: Hermes `<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>` — NOT OpenAI JSON tool_calls. The agent loop in `src/agent/loop.ts` parses this format.
 - **fs-tools-first**: 12 dedicated file tools (`read_file`, `write_file`, `edit_file`, etc.) in `src/tools/fs/`. Bash is reserved for non-file operations (npm, git, docker).
 - **LLM providers**: OpenAI-compatible REST only (LM Studio, Ollama, vLLM, Together). No SDK dependencies.
-- **Ink UI**: React-based terminal UI (`src/ui/ink/`). Requires `jsx: "react-jsx"` in tsconfig. Components are `.tsx` files.
+
 - **Config**: `~/.mma/config.json` globally, `.mmrc` project-local override. Config loads via `src/config/config.ts`.
 - **ToolHandler interface**: All 21 tools (12 FS + bash + 3 web + 6 native) implement `ToolHandler` from `src/tools/types.ts`. ToolExecutor dispatches: pre-hooks → execute → post-hooks → truncate.
 - **ModeRegistry**: Data-driven mode configs (fast/base/pro) in `src/agent/modes/`. Custom modes via `AppConfig.modes`.
@@ -55,7 +55,7 @@ npm run dev              # bun --watch
 | Theme/styling | `src/styling/` | ThemeEngine, loader, JSON theme files |
 | Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
 | Web tools | `src/tools/web-*.ts` | web_search, web_fetch, web_browse (Playwright headless) |
-| Ink UI | `src/ui/ink/` | React components for terminal UI |
+
 
 ## Testing
 

@@ -955,10 +955,6 @@ async function cmdTheme(args: string, ctx: CommandContext): Promise<void> {
       config.theme = subcmd;
       saveConfig(config);
       switchTheme(subcmd);
-      try {
-        const { resetInkTheme } = await import('../ui/ink/theme.js');
-        resetInkTheme();
-      } catch { /* not in ink mode */ }
       ctx.renderer.writeSuccess(`  Theme switched to "${subcmd}"`);
       break;
     }

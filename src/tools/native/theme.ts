@@ -68,10 +68,6 @@ export const themeHandler: ToolHandler = {
         appConfig.theme = name;
         saveConfig(appConfig);
         switchTheme(name);
-        try {
-          const { resetInkTheme } = await import('../../ui/ink/theme.js');
-          resetInkTheme();
-        } catch { /* not in ink mode */ }
         output = `Theme switched to "${name}"`;
         break;
       }

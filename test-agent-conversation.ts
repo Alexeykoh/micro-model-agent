@@ -51,7 +51,7 @@ export interface Scenario {
   prompts: string[];
 }
 
-// ─── Renderer mock (без Ink зависимостей) ─────────────────
+// ─── Renderer mock ────────────────────────────────────────
 
 function createVerboseRenderer() {
   let mdBuf = '';

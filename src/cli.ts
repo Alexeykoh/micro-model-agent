@@ -143,7 +143,6 @@ export function createCli() {
     .option('--provider <provider>', 'provider to use')
     .option('--mode <mode>', 'agent mode (fast|base|pro)')
     .option('--stdin', 'force read from stdin (for piped mode)')
-    .option('--ink', 'use ink renderer (React terminal UI)')
     .option('--max-files <count>', 'max source files for project map', parseInt);
 
   registerProviderCommands(program);
@@ -323,9 +322,6 @@ export function createCli() {
     const { provider, modelLabel } = await createProviderInteractive(config);
     const registry = new ToolRegistry();
 
-    const useInk = program.getOptionValue('ink');
-    const renderOptions: { mode?: 'readline' | 'ink' } = { mode: useInk ? 'ink' : 'readline' };
-
     const forceStdin = program.getOptionValue('stdin');
     const hasStdinData = forceStdin || (!process.stdin.isTTY) || process.env.MMA_STDIN === '1';
     if (hasStdinData) {
@@ -341,7 +337,7 @@ export function createCli() {
           const ctx = prompt
             ? `${prompt}\n\nContext from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\``
             : `Context from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\`\n\nAnalyze the above content.`;
-          const renderer = await createRenderer(undefined, renderOptions);
+          const renderer = await createRenderer(undefined);
           runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
           return;
         }
@@ -349,11 +345,11 @@ export function createCli() {
     }
 
     if (prompt) {
-      const renderer = await createRenderer(undefined, renderOptions);
+      const renderer = await createRenderer(undefined);
       runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking, mode: modeOpt });
     } else {
       const commands = getSlashCommands();
-      const renderer = await createRenderer(commands, renderOptions);
+      const renderer = await createRenderer(commands);
       runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking, mode: modeOpt });
     }
   });
