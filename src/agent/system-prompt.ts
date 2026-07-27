@@ -92,28 +92,15 @@ Directory tree: {"name":"tree","arguments":{"depth":2}}
   {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
   {"name":"web_fetch","arguments":{"url":"https://example.com"}}
 
-## Web Browse (interactive headless browser):
+## Web Browse (headless browser):
   {"name":"web_browse","arguments":{"action":"navigate","url":"https://example.com"}}
-  {"name":"web_browse","arguments":{"action":"discover"}}
+  {"name":"web_browse","arguments":{"action":"scrape","url":"https://example.com/catalog"}}
+  {"name":"web_browse","arguments":{"action":"scrape","url":"https://shop.com/bikes","pattern":"bike|velosiped","maxItems":15}}
   {"name":"web_browse","arguments":{"action":"click","selector":"button.submit"}}
   {"name":"web_browse","arguments":{"action":"type","selector":"#search","value":"hello"}}
-  {"name":"web_browse","arguments":{"action":"evaluate","value":"document.title"}}
-  {"name":"web_browse","arguments":{"action":"evaluate","value":"JSON.stringify(Array.from(document.querySelectorAll('a[href]')).filter(a => a.href.includes('/product')).slice(0,5).map(a => ({href: a.href, cls: a.closest('div[class]')?.className})))"}}
-  {"name":"web_browse","arguments":{"action":"extract","format":"text"}}
-  {"name":"web_browse","arguments":{"action":"extract","selector":".content","format":"html"}}
-  {"name":"web_browse","arguments":{"action":"screenshot"}}
-  {"name":"web_browse","arguments":{"action":"scroll","direction":"down"}}
   {"name":"web_browse","arguments":{"action":"wait","selector":"#result","timeout":5000}}
-  {"name":"web_browse","arguments":{"action":"wait","condition":"document.querySelectorAll('.item').length > 0","timeout":10000}}
-  {"name":"web_browse","arguments":{"action":"get_links"}}
+  {"name":"web_browse","arguments":{"action":"screenshot"}}
   {"name":"web_browse","arguments":{"action":"close"}}
-
-## Web Scrape (one-call product/card extraction):
-  Use for: parsing products, cards, items, listings from any website.
-  Instead of navigate → discover → evaluate → write_file (4 calls), use ONE call:
-  {"name":"web_browse","arguments":{"action":"scrape","url":"https://example.com/catalog","pattern":"product|card|item","maxItems":10}}
-  {"name":"web_browse","arguments":{"action":"scrape","url":"https://shop.com/bikes","pattern":"bike|velosiped","maxItems":15}}
-  Parameters: url (required), pattern (regex for class matching, default: "product|card|item|goods"), maxItems (default: 10)
 
 ## Theme tool (theme management):
   {"name":"theme","arguments":{"action":"list"}}
@@ -265,15 +252,10 @@ const R: Record<string, _Rule> = {
     The subagent will see the project context and should NOT create files beyond what's in the task.`,
 
   web_tools: `WEB TOOLS STRATEGY:
-    a. For scraping products/cards/items: use web_browse(action:"scrape") — ONE call does everything.
-    b. For any other URL: FIRST try web_fetch — it's fast and works for most sites (content is in the initial HTML).
-    c. If web_fetch returns empty or nonsense (JS-rendered page), switch to web_browse.
-    d. When using web_browse manually — 4-step pattern:
-       Step 1: navigate(url)
-       Step 2: discover → find REAL CSS selectors
-       Step 3: evaluate → extract data via JSON
-       Step 4: write_file → save result
-    e. NEVER guess CSS selectors — always use discover or scrape first.`,
+    a. For data extraction (products, listings, cards): use web_browse(action:"scrape") — ONE call navigates, scrolls, discovers, and extracts.
+    b. For simple pages (blogs, docs, API): use web_fetch — lightweight, no browser needed.
+    c. For interactive pages (login, forms, search): navigate → click/type → wait → scrape.
+    d. Retry scrape with a custom pattern if the default misses content: {pattern:"product|card|item"}.`,
 
   // ── Fast mode only ──
   execute_directly: `Execute tasks directly. Simple tasks (1-2 steps): just do it without commentary. Complex tasks: break into steps and execute ONE FILE AT A TIME. Write first file → check syntax → fix if needed → then next file.`,
