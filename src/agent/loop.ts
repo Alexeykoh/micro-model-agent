@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute, relative } from 'node:path';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { parseToolCalls } from '../tools/parse-tool-call.js';
@@ -943,7 +943,6 @@ export async function runAgentLoop(
             ? cmd!.match(/-Path\s+['"]?([^'"]+\.(?:ts|tsx|js|jsx|json))['"]?/i)?.[1]?.replace(/\\/g, '/')
             : String(parsed.arguments.path ?? '');
           if (rawPath && /\.(ts|tsx|js|jsx|json)$/.test(rawPath)) {
-            const { isAbsolute, relative } = await import('node:path');
             const filePath = isAbsolute(rawPath) ? relative(process.cwd(), rawPath).replace(/\\/g, '/') : rawPath;
             const syntaxResult = checkFileSyntax(filePath, process.cwd());
             if (syntaxResult !== 'OK') {
