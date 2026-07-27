@@ -291,6 +291,12 @@ export function isSkillRequest(text: string): boolean {
  * 3. Ищет пересечение: совпадение в имени = +2 балла, в описании = +1
  * 4. Возвращает топ-3 скилла с наибольшим скором
  */
+const STOP_WORDS = new Set([
+  'en', 'by', 'it', 'is', 'to', 'of', 'in', 'at', 'on', 'be', 'he', 'as',
+  'an', 'or', 'we', 'us', 'my', 'do', 'no', 'go', 'up', 'if', 'am', 'me',
+  'so', 'by', 'tv', 'ok', 'hi', 'ex', 'vs', 'et', 'al', 'de', 'la', 'le',
+]);
+
 export function preloadSkillsByKeywords(text: string, cwd: string): Skill[] {
   const index = buildSkillIndex(cwd);
   const searchTerms = extractSearchTerms(text);
@@ -305,10 +311,12 @@ export function preloadSkillsByKeywords(text: string, cwd: string): Skill[] {
     let score = 0;
 
     for (const term of searchTerms) {
-      if (name.includes(term)) {
-        score += 2;
+      if (term.length >= 4) {
+        if (name.includes(term)) {
+          score += 2;
+        }
       }
-      if (keywords.includes(term)) {
+      if (!STOP_WORDS.has(term) && keywords.includes(term)) {
         score += 1;
       }
     }

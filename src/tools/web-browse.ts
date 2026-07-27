@@ -121,7 +121,7 @@ async function actionScrape(page: import('playwright').Page, args: Record<string
       return 'Error: URL must start with http:// or https://';
     }
     const navResult = await actionNavigate(page, args);
-    if (navResult.startsWith('Error')) return navResult;
+    if (navResult.text.startsWith('Error')) return navResult.text;
   }
 
   if (!page || page.isClosed()) {
@@ -275,11 +275,16 @@ async function actionScrape(page: import('playwright').Page, args: Record<string
   return output;
 }
 
-async function actionNavigate(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
+interface NavigateResult {
+  text: string;
+  status: number;
+}
+
+async function actionNavigate(page: import('playwright').Page, args: Record<string, unknown>): Promise<NavigateResult> {
   const url = String(args.url ?? '').trim();
-  if (!url) return 'Error: url is required for navigate';
+  if (!url) return { text: 'Error: url is required for navigate', status: 0 };
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return 'Error: URL must start with http:// or https://';
+    return { text: 'Error: URL must start with http:// or https://', status: 0 };
   }
 
   const response = await page.goto(url, {
@@ -335,51 +340,64 @@ async function actionNavigate(page: import('playwright').Page, args: Record<stri
   const title = await page.title();
   const finalUrl = page.url();
 
-  // Краткая сводка страницы — ссылки + ключевые классы
+  // Сводка страницы: текст + ссылки + классы
   let summary = '';
   try {
     const info = await page.evaluate(() => {
-      // Ссылки (до 10)
-      const links = Array.from(document.querySelectorAll('a[href]'))
-        .filter((a): a is HTMLAnchorElement => a instanceof HTMLAnchorElement)
-        .filter(a => !a.href.startsWith('javascript:') && !a.href.startsWith('#'))
-        .slice(0, 10)
-        .map(a => ({
-          text: (a.textContent ?? '').trim().substring(0, 60),
-          href: a.href,
-          parentClass: a.closest('div[class], li[class], article[class], section[class]')?.className?.substring(0, 40) ?? '',
-        }));
+      // Текст страницы (первые 1500 символов для preview)
+      const bodyText = (document.body?.innerText ?? '').trim().substring(0, 1500);
 
-      // Ключевые классы (уникальные, содержат слова-маркеры)
-      const allElements = document.querySelectorAll('*');
+      // Ссылки (до 10)
+      const allLinks = Array.from(document.querySelectorAll('a[href]'))
+        .filter((a): a is HTMLAnchorElement => a instanceof HTMLAnchorElement)
+        .filter(a => !a.href.startsWith('javascript:') && !a.href.startsWith('#'));
+
+      const totalLinks = allLinks.length;
+      const links = allLinks.slice(0, 10).map(a => ({
+        text: (a.textContent ?? '').trim().substring(0, 60),
+        href: a.href,
+        parentClass: a.closest('div[class], li[class], article[class], section[class]')?.className?.substring(0, 40) ?? '',
+      }));
+
+      // Ключевые классы
       const classSet = new Set<string>();
-      for (const el of allElements) {
+      for (const el of document.querySelectorAll('*')) {
         for (const cls of el.classList) {
           if (cls.length > 2 && cls.length < 50) classSet.add(cls);
         }
       }
       const classes = Array.from(classSet).sort();
 
-      return { links, classes, totalElements: allElements.length };
-    }, );
+      const totalElements = document.querySelectorAll('*').length;
 
-    if (info.links.length > 0 || info.classes.length > 0) {
-      summary = `\n\nPage summary (${info.totalElements} elements):`;
-      if (info.links.length > 0) {
-        summary += `\nLinks (${info.links.length} shown):`;
-        for (const link of info.links.slice(0, 8)) {
-          summary += `\n  "${link.text || '(no text)'}" → ${link.href}`;
-          if (link.parentClass) summary += ` [${link.parentClass}]`;
-        }
-      }
-      if (info.classes.length > 0) {
-        summary += `\nKey classes: ${info.classes.slice(0, 15).join(', ')}${info.classes.length > 15 ? ` (+${info.classes.length - 15} more)` : ''}`;
-      }
-      summary += `\nUse discover for full structure, or extract to get content.`;
+      return { bodyText, links, totalLinks, classes, totalElements };
+    });
+
+    summary = `\n\nPage preview (${info.totalElements} elements, ${info.totalLinks} links):`;
+    if (info.bodyText) {
+      summary += `\nContent:\n${info.bodyText}`;
+      if (info.bodyText.length >= 1500) summary += `\n... (content truncated)`;
     }
+    if (info.links.length > 0) {
+      summary += `\n\nLinks (${info.links.length} of ${info.totalLinks} shown):`;
+      for (const link of info.links) {
+        summary += `\n  "${link.text || '(no text)'}" → ${link.href}`;
+        if (link.parentClass) summary += ` [${link.parentClass}]`;
+      }
+      if (info.totalLinks > 10) summary += `\n  ... and ${info.totalLinks - 10} more. Use get_links to see all.`;
+    }
+    if (info.classes.length > 0) {
+      summary += `\nKey CSS classes: ${info.classes.slice(0, 15).join(', ')}${info.classes.length > 15 ? ` (+${info.classes.length - 15} more)` : ''}`;
+    }
+
+    summary += `\n\nSuggested next steps:`;
+    summary += `\n  - web_browse(action:"get_links") — all links on page`;
+    summary += `\n  - web_browse(action:"extract", selector:".content") — extract specific section`;
+    summary += `\n  - web_browse(action:"discover") — full page structure with CSS selectors`;
+    summary += `\n  - web_browse(action:"scrape", pattern:"...") — auto-scrape items from page`;
   } catch { /* ignore — summary is optional */ }
 
-  return `Navigated to: ${finalUrl}\nTitle: ${title}\nStatus: ${status}${summary}`;
+  return { text: `Navigated to: ${finalUrl}\nTitle: ${title}\nStatus: ${status}${summary}`, status };
 }
 
 async function actionClick(page: import('playwright').Page, args: Record<string, unknown>): Promise<string> {
@@ -728,8 +746,14 @@ export const webBrowseHandler: ToolHandler = {
           return { stdout: '', stderr: 'URL must start with http:// or https://', exitCode: 1, truncated: false };
         }
         const page = await ensureBrowser();
-        const result = await actionNavigate(page, args);
-        return { stdout: result, stderr: '', exitCode: 0, truncated: false };
+        const navResult = await actionNavigate(page, args);
+        const isHttpError = navResult.status >= 400;
+        return {
+          stdout: navResult.text,
+          stderr: isHttpError ? `HTTP ${navResult.status}` : '',
+          exitCode: isHttpError ? 1 : 0,
+          truncated: false,
+        };
       }
 
       // Scrape тоже может навигировать сам (если указан URL)

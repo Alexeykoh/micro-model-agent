@@ -533,13 +533,9 @@ export async function runAgentLoop(
 
       renderer?.writeInfo(`  Auto-loaded ${loadedSkills.filter(s => newSkillNames.includes(s.name)).length} skill(s): ${newSkillNames.join(', ')}`);
       messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections) };
-      // Удаляем первый ответ ассистента — он был сгенерирован без загруженных скилов
-      // и будет перегенерирован после пересборки system prompt
-      if (messages[messages.length - 1]?.role === 'assistant') {
-        messages.pop();
-        renderer?.undoLastMessage();
-      }
-      continue;
+      // Не удаляем ответ ассистента — skills загружаются для следующих шагов цикла.
+      // Модель увидит обновлённый system prompt на следующей итерации и сможет
+      // использовать загруженные скилы без retry (экономит ~один LLM-запрос).
     }
     } // end fast-mode skill block
 
@@ -1263,6 +1259,8 @@ export async function runAgentLoop(
           let webHint = '';
           if (parsed.name === 'web_browse' && String(parsed.arguments?.action) === 'evaluate') {
             webHint = ' For web scraping: use web_browse(action:"discover") to find real CSS selectors, or web_browse(action:"get_links") to see all links, or web_browse(action:"extract", format:"html") to inspect the page structure.';
+          } else if (parsed.name === 'web_browse' && String(parsed.arguments?.action) === 'navigate' && toolOutput.includes('Status: 40')) {
+            webHint = ' Page returned HTTP error. Try navigating to the site homepage first, then use web_browse(action:"get_links") or web_browse(action:"discover") to explore available categories and sections instead of guessing URLs.';
           }
 
           const msg = errorCount === specialistCfg.triggerThreshold + 1
