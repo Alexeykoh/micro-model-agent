@@ -21,7 +21,7 @@ import { loadConfig, getLLMConfig, getGroundingConfig } from '../config/config.j
 import type { OutputRenderer } from '../ui/renderer.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { logInfo, logWarn, logError, logDebug, logLLMRequest, logLLMResponse, logToolCall, setStatusWriter, writeStatus } from '../logger.js';
-import type { AgentMode } from '../config/types.js';
+import type { AgentMode, RuntimeFlags } from '../config/types.js';
 import { IsolatedLoopResult, buildSubagentContext, runIsolatedLoop, doChat } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
 import { ToolExecutor } from './tool-executor.js';
@@ -141,7 +141,7 @@ export async function runAgentLoop(
   previousMessages?: ChatMessage[],
   renderer?: OutputRenderer,
   providerName?: string,
-  options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode },
+  options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode; flags?: RuntimeFlags },
 ): Promise<AgentLoopResult> {
   logInfo('LOOP', `runAgentLoop started: "${prompt.slice(0, 50)}"`);
   renderer?.resetAbort?.();
@@ -278,7 +278,7 @@ export async function runAgentLoop(
 
   // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память, плагины)
   const sysStart = performance.now();
-  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode, pluginSections);
+  const systemPrompt = buildSystemPrompt(loadedSkills.length > 0 ? loadedSkills : undefined, options?.mode, pluginSections, options?.flags);
   const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
   writeStatus(`Done (${sysElapsed}s)`);
   setStatusWriter(null);
@@ -429,7 +429,7 @@ export async function runAgentLoop(
       }
 
       renderer?.writeInfo(`  Auto-loaded ${loadedSkills.filter(s => newSkillNames.includes(s.name)).length} skill(s): ${newSkillNames.join(', ')}`);
-      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections) };
+      messages[0] = { role: 'system', content: buildSystemPrompt(loadedSkills, options?.mode, pluginSections, options?.flags) };
       // Не удаляем ответ ассистента — skills загружаются для следующих шагов цикла.
       // Модель увидит обновлённый system prompt на следующей итерации и сможет
       // использовать загруженные скилы без retry (экономит ~один LLM-запрос).

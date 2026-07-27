@@ -18,6 +18,7 @@
   },
   "scripts": {
     "mma": "bun run src/index.ts",
+    "mma:dev": "bun run src/index.ts --dev",
     "build": "tsc -p tsconfig.build.json && node scripts/copy-builtin-skills.mjs",
     "prepublishOnly": "npm run build",
     "prepack": "npm run build",

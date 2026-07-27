@@ -18,7 +18,8 @@ import { registerConfigCommands } from './cli/config.js';
 import { registerUpdateCommand } from './cli/update.js';
 
 import { checkProjectSize, setMaxFilesForProject } from './indexer/cache.js';
-import { logInfo } from './logger.js';
+import { logInfo, setLogRenderer } from './logger.js';
+import type { RuntimeFlags } from './config/types.js';
 
 /**
  * CLI агента MMA.
@@ -143,7 +144,9 @@ export function createCli() {
     .option('--provider <provider>', 'provider to use')
     .option('--mode <mode>', 'agent mode (fast|base|pro)')
     .option('--stdin', 'force read from stdin (for piped mode)')
-    .option('--max-files <count>', 'max source files for project map', parseInt);
+    .option('--max-files <count>', 'max source files for project map', parseInt)
+    .option('--dev', 'development mode (skip AGENTS.md, memory, project map)')
+    .option('--logs', 'output logs to chat in real time');
 
   registerProviderCommands(program);
   registerModelCommands(program);
@@ -291,6 +294,11 @@ export function createCli() {
       logInfo('CLI', `maxFiles set to ${maxFilesOpt} via --max-files`);
     }
 
+    const flags: RuntimeFlags = {
+      dev: !!program.getOptionValue('dev'),
+      logs: !!program.getOptionValue('logs'),
+    };
+
     if (!maxFilesOpt && process.stdin.isTTY && !prompt) {
       const count = checkProjectSize(process.cwd());
       if (count > 5000) {
@@ -334,7 +342,8 @@ export function createCli() {
             ? `${prompt}\n\nContext from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\``
             : `Context from stdin:\n\`\`\`\n${stdinContent.slice(0, 8000)}\n\`\`\`\n\nAnalyze the above content.`;
           const renderer = await createRenderer(undefined);
-          runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking });
+          if (flags.logs) setLogRenderer((level, tag, msg) => renderer.writeDim(`  [${level}] [${tag}] ${msg}`));
+          runAgentLoop(provider, registry, ctx, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking, flags });
           return;
         }
       } catch { /* stdin not available, continue */ }
@@ -342,11 +351,12 @@ export function createCli() {
 
     if (prompt) {
       const renderer = await createRenderer(undefined);
-      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking, mode: modeOpt });
+      if (flags.logs) setLogRenderer((level, tag, msg) => renderer.writeDim(`  [${level}] [${tag}] ${msg}`));
+      runAgentLoop(provider, registry, prompt, undefined, undefined, renderer, config.active.provider, { showThinking: config.agent.showThinking, mode: modeOpt, flags });
     } else {
       const commands = getSlashCommands();
       const renderer = await createRenderer(commands);
-      runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking, mode: modeOpt });
+      runRepl(provider, registry, modelLabel, renderer, { showThinking: config.agent.showThinking, mode: modeOpt, flags });
     }
   });
 

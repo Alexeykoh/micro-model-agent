@@ -1,7 +1,7 @@
 import type { LLMProvider } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { OutputRenderer } from '../ui/renderer.js';
-import type { AgentMode } from '../config/types.js';
+import type { AgentMode, RuntimeFlags } from '../config/types.js';
 import { runAgentLoop, type AgentLoopResult } from '../agent/loop.js';
 import { logInfo } from '../logger.js';
 
@@ -48,7 +48,7 @@ export class ConversationHistory {
     registry: ToolRegistry,
     renderer: OutputRenderer,
     providerName?: string,
-    options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode },
+    options?: { quiet?: boolean; showThinking?: boolean; mode?: AgentMode; flags?: RuntimeFlags },
   ): Promise<AgentLoopResult> {
     logInfo('HISTORY', `send() called: "${prompt.slice(0, 50)}"`);
     const result = await runAgentLoop(

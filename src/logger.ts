@@ -19,9 +19,14 @@ const LOGS_DIR = join(homedir(), '.mma', 'logs');
 
 let _sessionLogPath: string | null = null;
 let _statusWriter: ((msg: string) => void) | null = null;
+let _logRenderer: ((level: string, tag: string, message: string) => void) | null = null;
 
 export function setStatusWriter(writer: ((msg: string) => void) | null): void {
   _statusWriter = writer;
+}
+
+export function setLogRenderer(renderer: ((level: string, tag: string, message: string) => void) | null): void {
+  _logRenderer = renderer;
 }
 
 export function writeStatus(msg: string): void {
@@ -57,6 +62,7 @@ export function log(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', tag: string, mes
   ensureDir();
   const line = `[${timestamp()}] [${level}] [${tag}] ${message}\n`;
   appendFileSync(getLogPath(), line, 'utf-8');
+  _logRenderer?.(level, tag, message);
 }
 
 export function logInfo(tag: string, message: string): void { log('INFO', tag, message); }

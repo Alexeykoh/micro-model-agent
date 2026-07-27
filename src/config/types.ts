@@ -115,6 +115,12 @@ export interface SpecialistConfig {
 /** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */
 export type AgentMode = 'fast' | 'base' | 'pro';
 
+/** Runtime-флаги сессии (не сохраняются, передаются через CLI) */
+export interface RuntimeFlags {
+  dev?: boolean;
+  logs?: boolean;
+}
+
 /** Полная конфигурация приложения */
 export interface AppConfig {
   providers: Record<string, ProviderConfig>;

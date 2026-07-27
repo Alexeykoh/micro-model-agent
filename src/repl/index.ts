@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { LLMProvider } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { OutputRenderer } from '../ui/renderer.js';
-import type { AgentMode } from '../config/types.js';
+import type { AgentMode, RuntimeFlags } from '../config/types.js';
 import { ModeRegistry } from '../agent/modes/registry.js';
 import { loadAllMemory } from '../agent/memory.js';
 import { createAutoSession, generateReadableId } from '../session/store.js';
@@ -48,7 +48,7 @@ export async function runRepl(
   registry: ToolRegistry,
   modelLabel: string,
   renderer: OutputRenderer,
-  options?: { showThinking?: boolean; mode?: string },
+  options?: { showThinking?: boolean; mode?: string; flags?: RuntimeFlags },
 ): Promise<void> {
   const sessionId = generateReadableId();
   initSessionLog(sessionId);
@@ -207,7 +207,7 @@ export async function runRepl(
     renderer.writeBracketTag('user', ` ${line}`);
     renderer.writeNewline();
     logREPL('user', line);
-    const result = await history.send(line, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking, mode: currentMode });
+    const result = await history.send(line, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking, mode: currentMode, flags: options?.flags });
 
     const lastAssistant = [...result.messages].reverse().find(m => m.role === 'assistant');
     if (lastAssistant) logREPL('assistant', lastAssistant.content);
@@ -231,7 +231,7 @@ export async function runRepl(
       renderer.writeBracketTag('user', answer);
       history.push('user', answer);
 
-      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking, mode: currentMode });
+      const answerResult = await history.send(`User answered: ${answer}`, provider, registry, renderer, modelLabel, { showThinking: options?.showThinking, mode: currentMode, flags: options?.flags });
     }
     } catch (err: any) {
       const logPath = getLogPath();

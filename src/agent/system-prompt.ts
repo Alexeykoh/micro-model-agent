@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import * as os from 'node:os';
 import { loadAllMemoryDetailed } from './memory.js';
 import { loadProfileSummary } from './user-profile.js';
+import type { RuntimeFlags } from '../config/types.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
 import { loadAgentsMd, listSkillsWithDescriptions, formatSkillsBlock, invalidateSkillCaches, type Skill } from '../skills/loader.js';
 import { logInfo, logDebug } from '../logger.js';
@@ -377,7 +378,7 @@ export function invalidateSystemPromptCache(): void {
  * @param mode - working mode (fast/pro/base)
  * @returns Assembled system prompt string
  */
-export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, pluginSections?: string[]): string {
+export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, pluginSections?: string[], flags?: RuntimeFlags): string {
   const start = performance.now();
   // Cache key: current directory + mode + skill names (sorted)
   const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}:${pluginSections?.length || 0}`;
@@ -444,7 +445,7 @@ You help with software engineering tasks in the project directory.`;
   } catch { /* ignore */ }
 
   // ─── Project instructions (AGENTS.md) ─────────────────
-  const agentsMd = loadAgentsMd(process.cwd());
+  const agentsMd = flags?.dev ? null : loadAgentsMd(process.cwd());
   const agentsBlock = agentsMd ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}` : '';
 
   // ─── Available skills hint ────────────────────────────
