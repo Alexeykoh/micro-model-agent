@@ -55,42 +55,7 @@ import { treeHandler } from '../tools/fs/tree.js';
 import { webSearchHandler } from '../tools/web-search.js';
 import { webFetchHandler } from '../tools/web-fetch.js';
 import { webBrowseHandler } from '../tools/web-browse.js';
-
-/**
- * Умная обрезка tool-результатов для экономии токенов в контексте.
- *
- * Полные результаты сохраняются в файл сессии, в контексте — только
- * достаточно информации для модели чтобы продолжить работу.
- *
- * Лимиты подобраны эмпирически: достаточно для маленьких моделей
- * понять что произошло, но не занимают весь контекст.
- */
-export function truncateToolOutput(toolName: string, output: string, exitCode: number): string {
-  // Ошибки обрезаем мягче — модели нужен контекст для диагностики
-  if (exitCode !== 0) {
-    return output.length > 3000 ? output.slice(0, 3000) + '\n...[truncated]' : output;
-  }
-
-  // Лимиты для успешных операций (в символах)
-  const LIMITS: Record<string, number> = {
-    read_file: 2000,    // модель может ссылаться на строки
-    write_file: 200,    // достаточно "Written X bytes"
-    edit_file: 300,     // нужно знать что изменилось
-    bash: 1500,         // build output, git status
-    list_dir: 1500,     // структура обычно компактна
-    glob_search: 1000,  // список файлов
-    grep_search: 1500,  // результаты поиска
-    tree: 1500,         // дерево файлов
-    subagent: 500,      // краткое резюме от субагента
-    web_search: 1000,   // результаты поиска
-    web_fetch: 1500,    // контент страницы
-    web_browse: 2000,   // browser interaction results
-  };
-
-  const limit = LIMITS[toolName] ?? 800;
-  if (output.length <= limit) return output;
-  return output.slice(0, limit) + '\n...[truncated]';
-}
+import { truncateOutput } from './tool-executor.js';
 
 /**
  * Основной цикл ReAct-агента.
@@ -1050,7 +1015,7 @@ export async function runAgentLoop(
 
       messages.push({
         role: 'tool',
-        content: truncateToolOutput(parsed.name, toolOutput, toolExitCode),
+        content: truncateOutput(parsed.name, toolOutput, toolExitCode),
         tool_call_id: toolId,
       });
 

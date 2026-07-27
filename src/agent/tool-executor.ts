@@ -87,7 +87,7 @@ function extractPathFromError(stderr: string): string | null {
 }
 
 /** Обрезка вывода инструмента для экономии токенов */
-function truncateOutput(toolName: string, output: string, exitCode: number): string {
+export function truncateOutput(toolName: string, output: string, exitCode: number): string {
   if (exitCode !== 0) {
     return output.length > ERROR_LIMIT ? output.slice(0, ERROR_LIMIT) + '\n...[truncated]' : output;
   }

@@ -3,6 +3,7 @@ import { logInfo, logError } from '../logger.js';
 import { loadConfig, getSpecialistConfig } from '../config/config.js';
 import { buildSpecialistTask, buildSubagentContext, isTrivialError, runIsolatedLoop } from '../tools/subagent.js';
 import { SubagentRenderer } from '../ui/subagent-renderer.js';
+import { truncateOutput } from './tool-executor.js';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { ToolExecutor } from './tool-executor.js';
@@ -42,7 +43,7 @@ async function spawnSpecialist(p: SpecialistParams): Promise<boolean> {
         const text = r.errors.length > 0
           ? `[Specialist attempted to fix "${p.toolName}" but failed:\n${r.errors.join('\n')}\n${r.summary}]\nTry a different approach.`
           : `[Specialist resolved "${p.toolName}" error.\n${r.summary}]\nContinue with the task.`;
-        p.messages[i].content = truncateToolOutput(p.toolName, text, 0);
+        p.messages[i].content = truncateOutput(p.toolName, text, 0);
         break;
       }
     }
@@ -56,31 +57,6 @@ async function spawnSpecialist(p: SpecialistParams): Promise<boolean> {
     if (!p.quiet) p.renderer?.writeError(`  [specialist failed: ${e.message}]`);
     return false;
   }
-}
-
-function truncateToolOutput(toolName: string, output: string, exitCode: number): string {
-  if (exitCode !== 0) {
-    return output.length > 3000 ? output.slice(0, 3000) + '\n...[truncated]' : output;
-  }
-
-  const LIMITS: Record<string, number> = {
-    read_file: 2000,
-    write_file: 200,
-    edit_file: 300,
-    bash: 1500,
-    list_dir: 1500,
-    glob_search: 1000,
-    grep_search: 1500,
-    tree: 1500,
-    subagent: 500,
-    web_search: 1000,
-    web_fetch: 1500,
-    web_browse: 2000,
-  };
-
-  const limit = LIMITS[toolName] ?? 800;
-  if (output.length <= limit) return output;
-  return output.slice(0, limit) + '\n...[truncated]';
 }
 
 /**
