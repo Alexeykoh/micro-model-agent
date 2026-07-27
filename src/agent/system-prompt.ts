@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import { loadAllMemoryDetailed } from './memory.js';
 import { loadProfileSummary } from './user-profile.js';
 import { getOrBuildProjectMap } from '../indexer/cache.js';
-import { loadAgentsMd, listInstalledSkills, formatSkillsBlock, type Skill } from '../skills/loader.js';
+import { loadAgentsMd, listSkillsWithDescriptions, formatSkillsBlock, invalidateSkillCaches, type Skill } from '../skills/loader.js';
 import { logInfo, logDebug } from '../logger.js';
 import type { AgentMode } from '../config/types.js';
 
@@ -355,6 +355,7 @@ const systemPromptCache = new Map<string, string>();
 /** Invalidate system prompt cache (called when config changes) */
 export function invalidateSystemPromptCache(): void {
   systemPromptCache.clear();
+  invalidateSkillCaches();
 }
 
 /**
@@ -440,9 +441,18 @@ You help with software engineering tasks in the project directory.`;
   const agentsBlock = agentsMd ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}` : '';
 
   // ─── Available skills hint ────────────────────────────
-  const allSkills = listInstalledSkills();
+  const allSkills = listSkillsWithDescriptions();
+  const truncateDesc = (d: string, max = 100): string =>
+    d.length <= max ? d : d.slice(0, max - 1) + '…';
+
   const skillsHint = allSkills.length > 0
-    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): mention @skill-name in your response — skills will be auto-loaded into context.\nDo NOT put @skill-name inside tool_call. Just mention them naturally in your text.\nWorkflow:\n  1. User asks: "Create a REST API"\n  2. You: "I'll use @typescript-expert @nodejs-expert for this task." (skills auto-load on next turn)\n  3. You create plan BASED ON skill guidance: plan create REST API ...\n  4. You execute plan step by step\n\nInstalled skills: ${allSkills.map(s => '@' + s).join(' ')}`
+    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): mention @skill-name in your response — skills will be auto-loaded into context.\nDo NOT put @skill-name inside tool_call. Just mention them naturally in your text.\nWorkflow:\n  1. User asks: "Create a REST API"\n  2. You: "I'll use @typescript-expert @nodejs-expert for this task." (skills auto-load on next turn)\n  3. You create plan BASED ON skill guidance: plan create REST API ...\n  4. You execute plan step by step\n\nAvailable skills:\n${
+      allSkills.map(s =>
+        s.description
+          ? `  @${s.name} — ${truncateDesc(s.description)}`
+          : `  @${s.name}`
+      ).join('\n')
+    }`
     : '';
 
   // ─── Mode block ──────────────────────────────────────

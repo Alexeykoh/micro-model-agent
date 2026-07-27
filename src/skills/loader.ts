@@ -203,6 +203,115 @@ export function enforceSkillBudget(
   return { allowed, dropped };
 }
 
+// ─── Description cache ───────────────────────────────────
+let descriptionCache: Map<string, Record<string, string>> | null = null;
+
+/**
+ * Парсит YAML frontmatter из SKILL.md и возвращает все поля.
+ */
+function parseSkillFrontmatter(content: string): Record<string, string> {
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!fmMatch) return {};
+
+  const fields: Record<string, string> = {};
+  const lines = fmMatch[1].split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.startsWith('description:')) continue;
+
+    let raw = line.slice('description:'.length).trim();
+
+    // Block scalar (>-, >, |, |-)
+    if (raw === '>-' || raw === '>' || raw === '|' || raw === '|-') {
+      const parts: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = lines[j];
+        if (next.startsWith('  ') || next.startsWith('\t')) {
+          parts.push(next.trim());
+        } else if (next === '') {
+          if (parts.length > 0) parts.push('');
+        } else {
+          break;
+        }
+      }
+      raw = raw.startsWith('>')
+        ? parts.join(' ').replace(/\s+/g, ' ').trim()
+        : parts.join('\n').trim();
+    } else {
+      raw = raw.replace(/^["']|["']$/g, '');
+    }
+
+    fields['description'] = raw || '';
+    break;
+  }
+
+  // Also parse name from frontmatter if present
+  const nameLine = lines.find(l => l.startsWith('name:'));
+  if (nameLine) {
+    fields['name'] = nameLine.slice('name:'.length).trim().replace(/^["']|["']$/g, '');
+  }
+
+  return fields;
+}
+
+/**
+ * Возвращает описание скилла из его SKILL.md.
+ * Результат кэшируется.
+ */
+export function getSkillDescription(name: string, cwd: string): string | null {
+  if (descriptionCache) {
+    const cached = descriptionCache.get(name);
+    if (cached !== undefined) return cached['description'] || null;
+  }
+
+  const skill = loadSkill(name, cwd);
+  if (!skill) return null;
+
+  const fm = parseSkillFrontmatter(skill.content);
+  if (descriptionCache) {
+    descriptionCache.set(name, fm);
+  }
+  return fm['description'] || null;
+}
+
+/**
+ * Строит кэш описаний для всех скиллов.
+ */
+function buildDescriptionCache(cwd: string): void {
+  const names = listInstalledSkills(cwd);
+  descriptionCache = new Map();
+  for (const name of names) {
+    const skill = loadSkill(name, cwd);
+    if (skill) {
+      descriptionCache.set(name, parseSkillFrontmatter(skill.content));
+    } else {
+      descriptionCache.set(name, {});
+    }
+  }
+}
+
+/**
+ * Возвращает список всех установленных скиллов с описаниями.
+ */
+export function listSkillsWithDescriptions(cwd?: string): { name: string; description: string | null }[] {
+  const cw = cwd ?? process.cwd();
+  if (!descriptionCache) buildDescriptionCache(cw);
+  const names = listInstalledSkills(cw);
+  return names.map(name => ({
+    name,
+    description: descriptionCache!.get(name)?.description ?? null,
+  }));
+}
+
+/**
+ * Инвалидирует кэш описаний (вызывается при изменении конфига).
+ */
+export function invalidateSkillCaches(): void {
+  skillIndexCache = null;
+  descriptionCache = null;
+}
+
 // ─── Keyword-based skill preloading (pre-load по ключевым словам) ──
 
 let skillIndexCache: Map<string, string[]> | null = null;
@@ -233,13 +342,10 @@ function getSkillKeywords(name: string, cwd: string): string[] {
 
   const skill = loadSkill(name, cwd);
   if (skill) {
-    const fmMatch = skill.content.match(/^---\n([\s\S]*?)\n---/);
-    if (fmMatch) {
-      const descLine = fmMatch[1].split('\n').find(l => l.startsWith('description:'));
-      if (descLine) {
-        const desc = descLine.replace(/^description:\s*"?([^"]*)"?\s*$/, '$1').trim();
-        for (const w of splitWords(desc)) keywords.add(w);
-      }
+    const fm = parseSkillFrontmatter(skill.content);
+    const desc = fm['description'];
+    if (desc) {
+      for (const w of splitWords(desc)) keywords.add(w);
     }
   }
 
@@ -313,7 +419,7 @@ export function preloadSkillsByKeywords(text: string, cwd: string): Skill[] {
     for (const term of searchTerms) {
       if (term.length >= 4) {
         if (name.includes(term)) {
-          score += 2;
+          score += 1;
         }
       }
       if (!STOP_WORDS.has(term) && keywords.includes(term)) {
