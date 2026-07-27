@@ -1,4 +1,4 @@
-import type { ModeConfig } from './types.js';
+import type { ModeConfig, ModeBehaviors } from './types.js';
 
 /**
  * Реестр режимов агента.
@@ -171,7 +171,7 @@ export class ModeRegistry {
           id,
           constraints: { ...base.constraints, ...(overrides.constraints || {}) },
           ui: { ...base.ui, ...(overrides.ui || {}) },
-          behaviors: { ...base.behaviors, ...(overrides.behaviors || {}) },
+          behaviors: { ...base.behaviors, ...(overrides.behaviors || {}) } as ModeBehaviors,
         };
         this.register(mode);
       } else {

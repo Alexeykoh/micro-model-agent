@@ -10,6 +10,17 @@
  * @module agent/modes/types
  */
 
+/** Типизированные поведения режима */
+export interface ModeBehaviors {
+  planEnforcement?: boolean;
+  directWriteStreakLimit?: number;
+  directWriteStreak?: boolean;
+  continuationNudgeLimit?: number;
+  continuationNudge?: boolean;
+  readConsolidation?: boolean;
+  singleWritePerResponse?: boolean;
+}
+
 /** Конфигурация режима агента */
 export interface ModeConfig {
   /** Уникальный id режима */
@@ -34,8 +45,8 @@ export interface ModeConfig {
   /** Разрешить автозагрузку скилов по @упоминаниям */
   allowAutoLoadSkills: boolean;
 
-  /** Поведения ( Record для расширяемости) */
-  behaviors: Record<string, unknown>;
+  /** Поведения */
+  behaviors: ModeBehaviors;
 
   /** Плагины, активируемые в этом режиме */
   plugins?: string[];

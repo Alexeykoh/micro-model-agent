@@ -1,4 +1,4 @@
-import type { ModeConfig, ModeContext } from './types.js';
+import type { ModeConfig, ModeContext, ModeBehaviors } from './types.js';
 
 /**
  * Применение конфигурации режима к агенту.
@@ -24,7 +24,7 @@ export interface AppliedMode {
   /** Разрешить автозагрузку */
   allowAutoLoadSkills: boolean;
   /** Поведения */
-  behaviors: Record<string, unknown>;
+  behaviors: ModeBehaviors;
   /** Префикс промпта */
   promptPrefix: string;
   /** Режим для subagent */
