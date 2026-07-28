@@ -12,9 +12,6 @@
 
 /** Типизированные поведения режима */
 export interface ModeBehaviors {
-  planEnforcement?: boolean;
-  directWriteStreakLimit?: number;
-  directWriteStreak?: boolean;
   continuationNudgeLimit?: number;
   continuationNudge?: boolean;
   readConsolidation?: boolean;
@@ -47,9 +44,6 @@ export interface ModeConfig {
 
   /** Поведения */
   behaviors: ModeBehaviors;
-
-  /** Плагины, активируемые в этом режиме */
-  plugins?: string[];
 
   /** UI настройки */
   ui: {

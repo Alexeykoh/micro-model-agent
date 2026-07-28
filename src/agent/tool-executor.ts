@@ -1,11 +1,19 @@
-import type { ToolHandler, ToolResult, ToolContext, ParsedToolCall } from '../tools/types.js';
-import { runPreToolUseHooks, runPostToolUseHooks } from '../tools/hooks.js';
-import { notifyFileChanged } from '../indexer/cache.js';
-import { invalidateSystemPromptCache } from './system-prompt.js';
-import type { PluginManager } from '../plugins/manager.js';
-import { resolve, dirname } from 'node:path';
-import { existsSync } from 'node:fs';
-import { getGroundingConfig } from '../config/config.js';
+import type {
+  ToolHandler,
+  ToolResult,
+  ToolContext,
+  ParsedToolCall,
+} from "../tools/types.js";
+import {
+  runPreToolUseHooks,
+  runPostToolUseHooks,
+  runLintAfterWrite,
+} from "../tools/hooks.js";
+import { notifyFileChanged } from "../indexer/cache.js";
+import { invalidateSystemPromptCache } from "./system-prompt.js";
+import { resolve, dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { getGroundingConfig } from "../config/config.js";
 
 /**
  * Диспетчер инструментов с пайплайном: pre-hooks → execute → post-hooks → truncate.
@@ -18,27 +26,47 @@ import { getGroundingConfig } from '../config/config.js';
  */
 
 /** Инструменты, требующие path validation: путь должен существовать */
-const FS_TOOLS_REQUIRE_EXIST = new Set(['read_file', 'edit_file', 'delete_file', 'file_info']);
+const FS_TOOLS_REQUIRE_EXIST = new Set([
+  "read_file",
+  "edit_file",
+  "delete_file",
+  "file_info",
+]);
 
 /** Инструменты, для которых проверяем только родительскую директорию */
-const FS_TOOLS_CHECK_PARENT = new Set(['write_file', 'create_dir']);
+const FS_TOOLS_CHECK_PARENT = new Set(["write_file", "create_dir"]);
 
 /** Инструменты с source/destination */
-const FS_TOOLS_COPY_MOVE = new Set(['copy_file', 'move_file']);
+const FS_TOOLS_COPY_MOVE = new Set(["copy_file", "move_file"]);
 
 /** Инструменты, которые модифицируют файловую систему */
-const MODIFYING_TOOLS = new Set(['write_file', 'edit_file', 'delete_file', 'copy_file', 'move_file']);
+const MODIFYING_TOOLS = new Set([
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "copy_file",
+  "move_file",
+]);
 
 /** Извлекает пути изменённых файлов из аргументов инструмента */
-function getChangedFilePaths(toolName: string, args: Record<string, unknown>): string[] {
-  const normalize = (p: unknown) => String(p ?? '').replace(/\\/g, '/');
+function getChangedFilePaths(
+  toolName: string,
+  args: Record<string, unknown>,
+): string[] {
+  const normalize = (p: unknown) => String(p ?? "").replace(/\\/g, "/");
   switch (toolName) {
-    case 'write_file': return [normalize(args.path)];
-    case 'edit_file':  return [normalize(args.path)];
-    case 'delete_file': return [normalize(args.path)];
-    case 'copy_file':  return [normalize(args.destination)];
-    case 'move_file':  return [normalize(args.source), normalize(args.destination)];
-    default: return [];
+    case "write_file":
+      return [normalize(args.path)];
+    case "edit_file":
+      return [normalize(args.path)];
+    case "delete_file":
+      return [normalize(args.path)];
+    case "copy_file":
+      return [normalize(args.destination)];
+    case "move_file":
+      return [normalize(args.source), normalize(args.destination)];
+    default:
+      return [];
   }
 }
 
@@ -72,28 +100,38 @@ const PATH_NOT_FOUND_PATTERNS = [
 
 /** Проверяет, является ли ошибка ошибкой "path not found" */
 function isPathNotFoundError(stderr: string): boolean {
-  return PATH_NOT_FOUND_PATTERNS.some(p => p.test(stderr));
+  return PATH_NOT_FOUND_PATTERNS.some((p) => p.test(stderr));
 }
 
 /** Извлекает путь из ошибки */
 function extractPathFromError(stderr: string): string | null {
   // Windows: "Cannot find path 'E:\foo\bar' because it does not exist."
-  const winMatch = stderr.match(/(?:cannot find path|no such file|does not exist)['"]\s*['"]?([A-Z]:\\[^'"]+)['"]?/i);
+  const winMatch = stderr.match(
+    /(?:cannot find path|no such file|does not exist)['"]\s*['"]?([A-Z]:\\[^'"]+)['"]?/i,
+  );
   if (winMatch) return winMatch[1];
   // Unix: "No such file or directory '/foo/bar'"
-  const unixMatch = stderr.match(/['"]?(\/[^\s'"]+)['"]?\s*(?:because|no such)/i);
+  const unixMatch = stderr.match(
+    /['"]?(\/[^\s'"]+)['"]?\s*(?:because|no such)/i,
+  );
   if (unixMatch) return unixMatch[1];
   return null;
 }
 
 /** Обрезка вывода инструмента для экономии токенов */
-export function truncateOutput(toolName: string, output: string, exitCode: number): string {
+export function truncateOutput(
+  toolName: string,
+  output: string,
+  exitCode: number,
+): string {
   if (exitCode !== 0) {
-    return output.length > ERROR_LIMIT ? output.slice(0, ERROR_LIMIT) + '\n...[truncated]' : output;
+    return output.length > ERROR_LIMIT
+      ? output.slice(0, ERROR_LIMIT) + "\n...[truncated]"
+      : output;
   }
   const limit = TRUNCATION_LIMITS[toolName] ?? DEFAULT_LIMIT;
   if (output.length <= limit) return output;
-  return output.slice(0, limit) + '\n...[truncated]';
+  return output.slice(0, limit) + "\n...[truncated]";
 }
 
 /** Результат выполнения ToolExecutor */
@@ -120,24 +158,19 @@ export interface ExecutorResult {
 function hashError(toolName: string, stderr: string): string {
   // Убираем пути файлов, numbers, timestamps для нормализации
   const normalized = stderr
-    .replace(/[A-Z]:\\[^\s"']+/gi, '<PATH>')
-    .replace(/\/[^\s"']+/g, '<PATH>')
-    .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/g, '<TS>')
-    .replace(/\b\d{10,13}\b/g, '<ID>')
+    .replace(/[A-Z]:\\[^\s"']+/gi, "<PATH>")
+    .replace(/\/[^\s"']+/g, "<PATH>")
+    .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/g, "<TS>")
+    .replace(/\b\d{10,13}\b/g, "<ID>")
     .trim();
   return `${toolName}::${normalized}`;
 }
 
 export class ToolExecutor {
   private handlers: Map<string, ToolHandler> = new Map();
-  private pluginManager?: PluginManager;
   /** Повторяющиеся ошибки: hash → { count, lastStderr } */
-  private recentErrors: Map<string, { count: number; lastStderr: string }> = new Map();
-
-  /** Установка менеджера плагинов */
-  setPluginManager(pm: PluginManager): void {
-    this.pluginManager = pm;
-  }
+  private recentErrors: Map<string, { count: number; lastStderr: string }> =
+    new Map();
 
   /** Регистрация обработчика инструмента */
   register(handler: ToolHandler): void {
@@ -163,17 +196,21 @@ export class ToolExecutor {
 
   /** Получение определений всех инструментов для LLM */
   getDefinitions() {
-    return Array.from(this.handlers.values()).map(h => h.definition);
+    return Array.from(this.handlers.values()).map((h) => h.definition);
   }
 
   /** Pre-flight проверка существования пути для FS-тулов */
-  private preFlightCheck(name: string, args: Record<string, unknown>, cwd: string): string | null {
+  private preFlightCheck(
+    name: string,
+    args: Record<string, unknown>,
+    cwd: string,
+  ): string | null {
     const groundingCfg = getGroundingConfig();
     if (!groundingCfg.checkFiles) return null;
 
-    const pathArg = String(args.path ?? '');
-    const sourceArg = String(args.source ?? '');
-    const destArg = String(args.destination ?? '');
+    const pathArg = String(args.path ?? "");
+    const sourceArg = String(args.source ?? "");
+    const destArg = String(args.destination ?? "");
 
     if (FS_TOOLS_REQUIRE_EXIST.has(name) && pathArg) {
       const resolved = resolve(cwd, pathArg);
@@ -197,7 +234,7 @@ export class ToolExecutor {
           return `ENOENT: source path not found — "${sourceArg}" does not exist.\nCheck the source path with glob_search before calling ${name}.`;
         }
       }
-      if (destArg && name === 'copy_file') {
+      if (destArg && name === "copy_file") {
         const resolvedDest = resolve(cwd, destArg);
         const parent = dirname(resolvedDest);
         if (parent !== resolvedDest && !existsSync(parent)) {
@@ -229,8 +266,8 @@ export class ToolExecutor {
     if (!preHook.continue) {
       return {
         result: {
-          stdout: '',
-          stderr: `Hook blocked: ${preHook.message || ''}`,
+          stdout: "",
+          stderr: `Hook blocked: ${preHook.message || ""}`,
           exitCode: 1,
           truncated: false,
         },
@@ -238,26 +275,12 @@ export class ToolExecutor {
       };
     }
 
-    // 1.5. Plugin: tool:before
-    if (this.pluginManager) {
-      try {
-        await this.pluginManager.emit('tool:before', call.name, call.arguments);
-      } catch (e: any) {
-        if (e.name === 'PluginError') {
-          return {
-            result: { stdout: '', stderr: 'Plugin blocked: ' + e.message, exitCode: 1, truncated: false },
-            elapsed: (performance.now() - start) / 1000,
-          };
-        }
-      }
-    }
-
     // 2. Execute handler
     const handler = this.handlers.get(call.name);
     if (!handler) {
       return {
         result: {
-          stdout: '',
+          stdout: "",
           stderr: `Unknown tool: ${call.name}`,
           exitCode: 1,
           truncated: false,
@@ -267,10 +290,19 @@ export class ToolExecutor {
     }
 
     // 2.5 Pre-flight validation путей для FS-тулов
-    const preFlightError = this.preFlightCheck(call.name, call.arguments, context.cwd);
+    const preFlightError = this.preFlightCheck(
+      call.name,
+      call.arguments,
+      context.cwd,
+    );
     if (preFlightError) {
       return {
-        result: { stdout: '', stderr: preFlightError, exitCode: 1, truncated: false },
+        result: {
+          stdout: "",
+          stderr: preFlightError,
+          exitCode: 1,
+          truncated: false,
+        },
         elapsed: (performance.now() - start) / 1000,
       };
     }
@@ -280,7 +312,7 @@ export class ToolExecutor {
       result = await handler.execute(call.arguments, context);
     } catch (e: any) {
       result = {
-        stdout: '',
+        stdout: "",
         stderr: `Tool error: ${e.message}`,
         exitCode: 1,
         truncated: false,
@@ -288,14 +320,13 @@ export class ToolExecutor {
     }
 
     // 3. Post-hooks
-    runPostToolUseHooks(context.cwd, call.name, hookCmd, result.stdout, result.exitCode);
-
-    // 3.5. Plugin: tool:after
-    if (this.pluginManager) {
-      try {
-        await this.pluginManager.emit('tool:after', call.name, result);
-      } catch { /* plugin errors non-fatal in post */ }
-    }
+    runPostToolUseHooks(
+      context.cwd,
+      call.name,
+      hookCmd,
+      result.stdout,
+      result.exitCode,
+    );
 
     // 4. Notify indexer (для модифицирующих инструментов)
     if (result.exitCode === 0 && MODIFYING_TOOLS.has(call.name)) {
@@ -306,25 +337,51 @@ export class ToolExecutor {
       invalidateSystemPromptCache();
     }
 
+    // 4.5. Lint-on-write hook (after write_file/edit_file)
+    if (
+      result.exitCode === 0 &&
+      (call.name === "write_file" || call.name === "edit_file")
+    ) {
+      const filePath = String(call.arguments.path ?? "");
+      const lintError = runLintAfterWrite(context.cwd, filePath);
+      if (lintError) {
+        result = { ...result, stderr: result.stderr + "\n[LINT] " + lintError };
+      }
+    }
+
     // 5. Truncate output
-    const truncatedStdout = truncateOutput(call.name, result.stdout, result.exitCode);
-    let truncatedStderr = truncateOutput(call.name, result.stderr, result.exitCode);
+    const truncatedStdout = truncateOutput(
+      call.name,
+      result.stdout,
+      result.exitCode,
+    );
+    let truncatedStderr = truncateOutput(
+      call.name,
+      result.stderr,
+      result.exitCode,
+    );
 
     // 5.5. Path-not-found enrichment — показываем содержимое родительской директории
     if (result.exitCode !== 0 && isPathNotFoundError(result.stderr)) {
-      const errPath = extractPathFromError(result.stderr) ?? (call.arguments as any)?.path;
+      const errPath =
+        extractPathFromError(result.stderr) ?? (call.arguments as any)?.path;
       if (errPath) {
         const parentDir = dirname(String(errPath));
-        const listDirHandler = this.handlers.get('list_dir');
+        const listDirHandler = this.handlers.get("list_dir");
         if (listDirHandler) {
           try {
-            const dirResult = await listDirHandler.execute({ path: parentDir }, context);
+            const dirResult = await listDirHandler.execute(
+              { path: parentDir },
+              context,
+            );
             if (dirResult.exitCode === 0 && dirResult.stdout.trim()) {
               truncatedStderr += `\n\n[ENRICHMENT] Contents of ${parentDir}:\n${dirResult.stdout}`;
             } else {
               truncatedStderr += `\n\n[ENRICHMENT] Parent directory ${parentDir} is empty or inaccessible.`;
             }
-          } catch { /* enrichment is best-effort */ }
+          } catch {
+            /* enrichment is best-effort */
+          }
         }
       }
     }
@@ -341,7 +398,10 @@ export class ToolExecutor {
           truncatedStderr += `\n[WARNING] Same error ${prev.count} times in a row. STOP retrying this exact call. Try a different approach or ask for help.`;
         }
       } else {
-        this.recentErrors.set(errHash, { count: 1, lastStderr: truncatedStderr });
+        this.recentErrors.set(errHash, {
+          count: 1,
+          lastStderr: truncatedStderr,
+        });
       }
       // Ограничиваем размер карты
       if (this.recentErrors.size > 50) {
@@ -351,7 +411,7 @@ export class ToolExecutor {
     } else if (result.exitCode === 0) {
       // При успехе — сбрасываем счётчик для этого инструмента
       for (const [key] of this.recentErrors) {
-        if (key.startsWith(call.name + '::')) {
+        if (key.startsWith(call.name + "::")) {
           this.recentErrors.delete(key);
         }
       }
@@ -364,7 +424,10 @@ export class ToolExecutor {
         ...result,
         stdout: truncatedStdout,
         stderr: truncatedStderr,
-        truncated: result.truncated || truncatedStdout !== result.stdout || truncatedStderr !== result.stderr,
+        truncated:
+          result.truncated ||
+          truncatedStdout !== result.stdout ||
+          truncatedStderr !== result.stderr,
       },
       elapsed,
     };

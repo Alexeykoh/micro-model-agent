@@ -62,8 +62,6 @@ export interface AgentConfig {
   llm?: LLMConfig;
   /** Auto-specialist конфигурация */
   specialist?: SpecialistConfig;
-  /** Список плагинов для активации (имена через запятую) */
-  plugins?: string[];
   /** Grounding-конфигурация (борьба с галлюцинациями) */
   grounding?: GroundingConfig;
 }

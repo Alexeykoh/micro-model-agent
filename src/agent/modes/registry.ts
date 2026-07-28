@@ -1,4 +1,4 @@
-import type { ModeConfig, ModeBehaviors } from './types.js';
+import type { ModeConfig, ModeBehaviors } from "./types.js";
 
 /**
  * Реестр режимов агента.
@@ -13,9 +13,9 @@ import type { ModeConfig, ModeBehaviors } from './types.js';
 /** Встроенные режимы */
 const BUILTIN_MODES: ModeConfig[] = [
   {
-    id: 'fast',
-    label: 'Fast',
-    systemPromptTemplate: 'fast',
+    id: "fast",
+    label: "Fast",
+    systemPromptTemplate: "fast",
     constraints: {
       maxSkills: 0,
       skillTokenBudget: 0,
@@ -24,8 +24,6 @@ const BUILTIN_MODES: ModeConfig[] = [
     forcedSkills: [],
     allowAutoLoadSkills: false,
     behaviors: {
-      planEnforcement: false,
-      directWriteStreak: false,
       singleWritePerResponse: false,
       readConsolidation: false,
       continuationNudge: false,
@@ -33,14 +31,14 @@ const BUILTIN_MODES: ModeConfig[] = [
     ui: {
       showThinking: false,
       quiet: false,
-      promptPrefix: '[fast]',
+      promptPrefix: "[fast]",
     },
-    subagentMode: 'fast',
+    subagentMode: "fast",
   },
   {
-    id: 'base',
-    label: 'Base',
-    systemPromptTemplate: 'base',
+    id: "base",
+    label: "Base",
+    systemPromptTemplate: "base",
     constraints: {
       maxSkills: 2,
       skillTokenBudget: 4000,
@@ -49,8 +47,6 @@ const BUILTIN_MODES: ModeConfig[] = [
     forcedSkills: [],
     allowAutoLoadSkills: true,
     behaviors: {
-      planEnforcement: true,
-      directWriteStreak: true,
       singleWritePerResponse: true,
       readConsolidation: true,
       continuationNudge: true,
@@ -58,24 +54,22 @@ const BUILTIN_MODES: ModeConfig[] = [
     ui: {
       showThinking: false,
       quiet: false,
-      promptPrefix: '',
+      promptPrefix: "",
     },
-    subagentMode: 'base',
+    subagentMode: "base",
   },
   {
-    id: 'pro',
-    label: 'Pro',
-    systemPromptTemplate: 'pro',
+    id: "pro",
+    label: "Pro",
+    systemPromptTemplate: "pro",
     constraints: {
       maxSkills: 0,
       skillTokenBudget: 8000,
       minContextWindow: 64000,
     },
-    forcedSkills: ['grill-me'],
+    forcedSkills: ["grill-me"],
     allowAutoLoadSkills: true,
     behaviors: {
-      planEnforcement: true,
-      directWriteStreak: true,
       singleWritePerResponse: true,
       readConsolidation: true,
       continuationNudge: true,
@@ -83,10 +77,9 @@ const BUILTIN_MODES: ModeConfig[] = [
     ui: {
       showThinking: true,
       quiet: false,
-      promptPrefix: '[pro]',
+      promptPrefix: "[pro]",
     },
-    subagentMode: 'base',
-    plugins: ['hooks-adapter'],
+    subagentMode: "base",
   },
 ];
 
@@ -109,7 +102,7 @@ export class ModeRegistry {
     for (const mode of BUILTIN_MODES) {
       this.modes.set(mode.id, mode);
     }
-    this.defaultId = 'base';
+    this.defaultId = "base";
   }
 
   /** Регистрация/переопределение режима */
@@ -162,16 +155,22 @@ export class ModeRegistry {
 
     for (const [id, overrides] of Object.entries(modesConfig)) {
       const baseId = (overrides as any).extends;
-      const base = baseId ? this.modes.get(baseId) : this.modes.get('base');
+      const base = baseId ? this.modes.get(baseId) : this.modes.get("base");
 
       if (base) {
         const mode: ModeConfig = {
           ...base,
           ...overrides,
           id,
-          constraints: { ...base.constraints, ...(overrides.constraints || {}) },
+          constraints: {
+            ...base.constraints,
+            ...(overrides.constraints || {}),
+          },
           ui: { ...base.ui, ...(overrides.ui || {}) },
-          behaviors: { ...base.behaviors, ...(overrides.behaviors || {}) } as ModeBehaviors,
+          behaviors: {
+            ...base.behaviors,
+            ...(overrides.behaviors || {}),
+          } as ModeBehaviors,
         };
         this.register(mode);
       } else {

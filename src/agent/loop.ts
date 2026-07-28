@@ -6,8 +6,7 @@ import { parseToolCalls } from "../tools/parse-tool-call.js";
 import type { ParsedToolCall } from "../tools/types.js";
 import { parseFileRefs } from "../file-loader.js";
 import { ContextManager } from "./context.js";
-import { autoLearnFromError } from "./memory.js";
-import { appendNote, collectCodingStyle, loadProfile } from "./user-profile.js";
+import { appendNote, loadProfile } from "./user-profile.js";
 import { ModeRegistry } from "./modes/registry.js";
 import { applyMode } from "./modes/applier.js";
 import {
@@ -53,24 +52,14 @@ import {
   writeStatus,
 } from "../logger.js";
 import type { AgentMode, RuntimeFlags } from "../config/types.js";
-import {
-  IsolatedLoopResult,
-  buildSubagentContext,
-  runIsolatedLoop,
-  doChat,
-} from "../tools/subagent.js";
+import { IsolatedLoopResult, runIsolatedLoop } from "../tools/subagent.js";
+import { buildSubagentContext } from "../subagent/context.js";
+import { doChat } from "../subagent/chat.js";
 import { SubagentRenderer } from "../ui/subagent-renderer.js";
 import { ToolExecutor } from "./tool-executor.js";
 import { ErrorEscalator } from "./error-escalation.js";
 import { WriteEnforcer } from "./write-enforcer.js";
-import { PluginManager } from "../plugins/manager.js";
-import { loadAllPluginsWithInfo } from "../plugins/loader.js";
-import { handleToolAfter as lintHandleToolAfter } from "../plugins/builtin/lint-on-write/index.js";
-import {
-  handleAgentDone,
-  handleToolBlocked,
-  handleToolAfter as notifyHandleToolAfter,
-} from "../plugins/builtin/notify/index.js";
+import { sendNotification } from "../tools/hooks.js";
 import { planHandler } from "../tools/native/plan.js";
 import { todoHandler } from "../tools/native/todo.js";
 import { questionHandler } from "../tools/native/question.js";
@@ -214,13 +203,6 @@ export async function runAgentLoop(
 
   // ─── Behaviors из ModeConfig ──────────────────────────
   const behaviors = modeConfig.behaviors;
-  const planEnforcement = behaviors.planEnforcement !== false;
-  const directWriteStreakMax =
-    typeof behaviors.directWriteStreakLimit === "number"
-      ? behaviors.directWriteStreakLimit
-      : behaviors.directWriteStreak !== false
-        ? 3
-        : Infinity;
   const continuationNudgeMax =
     typeof behaviors.continuationNudgeLimit === "number"
       ? behaviors.continuationNudgeLimit
@@ -331,77 +313,11 @@ export async function runAgentLoop(
   setStatusWriter(renderer ? (msg) => renderer.writeDim(`  ${msg}`) : null);
   writeStatus("Initializing...");
 
-  // ─── PluginManager: загрузка и активация плагинов ──
-  const pluginManager = new PluginManager();
-  const pluginLogger = {
-    info: logInfo.bind(null, "PLUGIN"),
-    warn: logWarn.bind(null, "PLUGIN"),
-    error: logError.bind(null, "PLUGIN"),
-    debug: logDebug.bind(null, "PLUGIN"),
-  };
-  const pluginCtx = { cwd: process.cwd(), config: {}, logger: pluginLogger };
-
-  // Загружаем все плагины (builtin + project + user)
-  const pluginInfos = await loadAllPluginsWithInfo(pluginManager);
-
-  // Активируем плагины из modeConfig (кастомные)
-  if (modeConfig.plugins?.length) {
-    await pluginManager.activateAll(modeConfig.plugins, pluginCtx);
-  }
-
-  // Авто-активация builtin плагинов (все моды)
-  const builtinPlugins = pluginInfos.filter((p) => p.source === "builtin");
-  for (const bp of builtinPlugins) {
-    if (!pluginManager.isActive(bp.name)) {
-      await pluginManager.activate(bp.name, pluginCtx);
-    }
-  }
-
-  // Активация плагинов из config.agent.plugins
-  const configPlugins = config.agent?.plugins || [];
-  for (const pluginName of configPlugins) {
-    if (!pluginManager.isActive(pluginName)) {
-      await pluginManager.activate(pluginName, pluginCtx);
-    }
-  }
-
-  // Регистрация обработчиков событий для всех активных плагинов
-  if (pluginManager.isActive("lint-on-write")) {
-    pluginManager.on(
-      "tool:after",
-      "lint-on-write",
-      (toolName: string, args: any, result: any) => {
-        return lintHandleToolAfter(
-          toolName,
-          args,
-          result,
-          process.cwd(),
-          ".lint-detected",
-        );
-      },
-    );
-  }
-  if (pluginManager.isActive("notify")) {
-    pluginManager.on("agent:done", "notify", () => handleAgentDone());
-    pluginManager.on("tool:blocked", "notify", (toolName: string, args: any) =>
-      handleToolBlocked(toolName, args),
-    );
-    pluginManager.on(
-      "tool:after",
-      "notify",
-      (toolName: string, args: any, result: any) =>
-        notifyHandleToolAfter(toolName, args, result),
-    );
-  }
-
-  const pluginSections = await pluginManager.getPromptSections();
-
-  // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память, плагины)
+  // Сборка system prompt (включает инструкции, информацию о проекте, скилы, память)
   const sysStart = performance.now();
   const systemPrompt = buildSystemPrompt(
     loadedSkills.length > 0 ? loadedSkills : undefined,
     options?.mode,
-    pluginSections,
     options?.flags,
   );
   const sysElapsed = ((performance.now() - sysStart) / 1000).toFixed(1);
@@ -437,7 +353,6 @@ export async function runAgentLoop(
 
   // ─── ToolExecutor: единый диспетчер инструментов ──
   const toolExecutor = new ToolExecutor();
-  toolExecutor.setPluginManager(pluginManager);
   toolExecutor.registerAll([
     planHandler,
     todoHandler,
@@ -623,7 +538,6 @@ export async function runAgentLoop(
           content: buildSystemPrompt(
             loadedSkills,
             options?.mode,
-            pluginSections,
             options?.flags,
           ),
         };
@@ -1029,20 +943,6 @@ export async function runAgentLoop(
       toolId: string;
     } | null = null;
 
-    writeEnforcer.enforcePlan(
-      validCalls,
-      messages,
-      planEnforcement,
-      quiet,
-      renderer,
-    );
-    writeEnforcer.enforceWriteStreak(
-      validCalls,
-      messages,
-      directWriteStreakMax,
-      quiet,
-      renderer,
-    );
     writeEnforcer.enforceSingleWrite(validCalls, messages, quiet, renderer);
 
     // ─── Исполнение tool calls ──────────────────────────
@@ -1294,7 +1194,6 @@ export async function runAgentLoop(
             renderer?.writeError(`  ${line}`);
           }
         }
-        autoLearnFromError(hookCmd, toolExitCode !== 0 ? toolOutput : "", "");
       }
 
       runPostToolUseHooks(
@@ -1446,21 +1345,9 @@ export async function runAgentLoop(
               }
             }
 
-            // Автодетекция стиля кодирования из содержимого файла
-            if (toolExitCode === 0 && filePath) {
-              try {
-                const fullContent = readFileSync(
-                  join(process.cwd(), filePath),
-                  "utf-8",
-                );
-                collectCodingStyle(filePath, fullContent);
-              } catch {
-                /* ignore */
-              }
-              // Track created/modified files for completion reporting
-              if (!hasSyntaxError && !createdFiles.includes(filePath)) {
-                createdFiles.push(filePath);
-              }
+            // Track created/modified files for completion reporting
+            if (!hasSyntaxError && !createdFiles.includes(filePath)) {
+              createdFiles.push(filePath);
             }
           }
         }
@@ -1512,10 +1399,8 @@ export async function runAgentLoop(
     `runAgentLoop done: ${messages.length} total messages, aborted=${aborted}`,
   );
 
-  // Agent:done event for notify plugin
-  if (pluginManager.isActive("notify")) {
-    pluginManager.emit("agent:done").catch(() => {});
-  }
+  // Agent:done notification
+  sendNotification("MMA", "Agent finished the task");
 
   return { messages };
 }

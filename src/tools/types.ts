@@ -1,4 +1,5 @@
-import type { OutputRenderer } from '../ui/renderer.js';
+import type { OutputRenderer } from "../ui/renderer.js";
+import type { ToolDefinition } from "./registry.js";
 
 /**
  * Общие типы для системы инструментов.
@@ -43,17 +44,10 @@ export interface ToolHandler {
   /** Определение для LLM (name, description, parameters) */
   definition: ToolDefinition;
   /** Выполнение инструмента */
-  execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
-}
-
-/** Определение инструмента для LLM */
-export interface ToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
+  execute(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult>;
 }
 
 /** Инструментальный вызов из LLM ( до валидации) */

@@ -1,4 +1,5 @@
-import { ThemeEngine } from './engine.js';
+﻿import { createThemeEngine } from './engine.js';
+import type { ThemeEngine } from './engine.js';
 import { loadTheme, loadThemeConfig, listThemes as listThemeNames, ensureThemeDir } from './loader.js';
 
 /**
@@ -45,6 +46,6 @@ export function resetTheme(): void {
   _theme = null;
 }
 
-export { ThemeEngine } from './engine.js';
 export { loadTheme, loadThemeConfig, ensureThemeDir } from './loader.js';
+export type { ThemeEngine } from './engine.js';
 export type { ThemeConfig, ThemeColors, ThemeIcons, ThemeFormat } from './types.js';

@@ -9,12 +9,10 @@ import { homedir } from 'node:os';
  * - project.md — информация о проекте
  * - conventions.md — обнаруженные паттерны кодирования
  * - decisions.md — принятые решения
- * - errors.md — ошибки и их решения (автообучение)
+ * - errors.md — ошибки и их решения
  * - history.md — история действий
  *
  * Возможности:
- * - Автономное обучение из ошибок (autoLearnFromError)
- * - Автономное обучение из редактирования файлов (autoLearnFromEdit)
  * - Поиск по записям (searchMemory)
  * - Компактификация при превышении бюджета токенов (trimMemoryToBudget)
  *
@@ -183,86 +181,6 @@ export function exportMemory(): string | null {
   const exportPath = join(MEMORY_DIR, 'memory-export.md');
   writeFileSync(exportPath, parts.join('\n\n---\n\n'), 'utf-8');
   return exportPath;
-}
-
-/**
- * Автономное обучение из ошибок.
- *
- * Анализирует stderr/stdout и автоматически сохраняет
- * известные паттерны ошибок с решениями:
- * - Cannot find module → npm install
- * - ENOENT → проверить путь
- * - SyntaxError → исправить синтаксис
- * - TypeError → проверить типы
- * - EACCES → права доступа
- * - EADDRINUSE → порт занят
- *
- * @param command - выполненная команда
- * @param stderr - вывод ошибок
- * @param stdout - стандартный вывод
- */
-export function autoLearnFromError(command: string, stderr: string, stdout: string): void {
-  const errorText = stderr || stdout;
-  if (!errorText || errorText.length < 10) return;
-
-  const patterns: { re: RegExp; title: string; solution: string }[] = [
-    { re: /Cannot find module\s+['"]([^'"]+)['"]/i, title: 'Missing module', solution: 'Install with npm install <module>' },
-    { re: /ENOENT:\s+no such file or directory/i, title: 'File not found', solution: 'Check file path exists' },
-    { re: /SyntaxError:\s+(.+)/i, title: 'Syntax error', solution: 'Fix syntax in the file' },
-    { re: /TypeError:\s+(.+)/i, title: 'Type error', solution: 'Check types and null values' },
-    { re: /ReferenceError:\s+(\w+)\s+is not defined/i, title: 'Undefined reference', solution: 'Import or define the variable' },
-    { re: /EACCES:\s+permission denied/i, title: 'Permission denied', solution: 'Run with appropriate permissions' },
-    { re: /EADDRINUSE:\s+address already in use/i, title: 'Port in use', solution: 'Kill process on that port or use different port' },
-    { re: /Command failed:\s+(.+)/i, title: 'Command failed', solution: 'Check command syntax and dependencies' },
-  ];
-
-  for (const pattern of patterns) {
-    const match = errorText.match(pattern.re);
-    if (match) {
-      const shortCmd = command.length > 60 ? command.slice(0, 57) + '...' : command;
-      const shortErr = (match[1] || match[0]).toString().slice(0, 100);
-      saveMemory('errors', `${pattern.title}: ${shortErr}`, `Command: \`${shortCmd}\`\nError: ${shortErr}\nSolution: ${pattern.solution}`);
-      return;
-    }
-  }
-}
-
-/**
- * Автономное обучение из редактирования файлов.
- *
- * Анализирует содержимое файла и извлекает паттерны кодирования:
- * - export default function/class
- * - named exports / arrow functions
- * - type exports
- * - import patterns
- * - console usage
- * - error handling patterns
- */
-export function autoLearnFromEdit(filePath: string, content: string): void {
-  const ext = filePath.split('.').pop()?.toLowerCase() || '';
-  const patterns: { re: RegExp; convention: string }[] = [
-    { re: /export\s+default\s+function\s+(\w+)/, convention: 'Default export: function' },
-    { re: /export\s+default\s+class\s+(\w+)/, convention: 'Default export: class' },
-    { re: /export\s+(?:async\s+)?function\s+(\w+)/, convention: 'Named function export' },
-    { re: /export\s+const\s+(\w+)\s*=\s*(?:async\s+)?\(/, convention: 'Arrow function export' },
-    { re: /export\s+(?:type|interface)\s+(\w+)/, convention: 'Type export' },
-    { re: /import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/, convention: 'Named imports' },
-    { re: /import\s+(\w+)\s+from\s+['"]([^'"]+)['"]/, convention: 'Default import' },
-    { re: /console\.(log|error|warn)\(/, convention: 'Console output (consider using logger)' },
-    { re: /try\s*\{[\s\S]*?\}\s*catch\s*\(/, convention: 'Error handling pattern' },
-  ];
-
-  const detected: string[] = [];
-  for (const p of patterns) {
-    if (p.re.test(content)) {
-      detected.push(p.convention);
-    }
-  }
-
-  if (detected.length > 0) {
-    const unique = [...new Set(detected)];
-    saveMemory('conventions', `Patterns in ${filePath}`, unique.join('\n'));
-  }
 }
 
 /** Оценивает количество токенов в файлах памяти (~4 символа на токен) */

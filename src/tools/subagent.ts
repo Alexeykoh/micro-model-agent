@@ -19,7 +19,6 @@ import {
 import { getLLMConfig } from "../config/config.js";
 
 import { validateToolCall } from "../subagent/validation.js";
-export { validateToolCall };
 
 /**
  * Изолированный цикл агента для субагентов.
@@ -49,16 +48,13 @@ export interface IsolatedLoopResult {
 // ─── Context builder ──────────────────────────────────────
 
 import { buildSubagentContext } from "../subagent/context.js";
-export { buildSubagentContext };
 
 import { buildSpecialistTask, isTrivialError } from "../subagent/errors.js";
-export { buildSpecialistTask, isTrivialError };
 
 // ─── Tool call parsing ───────────────────────────────────
 // validateToolCall moved to src/subagent/validation.ts
 
 import { doChat } from "../subagent/chat.js";
-export { doChat };
 
 // ─── Tool execution helper ────────────────────────────────
 
@@ -347,6 +343,3 @@ export async function runIsolatedLoop(
 
   return { createdFiles, errors, summary, turns };
 }
-
-import { subagentDefinition } from "../subagent/definition.js";
-export { subagentDefinition };

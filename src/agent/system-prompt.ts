@@ -14,6 +14,8 @@ import {
 } from "../skills/loader.js";
 import { logInfo, logWarn, logDebug } from "../logger.js";
 import type { AgentMode } from "../config/types.js";
+import { ALL_DEFINITIONS } from "../tools/registry.js";
+import type { ToolDefinition } from "../tools/registry.js";
 
 /**
  * Build system prompt for the LLM agent.
@@ -35,113 +37,102 @@ import type { AgentMode } from "../config/types.js";
 
 // ─── Tool format ──────────────────────────────────────
 // System prompt block describing the tool calling format
-const TOOL_FORMAT = `CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.
+const TOOL_FORMAT = generateToolFormatString(ALL_DEFINITIONS);
 
-To call a tool, output EXACTLY this format (on its own line):
+function generateToolFormatString(defs: ToolDefinition[]): string {
+  const lines: string[] = [
+    "CRITICAL: Use filesystem tools for file operations — they are more reliable than bash.",
+    "",
+    "To call a tool, output EXACTLY this format (on its own line):",
+    "",
+    '<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>',
+    "",
+  ];
 
-<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>
+  const toolExamples: Record<string, string[]> = {
+    subagent: [
+      '{"name":"subagent","arguments":{"task":"Create src/db.ts: sqlite connection","existingFiles":"package.json"}}',
+      '{"name":"subagent","arguments":{"task":"Run tsc --noEmit to check types"}}',
+    ],
+    bash: [
+      '{"name":"bash","arguments":{"cmd":"npm test"}}',
+      '{"name":"bash","arguments":{"cmd":"git status"}}',
+    ],
+    read_file: [
+      '{"name":"read_file","arguments":{"path":"src/index.ts"}}',
+      '{"name":"read_file","arguments":{"path":"src/index.ts","offset":50,"limit":100}}',
+    ],
+    write_file: [
+      '{"name":"write_file","arguments":{"path":"src/utils.ts","content":"export function foo() { return 1; }"}}',
+    ],
+    edit_file: [
+      '{"name":"edit_file","arguments":{"path":"src/index.ts","old_string":"old text","new_string":"new text"}}',
+    ],
+    list_dir: [
+      '{"name":"list_dir","arguments":{}}',
+      '{"name":"list_dir","arguments":{"path":"src"}}',
+    ],
+    web_search: [
+      '{"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}',
+    ],
+    web_fetch: [
+      '{"name":"web_fetch","arguments":{"url":"https://example.com"}}',
+    ],
+    web_browse: [
+      '{"name":"web_browse","arguments":{"action":"navigate","url":"https://example.com"}}',
+      '{"name":"web_browse","arguments":{"action":"scrape","url":"https://example.com/catalog"}}',
+      '{"name":"web_browse","arguments":{"action":"click","selector":"button.submit"}}',
+      '{"name":"web_browse","arguments":{"action":"screenshot"}}',
+    ],
+    plan: [
+      '{"name":"plan","arguments":{"action":"create","name":"Todo App","steps":["Step 1","Step 2"]}}',
+      '{"name":"plan","arguments":{"action":"done","step":1}}',
+    ],
+    todo: [
+      '{"name":"todo","arguments":{"action":"add","text":"Implement feature X"}}',
+    ],
+    question: [
+      '{"name":"question","arguments":{"question":"What color?","choices":["Red","Blue"]}}',
+    ],
+    approve: ['{"name":"approve","arguments":{"action":"Delete file foo.ts"}}'],
+    user_profile: ['{"name":"user_profile","arguments":{"action":"show"}}'],
+    theme: [
+      '{"name":"theme","arguments":{"action":"list"}}',
+      '{"name":"theme","arguments":{"action":"switch","name":"dark"}}',
+    ],
+    project_map: [
+      '{"name":"project_map","arguments":{"action":"list"}}',
+      '{"name":"project_map","arguments":{"action":"info","path":"src/App.tsx"}}',
+    ],
+    scaffold: [
+      '{"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"my-app"}}',
+    ],
+    create_dir: [],
+    delete_file: [],
+    copy_file: [],
+    move_file: [],
+    file_info: [],
+    glob_search: [],
+    grep_search: [],
+    tree: [],
+  };
 
-## Subagent — delegate file creation to isolated agent:
-  Use for EACH separate file when creating multi-file projects (3+ files).
-  One subagent call per file. Subagent has fresh context and works independently.
+  for (const def of defs) {
+    const name = def.function.name;
+    const desc = def.function.description;
+    const examples = toolExamples[name] || [];
+    lines.push(`## ${name} — ${desc}`);
+    for (const ex of examples) {
+      lines.push(`  ${ex}`);
+    }
+    lines.push("");
+  }
 
-  {"name":"subagent","arguments":{"task":"Create src/db.ts: better-sqlite3 connection + users table"}}
-  {"name":"subagent","arguments":{"task":"Create src/routes/users.ts: Express CRUD for users","existingFiles":"package.json, src/db.ts"}}
-  {"name":"subagent","arguments":{"task":"Run tsc --noEmit to check types"}}
-
-  Arguments:
-  - task (required) — what the subagent should create/fix/check
-  - existingFiles (optional) — comma-separated files for cross-file context
-
-## Filesystem Tools (USE THESE for file ops):
-
-Read a file:
-  {"name":"read_file","arguments":{"path":"src/index.ts"}}
-  {"name":"read_file","arguments":{"path":"src/index.ts","offset":50,"limit":100}}
-
-Write/create a file:
-  {"name":"write_file","arguments":{"path":"src/utils.ts","content":"export function foo() { return 1; }"}}
-
-Edit (find & replace):
-  {"name":"edit_file","arguments":{"path":"src/index.ts","old_string":"old text","new_string":"new text"}}
-
-List directory (only when user explicitly asks):
-  {"name":"list_dir","arguments":{}}
-  {"name":"list_dir","arguments":{"path":"src"}}
-
-Create directory: {"name":"create_dir","arguments":{"path":"src/routes"}}
-Delete file: {"name":"delete_file","arguments":{"path":"old-file.ts"}}
-Copy file: {"name":"copy_file","arguments":{"source":"src/a.ts","destination":"src/b.ts"}}
-Move/rename: {"name":"move_file","arguments":{"source":"old.ts","destination":"new.ts"}}
-File info: {"name":"file_info","arguments":{"path":"src/index.ts"}}
-Search files: {"name":"glob_search","arguments":{"pattern":"**/*.ts"}}
-Search content: {"name":"grep_search","arguments":{"pattern":"function","include":"*.ts"}}
-Search with regex: {"name":"grep_search","arguments":{"pattern":"import.*from","include":"*.ts"}}
-Search literal dot: {"name":"grep_search","arguments":{"pattern":"config\\.json"}}
-Directory tree: {"name":"tree","arguments":{"depth":2}}
-
-## Plan / Todo / Question / Approve (native tools):
-  {"name":"plan","arguments":{"action":"create","name":"Todo App","steps":["Step 1","Step 2"]}}
-  {"name":"plan","arguments":{"action":"done","step":1}}
-  {"name":"plan","arguments":{"action":"show"}}
-  {"name":"plan","arguments":{"action":"clear"}}
-  {"name":"todo","arguments":{"action":"add","text":"Implement feature X"}}
-  {"name":"todo","arguments":{"action":"list"}}
-  {"name":"question","arguments":{"question":"What color?","choices":["Red","Blue"]}}
-  {"name":"approve","arguments":{"action":"Delete file foo.ts"}}
-  {"name":"user_profile","arguments":{"action":"show"}}
-  {"name":"user_profile","arguments":{"action":"add_note","section":"Notes","note":"text"}}
-
-## Subagent (isolate a single task in fresh context):
-  {"name":"subagent","arguments":{"task":"Create file db.ts with better-sqlite3","existingFiles":"package.json"}}
-
-## Web tools (search & fetch):
-  {"name":"web_search","arguments":{"query":"weather in Minsk","maxResults":5}}
-  {"name":"web_fetch","arguments":{"url":"https://example.com"}}
-
-## Web Browse (headless browser):
-  {"name":"web_browse","arguments":{"action":"navigate","url":"https://example.com"}}
-  {"name":"web_browse","arguments":{"action":"scrape","url":"https://example.com/catalog"}}
-  {"name":"web_browse","arguments":{"action":"scrape","url":"https://shop.com/bikes","pattern":"bike|velosiped","maxItems":15}}
-  {"name":"web_browse","arguments":{"action":"click","selector":"button.submit"}}
-  {"name":"web_browse","arguments":{"action":"type","selector":"#search","value":"hello"}}
-  {"name":"web_browse","arguments":{"action":"wait","selector":"#result","timeout":5000}}
-  {"name":"web_browse","arguments":{"action":"screenshot"}}
-  {"name":"web_browse","arguments":{"action":"close"}}
-
-## Theme tool (theme management):
-  {"name":"theme","arguments":{"action":"list"}}
-  {"name":"theme","arguments":{"action":"switch","name":"dark"}}
-  {"name":"theme","arguments":{"action":"show"}}
-  {"name":"theme","arguments":{"action":"install","name":"monokai","url":"https://example.com/monokai.json"}}
-  {"name":"theme","arguments":{"action":"remove","name":"monokai"}}
-
-Themes are in ~/.mma/themes/. Built-in: light, dark. Can install from URL.
-If the user wants to switch themes — suggest a matching one from the list and switch.
-
-## Project Map tool (project structure):
-  {"name":"project_map","arguments":{"action":"list"}}
-  {"name":"project_map","arguments":{"action":"find","pattern":"*.tsx"}}
-  {"name":"project_map","arguments":{"action":"info","path":"src/App.tsx"}}
-
-CRITICAL: Use project_map FIRST before reading any files. It shows what files exist.
-- action="list" — show all files in the project
-- action="find" — search files by glob pattern
-- action="info" — get details about specific file (path, exports, lines)
-
-## Scaffold (create complete project structure programmatically):
-  {"name":"scaffold","arguments":{"template":"vite-react-ts","dir":"my-app"}}
-  {"name":"scaffold","arguments":{"template":"vite-vanilla-ts","dir":"my-app"}}
-  {"name":"scaffold","arguments":{"template":"node-express-ts","dir":"api-server"}}
-
-  Templates: vite-react-ts (React+TypeScript), vite-vanilla-ts (vanilla TS), node-express-ts (Express+TS)
-  Use scaffold INSTEAD of creating project files manually. It creates all config files correctly.
-
-## Bash (for non-file operations — npm, git, etc):
-  {"name":"bash","arguments":{"cmd":"npm test"}}
-  {"name":"bash","arguments":{"cmd":"git status"}}
-
-NEVER output tool calls in any other format. ALWAYS use <tool_call> tags.`;
+  lines.push(
+    "NEVER output tool calls in any other format. ALWAYS use <tool_call> tags.",
+  );
+  return lines.join("\n");
+}
 
 // ─── Conversation flow ──────────────────────────────────
 // System prompt block explaining how the dialog cycle works
@@ -334,22 +325,6 @@ const RULES_FAST = composeRules([
   "web_tools",
 ]);
 
-const GROUNDING_RULE = `## Grounding Rule (CRITICAL — prevents hallucinations)
-Before EVERY <tool_call> to a filesystem tool (read_file, write_file, edit_file, etc.),
-you MUST output a grounding marker on its own line:
-  @grounding[файл: <target-path>]
-where <target-path> is the file path from the tool call arguments.
-This proves you know which file you are operating on and prevents path hallucinations.
-
-Examples:
-  @grounding[файл: src/index.ts]
-  <tool_call>{"name":"read_file","arguments":{"path":"src/index.ts"}}</tool_call>
-
-  @grounding[файл: src/utils.ts]
-  <tool_call>{"name":"write_file","arguments":{"path":"src/utils.ts","content":"..."}}</tool_call>
-
-If you cannot determine the exact file path — do NOT call the tool. Ask the user for clarification first.`;
-
 const POWERSHELL_EXAMPLES = `Examples (PowerShell):
   <tool_call>{"name":"bash","arguments":{"cmd":"dir"}}</tool_call>
   <tool_call>{"name":"bash","arguments":{"cmd":"Get-Content src\\\\index.ts"}}</tool_call>
@@ -423,7 +398,6 @@ export function invalidateSystemPromptCache(): void {
 export function buildSystemPrompt(
   extraSkills?: Skill[],
   mode?: AgentMode,
-  pluginSections?: string[],
   flags?: RuntimeFlags,
 ): string {
   const start = performance.now();
@@ -433,7 +407,7 @@ export function buildSystemPrompt(
       ?.map((s) => s.name)
       .sort()
       .join(",") || ""
-  }:${pluginSections?.length || 0}`;
+  }`;
   const cached = systemPromptCache.get(key);
   if (cached) {
     logDebug("SYSTEM", "buildSystemPrompt: cache hit");
@@ -479,19 +453,13 @@ export function buildSystemPrompt(
     ? [
         TOOL_FORMAT,
         CONVERSATION_FLOW,
-        GROUNDING_RULE,
         POWERSHELL_EXAMPLES,
         rules,
         POWERSHELL_RULES,
       ].join("\n\n")
-    : [
-        TOOL_FORMAT,
-        CONVERSATION_FLOW,
-        GROUNDING_RULE,
-        UNIX_EXAMPLES,
-        rules,
-        UNIX_RULES,
-      ].join("\n\n");
+    : [TOOL_FORMAT, CONVERSATION_FLOW, UNIX_EXAMPLES, rules, UNIX_RULES].join(
+        "\n\n",
+      );
 
   const header = `You are Micro Models Agent (MMA), an AI coding assistant.
 You help with software engineering tasks in the project directory.`;
@@ -585,22 +553,6 @@ You help with software engineering tasks in the project directory.`;
     base +
     (extraSkills && extraSkills.length > 0 && mode !== "fast"
       ? "\n\n" + formatSkillsBlock(extraSkills)
-      : "") +
-    (pluginSections?.length
-      ? "\n\n## Plugin Context (facts only)\n\n" +
-        pluginSections
-          .map((s) => {
-            // Лимит: 200 токенов ≈ 800 символов на секцию плагина
-            if (s.length > 800) {
-              logWarn(
-                "SYSTEM",
-                `plugin section too long (${s.length} chars), truncating to 800`,
-              );
-              return s.slice(0, 800) + "\n[truncated]";
-            }
-            return s;
-          })
-          .join("\n\n")
       : "");
   const elapsed = (performance.now() - start).toFixed(0);
   logInfo(

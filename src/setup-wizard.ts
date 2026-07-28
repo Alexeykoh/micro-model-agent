@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import type { AppConfig } from "./config/types.js";
-import { saveConfig } from "./config/config.js";
+import { saveConfig, DEFAULT_CONFIG } from "./config/config.js";
 
 interface LmStudioModel {
   id: string;
@@ -417,28 +417,10 @@ function getVersion(): string {
 }
 
 function makeDefaultConfig(): AppConfig {
-  return {
-    providers: {},
-    active: { provider: "", model: "" },
-    agent: {
-      maxSteps: 50,
-      autoCompact: true,
-      compactThreshold: 0.7,
-      toolTimeout: 120,
-      maxOutputLength: 2000,
-      showThinking: false,
-      skillTokenBudget: 4000,
-      maxSkillsBase: 2,
-      maxSkillsPro: 0,
-      grounding: {
-        enabled: true,
-        strictMode: true,
-        checkFiles: true,
-        maxMissingGrounding: 2,
-        maxConsecutiveGroundingErrors: 5,
-      },
-    },
-  };
+  const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
+  config.providers = {};
+  config.active = { provider: "", model: "" };
+  return config;
 }
 
 export async function runSetupWizard(force = false): Promise<AppConfig> {

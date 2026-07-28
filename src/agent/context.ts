@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../llm/provider.js';
+﻿import type { ChatMessage } from '../llm/provider.js';
 import { countTokens } from '../llm/token-counter.js';
 import { getTheme } from '../styling/index.js';
 import { logInfo, logDebug } from '../logger.js';
@@ -77,47 +77,23 @@ export class ContextManager {
    *
    * Алгоритм:
    * - System: 100 (всегда сохраняется отдельно)
-   * - Tool с ошибкой: 90 (важно для диагностики)
-   * - User с "важно"/"critical": 85
-   * - Tool с успехом: 70
-   * - Assistant с ошибкой/решением: 70-75
-   * - User-вопрос: 65
-   * - Обычный user/assistant: 40-60
+   * - Tool: 70
+   * - User: 60
+   * - Assistant: 65
    * + Recency bonus: (index/total) * 20
    */
   private scoreMessage(msg: ChatMessage, index: number, total: number): number {
-    let score = 50; // базовая оценка
-
     // Оценка по роли сообщения
-    if (msg.role === 'system') score = 100;
-    else if (msg.role === 'tool') {
-      const content = (msg.content || '').toLowerCase();
-      if (content.includes('error') || content.includes('fail')) score = 90;
-      else if (content.includes('✓') || content.includes('success')) score = 70;
-      else score = 60;
-    }
-    else if (msg.role === 'user') {
-      const content = (msg.content || '').toLowerCase();
-      if (content.includes('decision') || content.includes('важно') || content.includes('critical')) score = 85;
-      else if (content.includes('?')) score = 65;
-      else score = 60;
-    }
-    else if (msg.role === 'assistant') {
-      const content = (msg.content || '').toLowerCase();
-      if (content.includes('error') || content.includes('ошибка')) score = 75;
-      else if (content.includes(' decided ') || content.includes('решено')) score = 70;
-      else score = 65;  // reasoning слишком важен для удаления (было 40)
-    }
-
-    // Бонус за длину — длинные ответы = более ценные рассуждения
-    const lengthBonus = Math.min(15, Math.floor((msg.content?.length || 0) / 500));
-    score += lengthBonus;
+    const roleScore =
+      msg.role === 'system' ? 100 :
+      msg.role === 'tool' ? 70 :
+      msg.role === 'assistant' ? 65 :
+      60; // user и прочие
 
     // Бонус за свежесть: чем позже сообщение, тем выше бонус
     const recencyBonus = (index / total) * 20;
-    score += recencyBonus;
 
-    return score;
+    return roleScore + recencyBonus;
   }
 
   /**

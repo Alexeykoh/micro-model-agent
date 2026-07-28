@@ -1,23 +1,29 @@
-import type { ChatMessage } from '../llm/provider.js';
-import { readFileDefinition } from './fs/read-file.js';
-import { writeFileDefinition } from './fs/write-file.js';
-import { editFileDefinition } from './fs/edit-file.js';
-import { listDirDefinition } from './fs/list-dir.js';
-import { scaffoldDefinition } from './native/scaffold.js';
-import { projectMapDefinition } from './native/project-map.js';
-import { createDirDefinition } from './fs/create-dir.js';
-import { deleteFileDefinition } from './fs/delete-file.js';
-import { copyFileDefinition } from './fs/copy-file.js';
-import { moveFileDefinition } from './fs/move-file.js';
-import { fileInfoDefinition } from './fs/file-info.js';
-import { globSearchDefinition } from './fs/glob-search.js';
-import { grepSearchDefinition } from './fs/grep-search.js';
-import { treeDefinition } from './fs/tree.js';
-import { bashDefinition } from './bash.js';
-import { webSearchDefinition } from './web-search.js';
-import { webFetchDefinition } from './web-fetch.js';
-import { webBrowseDefinition } from './web-browse.js';
-import type { BashResult } from './bash.js';
+import type { ChatMessage } from "../llm/provider.js";
+import { readFileDefinition } from "./fs/read-file.js";
+import { writeFileDefinition } from "./fs/write-file.js";
+import { editFileDefinition } from "./fs/edit-file.js";
+import { listDirDefinition } from "./fs/list-dir.js";
+import { scaffoldDefinition } from "./native/scaffold.js";
+import { projectMapDefinition } from "./native/project-map.js";
+import { createDirDefinition } from "./fs/create-dir.js";
+import { deleteFileDefinition } from "./fs/delete-file.js";
+import { copyFileDefinition } from "./fs/copy-file.js";
+import { moveFileDefinition } from "./fs/move-file.js";
+import { fileInfoDefinition } from "./fs/file-info.js";
+import { globSearchDefinition } from "./fs/glob-search.js";
+import { grepSearchDefinition } from "./fs/grep-search.js";
+import { treeDefinition } from "./fs/tree.js";
+import { bashDefinition } from "./bash.js";
+import { webSearchDefinition } from "./web-search.js";
+import { webFetchDefinition } from "./web-fetch.js";
+import { webBrowseDefinition } from "./web-browse.js";
+import { planDefinition } from "./native/plan.js";
+import { todoDefinition } from "./native/todo.js";
+import { questionDefinition } from "./native/question.js";
+import { approveDefinition } from "./native/approve.js";
+import { userProfileDefinition } from "./native/user-profile.js";
+import { themeDefinition } from "./native/theme.js";
+import type { BashResult } from "./bash.js";
 
 /**
  * Реестр всех инструментов агента.
@@ -29,7 +35,7 @@ import type { BashResult } from './bash.js';
  */
 
 export interface ToolDefinition {
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     description: string;
@@ -46,20 +52,28 @@ export interface ToolCall {
 export type ToolResult = BashResult;
 
 /** Все определения инструментов (для system prompt) */
-const ALL_DEFINITIONS: ToolDefinition[] = [
+export const ALL_DEFINITIONS: ToolDefinition[] = [
   // Native
   {
-    type: 'function',
+    type: "function",
     function: {
-      name: 'subagent',
-      description: 'Delegate a task to an isolated agent in a fresh context. Use for EACH file when creating 3+ new files. Arguments: task (required, what to do), existingFiles (optional, comma-separated files for context).',
+      name: "subagent",
+      description:
+        "Delegate a task to an isolated agent in a fresh context. Use for EACH file when creating 3+ new files. Arguments: task (required, what to do), existingFiles (optional, comma-separated files for context).",
       parameters: {
-        type: 'object',
+        type: "object",
         properties: {
-          task: { type: 'string', description: 'What the subagent should create/fix/check' },
-          existingFiles: { type: 'string', description: 'Comma-separated files the subagent can read for context (optional)' },
+          task: {
+            type: "string",
+            description: "What the subagent should create/fix/check",
+          },
+          existingFiles: {
+            type: "string",
+            description:
+              "Comma-separated files the subagent can read for context (optional)",
+          },
         },
-        required: ['task'],
+        required: ["task"],
       },
     },
   },
@@ -86,9 +100,16 @@ const ALL_DEFINITIONS: ToolDefinition[] = [
   webSearchDefinition,
   webFetchDefinition,
   webBrowseDefinition,
+  // Native
+  planDefinition,
+  todoDefinition,
+  questionDefinition,
+  approveDefinition,
+  userProfileDefinition,
+  themeDefinition,
 ];
 
-const VALID_TOOL_NAMES = new Set(ALL_DEFINITIONS.map(d => d.function.name));
+const VALID_TOOL_NAMES = new Set(ALL_DEFINITIONS.map((d) => d.function.name));
 
 /**
  * Реестр инструментов — хранит определения и валидирует имена.
@@ -101,7 +122,7 @@ export class ToolRegistry {
   }
 
   isToolCall(message: ChatMessage): boolean {
-    return message.role === 'assistant' && message.content === '';
+    return message.role === "assistant" && message.content === "";
   }
 
   isValidTool(name: string): boolean {
