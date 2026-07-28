@@ -3,7 +3,7 @@ import { parseToolCalls } from "./parse-tool-call.js";
 import type { LLMProvider, ChatMessage } from "../llm/provider.js";
 import { LMStudioNative } from "../llm/lmstudio-native.js";
 import { ToolRegistry } from "./registry.js";
-import type { ParsedToolCall } from "./types.js";
+import type { ParsedCall } from "./parse-tool-call.js";
 import type { ToolExecutor } from "../agent/tool-executor.js";
 import { ContextManager } from "../agent/context.js";
 import { buildSystemPrompt } from "../agent/system-prompt.js";
@@ -17,8 +17,7 @@ import {
   logToolOutput,
 } from "../logger.js";
 import { getLLMConfig } from "../config/config.js";
-import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+
 import { validateToolCall } from "../subagent/validation.js";
 export { validateToolCall };
 
@@ -60,6 +59,98 @@ export { buildSpecialistTask, isTrivialError };
 
 import { doChat } from "../subagent/chat.js";
 export { doChat };
+
+// ─── Tool execution helper ────────────────────────────────
+
+async function executeToolCall(
+  call: ParsedCall,
+  toolExecutor: ToolExecutor | undefined,
+  cwd: string,
+  createdFiles: string[],
+  errors: string[],
+  step: number,
+): Promise<{ output: string; exitCode: number }> {
+  const { parsed, cmd } = call;
+  const isBash = parsed.name === "bash";
+  const toolId = generateSubagentToolCallId();
+
+  if (parsed.name === "subagent") {
+    logWarn("SUBAGENT", `nested subagent blocked at step ${step}`);
+    return {
+      output: "Subagents cannot spawn subagents (max depth 1)",
+      exitCode: 1,
+    };
+  }
+
+  const preview = isBash
+    ? String(cmd).slice(0, 80)
+    : parsed.name === "write_file" || parsed.name === "edit_file"
+      ? String(parsed.arguments.path ?? "").slice(-60)
+      : JSON.stringify(parsed.arguments).slice(0, 80);
+  logToolCall(`sub:${parsed.name}`, preview);
+
+  const hookCmd = isBash
+    ? String(cmd)
+    : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
+  const execResult = toolExecutor
+    ? await toolExecutor.execute(
+        { id: toolId, name: parsed.name, arguments: parsed.arguments } as any,
+        { cwd, quiet: false },
+        hookCmd,
+      )
+    : null;
+  const result = execResult?.result ?? {
+    stdout: "",
+    stderr: "ToolExecutor not available",
+    exitCode: 1,
+    truncated: false,
+  };
+  const output = result.stdout || result.stderr || "(no output)";
+  const exitCode = result.exitCode;
+
+  logToolOutput(`sub:${parsed.name}`, output, exitCode);
+
+  if (
+    exitCode !== 0 &&
+    isBash &&
+    /pwsh|powershell|not recognized|not found/i.test(output)
+  ) {
+    return {
+      output:
+        output +
+        "\n\n[HINT] Shell unavailable on this system. Use write_file tool to create files manually. Do NOT retry bash commands.",
+      exitCode,
+    };
+  }
+
+  if (
+    exitCode === 0 &&
+    (parsed.name === "write_file" || parsed.name === "edit_file")
+  ) {
+    const filePath = String(parsed.arguments.path ?? "");
+    if (filePath && !createdFiles.includes(filePath)) {
+      createdFiles.push(filePath);
+      logInfo("SUBAGENT", `created: ${filePath}`);
+    }
+    if (filePath && /\.(ts|tsx|js|jsx|json)$/.test(filePath)) {
+      const { isAbsolute, relative } = await import("node:path");
+      const relPath = isAbsolute(filePath)
+        ? relative(cwd, filePath).replace(/\\/g, "/")
+        : filePath;
+      const syntaxResult = checkFileSyntax(relPath, cwd);
+      if (syntaxResult !== "OK") {
+        errors.push(`${filePath}: ${syntaxResult.split("\n")[0]}`);
+        logWarn(
+          "SUBAGENT",
+          `syntax error in ${filePath}: ${syntaxResult.split("\n")[0]}`,
+        );
+        return { output: output + `\nSYNTAX ERROR: ${syntaxResult}`, exitCode };
+      }
+    }
+  }
+
+  return { output, exitCode };
+}
 
 // ─── Isolated agent loop ──────────────────────────────────
 
@@ -193,133 +284,20 @@ export async function runIsolatedLoop(
     }
 
     for (const call of validCalls) {
-      const { parsed, cmd } = call;
-      const isBash = parsed.name === "bash";
-      const toolId = generateSubagentToolCallId();
       toolCallCount++;
-
-      let toolOutput = "";
-      let toolExitCode = 0;
-
-      if (parsed.name === "subagent") {
-        toolOutput = "Subagents cannot spawn subagents (max depth 1)";
-        toolExitCode = 1;
-        logWarn("SUBAGENT", `nested subagent blocked at step ${step}`);
-      } else if (!isBash) {
-        const preview =
-          parsed.name === "write_file"
-            ? String(parsed.arguments.path ?? "").slice(-60)
-            : parsed.name === "edit_file"
-              ? String(parsed.arguments.path ?? "").slice(-60)
-              : JSON.stringify(parsed.arguments).slice(0, 80);
-        logToolCall(`sub:${parsed.name}`, preview);
-
-        const hookCmd = isBash
-          ? String(cmd)
-          : `${parsed.name} ${JSON.stringify(parsed.arguments)}`;
-        const execResult = toolExecutor
-          ? await toolExecutor.execute(
-              {
-                id: toolId,
-                name: parsed.name,
-                arguments: parsed.arguments,
-              } as any,
-              { cwd, quiet: false },
-              hookCmd,
-            )
-          : null;
-        const result = execResult?.result ?? {
-          stdout: "",
-          stderr: "ToolExecutor not available",
-          exitCode: 1,
-          truncated: false,
-        };
-        toolOutput = result.stdout || result.stderr || "(no output)";
-        toolExitCode = result.exitCode;
-
-        logToolOutput(`sub:${parsed.name}`, toolOutput, toolExitCode);
-
-        if (toolExitCode !== 0) {
-          logDebug(
-            "SUBAGENT",
-            `tool ${parsed.name} failed: exit ${toolExitCode} | ${toolOutput.slice(0, 200)}`,
-          );
-        }
-
-        if (
-          toolExitCode === 0 &&
-          (parsed.name === "write_file" || parsed.name === "edit_file")
-        ) {
-          const filePath = String(parsed.arguments.path ?? "");
-          if (filePath && !createdFiles.includes(filePath)) {
-            createdFiles.push(filePath);
-            logInfo("SUBAGENT", `created: ${filePath}`);
-          }
-        }
-
-        if (
-          toolExitCode === 0 &&
-          (parsed.name === "write_file" || parsed.name === "edit_file")
-        ) {
-          const filePath = String(parsed.arguments.path ?? "");
-          if (filePath && /\.(ts|tsx|js|jsx|json)$/.test(filePath)) {
-            const { isAbsolute, relative } = await import("node:path");
-            const relPath = isAbsolute(filePath)
-              ? relative(cwd, filePath).replace(/\\/g, "/")
-              : filePath;
-            const syntaxResult = checkFileSyntax(relPath, cwd);
-            if (syntaxResult !== "OK") {
-              errors.push(`${filePath}: ${syntaxResult.split("\n")[0]}`);
-              toolOutput += `\nSYNTAX ERROR: ${syntaxResult}`;
-              logWarn(
-                "SUBAGENT",
-                `syntax error in ${filePath}: ${syntaxResult.split("\n")[0]}`,
-              );
-            }
-          }
-        }
-      } else {
-        logToolCall("sub:bash", String(cmd).slice(0, 80));
-
-        const bashExecResult = toolExecutor
-          ? await toolExecutor.execute(
-              {
-                id: toolId,
-                name: "bash",
-                arguments: { cmd, timeout: parsed.arguments?.timeout ?? 30 },
-              } as any,
-              { cwd, quiet: false },
-              String(cmd),
-            )
-          : null;
-        const result = bashExecResult?.result ?? {
-          stdout: "",
-          stderr: "ToolExecutor not available",
-          exitCode: 1,
-          truncated: false,
-        };
-        toolOutput = result.stdout || result.stderr || "(no output)";
-        toolExitCode = result.exitCode;
-
-        logToolOutput("sub:bash", toolOutput, toolExitCode);
-
-        if (toolExitCode !== 0) {
-          logDebug(
-            "SUBAGENT",
-            `bash failed: exit ${toolExitCode} | ${toolOutput.slice(0, 200)}`,
-          );
-          // Если bash падает из-за отсутствия shell —提示 модель использовать write_file
-          if (/pwsh|powershell|not recognized|not found/i.test(toolOutput)) {
-            toolOutput +=
-              "\n\n[HINT] Shell unavailable on this system. Use write_file tool to create files manually. Do NOT retry bash commands.";
-          }
-        }
-      }
+      const { output, exitCode } = await executeToolCall(
+        call,
+        toolExecutor,
+        cwd,
+        createdFiles,
+        errors,
+        step,
+      );
 
       messages.push({
         role: "tool",
-        content: toolOutput.slice(0, 8000),
-        tool_call_id: toolId,
+        content: output.slice(0, 8000),
+        tool_call_id: generateSubagentToolCallId(),
       });
       messages.push({ role: "user", content: "Continue." });
     }
