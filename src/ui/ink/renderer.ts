@@ -117,6 +117,10 @@ export class InkRenderer implements OutputRenderer {
     this.dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'plugins', content: names.join(', ') } });
   }
 
+  setStreamRole(_role: 'assistant' | 'subagent' | 'expert' | null): void {
+    // Ink mode uses its own streaming state — no-op
+  }
+
   writeBracketTag(tag: string, message: string): void {
     this.dispatch({ type: 'ADD_MESSAGE', kind: 'message', data: { type: 'bracket', tag, message } });
   }
@@ -150,7 +154,7 @@ export class InkRenderer implements OutputRenderer {
   }
 
   writeSpinner(text?: string): void {
-    this.dispatch({ type: 'SPINNER', show: true });
+    this.dispatch({ type: 'SPINNER', show: true, text });
   }
 
   clearSpinner(): void {

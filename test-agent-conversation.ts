@@ -16,7 +16,7 @@
  *   MMA_LLM_MODEL=qwen/qwen3.5-9b
  *   MMA_CTX=32768
  */
-import { OpenAICompat } from './src/llm/openai-compat.js';
+import { LMStudioNative } from './src/llm/lmstudio-native.js';
 import { ToolRegistry } from './src/tools/registry.js';
 import { runAgentLoop } from './src/agent/loop.js';
 import { ContextManager } from './src/agent/context.js';
@@ -298,6 +298,14 @@ const SCENARIOS: Scenario[] = [
       'Создай 5 файлов в папке multi-file-test: math.ts (add/sub/mul/div), string.ts (capitalize/reverse/truncate), db.ts (sqlite3 init + users table), api.ts (express CRUD users), index.ts (экспорт + server start). SQLite+express уже установлены. Сделай план, затем реализуй каждый файл через subagent.',
     ],
   },
+  {
+    name: 'web-scraping',
+    description: 'Парсинг товаров с сайта + поиск в интернете',
+    prompts: [
+      'Спарси 10-15 велосипедов Specialized с https://tvojvelik.by/catalog/velosipedy/specialized/ и запиши результат в файл specialized-bikes.md. Используй 4-step паттерн: navigate → discover → evaluate → write_file.',
+      'Найди в интернете велосипед Specialized ROCKHOPPER SPORT — все что найдешь: характеристики, цены, обзоры. Запиши всё в файл rockhopper-sport.md.',
+    ],
+  },
 ];
 
 // ─── Analysis ─────────────────────────────────────────────
@@ -377,6 +385,23 @@ function analyzeResults(allResults: TestResult[]) {
     const total = results.length;
     const icon = ok === total ? '✅' : '⚠️';
     console.log(`  ${icon} ${name}: ${ok}/${total} OK`);
+  }
+
+  // Web scraping specific checks
+  const webResults = allResults.filter(r => r.scenario === 'web-scraping');
+  if (webResults.length > 0) {
+    console.log('\nWeb scraping verification:');
+    for (const r of webResults) {
+      const usedDiscover = r.toolCalls.includes('discover');
+      const usedWebBrowse = r.toolCalls.includes('web_browse');
+      const usedWebSearch = r.toolCalls.includes('web_search');
+      const usedWriteFile = r.toolCalls.includes('write_file');
+      console.log(`  [${r.input.slice(0, 60)}...]`);
+      console.log(`    web_browse: ${usedWebBrowse ? '✅' : '❌'} | discover: ${usedDiscover ? '✅' : '❌'} | web_search: ${usedWebSearch ? '✅' : '❌'} | write_file: ${usedWriteFile ? '✅' : '❌'}`);
+      if (!usedDiscover && usedWebBrowse) {
+        console.log(`    ⚠️  Модель НЕ использовала discover — угадывала селекторы`);
+      }
+    }
   }
 }
 
@@ -495,22 +520,15 @@ async function main() {
     process.exit(1);
   }
 
-  const provider = new OpenAICompat(BASE_URL, MODEL, CTX);
+  const provider = new LMStudioNative(BASE_URL, MODEL, CTX);
 
   // Create isolated temp directory for testing
   const testDir = mkdtempSync(join(tmpdir(), 'mma-test-'));
   const origCwd = process.cwd();
   process.chdir(testDir);
 
-  // Set up minimal project structure
+  // Set up minimal project structure (just package.json for npm)
   writeFileSync(join(testDir, 'package.json'), JSON.stringify({ name: 'test-project', version: '1.0.0', type: 'module' }, null, 2));
-  mkdirSync(join(testDir, 'src'), { recursive: true });
-  writeFileSync(join(testDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, esModuleInterop: true, skipLibCheck: true, jsx: 'react-jsx' } }, null, 2));
-
-  // Install typescript so syntax checking works (tsc --noEmit)
-  try {
-    execSync('npm install typescript --save-dev --silent', { cwd: testDir, stdio: 'pipe', timeout: 30000 });
-  } catch { /* ignore — syntax checks will be skipped if tsc unavailable */ }
 
   console.log(`📁 Test directory: ${testDir}\n`);
 

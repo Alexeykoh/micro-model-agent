@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from 'node:process'
 import type { CompleterResult } from 'node:readline'
 import type { OutputRenderer, StatusInfo } from './renderer.js'
 import { getTheme } from '../styling/index.js'
+import { MdStreamFormatter } from './md-formatter.js'
 
 /**
  * Readline-рендерер — простой текстовый вывод в терминал.
@@ -27,6 +28,9 @@ export class ReadlineRenderer implements OutputRenderer {
   private rl: ReturnType<typeof createInterface> | null = null
   private closed = false
   private commands: SlashCommandInfo[] = []
+  private _streamRole: 'assistant' | 'subagent' | 'expert' | null = null
+  private _streamStarted = false
+  private _mdFormatter = new MdStreamFormatter()
 
   setCommands(cmds: SlashCommandInfo[]): void {
     this.commands = cmds
@@ -111,7 +115,8 @@ export class ReadlineRenderer implements OutputRenderer {
   }
 
   writeToolPreview(toolName: string, argsJson: string): void {
-    console.log(`  ${this.theme.dim(argsJson)}`)
+    const preview = formatToolArgs(toolName, argsJson);
+    console.log(`  ${this.theme.dim(preview)}`)
   }
 
   writeToolResult(time: string, exitCode?: number, result?: string): void {
@@ -121,11 +126,33 @@ export class ReadlineRenderer implements OutputRenderer {
     }
   }
 
+  setStreamRole(role: 'assistant' | 'subagent' | 'expert' | null): void {
+    this._streamRole = role
+    this._streamStarted = false
+    this._mdFormatter.reset()
+  }
+
   writeMarkdownChunk(chunk: string): void {
-    process.stdout.write(chunk)
+    if (!this._streamStarted && this._streamRole) {
+      const prefix = this.theme.bracketTag(this._streamRole, '')
+      process.stdout.write(`\n${prefix}\n`)
+      this._streamStarted = true
+    }
+
+    const formatted = this._mdFormatter.push(chunk)
+    if (formatted) {
+      process.stdout.write(formatted)
+    }
   }
 
   commitMarkdown(): void {
+    const flushed = this._mdFormatter.flush()
+    if (flushed) {
+      process.stdout.write(flushed)
+    }
+    this._streamRole = null
+    this._streamStarted = false
+    this._mdFormatter.reset()
     console.log()
   }
 
@@ -175,4 +202,18 @@ export class ReadlineRenderer implements OutputRenderer {
     }
     this.rl = null
   }
+}
+
+function formatToolArgs(toolName: string, argsJson: string): string {
+  if (toolName === 'subagent') {
+    try {
+      const args = JSON.parse(argsJson);
+      const task = args.task || '';
+      const files = args.existingFiles || '';
+      let result = task.length > 100 ? task.slice(0, 97) + '…' : task;
+      if (files) result += ` ← ${files}`;
+      return result;
+    } catch { /* fall through */ }
+  }
+  return argsJson.length > 120 ? argsJson.slice(0, 117) + '…' : argsJson;
 }

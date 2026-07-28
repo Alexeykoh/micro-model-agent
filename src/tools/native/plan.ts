@@ -1,9 +1,9 @@
 import type { ToolDefinition } from '../registry.js';
 import type { ToolHandler, ToolResult } from '../types.js';
-import { createPlan } from '../plan.js';
+import { createPlan, updatePlanStep, showPlan, clearPlan, getPlanStepTitle, getNextPendingStep } from '../plan.js';
 
 /**
- * Нативный инструмент plan — управление планами задач.
+ * Native plan tool — task plan management.
  *
  * @module tools/native/plan
  */
@@ -12,14 +12,16 @@ export const planDefinition: ToolDefinition = {
   type: 'function',
   function: {
     name: 'plan',
-    description: 'Create a task plan with named steps. Use before starting multi-step work.',
+    description: 'Manage task plans. Create plans, mark steps done, show progress, or clear.',
     parameters: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Plan name' },
-        steps: { type: 'array', items: { type: 'string' }, description: 'List of steps' },
+        action: { type: 'string', enum: ['create', 'done', 'skip', 'progress', 'show', 'clear'], description: 'Action: create (with name+steps), done (mark step N done), skip (skip step N), progress (show plan), show (same as progress), clear (delete plan)' },
+        name: { type: 'string', description: 'Plan name (required for create)' },
+        steps: { type: 'array', items: { type: 'string' }, description: 'List of steps (required for create)' },
+        step: { type: 'number', description: 'Step number to mark as done (required for done)' },
       },
-      required: ['name', 'steps'],
+      required: ['action'],
     },
   },
 };
@@ -28,22 +30,86 @@ export const planHandler: ToolHandler = {
   name: 'plan',
   definition: planDefinition,
   async execute(args, ctx) {
-    const planName = String(args.name || 'Untitled');
-    const stepsRaw = args.steps || [];
-    const steps = Array.isArray(stepsRaw) ? stepsRaw.map(String) : String(stepsRaw).split('\n').filter((s: string) => s.trim());
+    const action = String(args.action || 'show');
 
     if (!ctx.quiet) {
-      ctx.renderer?.writeBracketTag('plan', 'create');
+      ctx.renderer?.writeBracketTag('plan', action);
     }
 
-    let output = createPlan(planName, steps);
+    let output = '';
 
-    if (steps.length >= 3) {
-      output += `\n\nIMPORTANT: Plan has ${steps.length} steps. Use subagent tool for EACH step to work in isolation:\n`;
-      for (let i = 0; i < steps.length; i++) {
-        output += `subagent("Step ${i + 1}: ${steps[i]}. List existing files and packages.")\n`;
+    switch (action) {
+      case 'create': {
+        const existingPlan = showPlan();
+        if (!existingPlan.startsWith('No active plan')) {
+          output = `ERROR: A plan already exists!\n${existingPlan}\n\nDo NOT create a new plan. Use the existing plan. If you need to modify it, use plan({action:"clear"}) first.`;
+          break;
+        }
+        const planName = String(args.name || 'Untitled');
+        const stepsRaw = args.steps || [];
+        const steps = Array.isArray(stepsRaw) ? stepsRaw.map(String) : String(stepsRaw).split('\n').filter((s: string) => s.trim());
+        output = createPlan(planName, steps);
+
+        if (steps.length >= 3) {
+          output += `\n\nIMPORTANT: Plan has ${steps.length} steps. For EACH step, use subagent with STRICT task scope:\n`;
+          for (let i = 0; i < steps.length; i++) {
+            const stepTitle = steps[i].replace(/^\d+\.\s*/, '');
+            output += `Step ${i + 1}: subagent({task:"Create ONLY ${stepTitle}", existingFiles:"<files from previous steps>"})\n`;
+          }
+          output += `\nCRITICAL: Each subagent creates ONLY what its task says. Do NOT let subagent create extra files.\n`;
+          output += `After each subagent completes, mark the step done: plan({action:"done", step:1})\n`;
+          output += `Plan steps: ${steps.map((s, i) => `${i+1}. ${s.replace(/^\d+\.\s*/, '')}`).join(' | ')}`;
+        }
+        break;
       }
-      output += `This prevents context loss. Do NOT use write_file directly — delegate to subagents.`;
+      case 'done': {
+        const stepNum = Number(args.step);
+        if (!stepNum || stepNum < 1) {
+          output = 'Usage: plan({action:"done", step:1}) — marks step 1 as done.';
+        } else {
+          const stepTitle = getPlanStepTitle(stepNum);
+          if (stepTitle === null) {
+            // Step doesn't exist — show current plan so agent can see valid step numbers
+            const currentPlan = showPlan();
+            output = `ERROR: Step ${stepNum} not found.\n\nCurrent plan:\n${currentPlan}\n\nCheck the step numbers above and use the correct one.`;
+          } else {
+            // Auto-mark next pending step as in_progress if this one is pending
+            const nextPending = getNextPendingStep();
+            if (nextPending && nextPending.id === stepNum) {
+              updatePlanStep(stepNum, 'in_progress');
+            }
+            const result = updatePlanStep(stepNum, 'done');
+            output = result;
+          }
+        }
+        break;
+      }
+      case 'skip': {
+        const stepNum = Number(args.step);
+        if (!stepNum || stepNum < 1) {
+          output = 'Usage: plan({action:"skip", step:N}) — marks step N as skipped.';
+        } else {
+          const stepTitle = getPlanStepTitle(stepNum);
+          if (stepTitle === null) {
+            const currentPlan = showPlan();
+            output = `ERROR: Step ${stepNum} not found.\n\nCurrent plan:\n${currentPlan}`;
+          } else {
+            output = updatePlanStep(stepNum, 'skipped');
+          }
+        }
+        break;
+      }
+      case 'progress':
+      case 'show': {
+        output = showPlan();
+        break;
+      }
+      case 'clear': {
+        output = clearPlan();
+        break;
+      }
+      default:
+        output = showPlan();
     }
 
     if (!ctx.quiet && output) {

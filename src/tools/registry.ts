@@ -3,6 +3,8 @@ import { readFileDefinition } from './fs/read-file.js';
 import { writeFileDefinition } from './fs/write-file.js';
 import { editFileDefinition } from './fs/edit-file.js';
 import { listDirDefinition } from './fs/list-dir.js';
+import { scaffoldDefinition } from './native/scaffold.js';
+import { projectMapDefinition } from './native/project-map.js';
 import { createDirDefinition } from './fs/create-dir.js';
 import { deleteFileDefinition } from './fs/delete-file.js';
 import { copyFileDefinition } from './fs/copy-file.js';
@@ -14,6 +16,7 @@ import { treeDefinition } from './fs/tree.js';
 import { bashDefinition } from './bash.js';
 import { webSearchDefinition } from './web-search.js';
 import { webFetchDefinition } from './web-fetch.js';
+import { webBrowseDefinition } from './web-browse.js';
 import type { BashResult } from './bash.js';
 
 /**
@@ -62,6 +65,10 @@ const ALL_DEFINITIONS: ToolDefinition[] = [
   },
   // Bash
   bashDefinition,
+  // Scaffold
+  scaffoldDefinition,
+  // Project Map
+  projectMapDefinition,
   // FS
   readFileDefinition,
   writeFileDefinition,
@@ -78,6 +85,7 @@ const ALL_DEFINITIONS: ToolDefinition[] = [
   // Web
   webSearchDefinition,
   webFetchDefinition,
+  webBrowseDefinition,
 ];
 
 const VALID_TOOL_NAMES = new Set(ALL_DEFINITIONS.map(d => d.function.name));

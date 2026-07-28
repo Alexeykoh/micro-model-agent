@@ -12,23 +12,28 @@ interface StatusInfo {
 
 export function StatusBar({ info, usage }: { info: StatusInfo; usage?: string }) {
   const t = getInkTheme();
-  const parts: string[] = [];
-  if (info.model) {
-    const short = info.model.split('/').pop() || info.model;
-    parts.push(short);
-  }
-  if (info.step !== undefined && info.maxSteps !== undefined) {
-    parts.push(`step ${info.step}/${info.maxSteps}`);
-  }
-  if (usage) {
-    parts.push(usage);
-  }
 
-  const display = parts.join(' │ ') || 'MMA';
+  const modelShort = info.model ? (info.model.split('/').pop() || info.model) : null;
+  const stepInfo = info.step !== undefined && info.maxSteps !== undefined
+    ? `${info.step}/${info.maxSteps}`
+    : null;
 
   return (
-    <Box borderStyle="single" borderColor="gray" width="100%" paddingX={1}>
-      <Text {...t.colors.dim}>{display}</Text>
+    <Box width="100%" paddingX={0}>
+      <Box flexGrow={1}>
+        <Text {...t.colors.dim}>{'─'.repeat(60)}</Text>
+      </Box>
+      <Box>
+        {modelShort ? (
+          <>
+            <Text bold color="magenta">{modelShort}</Text>
+            {stepInfo ? <Text {...t.colors.dim}>{' │ '}{stepInfo}</Text> : null}
+            {usage ? <Text {...t.colors.dim}>{' │ '}{usage}</Text> : null}
+          </>
+        ) : (
+          <Text bold color="magenta">MMA</Text>
+        )}
+      </Box>
     </Box>
   );
 }

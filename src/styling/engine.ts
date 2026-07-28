@@ -119,6 +119,31 @@ export class ThemeEngine {
     return this.c('bracket')(text);
   }
 
+  userRole(text: string): string {
+    return this.c('user')(text);
+  }
+
+  assistantRole(text: string): string {
+    return this.c('assistant')(text);
+  }
+
+  subagentRole(text: string): string {
+    return this.c('subagent')(text);
+  }
+
+  expertRole(text: string): string {
+    return this.c('expert')(text);
+  }
+
+  /** Маппинг тегов bracket к цветам ролей */
+  private readonly ROLE_TAG_COLORS: Record<string, keyof ThemeColors> = {
+    user: 'user',
+    assistant: 'assistant',
+    subagent: 'subagent',
+    expert: 'expert',
+    specialist: 'expert',
+  };
+
   get icon(): ThemeIcons {
     return this._icons;
   }
@@ -132,8 +157,11 @@ export class ThemeEngine {
   }
 
   bracketTag(tag: string, message: string): string {
-    if (tag === 'user') {
-      return `${this.c('info')(`[${tag}]`)} ${this.c('highlight')(message)}`;
+    const roleKey = this.ROLE_TAG_COLORS[tag];
+    if (roleKey) {
+      const tagStr = this.c(roleKey)(`[${tag}]`);
+      const msgStr = roleKey === 'user' ? this.c('highlight')(message) : message;
+      return `${tagStr} ${msgStr}`;
     }
     return `${this.dim(`[${tag}]`)} ${message}`;
   }

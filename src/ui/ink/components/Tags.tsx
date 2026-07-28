@@ -1,3 +1,4 @@
+import React from 'react';
 import { Box, Text } from 'ink';
 import { getInkTheme } from '../theme.js';
 
@@ -28,15 +29,23 @@ export function DimText({ children }: { children: string }) {
 
 export function HeadingTag({ children }: { children: string }) {
   const t = getInkTheme();
-  return <Text {...t.colors.heading}>{children}</Text>;
+  return <Text bold>{children}</Text>;
 }
+
+const ROLE_TAG_STYLES: Record<string, { color: string; bold?: boolean }> = {
+  user: { color: 'yellow', bold: true },
+  assistant: { color: 'cyan' },
+  subagent: { color: 'magenta' },
+  expert: { color: 'green' },
+  specialist: { color: 'green' },
+};
 
 export function BracketTag({ tag, message }: { tag: string; message: string }) {
   const t = getInkTheme();
-  const tagColor = tag === 'user' ? 'yellow' : 'dim';
+  const tagStyle = ROLE_TAG_STYLES[tag] ?? { ...t.colors.info, bold: true };
   return (
     <Box>
-      <Text bold color={tagColor}>[{tag}]</Text>
+      <Text {...tagStyle}>[{tag}]</Text>
       <Text> {message}</Text>
     </Box>
   );
@@ -45,4 +54,14 @@ export function BracketTag({ tag, message }: { tag: string; message: string }) {
 export function LineNumbers({ text }: { text: string }) {
   const t = getInkTheme();
   return <Text {...t.colors.lineNumbers}>{text}</Text>;
+}
+
+/** Визуальный разделитель между блоками */
+export function TurnSeparator() {
+  const t = getInkTheme();
+  return (
+    <Box marginTop={0} marginBottom={0}>
+      <Text {...t.colors.dim}>{'─'.repeat(60)}</Text>
+    </Box>
+  );
 }

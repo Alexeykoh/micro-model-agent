@@ -31,12 +31,40 @@ const PROJECT_MAP_JSON = join(CACHE_DIR, 'project-map.json');
 const CODE_INDEX_FILE = join(CACHE_DIR, 'code-index.json');
 const CODE_INDEX_TXT = join(CACHE_DIR, 'code-index.txt');
 
+/** Версия формата кэша. При изменении — кэш пересоздаётся. */
+const CACHE_VERSION = 2; // v2: added directories field
+
+/** Максимальный возраст кэша (5 минут). После — пересборка. */
+const CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+
 export function loadCachedProjectMap(): { map: ProjectMap; formatted: string } | null {
   try {
     if (existsSync(PROJECT_MAP_JSON) && existsSync(PROJECT_MAP_FILE)) {
-      const map = JSON.parse(readFileSync(PROJECT_MAP_JSON, 'utf-8')) as ProjectMap;
+      const raw = readFileSync(PROJECT_MAP_JSON, 'utf-8');
+      const data = JSON.parse(raw);
+
+      // Проверка версии кэша
+      if (data._cacheVersion !== CACHE_VERSION) {
+        logInfo('INDEXER', `Cache version mismatch: ${data._cacheVersion} != ${CACHE_VERSION}, rebuilding`);
+        return null;
+      }
+
+      // Проверка возраста кэша
+      if (data.generatedAt) {
+        const age = Date.now() - new Date(data.generatedAt).getTime();
+        if (age > CACHE_MAX_AGE_MS) {
+          logInfo('INDEXER', `Cache expired (${Math.round(age / 1000)}s old), rebuilding`);
+          return null;
+        }
+      }
+
+      // Совместимость: старый кэш без directories
+      if (!data.directories) {
+        data.directories = [];
+      }
+
       const formatted = readFileSync(PROJECT_MAP_FILE, 'utf-8');
-      return { map, formatted };
+      return { map: data as ProjectMap, formatted };
     }
   } catch { /* ignore */ }
   return null;
@@ -44,7 +72,8 @@ export function loadCachedProjectMap(): { map: ProjectMap; formatted: string } |
 
 export function saveProjectMap(map: ProjectMap, formatted: string): void {
   ensureCacheDir();
-  writeFileSync(PROJECT_MAP_JSON, JSON.stringify(map), 'utf-8');
+  const data = { ...map, _cacheVersion: CACHE_VERSION };
+  writeFileSync(PROJECT_MAP_JSON, JSON.stringify(data), 'utf-8');
   writeFileSync(PROJECT_MAP_FILE, formatted, 'utf-8');
 }
 

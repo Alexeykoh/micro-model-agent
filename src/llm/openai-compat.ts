@@ -63,10 +63,15 @@ export class OpenAICompat implements LLMProvider {
       model: this.model,
       messages: messages.map(m => {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
+        // Tool messages требуют tool_call_id для OpenAI API
+        if (m.role === 'tool' && m.tool_call_id) {
+          msg.tool_call_id = m.tool_call_id;
+          if (m.name) msg.name = m.name;
+        }
         return msg;
       }),
       stream: true,
-      temperature: options?.temperature ?? 0.7,
+      temperature: options?.temperature ?? 0.3,
       max_tokens: options?.max_tokens ?? defaultMaxTokens,
     };
 

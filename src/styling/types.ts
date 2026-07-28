@@ -28,6 +28,10 @@ export interface ThemeColors {
   symbolName: string;
   symbolType: string;
   bracket: string;
+  user: string;
+  assistant: string;
+  subagent: string;
+  expert: string;
 }
 
 /** Иконки темы */

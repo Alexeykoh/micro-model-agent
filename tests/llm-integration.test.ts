@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { OpenAICompat } from '../src/llm/openai-compat.js';
+import { LMStudioNative } from '../src/llm/lmstudio-native.js';
 import type { ChatMessage } from '../src/llm/provider.js';
 
 const BASE_URL = process.env.MMA_LLM_URL || 'http://localhost:1234/v1';
 const MODEL = process.env.MMA_LLM_MODEL || 'qwen/qwen3.5-9b';
 const CTX = parseInt(process.env.MMA_CTX || '32768', 10);
 
-let provider: OpenAICompat;
+let provider: LMStudioNative;
 
 beforeAll(() => {
-  provider = new OpenAICompat(BASE_URL, MODEL, CTX);
+  provider = new LMStudioNative(BASE_URL, MODEL, CTX);
 });
 
 async function chat(msgs: ChatMessage[]): Promise<string> {

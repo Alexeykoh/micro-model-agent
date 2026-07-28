@@ -51,9 +51,10 @@ export function registerProviderCommands(program: Command): void {
   providerCmd
     .command('add')
     .argument('<name>', 'provider name')
-    .argument('<url>', 'API URL (e.g. http://localhost:8000/v1)')
+    .argument('<url>', 'API URL (e.g. https://openrouter.ai/api/v1)')
+    .option('--api-key <key>', 'API key')
     .description('Add a new provider')
-    .action((name: string, url: string) => {
+    .action((name: string, url: string, options: { apiKey?: string }) => {
       const config = loadConfig();
       const theme = getTheme();
       if (config.providers[name]) {
@@ -63,11 +64,12 @@ export function registerProviderCommands(program: Command): void {
       config.providers[name] = {
         type: 'openai-compat',
         url,
-        apiKey: null,
+        apiKey: options.apiKey || null,
         models: {},
       };
       saveConfig(config);
       console.log(theme.successMsg(`Provider "${name}" added (${url})`));
+      if (options.apiKey) console.log(`  ${theme.dim('API key:')} ${'*'.repeat(options.apiKey.length - 4)}${options.apiKey.slice(-4)}`);
       console.log(`  Add models: ${theme.info(`mma model add ${name} <model-name> <context-window>`)}`);
     });
 

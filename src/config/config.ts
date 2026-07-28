@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppConfig } from './types.js';
 
 /**
@@ -54,10 +55,22 @@ const DEFAULT_CONFIG: AppConfig = {
       retries: 1,
       retryWithoutThinking: true,
       fallbackToReasoning: true,
-      maxTokensReasoning: 16384,
+      maxTokensReasoning: 32768,
       maxTokensDefault: 4096,
       maxTokensAfterTool: 24576,
       emptyResponseThreshold: 10,
+    },
+    specialist: {
+      enabled: true,
+      triggerThreshold: 2,
+      maxSteps: 10,
+      minErrorLength: 15,
+    },
+    grounding: {
+      enabled: true,
+      strictMode: false,
+      checkFiles: true,
+      maxMissingGrounding: 3,
     },
   },
 };
@@ -120,10 +133,51 @@ export function loadConfig(): AppConfig {
 
 const MMA_DIR = join(homedir(), '.mma');
 
-/** Создаёт директории ~/.mma/, state/, cache/, index/ если не существуют */
+/** Создаёт директории ~/.mma/ + subdirs если не существуют */
 export function ensureMmaDir(): void {
-  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index')]) {
+  const pluginsDir = join(MMA_DIR, 'plugins');
+  const isFirstRun = !existsSync(pluginsDir);
+
+  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index'), pluginsDir]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  }
+
+  if (isFirstRun) {
+    const __filename = fileURLToPath(import.meta.url);
+    const rootDir = resolve(dirname(__filename), '..', '..');
+    const docsSrc = join(rootDir, 'docs', 'PLUGINS.md');
+    try {
+      copyFileSync(docsSrc, join(pluginsDir, 'PLUGINS.md'));
+    } catch {
+      /* docs могут отсутствовать в некоторых установках */
+    }
+
+    const testPluginDir = join(pluginsDir, 'test-plugin');
+    mkdirSync(testPluginDir, { recursive: true });
+    writeFileSync(
+      join(testPluginDir, 'manifest.json'),
+      JSON.stringify({
+        name: 'test-plugin',
+        version: '0.1.0',
+        description: 'Тестовый плагин (ничего не делает)',
+        entry: 'index.ts',
+      }, null, 2),
+    );
+    writeFileSync(
+      join(testPluginDir, 'index.ts'),
+      `import type { AgentPlugin } from 'micro-models-agent';
+
+export default function createPlugin(): AgentPlugin {
+  return {
+    name: 'test-plugin',
+    version: '0.1.0',
+    onActivate() {
+      // Ничего не делает
+    },
+  };
+}
+`,
+    );
   }
 }
 
@@ -139,10 +193,11 @@ const LLM_DEFAULTS = {
   retries: 1,
   retryWithoutThinking: true,
   fallbackToReasoning: true,
-  maxTokensReasoning: 16384,
+  maxTokensReasoning: 48000,
   maxTokensDefault: 4096,
   maxTokensAfterTool: 24576,
   emptyResponseThreshold: 10,
+  toolModel: undefined as string | undefined,
 };
 
 /** Получить LLM конфиг с заполненными defaults */
@@ -157,5 +212,46 @@ export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
     maxTokensDefault: src.maxTokensDefault ?? LLM_DEFAULTS.maxTokensDefault,
     maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
     emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
+    toolModel: src.toolModel ?? LLM_DEFAULTS.toolModel,
+  };
+}
+
+/** Grounding config defaults */
+const GROUNDING_DEFAULTS = {
+  enabled: true,
+  strictMode: false,
+  checkFiles: true,
+  maxMissingGrounding: 3,
+};
+
+/** Получить grounding конфиг с заполненными defaults */
+export function getGroundingConfig(config?: AppConfig): typeof GROUNDING_DEFAULTS {
+  const src = config?.agent?.grounding;
+  if (!src) return { ...GROUNDING_DEFAULTS };
+  return {
+    enabled: src.enabled ?? GROUNDING_DEFAULTS.enabled,
+    strictMode: src.strictMode ?? GROUNDING_DEFAULTS.strictMode,
+    checkFiles: src.checkFiles ?? GROUNDING_DEFAULTS.checkFiles,
+    maxMissingGrounding: src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
+  };
+}
+
+/** Specialist config defaults */
+const SPECIALIST_DEFAULTS = {
+  enabled: true,
+  triggerThreshold: 2,
+  maxSteps: 10,
+  minErrorLength: 15,
+};
+
+/** Получить specialist конфиг с заполненными defaults */
+export function getSpecialistConfig(config?: AppConfig): typeof SPECIALIST_DEFAULTS {
+  const src = config?.agent?.specialist;
+  if (!src) return { ...SPECIALIST_DEFAULTS };
+  return {
+    enabled: src.enabled ?? SPECIALIST_DEFAULTS.enabled,
+    triggerThreshold: src.triggerThreshold ?? SPECIALIST_DEFAULTS.triggerThreshold,
+    maxSteps: src.maxSteps ?? SPECIALIST_DEFAULTS.maxSteps,
+    minErrorLength: src.minErrorLength ?? SPECIALIST_DEFAULTS.minErrorLength,
   };
 }

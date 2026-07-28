@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getTheme } from '../styling/index.js';
@@ -94,7 +94,7 @@ export function showPlan(): string {
 export function clearPlan(): string {
   const plan = loadPlan();
   if (!plan) return 'No active plan to clear.';
-  try { require('node:fs').unlinkSync(PLAN_FILE); } catch { /* ignore */ }
+  try { unlinkSync(PLAN_FILE); } catch { /* ignore */ }
   return `Plan "${plan.name}" cleared.`;
 }
 
@@ -103,6 +103,32 @@ export function getPlanPendingCount(): number {
   const plan = loadPlan();
   if (!plan) return 0;
   return plan.steps.filter(s => s.status !== 'done' && s.status !== 'skipped').length;
+}
+
+/** Возвращает заголовок шага плана по его ID (или null если плана нет/шаг не найден) */
+export function getPlanStepTitle(stepId: number): string | null {
+  const plan = loadPlan();
+  if (!plan) return null;
+  const step = plan.steps.find(s => s.id === stepId);
+  return step?.title ?? null;
+}
+
+/** Возвращает следующий pending шаг плана (или null) */
+export function getNextPendingStep(): PlanStep | null {
+  const plan = loadPlan();
+  if (!plan) return null;
+  return plan.steps.find(s => s.status === 'pending') ?? null;
+}
+
+/** Извлекает ожидаемую директорию из заголовка шага.
+ *  Например: "Create src/db.ts" → "src"
+ *            "Создать index.html в src/" → "src"
+ *  Возвращает null если директория не найдена. */
+export function extractDirFromStepTitle(title: string): string | null {
+  // Паттерн: "Create dir/file" или "Создать file в dir/"
+  const match = title.match(/(?:Create|Создать|Add|Добавить)\s+(\w[\w-]*)\//i)
+    || title.match(/(?:Create|Создать|Add|Добавить)\s+\S+\s+(?:in|в)\s+(\w[\w-]*)\//i);
+  return match?.[1] ?? null;
 }
 
 /** Форматирует план для отображения (с иконками и прогрессом) */

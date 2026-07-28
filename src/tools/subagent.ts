@@ -1,5 +1,7 @@
 import { jsonrepair } from 'jsonrepair';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
+import { LMStudioNative } from '../llm/lmstudio-native.js';
+import { OpenAICompat } from '../llm/openai-compat.js';
 import { ToolRegistry } from './registry.js';
 import type { ParsedToolCall } from './types.js';
 import type { ToolExecutor } from '../agent/tool-executor.js';
@@ -102,6 +104,100 @@ export function buildSubagentContext(cwd: string): string {
   return lines.join('\n');
 }
 
+/**
+ * Контекст для specialist'а — фокусированное описание ошибки.
+ *
+ * @param toolName - имя упавшего инструмента
+ * @param toolArgs - аргументы которые были переданы
+ * @param errorOutput - текст ошибки
+ * @param userTask - исходный запрос пользователя (краткое описание)
+ * @param attemptCount - сколько раз ошибка повторилась
+ * @returns Текст задачи для specialist'а
+ */
+export function buildSpecialistTask(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  errorOutput: string,
+  userTask: string,
+  attemptCount: number,
+): string {
+  const argsStr = JSON.stringify(toolArgs, null, 2);
+
+  // Специфичные подсказки для web_browse evaluate
+  let webHints = '';
+  if (toolName === 'web_browse' && String(toolArgs?.action) === 'evaluate') {
+    const code = String(toolArgs?.value ?? toolArgs?.code ?? '');
+    webHints = [
+      '',
+      'web_browse evaluate: "value" is JS code executed in browser context.',
+      '- Expressions work: document.title, document.querySelectorAll(".item").length',
+      '- return statements work: return document.title',
+      '- Multi-line with return: return Array.from(document.querySelectorAll("a")).map(a => a.href)',
+      `- Current code that failed: ${code.slice(0, 300)}`,
+    ].join('\n');
+  }
+
+  return [
+    `The tool "${toolName}" has failed ${attemptCount} times with the same error while working on: "${userTask.slice(0, 200)}"`,
+    '',
+    `Failed tool call:`,
+    `  Tool: ${toolName}`,
+    `  Arguments: ${argsStr}`,
+    '',
+    `Error output:`,
+    `  ${errorOutput.slice(0, 500)}`,
+    webHints,
+    '',
+    `Your task: Diagnose WHY this tool call fails and FIX the underlying problem.`,
+    `  - Read the relevant files to understand the actual state`,
+    `  - Fix the root cause (wrong path, missing file, syntax error, etc.)`,
+    `  - If the tool call arguments are wrong, correct them`,
+    `  - If the file doesn't exist, create it`,
+    `  - Return a clear summary of what you found and what you fixed`,
+  ].join('\n');
+}
+
+/** Паттерны ошибок которые НЕ триггерят specialist (trivial) */
+const TRIVIAL_ERROR_PATTERNS = [
+  /no results? found/i,
+  /pattern .* matched 0 results/i,
+  /0 files? matched/i,
+  /command not found.*grep/i,
+  /not a directory/i,
+];
+
+/** Паттерны ошибок которые ВСЕГДА требуют specialist (не trivial) */
+const NON_TRIVIAL_ERROR_PATTERNS = [
+  /unexpected token/i,
+  /syntaxerror/i,
+  /cannot find module/i,
+  /module not found/i,
+  /permission denied/i,
+  /enoent/i,
+  /eacces/i,
+];
+
+/**
+ * Проверяет является ли ошибка тривиальной (не требует specialist).
+ */
+export function isTrivialError(toolName: string, errorOutput: string): boolean {
+  // Синтаксические и критические ошибки — ВСЕГДА не trivial
+  if (NON_TRIVIAL_ERROR_PATTERNS.some(p => p.test(errorOutput))) {
+    return false;
+  }
+
+  // grep_search/glob_search с 0 результатами — нормальное поведение
+  if (toolName === 'grep_search' || toolName === 'glob_search') {
+    if (/0 results|0 files|no match/i.test(errorOutput) && errorOutput.length < 200) {
+      return true;
+    }
+  }
+  // Любая ошибка < 10 символов — скорее всего trivia
+  if (errorOutput.length < 10) return true;
+
+  return TRIVIAL_ERROR_PATTERNS.some(p => p.test(errorOutput));
+}
+
 // ─── Tool call parsing ───────────────────────────────────
 
 /**
@@ -171,7 +267,7 @@ export function validateToolCall(parsed: any): { valid: boolean; name?: string; 
     return { valid: false, error: 'Not an object' };
   }
 
-  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'subagent', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch']);
+  const VALID_TOOLS = new Set(['bash', 'plan', 'todo', 'question', 'approve', 'theme', 'user_profile', 'subagent', 'read_file', 'write_file', 'edit_file', 'list_dir', 'create_dir', 'delete_file', 'copy_file', 'move_file', 'file_info', 'glob_search', 'grep_search', 'tree', 'web_search', 'web_fetch', 'web_browse', 'scaffold', 'project_map']);
 
   if (!parsed.name || !VALID_TOOLS.has(parsed.name)) {
     return { valid: false, error: `Unknown tool: ${parsed.name}` };
@@ -204,6 +300,7 @@ export function validateToolCall(parsed: any): { valid: boolean; name?: string; 
     web_search: ['query'],
     web_fetch: ['url'],
     user_profile: [],
+    question: ['question'],
   };
 
   const required = REQUIRED_ARGS[parsed.name] ?? [];
@@ -260,6 +357,10 @@ export async function doChat(
 
     const lastMsg = messages[messages.length - 1];
     logLLMRequest(provider.model, messages.length, lastMsg?.content || '', caller);
+
+    if (caller === 'main') {
+      renderer.setStreamRole?.('assistant');
+    }
 
     renderer.writeSpinner();
 
@@ -353,7 +454,22 @@ export async function doChat(
       }
       logLLMResponse(provider.model, 0, performance.now() - startTime, e.message, caller);
       renderer.writeError(`\n[LLM] ${e.message}`);
-      renderer.writeWarning('[LLM] Check that your server is running (LM Studio on localhost:1234 or Ollama)');
+
+      // Сетевые ошибки (fetch failed, ECONNREFUSED и т.д.) — retry с задержкой
+      const isNetworkError = !e.message?.includes('API ') && !e.message?.includes('status');
+      if (isNetworkError && attempt < retries) {
+        const delay = Math.min(2000 * (attempt + 1), 10000);
+        renderer.writeWarning(`[LLM] Network error, retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      const providerHint = provider instanceof LMStudioNative
+        ? 'Check that LM Studio is running on localhost:1234'
+        : provider instanceof OpenAICompat
+          ? 'Check that your API server is running and the API key is correct'
+          : 'Check that your LLM server is running';
+      renderer.writeWarning(`[LLM] ${providerHint}`);
       return { response: '', genTimeMs: 0 };
     }
 
@@ -393,6 +509,22 @@ export async function doChat(
     }
   }
 
+  // Phase 2.5: Emergency — принудительно генерируем content с низкой температурой
+  // Когда reasoning есть, но content пустой — модель "застряла" в thinking loop
+  if (lastReasoningText.trim()) {
+    logInfo('DOCHAT', `emergency: forcing content with low temperature`);
+    renderer.writeDim(`[emergency: forcing content with temperature=0.1]`);
+    const emergencyMessages: ChatMessage[] = [
+      ...messages,
+      { role: 'user', content: '[System] You MUST produce a response now. Do NOT use thinking tags. Reply with a tool call or a direct answer. Any response is better than empty.' },
+    ];
+    const emergencyResult = await doChatOnce(provider, emergencyMessages, renderer, signal, false, showThinking, caller, maxTokens, 0.1);
+    if (emergencyResult.response.trim()) {
+      logInfo('DOCHAT', `emergency succeeded: ${emergencyResult.response.length} chars`);
+      return emergencyResult;
+    }
+  }
+
   // Phase 3: Fallback — используем reasoning как content
   if (llmCfg.fallbackToReasoning && lastReasoningText.trim()) {
     logInfo('DOCHAT', `fallback: using reasoning as content (${lastReasoningText.length} chars)`);
@@ -416,6 +548,7 @@ async function doChatOnce(
   showThinking = false,
   caller: 'main' | 'subagent' = 'main',
   maxTokens?: number,
+  temperature = 0.7,
 ): Promise<{ response: string; genTimeMs: number }> {
   const startTime = performance.now();
   const fullText: string[] = [];
@@ -423,11 +556,15 @@ async function doChatOnce(
 
   if (signal?.aborted) return { response: '', genTimeMs: 0 };
 
+  if (caller === 'main') {
+    renderer.setStreamRole?.('assistant');
+  }
+
   renderer.writeSpinner();
 
   try {
     let buf = '';
-    for await (const chunk of provider.chat(messages, { temperature: 0.7, signal, showThinking, enableThinking, max_tokens: maxTokens })) {
+    for await (const chunk of provider.chat(messages, { temperature, signal, showThinking, enableThinking, max_tokens: maxTokens })) {
       if (!chunk.content && !chunk.finish_reason) continue;
 
       if (chunk.content) {
@@ -511,12 +648,25 @@ export async function runIsolatedLoop(
   renderer: OutputRenderer,
   toolExecutor?: ToolExecutor,
   mode?: string,
+  toolModel?: string,
+  maxStepsParam?: number,
 ): Promise<IsolatedLoopResult> {
   const createdFiles: string[] = [];
   const errors: string[] = [];
   const startTime = performance.now();
 
-  logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${provider.contextWindow}`);
+  // Two-model pipeline: если toolModel задана, создаём отдельный провайдер
+  let effectiveProvider = provider;
+  if (toolModel && provider instanceof LMStudioNative) {
+    effectiveProvider = new LMStudioNative(
+      (provider as any).baseUrl,
+      toolModel,
+      provider.contextWindow,
+    );
+    logInfo('SUBAGENT', `using tool model: ${toolModel} (main: ${provider.model})`);
+  }
+
+  logInfo('SUBAGENT', `START | task: "${task.slice(0, 200)}" | context window: ${effectiveProvider.contextWindow}`);
 
   // Always build auto-context from project, even if model didn't pass existingFiles
   const autoContext = buildSubagentContext(cwd);
@@ -539,8 +689,8 @@ export async function runIsolatedLoop(
     { role: 'user', content: task + contextInfo },
   ];
 
-  const ctx = new ContextManager(provider.contextWindow);
-  const maxSteps = 20;
+  const ctx = new ContextManager(effectiveProvider.contextWindow);
+  const maxSteps = maxStepsParam ?? 20;
   let toolCallCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -562,7 +712,7 @@ export async function runIsolatedLoop(
     const llmCfg = getLLMConfig();
     const maxTokens = hasToolResult ? llmCfg.maxTokensAfterTool : undefined;
 
-    const { response } = await doChat(provider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent', maxTokens);
+    const { response } = await doChat(effectiveProvider, messages, renderer!, renderer?.abortSignal, 1, false, 'subagent', maxTokens);
 
     if (!response.trim()) {
       logDebug('SUBAGENT', `empty response at step ${step}, stopping`);
@@ -699,11 +849,11 @@ export const subagentDefinition: ToolDefinition = {
   type: 'function',
   function: {
     name: 'subagent',
-    description: 'Delegate a task to an isolated agent in a fresh context. Use for EACH file when creating 3+ new files. Arguments: task (required, what to do), existingFiles (optional, comma-separated files for context).',
+    description: 'Delegate a task to an isolated agent with a FRESH context (no history of prior errors). Use for: (1) each file when creating 3+ new files, (2) any task where you are stuck or making repeated errors, (3) simple single-step operations (bash, file read/write). The subagent has all tools and starts clean — ideal when accumulated context is causing confusion.',
     parameters: {
       type: 'object',
       properties: {
-        task: { type: 'string', description: 'What the subagent should create/fix/check' },
+        task: { type: 'string', description: 'What the subagent should do — be specific and include file paths' },
         existingFiles: { type: 'string', description: 'Comma-separated files the subagent can read for context (optional)' },
       },
       required: ['task'],

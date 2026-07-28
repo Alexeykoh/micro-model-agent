@@ -203,6 +203,141 @@ export function enforceSkillBudget(
   return { allowed, dropped };
 }
 
+// ─── Keyword-based skill preloading (pre-load по ключевым словам) ──
+
+let skillIndexCache: Map<string, string[]> | null = null;
+
+/**
+ * Извлекает ключевые слова из скилла: сегменты имени + слова из описания (frontmatter).
+ */
+/**
+ * Разбивает текст на слова через Intl.Segmenter — корректно для всех языков.
+ */
+function splitWords(text: string): string[] {
+  const segmenter = new Intl.Segmenter('any', { granularity: 'word' });
+  const words: string[] = [];
+  for (const { segment, isWordLike } of segmenter.segment(text.toLowerCase())) {
+    if (isWordLike && segment.length > 1) {
+      words.push(segment);
+    }
+  }
+  return words;
+}
+
+function getSkillKeywords(name: string, cwd: string): string[] {
+  const keywords = new Set<string>();
+
+  for (const seg of name.split('-')) {
+    if (seg.length > 1) keywords.add(seg.toLowerCase());
+  }
+
+  const skill = loadSkill(name, cwd);
+  if (skill) {
+    const fmMatch = skill.content.match(/^---\n([\s\S]*?)\n---/);
+    if (fmMatch) {
+      const descLine = fmMatch[1].split('\n').find(l => l.startsWith('description:'));
+      if (descLine) {
+        const desc = descLine.replace(/^description:\s*"?([^"]*)"?\s*$/, '$1').trim();
+        for (const w of splitWords(desc)) keywords.add(w);
+      }
+    }
+  }
+
+  return [...keywords];
+}
+
+function buildSkillIndex(cwd: string): Map<string, string[]> {
+  if (skillIndexCache) return skillIndexCache;
+
+  const names = listInstalledSkills(cwd);
+  const index = new Map<string, string[]>();
+
+  logDebug('SKILLS', `building keyword index for ${names.length} skills...`);
+  for (const name of names) {
+    index.set(name, getSkillKeywords(name, cwd));
+  }
+  logDebug('SKILLS', `keyword index built`);
+
+  skillIndexCache = index;
+  return index;
+}
+
+/**
+ * Извлекает поисковые термы из текста — просто слова, никакой лингвистики.
+ * Матчинг работает по совпадению слов в одном языке.
+ * Поддерживает все языки через Intl.Segmenter.
+ */
+function extractSearchTerms(text: string): Set<string> {
+  return new Set(splitWords(text));
+}
+
+/**
+ * Проверяет, просит ли пользователь явно "используй скилл".
+ */
+export function isSkillRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return /\b(skill|скилл|скил|навык|плаг(ин|ина?))\b/.test(lower);
+}
+
+/**
+ * Pre-загружает скиллы на основе совпадения ключевых слов в запросе.
+ *
+ * Решает проблему: пользователь просит "используй скилл для дизайна",
+ * но модель не догадывается упомянуть @ui-ux-pro-max в ответе.
+ *
+ * Алгоритм:
+ * 1. Строит индекс ключевых слов (имя + описание) для всех скиллов (кэш)
+ * 2. Извлекает термы из запроса (с русско-английским переводом)
+ * 3. Ищет пересечение: совпадение в имени = +2 балла, в описании = +1
+ * 4. Возвращает топ-3 скилла с наибольшим скором
+ */
+const STOP_WORDS = new Set([
+  'en', 'by', 'it', 'is', 'to', 'of', 'in', 'at', 'on', 'be', 'he', 'as',
+  'an', 'or', 'we', 'us', 'my', 'do', 'no', 'go', 'up', 'if', 'am', 'me',
+  'so', 'by', 'tv', 'ok', 'hi', 'ex', 'vs', 'et', 'al', 'de', 'la', 'le',
+]);
+
+export function preloadSkillsByKeywords(text: string, cwd: string): Skill[] {
+  const index = buildSkillIndex(cwd);
+  const searchTerms = extractSearchTerms(text);
+
+  logDebug('SKILLS', `keyword preload: "${text.slice(0, 60)}" (${searchTerms.size} terms)`);
+
+  if (searchTerms.size === 0) return [];
+
+  const matched: { name: string; score: number }[] = [];
+
+  for (const [name, keywords] of index) {
+    let score = 0;
+
+    for (const term of searchTerms) {
+      if (term.length >= 4) {
+        if (name.includes(term)) {
+          score += 2;
+        }
+      }
+      if (!STOP_WORDS.has(term) && keywords.includes(term)) {
+        score += 1;
+      }
+    }
+
+    if (score > 0) {
+      matched.push({ name, score });
+    }
+  }
+
+  matched.sort((a, b) => b.score - a.score);
+  const top = matched.slice(0, 3);
+
+  if (top.length > 0) {
+    logDebug('SKILLS', `keyword preload matched: ${top.map(m => `${m.name}(${m.score})`).join(', ')}`);
+  }
+
+  return top
+    .map(m => loadSkill(m.name, cwd))
+    .filter((s): s is Skill => s !== null);
+}
+
 export function formatSkillsBlock(skills: Skill[], maxContentLength?: number): string {
   if (skills.length === 0) return '';
   const parts = skills.map(s => {

@@ -46,7 +46,7 @@ export class ContextManager {
    */
   constructor(
     private contextWindow: number,
-    private compactThreshold: number = 0.70,
+    private compactThreshold: number = 0.50,
     private responseBuffer: number = 4096,
   ) {}
 
