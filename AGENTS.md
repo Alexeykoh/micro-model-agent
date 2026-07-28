@@ -1,125 +1,166 @@
-# Micro Models Agent (MMA)
+# MMA v2 — Micro Models Agent
 
-LLM agent harness for small models (Qwen3.5-9B, 32K-64K context). TypeScript/Node.js ESM project.
+AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1.
 
-## Quick commands
+> **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
+
+## Tech Stack
+
+- **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
+- **Testing:** vitest (`bun test`)
+- **Linting:** TypeScript strict mode (`tsc --noEmit`)
+- **Dependencies:** commander, js-tiktoken, picocolors, execa, jsonrepair, playwright
+
+## Commands
 
 ```bash
-npm run mma              # dev run (bun run src/index.ts)
-npm run build            # tsc + copy built-in skills to dist/
-npm test                 # unit tests (bun test, specific files only)
-npm run test:all         # all tests including integration
-npm run test:watch       # vitest watch mode
-npm run dev              # bun --watch
+# Run agent
+bun run mma "<prompt>"
+
+# Dev mode (watch)
+bun run dev
+
+# Build (tsc + copy skills)
+bun run build
+
+# Test (component tests)
+bun test
+
+# Typecheck
+tsc --noEmit
+
+# Test a single file
+bun test tests/<name>.test.ts
 ```
-
-## Key commands that trip up agents
-
-- `npm test` runs a **specific subset** of test files (see `package.json` `scripts.test`) — not `bun test` with no args. Use `npm run test:all` for everything.
-- `npm run build` does **two things**: `tsc -p tsconfig.build.json` + copies `src/skills/builtin/` → `dist/skills/builtin/`. Both are required for a working build.
-- The build uses `tsconfig.build.json` (extends `tsconfig.json`). Don't use plain `tsc` for builds.
-- `npm run mma` is the dev shortcut — it uses `bun run src/index.ts`, not the compiled `dist/`.
 
 ## Architecture
 
-- **ESM throughout**: `"type": "module"` in package.json. All imports use `.js` extensions (e.g. `'./foo.js'`).
-- **Tool calling format**: Hermes `<tool_call>{"name":"tool_name","arguments":{...}}</tool_call>` — NOT OpenAI JSON tool_calls. The agent loop in `src/agent/loop.ts` parses this format.
-- **fs-tools-first**: 12 dedicated file tools (`read_file`, `write_file`, `edit_file`, etc.) in `src/tools/fs/`. Bash is reserved for non-file operations (npm, git, docker).
-- **LLM providers**: OpenAI-compatible REST only (LM Studio, Ollama, vLLM, Together). No SDK dependencies.
+6-layer state machine agent:
 
-- **Config**: `~/.mma/config.json` globally, `.mmrc` project-local override. Config loads via `src/config/config.ts`.
-- **ToolHandler interface**: All 21 tools (12 FS + bash + 3 web + 6 native) implement `ToolHandler` from `src/tools/types.ts`. ToolExecutor dispatches: pre-hooks → execute → post-hooks → truncate.
-- **ModeRegistry**: Data-driven mode configs (fast/base/pro) in `src/agent/modes/`. Custom modes via `AppConfig.modes`.
-- **Plugin system**: Lifecycle events in `src/plugins/`. Plugins subscribe via `AgentPlugin` interface with events like `tool:before/after`.
-- **React-loop**: Shared ReAct cycle in `src/agent/react-loop.ts` with callbacks. Used by subagent.ts; loop.ts has its own inline cycle (domain logic too tightly coupled).
-
-## Source layout (what to touch)
-
-| Area | Path | Notes |
-|------|------|-------|
-| Entry point | `src/index.ts` → `src/cli.ts` | Commander CLI, registers subcommands |
-| Agent loop | `src/agent/loop.ts` | ReAct cycle, ~884 lines, core logic |
-| Tool executor | `src/agent/tool-executor.ts` | ToolExecutor: pure dispatcher pipeline |
-| React-loop | `src/agent/react-loop.ts` | Shared ReAct cycle (193 lines) |
-| Tool types | `src/tools/types.ts` | ToolHandler interface, ToolContext, ToolResult |
-| Tool registry | `src/tools/registry.ts` | Wires all tools, handles file-change notifications |
-| Native tools | `src/tools/native/*.ts` | plan, todo, question, approve, theme, user-profile |
-| FS tools | `src/tools/fs/*.ts` | 14 files (12 tools + path-utils + types) |
-| Modes | `src/agent/modes/` | ModeRegistry, ModeConfig, applier |
-| Plugins | `src/plugins/` | PluginManager with event bus |
-| LLM provider | `src/llm/openai-compat.ts` | Direct REST to OpenAI-compatible endpoints |
-| System prompt | `src/agent/system-prompt.ts` | All prompt constants and buildSystemPrompt() |
-| REPL | `src/repl/index.ts` | Interactive readline loop |
-| REPL commands | `src/repl/commands.ts` | Slash command registry + handlers |
-| Skills | `src/skills/builtin/` | 10 built-in skills (grill-me, typescript-expert, etc.), copied to dist/ at build |
-| Theme/styling | `src/styling/` | ThemeEngine, loader, JSON theme files |
-| Indexer | `src/indexer/` | Project map + AST code index (tree-sitter) |
-| Web tools | `src/tools/web-*.ts` | web_search, web_fetch, web_browse (Playwright headless) |
-
-
-## Testing
-
-- Unit tests (in `npm test`): `context.test.ts`, `sanitizer.test.ts`, `code-index.test.ts`, `plan-todo-memory.test.ts`, `file-loader-syntax.test.ts`, `commands.test.ts`, `subagent.test.ts`, `web-browse.test.ts`
-- Additional unit tests (in `test:all`): `tool-executor.test.ts`, `native-tools.test.ts`, `react-loop.test.ts`, `web-tools.test.ts`, `modes.test.ts`, `fs-tools.test.ts`, `user-profile.test.ts`
-- Integration tests: `llm-integration.test.ts`, `agent-integration.test.ts`, `subagent-integration.test.ts` (require running LLM server)
-- All tests use **vitest** (`import { describe, it, expect } from 'vitest'`)
-- No vitest config file — uses defaults from package.json
-- `native-tools.test.ts` has mock isolation issues — keep out of `npm test` script. Run individually or via `test:all`.
-
-## Conventions
-
-- **Language**: Code comments and commit messages in Russian (by project convention).
-- **Plan-driven**: Major changes follow `PLAN.md`. Deviate only with justification.
-- **`.mimocode/`**: Agent runtime directory — do not modify.
-- **`session-*.md`**: Session logs, not part of the project.
-- **`research/`**: Reference research results.
-- **`docs/`**: External API documentation.
-- **Config location**: `~/.mma/config.json` (global), `.mmrc` (project-local).
-
-## LLM tuning (`agent.llm` in config)
-
-Config section for tuning empty-response handling and model behavior:
-
-```json
-{
-  "agent": {
-    "llm": {
-      "retries": 1,
-      "retryWithoutThinking": true,
-      "fallbackToReasoning": true,
-      "maxTokensReasoning": 16384,
-      "maxTokensDefault": 4096,
-      "maxTokensAfterTool": 24576,
-      "emptyResponseThreshold": 10
-    }
-  }
-}
+```
+CLI (main.ts → commands.ts / repl.ts)
+  → Core (agent.ts state machine: INIT→THINK→ACT→OBSERVE→OUTPUT→ERROR)
+    → LLM Layer (provider.ts → openai-compat.ts → token-counter.ts → response.ts)
+    → Tools (registry.ts → executor.ts → 20+ individual tools)
+    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, hallucination, execution, updater, user-profile)
 ```
 
-- `retries` — retry attempts for empty responses (default: 1)
-- `retryWithoutThinking` — retry with `enableThinking: false` when reasoning chunks but no content (default: true)
-- `fallbackToReasoning` — use reasoning text as content fallback (default: true)
-- `maxTokensReasoning` / `maxTokensDefault` — model-dependent token limits
-- `maxTokensAfterTool` — increased limit after tool calls in subagent
-- `emptyResponseThreshold` — min reasoning chunks to trigger retry
+## Key Design Rules
 
-Config loaded via `getLLMConfig()` from `src/config/config.ts`. Used in `doChat()`, `openai-compat.ts`, `subagent.ts`.
+1. **No file >300 lines** — split when approaching limit
+2. **Small files, single responsibility** — each file does one thing
+3. **KISS state machine** — no god objects, no if-else nesting in agent loop
+4. **Single source of truth** — `config/defaults.ts` for config, `tools/registry.ts` for tools
+5. **Plugin error isolation** — one plugin crash never stops others
+6. **Path safety** — all filesystem tools check `targetPath.startsWith(baseDir)`
+7. **TDD** — write test first, then implement, then commit
+8. **i18n for user messages only** — CLI and logs stay English
+9. **No TUI** — minimal CLI + REPL with markdown→ANSI formatting
 
-## Gotchas
+## Project Structure
 
-- The `jsonrepair` dependency is used in the agent loop to fix malformed JSON from small models — don't remove it.
-- `esprima` is used for syntax checking of code blocks before writing files.
-- `execa` is used for shell execution (not raw `child_process`).
-- The project publishes `dist/` + `dist/skills/builtin/` to npm (`files` field in package.json).
-- Built-in skills are in `src/skills/builtin/<name>/SKILL.md` — they must be copied to dist/ at build time.
-- **Tool output truncation is smart**: `truncateToolOutput()` in loop.ts applies per-tool limits (read_file=2000, bash=1500, etc.), not a flat cap. Full output persists in session store.
-- **Context compaction at 70%**: Score-based importance pruning keeps top-6 important + last-6 recent. Model has ~4K token buffer for response.
-- **Skills limited to 4000 tokens in system prompt**: `enforceSkillBudget()` sorts by size, keeps smaller first. In fast mode, skills are excluded entirely.
-- **Temperature 0.3 recommended**: User found 0.3 improves code quality and rule following for Qwen3.5-9B.
-- **Model ID format**: LM Studio uses `qwen/qwen3.5-9b` (org/model), not `qwen3.5-9b-instruct`.
-- **Question/approve pause mechanism**: `ToolResult.questionPending`/`breakLoop` flags. Handlers set `questionPending=true`; loop.ts returns early with questionPending object.
-- **Loop.ts still has inline ReAct cycle**: Despite react-loop.ts existing, loop.ts keeps its own cycle because domain logic (skills, plan enforcement, read_file consolidation, syntax check) is too tightly coupled. react-loop.ts is used by subagent.ts only.
-- **Config defaults must be synced across 3 files**: `config/config.ts` DEFAULT_CONFIG, `cli/config.ts` reset handler, and `setup-wizard.ts`. Changing one requires updating all three.
-- **Small models hallucinate file contents**: Qwen3.5-9B generates plausible file descriptions without calling tools. Prompt guidance alone insufficient; code-level enforcement needed.
-- **web_browse requires Node.js**: Playwright CDP pipe has issues with Bun's child process handling. The tool works correctly with Node.js (production runtime). `npm run mma` (Bun) may not launch the browser — use `node dist/index.js` for browser tasks.
-- **Playwright browsers**: Run `npx playwright install chromium` after first install. Browsers are cached in `~/.cache/ms-playwright/`.
+```
+src/
+├── core/               # Agent loop + prompt builder + types
+│   ├── agent.ts        # State machine (INIT→THINK→ACT→OBSERVE→OUTPUT→ERROR)
+│   ├── prompt-builder.ts # Collect PromptBlock[], sort by priority, fit 8K budget
+│   └── types.ts        # AgentState, PromptBlock, ToolCall, ToolResult, LLMResponse
+├── llm/                # LLM communication layer
+│   ├── provider.ts     # LLMProvider interface (chat, countTokens)
+│   ├── openai-compat.ts # OpenAI-compatible REST + SSE streaming
+│   ├── token-counter.ts # js-tiktoken wrapper
+│   ├── response.ts     # Parse stream chunks → typed LLMResponse
+│   └── orchestrator.ts # Optional orchestrator model (planning, conflict resolution)
+├── tools/              # Tool system
+│   ├── registry.ts     # Single source of truth for tool definitions
+│   ├── executor.ts     # Dispatch pipeline: plugins → validate → handler → plugins → log
+│   ├── types.ts        # ToolDefinition, ToolContext, ToolResult
+│   ├── read-file.ts    # Path-safe file reading with offset/limit
+│   ├── write-file.ts   # Create/overwrite with intermediate dir creation
+│   ├── edit-file.ts    # Find-replace in existing files
+│   ├── glob-tool.ts    # Glob pattern matching
+│   ├── grep-tool.ts    # Regex content search (via ripgrep)
+│   ├── bash.ts         # Shell command execution
+│   ├── subagent.ts     # Isolated sub-agent spawning
+│   ├── web-search.ts, web-fetch.ts, web-browse.ts
+│   ├── plan.ts, todo.ts, question.ts, approve.ts
+│   ├── load-skill.ts, pipeline-run.ts, mcp-call.ts, search-history.ts
+│   └── ...             # list-dir, create-dir, delete-file, move-file, file-info
+├── modules/            # All modules implement AgentModule interface
+│   ├── registry.ts     # ModuleRegistry: collect blocks/tools/plugins from modules
+│   ├── types.ts        # AgentModule, AgentPlugin interfaces
+│   ├── skills/         # Skills loader (builtin/global/project) + keyword matcher
+│   ├── plugins/        # PluginManager with lifecycle hooks + error isolation
+│   ├── mcp/            # MCP client (stdio/SSE) + server registry
+│   ├── pipelines/      # DAG-based workflow engine (YAML → execute)
+│   ├── indexer/        # File walker + export extraction + disk cache
+│   ├── memory/         # Persistent markdown (conventions.md, decisions.md, errors.md)
+│   ├── context/        # ContextManager (budget calc, sliding window compaction)
+│   │   └── history.ts  # SessionHistory (JSONL on disk, searchable)
+│   ├── hallucination/  # Pre-output validation pipeline
+│   │   ├── factual.ts  # Cross-check paths vs known set
+│   │   ├── consistency.ts # Track decisions, detect contradictions
+│   │   └── confidence.ts # Short/repetitive/uncertain markers
+│   ├── execution/      # Task execution guarantees
+│   │   ├── planner.ts  # Multi-step heuristic → plan creation
+│   │   ├── tracker.ts  # Step status, progress display
+│   │   ├── verifier.ts # File existence + syntax + test checks
+│   │   ├── stuck-detector.ts # Iteration/error thresholds, off-track guard
+│   │   └── auditor.ts  # Final audit after all steps
+│   ├── updater/        # Background npm registry version check
+│   └── user-profile/   # OS/shell/preferences → ~500 token compressed block
+├── cli/                # CLI + REPL
+│   ├── main.ts         # Entry point (commander subcommands)
+│   ├── commands.ts     # init, config, model, provider subcommands
+│   ├── repl.ts         # Readline loop with slash commands
+│   ├── completer.ts    # Provider-based tab completion
+│   └── setup.ts        # Interactive setup wizard (port scan → test)
+├── config/             # 3-layer config: defaults → global → project + env
+├── i18n/               # en.json + ru.json + t() function
+├── ui/                 # Markdown→ANSI formatter + output helpers
+├── logger/             # Structured logger with levels + child loggers
+└── migration/          # MMA v1→v2 detection, backup, safe startup
+```
+
+## Context Budget (dynamic, from model.contextWindow)
+
+| contextWindow | System (25%) | Reserve (12%) | History (63%) |
+|---------------|-------------|---------------|---------------|
+| 32K           | 8K          | 4K            | 20K           |
+| 64K           | 16K         | 8K            | 40K           |
+| 128K          | 32K         | 16K           | 80K           |
+
+Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → extracted facts/decisions/errors.
+
+## Agent Loop States
+
+```
+INIT    → collect system prompt blocks → build context
+THINK   → call LLM → validate response (hallucination check)
+ACT     → parse tool_call → execute via ToolExecutor
+OBSERVE → process results → check termination → loop or done
+OUTPUT  → show text to user → wait for input
+ERROR   → retry or escalate
+```
+
+## Orchestrator (optional)
+
+If `orchestrator.model` configured: larger model handles planning, conflict resolution, audit. Worker (9B) executes steps. If not set — everything runs on one model.
+
+## Hallucination Detection Pipeline
+
+```
+LLM response → ConfidenceCheck (short/repetitive) 
+             → FactualCheck (paths vs known set) 
+             → ConsistencyCheck (decision reversal)
+```
+
+Results: `pass` → show | `warn` → show with ⚠️ | `retry` → re-call LLM | `block` (3+ retries) → ask user
+
+## Migration Safety
+
+MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `version: "2.0.0"` or has v1-only fields (`apiBase`, `temperature`):
+1. Backs up `config.json` → `config.json.bak`
+2. Backs up entire `~/.mma/` → `~/.mma.bak/`
+3. Starts fresh with v2 defaults
+4. Old plugins/skills with incompatible format are skipped gracefully
