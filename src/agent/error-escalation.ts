@@ -111,6 +111,7 @@ async function spawnSpecialist(p: SpecialistParams): Promise<boolean> {
  */
 export class ErrorEscalator {
   consecutiveToolErrors = new Map<string, number>();
+  lastToolArgs = new Map<string, string>();
   totalToolErrors = 0;
   specialistSpawnedFor: string | null = null;
   errorStrategy: "normal" | "subagent-hint" | "force-subagent" = "normal";
@@ -120,11 +121,15 @@ export class ErrorEscalator {
       if (key.startsWith(toolName + "::"))
         this.consecutiveToolErrors.delete(key);
     }
+    for (const [key] of this.lastToolArgs) {
+      if (key.startsWith(toolName + "::")) this.lastToolArgs.delete(key);
+    }
     this.specialistSpawnedFor = null;
   }
 
   reset(): void {
     this.consecutiveToolErrors.clear();
+    this.lastToolArgs.clear();
     this.totalToolErrors = 0;
     this.specialistSpawnedFor = null;
     this.errorStrategy = "normal";
@@ -151,6 +156,15 @@ export class ErrorEscalator {
       .slice(0, 100)
       .replace(/[A-Z]:\\[^\s"']+/gi, "<PATH>")
       .replace(/\/[^\s"']+/g, "<PATH>")}`;
+
+    // Если аргументы изменились — сбрасываем счётчик ошибок для этого ключа
+    const argsStr = JSON.stringify(toolArgs);
+    const prevArgs = this.lastToolArgs.get(errKey);
+    if (prevArgs !== undefined && prevArgs !== argsStr) {
+      this.consecutiveToolErrors.delete(errKey);
+    }
+    this.lastToolArgs.set(errKey, argsStr);
+
     const prevCount = this.consecutiveToolErrors.get(errKey) ?? 0;
     this.consecutiveToolErrors.set(errKey, prevCount + 1);
     const errorCount = prevCount + 1;
@@ -227,16 +241,16 @@ export class ErrorEscalator {
         );
     }
 
-    if (errorCount >= 4) {
+    if (errorCount >= 6) {
       const blockId = generateToolCallId();
       messages.push({
         role: "tool",
-        content: `BLOCKED: Tool "${toolName}" failed ${errorCount} times. Temporarily blocked.`,
+        content: `BLOCKED: Tool "${toolName}" failed ${errorCount} times with the same error. Use subagent for a fresh context or try a different approach.`,
         tool_call_id: blockId,
       });
       if (!quiet)
         renderer?.writeWarning(
-          `  [blocked ${toolName}: too many repeated errors]`,
+          `  [blocked ${toolName}: ${errorCount} consecutive errors]`,
         );
       return "block";
     }

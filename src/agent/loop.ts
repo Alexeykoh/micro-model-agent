@@ -661,155 +661,128 @@ export async function runAgentLoop(
         }
       }
 
-      if (!skillsAutoLoaded) {
-        // ─── Определение завершения: только по поведению, не по тексту ──────
-        // Смотрим: были ли хоть какие-то вызовы инструментов за сессию.
-        // Сообщения с role:tool — это результаты выполненных инструментов
-        // (кроме invalid — они с tool_call_id вида "invalid-...").
-        const hasDoneAnyWork = messages.some(
-          (m) =>
-            m.role === "tool" &&
-            m.tool_call_id &&
-            !m.tool_call_id.startsWith("invalid-"),
-        );
-        const planStatus = showPlan();
-        const hasActivePlan = !planStatus.startsWith("No active plan");
-        const pendingSteps = getPlanPendingCount();
+      // ─── Определение завершения: только по поведению, не по тексту ──────
+      // Смотрим: были ли хоть какие-то вызовы инструментов за сессию.
+      // Сообщения с role:tool — это результаты выполненных инструментов
+      // (кроме invalid — они с tool_call_id вида "invalid-...").
+      const hasDoneAnyWork = messages.some(
+        (m) =>
+          m.role === "tool" &&
+          m.tool_call_id &&
+          !m.tool_call_id.startsWith("invalid-"),
+      );
+      const planStatus = showPlan();
+      const hasActivePlan = !planStatus.startsWith("No active plan");
+      const pendingSteps = getPlanPendingCount();
 
-        // === 1. Незавершённый план ===
-        if (hasActivePlan && pendingSteps > 0) {
-          const planText = planStatus;
-          const pendingLines = planText
-            .split("\n")
-            .filter((l) => l.includes("○") || l.includes("►"));
-          const nextStep = pendingLines[0] || "";
-          const nextStepMatch = nextStep.match(/\d+\.\s*(.+)/);
-          const nextStepTitle = nextStepMatch ? nextStepMatch[1].trim() : "";
+      // === 1. Незавершённый план ===
+      if (hasActivePlan && pendingSteps > 0) {
+        const planText = planStatus;
+        const pendingLines = planText
+          .split("\n")
+          .filter((l) => l.includes("○") || l.includes("►"));
+        const nextStep = pendingLines[0] || "";
+        const nextStepMatch = nextStep.match(/\d+\.\s*(.+)/);
+        const nextStepTitle = nextStepMatch ? nextStepMatch[1].trim() : "";
+        if (!quiet) {
+          renderer?.writeWarning(
+            `  [plan has ${pendingSteps} incomplete steps — pushing agent to continue]`,
+          );
+        }
+        const nudge = nextStepTitle
+          ? `Plan is NOT complete! ${pendingSteps} step(s) remaining.\nNext step: ${nextStepTitle}\nUse subagent to execute this step, then mark done: plan({action:"done", step:N})`
+          : `Plan is NOT complete! ${pendingSteps} step(s) remaining:\n${pendingLines.join("\n")}\n\nContinue with the next step using subagent.`;
+        messages.push({ role: "user", content: nudge });
+        continuationNudges = 0;
+        continue;
+      }
+
+      // === 2. План завершён — аудит файлов ===
+      // Проверка по createdFiles: если план выполнен, но ни одного файла
+      // не создано — скорее всего модель галлюцинирует выполнение шагов.
+      if (hasActivePlan && pendingSteps === 0) {
+        if (createdFiles.length === 0) {
           if (!quiet) {
-            renderer?.writeWarning(
-              `  [plan has ${pendingSteps} incomplete steps — pushing agent to continue]`,
-            );
+            renderer?.writeWarning(`  [plan complete but no files created]`);
           }
-          const nudge = nextStepTitle
-            ? `Plan is NOT complete! ${pendingSteps} step(s) remaining.\nNext step: ${nextStepTitle}\nUse subagent to execute this step, then mark done: plan({action:"done", step:N})`
-            : `Plan is NOT complete! ${pendingSteps} step(s) remaining:\n${pendingLines.join("\n")}\n\nContinue with the next step using subagent.`;
-          messages.push({ role: "user", content: nudge });
+          messages.push({
+            role: "user",
+            content: `Plan claims all steps done, but no files were created via write_file or subagent. Either execute the steps properly or explain why files aren't needed.`,
+          });
           continuationNudges = 0;
           continue;
         }
+        // Файлы созданы — выходим
+        return { messages };
+      }
 
-        // === 2. План завершён — аудит файлов ===
-        if (hasActivePlan && pendingSteps === 0) {
-          // Извлекаем заголовки шагов и проверяем наличие файлов
-          const stepLines = planStatus
-            .split("\n")
-            .filter((l) => l.match(/\d+\.\s/));
-          const missingFiles: string[] = [];
-          for (const line of stepLines) {
-            const titleMatch = line.match(/\d+\.\s*(.+)/);
-            if (!titleMatch) continue;
-            const title = titleMatch[1].trim();
-            const fileMatch =
-              title.match(
-                /(?:Create|Создать|Add|Добавить)\s+(\S+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
-              ) ||
-              title.match(
-                /(\w+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
-              );
-            if (fileMatch) {
-              const fileName = fileMatch[1];
-              if (
-                !existsSync(fileName) &&
-                !createdFiles.some((f) => f.endsWith(fileName))
-              ) {
-                missingFiles.push(fileName);
-              }
-            }
-          }
-          if (missingFiles.length > 0) {
-            if (!quiet) {
-              renderer?.writeWarning(
-                `  [plan complete but missing files: ${missingFiles.join(", ")}]`,
-              );
-            }
-            messages.push({
-              role: "user",
-              content: `Plan claims all steps done, but these files are missing: ${missingFiles.join(", ")}. Create them before finishing.`,
-            });
-            continuationNudges = 0;
-            continue;
-          }
-          // Все файлы на месте — выходим
-          return { messages };
+      // === 3. Нет активного плана ===
+
+      // Stuck detection (без изменений)
+      const isUselessAction = validCalls.some(
+        (c) =>
+          c.parsed.name === "list_dir" ||
+          c.parsed.name === "tree" ||
+          (c.parsed.name === "todo" && c.parsed.arguments?.action === "list") ||
+          (c.parsed.name === "question" && !c.parsed.arguments?.question),
+      );
+      let isRepeatedRead = false;
+      let isRepeatedSearch = false;
+      let isRepeatedQuestion = false;
+      let isRepeatedBash = false;
+      for (const c of validCalls) {
+        if (c.parsed.name === "read_file") {
+          const filePath = String(c.parsed.arguments?.path || "");
+          if (recentReadFiles.includes(filePath)) isRepeatedRead = true;
+          recentReadFiles.push(filePath);
+          if (recentReadFiles.length > 5) recentReadFiles.shift();
         }
-
-        // === 3. Нет активного плана ===
-
-        // Stuck detection (без изменений)
-        const isUselessAction = validCalls.some(
-          (c) =>
-            c.parsed.name === "list_dir" ||
-            c.parsed.name === "tree" ||
-            (c.parsed.name === "todo" &&
-              c.parsed.arguments?.action === "list") ||
-            (c.parsed.name === "question" && !c.parsed.arguments?.question),
-        );
-        let isRepeatedRead = false;
-        let isRepeatedSearch = false;
-        let isRepeatedQuestion = false;
-        let isRepeatedBash = false;
-        for (const c of validCalls) {
-          if (c.parsed.name === "read_file") {
-            const filePath = String(c.parsed.arguments?.path || "");
-            if (recentReadFiles.includes(filePath)) isRepeatedRead = true;
-            recentReadFiles.push(filePath);
-            if (recentReadFiles.length > 5) recentReadFiles.shift();
-          }
-          if (c.parsed.name === "grep_search") {
-            const pattern = String(c.parsed.arguments?.pattern || "");
-            if (recentGrepPatterns.includes(pattern)) isRepeatedSearch = true;
-            recentGrepPatterns.push(pattern);
-            if (recentGrepPatterns.length > 5) recentGrepPatterns.shift();
-          }
-          if (c.parsed.name === "question") {
-            const questionText = String(c.parsed.arguments?.question || "");
-            if (recentQuestions.includes(questionText))
-              isRepeatedQuestion = true;
-            recentQuestions.push(questionText);
-            if (recentQuestions.length > 3) recentQuestions.shift();
-          }
-          if (c.parsed.name === "bash") {
-            const cmdText = String(c.parsed.arguments?.cmd || "");
-            const normalized = cmdText.trim().replace(/\s+/g, " ");
-            if (recentBashCommands.includes(normalized)) isRepeatedBash = true;
-            recentBashCommands.push(normalized);
-            if (recentBashCommands.length > 5) recentBashCommands.shift();
-          }
+        if (c.parsed.name === "grep_search") {
+          const pattern = String(c.parsed.arguments?.pattern || "");
+          if (recentGrepPatterns.includes(pattern)) isRepeatedSearch = true;
+          recentGrepPatterns.push(pattern);
+          if (recentGrepPatterns.length > 5) recentGrepPatterns.shift();
         }
-        const isStuckAction =
-          isUselessAction ||
-          isRepeatedRead ||
-          isRepeatedSearch ||
-          isRepeatedQuestion ||
-          isRepeatedBash;
-        if (isStuckAction) {
-          uselessActionCount++;
-          if (uselessActionCount >= 3) {
-            if (!quiet) {
-              renderer?.writeWarning(
-                `  [agent stuck: ${uselessActionCount} useless actions]`,
-              );
-            }
-            clearPlan();
-            messages.push({
-              role: "user",
-              content: `[System: You are stuck in a loop. STOP calling the same tool. The user already answered your question — use their answer and proceed with the task. Do NOT ask the same question again.]`,
-            });
-            uselessActionCount = 0;
-            continuationNudges = 0;
-            continue;
+        if (c.parsed.name === "question") {
+          const questionText = String(c.parsed.arguments?.question || "");
+          if (recentQuestions.includes(questionText)) isRepeatedQuestion = true;
+          recentQuestions.push(questionText);
+          if (recentQuestions.length > 3) recentQuestions.shift();
+        }
+        if (c.parsed.name === "bash") {
+          const cmdText = String(c.parsed.arguments?.cmd || "");
+          const normalized = cmdText.trim().replace(/\s+/g, " ");
+          if (recentBashCommands.includes(normalized)) isRepeatedBash = true;
+          recentBashCommands.push(normalized);
+          if (recentBashCommands.length > 5) recentBashCommands.shift();
+        }
+      }
+      const isStuckAction =
+        isUselessAction ||
+        isRepeatedRead ||
+        isRepeatedSearch ||
+        isRepeatedQuestion ||
+        isRepeatedBash;
+      if (isStuckAction) {
+        uselessActionCount++;
+        if (uselessActionCount >= 3) {
+          if (!quiet) {
+            renderer?.writeWarning(
+              `  [agent stuck: ${uselessActionCount} useless actions]`,
+            );
           }
-        } else if (
+          clearPlan();
+          messages.push({
+            role: "user",
+            content: `[System: You are stuck in a loop. STOP calling the same tool. The user already answered your question — use their answer and proceed with the task. Do NOT ask the same question again.]`,
+          });
+          uselessActionCount = 0;
+          continuationNudges = 0;
+          continue;
+        }
+      } else {
+        consecutiveNoToolSteps = 0;
+        if (
           validCalls.some(
             (c) =>
               c.parsed.name === "subagent" ||
@@ -817,52 +790,50 @@ export async function runAgentLoop(
               c.parsed.name === "bash",
           )
         ) {
-          consecutiveNoToolSteps = 0;
           uselessActionCount = 0;
           recentReadFiles.length = 0;
           recentGrepPatterns.length = 0;
           recentQuestions.length = 0;
           recentBashCommands.length = 0;
         }
+      }
 
-        // === 4. Выход: решение по поведению, а не по тексту ===
+      // === 4. Выход: решение по поведению, а не по тексту ===
 
-        // 4a. Модель ничего не делала — поведенческий контроль
-        if (!hasDoneAnyWork) {
-          if (step > 0) consecutiveNoToolSteps++;
-          if (consecutiveNoToolSteps >= 2) {
-            if (!quiet) {
-              renderer?.writeWarning(
-                `  [idle: ${consecutiveNoToolSteps} steps without any tool calls]`,
-              );
-            }
-            const idleSteps = consecutiveNoToolSteps;
-            consecutiveNoToolSteps = 0;
-            messages.push({
-              role: "user",
-              content: `[System: ты уже ${idleSteps} шага подряд не вызываешь инструменты. Если задача требует создания/изменения файлов — вызови write_file или edit_file. Если задача уже выполнена — напиши результат пользователю.]`,
-            });
-            continuationNudges = 0;
-            continue;
+      // 4a. Модель ничего не делала — поведенческий контроль
+      if (!hasDoneAnyWork) {
+        if (step > 0) consecutiveNoToolSteps++;
+        if (consecutiveNoToolSteps >= 2) {
+          if (!quiet) {
+            renderer?.writeWarning(
+              `  [idle: ${consecutiveNoToolSteps} steps without any tool calls]`,
+            );
           }
-          // Первый ответ (step === 0) без инструментов — обычный диалог
-          return { messages };
-        }
-
-        // 4b. Модель что-то делала — проверяем созданные файлы перед выходом
-        if (createdFiles.length > 0) {
+          const idleSteps = consecutiveNoToolSteps;
+          consecutiveNoToolSteps = 0;
           messages.push({
             role: "user",
-            content: `Files created: ${createdFiles.join(", ")}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
+            content: `[System: ты уже ${idleSteps} шага подряд не вызываешь инструменты. Если задача требует создания/изменения файлов — вызови write_file или edit_file. Если задача уже выполнена — напиши результат пользователю.]`,
           });
           continuationNudges = 0;
           continue;
         }
-
-        // 4c. Модель работала, но не создавала файлы (читала, искала и т.д.)
+        // Первый ответ (step === 0) без инструментов — обычный диалог
         return { messages };
       }
-      continue;
+
+      // 4b. Модель что-то делала — проверяем созданные файлы перед выходом
+      if (createdFiles.length > 0) {
+        messages.push({
+          role: "user",
+          content: `Files created: ${createdFiles.join(", ")}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
+        });
+        continuationNudges = 0;
+        continue;
+      }
+
+      // 4c. Модель работала, но не создавала файлы (читала, искала и т.д.)
+      return { messages };
     }
 
     // ─── Grounding check ────────────────────────────────
