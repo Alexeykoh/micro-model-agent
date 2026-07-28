@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { getSpecialistConfig, getLLMConfig, getGroundingConfig } from '../src/config/config.js';
-import type { AppConfig } from '../src/config/types.js';
+import { describe, it, expect } from "vitest";
+import {
+  getSpecialistConfig,
+  getLLMConfig,
+  getGroundingConfig,
+} from "../src/config/config.js";
+import type { AppConfig } from "../src/config/types.js";
 
-describe('getSpecialistConfig', () => {
-
-  it('returns defaults when no config provided', () => {
+describe("getSpecialistConfig", () => {
+  it("returns defaults when no config provided", () => {
     const result = getSpecialistConfig();
     expect(result.enabled).toBe(true);
     expect(result.triggerThreshold).toBe(2);
@@ -12,14 +15,14 @@ describe('getSpecialistConfig', () => {
     expect(result.minErrorLength).toBe(15);
   });
 
-  it('returns defaults for empty config', () => {
+  it("returns defaults for empty config", () => {
     const config = {} as AppConfig;
     const result = getSpecialistConfig(config);
     expect(result.enabled).toBe(true);
     expect(result.triggerThreshold).toBe(2);
   });
 
-  it('overrides with user config', () => {
+  it("overrides with user config", () => {
     const config = {
       agent: {
         specialist: {
@@ -37,7 +40,7 @@ describe('getSpecialistConfig', () => {
     expect(result.minErrorLength).toBe(20);
   });
 
-  it('partial override fills missing fields with defaults', () => {
+  it("partial override fills missing fields with defaults", () => {
     const config = {
       agent: {
         specialist: {
@@ -53,23 +56,23 @@ describe('getSpecialistConfig', () => {
   });
 });
 
-describe('getGroundingConfig', () => {
-  it('returns defaults when no config provided', () => {
+describe("getGroundingConfig", () => {
+  it("returns defaults when no config provided", () => {
     const result = getGroundingConfig();
     expect(result.enabled).toBe(true);
-    expect(result.strictMode).toBe(false);
+    expect(result.strictMode).toBe(true);
     expect(result.checkFiles).toBe(true);
-    expect(result.maxMissingGrounding).toBe(3);
+    expect(result.maxMissingGrounding).toBe(2);
   });
 
-  it('returns defaults for empty config', () => {
+  it("returns defaults for empty config", () => {
     const config = {} as AppConfig;
     const result = getGroundingConfig(config);
     expect(result.enabled).toBe(true);
     expect(result.checkFiles).toBe(true);
   });
 
-  it('overrides with user config', () => {
+  it("overrides with user config", () => {
     const config = {
       agent: {
         grounding: {
@@ -87,7 +90,7 @@ describe('getGroundingConfig', () => {
     expect(result.maxMissingGrounding).toBe(5);
   });
 
-  it('partial override fills missing fields with defaults', () => {
+  it("partial override fills missing fields with defaults", () => {
     const config = {
       agent: {
         grounding: {
@@ -97,28 +100,27 @@ describe('getGroundingConfig', () => {
     } as AppConfig;
     const result = getGroundingConfig(config);
     expect(result.enabled).toBe(false);
-    expect(result.strictMode).toBe(false); // default
+    expect(result.strictMode).toBe(true); // default
     expect(result.checkFiles).toBe(true); // default
-    expect(result.maxMissingGrounding).toBe(3); // default
+    expect(result.maxMissingGrounding).toBe(2); // default
   });
 });
 
-describe('getLLMConfig specialist-related', () => {
-
-  it('returns toolModel as undefined by default', () => {
+describe("getLLMConfig specialist-related", () => {
+  it("returns toolModel as undefined by default", () => {
     const result = getLLMConfig();
     expect(result.toolModel).toBeUndefined();
   });
 
-  it('returns toolModel when configured', () => {
+  it("returns toolModel when configured", () => {
     const config = {
       agent: {
         llm: {
-          toolModel: 'qwen/qwen3.5-9b',
+          toolModel: "qwen/qwen3.5-9b",
         },
       },
     } as AppConfig;
     const result = getLLMConfig(config);
-    expect(result.toolModel).toBe('qwen/qwen3.5-9b');
+    expect(result.toolModel).toBe("qwen/qwen3.5-9b");
   });
 });

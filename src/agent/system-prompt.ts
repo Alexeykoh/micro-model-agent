@@ -1,13 +1,19 @@
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-import * as os from 'node:os';
-import { loadAllMemoryDetailed } from './memory.js';
-import { loadProfileSummary } from './user-profile.js';
-import type { RuntimeFlags } from '../config/types.js';
-import { getOrBuildProjectMap } from '../indexer/cache.js';
-import { loadAgentsMd, listSkillsWithDescriptions, formatSkillsBlock, invalidateSkillCaches, type Skill } from '../skills/loader.js';
-import { logInfo, logDebug } from '../logger.js';
-import type { AgentMode } from '../config/types.js';
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import * as os from "node:os";
+import { loadAllMemoryDetailed } from "./memory.js";
+import { loadProfileSummary } from "./user-profile.js";
+import type { RuntimeFlags } from "../config/types.js";
+import { getOrBuildProjectMap } from "../indexer/cache.js";
+import {
+  loadAgentsMd,
+  listSkillsWithDescriptions,
+  formatSkillsBlock,
+  invalidateSkillCaches,
+  type Skill,
+} from "../skills/loader.js";
+import { logInfo, logDebug } from "../logger.js";
+import type { AgentMode } from "../config/types.js";
 
 /**
  * Build system prompt for the LLM agent.
@@ -279,22 +285,53 @@ const R: Record<string, _Rule> = {
 };
 
 function composeRules(keys: (keyof typeof R)[]): string {
-  return 'Rules:\n' + keys.map((k, i) => `${i + 1}. ${R[k]}`).join('\n');
+  return "Rules:\n" + keys.map((k, i) => `${i + 1}. ${R[k]}`).join("\n");
 }
 
 const RULES_COMMON = composeRules([
-  'fs_tools', 'user_language', 'check_result', 'no_empty', 'valid_json', 'large_files',
-  'planning_skills', 'simple_tasks', 'never_just_talk_common', 'skills_loaded',
-  'user_profile_common', 'no_list_dir_common', 'off_topic_common', 'one_file_common',
-  'subagents_common', 'check_before_install', 'file_extensions', 'user_answers',
-  'project_map_common', 'subagent_context_common', 'web_tools',
+  "fs_tools",
+  "user_language",
+  "check_result",
+  "no_empty",
+  "valid_json",
+  "large_files",
+  "planning_skills",
+  "simple_tasks",
+  "never_just_talk_common",
+  "skills_loaded",
+  "user_profile_common",
+  "no_list_dir_common",
+  "off_topic_common",
+  "one_file_common",
+  "subagents_common",
+  "check_before_install",
+  "file_extensions",
+  "user_answers",
+  "project_map_common",
+  "subagent_context_common",
+  "web_tools",
 ]);
 
 const RULES_FAST = composeRules([
-  'fs_tools', 'user_language', 'check_result', 'no_empty', 'valid_json', 'large_files',
-  'execute_directly', 'never_just_talk_fast', 'user_profile_fast', 'no_list_dir_fast',
-  'off_topic_fast', 'one_file_fast', 'subagents_fast', 'check_before_install',
-  'file_extensions', 'user_answers', 'project_map_fast', 'subagent_context_fast', 'web_tools',
+  "fs_tools",
+  "user_language",
+  "check_result",
+  "no_empty",
+  "valid_json",
+  "large_files",
+  "execute_directly",
+  "never_just_talk_fast",
+  "user_profile_fast",
+  "no_list_dir_fast",
+  "off_topic_fast",
+  "one_file_fast",
+  "subagents_fast",
+  "check_before_install",
+  "file_extensions",
+  "user_answers",
+  "project_map_fast",
+  "subagent_context_fast",
+  "web_tools",
 ]);
 
 const GROUNDING_RULE = `## Grounding Rule (CRITICAL — prevents hallucinations)
@@ -324,17 +361,22 @@ const POWERSHELL_RULES = `PowerShell specifics:
   WRONG: cd my-app && npm install
   RIGHT: npm install (run from my-app directory)
   RIGHT: Set-Location my-app; npm install
+- Use Get-ChildItem (NOT dir /s) to list files recursively.
+  WRONG: dir /s src  (PowerShell interprets /s as a path, not a flag)
+  RIGHT: Get-ChildItem -Recurse src
 - Create/write files: Set-Content -Path file.md -Value "content"
 - Append to file: Add-Content -Path file.md -Value "line"
 - Read files: Get-Content file.md
-- List directory: dir (or Get-ChildItem)
+- List directory: Get-ChildItem (or dir)
+- List directory recursively: Get-ChildItem -Recurse
 - Create directories: New-Item -ItemType Directory -Force -Path "folder"
-- NEVER use: echo -e, cat (use Get-Content), bash syntax like mkdir -p or {src/routes,...}
+- NEVER use: echo -e, cat (use Get-Content), mkdir -p, cp, mv, sed (PowerShell has different syntax)
 - NEVER use single quotes for strings with \\n, \\t — use DOUBLE quotes: "line1\\nline2"
 - Paths use backslashes: src\\index.ts
 - Check file exists: Test-Path file.md
 - Install deps: npm install (NOT npm i)
-- Run dev: npm run dev (NOT npx tsx watch)`;
+- Run dev: npm run dev (NOT npx tsx watch)
+- Run status checks: git status (works fine, no special syntax needed)`;
 
 const UNIX_EXAMPLES = `Examples (Linux/macOS):
   <tool_call>{"name":"bash","arguments":{"cmd":"ls -la"}}</tool_call>
@@ -378,107 +420,178 @@ export function invalidateSystemPromptCache(): void {
  * @param mode - working mode (fast/pro/base)
  * @returns Assembled system prompt string
  */
-export function buildSystemPrompt(extraSkills?: Skill[], mode?: AgentMode, pluginSections?: string[], flags?: RuntimeFlags): string {
+export function buildSystemPrompt(
+  extraSkills?: Skill[],
+  mode?: AgentMode,
+  pluginSections?: string[],
+  flags?: RuntimeFlags,
+): string {
   const start = performance.now();
   // Cache key: current directory + mode + skill names (sorted)
-  const key = `${process.cwd()}:${mode || 'base'}:${extraSkills?.map(s => s.name).sort().join(',') || ''}:${pluginSections?.length || 0}`;
+  const key = `${process.cwd()}:${mode || "base"}:${
+    extraSkills
+      ?.map((s) => s.name)
+      .sort()
+      .join(",") || ""
+  }:${pluginSections?.length || 0}`;
   const cached = systemPromptCache.get(key);
   if (cached) {
-    logDebug('SYSTEM', 'buildSystemPrompt: cache hit');
+    logDebug("SYSTEM", "buildSystemPrompt: cache hit");
     return cached;
   }
-  logDebug('SYSTEM', 'buildSystemPrompt: building from scratch');
+  logDebug("SYSTEM", "buildSystemPrompt: building from scratch");
 
-  const isWin = os.platform() === 'win32';
-  const platformName = isWin ? 'Windows' : os.platform();
+  const isWin = os.platform() === "win32";
+  const platformName = isWin ? "Windows" : os.platform();
   let osVersion = platformName;
-  try { osVersion += ` (${os.version()})`; } catch { /* ignore */ }
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-  const timeStr = now.toLocaleTimeString('en-US');
-
-  let projectName = 'unknown';
-  const pkgPath = resolve(process.cwd(), 'package.json');
-  if (existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-      // Читаем ТОЛЬКО имя проекта — никакие другие поля package.json
-      // не должны попадать в system prompt (возможны токены, apiKey и т.д.)
-      if (typeof pkg.name === 'string' && pkg.name) {
-        projectName = pkg.name;
-      }
-    } catch { /* ignore */ }
+  try {
+    osVersion += ` (${os.version()})`;
+  } catch {
+    /* ignore */
   }
 
-  const rules = mode === 'fast' ? RULES_FAST : RULES_COMMON;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
+  const timeStr = now.toLocaleTimeString("en-US");
+
+  let projectName = "unknown";
+  const pkgPath = resolve(process.cwd(), "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      // Читаем ТОЛЬКО имя проекта — никакие другие поля package.json
+      // не должны попадать в system prompt (возможны токены, apiKey и т.д.)
+      if (typeof pkg.name === "string" && pkg.name) {
+        projectName = pkg.name;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const rules = mode === "fast" ? RULES_FAST : RULES_COMMON;
   const platformBlock = isWin
-    ? [TOOL_FORMAT, CONVERSATION_FLOW, GROUNDING_RULE, POWERSHELL_EXAMPLES, rules, POWERSHELL_RULES].join('\n\n')
-    : [TOOL_FORMAT, CONVERSATION_FLOW, GROUNDING_RULE, UNIX_EXAMPLES, rules, UNIX_RULES].join('\n\n');
+    ? [
+        TOOL_FORMAT,
+        CONVERSATION_FLOW,
+        GROUNDING_RULE,
+        POWERSHELL_EXAMPLES,
+        rules,
+        POWERSHELL_RULES,
+      ].join("\n\n")
+    : [
+        TOOL_FORMAT,
+        CONVERSATION_FLOW,
+        GROUNDING_RULE,
+        UNIX_EXAMPLES,
+        rules,
+        UNIX_RULES,
+      ].join("\n\n");
 
   const header = `You are Micro Models Agent (MMA), an AI coding assistant.
 You help with software engineering tasks in the project directory.`;
 
   const sysInfo = [
-    '',
-    '## System',
+    "",
+    "## System",
     `Date: ${dateStr}`,
     `Time: ${timeStr}`,
     `OS: ${osVersion}`,
     `Node.js: ${process.version}`,
     `CWD: ${process.cwd()}`,
     `Project: ${projectName}`,
-    '',
-  ].join('\n');
+    "",
+  ].join("\n");
 
   // ─── Memory and user profile ──────────────────────────
   const memory = loadAllMemoryDetailed();
   const userProfile = loadProfileSummary();
 
   // ─── Project map (from indexer) ───────────────────────
-  let projectMap = '';
+  let projectMap = "";
   try {
     const { formatted, fromCache } = getOrBuildProjectMap(process.cwd());
     if (formatted) {
-      projectMap = `\n## Project Map${fromCache ? ' (cached)' : ''}\n${formatted}`;
+      projectMap = `\n## Project Map${fromCache ? " (cached)" : ""}\n${formatted}`;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   // ─── Project instructions (AGENTS.md) ─────────────────
   const agentsMd = flags?.dev ? null : loadAgentsMd(process.cwd());
-  const agentsBlock = agentsMd ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}` : '';
+  const agentsBlock = agentsMd
+    ? `\n## Project Instructions (AGENTS.md)\n${agentsMd}`
+    : "";
 
   // ─── Available skills hint ────────────────────────────
   const allSkills = listSkillsWithDescriptions();
   const truncateDesc = (d: string, max = 100): string =>
-    d.length <= max ? d : d.slice(0, max - 1) + '…';
+    d.length <= max ? d : d.slice(0, max - 1) + "…";
 
-  const skillsHint = allSkills.length > 0
-    ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): mention @skill-name in your response — skills will be auto-loaded into context.\nDo NOT put @skill-name inside tool_call. Just mention them naturally in your text.\nWorkflow:\n  1. User asks: "Create a REST API"\n  2. You: "I'll use @typescript-expert @nodejs-expert for this task." (skills auto-load on next turn)\n  3. You create plan BASED ON skill guidance: plan create REST API ...\n  4. You execute plan step by step\n\nAvailable skills:\n${
-      allSkills.map(s =>
-        s.description
-          ? `  @${s.name} — ${truncateDesc(s.description)}`
-          : `  @${s.name}`
-      ).join('\n')
-    }`
-    : '';
+  const skillsHint =
+    allSkills.length > 0
+      ? `\n## Available Skills (${allSkills.length})\nSkills contain ready-made workflows, best practices, and step-by-step guides.\nFor complex tasks (3+ steps): mention @skill-name in your response — skills will be auto-loaded into context.\nDo NOT put @skill-name inside tool_call. Just mention them naturally in your text.\nWorkflow:\n  1. User asks: "Create a REST API"\n  2. You: "I'll use @typescript-expert @nodejs-expert for this task." (skills auto-load on next turn)\n  3. You create plan BASED ON skill guidance: plan create REST API ...\n  4. You execute plan step by step\n\nAvailable skills:\n${allSkills
+          .map((s) =>
+            s.description
+              ? `  @${s.name} — ${truncateDesc(s.description)}`
+              : `  @${s.name}`,
+          )
+          .join("\n")}`
+      : "";
 
   // ─── Mode block ──────────────────────────────────────
-  const modeBlock = mode === 'fast'
-    ? `\n## Mode: Fast\n\u26a1 Fast mode \u2014 execute tasks directly without planning or loading skills. Skills are not available in this mode. Proceed immediately.`
-    : mode === 'pro'
-    ? `\n## Mode: Pro\n\ud83d\udd0d Pro mode — @grill-me skill is pre-loaded. Before starting any task, you MUST first read and run the grill-me skill instructions to clarify requirements. Use it to refine the task before execution. Minimum context window: 64000.`
-    : '';
+  const modeBlock =
+    mode === "fast"
+      ? `\n## Mode: Fast\n\u26a1 Fast mode \u2014 execute tasks directly without planning or loading skills. Skills are not available in this mode. Proceed immediately.`
+      : mode === "pro"
+        ? `\n## Mode: Pro\n\ud83d\udd0d Pro mode — @grill-me skill is pre-loaded. Before starting any task, you MUST first read and run the grill-me skill instructions to clarify requirements. Use it to refine the task before execution. Minimum context window: 64000.`
+        : "";
 
   // ─── Final prompt assembly ───────────────────────────
-  const base = mode === 'fast'
-    ? [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, modeBlock].filter(Boolean).join('\n')
-    : [header, platformBlock, sysInfo, memory, userProfile, projectMap, agentsBlock, skillsHint, modeBlock].filter(Boolean).join('\n');
-  const result = base
-    + (extraSkills && extraSkills.length > 0 && mode !== 'fast' ? '\n\n' + formatSkillsBlock(extraSkills) : '')
-    + (pluginSections?.length ? '\n\n' + pluginSections.join('\n\n') : '');
+  const base =
+    mode === "fast"
+      ? [
+          header,
+          platformBlock,
+          sysInfo,
+          memory,
+          userProfile,
+          projectMap,
+          agentsBlock,
+          modeBlock,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : [
+          header,
+          platformBlock,
+          sysInfo,
+          memory,
+          userProfile,
+          projectMap,
+          agentsBlock,
+          skillsHint,
+          modeBlock,
+        ]
+          .filter(Boolean)
+          .join("\n");
+  const result =
+    base +
+    (extraSkills && extraSkills.length > 0 && mode !== "fast"
+      ? "\n\n" + formatSkillsBlock(extraSkills)
+      : "") +
+    (pluginSections?.length ? "\n\n" + pluginSections.join("\n\n") : "");
   const elapsed = (performance.now() - start).toFixed(0);
-  logInfo('SYSTEM', `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`);
+  logInfo(
+    "SYSTEM",
+    `buildSystemPrompt: ${result.length} chars in ${elapsed}ms`,
+  );
   systemPromptCache.set(key, result);
   return result;
 }

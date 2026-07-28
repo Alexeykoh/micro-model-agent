@@ -1,8 +1,14 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { AppConfig } from './types.js';
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { AppConfig } from "./types.js";
 
 /**
  * Загрузка и сохранение конфигурации.
@@ -22,35 +28,42 @@ import type { AppConfig } from './types.js';
 const DEFAULT_CONFIG: AppConfig = {
   providers: {
     lmstudio: {
-      type: 'openai-compat',
-      url: 'http://localhost:1234/v1',
+      type: "openai-compat",
+      url: "http://localhost:1234/v1",
       apiKey: null,
       models: {
-        'qwen/qwen3.5-9b': {
-          model: 'qwen/qwen3.5-9b',
+        "qwen/qwen3.5-9b": {
+          model: "qwen/qwen3.5-9b",
           contextWindow: 32768,
           params: { temperature: 0.7, top_p: 0.9, max_tokens: 4096 },
         },
       },
     },
     ollama: {
-      type: 'openai-compat',
-      url: 'http://localhost:11434/v1',
+      type: "openai-compat",
+      url: "http://localhost:11434/v1",
       apiKey: null,
       models: {
-        'qwen3.5:9b': {
-          model: 'qwen3.5:9b',
+        "qwen3.5:9b": {
+          model: "qwen3.5:9b",
           contextWindow: 32768,
           params: { temperature: 0.7, top_p: 0.9, num_ctx: 32768 },
         },
       },
     },
   },
-  active: { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' },
+  active: { provider: "lmstudio", model: "qwen/qwen3.5-9b" },
   agent: {
-    maxSteps: 100, autoCompact: true, compactThreshold: 0.70,
-    toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base',
-    skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0,
+    maxSteps: 100,
+    autoCompact: true,
+    compactThreshold: 0.7,
+    toolTimeout: 120,
+    maxOutputLength: 2000,
+    showThinking: false,
+    mode: "base",
+    skillTokenBudget: 4000,
+    maxSkillsBase: 2,
+    maxSkillsPro: 0,
     llm: {
       retries: 1,
       retryWithoutThinking: true,
@@ -68,9 +81,9 @@ const DEFAULT_CONFIG: AppConfig = {
     },
     grounding: {
       enabled: true,
-      strictMode: false,
+      strictMode: true,
       checkFiles: true,
-      maxMissingGrounding: 3,
+      maxMissingGrounding: 2,
     },
   },
 };
@@ -79,21 +92,25 @@ const DEFAULT_CONFIG: AppConfig = {
 function findProjectRoot(): string | null {
   let dir = resolve(process.cwd());
   while (true) {
-    if (existsSync(join(dir, '.mmrc')) || existsSync(join(dir, 'package.json'))) return dir;
-    const parent = resolve(dir, '..');
+    if (existsSync(join(dir, ".mmrc")) || existsSync(join(dir, "package.json")))
+      return dir;
+    const parent = resolve(dir, "..");
     if (parent === dir) return null;
     dir = parent;
   }
 }
 
 /** Рекурсивное слияние объектов (deep merge) */
-function deepAssign(target: Record<string, unknown>, source: Record<string, unknown>): void {
+function deepAssign(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): void {
   for (const key of Object.keys(source)) {
     const tv = target[key];
     const sv = source[key];
     if (Array.isArray(tv) || Array.isArray(sv)) {
       target[key] = sv;
-    } else if (tv && typeof tv === 'object' && sv && typeof sv === 'object') {
+    } else if (tv && typeof tv === "object" && sv && typeof sv === "object") {
       deepAssign(tv as Record<string, unknown>, sv as Record<string, unknown>);
     } else {
       target[key] = sv;
@@ -110,63 +127,78 @@ export function loadConfig(): AppConfig {
 
   const projectRoot = findProjectRoot();
   if (projectRoot) {
-    const rcPath = join(projectRoot, '.mmrc');
+    const rcPath = join(projectRoot, ".mmrc");
     if (existsSync(rcPath)) {
       try {
-        const rc = JSON.parse(readFileSync(rcPath, 'utf-8'));
+        const rc = JSON.parse(readFileSync(rcPath, "utf-8"));
         deepAssign(config as unknown as Record<string, unknown>, rc);
-      } catch { /* ignore invalid config */ }
+      } catch {
+        /* ignore invalid config */
+      }
     }
   }
 
-  const globalPath = join(homedir(), '.mma', 'config.json');
+  const globalPath = join(homedir(), ".mma", "config.json");
   if (existsSync(globalPath)) {
     try {
-      const global = JSON.parse(readFileSync(globalPath, 'utf-8'));
+      const global = JSON.parse(readFileSync(globalPath, "utf-8"));
       deepAssign(config as unknown as Record<string, unknown>, global);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  if (process.env.MMA_PROVIDER) config.active.provider = process.env.MMA_PROVIDER;
+  if (process.env.MMA_PROVIDER)
+    config.active.provider = process.env.MMA_PROVIDER;
   if (process.env.MMA_MODEL) config.active.model = process.env.MMA_MODEL;
 
   return config;
 }
 
-const MMA_DIR = join(homedir(), '.mma');
+const MMA_DIR = join(homedir(), ".mma");
 
 /** Создаёт директории ~/.mma/ + subdirs если не существуют */
 export function ensureMmaDir(): void {
-  const pluginsDir = join(MMA_DIR, 'plugins');
+  const pluginsDir = join(MMA_DIR, "plugins");
   const isFirstRun = !existsSync(pluginsDir);
 
-  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index'), pluginsDir]) {
+  for (const dir of [
+    MMA_DIR,
+    join(MMA_DIR, "state"),
+    join(MMA_DIR, "cache"),
+    join(MMA_DIR, "index"),
+    pluginsDir,
+  ]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
 
   if (isFirstRun) {
     const __filename = fileURLToPath(import.meta.url);
-    const rootDir = resolve(dirname(__filename), '..', '..');
-    const docsSrc = join(rootDir, 'docs', 'PLUGINS.md');
+    const rootDir = resolve(dirname(__filename), "..", "..");
+    const docsSrc = join(rootDir, "docs", "PLUGINS.md");
     try {
-      copyFileSync(docsSrc, join(pluginsDir, 'PLUGINS.md'));
+      copyFileSync(docsSrc, join(pluginsDir, "PLUGINS.md"));
     } catch {
       /* docs могут отсутствовать в некоторых установках */
     }
 
-    const testPluginDir = join(pluginsDir, 'test-plugin');
+    const testPluginDir = join(pluginsDir, "test-plugin");
     mkdirSync(testPluginDir, { recursive: true });
     writeFileSync(
-      join(testPluginDir, 'manifest.json'),
-      JSON.stringify({
-        name: 'test-plugin',
-        version: '0.1.0',
-        description: 'Тестовый плагин (ничего не делает)',
-        entry: 'index.ts',
-      }, null, 2),
+      join(testPluginDir, "manifest.json"),
+      JSON.stringify(
+        {
+          name: "test-plugin",
+          version: "0.1.0",
+          description: "Тестовый плагин (ничего не делает)",
+          entry: "index.ts",
+        },
+        null,
+        2,
+      ),
     );
     writeFileSync(
-      join(testPluginDir, 'index.ts'),
+      join(testPluginDir, "index.ts"),
       `import type { AgentPlugin } from 'micro-models-agent';
 
 export default function createPlugin(): AgentPlugin {
@@ -185,9 +217,9 @@ export default function createPlugin(): AgentPlugin {
 
 /** Сохраняет конфигурацию в ~/.mma/config.json */
 export function saveConfig(config: AppConfig): void {
-  const globalPath = join(MMA_DIR, 'config.json');
+  const globalPath = join(MMA_DIR, "config.json");
   ensureMmaDir();
-  writeFileSync(globalPath, JSON.stringify(config, null, 2), 'utf-8');
+  writeFileSync(globalPath, JSON.stringify(config, null, 2), "utf-8");
 }
 
 /** LLM config defaults */
@@ -208,12 +240,17 @@ export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
   if (!src) return { ...LLM_DEFAULTS };
   return {
     retries: src.retries ?? LLM_DEFAULTS.retries,
-    retryWithoutThinking: src.retryWithoutThinking ?? LLM_DEFAULTS.retryWithoutThinking,
-    fallbackToReasoning: src.fallbackToReasoning ?? LLM_DEFAULTS.fallbackToReasoning,
-    maxTokensReasoning: src.maxTokensReasoning ?? LLM_DEFAULTS.maxTokensReasoning,
+    retryWithoutThinking:
+      src.retryWithoutThinking ?? LLM_DEFAULTS.retryWithoutThinking,
+    fallbackToReasoning:
+      src.fallbackToReasoning ?? LLM_DEFAULTS.fallbackToReasoning,
+    maxTokensReasoning:
+      src.maxTokensReasoning ?? LLM_DEFAULTS.maxTokensReasoning,
     maxTokensDefault: src.maxTokensDefault ?? LLM_DEFAULTS.maxTokensDefault,
-    maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
-    emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
+    maxTokensAfterTool:
+      src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
+    emptyResponseThreshold:
+      src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
     toolModel: src.toolModel ?? LLM_DEFAULTS.toolModel,
   };
 }
@@ -221,20 +258,23 @@ export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
 /** Grounding config defaults */
 const GROUNDING_DEFAULTS = {
   enabled: true,
-  strictMode: false,
+  strictMode: true,
   checkFiles: true,
-  maxMissingGrounding: 3,
+  maxMissingGrounding: 2,
 };
 
 /** Получить grounding конфиг с заполненными defaults */
-export function getGroundingConfig(config?: AppConfig): typeof GROUNDING_DEFAULTS {
+export function getGroundingConfig(
+  config?: AppConfig,
+): typeof GROUNDING_DEFAULTS {
   const src = config?.agent?.grounding;
   if (!src) return { ...GROUNDING_DEFAULTS };
   return {
     enabled: src.enabled ?? GROUNDING_DEFAULTS.enabled,
     strictMode: src.strictMode ?? GROUNDING_DEFAULTS.strictMode,
     checkFiles: src.checkFiles ?? GROUNDING_DEFAULTS.checkFiles,
-    maxMissingGrounding: src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
+    maxMissingGrounding:
+      src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
   };
 }
 
@@ -247,12 +287,15 @@ const SPECIALIST_DEFAULTS = {
 };
 
 /** Получить specialist конфиг с заполненными defaults */
-export function getSpecialistConfig(config?: AppConfig): typeof SPECIALIST_DEFAULTS {
+export function getSpecialistConfig(
+  config?: AppConfig,
+): typeof SPECIALIST_DEFAULTS {
   const src = config?.agent?.specialist;
   if (!src) return { ...SPECIALIST_DEFAULTS };
   return {
     enabled: src.enabled ?? SPECIALIST_DEFAULTS.enabled,
-    triggerThreshold: src.triggerThreshold ?? SPECIALIST_DEFAULTS.triggerThreshold,
+    triggerThreshold:
+      src.triggerThreshold ?? SPECIALIST_DEFAULTS.triggerThreshold,
     maxSteps: src.maxSteps ?? SPECIALIST_DEFAULTS.maxSteps,
     minErrorLength: src.minErrorLength ?? SPECIALIST_DEFAULTS.minErrorLength,
   };
