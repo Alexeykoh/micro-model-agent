@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { DEFAULTS } from '../src/config/defaults'
+import { loadConfig } from '../src/config/config'
+import { mkdtempSync, writeFileSync, existsSync, rmSync } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
 
 describe('config defaults', () => {
   it('should have version field', () => {
@@ -28,5 +32,111 @@ describe('config defaults', () => {
   it('should have orchestrator undefined by default', () => {
     expect(DEFAULTS.orchestrator.model).toBeUndefined()
     expect(DEFAULTS.orchestrator.provider).toBeUndefined()
+  })
+})
+
+describe('loadConfig', () => {
+  const tmpDirs: string[] = []
+
+  afterEach(() => {
+    for (const d of tmpDirs) {
+      try { rmSync(d, { recursive: true }) } catch {}
+    }
+    tmpDirs.length = 0
+  })
+
+  function makeTempDir(): string {
+    const d = mkdtempSync(join(tmpdir(), 'mma-test-'))
+    tmpDirs.push(d)
+    return d
+  }
+
+  it('should return defaults when no files exist', () => {
+    const tmpDir = makeTempDir()
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, '.mmrc')
+    })
+    expect(cfg.model).toBe('qwen3.5-9b')
+  })
+
+  it('should merge global config', () => {
+    const tmpDir = makeTempDir()
+    writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({
+      version: '2.0.0',
+      model: 'test-model',
+      provider: { type: 'openai-compat', baseUrl: 'http://localhost:1234/v1' },
+      contextWindow: 32768,
+      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+    }))
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, '.mmrc')
+    })
+    expect(cfg.model).toBe('test-model')
+    expect(cfg.provider.baseUrl).toBe('http://localhost:1234/v1')
+  })
+
+  it('should merge project .mmrc over global', () => {
+    const tmpDir = makeTempDir()
+    writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({
+      version: '2.0.0',
+      model: 'global-model',
+      provider: { type: 'openai-compat', baseUrl: 'http://localhost:1234/v1' },
+      contextWindow: 32768,
+      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+    }))
+    writeFileSync(join(tmpDir, '.mmrc'), JSON.stringify({ model: 'project-model' }))
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, '.mmrc')
+    })
+    expect(cfg.model).toBe('project-model')
+  })
+
+  it('should apply MMA_ env vars', () => {
+    const tmpDir = makeTempDir()
+    const prev = process.env.MMA_MODEL
+    process.env.MMA_MODEL = 'env-model'
+    try {
+      const cfg = loadConfig({
+        configDir: tmpDir,
+        projectConfigPath: join(tmpDir, '.mmrc')
+      })
+      expect(cfg.model).toBe('env-model')
+    } finally {
+      if (prev) process.env.MMA_MODEL = prev
+      else delete process.env.MMA_MODEL
+    }
+  })
+
+  it('should handle MMA_PROVIDER_BASEURL env var', () => {
+    const tmpDir = makeTempDir()
+    const prev = process.env.MMA_PROVIDER_BASEURL
+    process.env.MMA_PROVIDER_BASEURL = 'http://env:8080/v1'
+    try {
+      const cfg = loadConfig({
+        configDir: tmpDir,
+        projectConfigPath: join(tmpDir, '.mmrc')
+      })
+      expect(cfg.provider.baseUrl).toBe('http://env:8080/v1')
+    } finally {
+      if (prev) process.env.MMA_PROVIDER_BASEURL = prev
+      else delete process.env.MMA_PROVIDER_BASEURL
+    }
+  })
+
+  it('should migrate v1 config on load', () => {
+    const tmpDir = makeTempDir()
+    writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({
+      apiBase: 'http://old:1234',
+      model: 'qwen2.5-7b',
+      temperature: 0.7,
+    }))
+
+    const cfg = loadConfig({ configDir: tmpDir, projectConfigPath: join(tmpDir, '.mmrc') })
+    expect(cfg.model).toBe('qwen3.5-9b')
+    expect(cfg.version).toBe('2.0.0')
+    expect(existsSync(join(tmpDir, 'config.json.bak'))).toBe(true)
   })
 })
