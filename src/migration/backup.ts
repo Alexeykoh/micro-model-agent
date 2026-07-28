@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from 'fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { AppConfig } from '../config/types'
 
