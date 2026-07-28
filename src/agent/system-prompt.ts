@@ -12,7 +12,7 @@ import {
   invalidateSkillCaches,
   type Skill,
 } from "../skills/loader.js";
-import { logInfo, logDebug } from "../logger.js";
+import { logInfo, logWarn, logDebug } from "../logger.js";
 import type { AgentMode } from "../config/types.js";
 
 /**
@@ -586,7 +586,22 @@ You help with software engineering tasks in the project directory.`;
     (extraSkills && extraSkills.length > 0 && mode !== "fast"
       ? "\n\n" + formatSkillsBlock(extraSkills)
       : "") +
-    (pluginSections?.length ? "\n\n" + pluginSections.join("\n\n") : "");
+    (pluginSections?.length
+      ? "\n\n## Plugin Context (facts only)\n\n" +
+        pluginSections
+          .map((s) => {
+            // Лимит: 200 токенов ≈ 800 символов на секцию плагина
+            if (s.length > 800) {
+              logWarn(
+                "SYSTEM",
+                `plugin section too long (${s.length} chars), truncating to 800`,
+              );
+              return s.slice(0, 800) + "\n[truncated]";
+            }
+            return s;
+          })
+          .join("\n\n")
+      : "");
   const elapsed = (performance.now() - start).toFixed(0);
   logInfo(
     "SYSTEM",

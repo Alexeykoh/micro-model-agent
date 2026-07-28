@@ -421,6 +421,7 @@ export async function runAgentLoop(
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
   let consecutiveMissingGrounding = 0; // счётчик пропущенных grounding-маркеров подряд
+  let consecutiveInvalidCalls = 0; // счётчик невалидных tool call подряд
   /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
   let uselessActionCount = 0;
   /** История последних чтений файлов для.detect повторных чтений */
@@ -694,6 +695,7 @@ export async function runAgentLoop(
           .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
           .trim();
         if (textOutside.length < 100) {
+          consecutiveInvalidCalls++;
           const feedback = `[Tool call error(s)]\n${invalidCalls.join("\n")}\n\nFix the tool call format and try again. Use ONLY valid tool names: bash, read_file, write_file, edit_file, list_dir, create_dir, delete_file, copy_file, move_file, file_info, glob_search, grep_search, tree, web_search, web_fetch, web_browse, plan, todo, question, approve, subagent, scaffold.`;
           if (!quiet) {
             renderer?.writeError(`  [invalid tool call: ${invalidCalls[0]}]`);
