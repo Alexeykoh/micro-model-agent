@@ -342,6 +342,8 @@ export async function runAgentLoop(
   let consecutiveInvalidCalls = 0; // счётчик невалидных tool call подряд
   /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
   let uselessActionCount = 0;
+  /** Сколько шагов подряд модель не вызывает инструменты */
+  let consecutiveNoToolSteps = 0;
   /** История последних чтений файлов для.detect повторных чтений */
   const recentReadFiles: string[] = [];
   /** История последних grep-запросов для detect повторных поисков */
@@ -383,6 +385,9 @@ export async function runAgentLoop(
   const errorEscalator = new ErrorEscalator();
   const writeEnforcer = new WriteEnforcer();
 
+  /** Отслеживание созданных/изменённых файлов за всю сессию */
+  const createdFiles: string[] = [];
+
   // Reset abort signal for this run
   if (renderer?.abortSignal === undefined) {
     // Renderer doesn't support abort — fine
@@ -403,7 +408,6 @@ export async function runAgentLoop(
       break;
     }
     let skillsAutoLoaded = false;
-    const createdFiles: string[] = []; // отслеживание созданных/изменённых файлов
 
     logDebug(
       "LOOP",
@@ -658,16 +662,23 @@ export async function runAgentLoop(
       }
 
       if (!skillsAutoLoaded) {
-        const textOutside = response
-          .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
-          .trim();
-        const looksLikeDone =
-          /done|готово|создан|выполн|completed|finished/i.test(textOutside);
-
-        // Проверка: план с незавершёнными шагами — не даём агенту остановиться
+        // ─── Определение завершения: только по поведению, не по тексту ──────
+        // Смотрим: были ли хоть какие-то вызовы инструментов за сессию.
+        // Сообщения с role:tool — это результаты выполненных инструментов
+        // (кроме invalid — они с tool_call_id вида "invalid-...").
+        const hasDoneAnyWork = messages.some(
+          (m) =>
+            m.role === "tool" &&
+            m.tool_call_id &&
+            !m.tool_call_id.startsWith("invalid-"),
+        );
+        const planStatus = showPlan();
+        const hasActivePlan = !planStatus.startsWith("No active plan");
         const pendingSteps = getPlanPendingCount();
-        if (pendingSteps > 0 && looksLikeDone) {
-          const planText = showPlan();
+
+        // === 1. Незавершённый план ===
+        if (hasActivePlan && pendingSteps > 0) {
+          const planText = planStatus;
           const pendingLines = planText
             .split("\n")
             .filter((l) => l.includes("○") || l.includes("►"));
@@ -687,54 +698,54 @@ export async function runAgentLoop(
           continue;
         }
 
-        // Phase 4.1: Аудит файлов при завершении плана
-        if (pendingSteps === 0 && looksLikeDone) {
-          const plan = showPlan();
-          if (!plan.startsWith("No active plan")) {
-            // Извлекаем заголовки шагов и проверяем наличие файлов
-            const stepLines = plan
-              .split("\n")
-              .filter((l) => l.match(/\d+\.\s/));
-            const missingFiles: string[] = [];
-            for (const line of stepLines) {
-              const titleMatch = line.match(/\d+\.\s*(.+)/);
-              if (!titleMatch) continue;
-              const title = titleMatch[1].trim();
-              // Извлекаем имя файла из заголовка (паттерн: "Create file.ext" или "file.ext")
-              const fileMatch =
-                title.match(
-                  /(?:Create|Создать|Add|Добавить)\s+(\S+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
-                ) ||
-                title.match(
-                  /(\w+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
-                );
-              if (fileMatch) {
-                const fileName = fileMatch[1];
-                if (
-                  !existsSync(fileName) &&
-                  !createdFiles.some((f) => f.endsWith(fileName))
-                ) {
-                  missingFiles.push(fileName);
-                }
+        // === 2. План завершён — аудит файлов ===
+        if (hasActivePlan && pendingSteps === 0) {
+          // Извлекаем заголовки шагов и проверяем наличие файлов
+          const stepLines = planStatus
+            .split("\n")
+            .filter((l) => l.match(/\d+\.\s/));
+          const missingFiles: string[] = [];
+          for (const line of stepLines) {
+            const titleMatch = line.match(/\d+\.\s*(.+)/);
+            if (!titleMatch) continue;
+            const title = titleMatch[1].trim();
+            const fileMatch =
+              title.match(
+                /(?:Create|Создать|Add|Добавить)\s+(\S+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
+              ) ||
+              title.match(
+                /(\w+\.(?:ts|tsx|js|jsx|json|html|css|md|yaml|yml))/i,
+              );
+            if (fileMatch) {
+              const fileName = fileMatch[1];
+              if (
+                !existsSync(fileName) &&
+                !createdFiles.some((f) => f.endsWith(fileName))
+              ) {
+                missingFiles.push(fileName);
               }
-            }
-            if (missingFiles.length > 0) {
-              if (!quiet) {
-                renderer?.writeWarning(
-                  `  [plan complete but missing files: ${missingFiles.join(", ")}]`,
-                );
-              }
-              messages.push({
-                role: "user",
-                content: `Plan claims all steps done, but these files are missing: ${missingFiles.join(", ")}. Create them before finishing.`,
-              });
-              continuationNudges = 0;
-              continue;
             }
           }
+          if (missingFiles.length > 0) {
+            if (!quiet) {
+              renderer?.writeWarning(
+                `  [plan complete but missing files: ${missingFiles.join(", ")}]`,
+              );
+            }
+            messages.push({
+              role: "user",
+              content: `Plan claims all steps done, but these files are missing: ${missingFiles.join(", ")}. Create them before finishing.`,
+            });
+            continuationNudges = 0;
+            continue;
+          }
+          // Все файлы на месте — выходим
+          return { messages };
         }
 
-        // Stuck detection: если модель делает бесполезные действия
+        // === 3. Нет активного плана ===
+
+        // Stuck detection (без изменений)
         const isUselessAction = validCalls.some(
           (c) =>
             c.parsed.name === "list_dir" ||
@@ -743,8 +754,6 @@ export async function runAgentLoop(
               c.parsed.arguments?.action === "list") ||
             (c.parsed.name === "question" && !c.parsed.arguments?.question),
         );
-
-        // Phase 5.1: Расширенное detect — повторные чтения, поиски, вопросы и bash
         let isRepeatedRead = false;
         let isRepeatedSearch = false;
         let isRepeatedQuestion = false;
@@ -752,39 +761,31 @@ export async function runAgentLoop(
         for (const c of validCalls) {
           if (c.parsed.name === "read_file") {
             const filePath = String(c.parsed.arguments?.path || "");
-            if (recentReadFiles.includes(filePath)) {
-              isRepeatedRead = true;
-            }
+            if (recentReadFiles.includes(filePath)) isRepeatedRead = true;
             recentReadFiles.push(filePath);
             if (recentReadFiles.length > 5) recentReadFiles.shift();
           }
           if (c.parsed.name === "grep_search") {
             const pattern = String(c.parsed.arguments?.pattern || "");
-            if (recentGrepPatterns.includes(pattern)) {
-              isRepeatedSearch = true;
-            }
+            if (recentGrepPatterns.includes(pattern)) isRepeatedSearch = true;
             recentGrepPatterns.push(pattern);
             if (recentGrepPatterns.length > 5) recentGrepPatterns.shift();
           }
           if (c.parsed.name === "question") {
             const questionText = String(c.parsed.arguments?.question || "");
-            if (recentQuestions.includes(questionText)) {
+            if (recentQuestions.includes(questionText))
               isRepeatedQuestion = true;
-            }
             recentQuestions.push(questionText);
             if (recentQuestions.length > 3) recentQuestions.shift();
           }
           if (c.parsed.name === "bash") {
             const cmdText = String(c.parsed.arguments?.cmd || "");
             const normalized = cmdText.trim().replace(/\s+/g, " ");
-            if (recentBashCommands.includes(normalized)) {
-              isRepeatedBash = true;
-            }
+            if (recentBashCommands.includes(normalized)) isRepeatedBash = true;
             recentBashCommands.push(normalized);
             if (recentBashCommands.length > 5) recentBashCommands.shift();
           }
         }
-
         const isStuckAction =
           isUselessAction ||
           isRepeatedRead ||
@@ -816,6 +817,7 @@ export async function runAgentLoop(
               c.parsed.name === "bash",
           )
         ) {
+          consecutiveNoToolSteps = 0;
           uselessActionCount = 0;
           recentReadFiles.length = 0;
           recentGrepPatterns.length = 0;
@@ -823,8 +825,32 @@ export async function runAgentLoop(
           recentBashCommands.length = 0;
         }
 
-        // Если модель claim-ит done но есть созданные файлы — напоминаем о полноте
-        if (createdFiles.length > 0 && looksLikeDone) {
+        // === 4. Выход: решение по поведению, а не по тексту ===
+
+        // 4a. Модель ничего не делала — поведенческий контроль
+        if (!hasDoneAnyWork) {
+          if (step > 0) consecutiveNoToolSteps++;
+          if (consecutiveNoToolSteps >= 2) {
+            if (!quiet) {
+              renderer?.writeWarning(
+                `  [idle: ${consecutiveNoToolSteps} steps without any tool calls]`,
+              );
+            }
+            const idleSteps = consecutiveNoToolSteps;
+            consecutiveNoToolSteps = 0;
+            messages.push({
+              role: "user",
+              content: `[System: ты уже ${idleSteps} шага подряд не вызываешь инструменты. Если задача требует создания/изменения файлов — вызови write_file или edit_file. Если задача уже выполнена — напиши результат пользователю.]`,
+            });
+            continuationNudges = 0;
+            continue;
+          }
+          // Первый ответ (step === 0) без инструментов — обычный диалог
+          return { messages };
+        }
+
+        // 4b. Модель что-то делала — проверяем созданные файлы перед выходом
+        if (createdFiles.length > 0) {
           messages.push({
             role: "user",
             content: `Files created: ${createdFiles.join(", ")}. Before finishing — verify all files are complete and connected to each other. If any file is missing or not imported, continue working.`,
@@ -832,6 +858,8 @@ export async function runAgentLoop(
           continuationNudges = 0;
           continue;
         }
+
+        // 4c. Модель работала, но не создавала файлы (читала, искала и т.д.)
         return { messages };
       }
       continue;
@@ -1352,6 +1380,9 @@ export async function runAgentLoop(
           }
         }
       }
+
+      // Любой выполненный tool call сбрасывает счётчик бездействия
+      consecutiveNoToolSteps = 0;
 
       messages.push({
         role: "tool",

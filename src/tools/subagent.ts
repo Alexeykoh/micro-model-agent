@@ -236,6 +236,7 @@ export async function runIsolatedLoop(
   const ctx = new ContextManager(effectiveProvider.contextWindow);
   const maxSteps = maxStepsParam ?? 20;
   let toolCallCount = 0;
+  let consecutiveNoToolSteps = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     await ctx.updateTokens(messages);
@@ -283,12 +284,53 @@ export async function runIsolatedLoop(
 
     messages.push({ role: "assistant", content: response });
 
-    const { validCalls } = parseToolCalls(response);
+    const { validCalls, invalidCalls } = parseToolCalls(response);
 
     if (validCalls.length === 0) {
+      // Поведенческий контроль: не анализируем текст ответа,
+      // а смотрим — вызывала ли модель инструменты.
+      if (invalidCalls.length > 0) {
+        messages.push({
+          role: "user",
+          content: `[Tool call format error: ${invalidCalls[0]}. Fix and try again.]`,
+        });
+        continue;
+      }
+
+      if (createdFiles.length === 0 && errors.length === 0) {
+        consecutiveNoToolSteps++;
+        if (consecutiveNoToolSteps >= 2 || toolCallCount > 0) {
+          logWarn(
+            "SUBAGENT",
+            `model idle for ${consecutiveNoToolSteps} steps without tools at step ${step}`,
+          );
+          if (toolCallCount === 0) {
+            messages.push({
+              role: "user",
+              content:
+                "[System: ты не вызвал(а) ни одного инструмента. Если задача требует действий — вызови соответствующий инструмент.]",
+            });
+            continue;
+          }
+          logDebug("SUBAGENT", `no valid tool calls, stopping`);
+          break;
+        }
+        // Первое бездействие — даём шанс
+        logDebug("SUBAGENT", `step ${step}: no tool calls, continuing`);
+        messages.push({
+          role: "user",
+          content:
+            "[System: ты не вызвал(а) ни одного инструмента. Если задача требует действий — вызови соответствующий инструмент.]",
+        });
+        continue;
+      }
+
+      // Была хоть какая-то работа — можно выйти
       logDebug("SUBAGENT", `no valid tool calls at step ${step}, stopping`);
       break;
     }
+    // Инструменты вызваны — сбрасываем счётчик
+    consecutiveNoToolSteps = 0;
 
     for (const call of validCalls) {
       toolCallCount++;
