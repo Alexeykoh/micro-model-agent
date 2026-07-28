@@ -1,5 +1,10 @@
-import { MigrationDetector } from './migration'
-import { BackupManager } from './migration'
+export * from './config/index'
+export * from './logger/index'
+export * from './core/index'
+export * from './migration/index'
+
+import { MigrationDetector } from './migration/detect'
+import { BackupManager } from './migration/backup'
 import { homedir } from 'os'
 import { join } from 'path'
 
