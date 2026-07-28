@@ -62,6 +62,17 @@ export { doChat };
 
 // ─── Tool execution helper ────────────────────────────────
 
+/**
+ * Выполняет один tool call внутри цикла субагента.
+ * Обрабатывает bash и не-bash инструменты, проверяет синтаксис созданных файлов.
+ *
+ * @param call - распарсенный tool call
+ * @param toolExecutor - исполнитель инструментов
+ * @param cwd - рабочая директория
+ * @param createdFiles - массив для отслеживания созданных файлов
+ * @param errors - массив для сбора ошибок
+ * @param step - номер шага в цикле
+ */
 async function executeToolCall(
   call: ParsedCall,
   toolExecutor: ToolExecutor | undefined,

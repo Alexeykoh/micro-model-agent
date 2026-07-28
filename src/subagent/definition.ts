@@ -1,5 +1,9 @@
 import type { ToolDefinition } from "../tools/registry.js";
 
+/**
+ * Определение инструмента subagent для реестра тулов.
+ * Позволяет LLM делегировать подзадачи изолированному агенту.
+ */
 export const subagentDefinition: ToolDefinition = {
   type: "function",
   function: {

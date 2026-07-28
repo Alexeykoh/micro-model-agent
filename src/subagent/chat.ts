@@ -11,6 +11,18 @@ import {
 } from "../logger.js";
 import { getLLMConfig } from "../config/config.js";
 
+/**
+ * Отправка запроса к LLM с streaming-ответом.
+ * Поддерживает retry при ошибках и отображение "мышления" модели.
+ *
+ * @param provider - провайдер LLM
+ * @param messages - история сообщений
+ * @param renderer - рендерер для отображения streaming
+ * @param signal - сигнал прерывания
+ * @param retries - количество повторных попыток
+ * @param showThinking - показывать ли "мышление" модели
+ * @param caller - кто вызвал (main/subagent)
+ */
 export async function doChat(
   provider: LLMProvider,
   messages: ChatMessage[],
@@ -23,6 +35,7 @@ export async function doChat(
 ): Promise<{ response: string; genTimeMs: number }> {
   let lastReasoningText = "";
 
+  // Phase 1: Normal attempts with thinking enabled
   for (let attempt = 0; attempt <= retries; attempt++) {
     const startTime = performance.now();
     const fullText: string[] = [];
@@ -102,6 +115,7 @@ export async function doChat(
 
         buf += chunk.content;
 
+        // Рендерим контент, вырезая tool_call блоки для корректного отображения
         while (buf.length > 0) {
           const tcStart = buf.indexOf("<tool_call>");
           const tcEnd = buf.indexOf("</tool_call>");
@@ -141,6 +155,7 @@ export async function doChat(
         renderer.writeNewline();
         renderer.writeDim(reasoningBuf);
       }
+      // Сохраняем reasoning для fallback
       if (currentReasoning) {
         lastReasoningText = currentReasoning;
       }
@@ -164,6 +179,7 @@ export async function doChat(
       );
       renderer.writeError(`\n[LLM] ${e.message}`);
 
+      // Сетевые ошибки (fetch failed, ECONNREFUSED и т.д.) — retry с задержкой
       const isNetworkError =
         !e.message?.includes("API ") && !e.message?.includes("status");
       if (isNetworkError && attempt < retries) {
@@ -200,6 +216,7 @@ export async function doChat(
       return { response, genTimeMs };
     }
 
+    // Диагностика пустого ответа
     const reason = lastFinishReason ?? "unknown";
     logWarn(
       "DOCHAT",
@@ -222,6 +239,7 @@ export async function doChat(
 
   const llmCfg = getLLMConfig();
 
+  // Phase 2: Retry WITHOUT thinking — модель генерирует content напрямую
   if (llmCfg.retryWithoutThinking && lastReasoningText.trim()) {
     logInfo(
       "DOCHAT",
@@ -247,6 +265,7 @@ export async function doChat(
     }
   }
 
+  // Phase 2.5: Emergency — принудительно генерируем content с низкой температурой
   if (lastReasoningText.trim()) {
     logInfo("DOCHAT", `emergency: forcing content with low temperature`);
     renderer.writeDim(`[emergency: forcing content with temperature=0.1]`);
@@ -278,6 +297,7 @@ export async function doChat(
     }
   }
 
+  // Phase 3: Fallback — используем reasoning как content
   if (llmCfg.fallbackToReasoning && lastReasoningText.trim()) {
     logInfo(
       "DOCHAT",
@@ -290,6 +310,10 @@ export async function doChat(
   return { response: "", genTimeMs: 0 };
 }
 
+/**
+ * Одиночный вызов LLM без retry логики.
+ * Используется для retry с другими параметрами (например, enableThinking: false).
+ */
 async function doChatOnce(
   provider: LLMProvider,
   messages: ChatMessage[],
@@ -337,6 +361,7 @@ async function doChatOnce(
 
       buf += chunk.content;
 
+      // Рендерим контент, вырезая tool_call блоки
       while (buf.length > 0) {
         const tcStart = buf.indexOf("<tool_call>");
         const tcEnd = buf.indexOf("</tool_call>");
@@ -348,14 +373,11 @@ async function doChatOnce(
         }
 
         if (tcStart !== -1 && (tcEnd === -1 || tcStart < tcEnd)) {
-          if (tcStart > 0) {
-            renderer.writeMarkdownChunk(buf.slice(0, tcStart));
-          }
+          if (tcStart > 0) renderer.writeMarkdownChunk(buf.slice(0, tcStart));
           buf = buf.slice(tcStart);
           const closeIdx = buf.indexOf("</tool_call>");
-          if (closeIdx !== -1) {
+          if (closeIdx !== -1)
             buf = buf.slice(closeIdx + "</tool_call>".length);
-          }
           break;
         }
 
@@ -366,9 +388,7 @@ async function doChatOnce(
       }
     }
   } catch (e: any) {
-    if (e.name === "AbortError") {
-      return { response: "", genTimeMs: 0 };
-    }
+    if (e.name === "AbortError") return { response: "", genTimeMs: 0 };
     renderer.writeError(`\n[LLM] ${e.message}`);
     return { response: "", genTimeMs: 0 };
   }

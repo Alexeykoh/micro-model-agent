@@ -47,6 +47,12 @@ export const REQUIRED_ARGS: Record<string, string[]> = {
   question: ["question"],
 };
 
+/**
+ * Валидация tool call: проверка имени инструмента и обязательных аргументов.
+ *
+ * @param parsed - распарсенный JSON из tool call
+ * @returns Результат валидации с именем инструмента и командой (для bash)
+ */
 export function validateToolCall(parsed: any): {
   valid: boolean;
   name?: string;

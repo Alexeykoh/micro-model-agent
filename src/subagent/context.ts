@@ -1,9 +1,17 @@
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/**
+ * Собирает контекст для субагента: список файлов, зависимости, tsconfig.
+ * Сканирует все директории проекта (не только src/).
+ *
+ * @param cwd - корневая директория проекта
+ * @returns Текстовый контекст для system prompt субагента
+ */
 export function buildSubagentContext(cwd: string): string {
   const lines: string[] = [];
 
+  // Сканируем все директории в поисках исходных файлов
   try {
     const entries = readdirSync(cwd, { withFileTypes: true });
     for (const entry of entries) {
@@ -29,6 +37,7 @@ export function buildSubagentContext(cwd: string): string {
     /* no entries */
   }
 
+  // Корневые .ts/.js файлы
   try {
     const rootFiles = readdirSync(cwd).filter(
       (f: string) => /\.(ts|js)$/.test(f) && !f.startsWith("."),
@@ -40,6 +49,7 @@ export function buildSubagentContext(cwd: string): string {
     /* skip */
   }
 
+  // package.json — зависимости и тип модулей
   try {
     const pkgPath = join(cwd, "package.json");
     if (existsSync(pkgPath)) {
@@ -55,6 +65,7 @@ export function buildSubagentContext(cwd: string): string {
     /* no package.json */
   }
 
+  // Наличие tsconfig.json
   try {
     if (existsSync(join(cwd, "tsconfig.json"))) {
       lines.push("Has tsconfig.json");
