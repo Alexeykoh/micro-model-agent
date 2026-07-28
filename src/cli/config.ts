@@ -55,6 +55,7 @@ export function registerConfigCommands(program: Command): void {
           strictMode: true,
           checkFiles: true,
           maxMissingGrounding: 2,
+          maxConsecutiveGroundingErrors: 5,
         },
       };
       saveConfig(config);

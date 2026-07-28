@@ -84,6 +84,7 @@ const DEFAULT_CONFIG: AppConfig = {
       strictMode: true,
       checkFiles: true,
       maxMissingGrounding: 2,
+      maxConsecutiveGroundingErrors: 5,
     },
   },
 };
@@ -261,6 +262,7 @@ const GROUNDING_DEFAULTS = {
   strictMode: true,
   checkFiles: true,
   maxMissingGrounding: 2,
+  maxConsecutiveGroundingErrors: 5,
 };
 
 /** Получить grounding конфиг с заполненными defaults */
@@ -275,6 +277,9 @@ export function getGroundingConfig(
     checkFiles: src.checkFiles ?? GROUNDING_DEFAULTS.checkFiles,
     maxMissingGrounding:
       src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
+    maxConsecutiveGroundingErrors:
+      src.maxConsecutiveGroundingErrors ??
+      GROUNDING_DEFAULTS.maxConsecutiveGroundingErrors,
   };
 }
 

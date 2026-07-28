@@ -421,6 +421,7 @@ export async function runAgentLoop(
   let aborted = false;
   let continuationNudges = 0; // счётчик подсказок "продолжай работать"
   let consecutiveMissingGrounding = 0; // счётчик пропущенных grounding-маркеров подряд
+  let groundingRetryCount = 0; // сколько раз был CRITICAL retry подряд
   let consecutiveInvalidCalls = 0; // счётчик невалидных tool call подряд
   /** Счётчик бесполезных действий (list_dir, glob_search, todo list без результата) */
   let uselessActionCount = 0;
@@ -935,42 +936,58 @@ export async function runAgentLoop(
         if (pathCalls.length > groundPaths.length) {
           consecutiveMissingGrounding++;
           const maxMissing = groundingCfg.maxMissingGrounding ?? 3;
+          const maxRetries = groundingCfg.maxConsecutiveGroundingErrors ?? 5;
 
           if (consecutiveMissingGrounding >= maxMissing) {
-            if (!quiet)
-              renderer?.writeError(
-                `  [grounding: ${consecutiveMissingGrounding}/${maxMissing} missing markers]`,
-              );
-            const userTask = enrichedPrompt.slice(0, 200);
-            messages.push({
-              role: "user",
-              content: `[Grounding Error: Missing @grounding[файл: path] marker. CRITICAL: Output it BEFORE each <tool_call>. Your task: "${userTask}". First, check git status with: bash({"cmd":"git status"}). Then proceed.`,
-            });
-            continue;
-          }
+            // CRITICAL — сброс счётчика + учёт retry
+            consecutiveMissingGrounding = 0;
+            groundingRetryCount++;
 
-          if (groundingCfg.strictMode) {
+            if (groundingRetryCount > maxRetries) {
+              // Полный bypass — выполняем tool_call без маркера
+              if (!quiet)
+                renderer?.writeWarning(
+                  `  [grounding: exceeded limit, bypassing]`,
+                );
+              groundingRetryCount = 0;
+              messages.push({
+                role: "user",
+                content: `[Note: Grounding check disabled after repeated failures. Proceeding without marker. To re-enable, reset the agent.]`,
+              });
+              // fall through — tool call будет выполнен
+            } else {
+              if (!quiet)
+                renderer?.writeError(
+                  `  [grounding: ${groundingRetryCount}/${maxRetries} retries]`,
+                );
+              messages.push({
+                role: "user",
+                content: `[CRITICAL: Output @grounding[файл: <path>] BEFORE each <tool_call>.\nExample:\n@grounding[файл: package.json]\n<tool_call>{"name":"read_file","arguments":{"path":"package.json"}}</tool_call>]`,
+              });
+              continue;
+            }
+          } else if (groundingCfg.strictMode) {
             if (!quiet)
               renderer?.writeError(`  [grounding: strict mode, retrying]`);
-            const userTask = enrichedPrompt.slice(0, 200);
             messages.push({
               role: "user",
-              content: `[Grounding Error: Missing @grounding[файл: path] marker. Output the marker BEFORE each <tool_call>. Your task: "${userTask}". Use a VALID tool call — do NOT return empty commands.`,
+              content: `[Grounding Error: Missing @grounding[файл: path] marker. Output the marker BEFORE each <tool_call>. Example:\n@grounding[файл: package.json]\n<tool_call>{"name":"read_file","arguments":{"path":"package.json"}}</tool_call>]`,
+            });
+            continue;
+          } else {
+            if (!quiet)
+              renderer?.writeDim(
+                `  [grounding: missing marker, reminder ${consecutiveMissingGrounding}/${maxMissing}]`,
+              );
+            messages.push({
+              role: "user",
+              content: `[Reminder: Include @grounding[файл: path] marker before each <tool_call> to prevent path hallucinations. Example:\n@grounding[файл: package.json]\n<tool_call>{"name":"read_file","arguments":{"path":"package.json"}}</tool_call>]`,
             });
             continue;
           }
-
-          if (!quiet)
-            renderer?.writeDim(
-              `  [grounding: missing marker, reminder ${consecutiveMissingGrounding}/${maxMissing}]`,
-            );
-          messages.push({
-            role: "user",
-            content: `[Reminder: Include @grounding[файл: path] marker before each <tool_call> to prevent path hallucinations.]`,
-          });
-          continue;
         } else {
           consecutiveMissingGrounding = 0;
+          groundingRetryCount = 0;
 
           // Проверка соответствия пути в маркере и в аргументах tool_call
           for (let i = 0; i < pathCalls.length && i < groundPaths.length; i++) {

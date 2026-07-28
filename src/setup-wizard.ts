@@ -435,6 +435,7 @@ function makeDefaultConfig(): AppConfig {
         strictMode: true,
         checkFiles: true,
         maxMissingGrounding: 2,
+        maxConsecutiveGroundingErrors: 5,
       },
     },
   };

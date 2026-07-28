@@ -98,6 +98,8 @@ export interface GroundingConfig {
   checkFiles?: boolean;
   /** Сколько раз можно пропустить токен до retry (default: 3) */
   maxMissingGrounding?: number;
+  /** Лимит CRITICAL retry-попыток подряд — после превышения grounding отключается до конца сессии (default: 5) */
+  maxConsecutiveGroundingErrors?: number;
 }
 
 /** Конфигурация auto-specialist (автоделегирование при повторяющихся ошибках) */
@@ -113,7 +115,7 @@ export interface SpecialistConfig {
 }
 
 /** Режимы работы агента: fast (без скилов), base (обычный), pro (с grill-me) */
-export type AgentMode = 'fast' | 'base' | 'pro';
+export type AgentMode = "fast" | "base" | "pro";
 
 /** Runtime-флаги сессии (не сохраняются, передаются через CLI) */
 export interface RuntimeFlags {
