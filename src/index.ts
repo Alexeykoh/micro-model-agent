@@ -1,6 +1,8 @@
 export * from './config/index'
 export * from './logger/index'
 export * from './core/index'
+export * from './llm/index'
+export * from './tools/index'
 export * from './migration/index'
 
 import { MigrationDetector } from './migration/detect'
