@@ -1,0 +1,15 @@
+{
+  "file.created": "Создан {path}",
+  "file.deleted": "Удалён {path}",
+  "file.updated": "Обновлён {path}",
+  "error.timeout": "Таймаут запроса",
+  "error.unknown": "Неизвестная ошибка",
+  "error.notfound": "Не найдено: {path}",
+  "session.started": "Сессия начата: {id}",
+  "session.ended": "Сессия завершена: {id}",
+  "tool.executed": "Выполнен {name}",
+  "tool.failed": "Инструмент {name} упал: {error}",
+  "plan.created": "План создан: {title} ({steps} шагов)",
+  "plan.step.done": "Шаг {n}/{total}: {description} ✓",
+  "plan.complete": "Задача выполнена: {summary}"
+}

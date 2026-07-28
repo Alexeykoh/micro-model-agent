@@ -1,0 +1,15 @@
+{
+  "file.created": "Created {path}",
+  "file.deleted": "Deleted {path}",
+  "file.updated": "Updated {path}",
+  "error.timeout": "Request timed out",
+  "error.unknown": "An unknown error occurred",
+  "error.notfound": "Not found: {path}",
+  "session.started": "Session started: {id}",
+  "session.ended": "Session ended: {id}",
+  "tool.executed": "Executed {name}",
+  "tool.failed": "Tool {name} failed: {error}",
+  "plan.created": "Plan created: {title} ({steps} steps)",
+  "plan.step.done": "Step {n}/{total}: {description} ✓",
+  "plan.complete": "Task complete: {summary}"
+}
