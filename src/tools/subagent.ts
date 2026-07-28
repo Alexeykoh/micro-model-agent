@@ -52,80 +52,8 @@ export interface IsolatedLoopResult {
 
 // ─── Context builder ──────────────────────────────────────
 
-/**
- * Собирает контекст для субагента: список файлов, зависимости, tsconfig.
- * Сканирует все директории проекта (не только src/).
- *
- * @param cwd - корневая директория проекта
- * @returns Текстовый контекст для system prompt субагента
- */
-export function buildSubagentContext(cwd: string): string {
-  const lines: string[] = [];
-
-  // Scan ALL directories for existing source files (not just src/)
-  try {
-    const entries = readdirSync(cwd, { withFileTypes: true });
-    for (const entry of entries) {
-      if (
-        !entry.isDirectory() ||
-        entry.name.startsWith(".") ||
-        entry.name === "node_modules"
-      )
-        continue;
-      const dirPath = join(cwd, entry.name);
-      try {
-        const files = (readdirSync(dirPath, { recursive: true }) as string[])
-          .filter((f: string) => /\.(ts|tsx|js|jsx)$/.test(f))
-          .slice(0, 20);
-        if (files.length > 0) {
-          lines.push(`Files in ${entry.name}/: ${files.join(", ")}`);
-        }
-      } catch {
-        /* skip unreadable dirs */
-      }
-    }
-  } catch {
-    /* no entries */
-  }
-
-  // Include root-level .ts/.js files too
-  try {
-    const rootFiles = readdirSync(cwd).filter(
-      (f: string) => /\.(ts|js)$/.test(f) && !f.startsWith("."),
-    );
-    if (rootFiles.length > 0) {
-      lines.push("Root files: " + rootFiles.join(", "));
-    }
-  } catch {
-    /* skip */
-  }
-
-  try {
-    const pkgPath = join(cwd, "package.json");
-    if (existsSync(pkgPath)) {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-      const deps = Object.keys(pkg.dependencies || {});
-      const devDeps = Object.keys(pkg.devDependencies || {});
-      if (deps.length > 0) lines.push("Dependencies: " + deps.join(", "));
-      if (devDeps.length > 0)
-        lines.push("DevDependencies: " + devDeps.join(", "));
-      lines.push("Module type: " + (pkg.type || "commonjs"));
-    }
-  } catch {
-    /* no package.json */
-  }
-
-  try {
-    const tsconfigPath = join(cwd, "tsconfig.json");
-    if (existsSync(tsconfigPath)) {
-      lines.push("Has tsconfig.json");
-    }
-  } catch {
-    /* no tsconfig */
-  }
-
-  return lines.join("\n");
-}
+import { buildSubagentContext } from "../subagent/context.js";
+export { buildSubagentContext };
 
 /**
  * Контекст для specialist'а — фокусированное описание ошибки.
