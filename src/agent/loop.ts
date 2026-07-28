@@ -48,6 +48,7 @@ import {
   logLLMRequest,
   logLLMResponse,
   logToolCall,
+  logToolOutput,
   setStatusWriter,
   writeStatus,
 } from "../logger.js";
@@ -1278,6 +1279,7 @@ export async function runAgentLoop(
       }
 
       const toolTime = ((performance.now() - toolStart) / 1000).toFixed(1);
+      logToolOutput(parsed.name, toolOutput, toolExitCode);
       logToolCall(
         parsed.name,
         preview,
