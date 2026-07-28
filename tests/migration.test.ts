@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmdirSync, mkdirSync } from 'fs'
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { MigrationDetector } from '../src/migration/detect'
@@ -13,7 +13,7 @@ describe('MigrationDetector', () => {
   })
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmdirSync(tmpDir, { recursive: true })
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true })
   })
 
   it('should detect v1 config by missing version field', () => {
@@ -51,7 +51,7 @@ describe('BackupManager', () => {
   })
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmdirSync(tmpDir, { recursive: true })
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true })
   })
 
   it('should backup config file', () => {

@@ -1,4 +1,4 @@
-import { copyFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { AppConfig } from '../config/types'
 
@@ -22,14 +22,7 @@ export class BackupManager {
     if (existsSync(bakDir)) return
 
     if (existsSync(this.configDir)) {
-      mkdirSync(bakDir, { recursive: true })
-      const entries = readdirSync(this.configDir)
-      for (const entry of entries) {
-        if (entry.endsWith('.bak')) continue
-        try {
-          copyFileSync(join(this.configDir, entry), join(bakDir, entry))
-        } catch { /* skip dirs */ }
-      }
+      cpSync(this.configDir, bakDir, { recursive: true })
     }
   }
 
