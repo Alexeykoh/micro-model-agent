@@ -15,7 +15,7 @@ export {
   bashTool, subagentTool,
   webSearchTool, webFetchTool, webBrowseTool,
   planTool, todoTool, questionTool, approveTool,
-  loadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
+  createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
   registerAllTools,
 } from './tools/index'
 export type { ToolDefinition, ToolContext, ToolResult, ToolCall, PluginHook, PluginManager } from './tools/types'

@@ -1,8 +1,8 @@
 export { ModuleRegistry } from './registry'
 export type { AgentModule, AgentPlugin } from './types'
 
-export { SkillsLoader, SkillsMatcher } from './skills'
-export type { SkillMeta } from './skills'
+export { SkillsLoader, SkillsMatcher, SkillsModule } from './skills'
+export type { SkillMeta, LoadResult } from './skills'
 
 export { PluginManager } from './plugins'
 export { PluginLoader } from './plugins/loader'

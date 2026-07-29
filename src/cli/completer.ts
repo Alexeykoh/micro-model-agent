@@ -1,3 +1,5 @@
+import type { SkillsModule } from '../modules/skills/module'
+
 export interface CompletionContext {
   line: string
   cursor: number
@@ -112,6 +114,37 @@ export class SessionNameProvider implements CompletionProvider {
     const names = this.getNames()
     if (!ctx.partial) return names
     return names.filter(n => n.toLowerCase().includes(ctx.partial.toLowerCase()))
+  }
+}
+
+export class SkillNameProvider implements CompletionProvider {
+  name = 'skill-names'
+  private skillsModule: SkillsModule
+
+  constructor(skillsModule: SkillsModule) {
+    this.skillsModule = skillsModule
+  }
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex >= 2 && ctx.tokens[0] === '/skill' &&
+      (ctx.tokens[1] === 'load' || ctx.tokens[1] === 'unload')
+  }
+
+  complete(ctx: CompletionContext): string[] {
+    const subcmd = ctx.tokens[1]
+    if (subcmd === 'load') {
+      const available = this.skillsModule.getAvailable()
+      const names = available.map(s => s.name)
+      if (!ctx.partial) return names
+      return names.filter(n => n.toLowerCase().includes(ctx.partial.toLowerCase()))
+    }
+    if (subcmd === 'unload') {
+      const loaded = this.skillsModule.getLoaded()
+      const names = loaded.map(s => s.name)
+      if (!ctx.partial) return names
+      return names.filter(n => n.toLowerCase().includes(ctx.partial.toLowerCase()))
+    }
+    return []
   }
 }
 

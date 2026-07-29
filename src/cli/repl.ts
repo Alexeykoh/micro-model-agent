@@ -3,10 +3,12 @@ import pc from 'picocolors'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
 import { SessionNameProvider } from './completer'
+import { SkillNameProvider } from './completer'
 import { FormattingStream } from '../ui/md-formatter'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
 import type { SessionManager } from '../modules/session/manager'
+import type { SkillsModule } from '../modules/skills/module'
 
 interface SlashCommand {
   name: string
@@ -32,14 +34,17 @@ export class Repl {
   private agent: Agent
   private config: AppConfig
   private sessionManager?: SessionManager
+  private skillsModule?: SkillsModule
 
-  constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager) {
+  constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager, skillsModule?: SkillsModule) {
     this.agent = agent
     this.config = config
     this.sessionManager = sessionManager
+    this.skillsModule = skillsModule
     this.registerBuiltinCommands()
     this.registerMmaCommands()
     this.registerSessionCommands()
+    this.registerSkillCommands()
     this.setupCompleter()
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -243,6 +248,99 @@ export class Repl {
     })
   }
 
+  private registerSkillCommands(): void {
+    if (!this.skillsModule) return
+
+    this.registerCommand({
+      name: 'skill',
+      description: 'Manage skills (list, loaded, load, unload, search)',
+      action: (args: string[]) => {
+        const subcmd = args[0]
+        const arg = args.slice(1).join(' ')
+
+        if (!subcmd || subcmd === 'list') {
+          const available = this.skillsModule!.getAvailable()
+          if (available.length === 0) {
+            console.log('No skills available')
+            return
+          }
+          console.log(pc.bold('Available skills:'))
+          for (const skill of available) {
+            const tokens = Math.ceil(skill.content.length / 4)
+            const loaded = this.skillsModule!.getLoaded().some(s => s.name === skill.name)
+            const marker = loaded ? pc.green(' [loaded]') : ''
+            console.log(`  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`)
+          }
+          return
+        }
+
+        if (subcmd === 'loaded') {
+          const loaded = this.skillsModule!.getLoaded()
+          const budget = this.skillsModule!.getBudget()
+          if (loaded.length === 0) {
+            console.log('No skills loaded')
+            return
+          }
+          console.log(pc.bold('Loaded skills:'))
+          for (const skill of loaded) {
+            const tokens = Math.ceil(skill.content.length / 4)
+            console.log(`  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`)
+          }
+          console.log(pc.dim(`\n  Budget: ${budget.used} / ${budget.total} tokens (${budget.remaining} remaining)`))
+          return
+        }
+
+        if (subcmd === 'load') {
+          if (!arg) {
+            console.log('Usage: /skill load <name>')
+            return
+          }
+          const result = this.skillsModule!.loadByName(arg)
+          if (result.success) {
+            console.log(pc.green(result.message))
+          } else {
+            console.log(pc.red(result.message))
+          }
+          return
+        }
+
+        if (subcmd === 'unload') {
+          if (!arg) {
+            console.log('Usage: /skill unload <name>')
+            return
+          }
+          if (this.skillsModule!.unload(arg)) {
+            console.log(pc.green(`Skill "${arg}" unloaded`))
+          } else {
+            console.log(pc.red(`Skill "${arg}" is not loaded`))
+          }
+          return
+        }
+
+        if (subcmd === 'search') {
+          if (!arg) {
+            console.log('Usage: /skill search <query>')
+            return
+          }
+          const results = this.skillsModule!.search(arg)
+          if (results.length === 0) {
+            console.log(`No skills match "${arg}"`)
+            return
+          }
+          console.log(pc.bold(`Skills matching "${arg}":`))
+          for (const skill of results) {
+            const tokens = Math.ceil(skill.content.length / 4)
+            console.log(`  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`)
+          }
+          return
+        }
+
+        console.log(pc.red(`Unknown skill subcommand: ${subcmd}`))
+        console.log('Usage: /skill [list|loaded|load|unload|search]')
+      },
+    })
+  }
+
   private setupCompleter(): void {
     const slashCommands = Array.from(this.commands.keys())
     this.completer.registerProvider(new SlashCommandProvider(slashCommands))
@@ -250,6 +348,9 @@ export class Repl {
       this.completer.registerProvider(new SessionNameProvider(() =>
         this.sessionManager!.list().map(s => s.name)
       ))
+    }
+    if (this.skillsModule) {
+      this.completer.registerProvider(new SkillNameProvider(this.skillsModule))
     }
   }
 
@@ -343,6 +444,7 @@ export class Repl {
   start(): void {
     this.running = true
 
+    console.log(pc.bold(pc.green('MMA REPL v2')))
     const divider = '─'.repeat(50)
 
     const ctx = this.config.contextWindow
@@ -354,6 +456,11 @@ export class Repl {
     console.log(`  ${pc.yellow('Model:')}      ${pc.white(this.config.model)}`)
     console.log(`  ${pc.yellow('Provider:')}   ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
     console.log(`  ${pc.yellow('Context:')}    ${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`)
+
+    if (this.skillsModule) {
+      const budget = this.skillsModule.getBudget()
+      console.log(`  ${pc.yellow('Skills:')}     ${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`)
+    }
 
     const meta = this.sessionManager?.getActiveMeta()
     if (meta) {

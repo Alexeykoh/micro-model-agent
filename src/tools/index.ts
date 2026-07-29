@@ -20,10 +20,11 @@ import { planTool } from './plan'
 import { todoTool } from './todo'
 import { questionTool } from './question'
 import { approveTool } from './approve'
-import { loadSkillTool } from './load-skill'
+import { createLoadSkillTool } from './load-skill'
 import { pipelineRunTool } from './pipeline-run'
 import { mcpCallTool } from './mcp-call'
 import { searchHistoryTool } from './search-history'
+import type { SkillsModule } from '../modules/skills/module'
 
 export { ToolRegistry, ToolExecutor }
 export type { ToolDefinition, ToolContext, ToolResult, ToolCall, PluginHook, PluginManager }
@@ -35,11 +36,11 @@ export {
   webSearchTool, webFetchTool, webBrowseTool,
   planTool, todoTool,
   questionTool, approveTool,
-  loadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
+  createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
 }
 
-export function registerAllTools(registry: ToolRegistry): void {
-  const tools = [
+export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsModule): void {
+  const tools: ToolDefinition[] = [
     readFileTool, writeFileTool, editFileTool,
     globTool, grepTool, listDirTool, createDirTool,
     deleteFileTool, moveFileTool, fileInfoTool,
@@ -47,8 +48,13 @@ export function registerAllTools(registry: ToolRegistry): void {
     webSearchTool, webFetchTool, webBrowseTool,
     planTool, todoTool,
     questionTool, approveTool,
-    loadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
+    pipelineRunTool, mcpCallTool, searchHistoryTool,
   ]
+
+  if (skillsModule) {
+    tools.push(createLoadSkillTool(skillsModule))
+  }
+
   for (const tool of tools) {
     registry.register(tool)
   }

@@ -30,8 +30,8 @@ async function main(): Promise<void> {
     }
     agent.shutdown()
   } else {
-    const { agent, config, sessionManager } = await bootstrap()
-    const repl = new Repl(agent, config, sessionManager)
+    const { agent, config, sessionManager, skillsModule } = await bootstrap()
+    const repl = new Repl(agent, config, sessionManager, skillsModule)
     repl.start()
   }
 }

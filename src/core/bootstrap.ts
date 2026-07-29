@@ -1,7 +1,6 @@
 import { loadConfig } from '../config/config'
 import { Logger } from '../logger/app-logger'
 import { OpenAICompatProvider } from '../llm/openai-compat'
-import { ModelLoader } from '../llm/model-loader'
 import { ToolRegistry, registerAllTools } from '../tools/index'
 import { ToolExecutor } from '../tools/executor'
 import { ModuleRegistry } from '../modules/registry'
@@ -11,6 +10,7 @@ import { HallucinationDetector } from '../modules/hallucination/detector'
 import { ExecutionModule } from '../modules/execution/module'
 import { SessionStore, SessionManager, SessionModule } from '../modules/session/index'
 import { UserProfile } from '../modules/user-profile/profile'
+import { SkillsLoader, SkillsMatcher, SkillsModule } from '../modules/skills/index'
 import { Agent } from './agent'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -35,9 +35,10 @@ export interface BootstrapResult {
   config: AppConfig
   logger: Logger
   sessionManager: SessionManager
+  skillsModule: SkillsModule
 }
 
-export async function bootstrap(configDir?: string, projectDir?: string): Promise<BootstrapResult> {
+export function bootstrap(configDir?: string, projectDir?: string): BootstrapResult {
   const dir = configDir || join(homedir(), '.mma')
   const projectConfigPath = projectDir ? join(projectDir, '.mmarc.json') : join(process.cwd(), '.mmarc.json')
 
@@ -46,26 +47,6 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   const logger = new Logger(config.logLevel as any)
   logger.setLogDir(join(dir, 'logs'))
   logger.debug('MMA bootstrap', { version: config.version, model: config.model })
-
-  const modelLoader = new ModelLoader(config.provider.baseUrl, logger)
-  const loadResult = await modelLoader.ensureModelLoaded({
-    model: config.model,
-    contextLength: config.contextWindow,
-    flashAttention: config.modelLoad.flashAttention,
-    evalBatchSize: config.modelLoad.evalBatchSize,
-    offloadKvCacheToGpu: config.modelLoad.offloadKvCacheToGpu,
-    autoLoad: config.modelLoad.autoLoad,
-  })
-
-  if (!loadResult.success) {
-    logger.warn(`Model auto-load failed: ${loadResult.error}. Continuing anyway...`)
-  } else if (!loadResult.alreadyLoaded) {
-    if (loadResult.loadTime !== undefined) {
-      logger.info(`Model loaded in ${loadResult.loadTime}s`)
-    } else {
-      logger.info('Model loaded')
-    }
-  }
 
   const profile = new UserProfile(join(dir))
   profile.load() || profile.collect()
@@ -78,12 +59,22 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     contextWindow: config.contextWindow,
   })
 
+  const baseDir = projectDir || process.cwd()
+
+  const skillsLoader = new SkillsLoader()
+  const builtinDir = join(import.meta.dirname, '..', 'modules', 'skills', 'builtin')
+  const globalDir = join(dir, 'skills')
+  const projectSkillsDir = join(baseDir, '.mma', 'skills')
+  const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir)
+
+  const skillsMatcher = new SkillsMatcher()
+  const skillsBudget = Math.floor(config.contextWindow * 0.05)
+  const skillsModule = new SkillsModule(availableSkills, skillsMatcher, skillsBudget)
+
   const toolRegistry = new ToolRegistry()
-  registerAllTools(toolRegistry)
+  registerAllTools(toolRegistry, skillsModule)
 
   const pluginManager = new PluginManager()
-
-  const baseDir = projectDir || process.cwd()
 
   const systemInfoPrompt: PromptBlock = {
     content: buildSystemInfo(config, baseDir, profile.compress()),
@@ -138,6 +129,8 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   const sessionModule = new SessionModule(sessionManager)
   moduleRegistry.register(sessionModule)
 
+  moduleRegistry.register(skillsModule)
+
   const plugin = execModule.getPlugin()
   if (plugin) {
     pluginManager.register(plugin)
@@ -181,5 +174,5 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
 
   const agent = new Agent(agentDeps)
 
-  return { agent, config, logger, sessionManager }
+  return { agent, config, logger, sessionManager, skillsModule }
 }

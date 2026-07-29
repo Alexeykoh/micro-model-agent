@@ -36,7 +36,7 @@ export class SkillsLoader {
     const frontmatter = this.parseFrontmatter(match[1])
     if (!frontmatter.name) return null
 
-    if (frontmatter.mma_version && frontmatter.mma_version !== 2) {
+    if (frontmatter.mma_version && String(frontmatter.mma_version) !== '2') {
       return null
     }
 
