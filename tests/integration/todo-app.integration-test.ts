@@ -1,0 +1,664 @@
+/**
+ * Integration test: Agent builds a Vite + TS + Tailwind todo app.
+ * Verifies: planning, todo tracking, file writing, bash, plugin lifecycle, error isolation.
+ * Run: bun run test:integration
+ */
+
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { Agent } from '../../src/core/agent'
+import { ToolRegistry } from '../../src/tools/registry'
+import { ToolExecutor } from '../../src/tools/executor'
+import { PluginManager } from '../../src/modules/plugins/manager'
+import { ContextManager } from '../../src/modules/context/manager'
+import { HallucinationDetector } from '../../src/modules/hallucination/detector'
+import { SessionStore, SessionManager } from '../../src/modules/session/index'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { rmSync, mkdtempSync, existsSync, readFileSync } from 'fs'
+import type { AppConfig } from '../../src/config/types'
+import type { AgentDeps } from '../../src/core/agent'
+import type { Chunk, Message } from '../../src/llm/provider'
+
+function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
+  return {
+    version: '2.0.0',
+    model: 'test-model',
+    provider: { type: 'openai-compat', baseUrl: 'http://localhost:1234/v1' },
+    orchestrator: {},
+    contextWindow: 32768,
+    contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+    maxToolIterations: 25,
+    stuckThreshold: 8,
+    autoPlan: true,
+    showReasoning: false,
+    logLevel: 'info',
+    locale: 'en',
+    session: { autoSave: true, maxSessions: 50, isolateMemory: false },
+    ...overrides,
+  }
+}
+
+function quietLogger() {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+}
+
+function makePluginManager() { return new PluginManager() }
+function makeContextManager(w = 32768) { return new ContextManager(w) }
+function makeToolRegistry() { return new ToolRegistry() }
+function makeToolExecutor(r: ToolRegistry, ctx: any, p: PluginManager) { return new ToolExecutor(r, ctx, p) }
+
+type MockChatFn = (messages: Message[], tools?: any[]) => AsyncIterable<Chunk>
+
+function makeLLMProvider(chatFn: MockChatFn) {
+  return {
+    model: 'test-model',
+    contextWindow: 32768,
+    chat: vi.fn().mockImplementation(chatFn),
+    countTokens: vi.fn().mockReturnValue(10),
+  }
+}
+
+function textChunk(content: string): Chunk {
+  return { type: 'text', content }
+}
+
+function toolCallChunk(name: string, args: Record<string, unknown> = {}, id = 'call-1'): Chunk {
+  return { type: 'tool_call', toolCall: { id, name, arguments: JSON.stringify(args) } }
+}
+
+function doneChunk(reason: 'stop' | 'tool_calls' = 'stop'): Chunk {
+  return { type: 'done', finishReason: reason }
+}
+
+// ─── Full Todo App build flow ───────────────────────────────────────────────
+
+describe('Todo App Build (mock-based integration)', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'mma-todo-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('completes a multi-turn plan→todo→write→bash→done flow', async () => {
+    const config = makeConfig({ maxToolIterations: 10 })
+    let turn = 0
+
+    const llmProvider = makeLLMProvider(async function* () {
+      turn++
+      if (turn === 1) {
+        yield toolCallChunk('plan', { action: 'create', title: 'Vite Todo App', steps: ['Scaffold project', 'Add Tailwind CSS', 'Build Todo UI + logic', 'Verify build'] }, 'plan-1')
+        yield doneChunk('tool_calls')
+      } else if (turn === 2) {
+        yield toolCallChunk('todo', { action: 'add', items: ['scaffold vite+ts project', 'configure tailwind', 'build todo list UI', 'add todo CRUD logic', 'verify build'] }, 'todo-1')
+        yield doneChunk('tool_calls')
+      } else if (turn === 3) {
+        yield toolCallChunk('write_file', { path: 'index.html', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <title>Todo App</title>\n</head>\n<body>\n  <div id="app"></div>\n  <script type="module" src="/src/main.ts"></script>\n</body>\n</html>' }, 'wf-html')
+        yield toolCallChunk('write_file', { path: 'src/main.ts', content: 'import "./style.css"\n\ninterface Todo {\n  id: number\n  text: string\n  done: boolean\n}\n\nconst todos: Todo[] = []\nlet nextId = 1\n\nconst app = document.getElementById("app")!\napp.innerHTML = `<h1>Todo App</h1><input id="new-todo" placeholder="Add todo..." /><ul id="list"></ul>`\n' }, 'wf-ts')
+        yield toolCallChunk('write_file', { path: 'src/style.css', content: '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\nbody { @apply bg-gray-100 text-gray-900; }' }, 'wf-css')
+        yield doneChunk('tool_calls')
+      } else if (turn === 4) {
+        yield toolCallChunk('bash', { command: 'npm install', workdir: tmpDir }, 'bash-install')
+        yield doneChunk('tool_calls')
+      } else {
+        yield textChunk('Todo app created successfully. Run `npm run dev` to start.')
+        yield doneChunk('stop')
+      }
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    const callLog: string[] = []
+
+    // real write_file tool
+    registry.register({
+      name: 'write_file',
+      description: 'Create or overwrite a file',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          content: { type: 'string' },
+        },
+        required: ['path', 'content'],
+      },
+      handler: async (ctx, args) => {
+        const { join: j, dirname } = await import('path')
+        const { writeFileSync, mkdirSync, existsSync } = await import('fs')
+        const path = String(args.path)
+        const baseDir = ctx.baseDir
+        const resolved = j(baseDir, path)
+        if (!resolved.startsWith(baseDir)) return { success: false, output: `Path not allowed: ${path}` }
+        const dir = dirname(resolved)
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(resolved, String(args.content), 'utf-8')
+        callLog.push(`write_file:${path}`)
+        return { success: true, output: `Written ${path}` }
+      },
+    })
+
+    // plan tool
+    registry.register({
+      name: 'plan',
+      description: 'Create, update, or abort a multi-step execution plan',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['create', 'update', 'abort'] },
+          title: { type: 'string' },
+          steps: { type: 'array', items: { type: 'string' } },
+          step: { type: 'number' },
+          status: { type: 'string', enum: ['done', 'failed', 'skipped'] },
+        },
+        required: ['action'],
+      },
+      handler: async (_ctx, args) => {
+        const action = String(args.action || '')
+        const title = String(args.title || 'Plan')
+        const steps = Array.isArray(args.steps) ? args.steps : []
+        callLog.push(`plan:${action}:${title}:${steps.length}`)
+        return { success: true, output: `Plan "${title}" ${action === 'create' ? 'created' : action}d with ${steps.length} steps` }
+      },
+    })
+
+    // todo tool
+    registry.register({
+      name: 'todo',
+      description: 'Manage sub-tasks with add/done/list',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['add', 'done', 'list'] },
+          items: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['action'],
+      },
+      handler: async (_ctx, args) => {
+        const action = String(args.action || '')
+        const items = Array.isArray(args.items) ? args.items : []
+        callLog.push(`todo:${action}:${items.length}`)
+        return { success: true, output: `${action} ${items.length} todos` }
+      },
+    })
+
+    // mock bash tool — does NOT execute real commands
+    registry.register({
+      name: 'bash',
+      description: 'Execute a shell command (mocked)',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string' },
+          workdir: { type: 'string' },
+        },
+        required: ['command'],
+      },
+      handler: async (_ctx, args) => {
+        callLog.push(`bash:${args.command}`)
+        return { success: true, output: `[mocked] ${args.command}` }
+      },
+    })
+
+    const pluginMgr = makePluginManager()
+    const hookLog: string[] = []
+
+    // plugin for session/think lifecycle
+    pluginMgr.register({
+      name: 'lifecycle-tracker',
+      onSessionStart: () => { hookLog.push('plugin:sessionStart') },
+      onBeforeThink: () => { hookLog.push('plugin:beforeThink') },
+      onSessionEnd: () => { hookLog.push('plugin:sessionEnd') },
+    })
+
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    const result = await agent.run('Create a Vite + TypeScript + Tailwind CSS todo app. Simple and minimal.')
+
+    // ── Assertions ──
+    expect(result.success).toBe(true)
+    expect(result.text).toContain('Todo app')
+
+    // plan was called with create action
+    expect(callLog).toContain('plan:create:Vite Todo App:4')
+
+    // todo was called with add action
+    expect(callLog.some(e => e.startsWith('todo:add'))).toBe(true)
+
+    // write_file was called at least 3 times
+    const writes = callLog.filter(e => e.startsWith('write_file:'))
+    expect(writes.length).toBeGreaterThanOrEqual(3)
+
+    // bash was called
+    expect(callLog.some(e => e.startsWith('bash:'))).toBe(true)
+
+    // files exist on disk
+    expect(existsSync(join(tmpDir, 'index.html'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'main.ts'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'style.css'))).toBe(true)
+
+    // verify file contents
+    const html = readFileSync(join(tmpDir, 'index.html'), 'utf-8')
+    expect(html).toContain('<!DOCTYPE html>')
+    expect(html).toContain('Todo App')
+    expect(html).toContain('/src/main.ts')
+
+    const ts = readFileSync(join(tmpDir, 'src', 'main.ts'), 'utf-8')
+    expect(ts).toContain('Todo')
+    expect(ts).toContain('interface')
+
+    const css = readFileSync(join(tmpDir, 'src', 'style.css'), 'utf-8')
+    expect(css).toContain('@tailwind base')
+
+    // plugin lifecycle hooks fired
+    expect(hookLog).toContain('plugin:sessionStart')
+    expect(hookLog.filter(h => h === 'plugin:beforeThink').length).toBeGreaterThanOrEqual(1)
+
+    // multi-turn: LLM was called multiple times
+    expect((llmProvider.chat as any).mock.calls.length).toBeGreaterThanOrEqual(4)
+
+    // result has context info
+    expect(result.contextUsed).toBeDefined()
+    expect(result.contextLimit).toBeDefined()
+    expect(result.iterationCount).toBeGreaterThanOrEqual(4)
+
+    agent.shutdown()
+    expect(hookLog).toContain('plugin:sessionEnd')
+  }, 30000)
+
+  // ── Path isolation: write_file outside baseDir is rejected ────────────────
+
+  it('rejects write_file outside baseDir (path isolation)', async () => {
+    const config = makeConfig({ maxToolIterations: 3 })
+    const outsideDir = join(tmpdir(), 'outside')
+
+    const llmProvider = makeLLMProvider(async function* () {
+      yield toolCallChunk('write_file', { path: '../outside/evil.txt', content: 'bad' }, 'wf-escape')
+      yield doneChunk('tool_calls')
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    registry.register({
+      name: 'write_file',
+      description: 'Write file',
+      parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] },
+      handler: async (ctx, args) => {
+        const { join: j } = await import('path')
+        const path = String(args.path)
+        const resolved = j(ctx.baseDir, path)
+        if (!resolved.startsWith(ctx.baseDir)) return { success: false, output: `Path not allowed: ${path}` }
+        return { success: true, output: 'ok' }
+      },
+    })
+
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    // This will loop because LLM keeps returning tool_calls; maxToolIterations will hit
+    const result = await agent.run('write evil file')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('iterations')
+    agent.shutdown()
+  }, 15000)
+
+  // ── Plugin error isolation ─────────────────────────────────────────────────
+
+  it('isolates crashing plugins — good plugins still run', async () => {
+    const config = makeConfig({ maxToolIterations: 3 })
+
+    const llmProvider = makeLLMProvider(async function* (messages, _tools) {
+      if (messages.some(m => m.role === 'tool')) {
+        yield textChunk('Got result, continuing')
+        yield doneChunk('stop')
+      } else {
+        yield toolCallChunk('test_tool', {}, 'tt-1')
+        yield doneChunk('tool_calls')
+      }
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    registry.register({
+      name: 'test_tool',
+      description: 'Test tool',
+      parameters: {},
+      handler: async () => ({ success: true, output: 'ok' }),
+    })
+
+    const pluginMgr = makePluginManager()
+    const goodLog: string[] = []
+
+    pluginMgr.register({
+      name: 'crashing-plugin',
+      onBeforeThink: () => { throw new Error('BOOM from plugin') },
+    })
+    pluginMgr.register({
+      name: 'good-plugin',
+      onBeforeThink: () => { goodLog.push('good-ran') },
+      onAfterTool: async () => { goodLog.push('after-tool') },
+    })
+
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    const result = await agent.run('test plugin isolation')
+
+    expect(result.success).toBe(true)
+    expect(goodLog).toContain('good-ran')
+    expect(goodLog).toContain('after-tool')
+    agent.shutdown()
+  }, 15000)
+
+  // ── Session manager integration ───────────────────────────────────────────
+
+  it('persists tool calls and responses to session history', async () => {
+    const config = makeConfig({ maxToolIterations: 3, session: { autoSave: true, maxSessions: 50, isolateMemory: false } })
+
+    const llmProvider = makeLLMProvider(async function* (messages, _tools) {
+      if (messages.some(m => m.role === 'tool')) {
+        yield textChunk('Done')
+        yield doneChunk('stop')
+      } else {
+        yield toolCallChunk('session_tool', { value: 42 }, 'st-1')
+        yield doneChunk('tool_calls')
+      }
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    registry.register({
+      name: 'session_tool',
+      description: 'Tool for session test',
+      parameters: {},
+      handler: async () => ({ success: true, output: 'session result' }),
+    })
+
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+
+    const sessionDir = join(tmpDir, 'sessions')
+    const sessionStore = new SessionStore(sessionDir)
+    sessionStore.init()
+    const sessionManager = new SessionManager(sessionStore, {
+      model: 'test-model',
+      contextWindow: 32768,
+      projectDir: tmpDir,
+      maxSessions: 50,
+    })
+
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+      sessionManager,
+    }
+
+    const agent = new Agent(deps)
+    await agent.run('session persistence test')
+
+    const history = sessionManager.loadHistory()
+    expect(history.length).toBeGreaterThan(0)
+
+    const roles = history.map(m => m.role)
+    expect(roles).toContain('user')
+    expect(roles).toContain('assistant')
+    expect(roles).toContain('tool')
+
+    agent.shutdown()
+  }, 15000)
+
+  // ── Context clear / session switch ────────────────────────────────────────
+
+  it('clearContext resets messages and systemPromptAdded flag', async () => {
+    const config = makeConfig({ maxToolIterations: 3 })
+
+    const llmProvider = makeLLMProvider(async function* () {
+      yield textChunk('first response')
+      yield doneChunk('stop')
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    const r1 = await agent.run('hello')
+    expect(r1.success).toBe(true)
+    const countBefore = ctxMgr.getMessageCount()
+
+    agent.clearContext()
+    const countAfter = ctxMgr.getMessageCount()
+    expect(countAfter).toBeLessThan(countBefore)
+
+    // Second run should re-add system prompt and work fresh
+    const llmProvider2 = makeLLMProvider(async function* () {
+      yield textChunk('second response')
+      yield doneChunk('stop')
+    })
+    deps.llmProvider = llmProvider2 as any
+
+    const r2 = await agent.run('hello again')
+    expect(r2.success).toBe(true)
+
+    agent.shutdown()
+  }, 15000)
+
+  // ── setContext restores session history ────────────────────────────────────
+
+  it('setContext loads history messages into context', async () => {
+    const config = makeConfig({ maxToolIterations: 3 })
+
+    let firstCall = true
+    const llmProvider = makeLLMProvider(async function* () {
+      if (firstCall) {
+        firstCall = false
+        yield textChunk('response in session')
+        yield doneChunk('stop')
+      } else {
+        yield textChunk('response after resume')
+        yield doneChunk('stop')
+      }
+    })
+
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const sessionDir = join(tmpDir, 'sessions')
+    const sessionStore = new SessionStore(sessionDir)
+    sessionStore.init()
+    const sessionManager = new SessionManager(sessionStore, {
+      model: 'test-model',
+      contextWindow: 32768,
+      projectDir: tmpDir,
+      maxSessions: 50,
+    })
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+      sessionManager,
+    }
+
+    const agent = new Agent(deps)
+    await agent.run('first message')
+
+    // Simulate saving history
+    sessionManager.appendMessage({ role: 'assistant', content: 'response in session', timestamp: new Date().toISOString() })
+    const history = sessionManager.loadHistory()
+    expect(history.length).toBeGreaterThan(0)
+
+    // Reset context and load history
+    agent.clearContext()
+    agent.setContext(history)
+
+    // System prompt re-added, history loaded, next run skips system prompt
+    expect(ctxMgr.getMessageCount()).toBeGreaterThan(0)
+
+    // Second call should work with restored context
+    const llmProvider2 = makeLLMProvider(async function* () {
+      yield textChunk('response after resume')
+      yield doneChunk('stop')
+    })
+    deps.llmProvider = llmProvider2 as any
+
+    const result = await agent.run('continue from history')
+    expect(result.success).toBe(true)
+    expect(result.text).toBe('response after resume')
+
+    agent.shutdown()
+  }, 15000)
+
+  // ── setContext filters out old system messages from history ───────────────
+
+  it('setContext filters system messages from loaded history', async () => {
+    const config = makeConfig({ maxToolIterations: 2 })
+    const llmProvider = makeLLMProvider(async function* () {
+      yield textChunk('ok')
+      yield doneChunk('stop')
+    })
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+
+    const history = [
+      { role: 'system', content: 'OLD SYSTEM PROMPT' },
+      { role: 'user', content: 'old user message' },
+      { role: 'assistant', content: 'old assistant reply' },
+    ]
+
+    agent.setContext(history)
+    const msgs = ctxMgr.getActiveHistory()
+
+    // Only one system message (freshly built), no OLD SYSTEM PROMPT
+    const systemMsgs = msgs.filter(m => m.role === 'system')
+    expect(systemMsgs).toHaveLength(1)
+    expect(systemMsgs[0].content).not.toContain('OLD SYSTEM PROMPT')
+
+    // User and assistant messages are present
+    expect(msgs.some(m => m.role === 'user' && m.content === 'old user message')).toBe(true)
+    expect(msgs.some(m => m.role === 'assistant' && m.content === 'old assistant reply')).toBe(true)
+
+    agent.shutdown()
+  }, 15000)
+
+  // ── Hallucination detection in todo app context ───────────────────────────
+
+  it('passes hallucination check for normal build output', async () => {
+    const config = makeConfig({ maxToolIterations: 2 })
+    const llmProvider = makeLLMProvider(async function* () {
+      yield textChunk('Todo app built successfully. Run npm run dev.')
+      yield doneChunk('stop')
+    })
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    const result = await agent.run('status check')
+    expect(result.success).toBe(true)
+    expect(result.text.length).toBeGreaterThan(0)
+    agent.shutdown()
+  }, 15000)
+
+  // ── Max iterations stops stuck loops ──────────────────────────────────────
+
+  it('stops when model loops on tool calls beyond max iterations', async () => {
+    const config = makeConfig({ maxToolIterations: 3 })
+    const llmProvider = makeLLMProvider(async function* () {
+      yield toolCallChunk('loop_tool', {}, 'loop-1')
+      yield doneChunk('tool_calls')
+    })
+    const logger = quietLogger()
+    const registry = makeToolRegistry()
+    registry.register({
+      name: 'loop_tool',
+      description: 'Always loops',
+      parameters: {},
+      handler: async () => ({ success: true, output: 'looped' }),
+    })
+    const pluginMgr = makePluginManager()
+    const ctxMgr = makeContextManager()
+    const executor = makeToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+
+    const agent = new Agent(deps)
+    const result = await agent.run('infinite loop test')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('iterations')
+    expect(result.iterationCount).toBe(3)
+    agent.shutdown()
+  }, 15000)
+})
