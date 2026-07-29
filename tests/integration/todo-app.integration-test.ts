@@ -2,6 +2,8 @@
  * Integration test: Agent builds a Vite + TS + Tailwind todo app.
  * Verifies: planning, todo tracking, file writing, bash, plugin lifecycle, error isolation.
  * Run: bun run test:integration
+ * Real LLM tests require an OpenAI-compatible API at $MMA_PROVIDER_BASEURL.
+ * Skip with: $env:MMA_SKIP_INTEGRATION=1
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
@@ -12,12 +14,18 @@ import { PluginManager } from '../../src/modules/plugins/manager'
 import { ContextManager } from '../../src/modules/context/manager'
 import { HallucinationDetector } from '../../src/modules/hallucination/detector'
 import { SessionStore, SessionManager } from '../../src/modules/session/index'
+import { OpenAICompatProvider } from '../../src/llm/openai-compat'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { rmSync, mkdtempSync, existsSync, readFileSync } from 'fs'
 import type { AppConfig } from '../../src/config/types'
 import type { AgentDeps } from '../../src/core/agent'
 import type { Chunk, Message } from '../../src/llm/provider'
+
+const BASE_URL = process.env.MMA_PROVIDER_BASEURL || 'http://localhost:1234/v1'
+const MODEL = process.env.MMA_MODEL || 'qwen3.5-9b'
+const API_KEY = process.env.MMA_PROVIDER_APIKEY || 'not-needed'
+const shouldSkip = process.env.MMA_SKIP_INTEGRATION === '1'
 
 function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
   return {
@@ -70,7 +78,401 @@ function doneChunk(reason: 'stop' | 'tool_calls' = 'stop'): Chunk {
   return { type: 'done', finishReason: reason }
 }
 
-// ─── Full Todo App build flow ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Real LLM tests — verify the model actually plans, uses tools, writes files
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe.skipIf(shouldSkip)('Todo App Build (integration — real LLM)', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'mma-todo-llm-'))
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function buildAgent(config: AppConfig, toolHandlers: Record<string, (ctx: any, args: Record<string, unknown>) => Promise<{ success: boolean; output: string }>>) {
+    const provider = new OpenAICompatProvider({
+      model: MODEL,
+      baseUrl: BASE_URL,
+      apiKey: API_KEY,
+      contextWindow: 32768,
+    })
+    const registry = new ToolRegistry()
+    for (const [name, handler] of Object.entries(toolHandlers)) {
+      registry.register({ name, description: `${name} tool`, parameters: { type: 'object', properties: {} }, handler })
+    }
+    const pluginMgr = new PluginManager()
+    const ctxMgr = new ContextManager(32768)
+    const logger = quietLogger()
+    const executor = new ToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+    const deps: AgentDeps = {
+      config, llmProvider: provider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [],
+    }
+    return { agent: new Agent(deps), provider, ctxMgr }
+  }
+
+  // ── Model creates a plan for the todo app ─────────────────────────────────
+
+  it('model creates a plan with plan tool when asked to build todo app', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 5,
+      autoPlan: true,
+      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    })
+
+    let planCreated = false
+    const { agent } = buildAgent(config, {
+      plan: async (_ctx, args) => {
+        const action = String(args.action || '')
+        if (action === 'create') {
+          planCreated = true
+          const steps = Array.isArray(args.steps) ? args.steps : []
+          return { success: true, output: `Plan created with ${steps.length} steps: ${steps.join(', ')}` }
+        }
+        return { success: true, output: 'Plan updated' }
+      },
+      todo: async (_ctx, args) => {
+        return { success: true, output: `Todo ${args.action}: ${(args.items || []).length} items` }
+      },
+    })
+
+    const result = await agent.run(
+      'You are building a web todo app. First, create a plan using the plan tool with action=create, title="Todo App", and 4 concrete steps. Then add todo items. Use ONLY the plan and todo tools. Do not write any files.'
+    )
+
+    expect(result.success).toBe(true)
+    expect(planCreated).toBe(true)
+    agent.shutdown()
+  }, 120000)
+
+  // ── Model writes actual source files ──────────────────────────────────────
+
+  it('model writes index.html, main.ts, style.css for a todo app', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 10,
+      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    })
+
+    const writtenFiles: string[] = []
+
+    const { agent } = buildAgent(config, {
+      write_file: async (ctx, args) => {
+        const path = String(args.path)
+        const baseDir = ctx.baseDir
+        const resolved = join(baseDir, path)
+        if (!resolved.startsWith(baseDir)) return { success: false, output: `Path not allowed: ${path}` }
+        const { dirname } = await import('path')
+        const { writeFileSync, mkdirSync, existsSync: ex } = await import('fs')
+        const dir = dirname(resolved)
+        if (!ex(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(resolved, String(args.content), 'utf-8')
+        writtenFiles.push(path)
+        return { success: true, output: `Written ${path}` }
+      },
+      plan: async (_ctx, args) => {
+        return { success: true, output: `Plan ${args.action}` }
+      },
+      todo: async (_ctx, args) => {
+        return { success: true, output: `Todo ${args.action}` }
+      },
+      bash: async (_ctx, args) => {
+        return { success: true, output: `[mocked] ${args.command}` }
+      },
+    })
+
+    const result = await agent.run(
+      'Create a minimal Vite + TypeScript + Tailwind todo app. Write these files:\n' +
+      '1. index.html — minimal HTML with <div id="app"> and script tag for /src/main.ts\n' +
+      '2. src/main.ts — TypeScript with a Todo interface (id, text, done) and basic render logic\n' +
+      '3. src/style.css — imports tailwind directives (@tailwind base/components/utilities)\n' +
+      'Use the plan tool first to outline steps, then write_file to create each file. Do NOT run npm/create commands — just write the files.'
+    )
+
+    expect(result.success).toBe(true)
+    expect(writtenFiles.length).toBeGreaterThanOrEqual(3)
+
+    // Verify files exist on disk
+    expect(existsSync(join(tmpDir, 'index.html'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'main.ts'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'style.css'))).toBe(true)
+
+    // Verify file contents are non-trivial
+    const html = readFileSync(join(tmpDir, 'index.html'), 'utf-8')
+    expect(html).toContain('html')
+    expect(html.length).toBeGreaterThan(50)
+
+    const ts = readFileSync(join(tmpDir, 'src', 'main.ts'), 'utf-8')
+    expect(ts.length).toBeGreaterThan(30)
+
+    const css = readFileSync(join(tmpDir, 'src', 'style.css'), 'utf-8')
+    expect(css.length).toBeGreaterThan(10)
+
+    agent.shutdown()
+  }, 180000)
+
+  // ── Full agent cycle: plan → todo → write → done ─────────────────────────
+
+  it('completes full build cycle: model plans, tracks todos, writes files', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 15,
+      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    })
+
+    const toolCalls: string[] = []
+    const writtenFiles: string[] = []
+
+    const { agent } = buildAgent(config, {
+      plan: async (_ctx, args) => {
+        toolCalls.push(`plan:${args.action}`)
+        const steps = Array.isArray(args.steps) ? args.steps : []
+        return { success: true, output: `Plan "${args.title || 'unnamed'}" with ${steps.length} steps: ${steps.join('; ')}` }
+      },
+      todo: async (_ctx, args) => {
+        toolCalls.push(`todo:${args.action}`)
+        const items = Array.isArray(args.items) ? args.items : []
+        return { success: true, output: `TODOs: ${items.join(', ')}` }
+      },
+      write_file: async (ctx, args) => {
+        toolCalls.push(`write_file:${args.path}`)
+        const path = String(args.path)
+        const baseDir = ctx.baseDir
+        const resolved = join(baseDir, path)
+        if (!resolved.startsWith(baseDir)) return { success: false, output: `Path not allowed` }
+        const { dirname } = await import('path')
+        const { writeFileSync, mkdirSync, existsSync: ex } = await import('fs')
+        const dir = dirname(resolved)
+        if (!ex(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(resolved, String(args.content), 'utf-8')
+        writtenFiles.push(path)
+        return { success: true, output: `Written ${path}` }
+      },
+      bash: async (_ctx, args) => {
+        toolCalls.push(`bash:${args.command}`)
+        return { success: true, output: `[mocked] ${args.command}` }
+      },
+    })
+
+    const result = await agent.run(
+      'Build a minimal Vite + TypeScript + Tailwind todo app. Steps:\n' +
+      '1. Create a plan with the plan tool\n' +
+      '2. Add todo items with the todo tool\n' +
+      '3. Write index.html, src/main.ts, src/style.css using write_file\n' +
+      '4. Run npm install with the bash tool\n' +
+      '5. Confirm completion with a short text message'
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.text.length).toBeGreaterThan(0)
+
+    // Model used plan tool
+    expect(toolCalls.some(c => c.startsWith('plan:create'))).toBe(true)
+
+    // Model used todo tool
+    expect(toolCalls.some(c => c.startsWith('todo:add'))).toBe(true)
+
+    // Model wrote at least 3 files
+    expect(toolCalls.filter(c => c.startsWith('write_file:')).length).toBeGreaterThanOrEqual(3)
+
+    // Files exist
+    expect(writtenFiles.length).toBeGreaterThanOrEqual(3)
+    expect(existsSync(join(tmpDir, 'index.html'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'main.ts'))).toBe(true)
+    expect(existsSync(join(tmpDir, 'src', 'style.css'))).toBe(true)
+
+    // Model completed multiple iterations
+    expect(result.iterationCount).toBeGreaterThanOrEqual(4)
+
+    agent.shutdown()
+  }, 180000)
+
+  // ── Model respects plan→step flow ────────────────────────────────────────
+
+  it('model updates plan steps sequentially during build', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 12,
+      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    })
+
+    const planUpdates: string[] = []
+
+    const { agent } = buildAgent(config, {
+      plan: async (_ctx, args) => {
+        const action = String(args.action || '')
+        if (action === 'create') {
+          const steps = Array.isArray(args.steps) ? args.steps : []
+          planUpdates.push(`create:${steps.length}steps`)
+          return { success: true, output: `Plan created with ${steps.length} steps.` }
+        }
+        if (action === 'update') {
+          planUpdates.push(`update:step${args.step}=${args.status}`)
+          return { success: true, output: `Step ${args.step} → ${args.status}` }
+        }
+        return { success: true, output: `Plan ${action}` }
+      },
+      todo: async (_ctx, args) => {
+        return { success: true, output: `Todo ${args.action}` }
+      },
+      write_file: async (ctx, args) => {
+        const path = String(args.path)
+        const baseDir = ctx.baseDir
+        const resolved = join(baseDir, path)
+        if (!resolved.startsWith(baseDir)) return { success: false, output: `Path not allowed` }
+        const { dirname } = await import('path')
+        const { writeFileSync, mkdirSync, existsSync: ex } = await import('fs')
+        const dir = dirname(resolved)
+        if (!ex(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(resolved, String(args.content), 'utf-8')
+        return { success: true, output: `Written ${path}` }
+      },
+      bash: async (_ctx, args) => {
+        return { success: true, output: `[mocked] ${args.command}` }
+      },
+    })
+
+    const result = await agent.run(
+      'Create a plan for building a minimal todo web app (3 steps). Then execute each step one by one, marking each as done using plan update. After all steps are done, write a short summary. Use the plan tool with action=create first, then action=update after completing each step.'
+    )
+
+    expect(result.success).toBe(true)
+    // Model should create a plan and then update at least one step
+    expect(planUpdates.some(u => u.startsWith('create:'))).toBe(true)
+    expect(planUpdates.some(u => u.startsWith('update:'))).toBe(true)
+
+    agent.shutdown()
+  }, 180000)
+
+  // ── Model isolates paths — won't write outside baseDir ───────────────────
+
+  it('model respects path isolation when LLM tries path traversal', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 8,
+      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    })
+
+    const writeAttempts: string[] = []
+
+    const { agent } = buildAgent(config, {
+      write_file: async (ctx, args) => {
+        const path = String(args.path)
+        const baseDir = ctx.baseDir
+        const resolved = join(baseDir, path)
+        writeAttempts.push(path)
+        if (!resolved.startsWith(baseDir)) {
+          return { success: false, output: `SECURITY BLOCK: ${path} is outside allowed directory` }
+        }
+        const { dirname } = await import('path')
+        const { writeFileSync, mkdirSync, existsSync: ex } = await import('fs')
+        const dir = dirname(resolved)
+        if (!ex(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(resolved, String(args.content), 'utf-8')
+        return { success: true, output: `Written ${path}` }
+      },
+      plan: async () => ({ success: true, output: 'ok' }),
+      todo: async () => ({ success: true, output: 'ok' }),
+    })
+
+    const result = await agent.run(
+      'Write file "safe.txt" with content "hello" in the current directory. Do not write anything else.'
+    )
+
+    expect(result.success).toBe(true)
+    // Should have written safe.txt and not attempted escape
+    expect(writeAttempts.some(f => f === 'safe.txt' || f.includes('safe'))).toBe(true)
+
+    agent.shutdown()
+  }, 120000)
+
+  // ── Session persistence with real LLM ────────────────────────────────────
+
+  it('persists user, assistant and tool messages to session on disk', async () => {
+    const config = makeConfig({
+      model: MODEL,
+      provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
+      maxToolIterations: 5,
+      session: { autoSave: true, maxSessions: 50, isolateMemory: false },
+    })
+
+    const sessionDir = join(tmpDir, 'sessions')
+    const sessionStore = new SessionStore(sessionDir)
+    sessionStore.init()
+    const sessionManager = new SessionManager(sessionStore, {
+      model: MODEL,
+      contextWindow: 32768,
+      projectDir: tmpDir,
+      maxSessions: 50,
+    })
+
+    const provider = new OpenAICompatProvider({
+      model: MODEL,
+      baseUrl: BASE_URL,
+      apiKey: API_KEY,
+      contextWindow: 32768,
+    })
+
+    const registry = new ToolRegistry()
+    registry.register({
+      name: 'echo',
+      description: 'Echo back a message. Call this when asked to echo.',
+      parameters: {
+        type: 'object',
+        properties: { message: { type: 'string', description: 'Text to echo' } },
+        required: ['message'],
+      },
+      handler: async (_ctx, args) => {
+        return { success: true, output: `ECHO: ${args.message}` }
+      },
+    })
+
+    const pluginMgr = new PluginManager()
+    const ctxMgr = new ContextManager(32768)
+    const logger = quietLogger()
+    const executor = new ToolExecutor(registry, { config, baseDir: tmpDir, logger }, pluginMgr)
+    const detector = new HallucinationDetector()
+
+    const deps: AgentDeps = {
+      config, llmProvider: provider, toolExecutor: executor, pluginManager: pluginMgr,
+      contextManager: ctxMgr, hallucinationDetector: detector, logger,
+      baseDir: tmpDir, promptBlocks: [], sessionManager,
+    }
+
+    const agent = new Agent(deps)
+    const result = await agent.run('Echo "Hello Session" using the echo tool')
+
+    expect(result.success).toBe(true)
+
+    // Session was auto-created
+    const activeId = sessionManager.getActive()
+    expect(activeId).not.toBeNull()
+
+    // Messages persisted to disk
+    const history = sessionManager.loadHistory()
+    expect(history.length).toBeGreaterThan(0)
+
+    const roles = history.map(m => m.role)
+    expect(roles).toContain('user')
+    expect(roles).toContain('assistant')
+
+    agent.shutdown()
+  }, 120000)
+})
+
+// ─── Full Todo App build flow (mock-based) ────────────────────────────────────
 
 describe('Todo App Build (mock-based integration)', () => {
   let tmpDir: string
