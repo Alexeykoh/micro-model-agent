@@ -49,7 +49,7 @@ export class ExecutionModule implements AgentModule {
     return [
       {
         name: 'plan',
-        description: 'Create, update, or abort a multi-step plan. System calls create automatically for multi-step tasks. Model calls update after each step.',
+        description: 'Create, update, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress.',
         parameters: {
           type: 'object',
           properties: {
@@ -64,17 +64,35 @@ export class ExecutionModule implements AgentModule {
         },
         handler: async (_ctx, args) => {
           const action = String(args.action)
+          if (action === 'create') {
+            const title = String(args.title || 'Task Plan')
+            const steps = Array.isArray(args.steps) ? args.steps.map(String) : []
+            if (steps.length === 0) {
+              return { success: false, output: t('plan.no_steps') }
+            }
+            const plan = PlanCreator.createPlan(title, steps)
+            this.setPlan(plan)
+            return { success: true, output: t('plan.created', { title, steps: String(steps.length) }) }
+          }
           if (action === 'update' && args.step && this.tracker) {
             this.tracker.updateStepStatus(Number(args.step), (args.status as any) || 'done')
             if (args.note) this.tracker.addNote(Number(args.step), String(args.note))
-            return { success: true, output: t('plan.step_status', { step: String(args.step), status: String(args.status || 'done') }) }
+            const progress = this.tracker.getProgressString()
+            return { success: true, output: `${t('plan.step_status', { step: String(args.step), status: String(args.status || 'done') })}\n${progress}` }
           }
-          return { success: true, output: t('plan.acknowledged', { action }) }
+          if (action === 'abort') {
+            this.tracker = null
+            return { success: true, output: t('plan.aborted') }
+          }
+          if (!this.tracker) {
+            return { success: false, output: t('plan.no_active') }
+          }
+          return { success: false, output: t('plan.unknown_action', { action }) }
         },
       },
       {
         name: 'todo',
-        description: 'Manage sub-tasks within a plan step.',
+        description: 'Manage sub-tasks within current plan step. Use to break down complex steps into smaller tasks.',
         parameters: {
           type: 'object',
           properties: {
@@ -83,7 +101,29 @@ export class ExecutionModule implements AgentModule {
           },
           required: ['action'],
         },
-        handler: async () => ({ success: true, output: t('todo.acknowledged') }),
+        handler: async (_ctx, args) => {
+          if (!this.tracker) {
+            return { success: false, output: t('plan.no_active') }
+          }
+          const action = String(args.action)
+          const currentStep = this.tracker.getCurrentStep()
+          if (!currentStep) {
+            return { success: false, output: t('plan.step_not_found') }
+          }
+          if (action === 'add' && Array.isArray(args.items)) {
+            const items = args.items.map(String)
+            currentStep.note = currentStep.note ? `${currentStep.note}; ${items.join(', ')}` : items.join(', ')
+            return { success: true, output: t('todo.added', { count: String(items.length), items: items.join(', ') }) }
+          }
+          if (action === 'done') {
+            return { success: true, output: t('todo.marked_done', { count: '1' }) }
+          }
+          if (action === 'list') {
+            const note = currentStep.note || '(no sub-tasks)'
+            return { success: true, output: `Step ${currentStep.id}: ${currentStep.description}\nSub-tasks: ${note}` }
+          }
+          return { success: false, output: t('todo.unknown_action', { action }) }
+        },
       },
       {
         name: 'verify',

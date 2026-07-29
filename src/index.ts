@@ -14,7 +14,7 @@ export {
   deleteFileTool, moveFileTool, fileInfoTool,
   bashTool, subagentTool,
   webSearchTool, webFetchTool, webBrowseTool,
-  planTool, todoTool, questionTool, approveTool,
+  questionTool, approveTool,
   createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
   registerAllTools,
 } from './tools/index'

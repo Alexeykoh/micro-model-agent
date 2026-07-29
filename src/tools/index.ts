@@ -16,8 +16,6 @@ import { subagentTool } from './subagent'
 import { webSearchTool } from './web-search'
 import { webFetchTool } from './web-fetch'
 import { webBrowseTool } from './web-browse'
-import { planTool } from './plan'
-import { todoTool } from './todo'
 import { questionTool } from './question'
 import { approveTool } from './approve'
 import { createLoadSkillTool } from './load-skill'
@@ -35,7 +33,6 @@ export {
   deleteFileTool, moveFileTool, fileInfoTool,
   bashTool, subagentTool,
   webSearchTool, webFetchTool, webBrowseTool,
-  planTool, todoTool,
   questionTool, approveTool,
   createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
   createBrowserTool,
@@ -48,7 +45,6 @@ export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsMo
     deleteFileTool, moveFileTool, fileInfoTool,
     bashTool, subagentTool,
     webSearchTool, webFetchTool, webBrowseTool,
-    planTool, todoTool,
     questionTool, approveTool,
     pipelineRunTool, mcpCallTool, searchHistoryTool,
   ]

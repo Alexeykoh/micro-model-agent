@@ -172,6 +172,11 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     }
   }
 
+  const moduleTools = moduleRegistry.collectToolDefinitions()
+  for (const tool of moduleTools) {
+    toolRegistry.register(tool)
+  }
+
   const plugin = execModule.getPlugin()
   if (plugin) {
     plugin.isBuiltin = true
