@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync, existsSync } from 'fs'
+import { readdirSync, readFileSync, statSync, existsSync, watch, FSWatcher } from 'fs'
 import { join, relative, extname } from 'path'
 
 const LANGUAGES: Record<string, string> = {
@@ -32,9 +32,25 @@ export interface IndexResult {
 export class Indexer {
   private baseDir: string
   private MAX_FILES = 1000
+  private watcher: FSWatcher | null = null
 
   constructor(baseDir: string) {
     this.baseDir = baseDir
+  }
+
+  watch(callback: (event: string, filename: string | null) => void): void {
+    this.watcher = watch(this.baseDir, { recursive: true }, (event, filename) => {
+      if (filename && !filename.includes('node_modules') && !filename.includes('.git')) {
+        callback(event, filename)
+      }
+    })
+  }
+
+  unwatch(): void {
+    if (this.watcher) {
+      this.watcher.close()
+      this.watcher = null
+    }
   }
 
   async walk(): Promise<IndexResult> {

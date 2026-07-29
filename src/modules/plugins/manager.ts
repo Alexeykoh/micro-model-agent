@@ -68,6 +68,15 @@ export class PluginManager {
     }
   }
 
+  runOnAfterThink(ctx: any): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onAfterThink) {
+        try { plugin.onAfterThink(ctx) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
+
   runOnSessionEnd(ctx: any): void {
     for (const plugin of this.plugins) {
       if (plugin.onSessionEnd) {

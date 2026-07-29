@@ -228,7 +228,7 @@ describe.skipIf(shouldSkip)('Todo App Build (integration — real LLM)', () => {
     const config = makeConfig({
       model: MODEL,
       provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
-      maxToolIterations: 12,
+      maxToolIterations: 25,
       session: { autoSave: false, maxSessions: 50, isolateMemory: false },
     })
 
@@ -511,7 +511,7 @@ describe.skipIf(shouldSkip)('Todo App Build (integration — real LLM)', () => {
     const config = makeConfig({
       model: MODEL,
       provider: { type: 'openai-compat', baseUrl: BASE_URL, apiKey: API_KEY },
-      maxToolIterations: 5,
+      maxToolIterations: 25,
       session: { autoSave: true, maxSessions: 50, isolateMemory: false },
     })
 
@@ -890,7 +890,7 @@ describe('Todo App Build (mock-based integration)', () => {
 
     const llmProvider = makeLLMProvider(async function* (messages, _tools) {
       if (messages.some(m => m.role === 'tool')) {
-        yield textChunk('Done')
+        yield textChunk('Done with the session tool execution')
         yield doneChunk('stop')
       } else {
         yield toolCallChunk('session_tool', { value: 42 }, 'st-1')
@@ -1064,7 +1064,7 @@ describe('Todo App Build (mock-based integration)', () => {
   it('setContext filters system messages from loaded history', async () => {
     const config = makeConfig({ maxToolIterations: 2 })
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('ok')
+      yield textChunk('ok, operation completed successfully')
       yield doneChunk('stop')
     })
     const logger = quietLogger()

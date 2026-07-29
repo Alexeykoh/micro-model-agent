@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { MemorySearch } from './search'
 
 const MEMORY_FILES = ['conventions', 'decisions', 'errors']
 
@@ -37,19 +38,7 @@ export class MemoryStore {
   }
 
   search(query: string): Array<{ file: string; match: string }> {
-    const results: Array<{ file: string; match: string }> = []
-    const lowerQuery = query.toLowerCase()
-
-    for (const name of MEMORY_FILES) {
-      const content = this.read(name)
-      const lines = content.split('\n')
-      for (const line of lines) {
-        if (line.toLowerCase().includes(lowerQuery)) {
-          results.push({ file: name, match: line.trim() })
-        }
-      }
-    }
-
-    return results
+    const searchModule = new MemorySearch(this.memoryDir)
+    return searchModule.query(query)
   }
 }

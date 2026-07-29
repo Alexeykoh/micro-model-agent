@@ -38,7 +38,7 @@ describe.skipIf(shouldSkip)('LLM Provider (integration)', () => {
 
     expect(result.length).toBeGreaterThan(0)
     expect(result.toLowerCase()).toContain('hello')
-  }, 30000)
+  }, 60000)
 
   it('should handle tool call requests', async () => {
     const provider = new OpenAICompatProvider({

@@ -15,6 +15,7 @@ export interface AgentPlugin {
   onBeforeTool?(ctx: any, call: any): boolean | Promise<boolean>
   onAfterTool?(ctx: any, result: any): void | Promise<void>
   onBeforeThink?(ctx: any): void
+  onAfterThink?(ctx: any): void
   onError?(ctx: any, error: Error): void
   onSessionStart?(ctx: any): void
   onSessionEnd?(ctx: any): void

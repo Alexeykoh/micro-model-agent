@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'fs'
 import { join } from 'path'
+import { gzipSync } from 'zlib'
 import type { SessionMeta, SessionMessage } from './types'
 
 export class SessionStore {
@@ -87,6 +88,27 @@ export class SessionStore {
     const dir = this.sessionDir(id)
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  rotateOldSessions(): void {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const sessions = this.listSessions()
+
+    for (const session of sessions) {
+      const updatedAt = new Date(session.updatedAt)
+      if (updatedAt < thirtyDaysAgo) {
+        const historyPath = this.historyPath(session.id)
+        if (existsSync(historyPath)) {
+          const content = readFileSync(historyPath, 'utf-8')
+          const compressed = gzipSync(content)
+          const gzPath = join(this.baseDir, `${session.id}.jsonl.gz`)
+          writeFileSync(gzPath, compressed)
+          rmSync(historyPath)
+        }
+      }
     }
   }
 }

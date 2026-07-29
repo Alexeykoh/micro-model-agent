@@ -1,6 +1,7 @@
 import { loadConfig } from '../config/config'
 import { Logger } from '../logger/app-logger'
 import { OpenAICompatProvider } from '../llm/openai-compat'
+import { ModelLoader } from '../llm/model-loader'
 import { ToolRegistry, registerAllTools } from '../tools/index'
 import { ToolExecutor } from '../tools/executor'
 import { ModuleRegistry } from '../modules/registry'
@@ -38,15 +39,34 @@ export interface BootstrapResult {
   skillsModule: SkillsModule
 }
 
-export function bootstrap(configDir?: string, projectDir?: string): BootstrapResult {
+export async function bootstrap(configDir?: string, projectDir?: string): Promise<BootstrapResult> {
   const dir = configDir || join(homedir(), '.mma')
-  const projectConfigPath = projectDir ? join(projectDir, '.mmarc.json') : join(process.cwd(), '.mmarc.json')
+  const projectConfigPath = projectDir ? join(projectDir, '.mmrc') : join(process.cwd(), '.mmrc')
 
   const config = loadConfig({ configDir: dir, projectConfigPath })
 
   const logger = new Logger(config.logLevel as any)
   logger.setLogDir(join(dir, 'logs'))
   logger.debug('MMA bootstrap', { version: config.version, model: config.model })
+
+  if (config.modelLoad.autoLoad) {
+    const modelLoader = new ModelLoader(config.provider.baseUrl, logger)
+    const loadResult = await modelLoader.ensureModelLoaded({
+      model: config.model,
+      contextLength: config.contextWindow,
+      flashAttention: config.modelLoad.flashAttention,
+      offloadKvCacheToGpu: config.modelLoad.offloadKvCacheToGpu,
+      autoLoad: config.modelLoad.autoLoad,
+    })
+
+    if (!loadResult.success) {
+      logger.warn(`Model auto-load failed: ${loadResult.error}. Continuing with manual load.`)
+    } else if (loadResult.alreadyLoaded) {
+      logger.debug(`Model ${config.model} already loaded`)
+    } else {
+      logger.info(`Model ${config.model} loaded in ${loadResult.loadTime}s`)
+    }
+  }
 
   const profile = new UserProfile(join(dir))
   profile.load() || profile.collect()

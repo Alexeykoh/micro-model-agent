@@ -1,5 +1,8 @@
 import * as readline from 'readline'
 import pc from 'picocolors'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { homedir } from 'os'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
 import { SessionNameProvider } from './completer'
@@ -35,12 +38,17 @@ export class Repl {
   private config: AppConfig
   private sessionManager?: SessionManager
   private skillsModule?: SkillsModule
+  private historyPath: string
+  private history: string[] = []
+  private maxHistory = 1000
 
   constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager, skillsModule?: SkillsModule) {
     this.agent = agent
     this.config = config
     this.sessionManager = sessionManager
     this.skillsModule = skillsModule
+    this.historyPath = join(homedir(), '.mma', 'repl-history')
+    this.loadHistory()
     this.registerBuiltinCommands()
     this.registerMmaCommands()
     this.registerSessionCommands()
@@ -50,6 +58,8 @@ export class Repl {
       input: process.stdin,
       output: process.stdout,
       prompt: pc.cyan('> '),
+      history: this.history,
+      historySize: this.maxHistory,
       tabSize: 2,
       completer: (line: string) => {
         const [matches, partial] = this.completer.complete(line)
@@ -58,6 +68,22 @@ export class Repl {
       },
     })
     this.setupListeners()
+  }
+
+  private loadHistory(): void {
+    if (existsSync(this.historyPath)) {
+      try {
+        const raw = readFileSync(this.historyPath, 'utf-8')
+        this.history = raw.split('\n').filter(Boolean).slice(-this.maxHistory)
+      } catch {
+        this.history = []
+      }
+    }
+  }
+
+  private saveHistory(): void {
+    const allHistory = this.history.slice(-this.maxHistory)
+    writeFileSync(this.historyPath, allHistory.join('\n'), 'utf-8')
   }
 
   private registerBuiltinCommands(): void {
@@ -355,8 +381,50 @@ export class Repl {
   }
 
   private setupListeners(): void {
+    let multiLineBuffer = ''
+    let inMultiLine = false
+
     this.rl.on('line', async (line: string) => {
       const trimmed = line.trim()
+      if (trimmed) {
+        this.history.push(trimmed)
+        if (this.history.length > this.maxHistory) {
+          this.history = this.history.slice(-this.maxHistory)
+        }
+      }
+
+      if (inMultiLine) {
+        multiLineBuffer += '\n' + line
+        if (!this.isMultiLineInput(multiLineBuffer)) {
+          inMultiLine = false
+          const fullInput = multiLineBuffer.trim()
+          multiLineBuffer = ''
+          if (fullInput) {
+            if (fullInput.startsWith('/')) {
+              await this.executeCommand(fullInput)
+            } else {
+              await this.runAgent(fullInput)
+            }
+          }
+          if (this.running) {
+            this.rl.setPrompt(pc.cyan('> '))
+            this.rl.prompt()
+          }
+        } else {
+          this.rl.setPrompt(pc.cyan('... '))
+          this.rl.prompt()
+        }
+        return
+      }
+
+      if (this.isMultiLineInput(trimmed)) {
+        inMultiLine = true
+        multiLineBuffer = trimmed
+        this.rl.setPrompt(pc.cyan('... '))
+        this.rl.prompt()
+        return
+      }
+
       if (!trimmed) {
         this.rl.prompt()
         return
@@ -376,6 +444,16 @@ export class Repl {
     this.rl.on('close', () => {
       this.running = false
     })
+  }
+
+  private isMultiLineInput(line: string): boolean {
+    if (line.endsWith('\\')) return true
+
+    const openBraces = (line.match(/\{/g) || []).length
+    const closeBraces = (line.match(/\}/g) || []).length
+    if (openBraces > closeBraces) return true
+
+    return false
   }
 
   private async runAgent(input: string): Promise<void> {
@@ -473,6 +551,7 @@ export class Repl {
 
   stop(): void {
     this.running = false
+    this.saveHistory()
     this.agent.shutdown()
     this.rl.close()
   }

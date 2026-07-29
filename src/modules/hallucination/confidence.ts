@@ -1,7 +1,7 @@
 import type { HallucinationCheckResult } from './factual'
 
 const UNCERTAINTY_MARKERS = ['i think', 'maybe', 'probably', 'i believe', 'not sure', 'might be']
-const MIN_TOKENS = 10
+const MIN_CHARS = 5
 
 export class ConfidenceCheck {
   private previousResponse: string = ''
@@ -11,7 +11,7 @@ export class ConfidenceCheck {
   }
 
   validate(response: string): HallucinationCheckResult {
-    if (!response || response.length < MIN_TOKENS) {
+    if (!response || response.length < MIN_CHARS) {
       return { status: 'retry', reason: 'Response too short or empty' }
     }
 

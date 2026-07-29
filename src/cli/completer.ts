@@ -1,4 +1,6 @@
 import type { SkillsModule } from '../modules/skills/module'
+import { readdirSync, statSync } from 'fs'
+import { join } from 'path'
 
 export interface CompletionContext {
   line: string
@@ -93,8 +95,49 @@ export class FilePathProvider implements CompletionProvider {
     return ctx.partial.includes('/') || ctx.partial.includes('\\')
   }
 
-  complete(_ctx: CompletionContext): string[] {
-    return []
+  complete(ctx: CompletionContext): string[] {
+    try {
+      const cwd = process.cwd()
+      const partialPath = ctx.partial
+      const lastSlash = Math.max(partialPath.lastIndexOf('/'), partialPath.lastIndexOf('\\'))
+      const dirPath = lastSlash > 0 ? partialPath.slice(0, lastSlash) : '.'
+      const prefix = lastSlash > 0 ? partialPath.slice(0, lastSlash + 1) : ''
+
+      const fullPath = join(cwd, dirPath)
+      const entries = readdirSync(fullPath)
+
+      const matches: string[] = []
+      for (const entry of entries) {
+        const entryPath = join(fullPath, entry)
+        const stat = statSync(entryPath)
+        const completion = prefix + entry + (stat.isDirectory() ? '/' : '')
+
+        if (completion.startsWith(ctx.partial)) {
+          matches.push(completion)
+        }
+      }
+
+      return matches.slice(0, 20)
+    } catch {
+      return []
+    }
+  }
+}
+
+export class ProviderArgProvider implements CompletionProvider {
+  name = 'provider-args'
+  private providers: string[]
+
+  constructor(providers: string[]) {
+    this.providers = providers
+  }
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex === 2 && ctx.tokens[0] === '/provider' && ctx.tokens[1] === 'use'
+  }
+
+  complete(ctx: CompletionContext): string[] {
+    return this.providers.filter(p => p.startsWith(ctx.partial))
   }
 }
 

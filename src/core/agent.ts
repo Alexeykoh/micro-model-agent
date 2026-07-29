@@ -150,17 +150,6 @@ export class Agent {
 
       if (sawToolCall) {
         for (const call of toolCalls) {
-          const proceed = await pluginManager.runOnBeforeTool({ iteration, logger }, call)
-          if (!proceed) {
-            logger.warn(`Tool call blocked by plugin: ${call.name}`)
-            contextManager.addMessage({
-              role: 'tool',
-              content: `Tool ${call.name} was blocked by policy`,
-              name: call.name,
-            })
-            continue
-          }
-
           const result = await toolExecutor.execute(call)
           const currentTokens = contextManager.getEstimatedTokens()
           const budget = contextManager.getBudget()
@@ -190,6 +179,23 @@ export class Agent {
       if (hallucinationResult.status === 'block') {
         logger.warn(`Response blocked: ${hallucinationResult.reason}`)
         return { success: false, text: lastText, error: `Response blocked: ${hallucinationResult.reason}`, iterationCount: iteration }
+      }
+      if (hallucinationResult.status === 'warn') {
+        logger.warn(`Hallucination warning: ${hallucinationResult.reason}`)
+        const warnPrefix = '\n\n[⚠️ Uncertainty] '
+        if (onChunk) {
+          onChunk(warnPrefix)
+        }
+        lastText = warnPrefix + lastText
+      }
+      if (hallucinationResult.status === 'retry') {
+        logger.warn(`Hallucination retry: ${hallucinationResult.reason}`)
+        contextManager.addMessage({ role: 'assistant', content: textContent })
+        contextManager.addMessage({
+          role: 'system',
+          content: `[Retry context: ${hallucinationResult.reason}. Please verify your response.]`,
+        })
+        continue
       }
 
       if (textContent || reasoningContent) {

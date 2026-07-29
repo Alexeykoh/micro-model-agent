@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { homedir, hostname, platform, tmpdir, type, userInfo } from 'os'
 import { env } from 'process'
+import { ProfileCompressor } from './compressor'
 
 export interface ProfileInfo {
   platform: string
@@ -79,14 +80,7 @@ export class UserProfile {
 
   compress(): string {
     if (!this.info) this.collect()
-    const parts: string[] = [
-      `OS: ${this.info!.os}`,
-      `Shell: ${this.info!.shell}`,
-      `Platform: ${this.info!.platform}`,
-    ]
-    if (Object.keys(this.preferences).length > 0) {
-      parts.push(`Prefs: ${JSON.stringify(this.preferences)}`)
-    }
-    return parts.join(', ')
+    const compressor = new ProfileCompressor()
+    return compressor.compress(this.info!)
   }
 }

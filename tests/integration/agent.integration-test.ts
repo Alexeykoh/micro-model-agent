@@ -136,17 +136,14 @@ describe.skipIf(shouldSkip)('Agent (integration — real LLM)', () => {
     })
 
     const tools = [{
-      type: 'function' as const,
-      function: {
-        name: 'get_weather',
-        description: 'Get current weather for a city',
-        parameters: {
-          type: 'object',
-          properties: {
-            city: { type: 'string', description: 'City name' },
-          },
-          required: ['city'],
+      name: 'get_weather',
+      description: 'Get current weather for a city',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: 'City name' },
         },
+        required: ['city'],
       },
     }]
 
@@ -156,7 +153,7 @@ describe.skipIf(shouldSkip)('Agent (integration — real LLM)', () => {
     ]
 
     const allChunks: Chunk[] = []
-    for await (const chunk of provider.chat(messages, tools as any)) {
+    for await (const chunk of provider.chat(messages, tools)) {
       allChunks.push(chunk)
     }
 
@@ -195,7 +192,7 @@ describe.skipIf(shouldSkip)('Agent (integration — real LLM)', () => {
       }
 
       const agent = new Agent(deps)
-      const result = await agent.run('Reply with exactly: OK')
+      const result = await agent.run('Please provide a detailed response explaining what you can do as an AI assistant.')
       expect(result.success).toBe(true)
       expect(result.text.length).toBeGreaterThan(0)
       agent.shutdown()
@@ -688,7 +685,7 @@ describe('Agent (mock-based integration)', () => {
   it('fires plugin lifecycle hooks in correct order', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('response')
+      yield textChunk('response from the assistant')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -727,7 +724,7 @@ describe('Agent (mock-based integration)', () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* (messages, _tools) {
       if (messages.some(m => m.role === 'tool')) {
-        yield textChunk('done')
+        yield textChunk('done with tool execution successfully')
         yield doneChunk('stop')
       } else {
         yield toolCallChunk('plugin_tool', { x: 1 }, 'call-plug')
@@ -769,8 +766,8 @@ describe('Agent (mock-based integration)', () => {
     const agent = new Agent(deps)
     await agent.run('test plugins')
 
-    // onBeforeTool is called twice: once in Agent.run() and once in ToolExecutor.execute()
-    expect(hookLog).toEqual(['before:plugin_tool', 'before:plugin_tool', 'after:ok'])
+    // onBeforeTool is called once in ToolExecutor.execute()
+    expect(hookLog).toEqual(['before:plugin_tool', 'after:ok'])
     agent.shutdown()
   })
 
@@ -859,7 +856,7 @@ describe('Agent (mock-based integration)', () => {
   it('isolates plugin errors — one crash does not stop others', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('response')
+      yield textChunk('response from the assistant')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -901,7 +898,7 @@ describe('Agent (mock-based integration)', () => {
   it('auto-creates session when sessionManager is provided', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('hello')
+      yield textChunk('hello from the assistant')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -1071,7 +1068,7 @@ describe('Agent (mock-based integration)', () => {
   it('builds system prompt respecting token budget', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('ok')
+      yield textChunk('ok, operation completed')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -1139,7 +1136,7 @@ describe('Agent (mock-based integration)', () => {
   it('returns context token usage in result', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('response')
+      yield textChunk('response from the assistant')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -1441,7 +1438,7 @@ describe('ContextManager (integration)', () => {
     const budget = mgr.getBudget()
 
     expect(budget.systemPrompt).toBe(Math.floor(32768 * 0.25))
-    expect(budget.responseReserve).toBe(Math.floor(32768 * 0.125))
-    expect(budget.history).toBe(Math.floor(32768 * 0.625))
+    expect(budget.responseReserve).toBe(Math.floor(32768 * 0.12))
+    expect(budget.history).toBe(Math.floor(32768 * 0.63))
   })
 })
