@@ -41,6 +41,8 @@ export class Repl {
   private historyPath: string
   private history: string[] = []
   private maxHistory = 1000
+  private lastEscTime = 0
+  private readonly doubleEscDelay = 500
 
   constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager, skillsModule?: SkillsModule, pluginManager?: PluginManager) {
     this.agent = agent
@@ -446,6 +448,24 @@ export class Repl {
     this.rl.on('close', () => {
       this.running = false
     })
+
+    if (process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin)
+      process.stdin.on('keypress', (str, key) => {
+        if (key.name === 'escape') {
+          const now = Date.now()
+          if (now - this.lastEscTime < this.doubleEscDelay) {
+            console.log(pc.yellow('\n\n[Ctrl+C] Остановка агента...'))
+            this.agent.shutdown()
+            this.running = false
+            this.saveHistory()
+            this.rl.close()
+            process.exit(0)
+          }
+          this.lastEscTime = now
+        }
+      })
+    }
   }
 
   private isMultiLineInput(line: string): boolean {
@@ -514,9 +534,13 @@ export class Repl {
     console.log()
   }
 
-  private showContextBar(result: { contextUsed?: number; contextLimit?: number }): void {
+  private showContextBar(result: { contextUsed?: number; contextLimit?: number; planProgress?: { current: number; total: number; title: string } }): void {
+    if (result.planProgress) {
+      const { current, total, title } = result.planProgress
+      const pct = Math.round((current / total) * 100)
+      console.log(pc.dim(t('repl.plan_progress', { title, current: String(current), total: String(total), pct: String(pct) })))
+    }
     if (result.contextUsed !== undefined && result.contextLimit !== undefined && result.contextLimit > 0) {
-      console.log()
       console.log(formatContextBar(result.contextUsed, result.contextLimit))
     }
   }

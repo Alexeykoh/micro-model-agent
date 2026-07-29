@@ -218,6 +218,7 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     baseDir,
     promptBlocks,
     sessionManager,
+    executionModule: execModule,
   }
 
   const agent = new Agent(agentDeps)

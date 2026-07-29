@@ -170,6 +170,7 @@
   "repl.hide": "скрыть",
   "repl.resume_hint": "Используйте /resume <id> или /resume <имя> для переключения между сессиями",
   "repl.reasoning_status": "Рассуждения: {status}",
+  "repl.plan_progress": "План: {title} — {current}/{total} шагов ({pct}%)",
   "setup.title": "\n  Мастер настройки MMA v2\n",
   "setup.scanning": "  Сканирование локальных LLM-серверов...",
   "setup.found_servers": "  Найдено серверов: {count}",

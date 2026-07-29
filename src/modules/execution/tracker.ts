@@ -57,6 +57,15 @@ export class PlanTracker {
     return `[Plan: ${this.plan.title}]  ${done}/${total}  ${bar}  ${pct}%`
   }
 
+  getProgress(): { current: number; total: number; title: string } {
+    const done = this.plan.steps.filter(s => s.status === 'done').length
+    return {
+      current: done,
+      total: this.plan.steps.length,
+      title: this.plan.title,
+    }
+  }
+
   toPromptBlock(): string {
     return PlanCreator.toPromptBlock(this.plan, this.currentStepIndex)
   }

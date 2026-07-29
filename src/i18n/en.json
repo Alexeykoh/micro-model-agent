@@ -170,6 +170,7 @@
   "repl.hide": "hide",
   "repl.resume_hint": "Use /resume <id> or /resume <name> to switch between sessions",
   "repl.reasoning_status": "Reasoning: {status}",
+  "repl.plan_progress": "Plan: {title} — {current}/{total} steps ({pct}%)",
   "setup.title": "\n  MMA Setup Wizard v2\n",
   "setup.scanning": "  Scanning local LLM servers...",
   "setup.found_servers": "  Found {count} server(s):",
