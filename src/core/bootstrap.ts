@@ -77,6 +77,7 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     baseUrl: config.provider.baseUrl,
     apiKey: config.provider.apiKey,
     contextWindow: config.contextWindow,
+    retry: config.retry,
   })
 
   const baseDir = projectDir || process.cwd()
@@ -159,6 +160,11 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   const sessionPlugin = sessionModule.getPlugin()
   if (sessionPlugin) {
     pluginManager.register(sessionPlugin)
+  }
+
+  const skillsPlugin = skillsModule.getPlugin()
+  if (skillsPlugin) {
+    pluginManager.register(skillsPlugin)
   }
 
   contextManager.onCompact = (messages) => {

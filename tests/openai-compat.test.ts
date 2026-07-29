@@ -195,4 +195,135 @@ describe('OpenAICompatProvider', () => {
       expect(e.message).toContain('401')
     }
   })
+
+  it('should retry on 5xx errors with exponential backoff', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+      retry: { maxRetries: 2, baseDelay: 10, maxDelay: 100 },
+    })
+
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' })
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable' })
+      .mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+            controller.close()
+          },
+        }),
+      })
+    global.fetch = mockFetch as any
+
+    const chunks: any[] = []
+    for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
+      chunks.push(chunk)
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].type).toBe('done')
+  })
+
+  it('should retry on 429 rate limit', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+      retry: { maxRetries: 1, baseDelay: 10, maxDelay: 100 },
+    })
+
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 429, statusText: 'Too Many Requests' })
+      .mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+            controller.close()
+          },
+        }),
+      })
+    global.fetch = mockFetch as any
+
+    for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
+
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('should not retry on 4xx errors except 429', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+      retry: { maxRetries: 3, baseDelay: 10, maxDelay: 100 },
+    })
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: () => Promise.resolve('{"error":"bad request"}'),
+    })
+    global.fetch = mockFetch as any
+
+    try {
+      for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
+      expect.unreachable('Should have thrown')
+    } catch (e: any) {
+      expect(e.message).toContain('400')
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('should retry on network errors', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+      retry: { maxRetries: 2, baseDelay: 10, maxDelay: 100 },
+    })
+
+    const mockFetch = vi.fn()
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      .mockRejectedValueOnce(new Error('ETIMEDOUT'))
+      .mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+            controller.close()
+          },
+        }),
+      })
+    global.fetch = mockFetch as any
+
+    const chunks: any[] = []
+    for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
+      chunks.push(chunk)
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(chunks).toHaveLength(1)
+  })
+
+  it('should throw after max retries exceeded', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+      retry: { maxRetries: 2, baseDelay: 10, maxDelay: 100 },
+    })
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'))
+    global.fetch = mockFetch as any
+
+    try {
+      for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
+      expect.unreachable('Should have thrown')
+    } catch (e: any) {
+      expect(e.message).toBe('Network error')
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
 })

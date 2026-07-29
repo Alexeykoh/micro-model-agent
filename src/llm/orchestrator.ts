@@ -1,4 +1,4 @@
-import { OpenAICompatProvider } from './openai-compat'
+import { OpenAICompatProvider, type RetryConfig } from './openai-compat'
 import type { LLMProvider, Message } from './provider'
 
 export interface OrchestratorConfig {
@@ -8,6 +8,7 @@ export interface OrchestratorConfig {
     baseUrl?: string
     apiKey?: string
   }
+  retry?: RetryConfig
 }
 
 export class OrchestratorClient {
@@ -22,6 +23,7 @@ export class OrchestratorClient {
           model: config.model,
           baseUrl: config.provider.baseUrl || 'http://localhost:1234/v1',
           apiKey: config.provider.apiKey,
+          retry: config.retry,
         })
       } else if (defaultProvider) {
         this.provider = defaultProvider
@@ -29,6 +31,7 @@ export class OrchestratorClient {
         this.provider = new OpenAICompatProvider({
           model: config.model,
           baseUrl: 'http://localhost:1234/v1',
+          retry: config.retry,
         })
       }
     }

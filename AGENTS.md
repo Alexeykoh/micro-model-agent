@@ -48,6 +48,7 @@ bun run mma session delete <id>
 CLI (main.ts → commands.ts / repl.ts)
   → Core (agent.ts state machine: INIT→THINK→ACT→OBSERVE→OUTPUT→ERROR)
     → LLM Layer (provider.ts → openai-compat.ts → token-counter.ts → response.ts)
+    │   └── Exponential backoff retry (3 retries, 1s/2s/4s delays, 429/5xx)
     → Tools (registry.ts → executor.ts → 20+ individual tools)
     → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile)
 ```

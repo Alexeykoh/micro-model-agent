@@ -2,6 +2,7 @@ import { createProgram } from './commands'
 import { bootstrap } from '../core/bootstrap'
 import { Repl } from './repl'
 import { formatMarkdown } from '../ui/md-formatter'
+import pc from 'picocolors'
 
 async function main(): Promise<void> {
   const program = createProgram()
@@ -18,7 +19,7 @@ async function main(): Promise<void> {
   if (program.args.length > 0) {
     const prompt = program.args.join(' ')
     const { agent } = await bootstrap()
-    const result = await agent.run(prompt)
+    const result = await agent.run(prompt, undefined, (meta) => process.stdout.write(meta))
     if (result.success) {
       console.log(formatMarkdown(result.text))
     } else {

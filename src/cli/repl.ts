@@ -3,10 +3,7 @@ import pc from 'picocolors'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
-import { Completer } from './completer'
-import { SlashCommandProvider } from './completer'
-import { SessionNameProvider } from './completer'
-import { SkillNameProvider } from './completer'
+import { Completer, SlashCommandProvider, SessionNameProvider, SubcommandProvider, SkillNameProvider } from './completer'
 import { FormattingStream } from '../ui/md-formatter'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
@@ -376,6 +373,7 @@ export class Repl {
       ))
     }
     if (this.skillsModule) {
+      this.completer.registerProvider(new SubcommandProvider('skill', ['list', 'loaded', 'load', 'unload', 'search']))
       this.completer.registerProvider(new SkillNameProvider(this.skillsModule))
     }
   }

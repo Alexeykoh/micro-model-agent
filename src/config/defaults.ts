@@ -19,9 +19,14 @@ export const DEFAULTS: AppConfig = {
     compactionThreshold: 0.75,
   },
   modelLoad: {
-    autoLoad: true,
+    autoLoad: false,
     flashAttention: true,
     offloadKvCacheToGpu: true,
+  },
+  retry: {
+    maxRetries: 3,
+    baseDelay: 1000,
+    maxDelay: 30000,
   },
   maxToolIterations: 25,
   stuckThreshold: 8,

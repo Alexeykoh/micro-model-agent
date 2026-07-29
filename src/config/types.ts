@@ -28,6 +28,12 @@ export interface ModelLoadConfig {
   offloadKvCacheToGpu?: boolean
 }
 
+export interface RetryConfig {
+  maxRetries: number
+  baseDelay: number
+  maxDelay: number
+}
+
 export interface AppConfig {
   version: string
   model: string
@@ -36,6 +42,7 @@ export interface AppConfig {
   contextWindow: number
   contextBudget: ContextBudget
   modelLoad: ModelLoadConfig
+  retry: RetryConfig
   maxToolIterations: number
   stuckThreshold: number
   autoPlan: boolean

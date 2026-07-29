@@ -2,6 +2,7 @@ import type { AgentModule, AgentPlugin } from '../types'
 import type { PromptBlock } from '../../core/types'
 import type { SkillMeta } from './loader'
 import type { SkillsMatcher } from './matcher'
+import pc from 'picocolors'
 
 export interface LoadResult {
   success: boolean
@@ -83,13 +84,26 @@ export class SkillsModule implements AgentModule {
   }
 
   getSystemPromptBlock(): PromptBlock | null {
-    if (this.loadedSkills.size === 0) return null
+    const lines: string[] = []
 
-    const lines = ['[Loaded Skills]']
-    for (const skill of this.loadedSkills.values()) {
-      const desc = skill.description.slice(0, 80)
-      lines.push(`- ${skill.name}: ${desc}`)
+    if (this.availableSkills.length > 0) {
+      lines.push('[Available Skills]')
+      lines.push('Use load_skill tool with task parameter to load relevant skill before answering domain-specific questions.')
+      for (const skill of this.availableSkills) {
+        const desc = skill.description.slice(0, 80)
+        lines.push(`- ${skill.name}: ${desc}`)
+      }
     }
+
+    if (this.loadedSkills.size > 0) {
+      lines.push('[Loaded Skills]')
+      for (const skill of this.loadedSkills.values()) {
+        const desc = skill.description.slice(0, 80)
+        lines.push(`- ${skill.name}: ${desc}`)
+      }
+    }
+
+    if (lines.length === 0) return null
 
     const content = lines.join('\n')
     const tokens = this.estimateTokens(content)
@@ -103,9 +117,41 @@ export class SkillsModule implements AgentModule {
   }
 
   getPlugin(): AgentPlugin {
+    let autoLoadedThisRun = false
     return {
       name: 'skills',
-      onSessionStart: (_ctx: any) => {},
+      onSessionStart: (_ctx: any) => {
+        autoLoadedThisRun = false
+      },
+      onBeforeThink: (ctx: any) => {
+        if (autoLoadedThisRun) return
+        const msg = ctx?.lastUserMessage as string | undefined
+        if (!msg || this.availableSkills.length === 0) return
+
+        const matches = this.matcher.match(msg, this.availableSkills, 1)
+        if (matches.length === 0) return
+
+        const skill = matches[0]
+        if (this.loadedSkills.has(skill.name)) return
+
+        const tokens = this.estimateTokens(skill.content)
+        if (this.currentTokens + tokens > this.budget) return
+
+        this.loadedSkills.set(skill.name, skill)
+        this.currentTokens += tokens
+
+        const contextManager = ctx?.contextManager
+        if (contextManager) {
+          const content = `[Skill loaded: ${skill.name}]\n${skill.content}\n\nUse this knowledge to answer the user's question.`
+          contextManager.addMessage({ role: 'user', content: `<system-instruction>${content}</system-instruction>` })
+        }
+
+        const onMeta = ctx?.onMeta as ((meta: string) => void) | undefined
+        if (onMeta) {
+          onMeta(pc.dim(`[Auto-loaded skill: ${skill.name}]`) + '\n')
+        }
+        autoLoadedThisRun = true
+      },
     }
   }
 

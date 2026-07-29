@@ -181,6 +181,38 @@ Supports:
 - Streaming SSE
 - Reasoning mode (Qwen3 thinking tokens)
 - Tool call format conversion
+- **Exponential backoff retry** (configurable)
+
+**Retry mechanism:**
+
+Provider automatically retries failed requests with exponential backoff:
+
+```typescript
+interface RetryConfig {
+  maxRetries: number    // default: 3
+  baseDelay: number     // default: 1000ms
+  maxDelay: number      // default: 30000ms
+}
+```
+
+**Retry conditions:**
+- Network errors (connection refused, timeout, DNS failure)
+- HTTP 429 (rate limit)
+- HTTP 5xx (server errors: 500, 502, 503, 504)
+
+**Backoff formula:**
+```
+delay = min(baseDelay * 2^attempt, maxDelay) + jitter
+jitter = random(0, baseDelay * 0.1)
+```
+
+Example with defaults:
+- Attempt 0: immediate
+- Attempt 1: ~1000ms + jitter
+- Attempt 2: ~2000ms + jitter
+- Attempt 3: ~4000ms + jitter
+
+Non-retryable errors (4xx except 429) fail immediately without retry.
 
 ### 4.3 Model Auto-Loader (`llm/model-loader.ts`)
 
@@ -193,7 +225,7 @@ Supports:
 **Параметры загрузки:**
 ```typescript
 interface ModelLoadConfig {
-  autoLoad: boolean           // включить автозагрузку (default: true)
+  autoLoad: boolean           // включить автозагрузку (default: false)
   flashAttention?: boolean    // оптимизация attention (default: true)
   evalBatchSize?: number      // размер батча для evaluation
   offloadKvCacheToGpu?: boolean // KV cache на GPU (default: true)
@@ -221,7 +253,7 @@ POST /api/v1/models/load
 ```json
 {
   "modelLoad": {
-    "autoLoad": true,
+    "autoLoad": false,
     "flashAttention": true,
     "offloadKvCacheToGpu": true
   }
@@ -418,13 +450,28 @@ interface AgentModule {
 - Each skill has `name`, `description`, `keywords[]` in YAML frontmatter
 - On startup: keyword overlap between task prompt and skill keywords
 - At runtime: LLM calls `load_skill`, system matches description overlap
-- In prompt: list of loaded skills with 50-token summaries
+
+**Auto-loading:**
+- Plugin `onBeforeThink` analyzes user message and auto-loads best matching skill
+- Loaded skill content injected into context as system message: `[Auto-loaded Skill: name]\n<content>`
+- Respects budget limit — skips if skill would exceed remaining budget
+- Same skill not loaded twice
+- Agent can also call `load_skill(task="...")` manually if needed
+
+**Prompt integration:**
+- `[Available Skills]` — list of all available skills with short descriptions, so agent knows what can be loaded
+- `[Loaded Skills]` — list of currently loaded skills (auto-loaded or manually)
+- Agent can also call `load_skill(task="...")` manually if needed
 
 **Format in prompt:**
 ```
+[Available Skills]
+Use load_skill tool with task parameter to load relevant skill before answering domain-specific questions.
+- git-expert: Git branching, merge conflict resolution, workflow strategies
+- typescript-expert: TypeScript type system, generics, advanced patterns
+
 [Loaded Skills]
-- typescript-expert: TypeScript generics, type system, compiler API
-- git-expert: Branching, merge conflict resolution
+- git-expert: Git branching, merge conflict resolution
 ```
 
 ### 6.2 Plugins (`modules/plugins/`)
@@ -1036,9 +1083,14 @@ export const DEFAULTS = {
     compactionThreshold: 0.75 // 75% от history budget
   },
   modelLoad: {
-    autoLoad: true,           // автозагрузка модели через LM Studio API
+    autoLoad: false,          // автозагрузка модели через LM Studio API
     flashAttention: true,     // оптимизация attention computation
     offloadKvCacheToGpu: true // KV cache на GPU
+  },
+  retry: {
+    maxRetries: 3,            // максимум повторных попыток при ошибке
+    baseDelay: 1000,          // базовая задержка в мс (экспоненциальный backoff)
+    maxDelay: 30000           // максимальная задержка в мс
   },
   maxToolIterations: 25,
   stuckThreshold: 8,        // итераций без прогресса до stuck-detector

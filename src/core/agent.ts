@@ -83,11 +83,13 @@ export class Agent {
 
     let iteration = 0
     let lastText = ''
+    let hallucinationRetries = 0
+    const MAX_HALLUCINATION_RETRIES = 3
 
     while (iteration < config.maxToolIterations) {
       iteration++
 
-      pluginManager.runOnBeforeThink({ iteration, logger })
+      pluginManager.runOnBeforeThink({ iteration, logger, lastUserMessage: input, contextManager, onMeta })
 
       if (contextManager.needsCompaction()) {
         contextManager.compact()
@@ -189,7 +191,12 @@ export class Agent {
         lastText = warnPrefix + lastText
       }
       if (hallucinationResult.status === 'retry') {
-        logger.warn(`Hallucination retry: ${hallucinationResult.reason}`)
+        if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
+          logger.warn(`Max hallucination retries (${MAX_HALLUCINATION_RETRIES}) reached, proceeding with response`)
+          break
+        }
+        hallucinationRetries++
+        logger.warn(`Hallucination retry (${hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${hallucinationResult.reason}`)
         contextManager.addMessage({ role: 'assistant', content: textContent })
         contextManager.addMessage({
           role: 'system',
