@@ -36,13 +36,6 @@ export interface AgentContext {
   totalSteps?: number
 }
 
-export interface AgentModule {
-  name: string
-  getSystemPromptBlock?(): PromptBlock | null
-  getToolDefinitions?(): import('../tools/types').ToolDefinition[]
-  getPlugin?(): import('../modules/plugins/types').AgentPlugin
-}
-
 export interface HallucinationResult {
   status: 'pass' | 'warn' | 'retry' | 'block'
   reason?: string
