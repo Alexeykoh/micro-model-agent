@@ -4,7 +4,7 @@ import { PluginManager } from './manager'
 import type { AgentPlugin } from './types'
 
 export class PluginLoader {
-  loadFromDir(dirPath: string, pluginManager: PluginManager): void {
+  loadFromDir(dirPath: string, pluginManager: PluginManager, logger?: { warn: (msg: string) => void }): void {
     if (!existsSync(dirPath)) return
 
     const entries = readdirSync(dirPath)
@@ -18,8 +18,11 @@ export class PluginLoader {
         const plugin = mod.default || mod.plugin
         if (plugin && plugin.name) {
           pluginManager.register(plugin)
+          logger?.warn(`Loaded plugin: ${plugin.name}`)
         }
-      } catch { /* skip invalid plugins */ }
+      } catch (e: any) {
+        logger?.warn(`Skipped incompatible plugin: ${entry} (${e.message})`)
+      }
     }
   }
 }
