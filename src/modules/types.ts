@@ -1,3 +1,13 @@
+import type { PromptBlock } from '../core/types'
+import type { ToolDefinition } from '../tools/types'
+
+export interface AgentModule {
+  name: string
+  getSystemPromptBlock?(): PromptBlock | null
+  getToolDefinitions?(): ToolDefinition[]
+  getPlugin?(): AgentPlugin
+}
+
 export interface AgentPlugin {
   name: string
   priority?: number
