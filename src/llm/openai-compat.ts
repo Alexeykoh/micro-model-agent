@@ -6,6 +6,7 @@ export interface OpenAICompatConfig {
   baseUrl: string
   apiKey?: string
   contextWindow?: number
+  maxCompletionTokens?: number
 }
 
 export class OpenAICompatProvider implements LLMProvider {
@@ -29,6 +30,7 @@ export class OpenAICompatProvider implements LLMProvider {
       model: this.model,
       messages,
       stream: true,
+      max_tokens: this.config.maxCompletionTokens ?? 4096,
     }
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({
