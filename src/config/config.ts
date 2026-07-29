@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
 import { DEFAULTS } from './defaults'
 import type { AppConfig } from './types'
 import { MigrationDetector } from '../migration/detect'
@@ -82,4 +82,10 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   config = applyEnvVars(config)
 
   return config
+}
+
+export function saveConfig(config: AppConfig, configPath: string): void {
+  const dir = dirname(configPath)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
 }
