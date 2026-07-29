@@ -1,6 +1,8 @@
 import * as readline from 'readline'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
+import type { Agent } from '../core/agent'
+import type { AppConfig } from '../config/types'
 
 interface SlashCommand {
   name: string
@@ -14,9 +16,14 @@ export class Repl {
   private commands: Map<string, SlashCommand> = new Map()
   private completer: Completer = new Completer()
   private running = false
+  private agent: Agent
+  private config: AppConfig
 
-  constructor() {
+  constructor(agent: Agent, config: AppConfig) {
+    this.agent = agent
+    this.config = config
     this.registerBuiltinCommands()
+    this.registerMmaCommands()
     this.setupCompleter()
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -53,6 +60,49 @@ export class Repl {
     })
   }
 
+  private registerMmaCommands(): void {
+    this.registerCommand({
+      name: 'run',
+      description: 'Run a prompt through the agent',
+      action: async (args: string[]) => {
+        if (args.length === 0) {
+          console.log('Usage: /run <prompt>')
+          return
+        }
+        const result = await this.agent.run(args.join(' '))
+        if (result.success) {
+          console.log(result.text)
+        } else {
+          console.error(`Error: ${result.error}`)
+          if (result.text) {
+            console.log(`Partial output:\n${result.text}`)
+          }
+        }
+      },
+    })
+    this.registerCommand({
+      name: 'config',
+      description: 'Show current configuration',
+      action: () => {
+        console.log(`Model:       ${this.config.model}`)
+        console.log(`Provider:    ${this.config.provider.type} (${this.config.provider.baseUrl})`)
+        console.log(`Context:     ${this.config.contextWindow}`)
+        console.log(`Max iters:   ${this.config.maxToolIterations}`)
+        console.log(`Stuck thresh: ${this.config.stuckThreshold}`)
+        console.log(`Log level:   ${this.config.logLevel}`)
+        console.log(`Locale:      ${this.config.locale}`)
+      },
+    })
+    this.registerCommand({
+      name: 'status',
+      description: 'Show agent status',
+      action: () => {
+        console.log(`Model: ${this.config.model}`)
+        console.log(`Provider: ${this.config.provider.type} @ ${this.config.provider.baseUrl}`)
+      },
+    })
+  }
+
   private setupCompleter(): void {
     const slashCommands = Array.from(this.commands.keys())
     this.completer.registerProvider(new SlashCommandProvider(slashCommands))
@@ -69,7 +119,12 @@ export class Repl {
       if (trimmed.startsWith('/')) {
         await this.executeCommand(trimmed)
       } else {
-        console.log(`[echo]: ${trimmed}`)
+        const result = await this.agent.run(trimmed)
+        if (result.success) {
+          console.log(result.text)
+        } else {
+          console.error(`Error: ${result.error}`)
+        }
       }
 
       if (this.running) {

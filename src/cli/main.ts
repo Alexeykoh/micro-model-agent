@@ -22,7 +22,8 @@ async function main(): Promise<void> {
       process.exit(1)
     }
   } else {
-    const repl = new Repl()
+    const { agent, config } = bootstrap()
+    const repl = new Repl(agent, config)
     repl.start()
   }
 }
