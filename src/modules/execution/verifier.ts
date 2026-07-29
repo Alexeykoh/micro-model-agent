@@ -1,6 +1,7 @@
 import { existsSync } from 'fs'
 import { resolve, extname } from 'path'
 import { execSync } from 'child_process'
+import { t } from '../../i18n/index'
 
 export interface VerificationItem {
   passed: boolean
@@ -25,7 +26,7 @@ export class StepVerifier {
     const exists = existsSync(resolved)
     return {
       passed: exists,
-      message: exists ? `File exists: ${path}` : `File not found: ${path}`,
+      message: exists ? t('verify.file_exists', { path }) : t('verify.file_not_found', { path }),
     }
   }
 
@@ -37,9 +38,9 @@ export class StepVerifier {
         timeout: 30_000,
         stdio: 'pipe',
       })
-      return { passed: true, message: `Script '${scriptName}' passed` }
+      return { passed: true, message: t('verify.script_passed', { script: scriptName }) }
     } catch (e: any) {
-      return { passed: false, message: `Script '${scriptName}' failed: ${e.message}` }
+      return { passed: false, message: t('verify.script_failed', { script: scriptName, message: e.message }) }
     }
   }
 
@@ -56,7 +57,7 @@ export class StepVerifier {
         const fullPath = resolve(this.baseDir, filePath)
         if (!this.validateSyntax(fullPath)) {
           syntaxValid = false
-          results.push({ passed: false, message: `Syntax error in: ${filePath}` })
+          results.push({ passed: false, message: t('verify.syntax_error', { path: filePath }) })
         }
       }
     }

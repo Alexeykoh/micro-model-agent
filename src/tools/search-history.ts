@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 function searchFile(filePath: string, query: string, maxResults: number, results: string[]): void {
@@ -38,7 +39,7 @@ export const searchHistoryTool: ToolDefinition = {
 
     try {
       if (!fs.existsSync(sessionDir)) {
-        return { success: true, output: `No sessions directory found at ${sessionDir}` }
+        return { success: true, output: t('tool.no_sessions_dir', { dir: sessionDir }) }
       }
 
       const entries = fs.readdirSync(sessionDir, { withFileTypes: true })
@@ -53,11 +54,11 @@ export const searchHistoryTool: ToolDefinition = {
       }
 
       if (results.length === 0) {
-        return { success: true, output: `No history entries matching "${query}"` }
+        return { success: true, output: t('tool.no_history', { query }) }
       }
-      return { success: true, output: `History results for "${query}":\n${results.join('\n')}` }
+      return { success: true, output: t('tool.history_results', { query, results: results.join('\n') }) }
     } catch (err) {
-      return { success: true, output: `Error searching history: ${err}` }
+      return { success: true, output: t('tool.history_error', { error: String(err) }) }
     }
   },
 }

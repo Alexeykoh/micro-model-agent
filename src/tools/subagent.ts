@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const subagentTool: ToolDefinition = {
@@ -12,7 +13,6 @@ export const subagentTool: ToolDefinition = {
   },
   handler: async (_ctx, args) => {
     const task = String(args.task || '')
-    // Sub-agent spawning is not yet implemented
-    return { success: true, output: `Sub-agent task queued: ${task}` }
+    return { success: true, output: t('tool.subagent_queued', { task }) }
   },
 }

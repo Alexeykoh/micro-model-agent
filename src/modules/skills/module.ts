@@ -2,6 +2,7 @@ import type { AgentModule, AgentPlugin } from '../types'
 import type { PromptBlock } from '../../core/types'
 import type { SkillMeta } from './loader'
 import type { SkillsMatcher } from './matcher'
+import { t } from '../../i18n/index'
 import pc from 'picocolors'
 
 export interface LoadResult {
@@ -27,12 +28,12 @@ export class SkillsModule implements AgentModule {
 
   loadByName(name: string): LoadResult {
     if (this.loadedSkills.has(name)) {
-      return { success: false, message: `Skill "${name}" is already loaded` }
+      return { success: false, message: t('skill.already_loaded', { name }) }
     }
 
     const skill = this.availableSkills.find(s => s.name === name)
     if (!skill) {
-      return { success: false, message: `Skill "${name}" not found in any source directory` }
+      return { success: false, message: t('skill.not_found', { name }) }
     }
 
     return this.tryLoad(skill)
@@ -41,7 +42,7 @@ export class SkillsModule implements AgentModule {
   loadByMatch(taskDescription: string): LoadResult {
     const matches = this.matcher.match(taskDescription, this.availableSkills, 1)
     if (matches.length === 0) {
-      return { success: false, message: `No skills match for: ${taskDescription}` }
+      return { success: false, message: t('skill.no_match', { task: taskDescription }) }
     }
     return this.tryLoad(matches[0])
   }
@@ -88,7 +89,7 @@ export class SkillsModule implements AgentModule {
 
     if (this.availableSkills.length > 0) {
       lines.push('[Available Skills]')
-      lines.push('Use load_skill tool with task parameter to load relevant skill before answering domain-specific questions.')
+      lines.push(t('skill.prompt_hint'))
       for (const skill of this.availableSkills) {
         const desc = skill.description.slice(0, 80)
         lines.push(`- ${skill.name}: ${desc}`)
@@ -142,13 +143,13 @@ export class SkillsModule implements AgentModule {
 
         const contextManager = ctx?.contextManager
         if (contextManager) {
-          const content = `[Skill loaded: ${skill.name}]\n${skill.content}\n\nUse this knowledge to answer the user's question.`
+          const content = t('skill.loaded_content', { name: skill.name, content: skill.content })
           contextManager.addMessage({ role: 'user', content: `<system-instruction>${content}</system-instruction>` })
         }
 
         const onMeta = ctx?.onMeta as ((meta: string) => void) | undefined
         if (onMeta) {
-          onMeta(pc.dim(`[Auto-loaded skill: ${skill.name}]`) + '\n')
+          onMeta(pc.dim(t('skill.auto_loaded', { name: skill.name })) + '\n')
         }
         autoLoadedThisRun = true
       },
@@ -161,7 +162,7 @@ export class SkillsModule implements AgentModule {
     if (tokens > this.budget) {
       return {
         success: false,
-        message: `Skill "${skill.name}" is too large (${tokens} tokens). Budget: ${this.budget} tokens`,
+        message: t('skill.too_large', { name: skill.name, tokens, budget: this.budget }),
       }
     }
 
@@ -169,7 +170,7 @@ export class SkillsModule implements AgentModule {
       const remaining = this.budget - this.currentTokens
       return {
         success: false,
-        message: `Skill "${skill.name}" (${tokens} tokens) exceeds remaining budget (${remaining} tokens). Unload other skills first.`,
+        message: t('skill.exceeds_budget', { name: skill.name, tokens, remaining }),
       }
     }
 
@@ -178,7 +179,7 @@ export class SkillsModule implements AgentModule {
 
     return {
       success: true,
-      message: `Skill "${skill.name}" loaded (${tokens} tokens, ${this.budget - this.currentTokens} remaining)`,
+      message: t('skill.loaded', { name: skill.name, tokens, remaining: this.budget - this.currentTokens }),
       skill,
     }
   }

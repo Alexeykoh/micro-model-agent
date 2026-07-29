@@ -1,3 +1,5 @@
+import { t } from '../../i18n/index'
+
 export interface PipelineStep {
   id: string
   agent: string
@@ -51,12 +53,12 @@ export class PipelineParser {
     }
 
     if (!result.name || currentSteps.length === 0) {
-      throw new Error('Invalid pipeline: name and steps required')
+      throw new Error(t('pipeline.invalid'))
     }
 
     for (const step of currentSteps) {
       if (!step.id || !step.agent || !step.prompt) {
-        throw new Error(`Step missing required fields (id, agent, prompt): ${JSON.stringify(step)}`)
+        throw new Error(t('pipeline.step_missing_fields', { step: JSON.stringify(step) }))
       }
     }
 

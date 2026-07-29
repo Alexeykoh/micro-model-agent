@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const webBrowseTool: ToolDefinition = {
@@ -23,10 +24,10 @@ export const webBrowseTool: ToolDefinition = {
         .replace(/\s+/g, ' ')
         .trim()
       const maxLen = 8000
-      const content = stripped.length > maxLen ? stripped.slice(0, maxLen) + '\n... (truncated)' : stripped
-      return { success: true, output: content || '(empty page)' }
+      const content = stripped.length > maxLen ? stripped.slice(0, maxLen) + t('file.truncated') : stripped
+      return { success: true, output: content || t('file.empty_page') }
     } catch (err: any) {
-      return { success: false, output: `Failed to fetch ${url}: ${err.message}` }
+      return { success: false, output: t('error.fetch_url_failed', { url, message: err.message }) }
     }
   },
 }

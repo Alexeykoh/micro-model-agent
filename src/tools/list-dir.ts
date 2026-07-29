@@ -1,5 +1,6 @@
 import { readdirSync, statSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const listDirTool: ToolDefinition = {
@@ -17,16 +18,16 @@ export const listDirTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
     if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: `Path not allowed: ${path}` }
+      return { success: false, output: t('file.path_not_allowed', { path }) }
     }
     if (!existsSync(resolved)) {
-      return { success: false, output: `Directory not found: ${path}` }
+      return { success: false, output: t('file.dir_notfound', { path }) }
     }
     const entries = readdirSync(resolved)
     const lines = entries.map(e => {
       const full = resolve(resolved, e)
       return statSync(full).isDirectory() ? `${e}/` : e
     })
-    return { success: true, output: lines.join('\n') || '(empty)' }
+    return { success: true, output: lines.join('\n') || t('file.empty') }
   },
 }

@@ -62,7 +62,7 @@ CLI (main.ts → commands.ts / repl.ts)
 5. **Plugin error isolation** — one plugin crash never stops others
 6. **Path safety** — all filesystem tools check `targetPath.startsWith(baseDir)`
 7. **TDD** — write test first, then implement, then commit
-8. **i18n for user messages only** — CLI and logs stay English
+8. **No hardcoded user-facing strings** — ALL text shown to users MUST go through `t()` from `i18n/index.ts`. Both `en.json` and `ru.json` must have matching keys. No exceptions — CLI labels, error messages, tool outputs, REPL prompts, setup wizard text, everything.
 9. **No TUI** — minimal CLI + REPL with markdown→ANSI formatting
 
 ## Project Structure

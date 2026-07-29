@@ -3,6 +3,7 @@ import type { BrowserConfig, BrowserState, ActionResult } from './types'
 import { extractInteractiveElements, formatSnapshot } from './snapshot'
 import { buildClickScript, buildTypeScript, buildScrollScript, buildIndexInjectionScript } from './actions'
 import { CookieStore, type StoredCookie } from './cookie-store'
+import { t } from '../../i18n/index'
 
 export class BrowserActionTracker {
   private history: Array<{ action: string; args: Record<string, unknown>; url: string }> = []
@@ -25,7 +26,7 @@ export class BrowserActionTracker {
     )
 
     if (allSame) {
-      return `You have repeated the same action (${action}) ${this.threshold} times. Try a different approach: use "snapshot" to re-read the page, try different element numbers, or navigate to a different URL.`
+      return t('browser.repeated_action', { action, threshold: this.threshold })
     }
 
     return null
@@ -68,7 +69,7 @@ export class BrowserSession {
         case 'snapshot': result = await this.snapshot(); break
         case 'close': result = await this.close(); break
         case 'wait': result = await this.wait(Number(args.ms || 1000)); break
-        default: return { success: false, output: `Unknown action: ${action}` }
+        default: return { success: false, output: t('browser.unknown_action', { action }) }
       }
 
       if (action !== 'open') {
@@ -80,13 +81,13 @@ export class BrowserSession {
 
       return result
     } catch (err: any) {
-      return { success: false, output: `Browser error: ${err.message}` }
+      return { success: false, output: t('browser.error', { message: err.message }) }
     }
   }
 
   private async ensurePage(): Promise<ActionResult | null> {
     if (!this.page) {
-      return { success: false, output: 'No page open. Use action "open" first.' }
+      return { success: false, output: t('browser.no_page') }
     }
     return null
   }
@@ -140,21 +141,21 @@ export class BrowserSession {
   }
 
   private async open(url: string): Promise<ActionResult> {
-    if (!url) return { success: false, output: 'URL is required' }
+    if (!url) return { success: false, output: t('browser.url_required') }
 
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://' + url
     }
 
     await this.launch()
-    if (!this.page) return { success: false, output: 'Failed to create page' }
+    if (!this.page) return { success: false, output: t('browser.create_page_failed') }
 
     this.actionTracker.reset()
 
     try {
       await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: this.config.navigationTimeout })
     } catch (err: any) {
-      return { success: false, output: `Navigation failed: ${err.message}` }
+      return { success: false, output: t('browser.nav_failed', { message: err.message }) }
     }
 
     const snapshot = await this.takeSnapshot()
@@ -168,7 +169,7 @@ export class BrowserSession {
     if (!this.page) return { success: false, output: 'No page' }
 
     if (!target || target < 1) {
-      return { success: false, output: 'Invalid target. Provide element number from snapshot.' }
+      return { success: false, output: t('browser.invalid_target') }
     }
 
     try {
@@ -180,7 +181,7 @@ export class BrowserSession {
       await this.saveCookies()
       return { success: true, output: snapshot }
     } catch (err: any) {
-      return { success: false, output: `Click failed: ${err.message}. Check element number.` }
+      return { success: false, output: t('browser.click_failed', { message: err.message }) }
     }
   }
 
@@ -190,10 +191,10 @@ export class BrowserSession {
     if (!this.page) return { success: false, output: 'No page' }
 
     if (!target || target < 1) {
-      return { success: false, output: 'Invalid target.' }
+      return { success: false, output: t('browser.invalid_target_short') }
     }
     if (!text) {
-      return { success: false, output: 'Text is required.' }
+      return { success: false, output: t('browser.text_required') }
     }
 
     try {
@@ -202,7 +203,7 @@ export class BrowserSession {
       const snapshot = await this.takeSnapshot()
       return { success: true, output: snapshot }
     } catch (err: any) {
-      return { success: false, output: `Type failed: ${err.message}` }
+      return { success: false, output: t('browser.type_failed', { message: err.message }) }
     }
   }
 
@@ -213,7 +214,7 @@ export class BrowserSession {
 
     const dir = direction as 'up' | 'down' | 'top' | 'bottom'
     if (!['up', 'down', 'top', 'bottom'].includes(dir)) {
-      return { success: false, output: 'Direction must be: up, down, top, bottom' }
+      return { success: false, output: t('browser.direction_invalid') }
     }
 
     try {
@@ -222,7 +223,7 @@ export class BrowserSession {
       const snapshot = await this.takeSnapshot()
       return { success: true, output: snapshot }
     } catch (err: any) {
-      return { success: false, output: `Scroll failed: ${err.message}` }
+      return { success: false, output: t('browser.scroll_failed', { message: err.message }) }
     }
   }
 
@@ -288,6 +289,6 @@ export class BrowserSession {
       this.browser = null
     }
     this.state = { isOpen: false, url: null, title: null, elementCount: 0 }
-    return { success: true, output: 'Browser closed.' }
+    return { success: true, output: t('browser.closed') }
   }
 }

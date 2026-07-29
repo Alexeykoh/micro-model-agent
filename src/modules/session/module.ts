@@ -1,6 +1,7 @@
 import type { AgentModule, AgentPlugin } from '../types'
 import type { PromptBlock } from '../../core/types'
 import type { SessionManager } from './manager'
+import { t } from '../../i18n/index'
 
 export class SessionModule implements AgentModule {
   name = 'session'
@@ -15,7 +16,7 @@ export class SessionModule implements AgentModule {
     const meta = this.manager.getActiveMeta()
     if (!meta) return null
     return {
-      content: `[Session: "${meta.name}" (${meta.id}) — ${meta.messageCount} messages so far]`,
+      content: t('session.info', { name: meta.name, id: meta.id, count: meta.messageCount }),
       priority: 'low',
       essential: false,
       estimatedTokens: 20,

@@ -1,5 +1,6 @@
 import type { LLMProvider, Message, Chunk, ToolDefinition } from './provider'
 import { TokenCounter } from './token-counter'
+import { t } from '../i18n/index'
 
 export interface RetryConfig {
   maxRetries: number
@@ -66,11 +67,11 @@ export class OpenAICompatProvider implements LLMProvider {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new Error(`LLM API error ${response.status} (${response.statusText}): ${errorText}`)
+      throw new Error(t('error.llm_api', { status: response.status, statusText: response.statusText, errorText }))
     }
 
     const reader = response.body?.getReader()
-    if (!reader) throw new Error('No response body stream')
+    if (!reader) throw new Error(t('error.no_response_body'))
 
     const decoder = new TextDecoder()
     let buffer = ''
@@ -170,7 +171,7 @@ export class OpenAICompatProvider implements LLMProvider {
       }
     }
 
-    throw lastError ?? new Error('LLM request failed after retries')
+    throw lastError ?? new Error(t('error.llm_retries'))
   }
 
   private isRetryable(status: number): boolean {

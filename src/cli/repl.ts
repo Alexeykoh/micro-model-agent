@@ -5,10 +5,12 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { Completer, SlashCommandProvider, SessionNameProvider, SubcommandProvider, SkillNameProvider } from './completer'
 import { FormattingStream } from '../ui/md-formatter'
+import { t } from '../i18n/index'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
 import type { SessionManager } from '../modules/session/manager'
 import type { SkillsModule } from '../modules/skills/module'
+import type { PluginManager } from '../modules/plugins/manager'
 
 interface SlashCommand {
   name: string
@@ -35,15 +37,17 @@ export class Repl {
   private config: AppConfig
   private sessionManager?: SessionManager
   private skillsModule?: SkillsModule
+  private pluginManager?: PluginManager
   private historyPath: string
   private history: string[] = []
   private maxHistory = 1000
 
-  constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager, skillsModule?: SkillsModule) {
+  constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager, skillsModule?: SkillsModule, pluginManager?: PluginManager) {
     this.agent = agent
     this.config = config
     this.sessionManager = sessionManager
     this.skillsModule = skillsModule
+    this.pluginManager = pluginManager
     this.historyPath = join(homedir(), '.mma', 'repl-history')
     this.loadHistory()
     this.registerBuiltinCommands()
@@ -86,18 +90,18 @@ export class Repl {
   private registerBuiltinCommands(): void {
     this.registerCommand({
       name: 'help',
-      description: 'Show available commands',
+      description: t('repl.help'),
       action: () => this.showHelp(),
     })
     this.registerCommand({
       name: 'exit',
-      description: 'Exit the REPL',
+      description: t('repl.exit'),
       aliases: ['quit', 'q'],
       action: () => this.stop(),
     })
     this.registerCommand({
       name: 'clear',
-      description: 'Clear the screen',
+      description: t('repl.clear'),
       action: () => {
         console.clear()
       },
@@ -107,10 +111,10 @@ export class Repl {
   private registerMmaCommands(): void {
     this.registerCommand({
       name: 'run',
-      description: 'Run a prompt through the agent',
+      description: t('repl.run'),
       action: async (args: string[]) => {
         if (args.length === 0) {
-          console.log('Usage: /run <prompt>')
+          console.log(t('repl.run_usage'))
           return
         }
         const prompt = args.join(' ')
@@ -119,43 +123,43 @@ export class Repl {
     })
     this.registerCommand({
       name: 'config',
-      description: 'Show current configuration',
+      description: t('repl.config'),
       action: () => {
         const ctx = this.config.contextWindow
         const sys = Math.floor(ctx * this.config.contextBudget.systemPrompt)
         const res = Math.floor(ctx * this.config.contextBudget.responseReserve)
-        console.log(`Model:       ${this.config.model}`)
-        console.log(`Provider:    ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
-        console.log(`Context:     ${ctx}  (sys:${sys}  res:${res}  hist:${ctx - sys - res})`)
-        console.log(`Max iters:   ${this.config.maxToolIterations}`)
-        console.log(`Stuck thresh: ${this.config.stuckThreshold}`)
-        console.log(`Reasoning:   ${this.config.showReasoning ? pc.green('show') : pc.dim('hide')}`)
-        console.log(`Log level:   ${this.config.logLevel}`)
-        console.log(`Locale:      ${this.config.locale}`)
+        console.log(`${t('repl.model')}       ${this.config.model}`)
+        console.log(`${t('repl.provider')}    ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
+        console.log(`${t('repl.context')}     ${ctx}  (sys:${sys}  res:${res}  hist:${ctx - sys - res})`)
+        console.log(`${t('repl.max_iters')}   ${this.config.maxToolIterations}`)
+        console.log(`${t('repl.stuck_thresh')} ${this.config.stuckThreshold}`)
+        console.log(`${t('repl.reasoning_label')}   ${this.config.showReasoning ? pc.green(t('repl.show')) : pc.dim(t('repl.hide'))}`)
+        console.log(`${t('repl.log_level')}   ${this.config.logLevel}`)
+        console.log(`${t('repl.locale')}      ${this.config.locale}`)
         const meta = this.sessionManager?.getActiveMeta()
         if (meta) {
-          console.log(`Session:     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`)
+          console.log(`${t('repl.session_label')}     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`)
         }
       },
     })
     this.registerCommand({
       name: 'reasoning',
-      description: 'Toggle showing model reasoning/thinking',
+      description: t('repl.reasoning'),
       action: () => {
         this.config.showReasoning = !this.config.showReasoning
-        const status = this.config.showReasoning ? pc.green('show') : pc.dim('hide')
-        console.log(`Reasoning: ${status}`)
+        const status = this.config.showReasoning ? pc.green(t('repl.show')) : pc.dim(t('repl.hide'))
+        console.log(t('repl.reasoning_status', { status }))
       },
     })
     this.registerCommand({
       name: 'status',
-      description: 'Show agent status',
+      description: t('repl.status'),
       action: () => {
-        console.log(`Model: ${this.config.model}`)
-        console.log(`Provider: ${this.config.provider.type} @ ${this.config.provider.baseUrl}`)
+        console.log(`${t('repl.model')} ${this.config.model}`)
+        console.log(`${t('repl.provider')} ${this.config.provider.type} @ ${this.config.provider.baseUrl}`)
         const meta = this.sessionManager?.getActiveMeta()
         if (meta) {
-          console.log(`Session: ${meta.name} (${meta.id}) — ${meta.messageCount} messages`)
+          console.log(`${t('repl.session_label')} ${meta.name} (${meta.id}) — ${meta.messageCount} messages`)
         }
       },
     })
@@ -166,13 +170,13 @@ export class Repl {
 
     this.registerCommand({
       name: 'sessions',
-      description: 'List all sessions (* active)',
+      description: t('repl.sessions'),
       aliases: ['ls'],
       action: () => {
         const sessions = this.sessionManager!.list()
         const active = this.sessionManager!.getActive()
         if (sessions.length === 0) {
-          console.log('No sessions found. Create one with /new <name>')
+          console.log(t('session.no_sessions_hint'))
           return
         }
         for (const s of sessions) {
@@ -180,93 +184,93 @@ export class Repl {
           const date = s.updatedAt.slice(0, 19).replace('T', ' ')
           console.log(` ${marker} ${s.id.slice(0, 12)}  ${s.name.padEnd(25)} ${date}  ${s.messageCount} msgs`)
         }
-        console.log(pc.dim(`\n  Use ${pc.cyan('/resume <id>')} ${pc.dim('or')} ${pc.cyan('/resume <name>')} ${pc.dim('to switch between sessions')}`))
+        console.log(pc.dim(`\n  ${t('repl.resume_hint')}`))
       },
     })
 
     this.registerCommand({
       name: 'new',
-      description: 'Create a new session',
+      description: t('repl.new'),
       aliases: ['create'],
       action: (args: string[]) => {
         const name = args.join(' ') || undefined
         const meta = this.sessionManager!.create(name)
         this.agent.clearContext()
         console.clear()
-        console.log(`Created session: ${pc.cyan(meta.name)} (${pc.dim(meta.id.slice(0, 12))})`)
-        console.log(pc.dim('  Chat cleared. Start typing to begin.\n'))
+        console.log(`${t('session.created', { name: meta.name })} (${pc.dim(meta.id.slice(0, 12))})`)
+        console.log(pc.dim(`  ${t('session.chat_cleared')}\n`))
       },
     })
 
     this.registerCommand({
       name: 'resume',
-      description: 'Switch to a session by id or name prefix',
+      description: t('repl.resume'),
       aliases: ['switch', 'use'],
       action: (args: string[]) => {
         const query = args.join(' ')
         const sessions = this.sessionManager!.list()
         if (!query) {
-          console.log(pc.dim('Available sessions:'))
+          console.log(pc.dim(t('session.available')))
           const active = this.sessionManager!.getActive()
           for (const s of sessions) {
             const marker = s.id === active ? pc.green(' *') : '  '
             console.log(pc.dim(` ${marker} ${s.id.slice(0, 12)}  ${s.name}`))
           }
-          console.log(pc.dim(`\n  Usage: ${pc.cyan('/resume <id|name>')}`))
+          console.log(pc.dim(`\n  ${t('repl.resume_usage')}`))
           return
         }
         const match = sessions.find(
           s => s.id === query || s.id.startsWith(query) || s.name.toLowerCase().includes(query.toLowerCase())
         )
         if (!match) {
-          console.log(`No session matching "${query}"`)
+          console.log(t('session.no_match', { query }))
           return
         }
         this.sessionManager!.setActive(match.id)
         const history = this.sessionManager!.loadHistory()
         this.agent.setContext(history)
-        console.log(`Resumed session: ${pc.cyan(match.name)} ${pc.dim(`(${match.id.slice(0, 12)})`)}  —  ${match.messageCount} msgs`)
-        console.log(pc.dim(`  Chat history loaded. Pick up where you left off.`))
+        console.log(`${t('session.resumed', { name: match.name })} ${pc.dim(`(${match.id.slice(0, 12)})`)}  —  ${match.messageCount} msgs`)
+        console.log(pc.dim(`  ${t('session.chat_loaded')}`))
       },
     })
 
     this.registerCommand({
       name: 'rename',
-      description: 'Rename the current session',
+      description: t('repl.rename'),
       action: (args: string[]) => {
         const name = args.join(' ')
         if (!name) {
-          console.log('Usage: /rename <new-name>')
+          console.log(t('repl.rename_usage'))
           return
         }
         const active = this.sessionManager!.getActive()
         if (!active) {
-          console.log('No active session')
+          console.log(t('session.no_active'))
           return
         }
         this.sessionManager!.rename(active, name)
-        console.log(`Session renamed to: ${name}`)
+        console.log(t('session.renamed', { name }))
       },
     })
 
     this.registerCommand({
       name: 'delete',
-      description: 'Delete a session by id',
+      description: t('repl.delete'),
       aliases: ['rm'],
       action: (args: string[]) => {
         const query = args[0]
         if (!query) {
-          console.log('Usage: /delete <session-id>')
+          console.log(t('repl.delete_usage'))
           return
         }
         const sessions = this.sessionManager!.list()
         const match = sessions.find(s => s.id === query || s.id.startsWith(query))
         if (!match) {
-          console.log(`No session matching "${query}"`)
+          console.log(t('session.no_match', { query }))
           return
         }
         this.sessionManager!.delete(match.id)
-        console.log(`Deleted session: ${match.name} (${match.id})`)
+        console.log(`${t('session.deleted', { id: match.id })}: ${match.name}`)
       },
     })
   }
@@ -276,7 +280,7 @@ export class Repl {
 
     this.registerCommand({
       name: 'skill',
-      description: 'Manage skills (list, loaded, load, unload, search)',
+      description: t('repl.skill'),
       action: (args: string[]) => {
         const subcmd = args[0]
         const arg = args.slice(1).join(' ')
@@ -284,10 +288,10 @@ export class Repl {
         if (!subcmd || subcmd === 'list') {
           const available = this.skillsModule!.getAvailable()
           if (available.length === 0) {
-            console.log('No skills available')
+            console.log(t('repl.no_skills'))
             return
           }
-          console.log(pc.bold('Available skills:'))
+          console.log(pc.bold(t('repl.available_skills')))
           for (const skill of available) {
             const tokens = Math.ceil(skill.content.length / 4)
             const loaded = this.skillsModule!.getLoaded().some(s => s.name === skill.name)
@@ -301,21 +305,21 @@ export class Repl {
           const loaded = this.skillsModule!.getLoaded()
           const budget = this.skillsModule!.getBudget()
           if (loaded.length === 0) {
-            console.log('No skills loaded')
+            console.log(t('repl.no_loaded'))
             return
           }
-          console.log(pc.bold('Loaded skills:'))
+          console.log(pc.bold(t('repl.loaded_skills')))
           for (const skill of loaded) {
             const tokens = Math.ceil(skill.content.length / 4)
             console.log(`  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`)
           }
-          console.log(pc.dim(`\n  Budget: ${budget.used} / ${budget.total} tokens (${budget.remaining} remaining)`))
+          console.log(pc.dim(`\n  ${t('repl.budget', { used: budget.used, total: budget.total, remaining: budget.remaining })}`))
           return
         }
 
         if (subcmd === 'load') {
           if (!arg) {
-            console.log('Usage: /skill load <name>')
+            console.log(t('repl.skill_load_usage'))
             return
           }
           const result = this.skillsModule!.loadByName(arg)
@@ -329,28 +333,28 @@ export class Repl {
 
         if (subcmd === 'unload') {
           if (!arg) {
-            console.log('Usage: /skill unload <name>')
+            console.log(t('repl.skill_unload_usage'))
             return
           }
           if (this.skillsModule!.unload(arg)) {
-            console.log(pc.green(`Skill "${arg}" unloaded`))
+            console.log(pc.green(t('repl.skill_unloaded', { name: arg })))
           } else {
-            console.log(pc.red(`Skill "${arg}" is not loaded`))
+            console.log(pc.red(t('repl.skill_not_loaded', { name: arg })))
           }
           return
         }
 
         if (subcmd === 'search') {
           if (!arg) {
-            console.log('Usage: /skill search <query>')
+            console.log(t('repl.skill_search_usage'))
             return
           }
           const results = this.skillsModule!.search(arg)
           if (results.length === 0) {
-            console.log(`No skills match "${arg}"`)
+            console.log(t('repl.no_skill_match', { query: arg }))
             return
           }
-          console.log(pc.bold(`Skills matching "${arg}":`))
+          console.log(pc.bold(t('repl.skills_matching', { query: arg })))
           for (const skill of results) {
             const tokens = Math.ceil(skill.content.length / 4)
             console.log(`  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`)
@@ -358,8 +362,8 @@ export class Repl {
           return
         }
 
-        console.log(pc.red(`Unknown skill subcommand: ${subcmd}`))
-        console.log('Usage: /skill [list|loaded|load|unload|search]')
+        console.log(pc.red(t('repl.skill_unknown_sub', { subcmd })))
+        console.log(t('repl.skill_usage'))
       },
     })
   }
@@ -455,7 +459,7 @@ export class Repl {
   }
 
   private async runAgent(input: string): Promise<void> {
-    process.stdout.write('\n' + pc.green('Agent: '))
+    process.stdout.write('\n' + pc.green(t('repl.agent')))
 
     const fmt = new FormattingStream((s) => process.stdout.write(s + '\n'))
     const result = await this.agent.run(input, (c) => fmt.write(c), (meta) => {
@@ -465,7 +469,7 @@ export class Repl {
     process.stdout.write('\n')
 
     if (!result.success) {
-      console.error(pc.red(`Error: ${result.error}`))
+      console.error(pc.red(`${t('error.prefix')}${result.error}`))
     }
     this.showContextBar(result)
   }
@@ -486,19 +490,19 @@ export class Repl {
 
     const cmd = this.commands.get(name)
     if (!cmd) {
-      console.log(pc.red(`Unknown command: ${name}.`), 'Type /help for available commands.')
+      console.log(pc.red(t('cli.unknown_cmd', { name })), t('cli.help_hint'))
       return
     }
 
     try {
       await cmd.action(args)
     } catch (err) {
-      console.error(pc.red(`Command error: ${err instanceof Error ? err.message : String(err)}`))
+      console.error(pc.red(t('error.command_error', { message: err instanceof Error ? err.message : String(err) })))
     }
   }
 
   private showHelp(): void {
-    console.log('\nAvailable commands:')
+    console.log(t('cli.available_cmds'))
     const shown = new Set<string>()
     for (const [name, cmd] of this.commands) {
       if (cmd.aliases?.includes(name)) continue
@@ -520,7 +524,7 @@ export class Repl {
   start(): void {
     this.running = true
 
-    console.log(pc.bold(pc.green('MMA REPL v2')))
+    console.log(pc.bold(pc.green(t('repl.title'))))
     const divider = '─'.repeat(50)
 
     const ctx = this.config.contextWindow
@@ -529,18 +533,26 @@ export class Repl {
     const histBudget = ctx - sysBudget - resBudget
 
     console.log(pc.dim(divider))
-    console.log(`  ${pc.yellow('Model:')}      ${pc.white(this.config.model)}`)
-    console.log(`  ${pc.yellow('Provider:')}   ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
-    console.log(`  ${pc.yellow('Context:')}    ${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`)
+    console.log(`  ${pc.yellow(t('repl.model'))}      ${pc.white(this.config.model)}`)
+    console.log(`  ${pc.yellow(t('repl.provider'))}   ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
+    console.log(`  ${pc.yellow(t('repl.context'))}    ${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`)
 
     if (this.skillsModule) {
       const budget = this.skillsModule.getBudget()
-      console.log(`  ${pc.yellow('Skills:')}     ${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`)
+      console.log(`  ${pc.yellow(t('repl.skills_label'))}     ${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`)
+    }
+
+    if (this.pluginManager) {
+      const plugins = this.pluginManager.getAllPlugins().filter(p => !p.isBuiltin)
+      if (plugins.length > 0) {
+        const pluginNames = plugins.map(p => p.name).join(', ')
+        console.log(`  ${pc.yellow(t('repl.plugins_label'))}    ${pc.white(String(plugins.length))} active  ${pc.dim(`(${pluginNames})`)}`)
+      }
     }
 
     const meta = this.sessionManager?.getActiveMeta()
     if (meta) {
-      console.log(`  ${pc.yellow('Session:')}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs`)
+      console.log(`  ${pc.yellow(t('repl.session_label'))}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs`)
     }
     console.log(pc.dim(divider))
     console.log()

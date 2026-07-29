@@ -1,5 +1,6 @@
 import { execSync } from 'child_process'
 import { resolve } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const grepTool: ToolDefinition = {
@@ -23,10 +24,10 @@ export const grepTool: ToolDefinition = {
         cmd += ` -g "${String(args.include)}"`
       }
       const output = execSync(cmd, { encoding: 'utf-8', maxBuffer: 1024 * 1024 })
-      return { success: true, output: output || 'No matches' }
+      return { success: true, output: output || t('file.no_matches') }
     } catch (e: any) {
-      if (e.status === 1) return { success: true, output: 'No matches' }
-      return { success: false, output: `Grep failed: ${e.message}` }
+      if (e.status === 1) return { success: true, output: t('file.no_matches') }
+      return { success: false, output: t('error.grep_failed', { message: e.message }) }
     }
   },
 }

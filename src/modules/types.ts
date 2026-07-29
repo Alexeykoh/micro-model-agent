@@ -11,6 +11,7 @@ export interface AgentModule {
 export interface AgentPlugin {
   name: string
   priority?: number
+  isBuiltin?: boolean
   onBuildPrompt?(): string | null
   onBeforeTool?(ctx: any, call: any): boolean | Promise<boolean>
   onAfterTool?(ctx: any, result: any): void | Promise<void>

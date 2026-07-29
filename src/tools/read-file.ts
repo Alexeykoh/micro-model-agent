@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 function isPathSafe(baseDir: string, targetPath: string): boolean {
@@ -22,11 +23,11 @@ export const readFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path)
     if (!isPathSafe(ctx.baseDir, path)) {
-      return { success: false, output: `Path not allowed: ${path}` }
+      return { success: false, output: t('file.path_not_allowed', { path }) }
     }
     const resolved = resolve(ctx.baseDir, normalize(path))
     if (!existsSync(resolved)) {
-      return { success: false, output: `File not found: ${path}` }
+      return { success: false, output: t('file.notfound', { path }) }
     }
     const content = readFileSync(resolved, 'utf-8')
     if (!args.offset && !args.limit) {

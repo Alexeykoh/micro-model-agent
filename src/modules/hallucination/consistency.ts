@@ -1,4 +1,5 @@
 import type { HallucinationCheckResult } from './factual'
+import { t } from '../../i18n/index'
 
 export class ConsistencyCheck {
   private decisions: Array<{ decision: string; location: string }> = []
@@ -32,7 +33,7 @@ export class ConsistencyCheck {
       if (contradicts) {
         return {
           status: 'warn',
-          reason: `Contradicts previous decision: "${d.decision}" in ${d.location}`,
+          reason: t('hall.contradiction', { decision: d.decision, location: d.location }),
         }
       }
     }

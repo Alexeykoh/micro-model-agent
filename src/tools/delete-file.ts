@@ -1,5 +1,6 @@
 import { unlinkSync, existsSync, statSync } from 'fs'
 import { resolve, normalize } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const deleteFileTool: ToolDefinition = {
@@ -17,15 +18,15 @@ export const deleteFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
     if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: `Path not allowed: ${path}` }
+      return { success: false, output: t('file.path_not_allowed', { path }) }
     }
     if (!existsSync(resolved)) {
-      return { success: false, output: `File not found: ${path}` }
+      return { success: false, output: t('file.notfound', { path }) }
     }
     if (statSync(resolved).isDirectory()) {
-      return { success: false, output: `Is a directory, use rmdir: ${path}` }
+      return { success: false, output: t('file.is_directory', { path }) }
     }
     unlinkSync(resolved)
-    return { success: true, output: `Deleted ${path}` }
+    return { success: true, output: t('file.deleted', { path }) }
   },
 }

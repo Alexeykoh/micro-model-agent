@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const webSearchTool: ToolDefinition = {
@@ -29,11 +30,11 @@ export const webSearchTool: ToolDefinition = {
         count++
       }
       if (results.length === 0) {
-        return { success: true, output: `No results found for "${query}"` }
+        return { success: true, output: t('tool.no_results', { query }) }
       }
-      return { success: true, output: `Search results for "${query}":\n${results.join('\n')}` }
+      return { success: true, output: t('tool.search_results', { query, results: results.join('\n') }) }
     } catch (err: any) {
-      return { success: false, output: `Search failed: ${err.message}` }
+      return { success: false, output: t('error.search_failed', { message: err.message }) }
     }
   },
 }

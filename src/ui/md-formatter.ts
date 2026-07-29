@@ -1,4 +1,5 @@
 import pc from 'picocolors'
+import { t } from '../i18n/index'
 
 const KW = /\b(import|export|from|const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|implements|interface|type|enum|namespace|module|declare|abstract|async|await|yield|throw|try|catch|finally|typeof|instanceof|in|of|as|is|keyof|readonly|static|private|public|protected|get|set|constructor|this|super|void|never|any|unknown|boolean|string|number|symbol|object|true|false|null|undefined|default)\b/g
 const STRING = /('[^']*'|"[^"]*"|`[^`]*`)/g
@@ -138,13 +139,13 @@ export function formatMarkdown(text: string): string {
 }
 
 export function formatError(text: string): string {
-  return pc.red(pc.bold('Error: ') + text)
+  return pc.red(pc.bold(t('ui.error_prefix')) + text)
 }
 
 export function formatSuccess(text: string): string {
-  return pc.green(pc.bold('✓ ') + text)
+  return pc.green(pc.bold(t('ui.success_prefix')) + text)
 }
 
 export function formatWarning(text: string): string {
-  return pc.yellow(pc.bold('⚠ ') + text)
+  return pc.yellow(pc.bold(t('ui.warning_prefix')) + text)
 }

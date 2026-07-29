@@ -1,5 +1,6 @@
 import { existsSync } from 'fs'
 import { resolve } from 'path'
+import { t } from '../../i18n/index'
 import type { Plan } from './planner'
 
 export interface AuditResult {
@@ -44,8 +45,8 @@ export class Auditor {
       createdFiles: existingFiles,
       modifiedFiles: [],
       summary: passed
-        ? `[✓] Task complete: ${doneSteps}/${totalSteps} steps done, ${existingFiles.length} files verified`
-        : `[✗] Task incomplete: ${doneSteps}/${totalSteps} steps done, ${missingFiles.length} files missing`,
+        ? t('exec.audit_pass', { done: doneSteps, total: totalSteps, files: existingFiles.length })
+        : t('exec.audit_fail', { done: doneSteps, total: totalSteps, files: missingFiles.length }),
     }
   }
 }

@@ -1,5 +1,6 @@
 import type { SessionMeta, SessionMessage } from './types'
 import type { SessionStore } from './store'
+import { t } from '../../i18n/index'
 
 export interface SessionManagerOptions {
   model: string
@@ -21,7 +22,7 @@ export class SessionManager {
   create(name?: string): SessionMeta {
     const now = new Date().toISOString()
     const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-    const sessionName = name || `Session ${now.slice(0, 10)}`
+    const sessionName = name || t('session.default_name', { date: now.slice(0, 10) })
     const meta: SessionMeta = {
       id,
       name: sessionName,
@@ -55,7 +56,7 @@ export class SessionManager {
 
   rename(id: string, name: string): void {
     const meta = this.store.loadMeta(id)
-    if (!meta) throw new Error(`Session not found: ${id}`)
+    if (!meta) throw new Error(t('session.not_found', { id }))
     meta.name = name
     this.store.saveMeta(id, meta)
   }
@@ -71,13 +72,13 @@ export class SessionManager {
 
   setActive(id: string): void {
     if (!this.store.sessionExists(id)) {
-      throw new Error(`Session not found: ${id}`)
+      throw new Error(t('session.not_found', { id }))
     }
     this.activeId = id
   }
 
   appendMessage(msg: SessionMessage): void {
-    if (!this.activeId) throw new Error('No active session')
+    if (!this.activeId) throw new Error(t('session.no_active'))
     this.store.appendMessage(this.activeId, msg)
   }
 

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { DEFAULTS } from './defaults'
+import { t } from '../i18n/index'
 import type { AppConfig } from './types'
 import { MigrationDetector } from '../migration/detect'
 import { BackupManager } from '../migration/backup'
@@ -65,7 +66,7 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
     const backup = new BackupManager(options.configDir)
     backup.backupConfig()
     const summary = backup.getBackupSummary()
-    console.log(`[MMA] Detected old config. ${summary}`)
+    console.log(t('migration.detected', { summary }))
     try { unlinkSync(globalPath) } catch { }
   }
 

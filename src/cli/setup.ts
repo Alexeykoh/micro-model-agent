@@ -1,4 +1,5 @@
 import * as readline from 'readline'
+import { t } from '../i18n/index'
 
 interface SetupAnswers {
   provider: string
@@ -89,60 +90,60 @@ async function testChat(apiBase: string, apiKey: string, model: string): Promise
 }
 
 export async function runSetup(): Promise<SetupAnswers> {
-  console.log('\n  MMA Setup Wizard v2\n')
+  console.log(t('setup.title'))
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   })
 
-  console.log('  Scanning local LLM servers...')
+  console.log(t('setup.scanning'))
   const found = await scanPorts()
   let apiBase = ''
   let provider = 'openai-compat'
 
   if (found.length > 0) {
-    console.log(`  Found ${found.length} server(s):`)
+    console.log(t('setup.found_servers', { count: found.length }))
     found.forEach((f, i) => console.log(`    ${i + 1}. ${f.label.padEnd(14)} ${f.url}`))
-    const choice = await ask(rl, '\n  Select server (1-' + found.length + ')', '1')
+    const choice = await ask(rl, t('setup.select_server', { max: found.length }), '1')
     const idx = Math.max(0, Math.min(found.length - 1, (parseInt(choice) || 1) - 1))
     apiBase = found[idx].url
     provider = 'openai-compat'
   } else {
-    console.log('  No local servers found. Enter URL manually.')
-    apiBase = await ask(rl, '  API Base URL', 'http://localhost:1234/v1')
-    provider = await ask(rl, '  Provider type', 'openai-compat')
+    console.log(t('setup.no_servers'))
+    apiBase = await ask(rl, t('setup.api_base'), 'http://localhost:1234/v1')
+    provider = await ask(rl, t('setup.provider_type'), 'openai-compat')
   }
 
-  const apiKey = await ask(rl, '  API Key (press Enter to skip)', 'not-needed')
+  const apiKey = await ask(rl, t('setup.api_key'), 'not-needed')
 
-  console.log('  Fetching model list...')
+  console.log(t('setup.fetching_models'))
   const models = await fetchModels(apiBase, apiKey)
   let model = ''
   if (models.length > 0) {
-    console.log(`  Available models:`)
+    console.log(t('setup.available_models'))
     models.slice(0, 10).forEach((m, i) => console.log(`    ${i + 1}. ${m}`))
-    const choice = await ask(rl, '  Select model (1-' + Math.min(models.length, 10) + ')', '1')
+    const choice = await ask(rl, t('setup.select_model', { max: Math.min(models.length, 10) }), '1')
     const idx = Math.max(0, Math.min(models.length - 1, (parseInt(choice) || 1) - 1))
     model = models[idx]
   } else {
-    model = await ask(rl, '  Model name', 'qwen3.5-9b')
+    model = await ask(rl, t('setup.model_name'), 'qwen3.5-9b')
   }
 
-  console.log(`\n  Testing chat with model "${model}"...`)
+  console.log(t('setup.testing', { model }))
   const connected = await testChat(apiBase, apiKey, model)
   if (connected) {
-    console.log('  OK — connection successful')
+    console.log(t('setup.ok'))
   } else {
-    console.log('  WARNING: could not connect — check your API endpoint and key')
+    console.log(t('setup.warning'))
   }
 
-  console.log('\n  --- Agent settings ---')
-  const contextWindow = parseInt(await ask(rl, '  Context window (tokens)', '32768'))
-  const maxIterations = parseInt(await ask(rl, '  Max tool iterations', '25'))
+  console.log(t('setup.agent_settings'))
+  const contextWindow = parseInt(await ask(rl, t('setup.context_window'), '32768'))
+  const maxIterations = parseInt(await ask(rl, t('setup.max_iters'), '25'))
 
-  console.log('\n  --- Language ---')
-  const locale = await ask(rl, '  UI language (en/ru)', 'en')
+  console.log(t('setup.language'))
+  const locale = await ask(rl, t('setup.ui_lang'), 'en')
 
   rl.close()
 
@@ -156,6 +157,6 @@ export async function runSetup(): Promise<SetupAnswers> {
     locale,
   }
 
-  console.log('\n  Setup complete!\n')
+  console.log(t('setup.complete'))
   return answers
 }

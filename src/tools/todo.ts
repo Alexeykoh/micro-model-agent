@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const todoTool: ToolDefinition = {
@@ -15,14 +16,14 @@ export const todoTool: ToolDefinition = {
     const action = String(args.action || '')
     const items = Array.isArray(args.items) ? args.items : []
     if (action === 'add' && items.length > 0) {
-      return { success: true, output: `Added ${items.length} todo(s): ${items.join(', ')}` }
+      return { success: true, output: t('todo.added', { count: items.length, items: items.join(', ') }) }
     }
     if (action === 'done') {
-      return { success: true, output: `Marked ${items.length} item(s) as done` }
+      return { success: true, output: t('todo.marked_done', { count: items.length }) }
     }
     if (action === 'list') {
-      return { success: true, output: 'No active todos' }
+      return { success: true, output: t('todo.no_active') }
     }
-    return { success: false, output: `Unknown todo action: ${action}` }
+    return { success: false, output: t('todo.unknown_action', { action }) }
   },
 }

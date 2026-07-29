@@ -2,6 +2,7 @@ import type { AgentModule } from '../types'
 import type { PromptBlock } from '../../core/types'
 import type { ToolDefinition } from '../../tools/types'
 import type { AgentPlugin } from '../types'
+import { t } from '../../i18n/index'
 import { PlanCreator } from './planner'
 import { PlanTracker } from './tracker'
 import { StepVerifier } from './verifier'
@@ -66,9 +67,9 @@ export class ExecutionModule implements AgentModule {
           if (action === 'update' && args.step && this.tracker) {
             this.tracker.updateStepStatus(Number(args.step), (args.status as any) || 'done')
             if (args.note) this.tracker.addNote(Number(args.step), String(args.note))
-            return { success: true, output: `Step ${args.step}: ${args.status || 'done'}` }
+            return { success: true, output: t('plan.step_status', { step: String(args.step), status: String(args.status || 'done') }) }
           }
-          return { success: true, output: `Plan ${action}: acknowledged` }
+          return { success: true, output: t('plan.acknowledged', { action }) }
         },
       },
       {
@@ -82,7 +83,7 @@ export class ExecutionModule implements AgentModule {
           },
           required: ['action'],
         },
-        handler: async () => ({ success: true, output: 'Todo acknowledged' }),
+        handler: async () => ({ success: true, output: t('todo.acknowledged') }),
       },
       {
         name: 'verify',
@@ -94,15 +95,15 @@ export class ExecutionModule implements AgentModule {
           },
         },
         handler: async (_ctx, args) => {
-          if (!this.tracker) return { success: false, output: 'No active plan' }
+          if (!this.tracker) return { success: false, output: t('plan.no_active') }
           const step = args.step ? this.tracker.getStep(Number(args.step)) : this.tracker.getCurrentStep()
-          if (!step) return { success: false, output: 'Step not found' }
+          if (!step) return { success: false, output: t('plan.step_not_found') }
           const result = await this.verifier.verifyStep(step.description)
           return {
             success: result.passed,
             output: result.passed
-              ? 'Verification passed'
-              : `Verification failed: ${result.failed.map(f => f.message).join('; ')}`,
+              ? t('verify.passed')
+              : t('verify.failed', { details: result.failed.map(f => f.message).join('; ') }),
           }
         },
       },

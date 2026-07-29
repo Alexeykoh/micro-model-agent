@@ -1,4 +1,5 @@
 import type { PipelineStep } from './parser'
+import { t } from '../../i18n/index'
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
 
@@ -11,7 +12,7 @@ export class PipelineEngine {
     const order: string[] = []
 
     function visit(stepId: string, stepMap: Map<string, PipelineStep>): void {
-      if (inStack.has(stepId)) throw new Error(`Circular dependency: ${stepId}`)
+      if (inStack.has(stepId)) throw new Error(t('pipeline.circular', { stepId }))
       if (visited.has(stepId)) return
 
       inStack.add(stepId)

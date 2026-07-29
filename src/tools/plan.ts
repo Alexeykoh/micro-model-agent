@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const planTool: ToolDefinition = {
@@ -19,16 +20,16 @@ export const planTool: ToolDefinition = {
     if (action === 'create') {
       const title = String(args.title || 'Plan')
       const steps = Array.isArray(args.steps) ? args.steps : []
-      return { success: true, output: `Plan "${title}" created with ${steps.length} steps` }
+      return { success: true, output: t('plan.title_steps', { title, count: steps.length }) }
     }
     if (action === 'update') {
       const step = Number(args.step || 0)
       const status = String(args.status || 'done')
-      return { success: true, output: `Step ${step} marked as ${status}` }
+      return { success: true, output: t('plan.step_marked', { step, status }) }
     }
     if (action === 'abort') {
-      return { success: true, output: 'Plan aborted' }
+      return { success: true, output: t('plan.aborted') }
     }
-    return { success: false, output: `Unknown plan action: ${action}` }
+    return { success: false, output: t('plan.unknown_action', { action }) }
   },
 }

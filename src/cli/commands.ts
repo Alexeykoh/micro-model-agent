@@ -2,18 +2,19 @@ import { Command } from 'commander'
 import { bootstrap } from '../core/bootstrap'
 import { saveConfig } from '../config/config'
 import { runSetup } from './setup'
+import { t } from '../i18n/index'
 import { join } from 'path'
 import { homedir } from 'os'
 
 export function createProgram(): Command {
   const program = new Command()
     .name('mma')
-    .description('Micro Models Agent — AI coding agent for small models')
+    .description(t('cli.description'))
     .version('0.4.0')
 
   program
     .command('init')
-    .description('Run interactive setup wizard')
+    .description(t('cli.init'))
     .action(async () => {
       const answers = await runSetup()
       const configPath = join(homedir(), '.mma', 'config.json')
@@ -26,14 +27,14 @@ export function createProgram(): Command {
       config.maxToolIterations = answers.maxToolIterations
       config.locale = answers.locale
       saveConfig(config, configPath)
-      console.log('Configuration saved to ~/.mma/config.json')
+      console.log(t('cli.config_saved'))
     })
 
-  const configCmd = program.command('config').description('Manage configuration')
+  const configCmd = program.command('config').description(t('cli.manage_config'))
   configCmd.command('set')
-    .argument('<key>', 'Config key (e.g., model, provider.baseUrl)')
+    .argument('<key>', t('cli.config_key'))
     .argument('<value>', 'Config value')
-    .description('Set a config value')
+    .description(t('cli.set_value'))
     .action(async (key: string, value: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
       const { config } = await bootstrap()
@@ -50,61 +51,61 @@ export function createProgram(): Command {
       else if (/^\d+\.\d+$/.test(value)) obj[lastKey] = parseFloat(value)
       else obj[lastKey] = value
       saveConfig(config, configPath)
-      console.log(`Set ${key}=${value}`)
+      console.log(t('cli.set_done', { key, value }))
     })
   configCmd.command('show')
-    .description('Show current config')
+    .description(t('cli.show_config'))
     .action(async () => {
       const { config } = await bootstrap()
       console.log(JSON.stringify(config, null, 2))
     })
 
-  const model = program.command('model').description('Manage models')
+  const model = program.command('model').description(t('cli.manage_models'))
   model.command('list')
-    .description('List available models')
+    .description(t('cli.list_models'))
     .action(async () => {
       const { config } = await bootstrap()
-      console.log('Current model:', config.model)
-      console.log('(Use /model use <name> to change)')
+      console.log(t('cli.current_model'), config.model)
+      console.log(t('cli.model_hint'))
     })
   model.command('use')
     .argument('<name>', 'Model name')
-    .description('Set default model')
+    .description(t('cli.set_model'))
     .action(async (name: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
       const { config } = await bootstrap()
       config.model = name
       saveConfig(config, configPath)
-      console.log(`Model set to: ${name}`)
+      console.log(t('cli.model_set', { name }))
     })
 
-  const provider = program.command('provider').description('Manage providers')
+  const provider = program.command('provider').description(t('cli.manage_providers'))
   provider.command('list')
-    .description('List providers')
+    .description(t('cli.list_providers'))
     .action(async () => {
       const { config } = await bootstrap()
-      console.log('Current provider:', config.provider.type)
-      console.log('Base URL:', config.provider.baseUrl)
+      console.log(t('cli.current_provider'), config.provider.type)
+      console.log(t('cli.base_url'), config.provider.baseUrl)
     })
   provider.command('use')
     .argument('<name>', 'Provider name')
-    .description('Set active provider')
+    .description(t('cli.set_provider'))
     .action(async (name: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
       const { config } = await bootstrap()
       config.provider.type = name
       saveConfig(config, configPath)
-      console.log(`Provider set to: ${name}`)
+      console.log(t('cli.provider_set', { name }))
     })
 
-  const session = program.command('session').description('Manage sessions')
+  const session = program.command('session').description(t('cli.manage_sessions'))
   session.command('list')
-    .description('List all sessions')
+    .description(t('cli.list_sessions'))
     .action(async () => {
       const { sessionManager } = await bootstrap()
       const sessions = sessionManager.list()
       if (sessions.length === 0) {
-        console.log('No sessions found')
+        console.log(t('session.no_sessions'))
         return
       }
       const active = sessionManager.getActive()
@@ -115,12 +116,12 @@ export function createProgram(): Command {
     })
   session.command('show')
     .argument('<id>', 'Session id')
-    .description('Show session details')
+    .description(t('cli.show_details'))
     .action(async (id: string) => {
       const { sessionManager } = await bootstrap()
       const meta = sessionManager.get(id)
       if (!meta) {
-        console.log(`Session not found: ${id}`)
+        console.log(t('session.not_found', { id }))
         return
       }
       console.log(`ID:           ${meta.id}`)
@@ -134,11 +135,11 @@ export function createProgram(): Command {
     })
   session.command('delete')
     .argument('<id>', 'Session id')
-    .description('Delete a session')
+    .description(t('cli.delete_session'))
     .action(async (id: string) => {
       const { sessionManager } = await bootstrap()
       sessionManager.delete(id)
-      console.log(`Session deleted: ${id}`)
+      console.log(t('session.deleted', { id }))
     })
 
   program
@@ -150,3 +151,4 @@ export function createProgram(): Command {
 
   return program
 }
+

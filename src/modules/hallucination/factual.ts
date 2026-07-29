@@ -1,3 +1,5 @@
+import { t } from '../../i18n/index'
+
 export interface HallucinationCheckResult {
   status: 'pass' | 'warn' | 'retry' | 'block'
   reason?: string
@@ -49,7 +51,7 @@ export class FactualCheck {
       const uniquePaths = [...new Set(unknownPaths)]
       return {
         status: 'warn',
-        reason: `Mentioned file paths not found in known files: ${uniquePaths.slice(0, 3).join(', ')}`,
+        reason: t('hall.unknown_paths', { paths: uniquePaths.slice(0, 3).join(', ') }),
       }
     }
 

@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import type { SkillsModule } from '../modules/skills/module'
 
@@ -17,7 +18,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
       const task = args.task ? String(args.task) : undefined
 
       if (!name && !task) {
-        return { success: false, output: 'Provide either "name" or "task" parameter' }
+        return { success: false, output: t('tool.name_or_task') }
       }
 
       let result
@@ -26,7 +27,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
       } else if (task) {
         result = skillsModule.loadByMatch(task)
       } else {
-        return { success: false, output: 'Invalid parameters' }
+        return { success: false, output: t('tool.invalid_params') }
       }
 
       if (!result.success) {
@@ -37,7 +38,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
       const budget = skillsModule.getBudget()
       return {
         success: true,
-        output: `${result.message}\n\n--- Skill Content ---\n${skill.content}\n\n[Skill loaded. ${budget.remaining} tokens remaining in skills budget]`,
+        output: `${result.message}\n\n--- Skill Content ---\n${skill.content}\n\n${t('tool.skill_budget', { remaining: budget.remaining })}`,
       }
     },
   }

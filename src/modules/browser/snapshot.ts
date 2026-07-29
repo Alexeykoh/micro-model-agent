@@ -1,4 +1,5 @@
 import type { ElementEntry, PageSnapshot } from './types'
+import { t } from '../../i18n/index'
 
 function inferRole(tag: string, type?: string): string {
   const t = tag.toLowerCase()
@@ -93,7 +94,7 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
   lines.push('')
 
   if (snapshot.elements.length === 0 && !snapshot.truncated) {
-    lines.push('(no interactive elements on page)')
+    lines.push(t('browser.no_elements'))
     return lines.join('\n')
   }
 
@@ -107,7 +108,7 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
 
   if (snapshot.truncated) {
     lines.push('')
-    lines.push(`... and more elements not shown. Use scroll or search to find others.`)
+    lines.push(t('browser.more_elements'))
   }
 
   return lines.join('\n')

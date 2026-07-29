@@ -1,3 +1,5 @@
+import { t } from '../../i18n/index'
+
 export class StuckDetector {
   private threshold: number
   private errorThreshold: number
@@ -43,11 +45,11 @@ export class StuckDetector {
 
   getStuckReason(): string {
     if (this.isStuck()) {
-      return `Stuck on step ${this.currentStepId}. Current: ${this.currentStepDescription}. No progress for ${this.iterationsOnCurrentStep} iterations.`
+      return t('exec.stuck', { stepId: String(this.currentStepId), description: this.currentStepDescription, iterations: this.iterationsOnCurrentStep })
     }
     const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
     if (errorTool) {
-      return `Tool ${errorTool[0]} failed ${errorTool[1]} times. Suggest alternative approach.`
+      return t('exec.tool_errors', { tool: errorTool[0], count: errorTool[1] })
     }
     return ''
   }
@@ -66,7 +68,7 @@ export class StuckDetector {
     const overlaps = pathInCall.some(p => pathInStep.some(s => p.includes(s) || s.includes(p)))
 
     if (!overlaps && pathInStep.length > 0 && pathInCall.length > 0) {
-      return `[⚠ Outside plan: step ${this.currentStepId} is "${this.currentStepDescription}", but you're using ${toolName} on a different path. Explain or return.]`
+      return t('exec.off_track', { stepId: String(this.currentStepId), description: this.currentStepDescription, tool: toolName })
     }
 
     return null

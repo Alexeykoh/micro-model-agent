@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const mcpCallTool: ToolDefinition = {
@@ -16,7 +17,6 @@ export const mcpCallTool: ToolDefinition = {
     const server = String(args.server || '')
     const tool = String(args.tool || '')
     const toolArgs = args.args || {}
-    // MCP integration is not yet implemented
-    return { success: true, output: `MCP call: ${server}/${tool} with ${JSON.stringify(toolArgs)}` }
+    return { success: true, output: t('tool.mcp_call', { server, tool, args: JSON.stringify(toolArgs) }) }
   },
 }

@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const pipelineRunTool: ToolDefinition = {
@@ -12,6 +13,6 @@ export const pipelineRunTool: ToolDefinition = {
   },
   handler: async (_ctx, args) => {
     const name = String(args.name || '')
-    return { success: true, output: `Pipeline "${name}" execution started. Pipeline engine is a stub — run dispatched.` }
+    return { success: true, output: t('tool.pipeline_started', { name }) }
   },
 }

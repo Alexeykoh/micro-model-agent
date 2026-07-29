@@ -1,6 +1,7 @@
 import type { ToolDefinition, ToolContext, ToolResult } from './types'
 import { BrowserSession } from '../modules/browser/session'
 import { DEFAULT_BROWSER_CONFIG } from '../modules/browser/types'
+import { t } from '../i18n/index'
 import { join } from 'path'
 
 let session: BrowserSession | null = null
@@ -22,7 +23,7 @@ function getSession(ctx: ToolContext): BrowserSession {
 }
 
 export function formatScreenshotForTextModel(snapshot: string): string {
-  return `[Screenshot captured — image not available for text-only model]\n\n${snapshot}`
+  return `${t('tool.screenshot_unavailable')}\n\n${snapshot}`
 }
 
 export function formatScreenshotResult(snapshot: string, screenshot: Buffer, supportsVision: boolean): string {
@@ -76,7 +77,7 @@ export function createBrowserTool(): ToolDefinition {
     handler: async (ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
       const action = String(args.action || '')
       if (!action) {
-        return { success: false, output: 'Action is required.' }
+        return { success: false, output: t('tool.action_required') }
       }
 
       const s = getSession(ctx)

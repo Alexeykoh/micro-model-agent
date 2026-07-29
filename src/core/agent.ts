@@ -8,6 +8,7 @@ import type { AppConfig } from '../config/types'
 import type { PromptBlock } from './types'
 import type { ToolCall } from './types'
 import type { SessionManager } from '../modules/session/manager'
+import { t } from '../i18n/index'
 import pc from 'picocolors'
 import { PromptBuilder } from './prompt-builder'
 
@@ -54,7 +55,7 @@ export class Agent {
 
     const truncated = output.slice(0, maxChars)
     const removedChars = output.length - maxChars
-    return truncated + `\n\n[Truncated: ${Math.ceil(removedChars / 2)} tokens removed]`
+    return truncated + `\n\n${t('tool.truncated', { tokens: Math.ceil(removedChars / 2) })}`
   }
 
   async run(input: string, onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
@@ -130,7 +131,7 @@ export class Agent {
           }
           if (chunk.type === 'tool_call' && chunk.toolCall) {
             sawToolCall = true
-            onMeta?.('\n' + pc.dim(`[Using: ${chunk.toolCall.name}]`) + '\n')
+            onMeta?.('\n' + pc.dim(t('tool.using', { name: chunk.toolCall.name })) + '\n')
             let parsedArgs: Record<string, unknown>
             try {
               parsedArgs = JSON.parse(chunk.toolCall.arguments)
@@ -147,7 +148,7 @@ export class Agent {
       } catch (err: any) {
         logger.error(`LLM call failed: ${err.message}`)
         pluginManager.runOnError({ iteration, logger }, err)
-        return { success: false, text: lastText, error: `LLM error: ${err.message}`, iterationCount: iteration }
+        return { success: false, text: lastText, error: t('error.llm', { message: err.message }), iterationCount: iteration }
       }
 
       if (sawToolCall) {
@@ -180,11 +181,11 @@ export class Agent {
       const hallucinationResult = hallucinationDetector.validate(textContent)
       if (hallucinationResult.status === 'block') {
         logger.warn(`Response blocked: ${hallucinationResult.reason}`)
-        return { success: false, text: lastText, error: `Response blocked: ${hallucinationResult.reason}`, iterationCount: iteration }
+        return { success: false, text: lastText, error: t('error.response_blocked', { reason: hallucinationResult.reason || '' }), iterationCount: iteration }
       }
       if (hallucinationResult.status === 'warn') {
         logger.warn(`Hallucination warning: ${hallucinationResult.reason}`)
-        const warnPrefix = '\n\n[⚠️ Uncertainty] '
+        const warnPrefix = t('hall.uncertainty_prefix')
         if (onChunk) {
           onChunk(warnPrefix)
         }
@@ -227,7 +228,7 @@ export class Agent {
     const budget = contextManager.getBudget()
 
     if (iteration >= config.maxToolIterations) {
-      return { success: false, text: lastText, error: `Max iterations (${config.maxToolIterations}) reached`, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
+      return { success: false, text: lastText, error: t('error.max_iters', { max: config.maxToolIterations }), iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
     }
 
     return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }

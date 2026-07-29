@@ -1,5 +1,6 @@
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { resolve, normalize, dirname } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const writeFileTool: ToolDefinition = {
@@ -18,13 +19,13 @@ export const writeFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
     if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: `Path not allowed: ${path}` }
+      return { success: false, output: t('file.path_not_allowed', { path }) }
     }
     const dir = dirname(resolved)
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
     writeFileSync(resolved, String(args.content), 'utf-8')
-    return { success: true, output: `Written ${path}` }
+    return { success: true, output: t('file.written', { path }) }
   },
 }

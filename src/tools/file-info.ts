@@ -1,5 +1,6 @@
 import { statSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const fileInfoTool: ToolDefinition = {
@@ -17,10 +18,10 @@ export const fileInfoTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
     if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: `Path not allowed: ${path}` }
+      return { success: false, output: t('file.path_not_allowed', { path }) }
     }
     if (!existsSync(resolved)) {
-      return { success: false, output: `Not found: ${path}` }
+      return { success: false, output: t('file.not_found_short', { path }) }
     }
     const stat = statSync(resolved)
     return {

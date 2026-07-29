@@ -1,3 +1,4 @@
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 const MAX_CHARS = 15000
@@ -27,17 +28,17 @@ export const webFetchTool: ToolDefinition = {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(15000) })
       if (!response.ok) {
-        return { success: false, output: `HTTP ${response.status}: ${response.statusText}` }
+        return { success: false, output: t('error.http', { status: response.status, statusText: response.statusText }) }
       }
       const contentType = response.headers.get('content-type') || ''
       const text = await response.text()
       const cleaned = contentType.includes('html') ? stripHtml(text) : text
       if (cleaned.length > MAX_CHARS) {
-        return { success: true, output: cleaned.slice(0, MAX_CHARS) + '\n... (truncated)' }
+        return { success: true, output: cleaned.slice(0, MAX_CHARS) + t('file.truncated') }
       }
-      return { success: true, output: cleaned || '(empty page)' }
+      return { success: true, output: cleaned || t('file.empty_page') }
     } catch (e: any) {
-      return { success: false, output: `Fetch failed: ${e.message}` }
+      return { success: false, output: t('error.fetch_failed', { message: e.message }) }
     }
   },
 }

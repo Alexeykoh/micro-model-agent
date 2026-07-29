@@ -1,4 +1,5 @@
 import { globSync } from 'fs'
+import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 
 export const globTool: ToolDefinition = {
@@ -14,6 +15,6 @@ export const globTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const pattern = String(args.pattern)
     const results = globSync(pattern, { cwd: ctx.baseDir })
-    return { success: true, output: results.length > 0 ? results.join('\n') : 'No matches' }
+    return { success: true, output: results.length > 0 ? results.join('\n') : t('file.no_matches') }
   },
 }

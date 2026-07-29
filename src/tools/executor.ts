@@ -1,5 +1,6 @@
 import type { ToolContext, ToolCall, ToolResult, PluginManager } from './types'
 import { ToolRegistry } from './registry'
+import { t } from '../i18n/index'
 
 export class ToolExecutor {
   private registry: ToolRegistry
@@ -15,7 +16,7 @@ export class ToolExecutor {
   async execute(call: ToolCall): Promise<ToolResult> {
     const tool = this.registry.get(call.name)
     if (!tool) {
-      return { success: false, output: `Unknown tool: ${call.name}`, toolCallId: call.id }
+      return { success: false, output: t('tool.unknown', { name: call.name }), toolCallId: call.id }
     }
 
     for (const plugin of this.pluginManager.getAllPlugins()) {
@@ -23,7 +24,7 @@ export class ToolExecutor {
         try {
           const proceed = await plugin.onBeforeTool(this.ctx, call)
           if (!proceed) {
-            return { success: false, output: `Blocked by plugin: ${plugin.constructor?.name || 'unknown'}`, toolCallId: call.id }
+            return { success: false, output: t('tool.blocked', { plugin: plugin.constructor?.name || 'unknown' }), toolCallId: call.id }
           }
         } catch (e: any) {
           this.ctx.logger.warn(`Plugin onBeforeTool error: ${e.message}`)
@@ -36,7 +37,7 @@ export class ToolExecutor {
       result = await tool.handler(this.ctx, call.arguments)
       result.toolCallId = call.id
     } catch (e: any) {
-      result = { success: false, output: `Error: ${e.message}`, toolCallId: call.id }
+      result = { success: false, output: `${t('error.prefix')}${e.message}`, toolCallId: call.id }
     }
 
     for (const plugin of this.pluginManager.getAllPlugins()) {

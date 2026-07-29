@@ -6,6 +6,7 @@ import { ToolRegistry, registerAllTools } from '../tools/index'
 import { ToolExecutor } from '../tools/executor'
 import { ModuleRegistry } from '../modules/registry'
 import { PluginManager } from '../modules/plugins/manager'
+import { PluginLoader } from '../modules/plugins/loader'
 import { ContextManager } from '../modules/context/manager'
 import { HallucinationDetector } from '../modules/hallucination/detector'
 import { ExecutionModule } from '../modules/execution/module'
@@ -13,6 +14,7 @@ import { SessionStore, SessionManager, SessionModule } from '../modules/session/
 import { UserProfile } from '../modules/user-profile/profile'
 import { SkillsLoader, SkillsMatcher, SkillsModule } from '../modules/skills/index'
 import { BrowserModule } from '../modules/browser/index'
+import { setLocale } from '../i18n/index'
 import { Agent } from './agent'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -38,6 +40,7 @@ export interface BootstrapResult {
   logger: Logger
   sessionManager: SessionManager
   skillsModule: SkillsModule
+  pluginManager: PluginManager
 }
 
 export async function bootstrap(configDir?: string, projectDir?: string): Promise<BootstrapResult> {
@@ -45,6 +48,7 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   const projectConfigPath = projectDir ? join(projectDir, '.mmrc') : join(process.cwd(), '.mmrc')
 
   const config = loadConfig({ configDir: dir, projectConfigPath })
+  setLocale(config.locale)
 
   const logger = new Logger(config.logLevel as any)
   logger.setLogDir(join(dir, 'logs'))
@@ -158,24 +162,32 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     moduleRegistry.register(browserModule)
     const browserPlugin = browserModule.getPlugin()
     if (browserPlugin) {
+      browserPlugin.isBuiltin = true
       pluginManager.register(browserPlugin)
     }
   }
 
   const plugin = execModule.getPlugin()
   if (plugin) {
+    plugin.isBuiltin = true
     pluginManager.register(plugin)
   }
 
   const sessionPlugin = sessionModule.getPlugin()
   if (sessionPlugin) {
+    sessionPlugin.isBuiltin = true
     pluginManager.register(sessionPlugin)
   }
 
   const skillsPlugin = skillsModule.getPlugin()
   if (skillsPlugin) {
+    skillsPlugin.isBuiltin = true
     pluginManager.register(skillsPlugin)
   }
+
+  const pluginLoader = new PluginLoader()
+  const userPluginsDir = join(dir, 'plugins')
+  pluginLoader.loadFromDir(userPluginsDir, pluginManager, logger)
 
   contextManager.onCompact = (messages) => {
     const meta = sessionManager.getActiveMeta()
@@ -210,5 +222,5 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
 
   const agent = new Agent(agentDeps)
 
-  return { agent, config, logger, sessionManager, skillsModule }
+  return { agent, config, logger, sessionManager, skillsModule, pluginManager }
 }

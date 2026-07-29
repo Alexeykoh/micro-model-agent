@@ -1,5 +1,6 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { t } from '../i18n/index'
 import type { AppConfig } from '../config/types'
 
 export class BackupManager {
@@ -43,15 +44,15 @@ export class BackupManager {
     const bakDir = this.configDir + '.bak'
 
     if (existsSync(bakConfig)) {
-      lines.push(`- config → config.json.bak`)
+      lines.push(t('migration.config_bak'))
     }
     if (existsSync(bakDir)) {
       const files = readdirSync(bakDir)
-      lines.push(`- .mma/ → .mma.bak/ (${files.length} files)`)
+      lines.push(t('migration.dir_bak', { count: files.length }))
     }
 
     return lines.length > 0
-      ? `Migrated:\n${lines.join('\n')}`
-      : 'No migration needed'
+      ? `${t('migration.migrated')}\n${lines.join('\n')}`
+      : t('migration.not_needed')
   }
 }
