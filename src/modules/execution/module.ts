@@ -31,55 +31,6 @@ export class ExecutionModule implements AgentModule {
     return this.tracker
   }
 
-  autoPlan(task: string): Plan | null {
-    if (!PlanCreator.isMultiStep(task)) return null
-
-    const steps = this.inferSteps(task)
-    if (steps.length === 0) return null
-
-    const title = this.inferTitle(task)
-    const plan = PlanCreator.createPlan(title, steps)
-    this.setPlan(plan)
-    return plan
-  }
-
-  private inferTitle(task: string): string {
-    const lower = task.toLowerCase()
-    if (lower.includes('найди') || lower.includes('search') || lower.includes('find')) {
-      return 'Web Search Task'
-    }
-    if (lower.includes('создай') || lower.includes('implement') || lower.includes('create')) {
-      return 'Implementation Task'
-    }
-    return 'Multi-step Task'
-  }
-
-  private inferSteps(task: string): string[] {
-    const lower = task.toLowerCase()
-    const steps: string[] = []
-
-    if (lower.includes('найди') || lower.includes('search') || lower.includes('найти')) {
-      steps.push('Search the web for relevant information')
-    }
-    if (lower.includes('интернет') || lower.includes('web') || lower.includes('в интернете')) {
-      steps.push('Collect data from web sources')
-    }
-    if (lower.includes('запиши') || lower.includes('write') || lower.includes('save') || lower.includes('файл')) {
-      steps.push('Write results to file')
-    }
-    if (lower.includes('характеристики') || lower.includes('spec') || lower.includes('цены') || lower.includes('price')) {
-      steps.push('Include specifications and prices')
-    }
-
-    if (steps.length === 0) {
-      steps.push('Analyze the task requirements')
-      steps.push('Execute the main steps')
-      steps.push('Verify the results')
-    }
-
-    return steps
-  }
-
   getStuckDetector(): StuckDetector {
     return this.stuckDetector
   }

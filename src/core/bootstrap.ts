@@ -31,6 +31,11 @@ function buildSystemInfo(config: AppConfig, baseDir: string, profileCompressed: 
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
+    ``,
+    `For multi-step tasks (involving multiple actions, file operations, web searches, or complex workflows):`,
+    `- Use the "plan" tool to create a plan before starting`,
+    `- Update plan status after completing each step`,
+    `- For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse"`,
   ].join('\n')
 }
 
@@ -218,7 +223,6 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     baseDir,
     promptBlocks,
     sessionManager,
-    executionModule: execModule,
   }
 
   const agent = new Agent(agentDeps)

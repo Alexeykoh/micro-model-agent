@@ -534,13 +534,9 @@ export class Repl {
     console.log()
   }
 
-  private showContextBar(result: { contextUsed?: number; contextLimit?: number; planProgress?: { current: number; total: number; title: string } }): void {
-    if (result.planProgress) {
-      const { current, total, title } = result.planProgress
-      const pct = Math.round((current / total) * 100)
-      console.log(pc.dim(t('repl.plan_progress', { title, current: String(current), total: String(total), pct: String(pct) })))
-    }
+  private showContextBar(result: { contextUsed?: number; contextLimit?: number }): void {
     if (result.contextUsed !== undefined && result.contextLimit !== undefined && result.contextLimit > 0) {
+      console.log()
       console.log(formatContextBar(result.contextUsed, result.contextLimit))
     }
   }

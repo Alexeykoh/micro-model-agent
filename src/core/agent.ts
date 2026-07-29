@@ -8,11 +8,9 @@ import type { AppConfig } from '../config/types'
 import type { PromptBlock } from './types'
 import type { ToolCall } from './types'
 import type { SessionManager } from '../modules/session/manager'
-import type { ExecutionModule } from '../modules/execution/module'
 import { t } from '../i18n/index'
 import pc from 'picocolors'
 import { PromptBuilder } from './prompt-builder'
-import { PlanCreator } from '../modules/execution/planner'
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000
@@ -28,7 +26,6 @@ export interface AgentDeps {
   baseDir: string
   promptBlocks: PromptBlock[]
   sessionManager?: SessionManager
-  executionModule?: ExecutionModule
 }
 
 export interface AgentResult {
@@ -38,7 +35,6 @@ export interface AgentResult {
   iterationCount: number
   contextUsed?: number
   contextLimit?: number
-  planProgress?: { current: number; total: number; title: string }
 }
 
 export class Agent {
@@ -84,16 +80,6 @@ export class Agent {
 
     if (sessionManager) {
       sessionManager.appendMessage({ role: 'user', content: input, timestamp: new Date().toISOString() })
-    }
-
-    const { executionModule } = this.deps
-    if (executionModule) {
-      const plan = executionModule.autoPlan(input)
-      if (plan) {
-        const planText = PlanCreator.toPromptBlock(plan, 0)
-        contextManager.addMessage({ role: 'system', content: `[Plan created]\n${planText}` })
-        onMeta?.(`\n${pc.dim('[Plan: ' + plan.title + ']\n')}`)
-      }
     }
 
     let iteration = 0
@@ -241,13 +227,11 @@ export class Agent {
     const tokensUsed = contextManager.getEstimatedTokens()
     const budget = contextManager.getBudget()
 
-    const planProgress = this.deps.executionModule?.getTracker()?.getProgress()
-
     if (iteration >= config.maxToolIterations) {
-      return { success: false, text: lastText, error: t('error.max_iters', { max: config.maxToolIterations }), iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history, planProgress }
+      return { success: false, text: lastText, error: t('error.max_iters', { max: config.maxToolIterations }), iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
     }
 
-    return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history, planProgress }
+    return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
   }
 
   clearContext(): void {
