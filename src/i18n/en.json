@@ -236,6 +236,7 @@
   "exec.tool_errors": "Tool {tool} failed {count} times. Suggest alternative approach.",
   "exec.tool_errors_recovery": "[Tool {tool} failed {count} times. Stop using this tool and try a different approach or explain the issue to the user.]",
   "exec.repetitive_tool": "[You called {tool} {count} times in a row with the same arguments and result. Stop repeating — try a different approach: create files, change arguments, or explain the problem to the user.]",
+  "exec.plan_warning": "[\u26a0 Warning: you are working on step {step} - \"{description}\". Your {tool} call touches files not mentioned in the current step. Focus on the current step or update the plan via plan update.]",
   "exec.off_track": "[\u26a0 Outside plan: step {stepId} is \"{description}\", but you're using {tool} on a different path. Explain or return.]",
   "exec.audit_pass": "[\u2713] Task complete: {done}/{total} steps done, {files} files verified",
   "exec.audit_fail": "[\u2717] Task incomplete: {done}/{total} steps done, {files} files missing",
@@ -276,5 +277,19 @@
   "migration.not_needed": "No migration needed",
   "ui.error_prefix": "Error: ",
   "ui.success_prefix": "\u2713 ",
-  "ui.warning_prefix": "\u26a0 "
+  "ui.warning_prefix": "\u26a0 ",
+  "indexer.map_header": "Project map",
+  "indexer.top_directories": "Top directories",
+  "indexer.files": "Files",
+  "indexer.empty": "No indexed files",
+  "indexer.and_more": "... and {count} more files",
+  "indexer.project_map_desc": "Get a map of the project: summary of files, languages, and exports. Use action 'find' to search files by path or exported name, 'refresh' to rebuild the index.",
+  "indexer.project_map_action_desc": "Action: summary, refresh, or find",
+  "indexer.project_map_query_desc": "Search query for the find action (matches file path or exported names)",
+  "indexer.summary": "Project map: {summary}",
+  "indexer.refreshed": "Project map refreshed: {summary}",
+  "indexer.not_indexed": "Project has not been indexed yet",
+  "indexer.find_results": "Found {count} matching files:\n{results}",
+  "indexer.no_matches": "No matching files for \"{query}\"",
+  "tool.friendly.project_map": "Project map"
 }

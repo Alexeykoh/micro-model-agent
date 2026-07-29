@@ -358,10 +358,14 @@ Dispatch pipeline:
 ```
 Plugins:onBeforeTool → validate args → handler() → Plugins:onAfterTool
                                                       ↓
-                                           hallucination:check
+                                           builtin plugins (lint-on-write)
                                                       ↓
                                            log to session history
 ```
+
+**Builtin plugins:**
+- `lint-on-write` — после `write_file` / `edit_file` проверяет синтаксис TS/JS и запускает `npm run lint` если есть
+- `notify` — базовые lifecycle уведомления
 
 ### 5.3 Tool Descriptions
 
@@ -405,12 +409,12 @@ interface ToolDefinition {
 
 | Tool | Parameters | Что делает | Когда использовать |
 |------|-----------|------------|-------------------|
-| `plan` | `{ action: 'create', title: string, steps: string[] }` | Создаёт многошаговый план. **Вызывается системой** принудительно для multi-step задач. | На старте комплексной задачи |
-| `plan` | `{ action: 'update', step: number, status: 'done' | 'failed' | 'skipped', note?: string }` | Обновляет статус шага. **Модель вызывает после завершения каждого шага.** | После выполнения шага |
+| `plan` | `{ action: 'create', title: string, steps: string[] }` | Создаёт многошаговый план. Показывает пользователю checklist `[x]` / `[ ]`. | На старте комплексной задачи |
+| `plan` | `{ action: 'update', step: number, status: 'done' | 'failed' | 'skipped', note?: string }` | Обновляет статус шага. Показывает обновлённый checklist. | После выполнения шага |
 | `plan` | `{ action: 'abort' }` | Отменяет текущий план | Если задача больше не актуальна |
 | `todo` | `{ action: 'add', step?: number, items: string[] }` | Добавляет подзадачи к шагу | Для детализации шага |
 | `todo` | `{ action: 'done', id: string }` | Отмечает подзадачу выполненной | Для трекинга прогресса внутри шага |
-| `verify` | `{ step?: number }` | Запускает верификацию шага: проверка файлов, синтаксис, тесты. **Вызывается системой автоматически** после каждого plan update. | Для автоматической проверки |
+| `verify` | `{ step?: number }` | Запускает верификацию шага: проверка файлов, синтаксис, тесты. | Для явной проверки шага |
 
 **Инструменты взаимодействия:**
 
@@ -622,10 +626,11 @@ History:          63%  динамическая часть (сжимается)
    - Timeout: 15 секунд (AbortSignal.timeout)
    - Проверка content-type для определения необходимости HTML-очистки
 
-**History recording:**
-- Every message appended to `~/.mma/sessions/<project>/<session-id>.jsonl`
-- Full raw history on disk, never lost
-- Tool `search_history` searches this file
+**History recording (no duplication):**
+- Every message appended once to `~/.mma/sessions/<id>/history.jsonl`
+- Full detailed log appended to `~/.mma/sessions/<id>/session.jsonl` (tool calls, args, results, duration, errors)
+- Context compaction writes only the compacted summary message; old messages are not re-appended
+- Tool `search_history` searches across `history.jsonl` files
 
 ### 6.9 Hallucination Detection (`modules/hallucination/`)
 
@@ -692,18 +697,13 @@ LLM response → confidence check → consistency check → pass/fail
 
 #### 6.11.2 Создание плана
 
-План создаётся **принудительно** (не модель решает, а система) для multi-step задач.
-Эвристика: запрос упоминает >1 файла, или содержит слова «реализуй», «сделай», «добавь», «напиши» + >10 слов.
+План создаётся по решению модели, подкреплённому сильной директивой в system prompt (когда `autoPlan: true`).
+Система **не использует keyword matching** для определения multi-step задач — это антипаттерн (design rule #10).
 
 ```mermaid
 flowchart LR
     TASK["Пользователь:<br/>\"реализуй OAuth\""] 
-    TASK --> HEURISTIC{"multi-step?<br/>файлов > 1 или слов > 10"}
-    HEURISTIC -->|простое| NO_PLAN["выполнить напрямую<br/>без плана"]
-    HEURISTIC -->|сложное| CREATE["system: создать план"]
-    
-    CREATE --> BUILD["execution/planner.ts<br/>разбить на шаги"]
-    BUILD --> PROMPT["system prompt вставляет<br/>модели директиву: создай план"]
+    TASK --> PROMPT["system prompt:<br/>создай план для multi-step"]
     PROMPT --> MODEL_CREATE["модель вызывает<br/>plan action=create"]
     
     MODEL_CREATE --> ORCH_OR_DIRECT{"есть orchestrator.model?"}
@@ -713,24 +713,14 @@ flowchart LR
     ORCH --> SAVE["план сохранён<br/>в system prompt"]
     WORKER --> SAVE
     
-    SAVE --> CONFIRM{"показать<br/>пользователю?"}
-    CONFIRM -->|да| SHOW_USER["вывод в терминал<br/>ожидание подтверждения"]
-    CONFIRM -->|нет, тихий режим| EXEC["выполнять"]
-    SHOW_USER -->|enter| EXEC
+    SAVE --> SHOW_USER["показать план<br/>пользователю [x]/[ ]"]
+    SHOW_USER --> EXEC["выполнять"]
 ```
 
-- **Пользователь не выбирает** — план создаётся автоматически при multi-step задаче
-- Если план не нужен — `/plan abort`
-- Модель **обязана** вызвать `plan update <step> done` после каждого шага — иначе stuck-detector срабатывает через 8 итераций
-- Прогресс выводится пользователю после каждого update:
-  ```
-  [Plan: implement-oauth]  2/5  ██░░░░░  40%
-  ✓  Изучить структуру auth
-  →  Создать OAuth роуты (src/routes/oauth.ts)  [выполняется...]
-  ☐  Создать OAuth сервис
-  ☐  Написать тесты
-  ☐  Проверить тесты
-  ```
+- План виден модели в system prompt на каждой итерации
+- При создании и обновлении плана пользователю показывается checklist `[x]` / `[ ]`
+- Модель должна вызывать `plan update <step> done` после каждого шага
+- Execution module автоматически продвигает план, если все файлы из описания шага созданы
 - Если настроен `orchestrator.model` — планирование и сложные решения уходят на orchestrator, а основная модель только исполняет шаги
 
 #### 6.11.3 Инструменты
@@ -774,18 +764,21 @@ stateDiagram-v2
 
 #### 6.11.5 Верификация шагов
 
-После каждого write/edit автоматически или по команде `verify`:
+После каждого `write_file` / `edit_file` автоматически запускается builtin plugin `lint-on-write`:
 
-1. **Для файлов TS/JS:** `tsc --noEmit` или скрипт из `package.json`
-2. **Для тестов:** `npm test` или `bun test` (только если есть тесты)
-3. **Для плана в целом:** проверка что все упомянутые в шагах файлы существуют на диске
-4. **Проверка синтаксиса** изменённых файлов (без компиляции)
+1. **Проверка синтаксиса** изменённых файлов:
+   - `.ts/.tsx`: `npx tsc --noEmit --skipLibCheck <file>`
+   - `.js/.jsx`: `node --check <file>`
+2. **Project lint:** если в `package.json` есть скрипт `lint`, он тоже запускается
+3. **Результат:** ошибки синтаксиса/линта добавляются к результату tool call, чтобы модель сразу исправила
+4. **По команде `verify`:** проверка файлов, упомянутых в описании шага
 
 #### 6.11.6 Stuck detection
 
-- **N итераций без прогресса:** если модель не завершила текущий шаг за X вызовов LLM (по умолчанию `stuckThreshold: 8`, настраивается в конфиге) → `execution` модуль вставляет в system prompt `[⚠️ Stuck on step 2. Current: <reason>. Suggest: <help>]`
-- **Повторяющиеся ошибки:** один и тот же инструмент падает > 2 раз → `execution` модуль предлагает альтернативный подход
-- **Off-track:** модель вызывает инструмент, не относящийся к текущему шагу → `[⚠️ Outside plan: step 2 is "create OAuth routes", but you're editing src/utils/logger.ts. Explain or return.]`
+- **N итераций без прогресса:** если модель не завершила текущий шаг за X вызовов LLM (по умолчанию `stuckThreshold: 8`, настраивается в конфиге) → `execution` модуль вставляет в system prompt recovery message
+- **Повторяющиеся tool calls:** 3 одинаковых вызова подряд с теми же аргументами → recovery message
+- **Повторяющиеся ошибки:** один и тот же инструмент падает > 2 раз → recovery message
+- **Off-track:** модель вызывает write/edit/bash для файлов, не упомянутых в текущем шаге → warning в system prompt
 
 #### 6.11.7 Финальный аудит
 

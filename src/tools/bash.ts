@@ -1,5 +1,20 @@
 import { execSync } from 'child_process'
+import { platform } from 'os'
 import type { ToolDefinition } from './types'
+
+function adaptCommandForWindows(command: string): string {
+  if (platform() !== 'win32') return command
+
+  // Windows mkdir does not support -p flag, but creates intermediate dirs by default
+  const trimmed = command.trim()
+  if (trimmed.startsWith('mkdir -p ')) {
+    return trimmed.replace(/^mkdir -p /, 'mkdir ')
+  }
+  if (trimmed === 'mkdir -p' || trimmed.startsWith('mkdir -p ')) {
+    return trimmed.replace(/mkdir -p/g, 'mkdir')
+  }
+  return command
+}
 
 export const bashTool: ToolDefinition = {
   name: 'bash',
@@ -13,7 +28,7 @@ export const bashTool: ToolDefinition = {
     required: ['command'],
   },
   handler: async (ctx, args) => {
-    const command = String(args.command)
+    const command = adaptCommandForWindows(String(args.command))
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir
     try {
       const output = execSync(command, {

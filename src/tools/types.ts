@@ -9,6 +9,7 @@ export interface ToolContext {
   config: import('../config/types').AppConfig
   baseDir: string
   logger: import('../logger/app-logger').Logger
+  contextManager?: import('../modules/context/manager').ContextManager
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>
   }
@@ -28,8 +29,11 @@ export interface ToolCall {
 }
 
 export interface PluginHook {
+  name?: string
+  priority?: number
+  isBuiltin?: boolean
   onBeforeTool?(ctx: ToolContext, call: ToolCall): boolean | Promise<boolean>
-  onAfterTool?(ctx: ToolContext, result: ToolResult): void | Promise<void>
+  onAfterTool?(ctx: ToolContext, call: ToolCall, result: ToolResult): void | Promise<void>
 }
 
 export interface PluginManager {

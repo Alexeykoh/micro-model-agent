@@ -95,7 +95,7 @@ export class SkillsModule implements AgentModule {
       lines.push('[Available Skills]')
       lines.push(t('skill.prompt_hint'))
       for (const skill of this.availableSkills) {
-        const desc = skill.description.slice(0, 80)
+        const desc = skill.description.slice(0, 60)
         lines.push(`- ${skill.name}: ${desc}`)
       }
     }

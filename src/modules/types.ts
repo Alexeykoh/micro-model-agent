@@ -14,7 +14,7 @@ export interface AgentPlugin {
   isBuiltin?: boolean
   onBuildPrompt?(): string | null
   onBeforeTool?(ctx: any, call: any): boolean | Promise<boolean>
-  onAfterTool?(ctx: any, result: any): void | Promise<void>
+  onAfterTool?(ctx: any, call: any, result: any): void | Promise<void>
   onBeforeThink?(ctx: any): void
   onAfterThink?(ctx: any): void
   onToolCall?(ctx: any): void

@@ -103,7 +103,10 @@ src/
 │   ├── plugins/        # PluginManager with lifecycle hooks + error isolation
 │   ├── mcp/            # MCP client (stdio/SSE) + server registry
 │   ├── pipelines/      # DAG-based workflow engine (YAML → execute)
-│   ├── indexer/        # File walker + export extraction + disk cache
+│   ├── indexer/        # Automatic project map: file walker + export extraction + disk cache
+│   │   ├── walker.ts   # Recursive walker, language detection, export extraction
+│   │   ├── cache.ts    # JSON cache of index results
+│   │   └── module.ts   # AgentModule — PromptBlock + project_map tool + watch plugin
 │   ├── memory/         # Persistent markdown (conventions.md, decisions.md, errors.md)
 │   ├── context/        # ContextManager (budget calc, sliding window compaction)
 │   ├── session/        # Multi-session management
@@ -145,7 +148,7 @@ src/
 
 ## Session Management
 
-Sessions persist conversation history to `~/.mma/sessions/<id>/` as meta.json + history.jsonl.
+Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`, `history.jsonl`, and `session.jsonl`.
 
 ### REPL slash commands
 
@@ -171,10 +174,12 @@ mma session delete <id>       # Delete a session
 ~/.mma/sessions/
 ├── ses_abc123/
 │   ├── meta.json        # SessionMeta (name, model, counts, timestamps)
-│   └── history.jsonl    # JSONL of SessionMessage[]
+│   ├── history.jsonl    # JSONL of SessionMessage[] (user/assistant/tool summaries)
+│   └── session.jsonl    # Detailed execution log: tool calls, args, results, timing, errors
 └── ses_def456/
     ├── meta.json
-    └── history.jsonl
+    ├── history.jsonl
+    └── session.jsonl
 ```
 
 ### Config
@@ -191,7 +196,7 @@ In `config/defaults.ts` / `~/.mma/config.json`:
 }
 ```
 
-Messages are persisted to history.jsonl on each iteration (tool calls, assistant responses). Context compaction persists a snapshot of all messages. The `search_history` tool searches across all sessions.
+Messages are persisted to `history.jsonl` on each iteration. `session.jsonl` records full tool call details (arguments, raw output, duration, success/failure) for debugging and post-mortem analysis. Context compaction no longer duplicates existing messages — it writes a single compacted summary to the session. The `search_history` tool searches across all `history.jsonl` files.
 
 ## Browser Tool
 
@@ -255,6 +260,22 @@ Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying l
 }
 ```
 
+## Project Map
+
+MMA automatically builds and maintains a map of the current workspace.
+
+- Triggered at agent startup; cached to `<project>/.mma/index-cache.json`.
+- Re-scans on file changes via a file watcher and exposes the result as a system prompt block.
+- `project_map` tool lets the model query the current map:
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `summary` | — | Languages, file counts, top directories, key exports |
+| `refresh` | — | Force a full re-index |
+| `find` | `query` | Search files by path or exported symbol name |
+
+- Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`).
+
 ## Context Budget (dynamic, from model.contextWindow)
 
 | contextWindow | System (25%) | Reserve (12%) | History (63%) |
@@ -263,7 +284,29 @@ Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying l
 | 64K           | 16K         | 8K            | 40K           |
 | 128K          | 32K         | 16K           | 80K           |
 
-Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → extracted facts/decisions/errors.
+Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages.
+
+## Execution Guarantees
+
+### Plan Enforcement
+
+- `autoPlan: true` adds a strong system prompt directive to create a plan for any multi-step task
+- The plan is always visible in the system prompt as a checklist `[x]` / `[ ]`
+- The execution module warns the model when a tool call targets files outside the current step
+- After `write_file` / `edit_file`, the execution module auto-advances the plan if all files mentioned in the current step exist
+
+### Stuck Detection
+
+- `stuckThreshold` (default 8) — too many iterations on the same step injects a recovery message
+- `tool repetition` — 3 identical tool calls with the same arguments inject a recovery message
+- `off-track` — tool calls touching files not in the current step trigger a warning
+
+### Auto-Verification
+
+- Builtin `lint-on-write` plugin runs after every `write_file` / `edit_file`
+- TypeScript files: `tsc --noEmit --skipLibCheck`
+- JavaScript files: `node --check`
+- Syntax errors are appended to the tool result so the model can fix them immediately
 
 ## Agent Loop States
 

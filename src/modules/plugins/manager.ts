@@ -32,10 +32,10 @@ export class PluginManager {
     return true
   }
 
-  async runOnAfterTool(ctx: any, result: ToolResult): Promise<void> {
+  async runOnAfterTool(ctx: any, call: ToolCall, result: ToolResult): Promise<void> {
     for (const plugin of this.plugins) {
       if (plugin.onAfterTool) {
-        try { await plugin.onAfterTool(ctx, result) }
+        try { await plugin.onAfterTool(ctx, call, result) }
         catch { /* error isolation */ }
       }
     }

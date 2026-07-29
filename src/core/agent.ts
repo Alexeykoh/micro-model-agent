@@ -214,7 +214,9 @@ export class Agent {
         }
         hallucinationRetries++
         logger.warn(`Hallucination retry (${hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${hallucinationResult.reason}`)
-        contextManager.addMessage({ role: 'assistant', content: textContent })
+        if (textContent) {
+          contextManager.addMessage({ role: 'assistant', content: textContent })
+        }
         contextManager.addMessage({
           role: 'system',
           content: `[Retry context: ${hallucinationResult.reason}. Please verify your response.]`,
@@ -222,16 +224,18 @@ export class Agent {
         continue
       }
 
-      if (textContent || reasoningContent) {
-        contextManager.addMessage({ role: 'assistant', content: textContent || reasoningContent })
+      if (textContent) {
+        contextManager.addMessage({ role: 'assistant', content: textContent })
         if (sessionManager && config.session.autoSave) {
           sessionManager.appendMessage({
             role: 'assistant',
-            content: (textContent || reasoningContent).slice(0, 500),
+            content: textContent.slice(0, 500),
             timestamp: new Date().toISOString(),
           })
-          sessionManager.appendLog({ ts: new Date().toISOString(), type: 'assistant', content: textContent || reasoningContent })
         }
+      }
+      if (sessionManager && (textContent || reasoningContent)) {
+        sessionManager.appendLog({ ts: new Date().toISOString(), type: 'assistant', content: textContent || reasoningContent })
       }
 
       lastText = textContent

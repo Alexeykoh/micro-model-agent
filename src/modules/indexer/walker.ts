@@ -40,7 +40,7 @@ export class Indexer {
 
   watch(callback: (event: string, filename: string | null) => void): void {
     this.watcher = watch(this.baseDir, { recursive: true }, (event, filename) => {
-      if (filename && !filename.includes('node_modules') && !filename.includes('.git')) {
+      if (filename && !Array.from(IGNORE_DIRS).some((dir) => filename.includes(dir))) {
         callback(event, filename)
       }
     })

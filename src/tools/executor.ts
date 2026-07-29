@@ -51,7 +51,7 @@ export class ToolExecutor {
     for (const plugin of this.pluginManager.getAllPlugins()) {
       if (plugin.onAfterTool) {
         try {
-          await plugin.onAfterTool(this.ctx, result)
+          await plugin.onAfterTool(this.ctx, call, result)
         } catch (e: any) {
           this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`)
         }

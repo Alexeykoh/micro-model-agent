@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import type { IndexResult } from './walker'
 
@@ -28,5 +28,8 @@ export class IndexCache {
 
   invalidate(): void {
     this.cache = null
+    if (existsSync(this.cachePath)) {
+      try { rmSync(this.cachePath) } catch { /* ignore */ }
+    }
   }
 }

@@ -7,6 +7,8 @@ import { ToolExecutor } from '../tools/executor'
 import { ModuleRegistry } from '../modules/registry'
 import { PluginManager } from '../modules/plugins/manager'
 import { PluginLoader } from '../modules/plugins/loader'
+import { plugin as lintOnWritePlugin } from '../modules/plugins/builtin/lint-on-write'
+import { plugin as notifyPlugin } from '../modules/plugins/builtin/notify'
 import { ContextManager } from '../modules/context/manager'
 import { HallucinationDetector } from '../modules/hallucination/detector'
 import { ExecutionModule } from '../modules/execution/module'
@@ -14,6 +16,7 @@ import { SessionStore, SessionManager, SessionModule } from '../modules/session/
 import { UserProfile } from '../modules/user-profile/profile'
 import { SkillsLoader, SkillsMatcher, SkillsModule } from '../modules/skills/index'
 import { BrowserModule } from '../modules/browser/index'
+import { IndexerModule } from '../modules/indexer/index'
 import { setLocale } from '../i18n/index'
 import { Agent } from './agent'
 import { homedir } from 'os'
@@ -25,26 +28,25 @@ import type { AppConfig } from '../config/types'
 
 function buildSystemInfo(config: AppConfig, baseDir: string, profileCompressed: string): string {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
+  const isWin = profileCompressed.toLowerCase().includes('win32')
   const lines = [
     `You are MMA v2, an AI coding agent for small models (${config.model}).`,
     `Date: ${now}`,
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
-    ``,
   ]
+
+  if (isWin) {
+    lines.push(
+      `OS-specific: You are on Windows. Do not use Unix-only command flags like "mkdir -p". Use the create_dir tool to create directories.`,
+    )
+  }
 
   if (config.autoPlan) {
     lines.push(
-      `IMPORTANT: For any task involving 2 or more steps (creating files, editing code, running commands, searching):`,
-      `- ALWAYS create a plan first using the "plan" tool — this significantly improves results`,
-      `- Break the task into concrete, actionable steps`,
-      `- After completing each step, call plan with action "update" to track progress`,
-      `- For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse"`,
-    )
-  } else {
-    lines.push(
-      `For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse".`,
+      ``,
+      `Plan rule: For any task with 2+ steps, create a plan first using the "plan" tool. After each step, call "plan update" to mark progress. Stay focused on the current step.`,
     )
   }
 
@@ -104,6 +106,14 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
 
   const baseDir = projectDir || process.cwd()
 
+  const projectMapCacheDir = join(baseDir, '.mma')
+  const indexerModule = new IndexerModule({ baseDir, cacheDir: projectMapCacheDir })
+  try {
+    await indexerModule.buildIndex()
+  } catch (err: any) {
+    logger.warn(`Project indexing failed: ${err.message}`)
+  }
+
   const skillsLoader = new SkillsLoader()
   const builtinDir = join(import.meta.dirname, '..', 'modules', 'skills', 'builtin')
   const globalDir = join(dir, 'skills')
@@ -140,10 +150,13 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     sessionManager.create()
   }
 
+  const contextManager = new ContextManager(config.contextWindow)
+
   const toolCtx: ToolContext = {
     config,
     baseDir,
     logger,
+    contextManager,
     sessionHistory: {
       append: async (type: string, content: unknown) => {
         const meta = sessionManager.getActiveMeta()
@@ -160,8 +173,6 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager)
 
-  const contextManager = new ContextManager(config.contextWindow)
-
   const hallucinationDetector = new HallucinationDetector()
 
   const moduleRegistry = new ModuleRegistry()
@@ -173,6 +184,7 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   moduleRegistry.register(sessionModule)
 
   moduleRegistry.register(skillsModule)
+  moduleRegistry.register(indexerModule)
 
   if (config.browser.enabled) {
     const browserModule = new BrowserModule()
@@ -207,21 +219,28 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     pluginManager.register(skillsPlugin)
   }
 
+  const indexerPlugin = indexerModule.getPlugin()
+  if (indexerPlugin) {
+    indexerPlugin.isBuiltin = true
+    pluginManager.register(indexerPlugin)
+  }
+
+  pluginManager.register(lintOnWritePlugin)
+  pluginManager.register(notifyPlugin)
+
   const pluginLoader = new PluginLoader()
   const userPluginsDir = join(dir, 'plugins')
   pluginLoader.loadFromDir(userPluginsDir, pluginManager, logger)
 
-  contextManager.onCompact = (messages) => {
+  contextManager.onCompact = (summary) => {
     const meta = sessionManager.getActiveMeta()
     if (!meta || !config.session.autoSave) return
-    for (const msg of messages) {
-      sessionManager.appendMessage({
-        role: msg.role,
-        content: msg.content,
-        name: msg.name,
-        timestamp: new Date().toISOString(),
-      })
-    }
+    sessionManager.appendMessage({
+      role: summary.role,
+      content: summary.content,
+      name: summary.name,
+      timestamp: new Date().toISOString(),
+    })
   }
 
   const promptBlocks: PromptBlock[] = [

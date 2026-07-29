@@ -236,6 +236,7 @@
   "exec.tool_errors": "Инструмент {tool} сбоил {count} раз. Предложите другой подход.",
   "exec.tool_errors_recovery": "[Инструмент {tool} сбоил {count} раз. Прекратите использовать этот инструмент и попробуйте другой подход или объясните проблему пользователю.]",
   "exec.repetitive_tool": "[Вы вызвали {tool} {count} раз подряд с одинаковыми аргументами и результатом. Прекратите повторять — попробуйте другой подход: создайте файлы, измените аргументы или объясните пользователю проблему.]",
+  "exec.plan_warning": "[⚠ Внимание: вы работаете над шагом {step} — \"{description}\". Ваш вызов {tool} касается файлов, не упомянутых в текущем шаге. Сосредоточьтесь на текущем шаге или обновите план через plan update.]",
   "exec.off_track": "[⚠ Вне плана: шаг {stepId} — \"{description}\", но вы используете {tool} для другого пути. Объясните или вернитесь.]",
   "exec.audit_pass": "[✓] Задача выполнена: {done}/{total} шагов, {files} файлов проверено",
   "exec.audit_fail": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов отсутствует",
@@ -276,5 +277,19 @@
   "migration.not_needed": "Миграция не требуется",
   "ui.error_prefix": "Ошибка: ",
   "ui.success_prefix": "✓ ",
-  "ui.warning_prefix": "⚠ "
+  "ui.warning_prefix": "⚠ ",
+  "indexer.map_header": "Карта проекта",
+  "indexer.top_directories": "Основные директории",
+  "indexer.files": "Файлы",
+  "indexer.empty": "Нет проиндексированных файлов",
+  "indexer.and_more": "... и ещё {count} файлов",
+  "indexer.project_map_desc": "Получить карту проекта: сводка по файлам, языкам и экспортам. Используйте действие 'find' для поиска файлов по пути или экспорту, 'refresh' для перестроения индекса.",
+  "indexer.project_map_action_desc": "Действие: summary, refresh или find",
+  "indexer.project_map_query_desc": "Строка поиска для действия find (совпадение по пути или экспортированным именам)",
+  "indexer.summary": "Карта проекта: {summary}",
+  "indexer.refreshed": "Карта проекта обновлена: {summary}",
+  "indexer.not_indexed": "Проект ещё не проиндексирован",
+  "indexer.find_results": "Найдено {count} совпадающих файлов:\n{results}",
+  "indexer.no_matches": "Нет совпадающих файлов для \"{query}\"",
+  "tool.friendly.project_map": "Карта проекта"
 }

@@ -1,0 +1,217 @@
+import { dirname } from 'path'
+import type { AgentModule, AgentPlugin } from '../types'
+import type { PromptBlock } from '../../core/types'
+import type { ToolDefinition, ToolContext, ToolResult } from '../../tools/types'
+import { Indexer } from './walker'
+import { IndexCache } from './cache'
+import type { IndexResult, IndexedFile } from './walker'
+import { t } from '../../i18n/index'
+
+export interface IndexerModuleOptions {
+  baseDir: string
+  cacheDir: string
+}
+
+export class IndexerModule implements AgentModule {
+  name = 'indexer'
+
+  private indexer: Indexer
+  private cache: IndexCache
+  private baseDir: string
+  private index: IndexResult | null = null
+  private rebuildTimeout: ReturnType<typeof setTimeout> | null = null
+
+  constructor(opts: IndexerModuleOptions) {
+    this.baseDir = opts.baseDir
+    this.indexer = new Indexer(opts.baseDir)
+    this.cache = new IndexCache(opts.cacheDir)
+  }
+
+  async buildIndex(): Promise<IndexResult | null> {
+    if (this.index) return this.index
+
+    const cached = this.cache.load()
+    if (cached) {
+      this.index = cached
+      return cached
+    }
+
+    try {
+      const result = await this.indexer.walk()
+      this.cache.save(result)
+      this.index = result
+      return result
+    } catch {
+      return null
+    }
+  }
+
+  async refresh(): Promise<IndexResult | null> {
+    this.cache.invalidate()
+    this.index = null
+    return this.buildIndex()
+  }
+
+  find(query: string): IndexedFile[] {
+    if (!this.index) return []
+    const q = query.toLowerCase()
+    return this.index.files.filter((f) => {
+      const path = f.path.toLowerCase()
+      return path.includes(q) || f.exports.some((e) => e.toLowerCase().includes(q))
+    })
+  }
+
+  watch(): void {
+    this.unwatch()
+    try {
+      this.indexer.watch((_event, filename) => {
+        if (!filename) return
+        if (this.rebuildTimeout) clearTimeout(this.rebuildTimeout)
+        this.rebuildTimeout = setTimeout(() => {
+          this.refresh().catch(() => {})
+        }, 2000)
+      })
+    } catch {
+      // Watching is best-effort; manual refresh still works.
+    }
+  }
+
+  unwatch(): void {
+    if (this.rebuildTimeout) {
+      clearTimeout(this.rebuildTimeout)
+      this.rebuildTimeout = null
+    }
+    this.indexer.unwatch()
+  }
+
+  getSystemPromptBlock(): PromptBlock | null {
+    if (!this.index) return null
+    const content = this.formatMap(this.index)
+    return {
+      content,
+      priority: 'normal',
+      essential: false,
+      estimatedTokens: this.estimateTokens(content),
+    }
+  }
+
+  getToolDefinitions(): ToolDefinition[] {
+    return [this.createProjectMapTool()]
+  }
+
+  getPlugin(): AgentPlugin {
+    return {
+      name: 'indexer',
+      onSessionStart: () => {
+        this.buildIndex().catch(() => {})
+        this.watch()
+      },
+      onSessionEnd: () => {
+        this.unwatch()
+      },
+    }
+  }
+
+  private formatMap(result: IndexResult): string {
+    const summary = this.indexer.summarize(result)
+    const dirCounts = this.getDirectoryCounts(result)
+    const topDirs = Object.entries(dirCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([dir, count]) => `${dir} (${count})`)
+      .join(', ') || '-'
+
+    const fileLines = result.files.slice(0, 100).map((f) => {
+      const path = f.path.replace(/\\/g, '/')
+      const exports = f.exports.length > 0 ? `: ${f.exports.join(', ')}` : ''
+      return `- ${path}${exports}`
+    })
+
+    const more = result.files.length > 100
+      ? `\n${t('indexer.and_more', { count: result.files.length - 100 })}`
+      : ''
+
+    return [
+      `${t('indexer.map_header')} (${this.baseDir})`,
+      summary,
+      `${t('indexer.top_directories')}: ${topDirs}`,
+      `${t('indexer.files')}:` + (fileLines.length > 0 ? '' : ' ' + t('indexer.empty')),
+      ...fileLines,
+      more,
+    ].join('\n')
+  }
+
+  private getDirectoryCounts(result: IndexResult): Record<string, number> {
+    const counts: Record<string, number> = {}
+    for (const f of result.files) {
+      const normalized = f.path.replace(/\\/g, '/')
+      const dir = dirname(normalized)
+      const key = dir === '.' ? '(root)' : dir
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }
+
+  private estimateTokens(content: string): number {
+    return Math.ceil(content.length / 4)
+  }
+
+  private createProjectMapTool(): ToolDefinition {
+    return {
+      name: 'project_map',
+      description: t('indexer.project_map_desc'),
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['summary', 'refresh', 'find'],
+            description: t('indexer.project_map_action_desc'),
+          },
+          query: {
+            type: 'string',
+            description: t('indexer.project_map_query_desc'),
+          },
+        },
+        required: ['action'],
+      },
+      handler: async (_ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
+        const action = String(args.action || 'summary')
+
+        if (action === 'refresh') {
+          const result = await this.refresh()
+          const summary = result ? this.indexer.summarize(result) : t('indexer.empty')
+          return this.makeResult(t('indexer.refreshed', { summary }))
+        }
+
+        if (action === 'find') {
+          const query = String(args.query || '').toLowerCase()
+          if (!query) return { success: false, output: t('tool.invalid_params') }
+          const matches = this.find(query)
+          if (matches.length === 0) {
+            return this.makeResult(t('indexer.no_matches', { query }))
+          }
+          const lines = matches.map((f) => {
+            const path = f.path.replace(/\\/g, '/')
+            const exports = f.exports.length > 0 ? `: ${f.exports.join(', ')}` : ''
+            return `- ${path}${exports}`
+          }).join('\n')
+          return this.makeResult(t('indexer.find_results', { count: matches.length, results: lines }))
+        }
+
+        if (!this.index) {
+          await this.buildIndex()
+        }
+        if (!this.index) {
+          return this.makeResult(t('indexer.not_indexed'))
+        }
+        const summary = this.indexer.summarize(this.index)
+        return this.makeResult(t('indexer.summary', { summary }))
+      },
+    }
+  }
+
+  private makeResult(output: string): ToolResult {
+    return { success: true, output, display: output }
+  }
+}

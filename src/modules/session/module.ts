@@ -14,7 +14,7 @@ export class SessionModule implements AgentModule {
 
   getSystemPromptBlock(): PromptBlock | null {
     const meta = this.manager.getActiveMeta()
-    if (!meta) return null
+    if (!meta || meta.messageCount === 0) return null
     return {
       content: t('session.info', { name: meta.name, id: meta.id, count: meta.messageCount }),
       priority: 'low',

@@ -9,6 +9,8 @@ import { StepVerifier } from './verifier'
 import { StuckDetector } from './stuck-detector'
 import { Auditor } from './auditor'
 import type { Plan } from './planner'
+import { existsSync } from 'fs'
+import { resolve } from 'path'
 
 export class ExecutionModule implements AgentModule {
   name = 'execution'
@@ -16,8 +18,10 @@ export class ExecutionModule implements AgentModule {
   private verifier: StepVerifier
   private stuckDetector: StuckDetector
   private auditor: Auditor
+  private baseDir: string
 
   constructor(baseDir: string, stuckThreshold = 8) {
+    this.baseDir = baseDir
     this.verifier = new StepVerifier(baseDir)
     this.stuckDetector = new StuckDetector(stuckThreshold)
     this.auditor = new Auditor(baseDir)
@@ -173,6 +177,13 @@ export class ExecutionModule implements AgentModule {
           }
         }
       },
+      onBeforeTool: (ctx: any, call: any) => {
+        const warning = this.checkPlanAlignment(call)
+        if (warning && ctx.contextManager) {
+          ctx.contextManager.addMessage({ role: 'system', content: warning })
+        }
+        return true
+      },
       onToolCall: (ctx: any) => {
         const toolName = ctx?.toolName as string
         const args = ctx?.args as Record<string, unknown>
@@ -180,11 +191,56 @@ export class ExecutionModule implements AgentModule {
           this.stuckDetector.recordToolCall(toolName, args)
         }
       },
-      onAfterTool: (ctx: any, result: any) => {
+      onAfterTool: (ctx: any, call: any, result: any) => {
         if (!result.success) {
           this.stuckDetector.recordToolError('tool')
         }
+        if (this.tracker && result.success && (call.name === 'write_file' || call.name === 'edit_file')) {
+          this.advancePlanIfStepComplete()
+        }
       },
+    }
+  }
+
+  private checkPlanAlignment(call: any): string | null {
+    if (!this.tracker) return null
+    const step = this.tracker.getCurrentStep()
+    if (!step) return null
+
+    const allowedAlways = ['plan', 'todo', 'verify', 'list_dir', 'read_file', 'glob', 'grep', 'file_info', 'load_skill', 'question', 'approve']
+    if (allowedAlways.includes(call.name)) return null
+
+    const stepPaths = (step.description.match(/\b[\w./\\-]+\.[a-z]+/gi) || [])
+      .map(p => p.toLowerCase())
+    if (stepPaths.length === 0) return null
+
+    const argStr = JSON.stringify(call.arguments).toLowerCase()
+    const callPaths = (argStr.match(/\b[\w./\\-]+\.[a-z]+/gi) || [])
+      .map(p => p.toLowerCase())
+
+    if (callPaths.length === 0) return null
+
+    const offPath = callPaths.some(p => !stepPaths.some(s => p.includes(s) || s.includes(p)))
+    if (!offPath) return null
+
+    return t('exec.plan_warning', {
+      step: String(step.id),
+      description: step.description,
+      tool: call.name,
+    })
+  }
+
+  private advancePlanIfStepComplete(): void {
+    const step = this.tracker?.getCurrentStep()
+    if (!step) return
+    const stepPaths = (step.description.match(/\b[\w./\\-]+\.[a-z]+/gi) || [])
+    if (stepPaths.length === 0) return
+
+    const allExist = stepPaths.every(p => existsSync(resolve(this.baseDir, p)))
+
+    if (allExist) {
+      this.tracker?.updateStepStatus(step.id, 'done')
+      this.tracker?.advance()
     }
   }
 }
