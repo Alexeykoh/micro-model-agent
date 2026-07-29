@@ -64,6 +64,7 @@ CLI (main.ts → commands.ts / repl.ts)
 7. **TDD** — write test first, then implement, then commit
 8. **No hardcoded user-facing strings** — ALL text shown to users MUST go through `t()` from `i18n/index.ts`. Both `en.json` and `ru.json` must have matching keys. No exceptions — CLI labels, error messages, tool outputs, REPL prompts, setup wizard text, everything.
 9. **No TUI** — minimal CLI + REPL with markdown→ANSI formatting
+10. **No keyword matching for task classification** — determining whether a task is multi-step, needs planning, or requires specific tools via keyword/word matching is an anti-pattern. It fails for non-English languages, ambiguous inputs, and novel task patterns. Instead, use the system prompt to instruct the model to use the `plan` tool when appropriate. The model decides whether to create a plan based on task complexity, not hardcoded heuristics.
 
 ## Project Structure
 
@@ -98,7 +99,7 @@ src/
 ├── modules/            # All modules implement AgentModule interface
 │   ├── registry.ts     # ModuleRegistry: collect blocks/tools/plugins from modules
 │   ├── types.ts        # AgentModule, AgentPlugin interfaces
-│   ├── skills/         # Skills loader (builtin/global/project) + keyword matcher
+│   ├── skills/         # Skills loader (builtin/global/project) + keyword matcher (anti-pattern — needs LLM-based matching)
 │   ├── plugins/        # PluginManager with lifecycle hooks + error isolation
 │   ├── mcp/            # MCP client (stdio/SSE) + server registry
 │   ├── pipelines/      # DAG-based workflow engine (YAML → execute)
@@ -115,7 +116,7 @@ src/
 │   │   ├── consistency.ts # Track decisions, detect contradictions
 │   │   └── confidence.ts # Short/repetitive/uncertain markers
 │   ├── execution/      # Task execution guarantees
-│   │   ├── planner.ts  # Multi-step heuristic → plan creation
+│   │   ├── planner.ts  # Plan creation utilities (no heuristics — model decides via prompt)
 │   │   ├── tracker.ts  # Step status, progress display
 │   │   ├── verifier.ts # File existence + syntax + test checks
 │   │   ├── stuck-detector.ts # Iteration/error thresholds, off-track guard
