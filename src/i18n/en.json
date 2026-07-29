@@ -71,6 +71,7 @@
   "tool.no_sessions_dir": "No sessions directory found at {dir}",
   "tool.history_error": "Error searching history: {error}",
   "tool.screenshot_unavailable": "[Screenshot captured \u2014 image not available for text-only model]",
+  "tool.timeout": "Tool {name} timed out after {seconds} seconds",
   "plan.created": "Plan created: {title} ({steps} steps)",
   "plan.step_done": "Step {n}/{total}: {description} \u2713",
   "plan.complete": "Task complete: {summary}",

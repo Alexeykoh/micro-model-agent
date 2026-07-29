@@ -71,6 +71,7 @@
   "tool.no_sessions_dir": "Каталог сессий не найден по {dir}",
   "tool.history_error": "Ошибка поиска истории: {error}",
   "tool.screenshot_unavailable": "[Скриншот сделан — изображение недоступно для текстовой модели]",
+  "tool.timeout": "Инструмент {name} превысил таймаут ({seconds} сек)",
   "plan.created": "План создан: {title} ({steps} шагов)",
   "plan.step_done": "Шаг {n}/{total}: {description} ✓",
   "plan.complete": "Задача выполнена: {summary}",

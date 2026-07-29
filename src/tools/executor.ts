@@ -2,6 +2,8 @@ import type { ToolContext, ToolCall, ToolResult, PluginManager } from './types'
 import { ToolRegistry } from './registry'
 import { t } from '../i18n/index'
 
+const TOOL_EXECUTION_TIMEOUT_MS = 60000
+
 export class ToolExecutor {
   private registry: ToolRegistry
   private ctx: ToolContext
@@ -34,7 +36,13 @@ export class ToolExecutor {
 
     let result: ToolResult
     try {
-      result = await tool.handler(this.ctx, call.arguments)
+      const timeoutPromise = new Promise<ToolResult>((_, reject) => {
+        setTimeout(() => reject(new Error(t('tool.timeout', { name: call.name, seconds: TOOL_EXECUTION_TIMEOUT_MS / 1000 }))), TOOL_EXECUTION_TIMEOUT_MS)
+      })
+      result = await Promise.race([
+        tool.handler(this.ctx, call.arguments),
+        timeoutPromise,
+      ])
       result.toolCallId = call.id
     } catch (e: any) {
       result = { success: false, output: `${t('error.prefix')}${e.message}`, toolCallId: call.id }
