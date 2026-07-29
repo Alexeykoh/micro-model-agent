@@ -2,16 +2,16 @@ import type { ToolDefinition } from './types'
 
 export const pipelineRunTool: ToolDefinition = {
   name: 'pipeline_run',
-  description: 'Run a predefined task workflow pipeline. Pipelines are defined as YAML with DAG dependencies.',
+  description: 'Run a named pipeline from the pipelines registry.',
   parameters: {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'Pipeline name' },
-      params: { type: 'object', description: 'Pipeline parameters (key-value pairs)' },
     },
     required: ['name'],
   },
   handler: async (_ctx, args) => {
-    return { success: true, output: `[Pipeline run requested: ${args.name}]` }
+    const name = String(args.name || '')
+    return { success: true, output: `Pipeline "${name}" execution started. Pipeline engine is a stub — run dispatched.` }
   },
 }

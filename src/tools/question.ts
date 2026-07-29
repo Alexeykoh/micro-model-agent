@@ -1,17 +1,24 @@
+import * as readline from 'readline'
 import type { ToolDefinition } from './types'
 
 export const questionTool: ToolDefinition = {
   name: 'question',
-  description: 'Ask the user a question when clarification is needed. Optionally provide choices.',
+  description: 'Ask the user a question and get their response.',
   parameters: {
     type: 'object',
     properties: {
-      question: { type: 'string', description: 'Question to ask' },
-      options: { type: 'array', items: { type: 'string' }, description: 'Available choices' },
+      question: { type: 'string', description: 'Question to ask the user' },
     },
     required: ['question'],
   },
   handler: async (_ctx, args) => {
-    return { success: true, output: `[Question asked: ${args.question}]` }
+    const question = String(args.question || '')
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    return new Promise((resolve) => {
+      rl.question(`${question} `, (answer: string) => {
+        rl.close()
+        resolve({ success: true, output: answer.trim() })
+      })
+    })
   },
 }
