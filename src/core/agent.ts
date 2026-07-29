@@ -160,11 +160,15 @@ export class Agent {
       if (sawToolCall) {
         for (const call of toolCalls) {
           const startTime = Date.now()
+          pluginManager.runOnToolCall({ toolName: call.name, args: call.arguments })
           if (sessionManager) {
             sessionManager.appendLog({ ts: new Date().toISOString(), type: 'tool_call', tool: call.name, args: call.arguments })
           }
           const result = await toolExecutor.execute(call)
           const duration = Date.now() - startTime
+          if (result.display) {
+            onMeta?.('\n' + result.display + '\n')
+          }
           const currentTokens = contextManager.getEstimatedTokens()
           const budget = contextManager.getBudget()
           const truncatedOutput = this.truncateToolOutput(result.output, budget, currentTokens)

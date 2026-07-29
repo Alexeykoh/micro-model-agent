@@ -23,6 +23,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     runOnBeforeThink: vi.fn(),
     runOnBeforeTool: vi.fn().mockResolvedValue(true),
     runOnAfterTool: vi.fn(),
+    runOnToolCall: vi.fn(),
     runOnError: vi.fn(),
     runOnSessionStart: vi.fn(),
     runOnSessionEnd: vi.fn(),

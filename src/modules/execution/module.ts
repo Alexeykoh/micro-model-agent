@@ -72,13 +72,15 @@ export class ExecutionModule implements AgentModule {
             }
             const plan = PlanCreator.createPlan(title, steps)
             this.setPlan(plan)
-            return { success: true, output: t('plan.created', { title, steps: String(steps.length) }) }
+            const display = PlanCreator.toPromptBlock(plan, 0)
+            return { success: true, output: t('plan.created', { title, steps: String(steps.length) }), display }
           }
           if (action === 'update' && args.step && this.tracker) {
             this.tracker.updateStepStatus(Number(args.step), (args.status as any) || 'done')
             if (args.note) this.tracker.addNote(Number(args.step), String(args.note))
             const progress = this.tracker.getProgressString()
-            return { success: true, output: `${t('plan.step_status', { step: String(args.step), status: String(args.status || 'done') })}\n${progress}` }
+            const display = this.tracker.toPromptBlock()
+            return { success: true, output: `${t('plan.step_status', { step: String(args.step), status: String(args.status || 'done') })}\n${progress}`, display }
           }
           if (action === 'abort') {
             this.tracker = null
@@ -164,11 +166,18 @@ export class ExecutionModule implements AgentModule {
         if (stuckReason) {
           ctx.logger?.warn(stuckReason)
         }
-        if (this.stuckDetector.isStuck()) {
+        if (this.stuckDetector.isStuck() || this.stuckDetector.hasRepetitiveToolCalls()) {
           const recovery = this.stuckDetector.getRecoveryMessage()
           if (recovery && ctx.contextManager) {
             ctx.contextManager.addMessage({ role: 'system', content: recovery })
           }
+        }
+      },
+      onToolCall: (ctx: any) => {
+        const toolName = ctx?.toolName as string
+        const args = ctx?.args as Record<string, unknown>
+        if (toolName && args) {
+          this.stuckDetector.recordToolCall(toolName, args)
         }
       },
       onAfterTool: (ctx: any, result: any) => {

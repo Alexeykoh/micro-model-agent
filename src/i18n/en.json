@@ -235,6 +235,7 @@
   "exec.stuck_recovery": "[Stuck detected: {iterations} iterations without progress. Stop repeating the same approach. Try a fundamentally different strategy: use a different tool (e.g., 'browser' tool for JavaScript-heavy websites instead of 'web_browse'), break the task into smaller parts, or explain to the user what went wrong and ask for guidance.]",
   "exec.tool_errors": "Tool {tool} failed {count} times. Suggest alternative approach.",
   "exec.tool_errors_recovery": "[Tool {tool} failed {count} times. Stop using this tool and try a different approach or explain the issue to the user.]",
+  "exec.repetitive_tool": "[You called {tool} {count} times in a row with the same arguments and result. Stop repeating — try a different approach: create files, change arguments, or explain the problem to the user.]",
   "exec.off_track": "[\u26a0 Outside plan: step {stepId} is \"{description}\", but you're using {tool} on a different path. Explain or return.]",
   "exec.audit_pass": "[\u2713] Task complete: {done}/{total} steps done, {files} files verified",
   "exec.audit_fail": "[\u2717] Task incomplete: {done}/{total} steps done, {files} files missing",

@@ -18,6 +18,7 @@ export interface ToolResult {
   success: boolean
   output: string
   toolCallId?: string
+  display?: string
 }
 
 export interface ToolCall {

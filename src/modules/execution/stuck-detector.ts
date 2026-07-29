@@ -1,5 +1,10 @@
 import { t } from '../../i18n/index'
 
+interface ToolCallRecord {
+  name: string
+  argsKey: string
+}
+
 export class StuckDetector {
   private threshold: number
   private errorThreshold: number
@@ -7,6 +12,9 @@ export class StuckDetector {
   private currentStepId: number | null = null
   private toolErrors: Map<string, number> = new Map()
   private currentStepDescription = ''
+  private recentToolCalls: ToolCallRecord[] = []
+  private readonly maxRecentCalls = 10
+  private readonly repetitionThreshold = 3
 
   constructor(threshold = 8, errorThreshold = 3) {
     this.threshold = threshold
@@ -19,6 +27,14 @@ export class StuckDetector {
     } else {
       this.currentStepId = stepId
       this.iterationsOnCurrentStep = 1
+    }
+  }
+
+  recordToolCall(name: string, args: Record<string, unknown>): void {
+    const argsKey = JSON.stringify(args)
+    this.recentToolCalls.push({ name, argsKey })
+    if (this.recentToolCalls.length > this.maxRecentCalls) {
+      this.recentToolCalls.shift()
     }
   }
 
@@ -43,6 +59,26 @@ export class StuckDetector {
     return Array.from(this.toolErrors.values()).some(c => c >= this.errorThreshold)
   }
 
+  hasRepetitiveToolCalls(): boolean {
+    if (this.recentToolCalls.length < this.repetitionThreshold) return false
+    const last = this.recentToolCalls[this.recentToolCalls.length - 1]
+    let count = 1
+    for (let i = this.recentToolCalls.length - 2; i >= 0; i--) {
+      if (this.recentToolCalls[i].name === last.name && this.recentToolCalls[i].argsKey === last.argsKey) {
+        count++
+      } else {
+        break
+      }
+    }
+    return count >= this.repetitionThreshold
+  }
+
+  getRepetitiveToolMessage(): string {
+    if (!this.hasRepetitiveToolCalls()) return ''
+    const last = this.recentToolCalls[this.recentToolCalls.length - 1]
+    return t('exec.repetitive_tool', { tool: last.name, count: this.repetitionThreshold })
+  }
+
   getStuckReason(): string {
     if (this.isStuck()) {
       return t('exec.stuck', { stepId: String(this.currentStepId), description: this.currentStepDescription, iterations: this.iterationsOnCurrentStep })
@@ -57,6 +93,9 @@ export class StuckDetector {
   getRecoveryMessage(): string {
     if (this.isStuck()) {
       return t('exec.stuck_recovery', { iterations: this.iterationsOnCurrentStep })
+    }
+    if (this.hasRepetitiveToolCalls()) {
+      return this.getRepetitiveToolMessage()
     }
     const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
     if (errorTool) {

@@ -85,4 +85,13 @@ export class PluginManager {
       }
     }
   }
+
+  runOnToolCall(ctx: any): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onToolCall) {
+        try { plugin.onToolCall(ctx) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
 }
