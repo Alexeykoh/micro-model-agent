@@ -151,6 +151,33 @@ describe('ModelLoader', () => {
     expect(result.error).toContain('400')
   })
 
+  it('should strip /v1 from baseUrl', async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ models: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          type: 'llm',
+          load_time_seconds: 2.0,
+          status: 'loaded',
+        }),
+      })
+    global.fetch = mockFetch as any
+
+    const loader = new ModelLoader('http://localhost:1234/v1', mockLogger as any)
+    await loader.ensureModelLoaded({
+      model: 'qwen3.5-9b',
+      contextLength: 32768,
+      autoLoad: true,
+    })
+
+    const loadCall = mockFetch.mock.calls[1]
+    expect(loadCall[0]).toBe('http://localhost:1234/api/v1/models/load')
+  })
+
   it('should send correct load parameters', async () => {
     const mockFetch = vi.fn()
       .mockResolvedValueOnce({

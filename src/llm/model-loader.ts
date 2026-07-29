@@ -21,7 +21,8 @@ export class ModelLoader {
   private logger: Logger
 
   constructor(baseUrl: string, logger: Logger) {
-    this.baseUrl = baseUrl.replace(/\/$/, '')
+    const url = baseUrl.replace(/\/$/, '')
+    this.baseUrl = url.replace(/\/v1\/?$/, '')
     this.logger = logger
   }
 
@@ -76,6 +77,7 @@ export class ModelLoader {
     if (config.offloadKvCacheToGpu !== undefined) body.offload_kv_cache_to_gpu = config.offloadKvCacheToGpu
 
     this.logger.info(`Loading model ${config.model} with context_length=${config.contextLength}`)
+    this.logger.debug(`POST ${this.baseUrl}/api/v1/models/load`)
 
     const response = await fetch(`${this.baseUrl}/api/v1/models/load`, {
       method: 'POST',
@@ -86,16 +88,13 @@ export class ModelLoader {
 
     if (!response.ok) {
       const error = await response.text()
+      this.logger.error(`Model load failed: HTTP ${response.status}: ${error}`)
       return { success: false, error: `HTTP ${response.status}: ${error}` }
     }
 
     const result = await response.json() as any
+    this.logger.debug(`Model load response: ${JSON.stringify(result)}`)
     const loadTime = result.load_time_seconds ?? result.loadTime
-    if (loadTime !== undefined) {
-      this.logger.info(`Model loaded in ${loadTime}s`)
-    } else {
-      this.logger.info('Model loaded')
-    }
 
     return {
       success: true,
