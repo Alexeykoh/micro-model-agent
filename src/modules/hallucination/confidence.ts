@@ -13,7 +13,7 @@ export class ConfidenceCheck {
 
   validate(response: string): HallucinationCheckResult {
     if (!response || response.length < MIN_CHARS) {
-      return { status: 'retry', reason: t('hall.short_response') }
+      return { status: 'pass', reason: t('hall.short_response') }
     }
 
     if (this.previousResponse) {

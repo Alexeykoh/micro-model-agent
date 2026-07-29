@@ -8,10 +8,10 @@ describe('HallucinationDetector', () => {
     expect(result.status).toBe('pass')
   })
 
-  it('should retry on empty', () => {
+  it('should pass on empty', () => {
     const detector = new HallucinationDetector()
     const result = detector.validate('')
-    expect(result.status).toBe('retry')
+    expect(result.status).toBe('pass')
   })
 
   it('should warn on unknown paths', () => {

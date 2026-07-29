@@ -52,4 +52,29 @@ describe('StuckDetector', () => {
     })
     expect(result).toBeNull()
   })
+
+  it('should return recovery message when stuck', () => {
+    for (let i = 0; i < 6; i++) {
+      detector.recordIteration(1)
+    }
+    expect(detector.isStuck()).toBe(true)
+    const recovery = detector.getRecoveryMessage()
+    expect(recovery).toBeTruthy()
+    expect(recovery).toContain('Stuck detected')
+  })
+
+  it('should return empty recovery message when not stuck', () => {
+    detector.recordIteration(1)
+    expect(detector.isStuck()).toBe(false)
+    expect(detector.getRecoveryMessage()).toBe('')
+  })
+
+  it('should return recovery message for repetitive tool errors', () => {
+    for (let i = 0; i < 4; i++) {
+      detector.recordToolError('bash')
+    }
+    const recovery = detector.getRecoveryMessage()
+    expect(recovery).toBeTruthy()
+    expect(recovery).toContain('bash')
+  })
 })

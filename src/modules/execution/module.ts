@@ -119,6 +119,12 @@ export class ExecutionModule implements AgentModule {
         if (stuckReason) {
           ctx.logger?.warn(stuckReason)
         }
+        if (this.stuckDetector.isStuck()) {
+          const recovery = this.stuckDetector.getRecoveryMessage()
+          if (recovery && ctx.contextManager) {
+            ctx.contextManager.addMessage({ role: 'system', content: recovery })
+          }
+        }
       },
       onAfterTool: (ctx: any, result: any) => {
         if (!result.success) {

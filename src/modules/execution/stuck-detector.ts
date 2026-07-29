@@ -54,6 +54,17 @@ export class StuckDetector {
     return ''
   }
 
+  getRecoveryMessage(): string {
+    if (this.isStuck()) {
+      return t('exec.stuck_recovery', { iterations: this.iterationsOnCurrentStep })
+    }
+    const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
+    if (errorTool) {
+      return t('exec.tool_errors_recovery', { tool: errorTool[0], count: errorTool[1] })
+    }
+    return ''
+  }
+
   checkOffTrack(toolName: string, call: { name: string; arguments: Record<string, unknown> }): string | null {
     if (!this.currentStepDescription) return null
 
