@@ -59,6 +59,15 @@ export class PluginManager {
     }
   }
 
+  runOnBeforeThink(ctx: any): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onBeforeThink) {
+        try { plugin.onBeforeThink(ctx) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
+
   runOnSessionEnd(ctx: any): void {
     for (const plugin of this.plugins) {
       if (plugin.onSessionEnd) {
