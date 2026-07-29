@@ -1,4 +1,4 @@
-export type { LLMProvider, Message, Chunk, ToolDefinition, ToolCall } from './provider'
+export type { LLMProvider, Message, Chunk, ToolDefinition } from './provider'
 export { OpenAICompatProvider } from './openai-compat'
 export type { OpenAICompatConfig } from './openai-compat'
 export { TokenCounter } from './token-counter'

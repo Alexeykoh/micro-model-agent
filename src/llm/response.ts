@@ -1,4 +1,5 @@
-import type { Chunk, ToolCall } from './provider'
+import type { Chunk } from './provider'
+import type { ToolCall } from '../core/types'
 
 export type ParsedResponse =
   | { type: 'text'; content: string; reasoning?: string }

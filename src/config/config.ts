@@ -6,22 +6,21 @@ import { MigrationDetector } from '../migration/detect'
 import { BackupManager } from '../migration/backup'
 
 function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result = { ...target }
+  const result: Record<string, unknown> = { ...target as any }
   for (const key of Object.keys(source as object)) {
-    const k = key as keyof T
-    const srcVal = source[k]
-    const tgtVal = target[k]
+    const srcVal = (source as any)[key]
+    const tgtVal = (target as any)[key]
     if (
       srcVal !== null && srcVal !== undefined &&
       typeof srcVal === 'object' && !Array.isArray(srcVal) &&
       typeof tgtVal === 'object' && !Array.isArray(tgtVal)
     ) {
-      result[k] = deepMerge(tgtVal as any, srcVal as any)
+      result[key] = deepMerge(tgtVal, srcVal)
     } else if (srcVal !== undefined) {
-      result[k] = srcVal
+      result[key] = srcVal
     }
   }
-  return result
+  return result as T
 }
 
 function loadJSON(path: string): Record<string, unknown> | null {
