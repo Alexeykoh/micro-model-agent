@@ -231,7 +231,27 @@ export class Repl {
         this.sessionManager!.setActive(match.id)
         const history = this.sessionManager!.loadHistory()
         this.agent.setContext(history)
-        console.log(`${t('session.resumed', { name: match.name })} ${pc.dim(`(${match.id.slice(0, 12)})`)}  —  ${match.messageCount} msgs`)
+        console.clear()
+        console.log(pc.bold(pc.green(t('session.resumed', { name: match.name }))) + ' ' + pc.dim(`(${match.id.slice(0, 12)})`) + '  —  ' + match.messageCount + ' msgs')
+        console.log(pc.dim('─'.repeat(50)))
+        if (history.length === 0) {
+          console.log(pc.dim(t('session.no_history')))
+        } else {
+          console.log(pc.dim(t('session.chat_history')))
+          console.log()
+          for (const msg of history) {
+            if (msg.role === 'user') {
+              console.log(pc.cyan(t('session.user_label') + ':'))
+              console.log(msg.content)
+              console.log()
+            } else if (msg.role === 'assistant') {
+              console.log(pc.green(t('session.assistant_label') + ':'))
+              console.log(msg.content)
+              console.log()
+            }
+          }
+        }
+        console.log(pc.dim('─'.repeat(50)))
         console.log(pc.dim(`  ${t('session.chat_loaded')}`))
       },
     })
