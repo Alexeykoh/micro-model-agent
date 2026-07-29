@@ -1,12 +1,29 @@
 import { createProgram } from './commands'
+import { bootstrap } from '../core/bootstrap'
+import { Repl } from './repl'
 
-function main(): void {
+async function main(): Promise<void> {
   const program = createProgram()
   program.parse(process.argv)
 
-  const args = process.argv.slice(2)
-  if (args.length === 0) {
-    console.log('Starting REPL...')
+  const args = program.args
+
+  if (args.length > 0) {
+    const prompt = args.join(' ')
+    const { agent, logger } = bootstrap()
+    const result = await agent.run(prompt)
+    if (result.success) {
+      console.log(result.text)
+    } else {
+      console.error(`Error: ${result.error}`)
+      if (result.text) {
+        console.log(`Partial output:\n${result.text}`)
+      }
+      process.exit(1)
+    }
+  } else {
+    const repl = new Repl()
+    repl.start()
   }
 }
 
