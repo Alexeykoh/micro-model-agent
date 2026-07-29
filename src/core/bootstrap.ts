@@ -59,8 +59,12 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
 
   if (!loadResult.success) {
     logger.warn(`Model auto-load failed: ${loadResult.error}. Continuing anyway...`)
-  } else if (loadResult.loadTime) {
-    logger.info(`Model loaded in ${loadResult.loadTime}s`)
+  } else if (!loadResult.alreadyLoaded) {
+    if (loadResult.loadTime !== undefined) {
+      logger.info(`Model loaded in ${loadResult.loadTime}s`)
+    } else {
+      logger.info('Model loaded')
+    }
   }
 
   const profile = new UserProfile(join(dir))

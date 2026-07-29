@@ -90,12 +90,17 @@ export class ModelLoader {
     }
 
     const result = await response.json() as any
-    this.logger.info(`Model loaded in ${result.load_time_seconds}s`)
+    const loadTime = result.load_time_seconds ?? result.loadTime
+    if (loadTime !== undefined) {
+      this.logger.info(`Model loaded in ${loadTime}s`)
+    } else {
+      this.logger.info('Model loaded')
+    }
 
     return {
       success: true,
       alreadyLoaded: false,
-      loadTime: result.load_time_seconds,
+      loadTime,
     }
   }
 }
