@@ -182,6 +182,54 @@ Supports:
 - Reasoning mode (Qwen3 thinking tokens)
 - Tool call format conversion
 
+### 4.3 Model Auto-Loader (`llm/model-loader.ts`)
+
+Автоматическая загрузка модели при старте MMA через LM Studio REST API.
+
+**API Endpoints:**
+- `GET /api/v1/models` — проверка загруженных моделей
+- `POST /api/v1/models/load` — загрузка модели с параметрами
+
+**Параметры загрузки:**
+```typescript
+interface ModelLoadConfig {
+  autoLoad: boolean           // включить автозагрузку (default: true)
+  flashAttention?: boolean    // оптимизация attention (default: true)
+  evalBatchSize?: number      // размер батча для evaluation
+  offloadKvCacheToGpu?: boolean // KV cache на GPU (default: true)
+}
+```
+
+**Логика работы:**
+1. При старте bootstrap вызывает `ModelLoader.ensureModelLoaded()`
+2. Проверяет через `/api/v1/models`, загружена ли нужная модель с правильным `context_length`
+3. Если не загружена или context_length отличается — вызывает `/api/v1/models/load`
+4. При ошибке загрузки — warning в лог, но агент продолжает работу (модель может быть загружена вручную)
+
+**Пример запроса:**
+```bash
+POST /api/v1/models/load
+{
+  "model": "qwen3.5-9b",
+  "context_length": 32768,
+  "flash_attention": true,
+  "offload_kv_cache_to_gpu": true
+}
+```
+
+**Конфигурация:**
+```json
+{
+  "modelLoad": {
+    "autoLoad": true,
+    "flashAttention": true,
+    "offloadKvCacheToGpu": true
+  }
+}
+```
+
+Если `autoLoad: false` — модель не загружается автоматически (полезно для удалённых провайдеров).
+
 ### 4.3 Response Parsing (`llm/response.ts`)
 
 Parse LLM response into typed result:
@@ -317,7 +365,7 @@ interface ToolDefinition {
 | `bash` | `{ command: string, workdir?: string }` | Выполняет shell команду | Для запуска тестов, билда, git |
 | `subagent` | `{ task: string, tools?: string[] }` | Запускает изолированного субагента с ограниченным набором инструментов | Для parallel задач, исследования без изменения контекста |
 | `web_search` | `{ query: string }` | Поиск в интернете | Для поиска документации |
-| `web_fetch` | `{ url: string }` | HTTP GET с markdown-конвертацией | Для чтения документации, API |
+| `web_fetch` | `{ url: string }` | HTTP GET с HTML-очисткой и лимитом 15K символов, timeout 15s | Для чтения документации, API |
 | `web_browse` | `{ action: string, ... }` | Headless browser (навигация, клики, скриншоты) | Для E2E тестов, отладки UI |
 
 **Инструменты планирования:**
@@ -489,9 +537,9 @@ History:          63%  динамическая часть (сжимается)
 
 | contextWindow | System prompt | Reserve | History |
 |---------------|--------------|---------|---------|
-| 32K | 8K | 4K | 20K |
-| 64K | 16K | 8K | 40K |
-| 128K | 32K | 16K | 80K |
+| 32K | 8K | 3.9K | 20.6K |
+| 64K | 16K | 7.7K | 40.3K |
+| 128K | 32K | 15.4K | 80.6K |
 
 **Compaction (sliding window + structured extraction):**
 - Срабатывает когда **history** превышает **75% своего бюджета** (не хардкод)
@@ -500,6 +548,31 @@ History:          63%  динамическая часть (сжимается)
 - Older turns → extract: facts, decisions, tool results, errors → compressed block
 - Preserve causality chains (read X → decided Y → wrote Z)
 - No second LLM call — pattern extraction only
+
+**Защита контекста от переполнения (multi-layer defense):**
+
+1. **Ограничение размера tool results** (`agent.ts:truncateToolOutput`):
+   - Максимум 30% от history budget на один tool result
+   - Максимум 50% от оставшегося контекста
+   - Абсолютный лимит: 15,000 символов (~3,750 токенов)
+   - Формула: `min(budget.history * 0.3 * 2, remainingBudget * 0.5 * 2, 15000)` символов
+   - При превышении: обрезка + маркер `[Truncated: N tokens removed]`
+
+2. **Pre-flight check перед LLM-вызовом** (`agent.ts:83-87`):
+   - Проверка `currentTokens > budget.history` перед каждым LLM-вызовом
+   - При превышении: принудительная компакция + warning в лог
+   - Гарантирует, что в LLM никогда не отправляется контекст больше бюджета
+
+3. **Post-tool compaction** (`agent.ts:157-160`):
+   - Проверка `needsCompaction()` после добавления каждого tool result
+   - Мгновенная компакция, если tool result превысил порог
+   - Предотвращает накопление больших результатов между итерациями
+
+4. **Улучшенный web_fetch** (`tools/web-fetch.ts`):
+   - Лимит: 15,000 символов (вместо 50,000)
+   - HTML-очистка: удаление `<script>`, `<style>`, тегов, HTML-entities
+   - Timeout: 15 секунд (AbortSignal.timeout)
+   - Проверка content-type для определения необходимости HTML-очистки
 
 **History recording:**
 - Every message appended to `~/.mma/sessions/<project>/<session-id>.jsonl`
@@ -962,6 +1035,11 @@ export const DEFAULTS = {
     responseReserve: 0.12, // 12% под ответ
     compactionThreshold: 0.75 // 75% от history budget
   },
+  modelLoad: {
+    autoLoad: true,           // автозагрузка модели через LM Studio API
+    flashAttention: true,     // оптимизация attention computation
+    offloadKvCacheToGpu: true // KV cache на GPU
+  },
   maxToolIterations: 25,
   stuckThreshold: 8,        // итераций без прогресса до stuck-detector
   autoPlan: true,           // авто-создание плана для multi-step
@@ -1232,3 +1310,5 @@ E:\projects\micro-models-agent\
 | Orchestrator | Optional separate model | Plan + decisions on larger model, execution on 9B |
 | Plan creation | Forced for multi-step | Not model's choice — system heuristic |
 | Progress display | Per-step terminal output | `[Plan] 2/5 ██░░░ 40%` — видно всегда |
+| Model auto-load | LM Studio REST API | Auto-load model with correct context on startup |
+| Context defense | Multi-layer truncation | Tool results limited, pre-flight check, post-tool compact |

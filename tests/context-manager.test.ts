@@ -6,8 +6,8 @@ describe('ContextManager', () => {
     const cm = new ContextManager(32768)
     const budget = cm.getBudget()
     expect(budget.systemPrompt).toBe(8192)
-    expect(budget.responseReserve).toBe(4096)
-    expect(budget.history).toBe(20480)
+    expect(budget.responseReserve).toBe(3932)
+    expect(budget.history).toBe(20643)
   })
 
   it('should add messages', () => {

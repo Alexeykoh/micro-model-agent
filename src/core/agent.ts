@@ -11,6 +11,9 @@ import type { SessionManager } from '../modules/session/manager'
 import pc from 'picocolors'
 import { PromptBuilder } from './prompt-builder'
 
+const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3
+const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000
+
 export interface AgentDeps {
   config: AppConfig
   llmProvider: LLMProvider
@@ -39,6 +42,19 @@ export class Agent {
 
   constructor(deps: AgentDeps) {
     this.deps = deps
+  }
+
+  private truncateToolOutput(output: string, budget: { history: number }, currentTokens: number): string {
+    const remainingBudget = budget.history - currentTokens
+    const maxCharsByBudget = Math.floor(remainingBudget * 0.5 * 2)
+    const maxCharsByRatio = Math.floor(budget.history * TOOL_RESULT_MAX_TOKENS_RATIO * 2)
+    const maxChars = Math.min(maxCharsByBudget, maxCharsByRatio, TOOL_RESULT_ABSOLUTE_MAX_CHARS)
+
+    if (output.length <= maxChars) return output
+
+    const truncated = output.slice(0, maxChars)
+    const removedChars = output.length - maxChars
+    return truncated + `\n\n[Truncated: ${Math.ceil(removedChars / 2)} tokens removed]`
   }
 
   async run(input: string, onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
@@ -76,6 +92,13 @@ export class Agent {
       if (contextManager.needsCompaction()) {
         contextManager.compact()
         logger.debug('Context compacted')
+      }
+
+      const currentTokens = contextManager.getEstimatedTokens()
+      const budget = contextManager.getBudget()
+      if (currentTokens > budget.history) {
+        contextManager.compact()
+        logger.warn(`Context overflow (${currentTokens} > ${budget.history}), forced compaction`)
       }
 
       const history = contextManager.getActiveHistory()
@@ -139,18 +162,25 @@ export class Agent {
           }
 
           const result = await toolExecutor.execute(call)
+          const currentTokens = contextManager.getEstimatedTokens()
+          const budget = contextManager.getBudget()
+          const truncatedOutput = this.truncateToolOutput(result.output, budget, currentTokens)
           contextManager.addMessage({
             role: 'tool',
-            content: result.output,
+            content: truncatedOutput,
             name: call.name,
           })
           if (sessionManager && config.session.autoSave) {
             sessionManager.appendMessage({
               role: 'tool',
-              content: result.output.slice(0, 500),
+              content: truncatedOutput.slice(0, 500),
               name: call.name,
               timestamp: new Date().toISOString(),
             })
+          }
+          if (contextManager.needsCompaction()) {
+            contextManager.compact()
+            logger.debug('Context compacted after tool result')
           }
         }
         continue

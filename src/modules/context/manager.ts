@@ -29,8 +29,8 @@ export class ContextManager {
   private calculateBudget(window: number): ContextBudget {
     return {
       systemPrompt: Math.floor(window * 0.25),
-      responseReserve: Math.floor(window * 0.125),
-      history: Math.floor(window * 0.625),
+      responseReserve: Math.floor(window * 0.12),
+      history: Math.floor(window * 0.63),
     }
   }
 

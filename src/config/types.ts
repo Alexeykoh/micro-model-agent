@@ -21,6 +21,13 @@ export interface SessionConfig {
   isolateMemory: boolean
 }
 
+export interface ModelLoadConfig {
+  autoLoad: boolean
+  flashAttention?: boolean
+  evalBatchSize?: number
+  offloadKvCacheToGpu?: boolean
+}
+
 export interface AppConfig {
   version: string
   model: string
@@ -28,6 +35,7 @@ export interface AppConfig {
   orchestrator: OrchestratorConfig
   contextWindow: number
   contextBudget: ContextBudget
+  modelLoad: ModelLoadConfig
   maxToolIterations: number
   stuckThreshold: number
   autoPlan: boolean

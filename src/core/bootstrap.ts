@@ -1,6 +1,7 @@
 import { loadConfig } from '../config/config'
 import { Logger } from '../logger/app-logger'
 import { OpenAICompatProvider } from '../llm/openai-compat'
+import { ModelLoader } from '../llm/model-loader'
 import { ToolRegistry, registerAllTools } from '../tools/index'
 import { ToolExecutor } from '../tools/executor'
 import { ModuleRegistry } from '../modules/registry'
@@ -36,7 +37,7 @@ export interface BootstrapResult {
   sessionManager: SessionManager
 }
 
-export function bootstrap(configDir?: string, projectDir?: string): BootstrapResult {
+export async function bootstrap(configDir?: string, projectDir?: string): Promise<BootstrapResult> {
   const dir = configDir || join(homedir(), '.mma')
   const projectConfigPath = projectDir ? join(projectDir, '.mmarc.json') : join(process.cwd(), '.mmarc.json')
 
@@ -45,6 +46,22 @@ export function bootstrap(configDir?: string, projectDir?: string): BootstrapRes
   const logger = new Logger(config.logLevel as any)
   logger.setLogDir(join(dir, 'logs'))
   logger.debug('MMA bootstrap', { version: config.version, model: config.model })
+
+  const modelLoader = new ModelLoader(config.provider.baseUrl, logger)
+  const loadResult = await modelLoader.ensureModelLoaded({
+    model: config.model,
+    contextLength: config.contextWindow,
+    flashAttention: config.modelLoad.flashAttention,
+    evalBatchSize: config.modelLoad.evalBatchSize,
+    offloadKvCacheToGpu: config.modelLoad.offloadKvCacheToGpu,
+    autoLoad: config.modelLoad.autoLoad,
+  })
+
+  if (!loadResult.success) {
+    logger.warn(`Model auto-load failed: ${loadResult.error}. Continuing anyway...`)
+  } else if (loadResult.loadTime) {
+    logger.info(`Model loaded in ${loadResult.loadTime}s`)
+  }
 
   const profile = new UserProfile(join(dir))
   profile.load() || profile.collect()
@@ -80,6 +97,10 @@ export function bootstrap(configDir?: string, projectDir?: string): BootstrapRes
     projectDir: baseDir,
     maxSessions: config.session.maxSessions,
   })
+
+  if (config.session.autoSave && !sessionManager.getActive()) {
+    sessionManager.create()
+  }
 
   const toolCtx: ToolContext = {
     config,

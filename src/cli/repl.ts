@@ -343,7 +343,6 @@ export class Repl {
   start(): void {
     this.running = true
 
-    console.log(pc.bold(pc.green('MMA REPL v2')))
     const divider = '─'.repeat(50)
 
     const ctx = this.config.contextWindow

@@ -18,6 +18,11 @@ export const DEFAULTS: AppConfig = {
     responseReserve: 0.12,
     compactionThreshold: 0.75,
   },
+  modelLoad: {
+    autoLoad: true,
+    flashAttention: true,
+    offloadKvCacheToGpu: true,
+  },
   maxToolIterations: 25,
   stuckThreshold: 8,
   autoPlan: true,

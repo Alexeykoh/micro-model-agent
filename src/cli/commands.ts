@@ -17,7 +17,7 @@ export function createProgram(): Command {
     .action(async () => {
       const answers = await runSetup()
       const configPath = join(homedir(), '.mma', 'config.json')
-      const { config } = bootstrap()
+      const { config } = await bootstrap()
       config.provider.type = answers.provider
       config.provider.baseUrl = answers.apiBase
       config.provider.apiKey = answers.apiKey
@@ -34,9 +34,9 @@ export function createProgram(): Command {
     .argument('<key>', 'Config key (e.g., model, provider.baseUrl)')
     .argument('<value>', 'Config value')
     .description('Set a config value')
-    .action((key: string, value: string) => {
+    .action(async (key: string, value: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
-      const { config } = bootstrap()
+      const { config } = await bootstrap()
       const keys = key.split('.')
       let obj: any = config
       for (let i = 0; i < keys.length - 1; i++) {
@@ -54,25 +54,25 @@ export function createProgram(): Command {
     })
   configCmd.command('show')
     .description('Show current config')
-    .action(() => {
-      const { config } = bootstrap()
+    .action(async () => {
+      const { config } = await bootstrap()
       console.log(JSON.stringify(config, null, 2))
     })
 
   const model = program.command('model').description('Manage models')
   model.command('list')
     .description('List available models')
-    .action(() => {
-      const { config } = bootstrap()
+    .action(async () => {
+      const { config } = await bootstrap()
       console.log('Current model:', config.model)
       console.log('(Use /model use <name> to change)')
     })
   model.command('use')
     .argument('<name>', 'Model name')
     .description('Set default model')
-    .action((name: string) => {
+    .action(async (name: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
-      const { config } = bootstrap()
+      const { config } = await bootstrap()
       config.model = name
       saveConfig(config, configPath)
       console.log(`Model set to: ${name}`)
@@ -81,17 +81,17 @@ export function createProgram(): Command {
   const provider = program.command('provider').description('Manage providers')
   provider.command('list')
     .description('List providers')
-    .action(() => {
-      const { config } = bootstrap()
+    .action(async () => {
+      const { config } = await bootstrap()
       console.log('Current provider:', config.provider.type)
       console.log('Base URL:', config.provider.baseUrl)
     })
   provider.command('use')
     .argument('<name>', 'Provider name')
     .description('Set active provider')
-    .action((name: string) => {
+    .action(async (name: string) => {
       const configPath = join(homedir(), '.mma', 'config.json')
-      const { config } = bootstrap()
+      const { config } = await bootstrap()
       config.provider.type = name
       saveConfig(config, configPath)
       console.log(`Provider set to: ${name}`)
@@ -100,8 +100,8 @@ export function createProgram(): Command {
   const session = program.command('session').description('Manage sessions')
   session.command('list')
     .description('List all sessions')
-    .action(() => {
-      const { sessionManager } = bootstrap()
+    .action(async () => {
+      const { sessionManager } = await bootstrap()
       const sessions = sessionManager.list()
       if (sessions.length === 0) {
         console.log('No sessions found')
@@ -116,8 +116,8 @@ export function createProgram(): Command {
   session.command('show')
     .argument('<id>', 'Session id')
     .description('Show session details')
-    .action((id: string) => {
-      const { sessionManager } = bootstrap()
+    .action(async (id: string) => {
+      const { sessionManager } = await bootstrap()
       const meta = sessionManager.get(id)
       if (!meta) {
         console.log(`Session not found: ${id}`)
@@ -135,8 +135,8 @@ export function createProgram(): Command {
   session.command('delete')
     .argument('<id>', 'Session id')
     .description('Delete a session')
-    .action((id: string) => {
-      const { sessionManager } = bootstrap()
+    .action(async (id: string) => {
+      const { sessionManager } = await bootstrap()
       sessionManager.delete(id)
       console.log(`Session deleted: ${id}`)
     })
