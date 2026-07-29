@@ -65,6 +65,7 @@ graph TB
         HALLUC["hallucination/"]
         UPDATER["updater/"]
         EXEC["execution/"]
+        BROWSER["browser/"]
     end
 
     subgraph SUPPORT["Support"]

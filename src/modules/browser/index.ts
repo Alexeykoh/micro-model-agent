@@ -1,0 +1,6 @@
+export { BrowserModule } from './module'
+export { BrowserSession, BrowserActionTracker } from './session'
+export { CookieStore } from './cookie-store'
+export { extractInteractiveElements, formatSnapshot } from './snapshot'
+export type { BrowserConfig, BrowserState, ActionResult, ElementEntry, PageSnapshot, BrowserAction } from './types'
+export { DEFAULT_BROWSER_CONFIG } from './types'

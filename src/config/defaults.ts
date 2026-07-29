@@ -39,4 +39,12 @@ export const DEFAULTS: AppConfig = {
     maxSessions: 50,
     isolateMemory: false,
   },
+  browser: {
+    enabled: true,
+    headless: true,
+    maxElements: 30,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    navigationTimeout: 15000,
+  },
 }

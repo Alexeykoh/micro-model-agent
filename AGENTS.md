@@ -50,7 +50,7 @@ CLI (main.ts → commands.ts / repl.ts)
     → LLM Layer (provider.ts → openai-compat.ts → token-counter.ts → response.ts)
     │   └── Exponential backoff retry (3 retries, 1s/2s/4s delays, 429/5xx)
     → Tools (registry.ts → executor.ts → 20+ individual tools)
-    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile)
+    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser)
 ```
 
 ## Key Design Rules
@@ -91,6 +91,7 @@ src/
 │   ├── bash.ts         # Shell command execution
 │   ├── subagent.ts     # Isolated sub-agent spawning
 │   ├── web-search.ts, web-fetch.ts, web-browse.ts
+│   ├── browser.ts      # Playwright browser tool (open, click, type, scroll, screenshot)
 │   ├── plan.ts, todo.ts, question.ts, approve.ts
 │   ├── load-skill.ts, pipeline-run.ts, mcp-call.ts, search-history.ts
 │   └── ...             # list-dir, create-dir, delete-file, move-file, file-info
@@ -120,7 +121,14 @@ src/
 │   │   ├── stuck-detector.ts # Iteration/error thresholds, off-track guard
 │   │   └── auditor.ts  # Final audit after all steps
 │   ├── updater/        # Background npm registry version check
-│   └── user-profile/   # OS/shell/preferences → ~500 token compressed block
+│   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
+│   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
+│       ├── types.ts    # BrowserConfig, BrowserState, ElementEntry, ActionResult
+│       ├── session.ts  # BrowserSession — Playwright lifecycle + action dispatch
+│       ├── snapshot.ts # Page → numbered accessibility tree (interactive elements)
+│       ├── actions.ts  # Script builders for click, type, scroll
+│       ├── cookie-store.ts # Cookie/session persistence to disk
+│       └── module.ts   # AgentModule — PromptBlock + Plugin hooks
 ├── cli/                # CLI + REPL
 │   ├── main.ts         # Entry point (commander subcommands)
 │   ├── commands.ts     # init, config, model, provider, session subcommands
@@ -183,6 +191,68 @@ In `config/defaults.ts` / `~/.mma/config.json`:
 ```
 
 Messages are persisted to history.jsonl on each iteration (tool calls, assistant responses). Context compaction persists a snapshot of all messages. The `search_history` tool searches across all sessions.
+
+## Browser Tool
+
+Playwright-based headless browser for web navigation, form filling, and page interaction.
+
+### Actions
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `open` | `url` | Navigate to URL, returns element snapshot |
+| `click` | `target` (number) | Click element by snapshot index |
+| `type` | `target`, `text` | Type text into element |
+| `scroll` | `direction` (up/down/top/bottom) | Scroll page |
+| `back` | — | Go back in history |
+| `forward` | — | Go forward in history |
+| `screenshot` | — | Capture page screenshot (vision models only) |
+| `snapshot` | — | Re-read current page elements |
+| `wait` | `ms` | Wait for page changes |
+| `close` | — | Close browser session |
+
+### Accessibility Tree Snapshot
+
+Instead of raw HTML, returns compact numbered element list:
+
+```
+Page: "Example Domain"
+URL: https://example.com
+
+[1] link "More information..." → http://www.iana.org/domains/example
+[2] textbox "Search" 
+[3] button "Submit"
+```
+
+Model interacts using element numbers (e.g., `click(target: 1)`).
+
+### Vision Fallback
+
+- **Vision models** (gpt-4o, claude, etc.): receive screenshot as base64 image
+- **Text-only models** (qwen3.5-9b, etc.): receive text-only message + snapshot
+
+### Stuck Detection
+
+Tracks repeated actions (same action + same URL × 3). Warns model to try different approach.
+
+### Cookie Persistence
+
+Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying logged in across agent runs.
+
+### Config
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "headless": true,
+    "maxElements": 30,
+    "viewportWidth": 1280,
+    "viewportHeight": 720,
+    "navigationTimeout": 15000
+  }
+}
+```
 
 ## Context Budget (dynamic, from model.contextWindow)
 

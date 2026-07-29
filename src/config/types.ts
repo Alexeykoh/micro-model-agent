@@ -34,6 +34,15 @@ export interface RetryConfig {
   maxDelay: number
 }
 
+export interface BrowserToolConfig {
+  enabled: boolean
+  headless: boolean
+  maxElements: number
+  viewportWidth: number
+  viewportHeight: number
+  navigationTimeout: number
+}
+
 export interface AppConfig {
   version: string
   model: string
@@ -50,4 +59,5 @@ export interface AppConfig {
   logLevel: string
   locale: string
   session: SessionConfig
+  browser: BrowserToolConfig
 }

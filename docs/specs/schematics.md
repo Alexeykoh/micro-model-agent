@@ -53,6 +53,7 @@ flowchart LR
         HAL["hallucination/"]
         UPD["updater/"]
         EXEC["execution/"]
+        BR["browser/"]
     end
     
     subgraph CORE["Ядро"]
@@ -75,6 +76,9 @@ flowchart LR
     EXEC -->|getPlugin| PM
     EXEC -->|getPromptBlock| PB
     EXEC -->|getTools| TR
+    BR -->|getPlugin| PM
+    BR -->|getPromptBlock| PB
+    BR -->|getTools| TR
     
     MR -->|collectBlocks| PB
     MR -->|collectTools| TR
@@ -481,6 +485,7 @@ graph TB
         HAL["modules/hallucination/"]
         UPD["modules/updater/"]
         EXECMOD["modules/execution/"]
+        BR["modules/browser/"]
     end
     
     MAIN --> CMD
@@ -515,4 +520,88 @@ graph TB
     OAI --> PROV
     TIK --> PROV
     RESP --> PROV
+```
+
+---
+
+## 14. Browser Tool Architecture
+
+```mermaid
+flowchart TD
+    subgraph TOOL["Tool Layer"]
+        BT["tools/browser.ts<br/>ToolDefinition"]
+    end
+    
+    subgraph MODULE["Browser Module"]
+        BM["module.ts<br/>BrowserModule<br/>AgentModule"]
+        BS["session.ts<br/>BrowserSession<br/>Playwright lifecycle"]
+        SNAP["snapshot.ts<br/>Accessibility tree<br/>extraction"]
+        ACT["actions.ts<br/>Script builders<br/>click, type, scroll"]
+        CS["cookie-store.ts<br/>Cookie persistence"]
+        TYPES["types.ts<br/>BrowserConfig, ElementEntry"]
+    end
+    
+    subgraph PLAYWRIGHT["Playwright"]
+        CHROMIUM["Chromium Browser"]
+        CTX["BrowserContext"]
+        PAGE["Page"]
+    end
+    
+    subgraph DISK["Disk"]
+        COOKIES[".mma/browser/cookies.json"]
+    end
+    
+    BT -->|createBrowserTool| BM
+    BM -->|getToolDefinitions| BT
+    BM -->|getPlugin| PM["PluginManager"]
+    
+    BT -->|getSession| BS
+    BS -->|execute action| ACT
+    BS -->|takeSnapshot| SNAP
+    BS -->|saveCookies| CS
+    CS -->|write| COOKIES
+    CS -->|read| COOKIES
+    
+    BS -->|launch| CHROMIUM
+    CHROMIUM --> CTX
+    CTX --> PAGE
+    PAGE -->|evaluate| ACT
+    PAGE -->|content| SNAP
+    
+    SNAP -->|format| OUTPUT["Numbered element list<br/>[1] link 'Home' → /<br/>[2] textbox 'Search'"]
+    
+    style OUTPUT fill:#ccffcc
+```
+
+### Browser Tool Flow
+
+```mermaid
+sequenceDiagram
+    participant LLM as LLM
+    participant BT as browser tool
+    participant BS as BrowserSession
+    participant PW as Playwright
+    participant SNAP as Snapshot
+    
+    LLM->>BT: browser(action: "open", url: "...")
+    BT->>BS: execute("open", args)
+    BS->>PW: launch() + goto(url)
+    PW-->>BS: page loaded
+    BS->>PW: evaluate(indexInjectionScript)
+    PW-->>BS: elements numbered
+    BS->>SNAP: extractInteractiveElements(html)
+    SNAP-->>BS: ElementEntry[]
+    BS->>BS: saveCookies()
+    BS-->>BT: ActionResult(snapshot)
+    BT-->>LLM: formatted snapshot
+    
+    Note over LLM: Model reads snapshot,<br/>decides to click [3]
+    
+    LLM->>BT: browser(action: "click", target: 3)
+    BT->>BS: execute("click", {target: 3})
+    BS->>PW: evaluate(clickScript(3))
+    PW-->>BS: clicked
+    BS->>SNAP: takeSnapshot()
+    BS-->>BT: new snapshot
+    BT-->>LLM: updated snapshot
 ```

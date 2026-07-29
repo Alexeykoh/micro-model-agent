@@ -24,6 +24,7 @@ import { createLoadSkillTool } from './load-skill'
 import { pipelineRunTool } from './pipeline-run'
 import { mcpCallTool } from './mcp-call'
 import { searchHistoryTool } from './search-history'
+import { createBrowserTool } from './browser'
 import type { SkillsModule } from '../modules/skills/module'
 
 export { ToolRegistry, ToolExecutor }
@@ -37,6 +38,7 @@ export {
   planTool, todoTool,
   questionTool, approveTool,
   createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
+  createBrowserTool,
 }
 
 export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsModule): void {

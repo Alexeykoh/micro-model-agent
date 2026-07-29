@@ -12,6 +12,7 @@ import { ExecutionModule } from '../modules/execution/module'
 import { SessionStore, SessionManager, SessionModule } from '../modules/session/index'
 import { UserProfile } from '../modules/user-profile/profile'
 import { SkillsLoader, SkillsMatcher, SkillsModule } from '../modules/skills/index'
+import { BrowserModule } from '../modules/browser/index'
 import { Agent } from './agent'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -151,6 +152,15 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   moduleRegistry.register(sessionModule)
 
   moduleRegistry.register(skillsModule)
+
+  if (config.browser.enabled) {
+    const browserModule = new BrowserModule()
+    moduleRegistry.register(browserModule)
+    const browserPlugin = browserModule.getPlugin()
+    if (browserPlugin) {
+      pluginManager.register(browserPlugin)
+    }
+  }
 
   const plugin = execModule.getPlugin()
   if (plugin) {
