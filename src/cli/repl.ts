@@ -1,14 +1,26 @@
 import * as readline from 'readline'
+import pc from 'picocolors'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
+import { formatMarkdown } from '../ui/md-formatter'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
+import type { SessionManager } from '../modules/session/manager'
 
 interface SlashCommand {
   name: string
   description: string
   aliases?: string[]
   action(args: string[]): void | Promise<void>
+}
+
+function formatContextBar(used: number, limit: number): string {
+  const pct = Math.min(100, Math.round((used / limit) * 100))
+  const barLen = 20
+  const filled = Math.round((pct / 100) * barLen)
+  const bar = pc.green('█'.repeat(filled)) + pc.dim('░'.repeat(barLen - filled))
+  const pctStr = pct >= 75 ? pc.yellow(`${pct}%`) : pc.dim(`${pct}%`)
+  return `  ${bar}  ${pctStr}  ${pc.dim(`(${used} / ${limit} tokens)`)}`
 }
 
 export class Repl {
@@ -18,17 +30,20 @@ export class Repl {
   private running = false
   private agent: Agent
   private config: AppConfig
+  private sessionManager?: SessionManager
 
-  constructor(agent: Agent, config: AppConfig) {
+  constructor(agent: Agent, config: AppConfig, sessionManager?: SessionManager) {
     this.agent = agent
     this.config = config
+    this.sessionManager = sessionManager
     this.registerBuiltinCommands()
     this.registerMmaCommands()
+    this.registerSessionCommands()
     this.setupCompleter()
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: '> ',
+      prompt: pc.cyan('> '),
       tabSize: 2,
       completer: (line: string) => {
         const [matches, partial] = this.completer.complete(line)
@@ -69,28 +84,38 @@ export class Repl {
           console.log('Usage: /run <prompt>')
           return
         }
-        const result = await this.agent.run(args.join(' '))
-        if (result.success) {
-          console.log(result.text)
-        } else {
-          console.error(`Error: ${result.error}`)
-          if (result.text) {
-            console.log(`Partial output:\n${result.text}`)
-          }
-        }
+        const prompt = args.join(' ')
+        await this.runAgent(prompt)
       },
     })
     this.registerCommand({
       name: 'config',
       description: 'Show current configuration',
       action: () => {
+        const ctx = this.config.contextWindow
+        const sys = Math.floor(ctx * this.config.contextBudget.systemPrompt)
+        const res = Math.floor(ctx * this.config.contextBudget.responseReserve)
         console.log(`Model:       ${this.config.model}`)
-        console.log(`Provider:    ${this.config.provider.type} (${this.config.provider.baseUrl})`)
-        console.log(`Context:     ${this.config.contextWindow}`)
+        console.log(`Provider:    ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
+        console.log(`Context:     ${ctx}  (sys:${sys}  res:${res}  hist:${ctx - sys - res})`)
         console.log(`Max iters:   ${this.config.maxToolIterations}`)
         console.log(`Stuck thresh: ${this.config.stuckThreshold}`)
+        console.log(`Reasoning:   ${this.config.showReasoning ? pc.green('show') : pc.dim('hide')}`)
         console.log(`Log level:   ${this.config.logLevel}`)
         console.log(`Locale:      ${this.config.locale}`)
+        const meta = this.sessionManager?.getActiveMeta()
+        if (meta) {
+          console.log(`Session:     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`)
+        }
+      },
+    })
+    this.registerCommand({
+      name: 'reasoning',
+      description: 'Toggle showing model reasoning/thinking',
+      action: () => {
+        this.config.showReasoning = !this.config.showReasoning
+        const status = this.config.showReasoning ? pc.green('show') : pc.dim('hide')
+        console.log(`Reasoning: ${status}`)
       },
     })
     this.registerCommand({
@@ -99,6 +124,107 @@ export class Repl {
       action: () => {
         console.log(`Model: ${this.config.model}`)
         console.log(`Provider: ${this.config.provider.type} @ ${this.config.provider.baseUrl}`)
+        const meta = this.sessionManager?.getActiveMeta()
+        if (meta) {
+          console.log(`Session: ${meta.name} (${meta.id}) — ${meta.messageCount} messages`)
+        }
+      },
+    })
+  }
+
+  private registerSessionCommands(): void {
+    if (!this.sessionManager) return
+
+    this.registerCommand({
+      name: 'sessions',
+      description: 'List all sessions (* active)',
+      aliases: ['ls'],
+      action: () => {
+        const sessions = this.sessionManager!.list()
+        const active = this.sessionManager!.getActive()
+        if (sessions.length === 0) {
+          console.log('No sessions found. Create one with /new <name>')
+          return
+        }
+        for (const s of sessions) {
+          const marker = s.id === active ? pc.green(' *') : '  '
+          const date = s.updatedAt.slice(0, 19).replace('T', ' ')
+          console.log(` ${marker} ${s.id.slice(0, 12)}  ${s.name.padEnd(25)} ${date}  ${s.messageCount} msgs`)
+        }
+      },
+    })
+
+    this.registerCommand({
+      name: 'new',
+      description: 'Create a new session',
+      aliases: ['create'],
+      action: (args: string[]) => {
+        const name = args.join(' ') || undefined
+        const meta = this.sessionManager!.create(name)
+        console.log(`Created session: ${meta.name} (${meta.id})`)
+      },
+    })
+
+    this.registerCommand({
+      name: 'resume',
+      description: 'Switch to a session by id or name prefix',
+      aliases: ['switch', 'use'],
+      action: (args: string[]) => {
+        const query = args.join(' ')
+        if (!query) {
+          console.log('Usage: /resume <session-id> or <name>')
+          return
+        }
+        const sessions = this.sessionManager!.list()
+        const match = sessions.find(
+          s => s.id === query || s.id.startsWith(query) || s.name.toLowerCase().includes(query.toLowerCase())
+        )
+        if (!match) {
+          console.log(`No session matching "${query}"`)
+          return
+        }
+        this.sessionManager!.setActive(match.id)
+        console.log(`Resumed session: ${match.name} (${match.id})`)
+      },
+    })
+
+    this.registerCommand({
+      name: 'rename',
+      description: 'Rename the current session',
+      action: (args: string[]) => {
+        const name = args.join(' ')
+        if (!name) {
+          console.log('Usage: /rename <new-name>')
+          return
+        }
+        const active = this.sessionManager!.getActive()
+        if (!active) {
+          console.log('No active session')
+          return
+        }
+        this.sessionManager!.rename(active, name)
+        console.log(`Session renamed to: ${name}`)
+      },
+    })
+
+    this.registerCommand({
+      name: 'delete',
+      description: 'Delete a session by id',
+      aliases: ['rm'],
+      action: (args: string[]) => {
+        const query = args[0]
+        if (!query) {
+          console.log('Usage: /delete <session-id>')
+          return
+        }
+        const sessions = this.sessionManager!.list()
+        const match = sessions.find(s => s.id === query || s.id.startsWith(query))
+        if (!match) {
+          console.log(`No session matching "${query}"`)
+          return
+        }
+        this.sessionManager!.delete(match.id)
+        console.log(`Deleted session: ${match.name} (${match.id})`)
       },
     })
   }
@@ -119,12 +245,7 @@ export class Repl {
       if (trimmed.startsWith('/')) {
         await this.executeCommand(trimmed)
       } else {
-        const result = await this.agent.run(trimmed)
-        if (result.success) {
-          console.log(result.text)
-        } else {
-          console.error(`Error: ${result.error}`)
-        }
+        await this.runAgent(trimmed)
       }
 
       if (this.running) {
@@ -135,6 +256,21 @@ export class Repl {
     this.rl.on('close', () => {
       this.running = false
     })
+  }
+
+  private async runAgent(input: string): Promise<void> {
+    process.stdout.write('\n' + pc.green('Agent: '))
+
+    const result = await this.agent.run(input, undefined, (meta) => {
+      process.stdout.write(meta)
+    })
+
+    process.stdout.write('\n' + formatMarkdown(result.text) + '\n')
+
+    if (!result.success) {
+      console.error(pc.red(`Error: ${result.error}`))
+    }
+    this.showContextBar(result)
   }
 
   registerCommand(cmd: SlashCommand): void {
@@ -153,35 +289,65 @@ export class Repl {
 
     const cmd = this.commands.get(name)
     if (!cmd) {
-      console.log(`Unknown command: ${name}. Type /help for available commands.`)
+      console.log(pc.red(`Unknown command: ${name}.`), 'Type /help for available commands.')
       return
     }
 
     try {
       await cmd.action(args)
     } catch (err) {
-      console.error(`Command error: ${err instanceof Error ? err.message : String(err)}`)
+      console.error(pc.red(`Command error: ${err instanceof Error ? err.message : String(err)}`))
     }
   }
 
   private showHelp(): void {
     console.log('\nAvailable commands:')
+    const shown = new Set<string>()
     for (const [name, cmd] of this.commands) {
       if (cmd.aliases?.includes(name)) continue
-      const aliases = cmd.aliases ? ` (${cmd.aliases.join(', ')})` : ''
-      console.log(`  /${name}${aliases}  ${cmd.description}`)
+      if (shown.has(cmd.name)) continue
+      shown.add(cmd.name)
+      const aliases = cmd.aliases ? ` (${pc.dim(cmd.aliases.join(', '))})` : ''
+      console.log(`  ${pc.cyan('/' + name)}${aliases}  ${pc.dim(cmd.description)}`)
     }
     console.log()
   }
 
+  private showContextBar(result: { contextUsed?: number; contextLimit?: number }): void {
+    if (result.contextUsed !== undefined && result.contextLimit !== undefined && result.contextLimit > 0) {
+      console.log()
+      console.log(formatContextBar(result.contextUsed, result.contextLimit))
+    }
+  }
+
   start(): void {
     this.running = true
-    console.log('MMA REPL — type /help for commands, /exit to quit\n')
+
+    console.log(pc.bold(pc.green('MMA REPL v2')))
+    const divider = '─'.repeat(50)
+
+    const ctx = this.config.contextWindow
+    const sysBudget = Math.floor(ctx * this.config.contextBudget.systemPrompt)
+    const resBudget = Math.floor(ctx * this.config.contextBudget.responseReserve)
+    const histBudget = ctx - sysBudget - resBudget
+
+    console.log(pc.dim(divider))
+    console.log(`  ${pc.yellow('Model:')}      ${pc.white(this.config.model)}`)
+    console.log(`  ${pc.yellow('Provider:')}   ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`)
+    console.log(`  ${pc.yellow('Context:')}    ${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`)
+
+    const meta = this.sessionManager?.getActiveMeta()
+    if (meta) {
+      console.log(`  ${pc.yellow('Session:')}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs`)
+    }
+    console.log(pc.dim(divider))
+    console.log()
     this.rl.prompt()
   }
 
   stop(): void {
     this.running = false
+    this.agent.shutdown()
     this.rl.close()
   }
 }

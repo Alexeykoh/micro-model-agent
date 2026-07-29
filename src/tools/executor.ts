@@ -52,4 +52,8 @@ export class ToolExecutor {
     this.ctx.logger.info(`Tool ${call.name}: ${result.success ? 'OK' : 'FAIL'}`)
     return result
   }
+
+  getToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+    return this.registry.getAllForLLM()
+  }
 }

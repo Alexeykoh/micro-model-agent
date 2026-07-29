@@ -19,6 +19,7 @@ export class ContextManager {
   private compactedBlock: string | null = null
   private iterationsSinceCompaction = 0
   private budget: ContextBudget
+  onCompact: ((messages: Message[]) => void) | null = null
 
   constructor(contextWindow: number) {
     this.contextWindow = contextWindow
@@ -54,6 +55,10 @@ export class ContextManager {
 
   compact(): void {
     if (this.messages.length <= KEEP_LAST_N * 2) return
+
+    if (this.onCompact) {
+      this.onCompact(this.messages)
+    }
 
     const cutoff = this.messages.length - KEEP_LAST_N * 2
     const oldTurns = this.messages.slice(0, cutoff)
@@ -93,5 +98,9 @@ export class ContextManager {
 
   getActiveHistory(): Message[] {
     return [...this.messages]
+  }
+
+  getEstimatedTokens(): number {
+    return this.messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 2), 0)
   }
 }

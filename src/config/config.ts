@@ -58,6 +58,8 @@ export interface LoadConfigOptions {
 export function loadConfig(options: LoadConfigOptions): AppConfig {
   const globalPath = join(options.configDir, 'config.json')
 
+  mkdirSync(options.configDir, { recursive: true })
+
   const detector = new MigrationDetector(options.configDir)
   if (detector.needsMigration()) {
     const backup = new BackupManager(options.configDir)
@@ -72,6 +74,10 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   const globalData = loadJSON(globalPath)
   if (globalData) {
     config = deepMerge(config, globalData as Partial<AppConfig>)
+  }
+
+  if (!existsSync(globalPath)) {
+    saveConfig(config, globalPath)
   }
 
   const projectData = loadJSON(options.projectConfigPath)

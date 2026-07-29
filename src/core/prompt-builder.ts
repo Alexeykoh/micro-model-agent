@@ -50,12 +50,17 @@ export class PromptBuilder {
     const included: string[] = []
     const excluded: string[] = []
 
-    for (const block of [...essential, ...nonEssential]) {
+    for (const block of essential) {
+      included.push(block.content)
+      usedTokens += block.estimatedTokens
+    }
+
+    for (const block of nonEssential) {
       const tokens = block.estimatedTokens
       if (usedTokens + tokens <= this.budget) {
         included.push(block.content)
         usedTokens += tokens
-      } else if (!block.essential) {
+      } else {
         excluded.push(block.content)
       }
     }

@@ -1,29 +1,37 @@
 import { createProgram } from './commands'
 import { bootstrap } from '../core/bootstrap'
 import { Repl } from './repl'
+import { formatMarkdown } from '../ui/md-formatter'
 
 async function main(): Promise<void> {
   const program = createProgram()
   program.parse(process.argv)
 
-  const args = program.args
+  const cmdNames = new Set(program.commands.map(c => c.name()))
 
-  if (args.length > 0) {
-    const prompt = args.join(' ')
-    const { agent, logger } = bootstrap()
+  const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0])
+
+  if (isSubcommand) {
+    return
+  }
+
+  if (program.args.length > 0) {
+    const prompt = program.args.join(' ')
+    const { agent } = bootstrap()
     const result = await agent.run(prompt)
     if (result.success) {
-      console.log(result.text)
+      console.log(formatMarkdown(result.text))
     } else {
       console.error(`Error: ${result.error}`)
       if (result.text) {
-        console.log(`Partial output:\n${result.text}`)
+        console.log(formatMarkdown(result.text))
       }
       process.exit(1)
     }
+    agent.shutdown()
   } else {
-    const { agent, config } = bootstrap()
-    const repl = new Repl(agent, config)
+    const { agent, config, sessionManager } = bootstrap()
+    const repl = new Repl(agent, config, sessionManager)
     repl.start()
   }
 }

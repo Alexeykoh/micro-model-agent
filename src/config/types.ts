@@ -15,6 +15,12 @@ export interface ContextBudget {
   compactionThreshold: number
 }
 
+export interface SessionConfig {
+  autoSave: boolean
+  maxSessions: number
+  isolateMemory: boolean
+}
+
 export interface AppConfig {
   version: string
   model: string
@@ -25,6 +31,8 @@ export interface AppConfig {
   maxToolIterations: number
   stuckThreshold: number
   autoPlan: boolean
+  showReasoning: boolean
   logLevel: string
   locale: string
+  session: SessionConfig
 }

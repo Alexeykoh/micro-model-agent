@@ -98,6 +98,82 @@ describe('OpenAICompatProvider', () => {
     expect(toolCall!.name).toBe('read_file')
   })
 
+  it('should wrap tools in OpenAI function format', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+    })
+
+    let requestBody: any = null
+    const mockFetch = vi.fn()
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    mockFetch.mockImplementation((_url: string, init: RequestInit) => {
+      requestBody = JSON.parse(init.body as string)
+      return Promise.resolve({
+        ok: true,
+        body: stream,
+        headers: new Map(),
+      })
+    })
+    global.fetch = mockFetch as any
+
+    const tools = [
+      { name: 'read_file', description: 'Read a file', parameters: { type: 'object', properties: {} } },
+      { name: 'write_file', description: 'Write a file', parameters: { type: 'object', properties: {} } },
+    ]
+
+    for await (const _ of provider.chat([{ role: 'user', content: 'hi' }], tools)) { }
+
+    expect(requestBody).not.toBeNull()
+    expect(requestBody.tools).toHaveLength(2)
+    expect(requestBody.tools[0]).toEqual({
+      type: 'function',
+      function: {
+        name: 'read_file',
+        description: 'Read a file',
+        parameters: { type: 'object', properties: {} },
+      },
+    })
+    expect(requestBody.tools[1].type).toBe('function')
+    expect(requestBody.tools[1].function.name).toBe('write_file')
+  })
+
+  it('should not include tools in body when tools is empty', async () => {
+    const provider = new OpenAICompatProvider({
+      model: 'test-model',
+      baseUrl: 'http://localhost:1234/v1',
+    })
+
+    let requestBody: any = null
+    const mockFetch = vi.fn()
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    mockFetch.mockImplementation((_url: string, init: RequestInit) => {
+      requestBody = JSON.parse(init.body as string)
+      return Promise.resolve({
+        ok: true,
+        body: stream,
+        headers: new Map(),
+      })
+    })
+    global.fetch = mockFetch as any
+
+    for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
+
+    expect(requestBody.tools).toBeUndefined()
+  })
+
   it('should handle API errors', async () => {
     const provider = new OpenAICompatProvider({
       model: 'test-model',

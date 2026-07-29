@@ -15,6 +15,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
 
   const mockToolExecutor = {
     execute: vi.fn().mockResolvedValue({ success: true, output: 'tool ok' }),
+    getToolDefinitions: vi.fn().mockReturnValue([]),
   }
 
   const mockPluginManager = {
@@ -33,6 +34,8 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     needsCompaction: vi.fn().mockReturnValue(false),
     compact: vi.fn(),
     getActiveHistory: vi.fn().mockReturnValue([]),
+    getEstimatedTokens: vi.fn().mockReturnValue(50),
+    getBudget: vi.fn().mockReturnValue({ systemPrompt: 1024, responseReserve: 512, history: 2560 }),
   }
 
   const mockHallucinationDetector = {
@@ -56,8 +59,10 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     maxToolIterations: 5,
     stuckThreshold: 8,
     autoPlan: true,
+    showReasoning: true,
     logLevel: 'info',
     locale: 'en',
+    session: { autoSave: true, maxSessions: 50, isolateMemory: false },
   }
 
   return {
@@ -101,6 +106,7 @@ describe('Agent', () => {
 
     const mockExecutor = {
       execute: vi.fn().mockResolvedValue({ success: true, output: 'tool executed', toolCallId: 'call-1' }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
     }
 
     const deps = createMockDeps({ llmProvider: mockProvider as any, toolExecutor: mockExecutor as any })
@@ -123,6 +129,7 @@ describe('Agent', () => {
 
     const mockExecutor = {
       execute: vi.fn().mockResolvedValue({ success: true, output: 'tool ok', toolCallId: 'call-x' }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
     }
 
     const deps = createMockDeps({
@@ -159,5 +166,50 @@ describe('Agent', () => {
     const result = await agent.run('delete everything')
     expect(result.success).toBe(false)
     expect(result.error).toContain('blocked')
+  })
+
+  it('streams reasoning via onMeta when showReasoning is true', async () => {
+    const mockProvider = {
+      model: 'test-model',
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue((async function* () {
+        yield { type: 'reasoning' as const, content: 'Let me think...' }
+        yield { type: 'text' as const, content: 'Answer' }
+        yield { type: 'done' as const, finishReason: 'stop' as const }
+      })()),
+      countTokens: vi.fn().mockReturnValue(10),
+    }
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any })
+    const agent = new Agent(deps as any)
+    const meta: string[] = []
+    const text: string[] = []
+    await agent.run('test', (c) => text.push(c), (m) => meta.push(m))
+
+    expect(meta.some(c => c.includes('Let me think'))).toBe(true)
+    expect(text.some(c => c.includes('Answer'))).toBe(true)
+    expect(text.some(c => c.includes('Let me think'))).toBe(false)
+  })
+
+  it('hides reasoning when showReasoning is false', async () => {
+    const mockProvider = {
+      model: 'test-model',
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue((async function* () {
+        yield { type: 'reasoning' as const, content: 'Hidden thought' }
+        yield { type: 'text' as const, content: 'Visible' }
+        yield { type: 'done' as const, finishReason: 'stop' as const }
+      })()),
+      countTokens: vi.fn().mockReturnValue(10),
+    }
+
+    const config = createMockDeps().config
+    config.showReasoning = false
+    const deps = createMockDeps({ llmProvider: mockProvider as any, config })
+    const agent = new Agent(deps as any)
+    const meta: string[] = []
+    await agent.run('test', undefined, (m) => meta.push(m))
+
+    expect(meta.some(c => c.includes('Hidden thought'))).toBe(false)
   })
 })

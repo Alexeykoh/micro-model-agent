@@ -59,6 +59,7 @@ graph TB
         PIPELINES["pipelines/"]
         INDEXER["indexer/"]
         MEMORY["memory/"]
+        SESSION["session/"]
         PROFILE["user-profile/"]
         CTXMOD["context/"]
         HALLUC["hallucination/"]
@@ -471,7 +472,8 @@ Collects:
 - Coding style preferences
 - Notes from user interactions
 
-Persisted to `~/.mma/profile.json`. Compressed to ~500 tokens for system prompt.
+Persisted to `~/.mma/profile.json` (auto-collected and saved on every bootstrap).
+Compressed to ~500 tokens for system prompt.
 
 ### 6.8 Context Manager (`modules/context/`)
 
@@ -697,6 +699,38 @@ flowchart LR
 - Если hallucination детектор выдал `block` на шаге N → execution модуль помечает шаг как требующий повторения
 - Если выдал `warn` → записывает в лог шага, но продолжает выполнение
 
+### 6.12 Session Management (`modules/session/`)
+
+Модуль для multi-session поддержки:
+
+**Файлы:**
+- `types.ts` — `SessionMeta` (id, name, timestamps, counts, model, contextWindow, projectDir), `SessionMessage` (role, content, timestamp)
+- `store.ts` — `SessionStore`: JSONL-персистентность на диск (`~/.mma/sessions/<id>/meta.json` + `history.jsonl`)
+- `manager.ts` — `SessionManager`: lifecycle (create, list, switch, delete, rename, autoName, maxSessions enforcement)
+- `module.ts` — `AgentModule`: `PromptBlock` с инфо о сессии + `AgentPlugin` с `onSessionStart/onSessionEnd`
+
+**CLI (`commands.ts`):**
+```bash
+mma session list              # список сессий
+mma session show <id>         # детали сессии
+mma session delete <id>       # удалить
+```
+
+**REPL (`repl.ts`):**
+```
+/sessions    /ls       — список (* active)
+/new <name>  /create   — создать
+/resume <id> /switch   — переключиться
+/rename <name>         — переименовать
+/delete <id> /rm       — удалить
+```
+
+**Интеграция:**
+- `PluginManager.onSessionStart` / `onSessionEnd` дёргаются при старте/завершении
+- `ContextManager.onCompact` сохраняет compaction в сессию
+- `search_history` ищет по всем `history.jsonl` в sessions/
+- ToolContext.sessionHistory пишет результаты tool в active сессию
+
 ## 7. CLI + REPL
 
 ### 7.1 CLI (`cli/main.ts`)
@@ -706,28 +740,62 @@ mma <prompt>                          # single run
 mma init                              # interactive setup wizard
 mma config set <key> <value>
 mma config show
-mma model list | use | add | remove
-mma provider list | use | add | remove
+mma model list | use
+mma provider list | use
+mma session list | show <id> | delete <id>   # session management
 ```
 
 ### 7.2 REPL (`cli/repl.ts`)
 
 Readline loop with:
-- **Slash commands:** `/help`, `/mode`, `/session`, `/plan`, `/todo`, `/memory`, `/model`, `/provider`, `/config`, `/exit`
+- **Colored output:** `You:` (cyan) for user messages, `Agent:` (green) for model responses
+- **Context bar:** After each response, shows `████░░░░░  40%  (8192 / 20480 tokens)` — remaining history budget
+- **REPL banner:** On startup shows model, provider, context budget breakdown, active session
+- **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/config`, `/status`, `/exit`
 - **Deep tab completion** (see 7.4)
 - **Fast navigation** (see 7.5)
 - **Persistent history** across sessions (`~/.mma/repl-history`)
-- **Multi-line support** (paste code blocks)
-- **Ctrl+C/D** signal handling
 - **Markdown output** with ANSI syntax highlighting via `ui/md-formatter.ts`
+
+### Session Management
+
+Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json` + `history.jsonl`.
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/sessions` | `/ls` | List all sessions (* active) |
+| `/new <name>` | `/create` | Create a new session |
+| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
+| `/rename <name>` | | Rename current session |
+| `/delete <id>` | `/rm` | Delete a session |
+
+**Data layout:**
+```
+~/.mma/sessions/
+├── ses_abc123/
+│   ├── meta.json        # SessionMeta (name, model, counts, timestamps)
+│   └── history.jsonl    # JSONL of SessionMessage[]
+└── ses_def456/
+    ├── meta.json
+    └── history.jsonl
+```
+
+Messages persisted to history.jsonl on each iteration (tool calls, assistant responses). `search_history` tool searches across all sessions.
 
 No TUI — no status bars, no themes, no spinners.
 
 ### 7.3 Interactive Setup Wizard (`cli/setup.ts`)
 
-Запускается через `mma init` или автоматически при первом запуске (если нет конфига).
+Запускается через `mma init` или при первом запуске (если нет конфига — создаётся автоматически с defaults).
 
 **Discovery flow:**
+1. Scan localhost for LLM servers (ports 1234, 11434, 8080, 4891)
+2. Show detected servers → user picks one
+3. Fetch model list from `/v1/models` → user picks model
+4. Test chat with selected model
+5. Configure context window (default 32768)
+6. Configure max tool iterations (default 25)
+7. Select locale (en/ru)
 
 ```mermaid
 flowchart TD
@@ -898,7 +966,12 @@ export const DEFAULTS = {
   stuckThreshold: 8,        // итераций без прогресса до stuck-detector
   autoPlan: true,           // авто-создание плана для multi-step
   logLevel: 'info',
-  locale: 'en'
+  locale: 'en',
+  session: {
+    autoSave: true,          // сохранять сообщения в history.jsonl
+    maxSessions: 50,         // максимум сессий (старые удаляются)
+    isolateMemory: false     // изолировать memory/ внутри сессии
+  }
 }
 ```
 
@@ -923,8 +996,9 @@ Default locale: `en`. Switch via `config.set('locale', 'ru')`.
 ## 10. Logging
 
 ### App Logger (`logger/app-logger.ts`)
-- Debug/info/warn/error to console + file
-- Filters: `LOG_LEVEL` env var
+- Debug/info/warn/error to console + file (`~/.mma/logs/app.jsonl`)
+- Log rotation: appends, no truncation
+- Filters: `MMA_LOG_LEVEL` env var
 - Used for development and debugging of the agent itself
 
 ### Session History (`modules/context/history.ts`)
@@ -1072,7 +1146,12 @@ E:\projects\micro-models-agent\
 │   │   │   └── index.ts
 │   │   ├── context/
 │   │   │   ├── manager.ts
-│   │   │   ├── history.ts
+│   │   │   └── index.ts
+│   │   ├── session/
+│   │   │   ├── types.ts
+│   │   │   ├── store.ts
+│   │   │   ├── manager.ts
+│   │   │   ├── module.ts
 │   │   │   └── index.ts
 │   │   ├── hallucination/
 │   │   │   ├── detector.ts

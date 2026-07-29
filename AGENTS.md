@@ -2,6 +2,8 @@
 
 AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1.
 
+> **Design spec:** [docs/specs/2025-07-28-mma-v2-design.md](./docs/specs/2025-07-28-mma-v2-design.md) — architecture, modules, tools, CLI, config, data flow.
+
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
 
 ## Tech Stack
@@ -31,6 +33,11 @@ tsc --noEmit
 
 # Test a single file
 bun test tests/<name>.test.ts
+
+# Session management
+bun run mma session list
+bun run mma session show <id>
+bun run mma session delete <id>
 ```
 
 ## Architecture
@@ -42,7 +49,7 @@ CLI (main.ts → commands.ts / repl.ts)
   → Core (agent.ts state machine: INIT→THINK→ACT→OBSERVE→OUTPUT→ERROR)
     → LLM Layer (provider.ts → openai-compat.ts → token-counter.ts → response.ts)
     → Tools (registry.ts → executor.ts → 20+ individual tools)
-    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, hallucination, execution, updater, user-profile)
+    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile)
 ```
 
 ## Key Design Rules
@@ -96,7 +103,11 @@ src/
 │   ├── indexer/        # File walker + export extraction + disk cache
 │   ├── memory/         # Persistent markdown (conventions.md, decisions.md, errors.md)
 │   ├── context/        # ContextManager (budget calc, sliding window compaction)
-│   │   └── history.ts  # SessionHistory (JSONL on disk, searchable)
+│   ├── session/        # Multi-session management
+│   │   ├── types.ts    # SessionMeta, SessionMessage
+│   │   ├── store.ts    # JSONL persistence on disk (~/.mma/sessions/<id>/)
+│   │   ├── manager.ts  # Session lifecycle (create, list, switch, delete)
+│   │   └── module.ts   # AgentModule — PromptBlock + Plugin hooks
 │   ├── hallucination/  # Pre-output validation pipeline
 │   │   ├── factual.ts  # Cross-check paths vs known set
 │   │   ├── consistency.ts # Track decisions, detect contradictions
@@ -111,7 +122,7 @@ src/
 │   └── user-profile/   # OS/shell/preferences → ~500 token compressed block
 ├── cli/                # CLI + REPL
 │   ├── main.ts         # Entry point (commander subcommands)
-│   ├── commands.ts     # init, config, model, provider subcommands
+│   ├── commands.ts     # init, config, model, provider, session subcommands
 │   ├── repl.ts         # Readline loop with slash commands
 │   ├── completer.ts    # Provider-based tab completion
 │   └── setup.ts        # Interactive setup wizard (port scan → test)
@@ -121,6 +132,56 @@ src/
 ├── logger/             # Structured logger with levels + child loggers
 └── migration/          # MMA v1→v2 detection, backup, safe startup
 ```
+
+## Session Management
+
+Sessions persist conversation history to `~/.mma/sessions/<id>/` as meta.json + history.jsonl.
+
+### REPL slash commands
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/sessions` | `/ls` | List all sessions (* active) |
+| `/new <name>` | `/create` | Create a new session |
+| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
+| `/rename <name>` | | Rename current session |
+| `/delete <id>` | `/rm` | Delete a session |
+
+### CLI subcommands
+
+```bash
+mma session list              # List all sessions
+mma session show <id>         # Show session details
+mma session delete <id>       # Delete a session
+```
+
+### Data layout
+
+```
+~/.mma/sessions/
+├── ses_abc123/
+│   ├── meta.json        # SessionMeta (name, model, counts, timestamps)
+│   └── history.jsonl    # JSONL of SessionMessage[]
+└── ses_def456/
+    ├── meta.json
+    └── history.jsonl
+```
+
+### Config
+
+In `config/defaults.ts` / `~/.mma/config.json`:
+
+```json
+{
+  "session": {
+    "autoSave": true,
+    "maxSessions": 50,
+    "isolateMemory": false
+  }
+}
+```
+
+Messages are persisted to history.jsonl on each iteration (tool calls, assistant responses). Context compaction persists a snapshot of all messages. The `search_history` tool searches across all sessions.
 
 ## Context Budget (dynamic, from model.contextWindow)
 

@@ -7,6 +7,8 @@ import type { Logger } from '../logger/app-logger'
 import type { AppConfig } from '../config/types'
 import type { PromptBlock } from './types'
 import type { ToolCall } from './types'
+import type { SessionManager } from '../modules/session/manager'
+import pc from 'picocolors'
 import { PromptBuilder } from './prompt-builder'
 
 export interface AgentDeps {
@@ -19,6 +21,7 @@ export interface AgentDeps {
   logger: Logger
   baseDir: string
   promptBlocks: PromptBlock[]
+  sessionManager?: SessionManager
 }
 
 export interface AgentResult {
@@ -26,25 +29,41 @@ export interface AgentResult {
   text: string
   error?: string
   iterationCount: number
+  contextUsed?: number
+  contextLimit?: number
 }
 
 export class Agent {
   private deps: AgentDeps
+  private systemPromptAdded = false
 
   constructor(deps: AgentDeps) {
     this.deps = deps
   }
 
-  async run(input: string): Promise<AgentResult> {
-    const { config, llmProvider, toolExecutor, pluginManager, contextManager, hallucinationDetector, logger, promptBlocks } = this.deps
+  async run(input: string, onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
+    const { config, llmProvider, toolExecutor, pluginManager, contextManager, hallucinationDetector, logger, promptBlocks, sessionManager } = this.deps
 
-    const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt)
-    const builder = new PromptBuilder(systemBudget)
-    builder.addBlocks(promptBlocks)
-    const { prompt: systemPrompt } = builder.build()
+    if (sessionManager && !sessionManager.getActive()) {
+      sessionManager.create()
+      logger.debug(`Session started: ${sessionManager.getActive()}`)
+    }
 
-    contextManager.addMessage({ role: 'system', content: systemPrompt })
+    if (!this.systemPromptAdded) {
+      const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt)
+      const builder = new PromptBuilder(systemBudget)
+      builder.addBlocks(promptBlocks)
+      const { prompt: systemPrompt } = builder.build()
+      contextManager.addMessage({ role: 'system', content: systemPrompt })
+      this.systemPromptAdded = true
+      pluginManager.runOnSessionStart({ logger, sessionManager: sessionManager?.getActiveMeta() })
+    }
+
     contextManager.addMessage({ role: 'user', content: input })
+
+    if (sessionManager) {
+      sessionManager.appendMessage({ role: 'user', content: input, timestamp: new Date().toISOString() })
+    }
 
     let iteration = 0
     let lastText = ''
@@ -61,21 +80,32 @@ export class Agent {
 
       const history = contextManager.getActiveHistory()
 
+      const allTools = toolExecutor.getToolDefinitions()
       let textContent = ''
       let reasoningContent = ''
       const toolCalls: ToolCall[] = []
       let sawToolCall = false
+      let emittedReasoning = false
 
       try {
-        for await (const chunk of llmProvider.chat(history)) {
+        for await (const chunk of llmProvider.chat(history, allTools as any)) {
           if (chunk.type === 'text' && chunk.content) {
+            if (emittedReasoning && !textContent) {
+              onMeta?.('\n\n')
+            }
             textContent += chunk.content
+            onChunk?.(chunk.content)
           }
           if (chunk.type === 'reasoning' && chunk.content) {
             reasoningContent += chunk.content
+            if (config.showReasoning) {
+              onMeta?.(pc.dim(chunk.content))
+              emittedReasoning = true
+            }
           }
           if (chunk.type === 'tool_call' && chunk.toolCall) {
             sawToolCall = true
+            onMeta?.('\n' + pc.dim(`[Using: ${chunk.toolCall.name}]`) + '\n')
             let parsedArgs: Record<string, unknown>
             try {
               parsedArgs = JSON.parse(chunk.toolCall.arguments)
@@ -114,6 +144,14 @@ export class Agent {
             content: result.output,
             name: call.name,
           })
+          if (sessionManager && config.session.autoSave) {
+            sessionManager.appendMessage({
+              role: 'tool',
+              content: result.output.slice(0, 500),
+              name: call.name,
+              timestamp: new Date().toISOString(),
+            })
+          }
         }
         continue
       }
@@ -126,6 +164,13 @@ export class Agent {
 
       if (textContent || reasoningContent) {
         contextManager.addMessage({ role: 'assistant', content: textContent || reasoningContent })
+        if (sessionManager && config.session.autoSave) {
+          sessionManager.appendMessage({
+            role: 'assistant',
+            content: (textContent || reasoningContent).slice(0, 500),
+            timestamp: new Date().toISOString(),
+          })
+        }
       }
 
       lastText = textContent
@@ -135,10 +180,19 @@ export class Agent {
       }
     }
 
+    const tokensUsed = contextManager.getEstimatedTokens()
+    const budget = contextManager.getBudget()
+
     if (iteration >= config.maxToolIterations) {
-      return { success: false, text: lastText, error: `Max iterations (${config.maxToolIterations}) reached`, iterationCount: iteration }
+      return { success: false, text: lastText, error: `Max iterations (${config.maxToolIterations}) reached`, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
     }
 
-    return { success: true, text: lastText, iterationCount: iteration }
+    return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
+  }
+
+  shutdown(): void {
+    const { pluginManager, logger, sessionManager, contextManager } = this.deps
+    contextManager.onCompact = null
+    pluginManager.runOnSessionEnd({ logger, sessionManager: sessionManager?.getActiveMeta() })
   }
 }

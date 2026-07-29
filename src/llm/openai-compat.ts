@@ -31,7 +31,14 @@ export class OpenAICompatProvider implements LLMProvider {
       stream: true,
     }
     if (tools && tools.length > 0) {
-      body.tools = tools
+      body.tools = tools.map(t => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }))
     }
 
     const headers: Record<string, string> = {

@@ -9,7 +9,7 @@ export function createProgram(): Command {
   const program = new Command()
     .name('mma')
     .description('Micro Models Agent — AI coding agent for small models')
-    .version('0.3.0')
+    .version('0.4.0')
 
   program
     .command('init')
@@ -22,6 +22,9 @@ export function createProgram(): Command {
       config.provider.baseUrl = answers.apiBase
       config.provider.apiKey = answers.apiKey
       config.model = answers.model
+      config.contextWindow = answers.contextWindow
+      config.maxToolIterations = answers.maxToolIterations
+      config.locale = answers.locale
       saveConfig(config, configPath)
       console.log('Configuration saved to ~/.mma/config.json')
     })
@@ -92,6 +95,50 @@ export function createProgram(): Command {
       config.provider.type = name
       saveConfig(config, configPath)
       console.log(`Provider set to: ${name}`)
+    })
+
+  const session = program.command('session').description('Manage sessions')
+  session.command('list')
+    .description('List all sessions')
+    .action(() => {
+      const { sessionManager } = bootstrap()
+      const sessions = sessionManager.list()
+      if (sessions.length === 0) {
+        console.log('No sessions found')
+        return
+      }
+      const active = sessionManager.getActive()
+      for (const s of sessions) {
+        const marker = s.id === active ? '*' : ' '
+        console.log(` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} msgs  ${s.updatedAt.slice(0, 10)}`)
+      }
+    })
+  session.command('show')
+    .argument('<id>', 'Session id')
+    .description('Show session details')
+    .action((id: string) => {
+      const { sessionManager } = bootstrap()
+      const meta = sessionManager.get(id)
+      if (!meta) {
+        console.log(`Session not found: ${id}`)
+        return
+      }
+      console.log(`ID:           ${meta.id}`)
+      console.log(`Name:         ${meta.name}`)
+      console.log(`Created:      ${meta.createdAt}`)
+      console.log(`Updated:      ${meta.updatedAt}`)
+      console.log(`Messages:     ${meta.messageCount}`)
+      console.log(`Model:        ${meta.model}`)
+      console.log(`Context:      ${meta.contextWindow}`)
+      console.log(`Project:      ${meta.projectDir}`)
+    })
+  session.command('delete')
+    .argument('<id>', 'Session id')
+    .description('Delete a session')
+    .action((id: string) => {
+      const { sessionManager } = bootstrap()
+      sessionManager.delete(id)
+      console.log(`Session deleted: ${id}`)
     })
 
   program

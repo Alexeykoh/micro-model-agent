@@ -21,6 +21,12 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 25,
   stuckThreshold: 8,
   autoPlan: true,
+  showReasoning: true,
   logLevel: 'info',
   locale: 'en',
+  session: {
+    autoSave: true,
+    maxSessions: 50,
+    isolateMemory: false,
+  },
 }

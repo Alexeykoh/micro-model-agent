@@ -1,9 +1,13 @@
+import { appendFileSync, mkdirSync, existsSync } from 'fs'
+import { join } from 'path'
+
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const
 type LogLevel = keyof typeof LEVELS
 
 export class Logger {
   private level: LogLevel
   private prefix: string
+  private logDir: string | null = null
 
   constructor(level: LogLevel = 'info', prefix = '') {
     this.level = level
@@ -14,9 +18,17 @@ export class Logger {
     this.level = level
   }
 
+  setLogDir(dir: string): void {
+    this.logDir = dir
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
+    }
+  }
+
   child(prefix: string): Logger {
-    const childPrefix = this.prefix ? `${this.prefix}:${prefix}` : prefix
-    return new Logger(this.level, childPrefix)
+    const childLogger = new Logger(this.level, this.prefix ? `${this.prefix}:${prefix}` : prefix)
+    if (this.logDir) childLogger.setLogDir(this.logDir)
+    return childLogger
   }
 
   debug(msg: string, meta?: Record<string, unknown>): void {
@@ -42,6 +54,13 @@ export class Logger {
     const prefix = this.prefix ? ` [${this.prefix}]` : ''
     const metaStr = meta ? ` ${JSON.stringify(meta)}` : ''
 
-    console.log(`[${level.toUpperCase()}]${prefix} ${ts} — ${msg}${metaStr}`)
+    const line = `[${level.toUpperCase()}]${prefix} ${ts} — ${msg}${metaStr}`
+    console.log(line)
+
+    if (this.logDir) {
+      try {
+        appendFileSync(join(this.logDir, 'app.jsonl'), JSON.stringify({ level, ts, prefix: this.prefix, msg, meta: meta ?? null }) + '\n', 'utf-8')
+      } catch { /* file logging is best-effort */ }
+    }
   }
 }
