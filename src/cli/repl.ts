@@ -2,7 +2,7 @@ import * as readline from 'readline'
 import pc from 'picocolors'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
-import { formatMarkdown } from '../ui/md-formatter'
+import { FormattingStream } from '../ui/md-formatter'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
 import type { SessionManager } from '../modules/session/manager'
@@ -261,11 +261,12 @@ export class Repl {
   private async runAgent(input: string): Promise<void> {
     process.stdout.write('\n' + pc.green('Agent: '))
 
-    const result = await this.agent.run(input, undefined, (meta) => {
+    const fmt = new FormattingStream((s) => process.stdout.write(s + '\n'))
+    const result = await this.agent.run(input, (c) => fmt.write(c), (meta) => {
       process.stdout.write(meta)
     })
-
-    process.stdout.write('\n' + formatMarkdown(result.text) + '\n')
+    fmt.flush()
+    process.stdout.write('\n')
 
     if (!result.success) {
       console.error(pc.red(`Error: ${result.error}`))
