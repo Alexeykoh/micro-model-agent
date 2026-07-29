@@ -31,7 +31,11 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
       }
 
       if (!result.success) {
-        return { success: false, output: result.message }
+        const available = skillsModule.getAvailable()
+        const hint = available.length > 0
+          ? `\n\n${t('tool.skill_available_hint')}: ${available.map(s => s.name).join(', ')}`
+          : ''
+        return { success: false, output: result.message + hint }
       }
 
       const skill = result.skill!

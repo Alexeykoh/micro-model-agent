@@ -25,18 +25,30 @@ import type { AppConfig } from '../config/types'
 
 function buildSystemInfo(config: AppConfig, baseDir: string, profileCompressed: string): string {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
-  return [
+  const lines = [
     `You are MMA v2, an AI coding agent for small models (${config.model}).`,
     `Date: ${now}`,
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
     ``,
-    `For multi-step tasks (involving multiple actions, file operations, web searches, or complex workflows):`,
-    `- Use the "plan" tool to create a plan before starting`,
-    `- Update plan status after completing each step`,
-    `- For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse"`,
-  ].join('\n')
+  ]
+
+  if (config.autoPlan) {
+    lines.push(
+      `IMPORTANT: For any task involving 2 or more steps (creating files, editing code, running commands, searching):`,
+      `- ALWAYS create a plan first using the "plan" tool — this significantly improves results`,
+      `- Break the task into concrete, actionable steps`,
+      `- After completing each step, call plan with action "update" to track progress`,
+      `- For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse"`,
+    )
+  } else {
+    lines.push(
+      `For web searches on JavaScript-heavy sites, prefer "browser" tool over "web_browse".`,
+    )
+  }
+
+  return lines.join('\n')
 }
 
 export interface BootstrapResult {

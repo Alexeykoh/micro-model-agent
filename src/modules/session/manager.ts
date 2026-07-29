@@ -1,5 +1,5 @@
 import type { SessionMeta, SessionMessage } from './types'
-import type { SessionStore } from './store'
+import type { SessionStore, SessionLogEntry } from './store'
 import { t } from '../../i18n/index'
 
 export interface SessionManagerOptions {
@@ -80,6 +80,11 @@ export class SessionManager {
   appendMessage(msg: SessionMessage): void {
     if (!this.activeId) throw new Error(t('session.no_active'))
     this.store.appendMessage(this.activeId, msg)
+  }
+
+  appendLog(entry: SessionLogEntry): void {
+    if (!this.activeId) return
+    this.store.appendSessionLog(this.activeId, entry)
   }
 
   loadHistory(): SessionMessage[] {

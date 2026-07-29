@@ -33,6 +33,10 @@ export class SkillsModule implements AgentModule {
 
     const skill = this.availableSkills.find(s => s.name === name)
     if (!skill) {
+      const fuzzyMatches = this.matcher.match(name, this.availableSkills, 1)
+      if (fuzzyMatches.length > 0) {
+        return this.tryLoad(fuzzyMatches[0])
+      }
       return { success: false, message: t('skill.not_found', { name }) }
     }
 

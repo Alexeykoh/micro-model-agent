@@ -58,7 +58,7 @@ export class ToolExecutor {
       }
     }
 
-    this.ctx.logger.info(`Tool ${call.name}: ${result.success ? 'OK' : 'FAIL'}`)
+    this.ctx.logger.debug(`Tool ${call.name}: ${result.success ? 'OK' : 'FAIL'}`)
     return result
   }
 

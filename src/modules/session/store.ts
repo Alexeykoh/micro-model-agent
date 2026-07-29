@@ -3,6 +3,16 @@ import { join } from 'path'
 import { gzipSync } from 'zlib'
 import type { SessionMeta, SessionMessage } from './types'
 
+export interface SessionLogEntry {
+  ts: string
+  type: 'tool_call' | 'tool_result' | 'assistant' | 'user' | 'system' | 'error'
+  tool?: string
+  args?: Record<string, unknown>
+  content?: string
+  success?: boolean
+  duration?: number
+}
+
 export class SessionStore {
   private baseDir: string
 
@@ -24,6 +34,10 @@ export class SessionStore {
 
   private historyPath(id: string): string {
     return join(this.sessionDir(id), 'history.jsonl')
+  }
+
+  private sessionLogPath(id: string): string {
+    return join(this.sessionDir(id), 'session.jsonl')
   }
 
   sessionExists(id: string): boolean {
@@ -65,6 +79,23 @@ export class SessionStore {
     try {
       const raw = readFileSync(path, 'utf-8')
       return raw.split('\n').filter(Boolean).map(line => JSON.parse(line) as SessionMessage)
+    } catch {
+      return []
+    }
+  }
+
+  appendSessionLog(id: string, entry: SessionLogEntry): void {
+    const dir = this.sessionDir(id)
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(this.sessionLogPath(id), JSON.stringify(entry) + '\n', 'utf-8')
+  }
+
+  loadSessionLog(id: string): SessionLogEntry[] {
+    const path = this.sessionLogPath(id)
+    if (!existsSync(path)) return []
+    try {
+      const raw = readFileSync(path, 'utf-8')
+      return raw.split('\n').filter(Boolean).map(line => JSON.parse(line) as SessionLogEntry)
     } catch {
       return []
     }

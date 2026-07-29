@@ -80,6 +80,7 @@ export class Agent {
 
     if (sessionManager) {
       sessionManager.appendMessage({ role: 'user', content: input, timestamp: new Date().toISOString() })
+      sessionManager.appendLog({ ts: new Date().toISOString(), type: 'user', content: input })
     }
 
     let iteration = 0
@@ -131,7 +132,9 @@ export class Agent {
           }
           if (chunk.type === 'tool_call' && chunk.toolCall) {
             sawToolCall = true
-            onMeta?.('\n' + pc.dim(t('tool.using', { name: chunk.toolCall.name })) + '\n')
+            const friendlyKey = `tool.friendly.${chunk.toolCall.name}`
+            const label = t(friendlyKey) !== friendlyKey ? t(friendlyKey) : chunk.toolCall.name
+            onMeta?.('\n' + pc.dim(t('tool.using', { label })) + '\n')
             let parsedArgs: Record<string, unknown>
             try {
               parsedArgs = JSON.parse(chunk.toolCall.arguments)
@@ -147,13 +150,21 @@ export class Agent {
         }
       } catch (err: any) {
         logger.error(`LLM call failed: ${err.message}`)
+        if (sessionManager) {
+          sessionManager.appendLog({ ts: new Date().toISOString(), type: 'error', content: err.message })
+        }
         pluginManager.runOnError({ iteration, logger }, err)
         return { success: false, text: lastText, error: t('error.llm', { message: err.message }), iterationCount: iteration }
       }
 
       if (sawToolCall) {
         for (const call of toolCalls) {
+          const startTime = Date.now()
+          if (sessionManager) {
+            sessionManager.appendLog({ ts: new Date().toISOString(), type: 'tool_call', tool: call.name, args: call.arguments })
+          }
           const result = await toolExecutor.execute(call)
+          const duration = Date.now() - startTime
           const currentTokens = contextManager.getEstimatedTokens()
           const budget = contextManager.getBudget()
           const truncatedOutput = this.truncateToolOutput(result.output, budget, currentTokens)
@@ -169,6 +180,7 @@ export class Agent {
               name: call.name,
               timestamp: new Date().toISOString(),
             })
+            sessionManager.appendLog({ ts: new Date().toISOString(), type: 'tool_result', tool: call.name, success: result.success, content: result.output.slice(0, 1000), duration })
           }
           if (contextManager.needsCompaction()) {
             contextManager.compact()
@@ -214,6 +226,7 @@ export class Agent {
             content: (textContent || reasoningContent).slice(0, 500),
             timestamp: new Date().toISOString(),
           })
+          sessionManager.appendLog({ ts: new Date().toISOString(), type: 'assistant', content: textContent || reasoningContent })
         }
       }
 
