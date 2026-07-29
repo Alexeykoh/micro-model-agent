@@ -96,6 +96,25 @@ export class FilePathProvider implements CompletionProvider {
   }
 }
 
+export class SessionNameProvider implements CompletionProvider {
+  name = 'session-names'
+  private getNames: () => string[]
+
+  constructor(getNames: () => string[]) {
+    this.getNames = getNames
+  }
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex >= 1 && ctx.tokens[0] === '/resume'
+  }
+
+  complete(ctx: CompletionContext): string[] {
+    const names = this.getNames()
+    if (!ctx.partial) return names
+    return names.filter(n => n.toLowerCase().includes(ctx.partial.toLowerCase()))
+  }
+}
+
 export class Completer {
   private providers: CompletionProvider[] = []
 

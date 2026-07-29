@@ -100,6 +100,12 @@ export class ContextManager {
     return [...this.messages]
   }
 
+  clear(): void {
+    this.messages = []
+    this.compactedBlock = null
+    this.iterationsSinceCompaction = 0
+  }
+
   getEstimatedTokens(): number {
     return this.messages.reduce((sum, m) => sum + Math.ceil(m.content.length / 2), 0)
   }

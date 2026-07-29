@@ -2,6 +2,7 @@ import * as readline from 'readline'
 import pc from 'picocolors'
 import { Completer } from './completer'
 import { SlashCommandProvider } from './completer'
+import { SessionNameProvider } from './completer'
 import { FormattingStream } from '../ui/md-formatter'
 import type { Agent } from '../core/agent'
 import type { AppConfig } from '../config/types'
@@ -151,6 +152,7 @@ export class Repl {
           const date = s.updatedAt.slice(0, 19).replace('T', ' ')
           console.log(` ${marker} ${s.id.slice(0, 12)}  ${s.name.padEnd(25)} ${date}  ${s.messageCount} msgs`)
         }
+        console.log(pc.dim(`\n  Use ${pc.cyan('/resume <id>')} ${pc.dim('or')} ${pc.cyan('/resume <name>')} ${pc.dim('to switch between sessions')}`))
       },
     })
 
@@ -161,7 +163,10 @@ export class Repl {
       action: (args: string[]) => {
         const name = args.join(' ') || undefined
         const meta = this.sessionManager!.create(name)
-        console.log(`Created session: ${meta.name} (${meta.id})`)
+        this.agent.clearContext()
+        console.clear()
+        console.log(`Created session: ${pc.cyan(meta.name)} (${pc.dim(meta.id.slice(0, 12))})`)
+        console.log(pc.dim('  Chat cleared. Start typing to begin.\n'))
       },
     })
 
@@ -171,11 +176,17 @@ export class Repl {
       aliases: ['switch', 'use'],
       action: (args: string[]) => {
         const query = args.join(' ')
+        const sessions = this.sessionManager!.list()
         if (!query) {
-          console.log('Usage: /resume <session-id> or <name>')
+          console.log(pc.dim('Available sessions:'))
+          const active = this.sessionManager!.getActive()
+          for (const s of sessions) {
+            const marker = s.id === active ? pc.green(' *') : '  '
+            console.log(pc.dim(` ${marker} ${s.id.slice(0, 12)}  ${s.name}`))
+          }
+          console.log(pc.dim(`\n  Usage: ${pc.cyan('/resume <id|name>')}`))
           return
         }
-        const sessions = this.sessionManager!.list()
         const match = sessions.find(
           s => s.id === query || s.id.startsWith(query) || s.name.toLowerCase().includes(query.toLowerCase())
         )
@@ -184,7 +195,10 @@ export class Repl {
           return
         }
         this.sessionManager!.setActive(match.id)
-        console.log(`Resumed session: ${match.name} (${match.id})`)
+        const history = this.sessionManager!.loadHistory()
+        this.agent.setContext(history)
+        console.log(`Resumed session: ${pc.cyan(match.name)} ${pc.dim(`(${match.id.slice(0, 12)})`)}  —  ${match.messageCount} msgs`)
+        console.log(pc.dim(`  Chat history loaded. Pick up where you left off.`))
       },
     })
 
@@ -232,6 +246,11 @@ export class Repl {
   private setupCompleter(): void {
     const slashCommands = Array.from(this.commands.keys())
     this.completer.registerProvider(new SlashCommandProvider(slashCommands))
+    if (this.sessionManager) {
+      this.completer.registerProvider(new SessionNameProvider(() =>
+        this.sessionManager!.list().map(s => s.name)
+      ))
+    }
   }
 
   private setupListeners(): void {

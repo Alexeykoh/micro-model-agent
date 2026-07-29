@@ -1,7 +1,7 @@
 import type { LLMProvider } from '../llm/provider'
 import type { ToolExecutor } from '../tools/executor'
 import type { PluginManager } from '../modules/plugins/manager'
-import type { ContextManager } from '../modules/context/manager'
+import type { ContextManager, Message } from '../modules/context/manager'
 import type { HallucinationDetector } from '../modules/hallucination/detector'
 import type { Logger } from '../logger/app-logger'
 import type { AppConfig } from '../config/types'
@@ -188,6 +188,26 @@ export class Agent {
     }
 
     return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
+  }
+
+  clearContext(): void {
+    this.deps.contextManager.clear()
+    this.systemPromptAdded = false
+  }
+
+  setContext(messages: Array<{ role: string; content: string; name?: string }>): void {
+    const { config, contextManager, promptBlocks } = this.deps
+    contextManager.clear()
+    const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt)
+    const builder = new PromptBuilder(systemBudget)
+    builder.addBlocks(promptBlocks)
+    const { prompt: systemPrompt } = builder.build()
+    contextManager.addMessage({ role: 'system', content: systemPrompt })
+    this.systemPromptAdded = true
+    for (const msg of messages) {
+      if (msg.role === 'system') continue
+      contextManager.addMessage({ role: msg.role as Message['role'], content: msg.content, name: msg.name })
+    }
   }
 
   shutdown(): void {
