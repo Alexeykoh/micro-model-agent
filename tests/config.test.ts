@@ -24,8 +24,8 @@ describe('config defaults', () => {
   })
 
   it('should have context budget defaults', () => {
-    expect(DEFAULTS.contextBudget.systemPrompt).toBe(0.25)
-    expect(DEFAULTS.contextBudget.responseReserve).toBe(0.12)
+    expect(DEFAULTS.contextBudget.systemPrompt).toBe(0.10)
+    expect(DEFAULTS.contextBudget.responseReserve).toBe(0.15)
     expect(DEFAULTS.contextBudget.compactionThreshold).toBe(0.75)
   })
 
@@ -67,7 +67,7 @@ describe('loadConfig', () => {
       model: 'test-model',
       provider: { type: 'openai-compat', baseUrl: 'http://localhost:1234/v1' },
       contextWindow: 32768,
-      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+      contextBudget: { systemPrompt: 0.10, responseReserve: 0.15, compactionThreshold: 0.75 },
     }))
     const cfg = loadConfig({
       configDir: tmpDir,
@@ -84,7 +84,7 @@ describe('loadConfig', () => {
       model: 'global-model',
       provider: { type: 'openai-compat', baseUrl: 'http://localhost:1234/v1' },
       contextWindow: 32768,
-      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+      contextBudget: { systemPrompt: 0.10, responseReserve: 0.15, compactionThreshold: 0.75 },
     }))
     writeFileSync(join(tmpDir, '.mmrc'), JSON.stringify({ model: 'project-model' }))
     const cfg = loadConfig({

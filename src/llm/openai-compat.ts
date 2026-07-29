@@ -60,10 +60,15 @@ export class OpenAICompatProvider implements LLMProvider {
       headers['Authorization'] = `Bearer ${this.config.apiKey}`
     }
 
+    const controller = new AbortController()
+    const requestTimeoutMs = 60000
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs)
+
     const response = await this.fetchWithRetry(
       `${this.config.baseUrl}/chat/completions`,
-      { method: 'POST', headers, body: JSON.stringify(body) }
+      { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal }
     )
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -76,12 +81,20 @@ export class OpenAICompatProvider implements LLMProvider {
     const decoder = new TextDecoder()
     let buffer = ''
     let toolCallAccumulator: { id?: string; name?: string; arguments?: string } = {}
+    let lastChunkTime = Date.now()
+    const inactivityTimeoutMs = 30000
+    const inactivityCheck = setInterval(() => {
+      if (Date.now() - lastChunkTime > inactivityTimeoutMs) {
+        controller.abort()
+      }
+    }, 5000)
 
     try {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
+        lastChunkTime = Date.now()
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
@@ -143,6 +156,7 @@ export class OpenAICompatProvider implements LLMProvider {
         }
       }
     } finally {
+      clearInterval(inactivityCheck)
       reader.releaseLock()
     }
   }
@@ -161,6 +175,9 @@ export class OpenAICompatProvider implements LLMProvider {
         if (!this.isRetryable(response.status)) return response
         lastError = new Error(`HTTP ${response.status}: ${response.statusText}`)
       } catch (err: any) {
+        if (err.name === 'AbortError') {
+          throw err
+        }
         lastError = err
       }
 

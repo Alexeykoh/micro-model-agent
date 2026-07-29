@@ -278,11 +278,11 @@ MMA automatically builds and maintains a map of the current workspace.
 
 ## Context Budget (dynamic, from model.contextWindow)
 
-| contextWindow | System (25%) | Reserve (12%) | History (63%) |
+| contextWindow | System (10%) | Reserve (15%) | History (75%) |
 |---------------|-------------|---------------|---------------|
-| 32K           | 8K          | 4K            | 20K           |
-| 64K           | 16K         | 8K            | 40K           |
-| 128K          | 32K         | 16K           | 80K           |
+| 32K           | 3K          | 5K            | 24K           |
+| 64K           | 6K          | 10K           | 48K           |
+| 128K          | 13K         | 19K           | 96K           |
 
 Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages.
 

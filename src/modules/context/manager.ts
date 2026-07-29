@@ -4,6 +4,8 @@ export interface Message {
   name?: string
 }
 
+import type { ContextBudget as ConfigContextBudget } from '../../config/types'
+
 export interface ContextBudget {
   systemPrompt: number
   responseReserve: number
@@ -19,17 +21,26 @@ export class ContextManager {
   private compactedBlock: string | null = null
   private iterationsSinceCompaction = 0
   private budget: ContextBudget
+  private compactionThreshold: number
   private fileFacts: string[] = []
   private decisionFacts: string[] = []
   private errorFacts: string[] = []
   onCompact: ((summary: Message) => void) | null = null
 
-  constructor(contextWindow: number) {
+  constructor(contextWindow: number, contextBudget?: ConfigContextBudget) {
     this.contextWindow = contextWindow
-    this.budget = this.calculateBudget(contextWindow)
+    this.compactionThreshold = contextBudget?.compactionThreshold ?? 0.75
+    this.budget = this.calculateBudget(contextWindow, contextBudget)
   }
 
-  private calculateBudget(window: number): ContextBudget {
+  private calculateBudget(window: number, contextBudget?: ConfigContextBudget): ContextBudget {
+    if (contextBudget) {
+      const systemPrompt = Math.floor(window * contextBudget.systemPrompt)
+      const responseReserve = Math.floor(window * contextBudget.responseReserve)
+      const history = Math.max(0, window - systemPrompt - responseReserve)
+      return { systemPrompt, responseReserve, history }
+    }
+    // Fallback for backwards compatibility (tests, subagents without explicit budget)
     return {
       systemPrompt: Math.floor(window * 0.25),
       responseReserve: Math.floor(window * 0.12),
@@ -53,7 +64,7 @@ export class ContextManager {
   needsCompaction(): boolean {
     if (this.iterationsSinceCompaction >= COMPACTION_INTERVAL) return true
     const totalTokens = this.messages.reduce((sum, m) => sum + m.content.length / 2, 0)
-    return totalTokens > this.budget.history * 0.75
+    return totalTokens > this.budget.history * this.compactionThreshold
   }
 
   compact(): void {

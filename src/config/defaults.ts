@@ -14,8 +14,8 @@ export const DEFAULTS: AppConfig = {
   },
   contextWindow: 32768,
   contextBudget: {
-    systemPrompt: 0.25,
-    responseReserve: 0.12,
+    systemPrompt: 0.10,
+    responseReserve: 0.15,
     compactionThreshold: 0.75,
   },
   modelLoad: {
@@ -31,7 +31,7 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 25,
   stuckThreshold: 8,
   autoPlan: true,
-  showReasoning: true,
+  showReasoning: false,
   logLevel: 'info',
   locale: 'en',
   session: {

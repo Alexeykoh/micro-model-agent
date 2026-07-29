@@ -35,6 +35,7 @@ function buildSystemInfo(config: AppConfig, baseDir: string, profileCompressed: 
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
+    `When you need to act, call a tool immediately. Do not describe your plans in text — use tools to perform operations.`,
   ]
 
   if (isWin) {
@@ -150,7 +151,7 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
     sessionManager.create()
   }
 
-  const contextManager = new ContextManager(config.contextWindow)
+  const contextManager = new ContextManager(config.contextWindow, config.contextBudget)
 
   const toolCtx: ToolContext = {
     config,

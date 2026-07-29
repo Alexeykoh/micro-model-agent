@@ -27,7 +27,7 @@ export const subagentTool: ToolDefinition = {
     }
 
     try {
-      const subContextManager = new ContextManager(ctx.config.contextWindow)
+      const subContextManager = new ContextManager(ctx.config.contextWindow, ctx.config.contextBudget)
       const subPluginManager = new PluginManager()
       const hallucinationDetector = new HallucinationDetector()
       
