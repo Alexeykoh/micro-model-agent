@@ -53,6 +53,14 @@ CLI (main.ts → commands.ts / repl.ts)
     → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser)
 ```
 
+### Agent-Level MoE
+
+> **Spec:** `docs/specs/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
+>
+> Status: **in spec / not yet implemented**. Planned as a future architecture evolution; current implementation remains the single-agent state machine.
+>
+> **Post-MVP note:** scope expansion for subagents is intentionally deferred to a later version. In the MVP, subagents work inside a fixed `allowed_files` / `read_only_files` scope; any need for additional files triggers a re-plan by the Router.
+
 ## Key Design Rules
 
 1. **No file >300 lines** — split when approaching limit
