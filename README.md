@@ -3,120 +3,131 @@
 [![npm version](https://img.shields.io/npm/v/micro-models-agent)](https://www.npmjs.com/package/micro-models-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**MMA** — modular AI coding agent harness designed for **small local language models** (9B params, 32K–64K context). Runs on your laptop, no cloud API needed.
+**MMA** — модульный AI-coding агент, оптимизированный для **небольших локальных языковых моделей** (9B параметров, 32K–64K контекст). Работает на ноутбуке, облачное API не требуется.
 
 ```bash
 npm install -g micro-models-agent
-mma "refactor the auth module to use JWT"
+mma "перепиши модуль авторизации на JWT"
 ```
 
-Built for and tested with [Qwen3.5-9B](https://qwen.readthedocs.io/) via LM Studio / Ollama / llama.cpp.
+Создан и протестирован с [Qwen3.5-9B](https://qwen.readthedocs.io/) через LM Studio / Ollama / llama.cpp.
 
 ---
 
-## Why MMA?
+## Зачем MMA?
 
-Most AI coding agents (Devin, Cursor, Copilot) depend on massive cloud models or expensive APIs. MMA is built differently:
+Большинство AI-агентов для кода (Devin, Cursor, Copilot) завязаны на облачные модели или дорогие API. MMA работает иначе:
 
-- **Designed for 9B models** — optimized for Qwen3.5-9B running locally on consumer hardware
-- **No cloud dependency** — works fully offline with any OpenAI-compatible backend
-- **Survives small context windows** — sophisticated sliding-window compaction keeps 32K models productive
-- **Catches hallucinations** — 3-stage validation pipeline catches the confabulations small models are prone to
-- **Agent-Level MoE** — hierarchical task decomposition so small models handle complex multi-step work
-
----
-
-## Features
-
-- **6-state agent loop** (INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR) — clean, predictable, debuggable
-- **Context budget management** — dynamic per-model budget, sliding-window compaction with fact/decision/error extraction
-- **Hallucination detection** — factual (file paths), consistency (decision reversals), confidence (short/repetitive responses)
-- **Execution guarantees** — auto-planning via LLM (no keyword heuristics), stuck detection, off-track warnings, plan auto-advance
-- **Agent-Level MoE** — Router + Expert sub-agents with filtered tools, isolated context, file scope, and topological parallel execution
-- **20+ tools** — filesystem, shell, web search/fetch, browser (Playwright), planning, interaction, subagent, MCP, pipelines
-- **13 modules** — skills, plugins, MCP client, pipelines, project indexer, persistent memory, context, sessions, browser, execution, hallucination detection, updater, user profile
-- **MCP client** — connect to any MCP server (stdio or SSE)
-- **YAML pipelines** — DAG-based workflow engine with parallel waves, dependencies, and retries
-- **Multi-session management** — persistent JSONL sessions with REPL commands
-- **Project map** — automatic file walker + export extraction + disk cache
-- **i18n** — all user-facing strings via `t()`, English and Russian included
-- **8K–120K context** — adapts to any model's context window
-- **No TUI** — minimal CLI + REPL with markdown-to-ANSI formatting
-- **llama.cpp / Jinja proven** — battle-tested against Jinja template edge cases (system-first, streaming fallback, explicit `stream: false`)
+- **Создан для моделей 9B** — оптимизирован под Qwen3.5-9B на обычном железе
+- **Не требует облака** — полностью работает офлайн с любым OpenAI-совместимым бэкендом
+- **Выживает в узком контексте** — умное sliding-window compaction держит 32K-модели продуктивными
+- **Отлавливает галлюцинации** — 3-стадийный пайплайн валидации ловит выдумки, к которым склонны маленькие модели
+- **Agent-Level MoE** — иерархическая декомпозиция задач: маленькие модели справляются со сложной многошаговой работой
 
 ---
 
-## Installation
+## Возможности
 
-### Prerequisites
+- **6-состояний цикл агента** (INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR) — чистый, предсказуемый, отлаживаемый
+- **Управление бюджетом контекста** — динамический бюджет под модель, sliding-window compaction с извлечением фактов/решений/ошибок
+- **Детекция галлюцинаций** — фактическая (пути файлов), согласованности (откат решений), уверенности (короткие/повторяющиеся ответы)
+- **Гарантии выполнения** — авто-планирование через LLM (без keyword-эвристик), stuck-detection, off-track предупреждения, авто-продвижение плана
+- **Agent-Level MoE** — Router + экспертные сабагенты с фильтрацией инструментов, изолированным контекстом, файловым скоупом и топологическим параллельным выполнением
+- **20+ инструментов** — файловая система, шелл, веб-поиск/fetch, браузер (Playwright), планирование, взаимодействие, сабагенты, MCP, пайплайны
+- **13 модулей** — скиллы, плагины, MCP-клиент, пайплайны, indexer проекта, постоянная память, контекст, сессии, браузер, выполнение, детекция галлюцинаций, апдейтер, профиль пользователя
+- **MCP-клиент** — подключение к любому MCP-серверу (stdio или SSE)
+- **YAML-пайплайны** — DAG-движок с параллельными волнами, зависимостями и повторными попытками
+- **Управление сессиями** — постоянные JSONL-сессии с REPL-командами
+- **Карта проекта** — автоматический обход файлов + извлечение экспортов + дисковый кэш
+- **i18n** — все строки интерфейса через `t()`, включены английский и русский
+- **8K–120K контекст** — адаптируется под любое контекстное окно модели
+- **Без TUI** — минимальный CLI + REPL с markdown→ANSI форматированием
+- **llama.cpp / Jinja proven** — проверено на граничных случаях Jinja-шаблонов (system-first, streaming fallback, явный `stream: false`)
 
-- **Runtime:** [Bun](https://bun.sh) (recommended) or Node.js ≥ 20
-- **LLM backend:** Any OpenAI-compatible server (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
+---
 
-### From npm
+## Установка
+
+### Требования
+
+- **Среда выполнения:** [Bun](https://bun.sh) (рекомендуется) или Node.js ≥ 20
+- **LLM-бэкенд:** Любой OpenAI-совместимый сервер (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
+
+### Через npm (рекомендуется)
 
 ```bash
-npm install -g micro-models-agent
+npm install -g micro-models-agent@latest
 ```
 
-### From source
+После установки команда `mma` будет доступна в терминале. Если после установки `mma` не находится — попробуйте переоткрыть терминал или выполните:
+
+```bash
+# PowerShell
+npm uninstall -g micro-models-agent
+npm install -g micro-models-agent@latest
+
+# Проверка
+mma --version
+```
+
+### Из исходников
 
 ```bash
 git clone https://github.com/your-org/micro-models-agent
 cd micro-models-agent
 bun install
-bun run build
+bun run build:prod
 ```
 
 ---
 
-## Quick Start
+## Быстрый старт
 
-### 1. Start your LLM backend
+### 1. Запустите LLM-бэкенд
 
-Point MMA to any OpenAI-compatible endpoint. Example with LM Studio:
+Направьте MMA на любой OpenAI-совместимый эндпоинт. Пример с LM Studio:
 
 ```bash
-# LM Studio listens on http://localhost:1234 by default
+# LM Studio слушает http://localhost:1234 по умолчанию
 ```
 
-### 2. Run the setup wizard
+### 2. Запустите мастер настройки
 
 ```bash
 bun run mma init
 ```
 
-Scans local ports, finds your model, tests the connection, and writes config.
+Сканирует локальные порты, находит модель, тестирует соединение и записывает конфиг.
 
-### 3. Use the agent
+### 3. Используйте агента
 
 ```bash
-# One-shot mode
-bun run mma "create a REST API with Express and add tests"
+# Одноразовый режим
+bun run mma "создай REST API на Express и добавь тесты"
 
-# Interactive REPL
+# Интерактивный REPL
 bun run dev
 ```
 
 ---
 
-## Usage
+## Использование
 
 ### CLI
 
 ```bash
 bun run mma "<prompt>"
 
-# Subcommands
-bun run mma init                       # Interactive setup wizard
+# Подкоманды
+bun run mma init                       # Интерактивный мастер настройки
 bun run mma config set model qwen3.5-9b
 bun run mma config show
-bun run mma model list                 # List available models
-bun run mma model use qwen3.5-9b       # Switch model
-bun run mma provider list              # List configured providers
-bun run mma session list               # List sessions
-bun run mma session show <id>          # Show session details
-bun run mma session delete <id>        # Delete a session
+bun run mma model list                 # Список доступных моделей
+bun run mma model use qwen3.5-9b       # Переключить модель
+bun run mma provider list              # Список провайдеров
+bun run mma session list               # Список сессий
+bun run mma session show <id>          # Детали сессии
+bun run mma session delete <id>        # Удалить сессию
 ```
 
 ### REPL
@@ -125,46 +136,46 @@ bun run mma session delete <id>        # Delete a session
 bun run dev
 ```
 
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/help` | | Show help |
-| `/sessions` | `/ls` | List all sessions (* = active) |
-| `/new <name>` | `/create` | Create a new session |
-| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
-| `/rename <name>` | | Rename current session |
-| `/delete <id>` | `/rm` | Delete a session |
-| `/config set <key> <value>` | | Set a config value |
-| `/exit` | | Exit REPL |
+| Команда | Алиасы | Описание |
+|---------|--------|----------|
+| `/help` | | Показать справку |
+| `/sessions` | `/ls` | Список сессий (* = активная) |
+| `/new <name>` | `/create` | Создать новую сессию |
+| `/resume <id\|name>` | `/switch`, `/use` | Переключиться на сессию |
+| `/rename <name>` | | Переименовать текущую сессию |
+| `/delete <id>` | `/rm` | Удалить сессию |
+| `/config set <key> <value>` | | Установить значение конфига |
+| `/exit` | | Выйти из REPL |
 
-### Development
+### Разработка
 
 ```bash
-bun run mma "fix the login page"       # Run agent
-bun run dev                            # Watch mode (auto-restart on changes)
-bun run build                          # TypeScript build
-bun test                               # Run tests
-tsc --noEmit                           # Type-check
+bun run mma "почини страницу логина"    # Запуск агента
+bun run dev                             # Watch-режим (авто-перезапуск при изменениях)
+bun run build:prod                      # Сборка для публикации
+bun test                                # Запуск тестов
+bun run typecheck                       # Проверка типов
 ```
 
 ---
 
-## Configuration
+## Конфигурация
 
-3-layer config: `defaults.ts` → `~/.mma/config.json` (global) → `.mmrc` (project) + env vars.
+3-слойный конфиг: `defaults.ts` → `~/.mma/config.json` (глобальный) → `.mmrc` (проект) + переменные окружения.
 
-Key options (see `src/config/defaults.ts` for full list):
+Ключевые опции (полный список в `src/config/defaults.ts`):
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `model` | `qwen3.5-9b` | Model name sent to backend |
-| `provider.baseUrl` | `http://localhost:1234/v1` | OpenAI-compatible API URL |
-| `contextWindow` | `32768` | Model's context window in tokens |
-| `autoPlan` | `true` | Auto-create plans for multi-step tasks |
-| `maxToolIterations` | `25` | Max tool calls per agent run |
-| `stuckThreshold` | `8` | Iterations without progress before stuck detection |
-| `moe.enabled` | `false` | Enable Agent-Level MoE |
-| `locale` | `en` | UI locale (`en` / `ru`) |
-| `logLevel` | `info` | Log level |
+| Опция | По умолчанию | Описание |
+|-------|-------------|----------|
+| `model` | `qwen3.5-9b` | Имя модели для бэкенда |
+| `provider.baseUrl` | `http://localhost:1234/v1` | URL OpenAI-совместимого API |
+| `contextWindow` | `32768` | Контекстное окно модели в токенах |
+| `autoPlan` | `true` | Авто-создание планов для многошаговых задач |
+| `maxToolIterations` | `25` | Макс. вызовов инструментов за запуск |
+| `stuckThreshold` | `8` | Итераций без прогресса до stuck-detection |
+| `moe.enabled` | `false` | Включить Agent-Level MoE |
+| `locale` | `en` | Язык интерфейса (`en` / `ru`) |
+| `logLevel` | `info` | Уровень логирования |
 
 ### Agent-Level MoE
 
@@ -185,7 +196,7 @@ Key options (see `src/config/defaults.ts` for full list):
 
 ---
 
-## Architecture
+## Архитектура
 
 ```
 CLI (main.ts → commands.ts / repl.ts / setup.ts)
@@ -196,91 +207,91 @@ CLI (main.ts → commands.ts / repl.ts / setup.ts)
                    hallucination, execution, updater, user-profile, browser)
 ```
 
-### Project Structure
+### Структура проекта
 
 ```
 src/
-├── core/          # Agent loop, prompt builder, types
-├── llm/           # Provider abstraction, OpenAI-compat, streaming, token counting
-├── tools/         # 20+ tools with registry, executor, scope guards
-├── modules/       # 13 modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser)
-├── cli/           # Entry point, commands, REPL, setup wizard
-├── config/        # 3-layer config: defaults → global → project
-├── i18n/          # en.json + ru.json + t() function
-├── ui/            # Markdown→ANSI formatter
-└── logger/        # Structured logger with levels + child loggers
+├── core/          # Цикл агента, сборщик промптов, типы
+├── llm/           # Абстракция провайдера, OpenAI-совместимость, стриминг, подсчёт токенов
+├── tools/         # 20+ инструментов с реестром, исполнителем, скоуп-гардами
+├── modules/       # 13 модулей (скиллы, плагины, mcp, пайплайны, indexer, память, контекст, сессии, галлюцинации, выполнение, апдейтер, профиль, браузер)
+├── cli/           # Точка входа, команды, REPL, мастер настройки
+├── config/        # 3-слойный конфиг: defaults → глобальный → проект
+├── i18n/          # en.json + ru.json + t()
+├── ui/            # Markdown→ANSI форматтер
+└── logger/        # Структурированный логгер с уровнями и дочерними логгерами
 ```
 
 ---
 
-## Tool Reference
+## Инструменты
 
-| Tool | Description |
-|------|-------------|
-| `read_file` | Read file with offset/limit |
-| `write_file` | Create/overwrite with directory creation |
-| `edit_file` | Find-replace in existing files |
-| `glob` | Glob pattern matching |
-| `grep` | Regex content search via ripgrep |
-| `list_dir` | List directory contents |
-| `create_dir` | Create directory (recursive) |
-| `delete_file` | Delete file or empty directory |
-| `move_file` | Move/rename file or directory |
-| `file_info` | File/directory metadata |
-| `bash` | Shell command execution |
-| `subagent` | Isolated sub-agent with scope |
-| `web_search` | Web search |
-| `web_fetch` | Web page fetch (15K chars, 15s timeout) |
-| `web_browse` | Playwright browser (click, type, scroll, screenshot) |
-| `plan` | Create/update/cancel plans |
-| `todo` | Track todo items |
-| `question` | Ask user for input |
-| `approve` | Request user approval |
-| `load_skill` | Load a skill at runtime |
-| `pipeline_run` | Execute a YAML pipeline |
-| `mcp_call` | Call an MCP server tool |
-| `search_history` | Search session history |
-| `project_map` | Query project index (summary, refresh, find) |
+| Инструмент | Описание |
+|------------|----------|
+| `read_file` | Чтение файла с offset/limit |
+| `write_file` | Создание/перезапись с созданием директорий |
+| `edit_file` | Поиск-и-замена в существующих файлах |
+| `glob` | Поиск по glob-паттернам |
+| `grep` | Поиск по содержимому через ripgrep |
+| `list_dir` | Список содержимого директории |
+| `create_dir` | Создание директории (рекурсивно) |
+| `delete_file` | Удаление файла или пустой директории |
+| `move_file` | Перемещение/переименование файла или директории |
+| `file_info` | Метаданные файла/директории |
+| `bash` | Выполнение shell-команд |
+| `subagent` | Изолированный сабагент со скоупом |
+| `web_search` | Поиск в интернете |
+| `web_fetch` | Загрузка веб-страницы (15K символов, 15s таймаут) |
+| `web_browse` | Браузер на Playwright (клик, ввод, скролл, скриншот) |
+| `plan` | Создание/обновление/отмена планов |
+| `todo` | Отслеживание задач |
+| `question` | Задать вопрос пользователю |
+| `approve` | Запросить подтверждение пользователя |
+| `load_skill` | Загрузить скилл во время выполнения |
+| `pipeline_run` | Выполнить YAML-пайплайн |
+| `mcp_call` | Вызвать инструмент MCP-сервера |
+| `search_history` | Поиск по истории сессий |
+| `project_map` | Запрос карты проекта (summary, refresh, find) |
 
 ---
 
-## Testing
+## Тестирование
 
 ```bash
-bun test                    # Unit + component tests
-bun test tests/agent.test.ts   # Single file
-bun run test:integration    # Integration tests (requires LLM backend)
-tsc --noEmit                # Type-check
+bun test                              # Модульные + компонентные тесты
+bun test tests/agent.test.ts          # Один файл
+bun run test:integration              # Интеграционные тесты (требуют LLM-бэкенд)
+bun run typecheck                     # Проверка типов
 ```
 
 ---
 
-## Design Principles
+## Принципы дизайна
 
-1. **No file >300 lines** — split when approaching limit
-2. **Small files, single responsibility** — each file does one thing
-3. **KISS state machine** — no god objects, no if-else nesting in agent loop
-4. **Plugin error isolation** — one plugin crash never stops others
-5. **Path safety** — all filesystem tools check `targetPath.startsWith(baseDir)`
-6. **TDD** — write test first, then implement, then commit
-7. **No hardcoded user-facing strings** — all text through `t()` i18n function
-8. **No keyword matching** — LLM decides when to plan, not heuristics
-9. **No TUI** — minimal CLI + REPL with markdown→ANSI
+1. **Ни одного файла >300 строк** — разделяй при приближении к лимиту
+2. **Маленькие файлы, одна ответственность** — каждый файл делает одно дело
+3. **KISS state machine** — никаких god-объектов, никакой вложенности if-else в цикле агента
+4. **Изоляция ошибок плагинов** — падение одного плагина не останавливает другие
+5. **Безопасность путей** — все файловые инструменты проверяют `targetPath.startsWith(baseDir)`
+6. **TDD** — сначала тест, потом реализация, потом коммит
+7. **Никаких захардкоженных строк** — весь текст через `t()` i18n
+8. **Никакого keyword matching** — LLM решает когда планировать, не эвристики
+9. **Без TUI** — минимальный CLI + REPL с markdown→ANSI
 
 ---
 
-## License
+## Лицензия
 
 MIT
 
 ---
 
-## Acknowledgments
+## Благодарности
 
-- [Qwen3.5-9B](https://qwen.readthedocs.io/) — the primary target model
-- [LM Studio](https://lmstudio.ai/) — recommended local inference server
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) — the inference engine
+- [Qwen3.5-9B](https://qwen.readthedocs.io/) — основная целевая модель
+- [LM Studio](https://lmstudio.ai/) — рекомендуемый локальный инференс-сервер
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) — инференс-движок
 
 ---
 
-**Made for local models. Runs everywhere.**
+**Сделано для локальных моделей. Работает везде.**
