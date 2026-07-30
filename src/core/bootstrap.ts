@@ -158,13 +158,7 @@ export async function bootstrap(
   }
 
   const skillsLoader = new SkillsLoader();
-  const builtinDir = join(
-    import.meta.dirname,
-    "..",
-    "modules",
-    "skills",
-    "builtin",
-  );
+  const builtinDir = join(import.meta.dirname, "skills", "builtin");
   const globalDir = join(homedir(), ".agents", "skills");
   const projectSkillsDir = join(baseDir, ".mma", "skills");
   const availableSkills = skillsLoader.loadFromAllSources(

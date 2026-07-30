@@ -1,13 +1,11 @@
 {
   "name": "micro-models-agent",
-  "version": "0.4.0",
+  "version": "0.7.0",
   "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context)",
   "type": "module",
   "bin": {
-    "mma": "dist/cli/main.js"
+    "mma": "dist/main.js"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "files": [
     "dist/"
   ],
@@ -16,8 +14,14 @@
   },
   "scripts": {
     "mma": "bun run src/cli/main.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun run build:tsc && bun run build:copy-assets",
+    "build:tsc": "tsc -p tsconfig.build.json",
+    "build:copy-assets": "powershell -Command \"Copy-Item -Recurse -Force 'src/modules/skills/builtin' 'dist/skills/builtin'\"",
+    "build:prod": "bun run 'build:bundle' && bun run 'build:copy-assets'",
+    "build:clean": "cmd /c \"if exist dist rmdir /s /q dist\"",
+    "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --external playwright-core",
     "dev": "bun --watch src/cli/main.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts"
