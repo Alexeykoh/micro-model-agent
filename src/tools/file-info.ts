@@ -6,6 +6,7 @@ import type { ToolDefinition } from './types'
 export const fileInfoTool: ToolDefinition = {
   name: 'file_info',
   description: 'Get metadata about a file or directory (size, creation date, modification date).',
+  tags: ['file'],
   parameters: {
     type: 'object',
     properties: {

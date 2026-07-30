@@ -2,13 +2,22 @@ export interface ToolDefinition {
   name: string
   description: string
   parameters: Record<string, unknown>
+  tags?: string[]
   handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult>
+}
+
+export interface ToolScope {
+  allowed_files: string[]
+  read_only_files: string[]
 }
 
 export interface ToolContext {
   config: import('../config/types').AppConfig
   baseDir: string
   logger: import('../logger/app-logger').Logger
+  scope?: ToolScope
+  llmProvider?: import('../llm/provider').LLMProvider
+  toolExecutor?: import('./executor').ToolExecutor
   contextManager?: import('../modules/context/manager').ContextManager
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>

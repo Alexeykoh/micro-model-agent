@@ -26,6 +26,7 @@ import { createBrowserTool } from './browser'
 import type { SkillsModule } from '../modules/skills/module'
 
 export { ToolRegistry, ToolExecutor }
+export { filterToolsByTags } from './filter-tools'
 export type { ToolDefinition, ToolContext, ToolResult, ToolCall, PluginHook, PluginManager }
 export {
   readFileTool, writeFileTool, editFileTool,

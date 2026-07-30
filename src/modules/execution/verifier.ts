@@ -2,6 +2,9 @@ import { existsSync } from 'fs'
 import { resolve, extname } from 'path'
 import { execSync } from 'child_process'
 import { t } from '../../i18n/index'
+import type { MoEPlan } from './types'
+import type { AppConfig } from '../../config/types'
+import { validateExpertConfig } from '../../config/experts'
 
 export interface VerificationItem {
   passed: boolean
@@ -12,6 +15,13 @@ export interface StepVerificationResult {
   passed: boolean
   syntaxValid: boolean
   failed: VerificationItem[]
+}
+
+export interface MoEVerificationResult {
+  success: boolean
+  errors: string[]
+  warnings: string[]
+  details: VerificationItem[]
 }
 
 export class StepVerifier {
@@ -35,12 +45,84 @@ export class StepVerifier {
       execSync(`bun run ${scriptName}`, {
         cwd: this.baseDir,
         encoding: 'utf-8',
-        timeout: 30_000,
+        timeout: 60_000,
         stdio: 'pipe',
       })
       return { passed: true, message: t('verify.script_passed', { script: scriptName }) }
     } catch (e: any) {
       return { passed: false, message: t('verify.script_failed', { script: scriptName, message: e.message }) }
+    }
+  }
+
+  async runTypeCheck(): Promise<VerificationItem> {
+    const tsconfigPath = resolve(this.baseDir, 'tsconfig.json')
+    if (!existsSync(tsconfigPath)) {
+      return { passed: true, message: 'No tsconfig.json found — skipping type check' }
+    }
+    try {
+      execSync('npx tsc --noEmit', {
+        cwd: this.baseDir,
+        encoding: 'utf-8',
+        timeout: 60_000,
+        stdio: 'pipe',
+      })
+      return { passed: true, message: 'TypeScript type check passed' }
+    } catch (e: any) {
+      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message
+      return { passed: false, message: `TypeScript type check failed: ${stderr.slice(0, 500)}` }
+    }
+  }
+
+  async runTests(): Promise<VerificationItem> {
+    const pkgPath = resolve(this.baseDir, 'package.json')
+    if (!existsSync(pkgPath)) {
+      return { passed: true, message: 'No package.json found — skipping tests' }
+    }
+    try {
+      const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf-8'))
+      if (!pkg.scripts?.test) {
+        return { passed: true, message: 'No test script defined — skipping tests' }
+      }
+    } catch { /* fall through — attempt to run */ }
+    return this.runScript('test')
+  }
+
+  async verifyArtifactFiles(files: string[]): Promise<VerificationItem[]> {
+    return Promise.all(files.map(f => this.checkFileExists(f)))
+  }
+
+  async verifyMoEManifest(plan: MoEPlan, config: AppConfig, allToolTags: string[]): Promise<MoEVerificationResult> {
+    const errors: string[] = []
+    const warnings: string[] = []
+    const details: VerificationItem[] = []
+
+    const expertErrors = validateExpertConfig(config, allToolTags)
+    for (const err of expertErrors) {
+      errors.push(err)
+      details.push({ passed: false, message: err })
+    }
+
+    const tscResult = await this.runTypeCheck()
+    details.push(tscResult)
+    if (!tscResult.passed) {
+      errors.push(tscResult.message)
+    }
+
+    for (const sub of plan.subtasks) {
+      const fileChecks = await this.verifyArtifactFiles(sub.allowed_files || [])
+      for (const check of fileChecks) {
+        details.push(check)
+        if (!check.passed) {
+          errors.push(check.message)
+        }
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      errors,
+      warnings,
+      details,
     }
   }
 

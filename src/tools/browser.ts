@@ -37,6 +37,7 @@ export function formatScreenshotResult(snapshot: string, screenshot: Buffer, sup
 export function createBrowserTool(): ToolDefinition {
   return {
     name: 'browser',
+    tags: ['browser', 'vision'],
     description: [
       'Control a headless browser. Navigate pages, click elements, type text, scroll, take screenshots.',
       'Returns a numbered list of interactive elements — use element numbers as targets for click/type.',

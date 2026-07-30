@@ -16,6 +16,7 @@ function stripHtml(html: string): string {
 export const webFetchTool: ToolDefinition = {
   name: 'web_fetch',
   description: 'Fetch a URL and convert its content to markdown. Use for reading documentation, APIs, web pages.',
+  tags: ['research'],
   parameters: {
     type: 'object',
     properties: {

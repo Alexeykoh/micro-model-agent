@@ -26,8 +26,16 @@ export class ToolRegistry {
     return Array.from(this.tools.values())
   }
 
-  getAllForLLM(): Array<Pick<ToolDefinition, 'name' | 'description' | 'parameters'>> {
-    return this.getAll().map(t => ({
+  getByTags(tags: string[]): ToolDefinition[] {
+    return this.getAll().filter(t => {
+      if (!t.tags || t.tags.length === 0) return false
+      return tags.some(tag => t.tags!.includes(tag))
+    })
+  }
+
+  getAllForLLM(tags?: string[]): Array<Pick<ToolDefinition, 'name' | 'description' | 'parameters'>> {
+    const tools = tags ? this.getByTags(tags) : this.getAll()
+    return tools.map(t => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,

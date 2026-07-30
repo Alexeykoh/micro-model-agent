@@ -5,6 +5,7 @@ import type { SkillsModule } from '../modules/skills/module'
 export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
     name: 'load_skill',
+    tags: ['core'],
     description: 'Load a skill by name or task description. Skills provide specialized instructions and workflows. Use when you need domain-specific knowledge.',
     parameters: {
       type: 'object',

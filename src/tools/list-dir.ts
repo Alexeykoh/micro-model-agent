@@ -6,6 +6,7 @@ import type { ToolDefinition } from './types'
 export const listDirTool: ToolDefinition = {
   name: 'list_dir',
   description: 'List files and directories in a given path.',
+  tags: ['file'],
   parameters: {
     type: 'object',
     properties: {

@@ -62,7 +62,7 @@ export class ToolExecutor {
     return result
   }
 
-  getToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
-    return this.registry.getAllForLLM()
+  getToolDefinitions(tags?: string[]): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+    return this.registry.getAllForLLM(tags)
   }
 }

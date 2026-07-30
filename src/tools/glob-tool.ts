@@ -5,6 +5,7 @@ import type { ToolDefinition } from './types'
 export const globTool: ToolDefinition = {
   name: 'glob',
   description: 'Search for files matching a glob pattern. Uses standard glob syntax (e.g., **/*.ts, src/**/*.test.ts).',
+  tags: ['file', 'code', 'research'],
   parameters: {
     type: 'object',
     properties: {

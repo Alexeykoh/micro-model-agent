@@ -6,6 +6,7 @@ import type { ToolDefinition } from './types'
 export const grepTool: ToolDefinition = {
   name: 'grep',
   description: 'Search file contents using a regular expression. Uses ripgrep (rg) if available, otherwise falls back to grep -r.',
+  tags: ['file', 'code', 'research'],
   parameters: {
     type: 'object',
     properties: {

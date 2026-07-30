@@ -5,6 +5,7 @@ import { t } from '../i18n/index'
 import type { AppConfig } from './types'
 import { MigrationDetector } from '../migration/detect'
 import { BackupManager } from '../migration/backup'
+import { validateExpertConfig } from './experts'
 
 function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = { ...target as any }
@@ -47,6 +48,7 @@ function applyEnvVars(config: AppConfig): AppConfig {
   if (env.MMA_MAX_TOOL_ITERATIONS) result.maxToolIterations = parseInt(env.MMA_MAX_TOOL_ITERATIONS, 10)
   if (env.MMA_STUCK_THRESHOLD) result.stuckThreshold = parseInt(env.MMA_STUCK_THRESHOLD, 10)
   if (env.MMA_AUTO_PLAN) result.autoPlan = env.MMA_AUTO_PLAN === 'true'
+  if (env.MMA_MOE_ENABLED) result.moe = { ...result.moe, enabled: env.MMA_MOE_ENABLED === 'true' }
 
   return result
 }
@@ -89,6 +91,13 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   config = applyEnvVars(config)
 
   return config
+}
+
+export function validateConfig(config: AppConfig, allToolTags: string[]): void {
+  const errors = validateExpertConfig(config, allToolTags)
+  if (errors.length > 0) {
+    throw new Error(`Config validation failed:\n${errors.join('\n')}`)
+  }
 }
 
 export function saveConfig(config: AppConfig, configPath: string): void {

@@ -173,6 +173,8 @@ export async function bootstrap(configDir?: string, projectDir?: string): Promis
   }
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager)
+  ;(toolCtx as any).llmProvider = llmProvider
+  ;(toolCtx as any).toolExecutor = toolExecutor
 
   const hallucinationDetector = new HallucinationDetector()
 

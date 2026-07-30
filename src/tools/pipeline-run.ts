@@ -8,6 +8,7 @@ const engine = new PipelineEngine()
 export const pipelineRunTool: ToolDefinition = {
   name: 'pipeline_run',
   description: 'Run a named pipeline with YAML definition. Creates a DAG of sub-agents that execute in dependency order.',
+  tags: ['shell', 'code'],
   parameters: {
     type: 'object',
     properties: {

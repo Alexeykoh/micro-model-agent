@@ -103,4 +103,42 @@ describe('ToolExecutor', () => {
     expect(result.success).toBe(false)
     expect(result.output).toContain('boom')
   })
+
+  it('should return filtered tool definitions by tags', () => {
+    registry.register({
+      name: 'file_tool',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      tags: ['file'],
+      handler: async () => ({ success: true, output: '' }),
+    })
+    registry.register({
+      name: 'shell_tool',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      tags: ['shell'],
+      handler: async () => ({ success: true, output: '' }),
+    })
+    registry.register({
+      name: 'browser_tool',
+      description: '',
+      parameters: { type: 'object', properties: {} },
+      tags: ['browser', 'vision'],
+      handler: async () => ({ success: true, output: '' }),
+    })
+
+    const all = executor.getToolDefinitions()
+    expect(all).toHaveLength(3)
+
+    const fileOnly = executor.getToolDefinitions(['file'])
+    expect(fileOnly).toHaveLength(1)
+    expect(fileOnly[0].name).toBe('file_tool')
+
+    const browserAndVision = executor.getToolDefinitions(['browser', 'vision'])
+    expect(browserAndVision).toHaveLength(1)
+    expect(browserAndVision[0].name).toBe('browser_tool')
+
+    const fileAndShell = executor.getToolDefinitions(['file', 'shell'])
+    expect(fileAndShell.map(t => t.name).sort()).toEqual(['file_tool', 'shell_tool'])
+  })
 })

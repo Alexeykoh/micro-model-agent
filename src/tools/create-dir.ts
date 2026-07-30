@@ -6,6 +6,7 @@ import type { ToolDefinition } from './types'
 export const createDirTool: ToolDefinition = {
   name: 'create_dir',
   description: 'Create a directory (and any intermediate directories).',
+  tags: ['file'],
   parameters: {
     type: 'object',
     properties: {

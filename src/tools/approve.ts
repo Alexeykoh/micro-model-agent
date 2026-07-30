@@ -5,6 +5,7 @@ import type { ToolDefinition } from './types'
 export const approveTool: ToolDefinition = {
   name: 'approve',
   description: 'Request user approval for an action. User must type "yes" or "y" to approve.',
+  tags: ['core'],
   parameters: {
     type: 'object',
     properties: {

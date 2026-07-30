@@ -1,5 +1,5 @@
 import { t } from '../i18n/index'
-import type { ToolDefinition, ToolContext } from './types'
+import type { ToolDefinition, ToolContext, ToolScope } from './types'
 import { Agent } from '../core/agent'
 import { ContextManager } from '../modules/context/manager'
 import { HallucinationDetector } from '../modules/hallucination/detector'
@@ -10,27 +10,45 @@ import type { PromptBlock } from '../core/types'
 export const subagentTool: ToolDefinition = {
   name: 'subagent',
   description: 'Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.',
+  tags: ['code'],
   parameters: {
     type: 'object',
     properties: {
       task: { type: 'string', description: 'Task description for the sub-agent' },
       context: { type: 'string', description: 'Optional context or constraints' },
+      expert_tag: { type: 'string', description: 'Expert tag for tool filtering and model selection' },
+      allowed_files: { type: 'array', items: { type: 'string' }, description: 'Files/directories the sub-agent can read and write' },
+      read_only_files: { type: 'array', items: { type: 'string' }, description: 'Files/directories the sub-agent can read but not write' },
+      shared_context: { type: 'string', description: 'Shared context/rules passed to the sub-agent' },
+      max_tokens: { type: 'number', description: 'Maximum tokens for the sub-agent response' },
+      tool_tags: { type: 'array', items: { type: 'string' }, description: 'Tool tags to expose to the sub-agent' },
     },
     required: ['task'],
   },
   handler: async (ctx: ToolContext, args) => {
     const task = String(args.task || '')
     const context = String(args.context || '')
-    
+
     if (!task) {
       return { success: false, output: t('tool.name_or_task') }
+    }
+
+    const scope: ToolScope | undefined = args.allowed_files || args.read_only_files ? {
+      allowed_files: (args.allowed_files as string[]) || [],
+      read_only_files: (args.read_only_files as string[]) || [],
+    } : ctx.scope
+
+    const toolTags = args.tool_tags ? (args.tool_tags as string[]) : undefined
+
+    if (!ctx.llmProvider || !ctx.toolExecutor) {
+      return { success: false, output: 'Sub-agent cannot run: missing llmProvider or toolExecutor in context' }
     }
 
     try {
       const subContextManager = new ContextManager(ctx.config.contextWindow, ctx.config.contextBudget)
       const subPluginManager = new PluginManager()
       const hallucinationDetector = new HallucinationDetector()
-      
+
       const systemBudget = Math.floor(ctx.config.contextWindow * ctx.config.contextBudget.systemPrompt)
       const builder = new PromptBuilder(systemBudget)
       const systemPrompt: PromptBlock = {
@@ -42,19 +60,21 @@ export const subagentTool: ToolDefinition = {
       builder.addBlock(systemPrompt)
       const { prompt } = builder.build()
       subContextManager.addMessage({ role: 'system', content: prompt })
-      
+
       const subDeps = {
         config: ctx.config,
-        llmProvider: (ctx as any).llmProvider,
-        toolExecutor: (ctx as any).toolExecutor,
+        llmProvider: ctx.llmProvider,
+        toolExecutor: ctx.toolExecutor,
         pluginManager: subPluginManager,
         contextManager: subContextManager,
         hallucinationDetector,
         logger: ctx.logger,
         baseDir: ctx.baseDir,
+        scope,
+        toolTags,
         promptBlocks: [systemPrompt],
       }
-      
+
       const subAgent = new Agent(subDeps)
       const fullTask = context ? `${task}\n\nContext: ${context}` : task
       const result = await subAgent.run(fullTask)

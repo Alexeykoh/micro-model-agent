@@ -5,12 +5,17 @@ import type { ContextManager, Message } from '../modules/context/manager'
 import type { HallucinationDetector } from '../modules/hallucination/detector'
 import type { Logger } from '../logger/app-logger'
 import type { AppConfig } from '../config/types'
+import type { ToolScope } from '../tools/types'
 import type { PromptBlock } from './types'
 import type { ToolCall } from './types'
 import type { SessionManager } from '../modules/session/manager'
 import { t } from '../i18n/index'
 import pc from 'picocolors'
 import { PromptBuilder } from './prompt-builder'
+import { OrchestratorClient } from '../llm/orchestrator'
+import { validatePlan, applyAutoFixes } from '../modules/execution/plan-validator'
+import { MoEExecutor } from '../modules/execution/moe-executor'
+import { StepVerifier } from '../modules/execution/verifier'
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000
@@ -24,6 +29,8 @@ export interface AgentDeps {
   hallucinationDetector: HallucinationDetector
   logger: Logger
   baseDir: string
+  scope?: ToolScope
+  toolTags?: string[]
   promptBlocks: PromptBlock[]
   sessionManager?: SessionManager
 }
@@ -45,6 +52,13 @@ export class Agent {
     this.deps = deps
   }
 
+  private setScope(): void {
+    const executor = this.deps.toolExecutor as any
+    if (executor && executor.ctx && this.deps.scope) {
+      executor.ctx.scope = this.deps.scope
+    }
+  }
+
   private truncateToolOutput(output: string, budget: { history: number }, currentTokens: number): string {
     const remainingBudget = budget.history - currentTokens
     const maxCharsByBudget = Math.floor(remainingBudget * 0.5 * 2)
@@ -59,6 +73,7 @@ export class Agent {
   }
 
   async run(input: string, onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
+    this.setScope()
     const { config, llmProvider, toolExecutor, pluginManager, contextManager, hallucinationDetector, logger, promptBlocks, sessionManager } = this.deps
 
     if (sessionManager && !sessionManager.getActive()) {
@@ -82,6 +97,16 @@ export class Agent {
       sessionManager.appendMessage({ role: 'user', content: input, timestamp: new Date().toISOString() })
       sessionManager.appendLog({ ts: new Date().toISOString(), type: 'user', content: input })
     }
+
+    if (config.moe?.enabled) {
+      return this.runWithMoE(input, onChunk, onMeta)
+    }
+
+    return this.executeSingleAgentLoop(input, onChunk, onMeta)
+  }
+
+  private async executeSingleAgentLoop(input: string, onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
+    const { config, llmProvider, toolExecutor, pluginManager, contextManager, hallucinationDetector, logger, sessionManager } = this.deps
 
     let iteration = 0
     let lastText = ''
@@ -107,7 +132,7 @@ export class Agent {
 
       const history = contextManager.getActiveHistory()
 
-      const allTools = toolExecutor.getToolDefinitions()
+      const allTools = toolExecutor.getToolDefinitions(this.deps.toolTags)
       let textContent = ''
       let reasoningContent = ''
       const toolCalls: ToolCall[] = []
@@ -159,6 +184,7 @@ export class Agent {
 
       if (sawToolCall) {
         for (const call of toolCalls) {
+          this.setScope()
           const startTime = Date.now()
           pluginManager.runOnToolCall({ toolName: call.name, args: call.arguments })
           if (sessionManager) {
@@ -253,6 +279,84 @@ export class Agent {
     }
 
     return { success: true, text: lastText, iterationCount: iteration, contextUsed: tokensUsed, contextLimit: budget.history }
+  }
+
+  private async runWithMoE(input: string, _onChunk?: (chunk: string) => void, onMeta?: (meta: string) => void): Promise<AgentResult> {
+    const { config, llmProvider, logger } = this.deps
+
+    const orchestrator = new OrchestratorClient({ model: config.orchestrator.model, provider: config.orchestrator.provider }, llmProvider)
+
+    if (!orchestrator.isEnabled()) {
+      logger.debug('MoE enabled but no orchestrator model configured — falling back to single-agent')
+      return this.executeSingleAgentLoop(input, _onChunk, onMeta)
+    }
+
+    onMeta?.('🤖 Planning with MoE mode...\n')
+    const planResult = await orchestrator.plan(input)
+    if ('error' in planResult) {
+      logger.warn(`MoE plan failed: ${planResult.error} — falling back to single-agent`)
+      return this.executeSingleAgentLoop(input, _onChunk, onMeta)
+    }
+
+    const { plan } = planResult
+    onMeta?.(`📋 Plan created: "${plan.title}" (${plan.subtasks.length} subtasks)\n`)
+
+    const validation = validatePlan(plan, config)
+    if (!validation.valid) {
+      const applied = applyAutoFixes(plan, validation.autoFixes)
+      const retry = validatePlan(applied, config)
+      if (!retry.valid) {
+        logger.warn(`MoE plan validation failed: ${retry.errors.join('; ')} — falling back to single-agent`)
+        onMeta?.(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`)
+        return this.executeSingleAgentLoop(input, _onChunk, onMeta)
+      }
+      Object.assign(plan, applied)
+      onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`)
+    }
+
+    const moeDeps = {
+      config,
+      toolRegistry: (this.deps.toolExecutor as any).registry,
+      toolExecutor: this.deps.toolExecutor,
+      llmProvider,
+      logger,
+      baseDir: this.deps.baseDir,
+    }
+
+    const executor = new MoEExecutor(moeDeps)
+    onMeta?.(`⚙️ Executing ${plan.subtasks.length} subtasks...\n`)
+    const planResults = await executor.executePlan(plan)
+    onMeta?.(`✅ Execution complete: ${planResults.results.filter(r => r.success).length}/${planResults.results.length} succeeded\n`)
+
+    const verifier = new StepVerifier(this.deps.baseDir)
+    const knownTags = ['file', 'code', 'shell', 'research', 'browser', 'vision', 'core']
+    const verification = await verifier.verifyMoEManifest(plan, config, knownTags)
+
+    const verifyResult = await orchestrator.verifyAndMerge({
+      plan,
+      results: planResults.results.map(r => ({ subtaskId: r.subtaskId, success: r.success, summary: r.summary, result: r.result, error: r.error })),
+      verifierErrors: verification.errors,
+      verifierWarnings: verification.warnings,
+    })
+
+    const outputLines: string[] = [`## MoE Execution Results\n`]
+    for (const r of planResults.results) {
+      const icon = r.success ? '✅' : '❌'
+      outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`)
+    }
+    outputLines.push('')
+    if (verifyResult.type === 'final') {
+      outputLines.push(`**Result:** ${verifyResult.finalAnswer || 'Complete'}`)
+    } else {
+      outputLines.push(`**Re-plan requested:** ${verifyResult.explanation || ''}`)
+    }
+
+    const failedCount = planResults.results.filter(r => !r.success).length
+    return {
+      success: failedCount === 0 && verification.success,
+      text: outputLines.join('\n'),
+      iterationCount: planResults.results.length,
+    }
   }
 
   clearContext(): void {

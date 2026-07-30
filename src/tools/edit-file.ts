@@ -2,10 +2,12 @@ import { readFileSync, writeFileSync } from 'fs'
 import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isPathWritable } from './scope-check'
 
 export const editFileTool: ToolDefinition = {
   name: 'edit_file',
   description: 'Find and replace text in an existing file. Uses exact string match (not regex).',
+  tags: ['file', 'code'],
   parameters: {
     type: 'object',
     properties: {
@@ -19,8 +21,9 @@ export const editFileTool: ToolDefinition = {
     const path = String(args.path)
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
-    if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: t('file.path_not_allowed', { path }) }
+    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope)
+    if (!scopeCheck.allowed) {
+      return { success: false, output: t('file.path_not_allowed', { path: `${path} — ${scopeCheck.reason}` }) }
     }
     const content = readFileSync(resolved, 'utf-8')
     const oldStr = String(args.old)

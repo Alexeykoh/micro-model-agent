@@ -4,6 +4,7 @@ import type { ToolDefinition } from './types'
 export const webBrowseTool: ToolDefinition = {
   name: 'web_browse',
   description: 'Fetch and read a web page. Returns the page content as plain text.',
+  tags: ['research'],
   parameters: {
     type: 'object',
     properties: {

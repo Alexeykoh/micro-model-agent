@@ -4,6 +4,7 @@ import type { ToolDefinition } from './types'
 export const webSearchTool: ToolDefinition = {
   name: 'web_search',
   description: 'Search the web for information. Returns search results with titles and snippets.',
+  tags: ['research'],
   parameters: {
     type: 'object',
     properties: {

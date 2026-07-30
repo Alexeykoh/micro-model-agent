@@ -40,3 +40,15 @@ export interface HallucinationResult {
   status: 'pass' | 'warn' | 'retry' | 'block'
   reason?: string
 }
+
+export interface SubtaskContext {
+  expert_tag: string
+  tool_tags: string[]
+  allowed_files: string[]
+  read_only_files: string[]
+  shared_context?: {
+    rules: string[]
+    refs: string[]
+  }
+  input_from?: string[]
+}

@@ -12,6 +12,15 @@ export const DEFAULTS: AppConfig = {
     model: undefined,
     provider: undefined,
   },
+  moe: {
+    enabled: false,
+  },
+  experts: {
+    code: { model: 'qwen3.5-9b', tool_tags: ['file', 'code', 'shell'], max_attempts: 3 },
+    research: { model: 'qwen3.5-9b', tool_tags: ['research'], max_attempts: 3 },
+    browser: { model: 'qwen3.5-9b', tool_tags: ['browser', 'vision'], max_attempts: 3 },
+    vision: { model: 'qwen3.5-9b', tool_tags: ['browser', 'vision', 'file'], max_attempts: 2 },
+  },
   contextWindow: 32768,
   contextBudget: {
     systemPrompt: 0.10,

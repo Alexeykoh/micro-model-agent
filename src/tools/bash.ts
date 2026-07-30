@@ -19,6 +19,7 @@ function adaptCommandForWindows(command: string): string {
 export const bashTool: ToolDefinition = {
   name: 'bash',
   description: 'Execute a shell command and return its output. Use for running tests, build, git, and shell operations.',
+  tags: ['shell', 'code'],
   parameters: {
     type: 'object',
     properties: {

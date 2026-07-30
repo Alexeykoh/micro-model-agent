@@ -2,15 +2,12 @@ import { readFileSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
-
-function isPathSafe(baseDir: string, targetPath: string): boolean {
-  const resolved = resolve(baseDir, normalize(targetPath))
-  return resolved.startsWith(resolve(baseDir))
-}
+import { isPathInScope } from './scope-check'
 
 export const readFileTool: ToolDefinition = {
   name: 'read_file',
   description: 'Read a file from the filesystem. Optionally specify offset (line number) and limit (number of lines, default all).',
+  tags: ['file', 'code'],
   parameters: {
     type: 'object',
     properties: {
@@ -22,8 +19,9 @@ export const readFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path)
-    if (!isPathSafe(ctx.baseDir, path)) {
-      return { success: false, output: t('file.path_not_allowed', { path }) }
+    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope)
+    if (!scopeCheck.allowed) {
+      return { success: false, output: t('file.path_not_allowed', { path: `${path} — ${scopeCheck.reason}` }) }
     }
     const resolved = resolve(ctx.baseDir, normalize(path))
     if (!existsSync(resolved)) {

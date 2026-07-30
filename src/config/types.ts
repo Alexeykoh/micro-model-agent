@@ -34,6 +34,16 @@ export interface RetryConfig {
   maxDelay: number
 }
 
+export interface MoeConfig {
+  enabled: boolean
+}
+
+export interface ExpertConfig {
+  model: string
+  tool_tags: string[]
+  max_attempts?: number
+}
+
 export interface BrowserToolConfig {
   enabled: boolean
   headless: boolean
@@ -48,6 +58,8 @@ export interface AppConfig {
   model: string
   provider: ProviderConfig
   orchestrator: OrchestratorConfig
+  moe: MoeConfig
+  experts: Record<string, ExpertConfig>
   contextWindow: number
   contextBudget: ContextBudget
   modelLoad: ModelLoadConfig

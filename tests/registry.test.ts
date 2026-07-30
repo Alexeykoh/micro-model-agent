@@ -61,4 +61,46 @@ describe('ToolRegistry', () => {
     })
     expect(registry.has('exists')).toBe(true)
   })
+
+  it('should filter tools by tags', () => {
+    registry.register({
+      name: 'read_file', description: '', parameters: { type: 'object', properties: {} },
+      tags: ['file', 'code'], handler: async () => ({ success: true, output: '' }),
+    })
+    registry.register({
+      name: 'bash', description: '', parameters: { type: 'object', properties: {} },
+      tags: ['shell'], handler: async () => ({ success: true, output: '' }),
+    })
+    registry.register({
+      name: 'browser', description: '', parameters: { type: 'object', properties: {} },
+      tags: ['browser', 'vision'], handler: async () => ({ success: true, output: '' }),
+    })
+
+    const fileTools = registry.getByTags(['file'])
+    expect(fileTools).toHaveLength(1)
+    expect(fileTools[0].name).toBe('read_file')
+
+    const codeShellTools = registry.getByTags(['code', 'shell'])
+    expect(codeShellTools).toHaveLength(2)
+    expect(codeShellTools.map(t => t.name).sort()).toEqual(['bash', 'read_file'])
+
+    const browserVision = registry.getByTags(['browser', 'vision'])
+    expect(browserVision).toHaveLength(1)
+    expect(browserVision[0].name).toBe('browser')
+  })
+
+  it('should return LLM-safe tool definitions filtered by tags', () => {
+    registry.register({
+      name: 'write_file', description: 'Writes files', parameters: { type: 'object', properties: {} },
+      tags: ['file'], handler: async () => ({ success: true, output: '' }),
+    })
+
+    const all = registry.getAllForLLM()
+    expect(all.some(t => t.name === 'write_file')).toBe(true)
+    expect(all[0]).not.toHaveProperty('handler')
+    expect(all[0]).not.toHaveProperty('tags')
+
+    const filtered = registry.getAllForLLM(['shell'])
+    expect(filtered.some(t => t.name === 'write_file')).toBe(false)
+  })
 })

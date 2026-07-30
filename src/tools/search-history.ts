@@ -21,6 +21,7 @@ function searchFile(filePath: string, query: string, maxResults: number, results
 export const searchHistoryTool: ToolDefinition = {
   name: 'search_history',
   description: 'Search through session history for past interactions across all sessions.',
+  tags: ['research'],
   parameters: {
     type: 'object',
     properties: {

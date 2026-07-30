@@ -8,6 +8,7 @@ const registry = new MCPRegistry()
 export const mcpCallTool: ToolDefinition = {
   name: 'mcp_call',
   description: 'Call a tool on an MCP (Model Context Protocol) server. MCP servers provide external capabilities like databases, APIs, or specialized tools.',
+  tags: ['code'],
   parameters: {
     type: 'object',
     properties: {

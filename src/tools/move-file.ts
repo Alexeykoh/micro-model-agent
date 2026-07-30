@@ -2,10 +2,12 @@ import { renameSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isPathWritable } from './scope-check'
 
 export const moveFileTool: ToolDefinition = {
   name: 'move_file',
   description: 'Move or rename a file or directory.',
+  tags: ['file'],
   parameters: {
     type: 'object',
     properties: {
@@ -20,8 +22,13 @@ export const moveFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir)
     const fromResolved = resolve(baseDir, normalize(fromPath))
     const toResolved = resolve(baseDir, normalize(toPath))
-    if (!fromResolved.startsWith(baseDir) || !toResolved.startsWith(baseDir)) {
-      return { success: false, output: t('file.path_not_allowed_short') }
+    const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope)
+    const toCheck = isPathWritable(ctx.baseDir, toPath, ctx.scope)
+    if (!fromCheck.allowed) {
+      return { success: false, output: t('file.path_not_allowed', { path: `${fromPath} — ${fromCheck.reason}` }) }
+    }
+    if (!toCheck.allowed) {
+      return { success: false, output: t('file.path_not_allowed', { path: `${toPath} — ${toCheck.reason}` }) }
     }
     if (!existsSync(fromResolved)) {
       return { success: false, output: t('file.not_found_short', { path: fromPath }) }

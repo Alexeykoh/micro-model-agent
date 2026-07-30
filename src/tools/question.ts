@@ -4,6 +4,7 @@ import type { ToolDefinition } from './types'
 export const questionTool: ToolDefinition = {
   name: 'question',
   description: 'Ask the user a question and get their response.',
+  tags: ['core'],
   parameters: {
     type: 'object',
     properties: {

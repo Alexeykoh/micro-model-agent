@@ -2,10 +2,12 @@ import { unlinkSync, existsSync, statSync } from 'fs'
 import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isPathWritable } from './scope-check'
 
 export const deleteFileTool: ToolDefinition = {
   name: 'delete_file',
   description: 'Delete a file from the filesystem.',
+  tags: ['file'],
   parameters: {
     type: 'object',
     properties: {
@@ -17,8 +19,9 @@ export const deleteFileTool: ToolDefinition = {
     const path = String(args.path)
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
-    if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: t('file.path_not_allowed', { path }) }
+    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope)
+    if (!scopeCheck.allowed) {
+      return { success: false, output: t('file.path_not_allowed', { path: `${path} — ${scopeCheck.reason}` }) }
     }
     if (!existsSync(resolved)) {
       return { success: false, output: t('file.notfound', { path }) }

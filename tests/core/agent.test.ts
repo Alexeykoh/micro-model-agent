@@ -248,4 +248,38 @@ describe('Agent', () => {
     expect(result.length).toBeLessThan(longOutput.length)
     expect(result).toContain('Truncated')
   })
+
+  it('filters tool definitions by toolTags when set', async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, output: 'tool ok' }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+    }
+
+    const deps = createMockDeps({ toolExecutor: mockExecutor as any, toolTags: ['file', 'code'] })
+    const agent = new Agent(deps as any)
+    await agent.run('hello')
+
+    expect(mockExecutor.getToolDefinitions).toHaveBeenCalledWith(['file', 'code'])
+  })
+
+  it('does not filter tools when toolTags is not set', async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, output: 'tool ok' }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+    }
+
+    const deps = createMockDeps({ toolExecutor: mockExecutor as any })
+    const agent = new Agent(deps as any)
+    await agent.run('hello')
+
+    expect(mockExecutor.getToolDefinitions).toHaveBeenCalledWith(undefined)
+  })
+
+  it('delegates to single-agent loop when moe is disabled', async () => {
+    const deps = createMockDeps({ config: { ...createMockDeps().config, moe: { enabled: false } } })
+    const agent = new Agent(deps as any)
+    const result = await agent.run('hello')
+    expect(result.text).toBe('Hello from mock LLM')
+    expect(result.success).toBe(true)
+  })
 })
