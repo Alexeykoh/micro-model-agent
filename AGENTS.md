@@ -82,6 +82,87 @@ CLI (main.ts → commands.ts / repl.ts)
 > - Cost/budget tracking per subtask.
 > - Subagent tool set uses tag filtering from expert config, but the orchestrator model selection is still the base model when no separate orchestrator provider is configured.
 
+## LLM Provider Contract (llama.cpp / OpenAI-compat)
+
+При работе с llama.cpp (и другими бэкендами, использующими Jinja-шаблоны для сообщений) необходимо соблюдать следующие правила. Их нарушение приводит к ошибке `400: Jinja Exception` и полной неработоспособности агента на multi-turn задачах.
+
+### Правило 1: `system` сообщение — всегда и только первое
+
+Большинство Jinja-шаблонов (llama.cpp, vLLM) требуют, чтобы `role: "system"` сообщение было **первым** в массиве `messages`. Если system-сообщение появляется после `user`, `assistant` или `tool` — API возвращает 400.
+
+**Было (сломано):**
+```typescript
+contextManager.addMessage({ role: "system", content: summary });
+// → system ПОСЛЕ tool/assistant → Jinja Exception
+```
+
+**Стало (работает):**
+```typescript
+contextManager.addMessage({ role: "user", content: `<system-summary>${summary}</system-summary>` });
+// → user, не system — не нарушает Jinja
+```
+
+**Где применяется:** `src/core/agent.ts` — после каждого tool call добавляется сводка результатов. Используй `role: "user"` с обёрткой `<system-summary>`. Никогда не добавляй `role: "system"` динамически.
+
+### Правило 2: Streaming fallback — всегда non-streaming
+
+Некоторые модели (Qwen 3.5-9B через llama.cpp) **не стримят JSON tool_calls** через `delta.tool_calls`. Streaming возвращает только `reasoning_content`, а финальный ответ содержит tool_calls только в non-streaming режиме.
+
+**Логика в `openai-compat.ts`:**
+1. Пробуем streaming (`doStream` — SSE через `delta.*`)
+2. Если streaming не вернул ни `text`, ни `tool_call` — вызываем fallback `doNonStreaming`
+3. Fallback всегда отправляет `stream: false` явно
+
+Условие для fallback: `!hasToolCall && !hasText` — без проверки на `reasoningAcc`, потому что streaming может вернуть пустой ответ (без reasoning) на второй итерации.
+
+### Правило 3: Non-streaming + tools = явный `stream: false`
+
+В `doNonStreaming` тело запроса должно содержать `stream: false`. Без этого поля некоторые бэкенды (llama.cpp, особенно с кастомными шаблонами) могут парсить запрос иначе и вернуть 400.
+
+**Было (сломано):**
+```typescript
+const body = { model, messages, max_tokens };
+```
+
+**Стало (работает):**
+```typescript
+const body = { model, messages, stream: false, max_tokens };
+```
+
+### Правило 4: tool_calls в истории — корректный формат
+
+При добавлении `assistant` сообщения с `tool_calls` в контекст, формат должен строго соответствовать OpenAI API:
+
+```typescript
+{
+  role: "assistant",
+  content: textContent || "",
+  tool_calls: [{
+    id: tc.id,
+    type: "function",
+    function: {
+      name: tc.name,
+      arguments: JSON.stringify(tc.arguments),
+    },
+  }],
+}
+```
+
+Поле `type: "function"` обязательно внутри каждого tool_call. Поле `arguments` — строка JSON. Без `type` некоторые бэкенды не распознают tool_call.
+
+### История проблемы
+
+Агент создавал папку (первый tool_call), но на второй итерации модель возвращала пустой ответ. Агент уходил в hallucination retry и зацикливался. Диагностика:
+
+1. `doStream` возвращал пустой стрим (ни text, ни tool_call) на второй итерации
+2. Fallback `doNonStreaming` не вызывался из-за условия `&& reasoningAcc` (reasoning был пуст)
+3. Даже когда fallback вызвали (после фикса условия), он падал с 400 из-за нарушения Jinja-шаблона (system не первый, отсутствует `stream: false`)
+4. Non-streaming без tools работал, но с tools — падал с `400: System message must be at the beginning` или `No user query found in messages`
+
+**Все фиксы сделаны в:** `src/core/agent.ts`, `src/llm/openai-compat.ts`, `src/modules/context/manager.ts`, `src/modules/hallucination/confidence.ts`.
+
+---
+
 ## Key Design Rules
 
 1. **No file >300 lines** — split when approaching limit

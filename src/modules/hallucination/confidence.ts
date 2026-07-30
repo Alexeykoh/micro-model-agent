@@ -9,7 +9,7 @@ const UNCERTAINTY_MARKERS = [
   "not sure",
   "might be",
 ];
-const MIN_CHARS = 5;
+const MIN_CHARS = 1;
 
 export class ConfidenceCheck {
   private previousResponse: string = "";

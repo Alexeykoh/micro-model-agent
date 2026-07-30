@@ -17,6 +17,12 @@ export interface OpenAICompatConfig {
   retry?: RetryConfig;
 }
 
+interface ToolCallAcc {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 export class OpenAICompatProvider implements LLMProvider {
   readonly model: string;
   readonly contextWindow: number;
@@ -37,6 +43,33 @@ export class OpenAICompatProvider implements LLMProvider {
   }
 
   async *chat(
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): AsyncIterable<Chunk> {
+    const streamResult = this.doStream(messages, tools);
+
+    let hasToolCall = false;
+    let hasText = false;
+    let reasoningAcc = "";
+
+    for await (const chunk of streamResult) {
+      if (chunk.type === "tool_call") hasToolCall = true;
+      if (chunk.type === "text") hasText = true;
+      if (chunk.type === "reasoning" && chunk.content) {
+        reasoningAcc += chunk.content;
+      }
+      yield chunk;
+    }
+
+    if (!hasToolCall && !hasText) {
+      const fallback = await this.doNonStreaming(messages, tools);
+      for (const chunk of fallback) {
+        yield chunk;
+      }
+    }
+  }
+
+  private async *doStream(
     messages: Message[],
     tools?: ToolDefinition[],
   ): AsyncIterable<Chunk> {
@@ -96,11 +129,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
     const decoder = new TextDecoder();
     let buffer = "";
-    let toolCallAccumulator: {
-      id?: string;
-      name?: string;
-      arguments?: string;
-    } = {};
+    const toolCallAccs = new Map<number, ToolCallAcc>();
     let lastChunkTime = Date.now();
     const inactivityTimeoutMs = 30000;
     const inactivityCheck = setInterval(() => {
@@ -124,10 +153,7 @@ export class OpenAICompatProvider implements LLMProvider {
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
           const data = trimmed.slice(6);
-          if (data === "[DONE]") {
-            yield { type: "done", finishReason: "stop" };
-            continue;
-          }
+          if (data === "[DONE]") continue;
 
           try {
             const parsed = JSON.parse(data);
@@ -143,13 +169,15 @@ export class OpenAICompatProvider implements LLMProvider {
 
             if (delta.tool_calls) {
               for (const tc of delta.tool_calls) {
-                if (tc.id) toolCallAccumulator.id = tc.id;
-                if (tc.function?.name)
-                  toolCallAccumulator.name = tc.function.name;
+                const idx = tc.index ?? 0;
+                if (!toolCallAccs.has(idx)) {
+                  toolCallAccs.set(idx, { id: "", name: "", arguments: "" });
+                }
+                const acc = toolCallAccs.get(idx)!;
+                if (tc.id) acc.id = tc.id;
+                if (tc.function?.name) acc.name = tc.function.name;
                 if (tc.function?.arguments) {
-                  toolCallAccumulator.arguments =
-                    (toolCallAccumulator.arguments || "") +
-                    tc.function.arguments;
+                  acc.arguments += tc.function.arguments;
                 }
               }
             }
@@ -158,20 +186,20 @@ export class OpenAICompatProvider implements LLMProvider {
               yield { type: "text", content: delta.content };
             }
 
-            if (finishReason === "tool_calls" && toolCallAccumulator.name) {
-              yield {
-                type: "tool_call",
-                toolCall: {
-                  id: toolCallAccumulator.id || "",
-                  name: toolCallAccumulator.name,
-                  arguments: toolCallAccumulator.arguments || "{}",
-                },
-              };
-              toolCallAccumulator = {};
-            }
-
-            if (finishReason === "stop") {
-              yield { type: "done", finishReason: "stop" };
+            if (finishReason === "tool_calls" && toolCallAccs.size > 0) {
+              for (const [, acc] of toolCallAccs) {
+                if (acc.name) {
+                  yield {
+                    type: "tool_call",
+                    toolCall: {
+                      id: acc.id,
+                      name: acc.name,
+                      arguments: acc.arguments || "{}",
+                    },
+                  };
+                }
+              }
+              toolCallAccs.clear();
             }
           } catch {
             // Skip malformed JSON lines
@@ -181,6 +209,91 @@ export class OpenAICompatProvider implements LLMProvider {
     } finally {
       clearInterval(inactivityCheck);
       reader.releaseLock();
+    }
+  }
+
+  private async doNonStreaming(
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): Promise<Chunk[]> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages,
+      stream: false,
+      max_tokens: this.config.maxCompletionTokens ?? 4096,
+    };
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+      body.tool_choice = "auto";
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.config.apiKey && this.config.apiKey !== "not-needed") {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
+    try {
+      const response = await this.fetchWithRetry(
+        `${this.config.baseUrl}/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      const choice = data.choices?.[0];
+      if (!choice) {
+        return [];
+      }
+
+      const msg = choice.message || {};
+      const chunks: Chunk[] = [];
+
+      if (msg.reasoning_content) {
+        chunks.push({ type: "reasoning", content: msg.reasoning_content });
+      }
+      if (msg.content) {
+        chunks.push({ type: "text", content: msg.content });
+      }
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          chunks.push({
+            type: "tool_call",
+            toolCall: {
+              id: tc.id || "",
+              name: tc.function?.name || "",
+              arguments: tc.function?.arguments || "{}",
+            },
+          });
+        }
+      }
+
+      console.error(
+        "[doNonStreaming] chunks:",
+        chunks.length,
+        "tool_calls:",
+        msg.tool_calls?.length,
+        "content len:",
+        msg.content?.length,
+      );
+      return chunks;
+    } catch {
+      return [];
     }
   }
 

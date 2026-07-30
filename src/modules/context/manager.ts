@@ -72,10 +72,23 @@ export class ContextManager {
     return this.messages.length;
   }
 
+  private estimateMessageTokens(m: Message): number {
+    let t = Math.ceil(m.content.length / 2);
+    if (m.tool_calls) {
+      for (const tc of m.tool_calls) {
+        t += Math.ceil(tc.id.length / 2);
+        t += Math.ceil(tc.function.name.length / 2);
+        t += Math.ceil(tc.function.arguments.length / 2);
+        t += 4;
+      }
+    }
+    return t;
+  }
+
   needsCompaction(): boolean {
     if (this.iterationsSinceCompaction >= COMPACTION_INTERVAL) return true;
     const totalTokens = this.messages.reduce(
-      (sum, m) => sum + m.content.length / 2,
+      (sum, m) => sum + this.estimateMessageTokens(m),
       0,
     );
     return totalTokens > this.budget.history * this.compactionThreshold;
@@ -180,7 +193,7 @@ export class ContextManager {
 
   getEstimatedTokens(): number {
     return this.messages.reduce(
-      (sum, m) => sum + Math.ceil(m.content.length / 2),
+      (sum, m) => sum + this.estimateMessageTokens(m),
       0,
     );
   }

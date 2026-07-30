@@ -223,6 +223,9 @@ export async function bootstrap(
   (toolCtx as any).toolExecutor = toolExecutor;
 
   const hallucinationDetector = new HallucinationDetector();
+  const factualCheck = hallucinationDetector.getFactualCheck();
+  toolCtx.trackReadPath = (p) => factualCheck.trackReadPath(p);
+  toolCtx.trackCreatedPath = (p) => factualCheck.trackCreatedPath(p);
 
   const moduleRegistry = new ModuleRegistry();
 

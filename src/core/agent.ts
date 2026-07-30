@@ -336,6 +336,7 @@ export class Agent {
             },
           })),
         });
+        const summaries: string[] = [];
         for (const call of toolCalls) {
           this.setScope();
           const startTime = Date.now();
@@ -372,6 +373,9 @@ export class Agent {
             name: call.name,
             tool_call_id: call.id,
           });
+          summaries.push(
+            `[Tool: ${call.name} (${JSON.stringify(call.arguments)}) → ${truncatedOutput.slice(0, 200)}]`,
+          );
           if (sessionManager && config.session.autoSave) {
             sessionManager.appendMessage({
               role: "tool",
@@ -395,6 +399,10 @@ export class Agent {
             logger.debug("Context compacted after tool result");
           }
         }
+        contextManager.addMessage({
+          role: "user",
+          content: `<system-summary>${summaries.join("\n")}</system-summary>`,
+        });
         continue;
       }
 
