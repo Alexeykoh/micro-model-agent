@@ -25,10 +25,12 @@ import {
 } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
 import { IndexerModule } from "../modules/indexer/index";
+import { MCPModule } from "../modules/mcp/index";
 import { setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
 import { join } from "path";
+import { existsSync, readFileSync } from "fs";
 import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
@@ -66,6 +68,16 @@ function buildSystemInfo(
     );
   }
 
+  const hasMCP =
+    config.mcpServers &&
+    Object.values(config.mcpServers).some((s) => s.enabled !== false);
+  if (hasMCP) {
+    lines.push(
+      ``,
+      `MCP servers are available. Use the named MCP tools (prefixed with mcp__) to query external services.`,
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -76,6 +88,8 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
+  configDir: string;
+  baseDir: string;
 }
 
 export async function bootstrap(
@@ -238,6 +252,10 @@ export async function bootstrap(
   moduleRegistry.register(skillsModule);
   moduleRegistry.register(indexerModule);
 
+  const mcpModule = new MCPModule(config);
+  await mcpModule.initialize();
+  moduleRegistry.register(mcpModule);
+
   if (config.browser.enabled) {
     const browserModule = new BrowserModule();
     moduleRegistry.register(browserModule);
@@ -277,6 +295,12 @@ export async function bootstrap(
     pluginManager.register(indexerPlugin);
   }
 
+  const mcpPlugin = mcpModule.getPlugin();
+  if (mcpPlugin) {
+    mcpPlugin.isBuiltin = true;
+    pluginManager.register(mcpPlugin);
+  }
+
   pluginManager.register(lintOnWritePlugin);
   pluginManager.register(notifyPlugin);
 
@@ -295,9 +319,30 @@ export async function bootstrap(
     });
   };
 
+  const agentsMdBlocks: PromptBlock[] = [];
+  const agentsMdCandidates = [
+    join(baseDir, "AGENTS.md"),
+    join(baseDir, ".mma", "AGENTS.md"),
+    join(dir, "AGENTS.md"),
+  ];
+  for (const p of agentsMdCandidates) {
+    if (existsSync(p)) {
+      const content = readFileSync(p, "utf-8").trim();
+      if (content) {
+        agentsMdBlocks.push({
+          content,
+          priority: "high",
+          essential: false,
+          estimatedTokens: Math.ceil(content.length / 4),
+        });
+      }
+    }
+  }
+
   const promptBlocks: PromptBlock[] = [
     systemInfoPrompt,
     ...moduleRegistry.collectPromptBlocks(),
+    ...agentsMdBlocks,
   ];
 
   const agentDeps: AgentDeps = {
@@ -315,5 +360,14 @@ export async function bootstrap(
 
   const agent = new Agent(agentDeps);
 
-  return { agent, config, logger, sessionManager, skillsModule, pluginManager };
+  return {
+    agent,
+    config,
+    logger,
+    sessionManager,
+    skillsModule,
+    pluginManager,
+    configDir: dir,
+    baseDir,
+  };
 }
