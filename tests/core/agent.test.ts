@@ -86,6 +86,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
       viewportHeight: 720,
       navigationTimeout: 15000,
     },
+    mcpServers: {},
   };
 
   return {

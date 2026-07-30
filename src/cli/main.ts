@@ -63,14 +63,23 @@ async function main(): Promise<void> {
       config.locale = answers.locale;
       saveConfig(config, configPath);
     }
-    const { agent, config, sessionManager, skillsModule, pluginManager } =
-      await bootstrap();
+    const {
+      agent,
+      config,
+      sessionManager,
+      skillsModule,
+      pluginManager,
+      configDir,
+      baseDir,
+    } = await bootstrap();
     const repl = new Repl(
       agent,
       config,
       sessionManager,
       skillsModule,
       pluginManager,
+      configDir,
+      baseDir,
     );
     repl.start();
   }

@@ -30,7 +30,7 @@ import { setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
@@ -192,6 +192,11 @@ export async function bootstrap(
     essential: true,
     estimatedTokens: 120,
   };
+
+  const agentsMdGlobal = join(dir, "AGENTS.md");
+  if (!existsSync(agentsMdGlobal)) {
+    writeFileSync(agentsMdGlobal, "", "utf-8");
+  }
 
   const sessionDir = join(dir, "sessions");
   const sessionStore = new SessionStore(sessionDir);

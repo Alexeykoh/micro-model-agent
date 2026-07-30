@@ -503,8 +503,11 @@ interface AgentPlugin {
 
 ### 6.3 MCP Client (`modules/mcp/`)
 
-- Connects to MCP servers via stdio or SSE
-- Each server provides tool list → registered in ToolRegistry dynamically
+- Connects to MCP servers via stdio or SSE (remote)
+- Configurable via `config.mcpServers` in global (`~/.mma/config.json`) or project (`.mma/config.json`) config
+- `MCPServerConfig`: `name`, `command`/`args` (stdio), `url`/`headers` (SSE), `enabled`, `timeout`
+- MCPRegistry populated at runtime from config on first `mcp_call` invocation
+- SSE transport uses `fetch` for POST requests + ReadableStream for event parsing
 - Tool calls proxied: `mcp_call { server, tool, args }`
 
 ```
@@ -864,7 +867,7 @@ mma session list | show <id> | delete <id>   # session management
 Readline loop with:
 - **Colored output:** `You:` (cyan) for user messages, `Agent:` (green) for model responses
 - **Context bar:** After each response, shows `████░░░░░  40%  (8192 / 20480 tokens)` — remaining history budget
-- **REPL banner:** On startup shows model, provider, context budget breakdown, active session
+- **REPL banner:** On startup shows model, provider, context budget breakdown, skills, plugins, MCP servers, active session
 - **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/config`, `/status`, `/exit`
 - **Deep tab completion** (see 7.4)
 - **Fast navigation** (see 7.5)

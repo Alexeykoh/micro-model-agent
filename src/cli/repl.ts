@@ -52,6 +52,8 @@ export class Repl {
   private maxHistory = 1000;
   private lastEscTime = 0;
   private readonly doubleEscDelay = 500;
+  private configDir: string;
+  private baseDir: string;
 
   constructor(
     agent: Agent,
@@ -59,12 +61,16 @@ export class Repl {
     sessionManager?: SessionManager,
     skillsModule?: SkillsModule,
     pluginManager?: PluginManager,
+    configDir?: string,
+    baseDir?: string,
   ) {
     this.agent = agent;
     this.config = config;
     this.sessionManager = sessionManager;
     this.skillsModule = skillsModule;
     this.pluginManager = pluginManager;
+    this.configDir = configDir || join(homedir(), ".mma");
+    this.baseDir = baseDir || process.cwd();
     this.historyPath = join(homedir(), ".mma", "repl-history");
     this.loadHistory();
     this.registerBuiltinCommands();
@@ -762,10 +768,42 @@ export class Repl {
       }
     }
 
+    const mcpServers = this.config.mcpServers || {};
+    const enabledServers = Object.entries(mcpServers).filter(
+      ([, s]) => s.enabled !== false,
+    );
+    if (enabledServers.length > 0) {
+      const names = enabledServers.map(([name]) => name).join(", ");
+      console.log(
+        `  ${pc.yellow(t("repl.mcp_label"))}       ${pc.white(String(enabledServers.length))}  ${pc.dim(`(${names})`)}`,
+      );
+    }
+
+    const cwd = process.cwd();
+    console.log(`  ${pc.yellow(t("repl.work_dir"))}  ${pc.dim(cwd)}`);
+
+    const agentsMdCandidates = [
+      join(this.baseDir, "AGENTS.md"),
+      join(this.baseDir, ".mma", "AGENTS.md"),
+      join(this.configDir, "AGENTS.md"),
+    ];
+    const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));
+    if (foundAgents.length > 0) {
+      console.log(`  ${pc.yellow(t("repl.agents_label"))}`);
+      for (const p of foundAgents) {
+        console.log(`    ${pc.dim(p)}`);
+      }
+    } else {
+      console.log(
+        `  ${pc.yellow(t("repl.agents_label"))}    ${pc.dim(t("repl.not_found"))}`,
+      );
+    }
+
     const meta = this.sessionManager?.getActiveMeta();
     if (meta) {
+      const sessionPath = join(this.configDir, "sessions", meta.id);
       console.log(
-        `  ${pc.yellow(t("repl.session_label"))}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs`,
+        `  ${pc.yellow(t("repl.session_label"))}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs  ${pc.dim(sessionPath)}`,
       );
     }
     console.log(pc.dim(divider));
