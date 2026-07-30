@@ -3,7 +3,7 @@ export interface MCPServerConfig {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
-  transport?: "stdio" | "sse";
+  transport?: "stdio" | "sse" | "http";
   url?: string;
   headers?: Record<string, string>;
   timeout?: number;

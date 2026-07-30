@@ -429,13 +429,16 @@ export class Agent {
       if (hallucinationResult.status === "retry") {
         if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
           logger.warn(
-            `Max hallucination retries (${MAX_HALLUCINATION_RETRIES}) reached, injecting recovery prompt`,
+            `Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
           );
-          contextManager.addMessage({
-            role: "system",
-            content: `[Recovery: previous responses were empty or insufficient. Original task: "${input}". Continue by calling the next needed tool or provide a concrete answer. Do not stop unfinished.]`,
-          });
-          continue;
+          return {
+            success: false,
+            text: lastText,
+            error: t("error.response_blocked", {
+              reason: t("hall.max_retries_exhausted"),
+            }),
+            iterationCount: iteration,
+          };
         }
         hallucinationRetries++;
         logger.warn(

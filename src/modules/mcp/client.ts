@@ -22,6 +22,10 @@ export class MCPClient {
   async connect(): Promise<void> {
     if (this._connected) return;
 
+    if (this.config.transport === "http") {
+      this._connected = true;
+      return;
+    }
     if (this.config.transport === "sse" || this.config.url) {
       return this.connectSSE();
     }
@@ -158,10 +162,47 @@ export class MCPClient {
       await this.connect();
     }
 
+    if (this.config.transport === "http") {
+      return this.listToolsHTTP();
+    }
     if (this.config.transport === "sse" || this.config.url) {
       return this.listToolsSSE();
     }
     return this.listToolsStdio();
+  }
+
+  private async listToolsHTTP(): Promise<
+    Array<{
+      name: string;
+      description?: string;
+      inputSchema?: Record<string, unknown>;
+    }>
+  > {
+    const request = {
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method: "tools/list",
+    };
+
+    const response = await fetch(this.config.url!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.config.headers,
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`MCP listTools failed: ${response.status} ${text}`);
+    }
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    return result.result?.tools || [];
   }
 
   private async listToolsSSE(): Promise<
@@ -254,6 +295,10 @@ export class MCPClient {
   }
 
   async disconnect(): Promise<void> {
+    if (this.config.transport === "http") {
+      this._connected = false;
+      return;
+    }
     if (this.config.transport === "sse" || this.config.url) {
       this.abortController?.abort();
       this.abortController = null;
@@ -272,10 +317,48 @@ export class MCPClient {
       throw new Error("Not connected to MCP server");
     }
 
+    if (this.config.transport === "http") {
+      return this.callToolHTTP(toolName, args);
+    }
     if (this.config.transport === "sse" || this.config.url) {
       return this.callToolSSE(toolName, args);
     }
     return this.callToolStdio(toolName, args);
+  }
+
+  private async callToolHTTP(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const request = {
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method: "tools/call",
+      params: {
+        name: toolName,
+        arguments: args,
+      },
+    };
+
+    const response = await fetch(this.config.url!, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.config.headers,
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`MCP call failed: ${response.status} ${text}`);
+    }
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    return result.result || result;
   }
 
   private async callToolSSE(

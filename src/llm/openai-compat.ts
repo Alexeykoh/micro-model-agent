@@ -247,12 +247,19 @@ export class OpenAICompatProvider implements LLMProvider {
       );
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          "[doNonStreaming] HTTP error:",
+          response.status,
+          errorText.slice(0, 500),
+        );
         return [];
       }
 
       const data = await response.json();
       const choice = data.choices?.[0];
       if (!choice) {
+        console.error("[doNonStreaming] No choices in response");
         return [];
       }
 
@@ -286,8 +293,17 @@ export class OpenAICompatProvider implements LLMProvider {
         "content len:",
         msg.content?.length,
       );
+      if (chunks.length === 0) {
+        console.error(
+          "[doNonStreaming] Empty response: no content, no tool_calls, no reasoning",
+        );
+      }
       return chunks;
-    } catch {
+    } catch (err) {
+      console.error(
+        "[doNonStreaming] Fetch error:",
+        err instanceof Error ? err.message : String(err),
+      );
       return [];
     }
   }

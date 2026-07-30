@@ -53,7 +53,7 @@ export interface MCPServerConfigEntry {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
-  transport?: "stdio" | "sse";
+  transport?: "stdio" | "sse" | "http";
   url?: string;
   headers?: MCPHeader;
   enabled?: boolean;
