@@ -1,257 +1,107 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { AppConfig } from './types.js';
+import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { DEFAULTS } from './defaults'
+import { t } from '../i18n/index'
+import type { AppConfig } from './types'
+import { MigrationDetector } from '../migration/detect'
+import { BackupManager } from '../migration/backup'
+import { validateExpertConfig } from './experts'
 
-/**
- * Загрузка и сохранение конфигурации.
- *
- * Конфигурация собирается из трёх источников (в порядке приоритета):
- * 1. DEFAULT_CONFIG — встроенные значения по умолчанию
- * 2. ~/.mma/config.json — глобальная конфигурация пользователя
- * 3. .mmrc — проектная конфигурация (перезаписывает глобальную)
- *
- * Также поддерживаются переменные окружения:
- * - MMA_PROVIDER — провайдер
- * - MMA_MODEL — модель
- *
- * @module config/config
- */
-
-const DEFAULT_CONFIG: AppConfig = {
-  providers: {
-    lmstudio: {
-      type: 'openai-compat',
-      url: 'http://localhost:1234/v1',
-      apiKey: null,
-      models: {
-        'qwen/qwen3.5-9b': {
-          model: 'qwen/qwen3.5-9b',
-          contextWindow: 32768,
-          params: { temperature: 0.7, top_p: 0.9, max_tokens: 4096 },
-        },
-      },
-    },
-    ollama: {
-      type: 'openai-compat',
-      url: 'http://localhost:11434/v1',
-      apiKey: null,
-      models: {
-        'qwen3.5:9b': {
-          model: 'qwen3.5:9b',
-          contextWindow: 32768,
-          params: { temperature: 0.7, top_p: 0.9, num_ctx: 32768 },
-        },
-      },
-    },
-  },
-  active: { provider: 'lmstudio', model: 'qwen/qwen3.5-9b' },
-  agent: {
-    maxSteps: 100, autoCompact: true, compactThreshold: 0.70,
-    toolTimeout: 120, maxOutputLength: 2000, showThinking: false, mode: 'base',
-    skillTokenBudget: 4000, maxSkillsBase: 2, maxSkillsPro: 0,
-    llm: {
-      retries: 1,
-      retryWithoutThinking: true,
-      fallbackToReasoning: true,
-      maxTokensReasoning: 32768,
-      maxTokensDefault: 4096,
-      maxTokensAfterTool: 24576,
-      emptyResponseThreshold: 10,
-    },
-    specialist: {
-      enabled: true,
-      triggerThreshold: 2,
-      maxSteps: 10,
-      minErrorLength: 15,
-    },
-    grounding: {
-      enabled: true,
-      strictMode: false,
-      checkFiles: true,
-      maxMissingGrounding: 3,
-    },
-  },
-};
-
-/** Ищет корень проекта (по .mmrc или package.json) */
-function findProjectRoot(): string | null {
-  let dir = resolve(process.cwd());
-  while (true) {
-    if (existsSync(join(dir, '.mmrc')) || existsSync(join(dir, 'package.json'))) return dir;
-    const parent = resolve(dir, '..');
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-/** Рекурсивное слияние объектов (deep merge) */
-function deepAssign(target: Record<string, unknown>, source: Record<string, unknown>): void {
-  for (const key of Object.keys(source)) {
-    const tv = target[key];
-    const sv = source[key];
-    if (tv && typeof tv === 'object' && !Array.isArray(tv) && sv && typeof sv === 'object' && !Array.isArray(sv)) {
-      deepAssign(tv as Record<string, unknown>, sv as Record<string, unknown>);
-    } else {
-      target[key] = sv;
+function deepMerge<T>(target: T, source: Partial<T>): T {
+  const result: Record<string, unknown> = { ...target as any }
+  for (const key of Object.keys(source as object)) {
+    const srcVal = (source as any)[key]
+    const tgtVal = (target as any)[key]
+    if (
+      srcVal !== null && srcVal !== undefined &&
+      typeof srcVal === 'object' && !Array.isArray(srcVal) &&
+      typeof tgtVal === 'object' && !Array.isArray(tgtVal)
+    ) {
+      result[key] = deepMerge(tgtVal, srcVal)
+    } else if (srcVal !== undefined) {
+      result[key] = srcVal
     }
   }
+  return result as T
 }
 
-/**
- * Загружает конфигурацию из всех источников.
- * Приоритет: DEFAULT < global < project < env vars.
- */
-export function loadConfig(): AppConfig {
-  const config = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as AppConfig;
-
-  const projectRoot = findProjectRoot();
-  if (projectRoot) {
-    const rcPath = join(projectRoot, '.mmrc');
-    if (existsSync(rcPath)) {
-      try {
-        const rc = JSON.parse(readFileSync(rcPath, 'utf-8'));
-        deepAssign(config as unknown as Record<string, unknown>, rc);
-      } catch { /* ignore invalid config */ }
+function loadJSON(path: string): Record<string, unknown> | null {
+  try {
+    if (existsSync(path)) {
+      return JSON.parse(readFileSync(path, 'utf-8'))
     }
+  } catch { /* ignore malformed files */ }
+  return null
+}
+
+function applyEnvVars(config: AppConfig): AppConfig {
+  const env = process.env
+  const result = { ...config }
+
+  if (env.MMA_MODEL) result.model = env.MMA_MODEL
+  if (env.MMA_PROVIDER_TYPE) result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE }
+  if (env.MMA_PROVIDER_BASEURL) result.provider = { ...result.provider, baseUrl: env.MMA_PROVIDER_BASEURL }
+  if (env.MMA_PROVIDER_APIKEY) result.provider = { ...result.provider, apiKey: env.MMA_PROVIDER_APIKEY }
+  if (env.MMA_LOG_LEVEL) result.logLevel = env.MMA_LOG_LEVEL
+  if (env.MMA_LOCALE) result.locale = env.MMA_LOCALE
+  if (env.MMA_CONTEXT_WINDOW) result.contextWindow = parseInt(env.MMA_CONTEXT_WINDOW, 10)
+  if (env.MMA_MAX_TOOL_ITERATIONS) result.maxToolIterations = parseInt(env.MMA_MAX_TOOL_ITERATIONS, 10)
+  if (env.MMA_STUCK_THRESHOLD) result.stuckThreshold = parseInt(env.MMA_STUCK_THRESHOLD, 10)
+  if (env.MMA_AUTO_PLAN) result.autoPlan = env.MMA_AUTO_PLAN === 'true'
+  if (env.MMA_MOE_ENABLED) result.moe = { ...result.moe, enabled: env.MMA_MOE_ENABLED === 'true' }
+
+  return result
+}
+
+export interface LoadConfigOptions {
+  configDir: string
+  projectConfigPath: string
+}
+
+export function loadConfig(options: LoadConfigOptions): AppConfig {
+  const globalPath = join(options.configDir, 'config.json')
+
+  mkdirSync(options.configDir, { recursive: true })
+
+  const detector = new MigrationDetector(options.configDir)
+  if (detector.needsMigration()) {
+    const backup = new BackupManager(options.configDir)
+    backup.backupConfig()
+    const summary = backup.getBackupSummary()
+    console.log(t('migration.detected', { summary }))
+    try { unlinkSync(globalPath) } catch { }
   }
 
-  const globalPath = join(homedir(), '.mma', 'config.json');
-  if (existsSync(globalPath)) {
-    try {
-      const global = JSON.parse(readFileSync(globalPath, 'utf-8'));
-      deepAssign(config as unknown as Record<string, unknown>, global);
-    } catch { /* ignore */ }
+  let config: AppConfig = { ...DEFAULTS }
+
+  const globalData = loadJSON(globalPath)
+  if (globalData) {
+    config = deepMerge(config, globalData as Partial<AppConfig>)
   }
 
-  if (process.env.MMA_PROVIDER) config.active.provider = process.env.MMA_PROVIDER;
-  if (process.env.MMA_MODEL) config.active.model = process.env.MMA_MODEL;
-
-  return config;
-}
-
-const MMA_DIR = join(homedir(), '.mma');
-
-/** Создаёт директории ~/.mma/ + subdirs если не существуют */
-export function ensureMmaDir(): void {
-  const pluginsDir = join(MMA_DIR, 'plugins');
-  const isFirstRun = !existsSync(pluginsDir);
-
-  for (const dir of [MMA_DIR, join(MMA_DIR, 'state'), join(MMA_DIR, 'cache'), join(MMA_DIR, 'index'), pluginsDir]) {
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(globalPath)) {
+    saveConfig(config, globalPath)
   }
 
-  if (isFirstRun) {
-    const __filename = fileURLToPath(import.meta.url);
-    const rootDir = resolve(dirname(__filename), '..', '..');
-    const docsSrc = join(rootDir, 'docs', 'PLUGINS.md');
-    try {
-      copyFileSync(docsSrc, join(pluginsDir, 'PLUGINS.md'));
-    } catch {
-      /* docs могут отсутствовать в некоторых установках */
-    }
+  const projectData = loadJSON(options.projectConfigPath)
+  if (projectData) {
+    config = deepMerge(config, projectData as Partial<AppConfig>)
+  }
 
-    const testPluginDir = join(pluginsDir, 'test-plugin');
-    mkdirSync(testPluginDir, { recursive: true });
-    writeFileSync(
-      join(testPluginDir, 'manifest.json'),
-      JSON.stringify({
-        name: 'test-plugin',
-        version: '0.1.0',
-        description: 'Тестовый плагин (ничего не делает)',
-        entry: 'index.ts',
-      }, null, 2),
-    );
-    writeFileSync(
-      join(testPluginDir, 'index.ts'),
-      `import type { AgentPlugin } from 'micro-models-agent';
+  config = applyEnvVars(config)
 
-export default function createPlugin(): AgentPlugin {
-  return {
-    name: 'test-plugin',
-    version: '0.1.0',
-    onActivate() {
-      // Ничего не делает
-    },
-  };
+  return config
 }
-`,
-    );
+
+export function validateConfig(config: AppConfig, allToolTags: string[]): void {
+  const errors = validateExpertConfig(config, allToolTags)
+  if (errors.length > 0) {
+    throw new Error(`Config validation failed:\n${errors.join('\n')}`)
   }
 }
 
-/** Сохраняет конфигурацию в ~/.mma/config.json */
-export function saveConfig(config: AppConfig): void {
-  const globalPath = join(MMA_DIR, 'config.json');
-  ensureMmaDir();
-  writeFileSync(globalPath, JSON.stringify(config, null, 2), 'utf-8');
-}
-
-/** LLM config defaults */
-const LLM_DEFAULTS = {
-  retries: 1,
-  retryWithoutThinking: true,
-  fallbackToReasoning: true,
-  maxTokensReasoning: 48000,
-  maxTokensDefault: 4096,
-  maxTokensAfterTool: 24576,
-  emptyResponseThreshold: 10,
-  toolModel: undefined as string | undefined,
-};
-
-/** Получить LLM конфиг с заполненными defaults */
-export function getLLMConfig(config?: AppConfig): typeof LLM_DEFAULTS {
-  const src = config?.agent?.llm;
-  if (!src) return { ...LLM_DEFAULTS };
-  return {
-    retries: src.retries ?? LLM_DEFAULTS.retries,
-    retryWithoutThinking: src.retryWithoutThinking ?? LLM_DEFAULTS.retryWithoutThinking,
-    fallbackToReasoning: src.fallbackToReasoning ?? LLM_DEFAULTS.fallbackToReasoning,
-    maxTokensReasoning: src.maxTokensReasoning ?? LLM_DEFAULTS.maxTokensReasoning,
-    maxTokensDefault: src.maxTokensDefault ?? LLM_DEFAULTS.maxTokensDefault,
-    maxTokensAfterTool: src.maxTokensAfterTool ?? LLM_DEFAULTS.maxTokensAfterTool,
-    emptyResponseThreshold: src.emptyResponseThreshold ?? LLM_DEFAULTS.emptyResponseThreshold,
-    toolModel: src.toolModel ?? LLM_DEFAULTS.toolModel,
-  };
-}
-
-/** Grounding config defaults */
-const GROUNDING_DEFAULTS = {
-  enabled: true,
-  strictMode: false,
-  checkFiles: true,
-  maxMissingGrounding: 3,
-};
-
-/** Получить grounding конфиг с заполненными defaults */
-export function getGroundingConfig(config?: AppConfig): typeof GROUNDING_DEFAULTS {
-  const src = config?.agent?.grounding;
-  if (!src) return { ...GROUNDING_DEFAULTS };
-  return {
-    enabled: src.enabled ?? GROUNDING_DEFAULTS.enabled,
-    strictMode: src.strictMode ?? GROUNDING_DEFAULTS.strictMode,
-    checkFiles: src.checkFiles ?? GROUNDING_DEFAULTS.checkFiles,
-    maxMissingGrounding: src.maxMissingGrounding ?? GROUNDING_DEFAULTS.maxMissingGrounding,
-  };
-}
-
-/** Specialist config defaults */
-const SPECIALIST_DEFAULTS = {
-  enabled: true,
-  triggerThreshold: 2,
-  maxSteps: 10,
-  minErrorLength: 15,
-};
-
-/** Получить specialist конфиг с заполненными defaults */
-export function getSpecialistConfig(config?: AppConfig): typeof SPECIALIST_DEFAULTS {
-  const src = config?.agent?.specialist;
-  if (!src) return { ...SPECIALIST_DEFAULTS };
-  return {
-    enabled: src.enabled ?? SPECIALIST_DEFAULTS.enabled,
-    triggerThreshold: src.triggerThreshold ?? SPECIALIST_DEFAULTS.triggerThreshold,
-    maxSteps: src.maxSteps ?? SPECIALIST_DEFAULTS.maxSteps,
-    minErrorLength: src.minErrorLength ?? SPECIALIST_DEFAULTS.minErrorLength,
-  };
+export function saveConfig(config: AppConfig, configPath: string): void {
+  const dir = dirname(configPath)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
 }

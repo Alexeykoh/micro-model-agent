@@ -1,50 +1,40 @@
-/**
- * Подсчёт токенов.
- *
- * Использует js-tiktoken (если доступен) для точного подсчёта.
- * Fallback: ~4 символа на токен.
- *
- * Encoding кэшируется как синглтон — создаётся один раз, переиспользуется.
- * Это критично для производительности: на 240 сообщениях разница ~32с vs <1с.
- *
- * @module llm/token-counter
- */
+// src/llm/token-counter.ts
+import { encodingForModel, getEncoding } from "js-tiktoken";
 
-let tiktoken: any = null;
-let cachedEncoding: any = null;
+export class TokenCounter {
+	private encoder: ReturnType<typeof getEncoding>;
 
-async function loadTiktoken(): Promise<void> {
-  if (tiktoken) return;
-  try {
-    const mod = await import('js-tiktoken');
-    tiktoken = mod;
-  } catch {
-    tiktoken = null;
-  }
-}
+	constructor(model: string = "gpt-4o") {
+		try {
+			this.encoder = encodingForModel(model as any);
+		} catch {
+			// Fallback to cl100k_base for unknown models
+			this.encoder = getEncoding("cl100k_base");
+		}
+	}
 
-function getEncoding(): any {
-  if (cachedEncoding) return cachedEncoding;
-  if (tiktoken?.encodingForModel) {
-    try {
-      cachedEncoding = tiktoken.encodingForModel('gpt-4');
-    } catch { /* fall through */ }
-  }
-  return cachedEncoding;
-}
+	count(text: string): number {
+		if (!text) return 0;
+		return this.encoder.encode(text).length;
+	}
 
-export async function countTokens(text: string): Promise<number> {
-  await loadTiktoken();
-  const enc = getEncoding();
-  if (enc) {
-    try {
-      return enc.encode(text).length;
-    } catch { /* fall through */ }
-  }
-  return Math.ceil(text.length / 4);
-}
+	countMessages(messages: Array<{ role: string; content: string }>): number {
+		let total = 0;
+		for (const msg of messages) {
+			// ~4 tokens per message overhead (role, boundaries)
+			total += 4;
+			total += this.count(msg.content);
+			if (msg.role === "tool") total += 2; // tool_call_id
+		}
+		total += 2; // assistant priming
+		return total;
+	}
 
-/** Сброс кэша encoding (при смене модели или ошибке) */
-export function resetTokenCache(): void {
-  cachedEncoding = null;
+	encode(text: string): number[] {
+		return this.encoder.encode(text);
+	}
+
+	decode(tokens: number[]): string {
+		return this.encoder.decode(tokens);
+	}
 }

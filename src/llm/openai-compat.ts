@@ -1,184 +1,337 @@
-import type { LLMProvider, ChatMessage, ChatOptions, Chunk } from './provider.js';
-import { getLLMConfig } from '../config/config.js';
+import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
+import { TokenCounter } from "./token-counter";
+import { t } from "../i18n/index";
 
-/**
- * OpenAI-совместимый LLM-провайдер.
- *
- * Работает с любым сервером, реализующим OpenAI Chat Completions API:
- * - LM Studio (localhost:1234)
- * - Ollama (localhost:11434)
- * - vLLM, Together, Groq и др.
- *
- * Поддерживает streaming-ответы (SSE).
- *
- * @module llm/openai-compat
- */
-
-interface OpenAIError {
-  error?: { message?: string };
+export interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number;
+  maxDelay: number;
 }
 
-/** Паттерны моделей, поддерживающих reasoning/thinking */
-const REASONING_MODEL_PATTERNS = [
-  /qwen.*3\.5/i,
-  /qwen.*3.*thinking/i,
-  /deepseek.*r1/i,
-  /deepseek.*reason/i,
-  /\br1\b.*7b/i,
-  /\br1\b.*14b/i,
-  /\br1\b.*32b/i,
-  /\br1\b.*70b/i,
-];
-
-/**
- * Проверяет, является ли модель reasoning-моделью.
- * Reasoning-модели отправляют reasoning_content перед content,
- * и нуждаются в большем max_tokens и enable_thinking.
- */
-function isReasoningModel(model: string): boolean {
-  return REASONING_MODEL_PATTERNS.some(p => p.test(model));
+export interface OpenAICompatConfig {
+  model: string;
+  baseUrl: string;
+  apiKey?: string;
+  contextWindow?: number;
+  maxCompletionTokens?: number;
+  retry?: RetryConfig;
 }
 
-export class OpenAICompat implements LLMProvider {
+interface ToolCallAcc {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export class OpenAICompatProvider implements LLMProvider {
   readonly model: string;
-  contextWindow: number;
-  private baseUrl: string;
-  private apiKey: string | null;
+  readonly contextWindow: number;
+  private config: OpenAICompatConfig;
+  private tokenCounter: TokenCounter;
+  private retryConfig: RetryConfig;
 
-  constructor(baseUrl: string, model: string, contextWindow: number, apiKey: string | null = null) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
-    this.model = model;
-    this.contextWindow = contextWindow;
-    this.apiKey = apiKey;
+  constructor(config: OpenAICompatConfig) {
+    this.config = config;
+    this.model = config.model;
+    this.contextWindow = config.contextWindow ?? 32768;
+    this.tokenCounter = new TokenCounter();
+    this.retryConfig = config.retry ?? {
+      maxRetries: 3,
+      baseDelay: 1000,
+      maxDelay: 30000,
+    };
   }
 
-  async *chat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<Chunk> {
-    const reasoning = isReasoningModel(this.model);
-    const llmCfg = getLLMConfig();
+  async *chat(
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): AsyncIterable<Chunk> {
+    const streamResult = this.doStream(messages, tools);
 
-    // Reasoning-модели требуют больший budget — reasoning токены потребляют часть max_tokens
-    const defaultMaxTokens = reasoning ? llmCfg.maxTokensReasoning : llmCfg.maxTokensDefault;
+    let hasToolCall = false;
+    let hasText = false;
+    let reasoningAcc = "";
 
-    const body: Record<string, unknown> = {
-      model: this.model,
-      messages: messages.map(m => {
-        const msg: Record<string, unknown> = { role: m.role, content: m.content };
-        // Tool messages требуют tool_call_id для OpenAI API
-        if (m.role === 'tool' && m.tool_call_id) {
-          msg.tool_call_id = m.tool_call_id;
-          if (m.name) msg.name = m.name;
-        }
-        return msg;
-      }),
-      stream: true,
-      temperature: options?.temperature ?? 0.3,
-      max_tokens: options?.max_tokens ?? defaultMaxTokens,
-    };
-
-    if (options?.top_p !== undefined) body.top_p = options.top_p;
-    if (options?.stop !== undefined) body.stop = options.stop;
-
-    // Reasoning-модели: включаем thinking если поддерживается
-    if (options?.enableThinking && reasoning) {
-      // Qwen3.5 (LM Studio / vLLM): chat_template_kwargs с enable_thinking=true
-      body.chat_template_kwargs = { enable_thinking: true };
+    for await (const chunk of streamResult) {
+      if (chunk.type === "tool_call") hasToolCall = true;
+      if (chunk.type === "text") hasText = true;
+      if (chunk.type === "reasoning" && chunk.content) {
+        reasoningAcc += chunk.content;
+      }
+      yield chunk;
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
-
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: options?.signal,
-    });
-
-    if (!response.ok) {
-      const err: OpenAIError = await response.json().catch(() => ({}));
-      throw new Error(`API ${response.status}: ${err.error?.message ?? response.statusText}`);
-    }
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    // Накапливаем нативные tool_calls из delta для конвертации в текстовый формат
-    const nativeToolCalls: Map<number, { id?: string; name?: string; arguments: string }> = new Map();
-    let hasContent = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') return;
-
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta;
-
-          // Нативные tool_calls: накапливаем и конвертируем в <tool_call> текст
-          if (delta?.tool_calls) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              if (!nativeToolCalls.has(idx)) {
-                nativeToolCalls.set(idx, { id: tc.id, name: tc.function?.name, arguments: '' });
-              }
-              const existing = nativeToolCalls.get(idx)!;
-              if (tc.id) existing.id = tc.id;
-              if (tc.function?.name) existing.name = tc.function.name;
-              if (tc.function?.arguments) existing.arguments += tc.function.arguments;
-            }
-          }
-
-          if (delta?.content) {
-            hasContent = true;
-            yield { content: delta.content, finish_reason: null };
-          } else if (delta?.reasoning_content) {
-            yield { content: '', reasoning: delta.reasoning_content, finish_reason: null };
-          }
-          const finish = parsed.choices?.[0]?.finish_reason;
-          if (finish) {
-            // Если finish_reason=tool_calls но контента не было — конвертируем нативные tool_calls в текст
-            if (finish === 'tool_calls' && !hasContent && nativeToolCalls.size > 0) {
-              const toolCallTexts: string[] = [];
-              for (const [, tc] of nativeToolCalls) {
-                if (tc.name) {
-                  let argsStr = tc.arguments;
-                  // Парсим arguments если это JSON — оборачиваем в валидный JSON
-                  try {
-                    JSON.parse(argsStr);
-                  } catch {
-                    // Если arguments не валидный JSON, оборачиваем как строку
-                    argsStr = JSON.stringify(argsStr);
-                  }
-                  toolCallTexts.push(`<tool_call>{"name":"${tc.name}","arguments":${argsStr}}</tool_call>`);
-                }
-              }
-              if (toolCallTexts.length > 0) {
-                yield { content: toolCallTexts.join('\n'), finish_reason: finish };
-              } else {
-                yield { content: '', finish_reason: finish };
-              }
-            } else {
-              yield { content: '', finish_reason: finish };
-            }
-          }
-        } catch { /* skip malformed chunk */ }
+    if (!hasToolCall && !hasText) {
+      const fallback = await this.doNonStreaming(messages, tools);
+      for (const chunk of fallback) {
+        yield chunk;
       }
     }
   }
 
-  async countTokens(text: string): Promise<number> {
-    const mod = await import('./token-counter.js');
-    return mod.countTokens(text);
+  private async *doStream(
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): AsyncIterable<Chunk> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages,
+      stream: true,
+      max_tokens: this.config.maxCompletionTokens ?? 4096,
+    };
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+      body.tool_choice = "auto";
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.config.apiKey && this.config.apiKey !== "not-needed") {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
+    const controller = new AbortController();
+    const totalTimeoutMs = 120000;
+    const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
+
+    const response = await this.fetchWithRetry(
+      `${this.config.baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      clearTimeout(timeoutId);
+      const errorText = await response.text();
+      throw new Error(
+        t("error.llm_api", {
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+        }),
+      );
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      clearTimeout(timeoutId);
+      throw new Error(t("error.no_response_body"));
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const toolCallAccs = new Map<number, ToolCallAcc>();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const choice = parsed.choices?.[0];
+            if (!choice) continue;
+
+            const delta = choice.delta || {};
+            const finishReason = choice.finish_reason;
+
+            if (delta.reasoning_content) {
+              yield { type: "reasoning", content: delta.reasoning_content };
+            }
+
+            if (delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallAccs.has(idx)) {
+                  toolCallAccs.set(idx, { id: "", name: "", arguments: "" });
+                }
+                const acc = toolCallAccs.get(idx)!;
+                if (tc.id) acc.id = tc.id;
+                if (tc.function?.name) acc.name = tc.function.name;
+                if (tc.function?.arguments) {
+                  acc.arguments += tc.function.arguments;
+                }
+              }
+            }
+
+            if (delta.content) {
+              yield { type: "text", content: delta.content };
+            }
+
+            if (finishReason === "tool_calls" && toolCallAccs.size > 0) {
+              for (const [, acc] of toolCallAccs) {
+                if (acc.name) {
+                  yield {
+                    type: "tool_call",
+                    toolCall: {
+                      id: acc.id,
+                      name: acc.name,
+                      arguments: acc.arguments || "{}",
+                    },
+                  };
+                }
+              }
+              toolCallAccs.clear();
+            }
+          } catch {
+            // Skip malformed JSON lines
+          }
+        }
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      reader.releaseLock();
+    }
+  }
+
+  private async doNonStreaming(
+    messages: Message[],
+    tools?: ToolDefinition[],
+  ): Promise<Chunk[]> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages,
+      stream: false,
+      max_tokens: this.config.maxCompletionTokens ?? 4096,
+    };
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
+      body.tool_choice = "auto";
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.config.apiKey && this.config.apiKey !== "not-needed") {
+      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+    }
+
+    try {
+      const response = await this.fetchWithRetry(
+        `${this.config.baseUrl}/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      const choice = data.choices?.[0];
+      if (!choice) {
+        return [];
+      }
+
+      const msg = choice.message || {};
+      const chunks: Chunk[] = [];
+
+      if (msg.reasoning_content) {
+        chunks.push({ type: "reasoning", content: msg.reasoning_content });
+      }
+      if (msg.content) {
+        chunks.push({ type: "text", content: msg.content });
+      }
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          chunks.push({
+            type: "tool_call",
+            toolCall: {
+              id: tc.id || "",
+              name: tc.function?.name || "",
+              arguments: tc.function?.arguments || "{}",
+            },
+          });
+        }
+      }
+
+      console.error(
+        "[doNonStreaming] chunks:",
+        chunks.length,
+        "tool_calls:",
+        msg.tool_calls?.length,
+        "content len:",
+        msg.content?.length,
+      );
+      return chunks;
+    } catch {
+      return [];
+    }
+  }
+
+  countTokens(text: string): number {
+    return this.tokenCounter.count(text);
+  }
+
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+  ): Promise<Response> {
+    const { maxRetries, baseDelay, maxDelay } = this.retryConfig;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, init);
+        if (!this.isRetryable(response.status)) return response;
+        lastError = new Error(
+          `HTTP ${response.status}: ${response.statusText}`,
+        );
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          throw err;
+        }
+        lastError = err;
+      }
+
+      if (attempt < maxRetries) {
+        const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+        const jitter = Math.random() * baseDelay * 0.1;
+        await this.sleep(delay + jitter);
+      }
+    }
+
+    throw lastError ?? new Error(t("error.llm_retries"));
+  }
+
+  private isRetryable(status: number): boolean {
+    return status === 429 || status >= 500;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

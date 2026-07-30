@@ -1,355 +1,48 @@
-import { execa, ExecaError } from 'execa';
-import { execSync } from 'node:child_process';
-import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { sanitize } from './sanitizer.js';
-import { getTheme } from '../styling/index.js';
-import { logInfo } from '../logger.js';
-import type { ToolDefinition } from './registry.js';
-import type { ToolHandler } from './types.js';
+import { execSync } from 'child_process'
+import { platform } from 'os'
+import type { ToolDefinition } from './types'
 
-/**
- * Исполнение shell-команд.
- *
- * Особенности:
- * - Автоматическая трансляция Unix-команд в PowerShell на Windows
- * - Санитайзинг опасных паттернов (rm -rf, fork bomb и т.д.)
- * - Автосоздание директорий для Set-Content
- * - Ограничение длины вывода (8000 символов)
- * - Логирование в файл для отладки
- *
- * @module tools/bash
- */
+function adaptCommandForWindows(command: string): string {
+  if (platform() !== 'win32') return command
 
-/** Результат выполнения bash-команды */
-export interface BashResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  truncated: boolean;
+  // Windows mkdir does not support -p flag, but creates intermediate dirs by default
+  const trimmed = command.trim()
+  if (trimmed.startsWith('mkdir -p ')) {
+    return trimmed.replace(/^mkdir -p /, 'mkdir ')
+  }
+  if (trimmed === 'mkdir -p' || trimmed.startsWith('mkdir -p ')) {
+    return trimmed.replace(/mkdir -p/g, 'mkdir')
+  }
+  return command
 }
 
-const MAX_OUTPUT_LENGTH = 8000; // максимальная длина вывода (обрезается)
-const CACHE_DIR = join(homedir(), '.mma', 'cache');
-
-// ─── Detection shell ──────────────────────────────────────
-// Определяем доступную shell-программу: pwsh → powershell.exe → cmd.exe
-interface ShellInfo {
-  executable: string;
-  args: string[];
-  isPowerShell: boolean;
-}
-
-let _detectedShell: ShellInfo | null = null;
-
-function detectShell(): ShellInfo {
-  if (_detectedShell) return _detectedShell;
-
-  if (process.platform !== 'win32') {
-    _detectedShell = { executable: 'sh', args: ['-c'], isPowerShell: false };
-    logInfo('SHELL', `detected: sh (unix)`);
-    return _detectedShell;
-  }
-
-  // Попытка 1: pwsh (PowerShell Core 7+)
-  try {
-    execSync('pwsh --version', { stdio: 'pipe', timeout: 3000, windowsHide: true });
-    _detectedShell = { executable: 'pwsh', args: ['-NoProfile', '-EncodedCommand'], isPowerShell: true };
-    logInfo('SHELL', 'detected: pwsh (PowerShell Core)');
-    return _detectedShell;
-  } catch { /* pwsh not found */ }
-
-  // Попытка 2: powershell.exe (Windows PowerShell 5.1, встроенная)
-  try {
-    execSync('powershell.exe -Version 5.1 -Command "echo ok"', { stdio: 'pipe', timeout: 3000, windowsHide: true });
-    _detectedShell = { executable: 'powershell.exe', args: ['-NoProfile', '-EncodedCommand'], isPowerShell: true };
-    logInfo('SHELL', 'detected: powershell.exe (Windows PowerShell 5.1)');
-    return _detectedShell;
-  } catch { /* powershell.exe not found */ }
-
-  // Попытка 3: cmd.exe (fallback)
-  _detectedShell = { executable: 'cmd.exe', args: ['/c'], isPowerShell: false };
-  logInfo('SHELL', 'detected: cmd.exe (fallback)');
-  return _detectedShell;
-}
-
-// ─── Трансляция Unix → PowerShell ─────────────────────────
-// Автоматически конвертирует стандартные Unix-команды в PowerShell-эквиваленты
-const UNIX_TO_PWSH: [RegExp, string | ((match: RegExpMatchArray) => string)][] = [
-  [/^ls\s+-la/, 'dir'],
-  [/^ls\s+/, 'dir '],
-  [/^cat\s+/, 'Get-Content '],
-  [/^rm\s+/, 'Remove-Item -Force '],
-  [/^mv\s+/, 'Move-Item '],
-  [/^cp\s+/, 'Copy-Item '],
-  [/^mkdir\s+-p\s+(.+)/, (match: RegExpMatchArray) => {
-    // Handle multiple directories: mkdir -p dir1 dir2 dir3
-    const dirs = match[1].split(/\s+/).filter(Boolean);
-    return dirs.map(d => `New-Item -ItemType Directory -Force -Path "${d}"`).join('; ');
-  }],
-  [/^mkdir\s+/, 'New-Item -ItemType Directory -Path '],
-  [/^touch\s+/, 'New-Item -ItemType File -Force -Path '],
-  [/^grep\s+/, "Select-String -Pattern "],
-  [/^wc\s+/, 'Measure-Object -Line '],
-  [/^head\s+/, 'Get-Content -TotalCount '],
-  [/^tail\s+/, 'Get-Content -Tail '],
-  [/^echo\s+-e\s+/, 'Write-Output '],
-  [/^echo\s+/, 'Write-Output '],
-  [/^pwd\s*$/, 'Get-Location'],
-  [/^which\s+/, 'Get-Command '],
-  [/^find\s+/, 'Get-ChildItem -Recurse -Filter '],
-  [/^chmod\s+/, '# chmod not needed on Windows -- '],
-];
-
-function expandBraces(cmd: string): string {
-  // Expand bash-style brace expansion: dir\{a,b,c} -> dir\a
-  // PowerShell script blocks { ... } and hashtables @{ ... } must NOT be touched
-  return cmd.replace(/\{([^{}]*,[^{}]*)\}/g, (_, inner) => {
-    const items = inner.split(',').map((s: string) => s.trim());
-    return items[0] || '';
-  });
-}
-
-function needsBraceExpansion(cmd: string): boolean {
-  // Only expand if the pattern looks like a bash brace expansion (contains comma)
-  return /\{[^{}]*,[^{}]*\}/.test(cmd);
-}
-
-function translateToPowerShell(cmd: string): string {
-  // Expand bash-style brace expansions (but NOT PowerShell { } blocks or @{ } hashtables)
-  if (needsBraceExpansion(cmd)) {
-    cmd = expandBraces(cmd);
-  }
-
-  for (const [pattern, replacement] of UNIX_TO_PWSH) {
-    if (pattern.test(cmd)) {
-      if (typeof replacement === 'function') {
-        const match = cmd.match(pattern);
-        if (match) return replacement(match);
-      } else {
-        return cmd.replace(pattern, replacement);
-      }
-    }
-  }
-  return cmd;
-}
-
-function ensureDirectoryExists(cmd: string, cwd: string): void {
-  // Auto-create directory for Set-Content commands
-  const match = cmd.match(/Set-Content\s+-Path\s+['"]?([^'"]+?)['"]?\s+-Value/i);
-  if (match) {
-    let filePath = match[1];
-    // Fix common path issues: blog-api\src\file.ts -> blog-api/src/file.ts
-    filePath = filePath.replace(/\\/g, '/');
-    const dir = filePath.split('/').slice(0, -1).join('/');
-    if (dir) {
-      const fullDir = join(cwd, dir);
-      if (!existsSync(fullDir)) {
-        mkdirSync(fullDir, { recursive: true });
-      }
-    }
-  }
-}
-
-function fixJsonContent(cmd: string): string {
-  // Fix backslashes in JSON content that break JSON parsing
-  // Problem: "dist\index.js" -> "dist\\index.js" or "dist/index.js"
-  return cmd.replace(
-    /(-Value\s+['"])(.*?)(['"])/gs,
-    (match, prefix, content, suffix) => {
-      // Replace \ with / in content (except for valid JSON escapes like \n, \t, \")
-      const fixed = content
-        .replace(/\\([^nrtbf"\\])/g, '/$1')  // \i -> /i, but keep \n \t etc
-        .replace(/\\\\/g, '/');               // \\ -> /
-      return prefix + fixed + suffix;
-    }
-  );
-}
-
-function fixCommonPathIssues(cmd: string): string {
-  // Fix: blog-api\src\file.ts -> blog-api/src/file.ts (normalize slashes)
-  // Fix: blog-apifile.ts -> blog-api/file.ts (missing slash)
-  let fixed = cmd;
-
-  // Fix missing slash between folder and file: "blog-api\package.json" -> "blog-api/package.json"
-  // But only if it looks like a path issue (no slash between folder name and file)
-  fixed = fixed.replace(/(['"])(\w+)-(\w+)\\(\w+\.\w+)/g, '$1$2-$3/$4');
-
-  return fixed;
-}
-
-function encodePowerShellCommand(cmd: string): string {
-  const utf16le = Buffer.from(cmd, 'utf16le');
-  return utf16le.toString('base64');
-}
-
-function cleanCliXml(text: string): string {
-  // Remove CLIXML wrapper and ANSI codes
-  if (!text.includes('#< CLIXML') && !text.includes('<Objs')) return text;
-
-  // Extract error messages from CLIXML
-  const errors: string[] = [];
-  const regex = /<S S="Error">(.*?)<\/S>/gs;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Remove ANSI codes and CLIXML entities
-    let msg = match[1]
-      .replace(/_x001B_\[[0-9;]*m/g, '')  // ANSI codes
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&quot;/g, '"')
-      .trim();
-    if (msg && !errors.includes(msg)) {
-      errors.push(msg);
-    }
-  }
-
-  return errors.length > 0 ? errors.join('\n') : text;
-}
-
-export async function executeBash(cmd: string, timeoutSeconds: number = 120): Promise<BashResult> {
-  // Block recursive calls to MMA itself
-  if (/\bmma\b/.test(cmd) && /\brun\b/.test(cmd)) {
-    return { stdout: '', stderr: 'Blocked: recursive MMA call detected. Use filesystem tools instead.', exitCode: 1, truncated: false };
-  }
-
-  // Dev server detection: long-running commands — не ждать завершения
-  const DEV_SERVER_PATTERNS = [
-    /\bnpm\s+run\s+dev\b/i,
-    /\bnpx\s+vite\b/i,
-    /\bvite\s+(--|serve)\b/i,
-    /\bwebpack\s+serve\b/i,
-    /\bnext\s+dev\b/i,
-    /\bnodemon\b/i,
-    /\bpm2\s+start\b/i,
-    /\bforeman\b/i,
-  ];
-  if (DEV_SERVER_PATTERNS.some(p => p.test(cmd))) {
-    return {
-      stdout: `[Dev server started] Команда "${cmd}" запущена в фоне. Это long-running процесс — он не завершается. Сервер работает.`,
-      stderr: '',
-      exitCode: 0,
-      truncated: false,
-    };
-  }
-
-
-
-  cmd = fixCommonPathIssues(cmd);
-  cmd = fixJsonContent(cmd);
-  cmd = translateToPowerShell(cmd);
-  if (!sanitize(cmd).safe) {
-    const theme = getTheme();
-    return { stdout: '', stderr: theme.error(`Blocked by sanitizer`), exitCode: 1, truncated: false };
-  }
-
-  // Auto-create directory for file write commands
-  ensureDirectoryExists(cmd, process.cwd());
-
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true });
-  }
-
-  const cacheId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const cacheFile = join(CACHE_DIR, `${cacheId}.out`);
-
-  let stdout = '';
-  let stderr = '';
-  let exitCode = 0;
-
-  const shell = detectShell();
-
-  try {
-    let result;
-    if (shell.isPowerShell) {
-      // PowerShell: используем -EncodedCommand для корректной передачи Unicode
-      const encoded = encodePowerShellCommand(cmd);
-      result = await execa(shell.executable, [...shell.args, encoded], {
-        timeout: timeoutSeconds * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-        windowsHide: true,
-        cwd: process.cwd(),
-        env: process.env as Record<string, string>,
-        encoding: 'utf8',
-      });
-    } else if (shell.executable === 'cmd.exe') {
-      // cmd.exe: передаём команду напрямую
-      result = await execa(shell.executable, [...shell.args, cmd], {
-        timeout: timeoutSeconds * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-        windowsHide: true,
-        cwd: process.cwd(),
-        env: process.env as Record<string, string>,
-        encoding: 'utf8',
-      });
-    } else {
-      // sh (unix): передаём команду напрямую
-      result = await execa(shell.executable, [...shell.args, cmd], {
-        timeout: timeoutSeconds * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-        windowsHide: true,
-        cwd: process.cwd(),
-        env: process.env as Record<string, string>,
-        encoding: 'utf8',
-      });
-    }
-    stdout = result.stdout;
-    stderr = result.stderr;
-    exitCode = result.exitCode ?? 0;
-  } catch (e: any) {
-    if (e instanceof ExecaError) {
-      stdout = e.stdout ?? '';
-      stderr = e.stderr ?? '';
-      exitCode = e.exitCode ?? 1;
-    } else {
-      stderr = String(e);
-      exitCode = 1;
-    }
-  }
-
-  // Clean CLIXML from stderr
-  stderr = cleanCliXml(stderr);
-
-  writeFileSync(cacheFile, stdout, 'utf-8');
-
-  let truncated = false;
-  if (stdout.length > MAX_OUTPUT_LENGTH) {
-    stdout = stdout.slice(0, MAX_OUTPUT_LENGTH) + `\n... (полный вывод сохранён в ${cacheFile})`;
-    truncated = true;
-  }
-
-  if (stderr.length > MAX_OUTPUT_LENGTH) {
-    stderr = stderr.slice(0, MAX_OUTPUT_LENGTH);
-  }
-
-  return { stdout, stderr, exitCode, truncated };
-}
-
-export const bashDefinition: ToolDefinition = {
-  type: 'function',
-  function: {
-    name: 'bash',
-    description: 'Execute a shell command. Use for non-file operations (npm, git, etc).',
-    parameters: {
-      type: 'object',
-      properties: {
-        cmd: { type: 'string', description: 'The command to execute' },
-        timeout: { type: 'number', description: 'Seconds before timeout (default 120, max 600)' },
-      },
-      required: ['cmd'],
-    },
-  },
-};
-
-export const bashHandler: ToolHandler = {
+export const bashTool: ToolDefinition = {
   name: 'bash',
-  definition: bashDefinition,
-  async execute(args) {
-    const cmd = String(args.cmd ?? '');
-    const timeout = Math.min(600, Math.max(1, Number(args.timeout ?? 120)));
-    return executeBash(cmd, timeout);
+  description: 'Execute a shell command and return its output. Use for running tests, build, git, and shell operations.',
+  tags: ['shell', 'code'],
+  parameters: {
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'Shell command to execute' },
+      workdir: { type: 'string', description: 'Working directory (default: baseDir)' },
+    },
+    required: ['command'],
   },
-};
+  handler: async (ctx, args) => {
+    const command = adaptCommandForWindows(String(args.command))
+    const workdir = args.workdir ? String(args.workdir) : ctx.baseDir
+    try {
+      const output = execSync(command, {
+        cwd: workdir,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 120_000,
+      })
+      return { success: true, output: output.trimEnd() }
+    } catch (e: any) {
+      const stderr = e.stderr?.toString() || ''
+      const stdout = e.stdout?.toString() || ''
+      return { success: false, output: stderr || stdout || e.message }
+    }
+  },
+}

@@ -1,64 +1,59 @@
-import type { OutputRenderer } from '../ui/renderer.js';
-
-/**
- * Общие типы для системы инструментов.
- *
- * Единый интерфейс ToolHandler используется всеми инструментами:
- * - FS (read_file, write_file и т.д.)
- * - Bash
- * - Web (search, fetch)
- * - Native (plan, todo, question, approve, theme, user_profile)
- *
- * @module tools/types
- */
-
-/** Контекст выполнения — передаётся в каждый ToolHandler */
-export interface ToolContext {
-  /** Рабочая директория */
-  cwd: string;
-  /** Рендерер для UI-вывода (нативные инструменты) */
-  renderer?: OutputRenderer;
-  /** Тихий режим (без вывода в UI) */
-  quiet?: boolean;
-  /** Колбэк для question/approve — приостанавливает цикл */
-  onQuestion?: () => void;
-}
-
-/** Результат выполнения инструмента */
-export interface ToolResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  truncated: boolean;
-  /** Инструмент ожидает ответа (question/approve) — цикл приостанавливается */
-  questionPending?: boolean;
-  /** Прервать ReAct-цикл после этого результата */
-  breakLoop?: boolean;
-}
-
-/** Единый интерфейс обработчика инструмента */
-export interface ToolHandler {
-  /** Уникальное имя инструмента (например 'read_file', 'bash', 'plan') */
-  name: string;
-  /** Определение для LLM (name, description, parameters) */
-  definition: ToolDefinition;
-  /** Выполнение инструмента */
-  execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
-}
-
-/** Определение инструмента для LLM */
 export interface ToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  tags?: string[];
+  handler: (
+    ctx: ToolContext,
+    args: Record<string, unknown>,
+  ) => Promise<ToolResult>;
 }
 
-/** Инструментальный вызов из LLM ( до валидации) */
-export interface ParsedToolCall {
+export interface ToolScope {
+  allowed_files: string[];
+  read_only_files: string[];
+}
+
+export interface ToolContext {
+  config: import("../config/types").AppConfig;
+  baseDir: string;
+  logger: import("../logger/app-logger").Logger;
+  scope?: ToolScope;
+  llmProvider?: import("../llm/provider").LLMProvider;
+  toolExecutor?: import("./executor").ToolExecutor;
+  contextManager?: import("../modules/context/manager").ContextManager;
+  sessionHistory?: {
+    append(type: string, content: unknown): Promise<void>;
+  };
+  trackReadPath?: (path: string) => void;
+  trackCreatedPath?: (path: string) => void;
+}
+
+export interface ToolResult {
+  success: boolean;
+  output: string;
+  toolCallId?: string;
+  display?: string;
+}
+
+export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+}
+
+export interface PluginHook {
+  name?: string;
+  priority?: number;
+  isBuiltin?: boolean;
+  onBeforeTool?(ctx: ToolContext, call: ToolCall): boolean | Promise<boolean>;
+  onAfterTool?(
+    ctx: ToolContext,
+    call: ToolCall,
+    result: ToolResult,
+  ): void | Promise<void>;
+}
+
+export interface PluginManager {
+  getAllPlugins(): PluginHook[];
 }
