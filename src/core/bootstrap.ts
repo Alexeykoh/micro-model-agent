@@ -48,6 +48,9 @@ function buildSystemInfo(
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
     `When you need to act, call a tool immediately. Do not describe your plans in text — use tools to perform operations.`,
+    `After every tool call, check whether the user's request is fully satisfied. If any files, commands, or checks are still missing, call the next needed tool right away. Do not stop with an empty or "done" response until the task is complete.`,
+    `If you create a directory, continue creating the files that belong inside it. A created folder alone is not a completed task.`,
+    `If a tool call fails (e.g., a skill is too large), try an alternative approach or continue without it. Do not reply with empty text when the task is unfinished.`,
   ];
 
   if (isWin) {
@@ -157,7 +160,7 @@ export async function bootstrap(
   );
 
   const skillsMatcher = new SkillsMatcher();
-  const skillsBudget = Math.floor(config.contextWindow * 0.05);
+  const skillsBudget = Math.floor(config.contextWindow * 0.1);
   const skillsModule = new SkillsModule(
     availableSkills,
     skillsMatcher,
