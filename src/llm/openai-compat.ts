@@ -99,8 +99,8 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     const controller = new AbortController();
-    const requestTimeoutMs = 60000;
-    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+    const totalTimeoutMs = 120000;
+    const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
 
     const response = await this.fetchWithRetry(
       `${this.config.baseUrl}/chat/completions`,
@@ -111,9 +111,9 @@ export class OpenAICompatProvider implements LLMProvider {
         signal: controller.signal,
       },
     );
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
+      clearTimeout(timeoutId);
       const errorText = await response.text();
       throw new Error(
         t("error.llm_api", {
@@ -125,25 +125,20 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     const reader = response.body?.getReader();
-    if (!reader) throw new Error(t("error.no_response_body"));
+    if (!reader) {
+      clearTimeout(timeoutId);
+      throw new Error(t("error.no_response_body"));
+    }
 
     const decoder = new TextDecoder();
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
-    let lastChunkTime = Date.now();
-    const inactivityTimeoutMs = 30000;
-    const inactivityCheck = setInterval(() => {
-      if (Date.now() - lastChunkTime > inactivityTimeoutMs) {
-        controller.abort();
-      }
-    }, 5000);
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        lastChunkTime = Date.now();
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
@@ -207,7 +202,7 @@ export class OpenAICompatProvider implements LLMProvider {
         }
       }
     } finally {
-      clearInterval(inactivityCheck);
+      clearTimeout(timeoutId);
       reader.releaseLock();
     }
   }
