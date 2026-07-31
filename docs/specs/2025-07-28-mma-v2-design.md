@@ -376,6 +376,8 @@ interface ToolDefinition {
   name: string                    // snake_case, уникальное
   description: string             // для LLM (что делает, когда использовать)
   parameters: JSONSchema          // OpenAI function calling schema
+  tags?: string[]                 // для MoE фильтрации
+  interactive?: boolean           // true = обход 60s таймаута (question, approve)
   handler: (ctx: ToolContext, args: unknown) => Promise<ToolResult>
 }
 ```
@@ -420,8 +422,8 @@ interface ToolDefinition {
 
 | Tool | Parameters | Что делает | Когда использовать |
 |------|-----------|------------|-------------------|
-| `question` | `{ question: string, options?: string[] }` | Задаёт вопрос пользователю | Для уточнений, выбора |
-| `approve` | `{ action: string, details: string }` | Запрашивает подтверждение перед опасной операцией | Для rm -rf, массовых удалений |
+| `question` | `{ questions: Array<{question, header?, options?, multiple?, custom?}> }` | Интерактивный опрос: вопросы с вариантами ответов или свободный текст. Поддержка множественных вопросов в одном вызове. Блокирует выполнение до ответа. | Для уточнений, выбора опций, сбора предпочтений |
+| `approve` | `{ action: string }` | Интерактивное подтверждение (Да/Нет). Возвращает success:false при отказе. | Для rm -rf, массовых удалений |
 
 **Инструменты расширения:**
 
@@ -1235,6 +1237,7 @@ E:\projects\micro-models-agent\
 │   │   ├── todo.ts
 │   │   ├── question.ts
 │   │   ├── approve.ts
+│   │   ├── user-input.ts
 │   │   └── index.ts
 │   ├── modules/
 │   │   ├── skills/

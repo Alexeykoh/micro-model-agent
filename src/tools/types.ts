@@ -3,6 +3,8 @@ export interface ToolDefinition {
   description: string;
   parameters: Record<string, unknown>;
   tags?: string[];
+  /** Interactive tools wait for user input and are exempt from the execution timeout. */
+  interactive?: boolean;
   handler: (
     ctx: ToolContext,
     args: Record<string, unknown>,

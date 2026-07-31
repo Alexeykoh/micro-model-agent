@@ -175,6 +175,7 @@ const body = { model, messages, stream: false, max_tokens };
 8. **No hardcoded user-facing strings** — ALL text shown to users MUST go through `t()` from `i18n/index.ts`. Both `en.json` and `ru.json` must have matching keys. No exceptions — CLI labels, error messages, tool outputs, REPL prompts, setup wizard text, everything.
 9. **No TUI** — minimal CLI + REPL with markdown→ANSI formatting
 10. **No keyword matching for task classification** — determining whether a task is multi-step, needs planning, or requires specific tools via keyword/word matching is an anti-pattern. It fails for non-English languages, ambiguous inputs, and novel task patterns. Instead, use the system prompt to instruct the model to use the `plan` tool when appropriate. The model decides whether to create a plan based on task complexity, not hardcoded heuristics.
+11. **Interactive tools bypass the execution timeout** — tools that block on user input (`question`, `approve`) must set `interactive: true` on their `ToolDefinition`. The executor skips the 60s timeout for them. Any new user-facing interactive tool must do the same, and must reuse `user-input.ts` instead of creating its own readline interface.
 
 ## Project Structure
 
@@ -203,6 +204,7 @@ src/
 │   ├── subagent.ts     # Isolated sub-agent spawning
 │   ├── web-search.ts, web-fetch.ts, web-browse.ts
 │   ├── browser.ts      # Playwright browser tool (open, click, type, scroll, screenshot)
+│   ├── user-input.ts   # Interactive user input primitive (menu, selection parsing, askUser)
 │   ├── plan.ts, todo.ts, question.ts, approve.ts
 │   ├── load-skill.ts, pipeline-run.ts, mcp-call.ts, search-history.ts
 │   └── ...             # list-dir, create-dir, delete-file, move-file, file-info
@@ -255,6 +257,65 @@ src/
 ├── logger/             # Structured logger with levels + child loggers
 └── migration/          # MMA v1→v2 detection, backup, safe startup
 ```
+
+## Question Tool
+
+Interactive Q&A for clarifying ambiguous tasks, gathering preferences, and offering choices to the user.
+
+### API
+
+The model sends a `question` tool call with one or more questions:
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which framework do you prefer?",
+      "header": "Framework choice",
+      "options": [
+        { "label": "React", "description": "Library from Meta" },
+        { "label": "Vue", "description": "Progressive framework" },
+        { "label": "Svelte", "description": "Compile-time framework" }
+      ],
+      "multiple": false,
+      "custom": true
+    }
+  ]
+}
+```
+
+**Parameters:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `question` | yes | Complete question text |
+| `header` | no | Short label (max 30 chars) shown above the question |
+| `options` | no | Array of `{label, description}` choices; omit for free-text |
+| `multiple` | no | Allow selecting more than one option |
+| `custom` | no | Allow typing a custom answer (default: true when options present) |
+
+### UX
+
+- **No options:** free-text input, returns the text.
+- **Single selection:** numbered menu `[1] React — ...`, user enters a number.
+- **Multiple selection:** comma-separated numbers `1,3`.
+- **Custom entry:** automatically appended as the last option when `custom: true`.
+- **Sequential questions:** shown as `Question 1/3` in the header.
+
+### Implementation
+
+- `src/tools/user-input.ts` — shared interactive primitive (`parseSelection`, `formatMenu`, `askChoice`, `askText`, `askUser`).
+- `src/tools/question.ts` — tool definition, normalizes legacy `{question: string}` format, calls `askUser()` sequentially per question.
+- `src/tools/approve.ts` — thin wrapper: two options (Yes/No), `success:false` on reject.
+
+### Timeout Bypass
+
+`question` and `approve` are marked `interactive: true` in `ToolDefinition`. The executor (`executor.ts`) skips the 60-second timeout for interactive tools — they block until the user answers.
+
+### Known Limitations
+
+- Multiple subagents in MoE parallel waves asking questions on the same stdin would conflict. Not supported.
+- No REST/SSE event system (unlike opencode). Questions work only in CLI/REPL with direct stdin.
 
 ## Session Management
 

@@ -49,10 +49,16 @@ function buildSystemInfo(
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
+    `When the task is ambiguous or has multiple reasonable options, ask the user via the "question" tool instead of guessing.`,
     `When you need to act, call a tool immediately. Do not describe your plans in text — use tools to perform operations.`,
     `After every tool call, check whether the user's request is fully satisfied. If any files, commands, or checks are still missing, call the next needed tool right away. Do not stop with an empty or "done" response until the task is complete.`,
     `If you create a directory, continue creating the files that belong inside it. A created folder alone is not a completed task.`,
     `If a tool call fails (e.g., a skill is too large), try an alternative approach or continue without it. Do not reply with empty text when the task is unfinished.`,
+    ``,
+    `Design principles — apply them automatically without naming them:`,
+    `- Do not add code, files, or abstractions that are not needed right now (YAGNI — You Ain't Gonna Need It). If something is not required by the current task, omit it.`,
+    `- Prefer simple, straightforward solutions over clever or complex ones (KISS — Keep It Simple, Stupid). Flat code beats nested, minimal config beats flexible, explicit beats generic.`,
+    `- Do not duplicate code, logic, or configuration (DRY — Don't Repeat Yourself). Extract shared logic into a single place, reuse existing utilities and patterns before writing new ones.`,
   ];
 
   if (isWin) {
@@ -184,7 +190,7 @@ export async function bootstrap(
     content: buildSystemInfo(config, baseDir, profile.compress()),
     priority: "critical",
     essential: true,
-    estimatedTokens: 120,
+    estimatedTokens: 250,
   };
 
   const agentsMdGlobal = join(dir, "AGENTS.md");
