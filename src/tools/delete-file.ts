@@ -1,8 +1,9 @@
-import { unlinkSync, existsSync, statSync } from "fs";
+import { unlinkSync, existsSync, statSync, readFileSync } from "fs";
 import { resolve, normalize } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "./scope-check";
+import { generateDeleteDiff } from "../ui/diff";
 
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
@@ -34,8 +35,10 @@ export const deleteFileTool: ToolDefinition = {
     if (statSync(resolved).isDirectory()) {
       return { success: false, output: t("file.is_directory", { path }) };
     }
+    const content = readFileSync(resolved, "utf-8");
     unlinkSync(resolved);
+    const diff = generateDeleteDiff(content);
     ctx.trackDeletedPath?.(path);
-    return { success: true, output: t("file.deleted", { path }) };
+    return { success: true, output: t("file.deleted", { path }), diff };
   },
 };

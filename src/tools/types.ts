@@ -42,6 +42,7 @@ export interface ToolResult {
   output: string;
   toolCallId?: string;
   display?: string;
+  diff?: string;
 }
 
 export interface ToolCall {

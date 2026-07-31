@@ -382,6 +382,9 @@ export class Agent {
             onMeta?.("\n" + result.display + "\n");
           }
           onMeta?.("\n" + pc.dim(result.output) + "\n");
+          if (result.diff) {
+            onMeta?.("\n" + result.diff + "\n");
+          }
           const currentTokens = contextManager.getEstimatedTokens();
           const budget = contextManager.getBudget();
           const truncatedOutput = this.truncateToolOutput(
@@ -412,6 +415,7 @@ export class Agent {
               tool_call_id: call.id,
               success: result.success,
               content: result.output.slice(0, 1000),
+              diff: result.diff,
               duration,
               iteration,
             });

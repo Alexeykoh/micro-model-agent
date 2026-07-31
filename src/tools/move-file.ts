@@ -3,6 +3,7 @@ import { resolve, normalize, dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "./scope-check";
+import { generateMoveDiff } from "../ui/diff";
 
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
@@ -51,9 +52,11 @@ export const moveFileTool: ToolDefinition = {
       mkdirSync(toDir, { recursive: true });
     }
     renameSync(fromResolved, toResolved);
+    const diff = generateMoveDiff(fromPath, toPath);
     return {
       success: true,
       output: t("file.moved", { from: fromPath, to: toPath }),
+      diff,
     };
   },
 };

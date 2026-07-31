@@ -32,6 +32,7 @@ export interface SessionLogEntry {
   }>;
   args?: Record<string, unknown>;
   content?: string;
+  diff?: string;
   success?: boolean;
   duration?: number;
   iteration?: number;
