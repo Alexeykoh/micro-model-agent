@@ -1364,3 +1364,41 @@ E:\projects\micro-models-agent\
 | Progress display | Per-step terminal output | `[Plan] 2/5 ██░░░ 40%` — видно всегда |
 | Model auto-load | LM Studio REST API | Auto-load model with correct context on startup |
 | Context defense | Multi-layer truncation | Tool results limited, pre-flight check, post-tool compact |
+
+---
+
+## 14. Тестирование агента из консоли (agent-driven)
+
+Одноразовый headless-прогон MMA без интерактивного REPL — основной способ проверки фич и регрессий из терминала или внешним агентом (opencode).
+
+**Команда:**
+
+```bash
+bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-песочнице>
+```
+
+| Флаг | Назначение |
+|------|-----------|
+| `--no-agents-md` | Не загружать AGENTS.md в системный промпт — чистая среда (агент не получает инструкции проекта) |
+| `--exit-on-complete` | Выход сразу после первого финального ответа; интерактивные тулзы `question`/`approve` не блокируют stdin, а возвращают ошибку |
+| `-d, --dir <path>` | Рабочая директория агента — туда он создаёт файлы |
+
+**Песочница:** прогоны всегда выполняются внутри `_testing/` в корне проекта (пример: `_testing/create-file-01/`). Папка `_testing/` добавлена в `.gitignore` — артефакты тестов не попадают в git.
+
+**Сессии:** каждый прогон автоматически создаёт сессию в `~/.mma/sessions/<id>/`:
+- `meta.json` — метаданные (имя, модель, счётчики),
+- `history.jsonl` — переписка `SessionMessage[]`,
+- `session.jsonl` — детальный лог: tool_calls, аргументы, результаты, ошибки, тайминги.
+
+Просмотр после прогона:
+
+```bash
+bun run mma session list
+bun run mma session show <id>
+```
+
+**Правила прогона:**
+1. Новый тест-кейс = новая подпапка `_testing/<case-name>/`.
+2. Промпт формулировать конкретно: что создать, с каким содержимым, куда.
+3. Результат оценивать по фактам (файлы на месте, содержимое корректно, exit code), а не по словам агента.
+4. Перед прогоном, проверяющим фикс/фичу, — прогнать `bun test` + `tsc --noEmit`.

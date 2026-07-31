@@ -6,3 +6,4 @@ blog_api_test/
 *.log
 *.tgz
 multi-*.txt
+_testing/
