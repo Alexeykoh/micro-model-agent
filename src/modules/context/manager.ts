@@ -117,9 +117,17 @@ export class ContextManager {
     }
 
     this.compactedBlock = parts.join(" ");
-    const summary: Message = { role: "system", content: this.compactedBlock };
+    const summary: Message = {
+      role: "user",
+      content: `<system-summary>${this.compactedBlock}</system-summary>`,
+    };
 
-    this.messages = [summary, ...recentTurns];
+    const firstSystem = this.messages.find((m) => m.role === "system");
+    this.messages = [
+      ...(firstSystem ? [firstSystem] : []),
+      summary,
+      ...recentTurns,
+    ];
     this.iterationsSinceCompaction = 0;
 
     if (this.onCompact) {

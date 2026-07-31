@@ -232,8 +232,8 @@ export class ExecutionModule implements AgentModule {
             const recovery = this.stuckDetector.getRecoveryMessage();
             if (recovery && ctx.contextManager) {
               ctx.contextManager.addMessage({
-                role: "system",
-                content: recovery,
+                role: "user",
+                content: `<system-summary>${recovery}</system-summary>`,
               });
             }
             this.lastRecoveryIteration = currentIter;
@@ -243,7 +243,10 @@ export class ExecutionModule implements AgentModule {
       onBeforeTool: (ctx: any, call: any) => {
         const warning = this.checkPlanAlignment(call);
         if (warning && ctx.contextManager) {
-          ctx.contextManager.addMessage({ role: "system", content: warning });
+          ctx.contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>${warning}</system-summary>`,
+          });
         }
         return true;
       },

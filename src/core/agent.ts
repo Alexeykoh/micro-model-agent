@@ -116,7 +116,10 @@ export class Agent {
       logger.debug(`Session started: ${sessionManager.getActive()}`);
     }
 
-    if (!this.systemPromptAdded) {
+    if (
+      !this.systemPromptAdded &&
+      !contextManager.getActiveHistory().some((m) => m.role === "system")
+    ) {
       const systemBudget = Math.floor(
         config.contextWindow * config.contextBudget.systemPrompt,
       );
@@ -186,6 +189,7 @@ export class Agent {
     let iteration = 0;
     let lastText = "";
     let hallucinationRetries = 0;
+    let lastToolSignature = "";
     const MAX_HALLUCINATION_RETRIES = 3;
 
     while (iteration < config.maxToolIterations) {
@@ -302,6 +306,19 @@ export class Agent {
           error: t("error.llm", { message: err.message }),
           iterationCount: iteration,
         };
+      }
+
+      if (this.deps.exitOnComplete && sawToolCall) {
+        const signature = toolCalls
+          .map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`)
+          .join("|");
+        if (signature && signature === lastToolSignature) {
+          logger.debug(
+            "Exit-on-complete: repeated identical tool call, stopping",
+          );
+          break;
+        }
+        lastToolSignature = signature;
       }
 
       if (sessionManager) {
