@@ -1,4 +1,6 @@
 import { t } from "../../i18n/index";
+import { existsSync } from "fs";
+import { join } from "path";
 
 export interface HallucinationCheckResult {
   status: "pass" | "warn" | "retry" | "block";
@@ -35,7 +37,6 @@ const FILE_EXTENSIONS = new Set([
   "bat",
   "cmd",
   "txt",
-  "log",
   "env",
   "gitignore",
   "dockerignore",
@@ -57,6 +58,11 @@ const COMMON_WORDS = new Set(["node.js", "Node.js"]);
 export class FactualCheck {
   private knownPaths: Set<string> = new Set();
   private createdPaths: Set<string> = new Set();
+  private baseDir: string = process.cwd();
+
+  setBaseDir(dir: string): void {
+    this.baseDir = dir;
+  }
 
   trackReadPath(path: string): void {
     this.knownPaths.add(path);
@@ -71,6 +77,28 @@ export class FactualCheck {
     this.createdPaths.add(path);
   }
 
+  trackDeletedPath(path: string): void {
+    this.knownPaths.add(path);
+    const base = path.split(/[/\\]/).pop();
+    if (base && base !== path) this.knownPaths.add(base);
+    this.createdPaths.delete(path);
+  }
+
+  private pathExistsOnDisk(path: string): boolean {
+    try {
+      if (
+        path.startsWith("/") ||
+        path.startsWith("~") ||
+        /^[A-Za-z]:/.test(path)
+      ) {
+        return existsSync(path);
+      }
+      return existsSync(join(this.baseDir, path));
+    } catch {
+      return false;
+    }
+  }
+
   validate(response: string): HallucinationCheckResult {
     const pathRegex = /[\w\-./]+\.\w+/g;
     const mentionedPaths = response.match(pathRegex) || [];
@@ -80,6 +108,7 @@ export class FactualCheck {
       if (VERSION_PATTERN.test(p)) return false;
       if (p.startsWith("/")) return false;
       if (COMMON_WORDS.has(p)) return false;
+      if (this.pathExistsOnDisk(p)) return false;
 
       const ext = p.split(".").pop()?.toLowerCase() || "";
       if (!FILE_EXTENSIONS.has(ext)) return false;

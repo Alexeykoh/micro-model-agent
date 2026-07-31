@@ -96,11 +96,14 @@ export interface BootstrapResult {
   pluginManager: PluginManager;
   configDir: string;
   baseDir: string;
+  noAgentsMd: boolean;
 }
 
 export async function bootstrap(
   configDir?: string,
   projectDir?: string,
+  noAgentsMd?: boolean,
+  exitOnComplete?: boolean,
 ): Promise<BootstrapResult> {
   const dir = configDir || join(homedir(), ".mma");
   const projectConfigPath = projectDir
@@ -221,6 +224,7 @@ export async function bootstrap(
     config,
     baseDir,
     logger,
+    exitOnComplete,
     contextManager,
     sessionHistory: {
       append: async (type: string, content: unknown) => {
@@ -243,8 +247,10 @@ export async function bootstrap(
 
   const hallucinationDetector = new HallucinationDetector();
   const factualCheck = hallucinationDetector.getFactualCheck();
+  factualCheck.setBaseDir(baseDir);
   toolCtx.trackReadPath = (p) => factualCheck.trackReadPath(p);
   toolCtx.trackCreatedPath = (p) => factualCheck.trackCreatedPath(p);
+  toolCtx.trackDeletedPath = (p) => factualCheck.trackDeletedPath(p);
 
   const moduleRegistry = new ModuleRegistry();
 
@@ -325,21 +331,24 @@ export async function bootstrap(
   };
 
   const agentsMdBlocks: PromptBlock[] = [];
-  const agentsMdCandidates = [
-    join(baseDir, "AGENTS.md"),
-    join(baseDir, ".mma", "AGENTS.md"),
-    join(dir, "AGENTS.md"),
-  ];
-  for (const p of agentsMdCandidates) {
-    if (existsSync(p)) {
-      const content = readFileSync(p, "utf-8").trim();
-      if (content) {
-        agentsMdBlocks.push({
-          content,
-          priority: "high",
-          essential: false,
-          estimatedTokens: Math.ceil(content.length / 4),
-        });
+  const skipAgentsMd = noAgentsMd === true;
+  if (!skipAgentsMd) {
+    const agentsMdCandidates = [
+      join(baseDir, "AGENTS.md"),
+      join(baseDir, ".mma", "AGENTS.md"),
+      join(dir, "AGENTS.md"),
+    ];
+    for (const p of agentsMdCandidates) {
+      if (existsSync(p)) {
+        const content = readFileSync(p, "utf-8").trim();
+        if (content) {
+          agentsMdBlocks.push({
+            content,
+            priority: "high",
+            essential: false,
+            estimatedTokens: Math.ceil(content.length / 4),
+          });
+        }
       }
     }
   }
@@ -361,6 +370,7 @@ export async function bootstrap(
     baseDir,
     promptBlocks,
     sessionManager,
+    exitOnComplete,
   };
 
   const agent = new Agent(agentDeps);
@@ -374,5 +384,6 @@ export async function bootstrap(
     pluginManager,
     configDir: dir,
     baseDir,
+    noAgentsMd: skipAgentsMd,
   };
 }

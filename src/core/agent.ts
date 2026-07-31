@@ -36,6 +36,11 @@ export interface AgentDeps {
   toolTags?: string[];
   promptBlocks: PromptBlock[];
   sessionManager?: SessionManager;
+  /**
+   * One-shot headless mode: exit on the first final answer instead of
+   * retrying empty responses, so the agent terminates immediately once done.
+   */
+  exitOnComplete?: boolean;
 }
 
 export interface AgentResult {
@@ -427,6 +432,10 @@ export class Agent {
         lastText = warnPrefix + lastText;
       }
       if (hallucinationResult.status === "retry") {
+        if (this.deps.exitOnComplete) {
+          logger.debug("Exit-on-complete: stopping on first response");
+          break;
+        }
         if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
           logger.warn(
             `Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
@@ -451,8 +460,8 @@ export class Agent {
           });
         }
         contextManager.addMessage({
-          role: "system",
-          content: `[Retry context: ${hallucinationResult.reason}. Original task: "${input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]`,
+          role: "user",
+          content: `<system-summary>[Retry context: ${hallucinationResult.reason}. Original task: "${input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]</system-summary>`,
         });
         continue;
       }

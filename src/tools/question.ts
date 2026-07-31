@@ -116,7 +116,10 @@ export const questionTool: ToolDefinition = {
       },
     },
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    if (ctx.exitOnComplete) {
+      return { success: false, output: t("tool.interactive_disabled") };
+    }
     const questions = normalizeQuestions(args);
     if (questions.length === 0) {
       return { success: false, output: t("tool.question.no_questions") };

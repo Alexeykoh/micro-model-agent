@@ -54,6 +54,7 @@ export class Repl {
   private readonly doubleEscDelay = 500;
   private configDir: string;
   private baseDir: string;
+  private noAgentsMd: boolean;
 
   constructor(
     agent: Agent,
@@ -63,6 +64,7 @@ export class Repl {
     pluginManager?: PluginManager,
     configDir?: string,
     baseDir?: string,
+    noAgentsMd?: boolean,
   ) {
     this.agent = agent;
     this.config = config;
@@ -71,6 +73,7 @@ export class Repl {
     this.pluginManager = pluginManager;
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
+    this.noAgentsMd = noAgentsMd === true;
     this.historyPath = join(homedir(), ".mma", "repl-history");
     this.loadHistory();
     this.registerBuiltinCommands();
@@ -782,21 +785,27 @@ export class Repl {
     const cwd = process.cwd();
     console.log(`  ${pc.yellow(t("repl.work_dir"))}  ${pc.dim(cwd)}`);
 
-    const agentsMdCandidates = [
-      join(this.baseDir, "AGENTS.md"),
-      join(this.baseDir, ".mma", "AGENTS.md"),
-      join(this.configDir, "AGENTS.md"),
-    ];
-    const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));
-    if (foundAgents.length > 0) {
-      console.log(`  ${pc.yellow(t("repl.agents_label"))}`);
-      for (const p of foundAgents) {
-        console.log(`    ${pc.dim(p)}`);
-      }
-    } else {
+    if (this.noAgentsMd) {
       console.log(
-        `  ${pc.yellow(t("repl.agents_label"))}    ${pc.dim(t("repl.not_found"))}`,
+        `  ${pc.yellow(t("repl.agents_label"))}    ${pc.red(t("repl.disabled"))}`,
       );
+    } else {
+      const agentsMdCandidates = [
+        join(this.baseDir, "AGENTS.md"),
+        join(this.baseDir, ".mma", "AGENTS.md"),
+        join(this.configDir, "AGENTS.md"),
+      ];
+      const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));
+      if (foundAgents.length > 0) {
+        console.log(`  ${pc.yellow(t("repl.agents_label"))}`);
+        for (const p of foundAgents) {
+          console.log(`    ${pc.dim(p)}`);
+        }
+      } else {
+        console.log(
+          `  ${pc.yellow(t("repl.agents_label"))}    ${pc.dim(t("repl.not_found"))}`,
+        );
+      }
     }
 
     const meta = this.sessionManager?.getActiveMeta();

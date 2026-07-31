@@ -18,7 +18,10 @@ export const approveTool: ToolDefinition = {
     },
     required: ["action"],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
+    if (ctx.exitOnComplete) {
+      return { success: false, output: t("tool.interactive_disabled") };
+    }
     const action = String(args.action || "");
     const indexes = await askChoice(t("tool.approve_prompt", { action }), [
       { label: t("tool.approve_yes"), description: t("tool.approve_yes_desc") },

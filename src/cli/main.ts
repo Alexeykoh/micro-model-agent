@@ -1,4 +1,4 @@
-import { createProgram } from "./commands";
+﻿import { createProgram } from "./commands";
 import { bootstrap } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { formatMarkdown } from "../ui/md-formatter";
@@ -15,6 +15,10 @@ async function main(): Promise<void> {
   program.parse(process.argv);
 
   const cmdNames = new Set(program.commands.map((c) => c.name()));
+  const opts = program.opts();
+  const noAgentsMd = opts.noAgentsMd === true;
+  const projectDir = opts.dir;
+  const exitOnComplete = opts.exitOnComplete === true;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -24,7 +28,7 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent } = await bootstrap();
+    const { agent } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
     const chunks: string[] = [];
     const result = await agent.run(
       prompt,
@@ -53,7 +57,7 @@ async function main(): Promise<void> {
     if (!existsSync(configPath)) {
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup();
-      const { config } = await bootstrap();
+      const { config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
       config.provider.type = answers.provider;
       config.provider.baseUrl = answers.apiBase;
       config.provider.apiKey = answers.apiKey;
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
       pluginManager,
       configDir,
       baseDir,
-    } = await bootstrap();
+    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
     const repl = new Repl(
       agent,
       config,
@@ -80,6 +84,7 @@ async function main(): Promise<void> {
       pluginManager,
       configDir,
       baseDir,
+      noAgentsMd,
     );
     repl.start();
   }
