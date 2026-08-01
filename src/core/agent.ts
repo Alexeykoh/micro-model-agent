@@ -7,7 +7,7 @@ import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import type { ToolScope } from "../tools/types";
 import type { PromptBlock } from "./types";
-import type { ToolCall, ToolEvent, AgentPhase } from "./types";
+import type { ToolCall, ToolEvent, AgentPhase, LLMResponse } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -35,6 +35,25 @@ export interface AgentDeps {
   scope?: ToolScope;
   toolTags?: string[];
   promptBlocks: PromptBlock[];
+  /**
+   * Dynamic prompt blocks (e.g. the plan checklist) that may appear after the
+   * system prompt was first built. Refreshed into the system prompt before each
+   * LLM call so mid-run state (a created plan) stays visible to the model.
+   */
+  getDynamicPromptBlocks?: () => PromptBlock[];
+  /**
+   * Final audit callback. Returns null when no plan is active. When a plan is
+   * active and incomplete, the loop refuses to terminate and re-injects the
+   * audit warning so the model can finish the remaining steps.
+   */
+  finalAudit?: () => Promise<{
+    passed: boolean;
+    done: number;
+    total: number;
+    pendingSteps: string[];
+    missingFiles: string[];
+    summary: string;
+  } | null>;
   sessionManager?: SessionManager;
   /**
    * One-shot headless mode: exit on the first final answer instead of
@@ -67,6 +86,44 @@ export class Agent {
     }
   }
 
+  private buildSystemPrompt(): { prompt: string; excluded: string[] } {
+    const systemBudget = Math.floor(
+      this.deps.config.contextWindow *
+        this.deps.config.contextBudget.systemPrompt,
+    );
+    const builder = new PromptBuilder(systemBudget);
+    builder.addBlocks(this.deps.promptBlocks);
+    const dynamic = this.deps.getDynamicPromptBlocks?.() ?? [];
+    if (dynamic.length > 0) {
+      builder.addBlocks(dynamic);
+    }
+    const pluginBlocks: PromptBlock[] = (
+      this.deps.pluginManager.runOnBuildPrompt?.() ?? []
+    )
+      .filter((s): s is string => Boolean(s && s.trim() !== ""))
+      .map((content) => ({
+        content,
+        priority: "low" as const,
+        essential: false,
+        estimatedTokens: this.deps.llmProvider.countTokens(content),
+      }));
+    if (pluginBlocks.length > 0) {
+      builder.addBlocks(pluginBlocks);
+    }
+    return builder.build();
+  }
+
+  /** Refresh the system prompt in context if dynamic blocks changed. */
+  private refreshSystemPrompt(): void {
+    const { prompt } = this.buildSystemPrompt();
+    const current = this.deps.contextManager
+      .getActiveHistory()
+      .find((m) => m.role === "system");
+    if (!current || current.content !== prompt) {
+      this.deps.contextManager.updateSystemPrompt?.(prompt);
+    }
+  }
+
   private truncateToolOutput(
     output: string,
     budget: { history: number },
@@ -93,6 +150,15 @@ export class Agent {
     );
   }
 
+  private emitPhase(
+    iteration: number,
+    phase: AgentPhase,
+    onPhase?: (phase: AgentPhase) => void,
+  ): void {
+    this.deps.pluginManager.runOnPhase?.({ iteration, logger: this.deps.logger }, phase);
+    onPhase?.(phase);
+  }
+
   async run(
     input: string,
     onChunk?: (chunk: string) => void,
@@ -109,7 +175,6 @@ export class Agent {
       contextManager,
       hallucinationDetector,
       logger,
-      promptBlocks,
       sessionManager,
     } = this.deps;
 
@@ -122,12 +187,7 @@ export class Agent {
       !this.systemPromptAdded &&
       !contextManager.getActiveHistory().some((m) => m.role === "system")
     ) {
-      const systemBudget = Math.floor(
-        config.contextWindow * config.contextBudget.systemPrompt,
-      );
-      const builder = new PromptBuilder(systemBudget);
-      builder.addBlocks(promptBlocks);
-      const { prompt: systemPrompt, excluded } = builder.build();
+      const { prompt: systemPrompt, excluded } = this.buildSystemPrompt();
       contextManager.addMessage({ role: "system", content: systemPrompt });
       this.systemPromptAdded = true;
       if (sessionManager) {
@@ -239,6 +299,7 @@ export class Agent {
         }
       }
 
+      this.refreshSystemPrompt();
       const history = contextManager.getActiveHistory();
 
       const allTools = toolExecutor.getToolDefinitions(this.deps.toolTags);
@@ -257,7 +318,7 @@ export class Agent {
       let sawToolCall = false;
       let emittedReasoning = false;
 
-      onPhase?.("thinking");
+      this.emitPhase(iteration, "thinking", onPhase);
       try {
         for await (const chunk of llmProvider.chat(history, allTools as any)) {
           if (chunk.type === "text" && chunk.content) {
@@ -265,12 +326,22 @@ export class Agent {
               onMeta?.("\n\n");
             }
             textContent += chunk.content;
-            onChunk?.(chunk.content);
+            const textOut = pluginManager.runOnText(
+              { iteration, logger },
+              chunk.content,
+            );
+            onChunk?.(textOut);
           }
           if (chunk.type === "reasoning" && chunk.content) {
             reasoningContent += chunk.content;
             if (config.showReasoning) {
-              onMeta?.(pc.dim(chunk.content));
+              const metaOut = pluginManager.runOnMeta(
+                { iteration, logger },
+                chunk.content,
+              );
+              if (metaOut) {
+                onMeta?.(pc.dim(metaOut));
+              }
               emittedReasoning = true;
             }
           }
@@ -306,8 +377,18 @@ export class Agent {
           iterationCount: iteration,
         };
       } finally {
-        onPhase?.("done");
+        this.emitPhase(iteration, "done", onPhase);
       }
+
+      let llmResponse: LLMResponse | null = null;
+      if (sawToolCall) {
+        llmResponse = { type: "tool_call", calls: toolCalls };
+      } else if (textContent) {
+        llmResponse = { type: "text", content: textContent };
+      } else if (reasoningContent) {
+        llmResponse = { type: "reasoning", content: reasoningContent };
+      }
+      pluginManager.runOnAfterThink({ iteration, logger }, llmResponse);
 
       if (this.deps.exitOnComplete && sawToolCall) {
         const signature = toolCalls
@@ -367,6 +448,10 @@ export class Agent {
             toolName: call.name,
             args: call.arguments,
           });
+          pluginManager.runOnToolStart(
+            { iteration, logger },
+            { id: call.id, name: call.name, arguments: call.arguments },
+          );
           onTool?.({ type: "start", tool: call.name, args: call.arguments });
           if (sessionManager) {
             sessionManager.appendLog({
@@ -380,10 +465,20 @@ export class Agent {
           }
           const result = await toolExecutor.execute(call);
           const duration = Date.now() - startTime;
+          pluginManager.runOnToolEnd(
+            { iteration, logger },
+            { id: call.id, name: call.name, arguments: call.arguments },
+            result,
+            duration,
+          );
           if (result.display) {
             onMeta?.("\n" + result.display + "\n");
           }
-          onMeta?.("\n" + pc.dim(result.output) + "\n");
+          const metaOut = pluginManager.runOnMeta(
+            { iteration, logger },
+            result.output,
+          );
+          onMeta?.("\n" + pc.dim(metaOut) + "\n");
           if (result.diff) {
             onMeta?.("\n" + result.diff + "\n");
           }
@@ -535,6 +630,33 @@ export class Agent {
       lastText = textContent;
 
       if (!sawToolCall) {
+        if (this.deps.finalAudit) {
+          const audit = await this.deps.finalAudit();
+          if (audit && !audit.passed) {
+            logger.warn(`Final audit incomplete: ${audit.summary}`);
+            const steps =
+              audit.pendingSteps.slice(0, 5).join("; ") || "—";
+            contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>${t("exec.audit_incomplete", {
+                summary: audit.summary,
+                steps,
+              })}</system-summary>`,
+            });
+            if (sessionManager) {
+              sessionManager.appendLog({
+                ts: new Date().toISOString(),
+                type: "audit",
+                content: audit.summary,
+                iteration,
+              });
+            }
+            if (iteration >= config.maxToolIterations - 1) {
+              break;
+            }
+            continue;
+          }
+        }
         break;
       }
     }
@@ -587,9 +709,9 @@ export class Agent {
     }
 
     onMeta?.("🤖 Planning with MoE mode...\n");
-    onPhase?.("thinking");
+    this.emitPhase(0, "thinking", onPhase);
     const planResult = await orchestrator.plan(input);
-    onPhase?.("done");
+    this.emitPhase(0, "done", onPhase);
     if ("error" in planResult) {
       logger.warn(
         `MoE plan failed: ${planResult.error} — falling back to single-agent`,
@@ -651,7 +773,7 @@ export class Agent {
       knownTags,
     );
 
-    onPhase?.("thinking");
+    this.emitPhase(0, "thinking", onPhase);
     const verifyResult = await orchestrator.verifyAndMerge({
       plan,
       results: planResults.results.map((r) => ({
@@ -664,7 +786,7 @@ export class Agent {
       verifierErrors: verification.errors,
       verifierWarnings: verification.warnings,
     });
-    onPhase?.("done");
+    this.emitPhase(0, "done", onPhase);
 
     const outputLines: string[] = [`## MoE Execution Results\n`];
     for (const r of planResults.results) {
@@ -698,14 +820,9 @@ export class Agent {
   setContext(
     messages: Array<{ role: string; content: string; name?: string }>,
   ): void {
-    const { config, contextManager, promptBlocks } = this.deps;
+    const { contextManager } = this.deps;
     contextManager.clear();
-    const systemBudget = Math.floor(
-      config.contextWindow * config.contextBudget.systemPrompt,
-    );
-    const builder = new PromptBuilder(systemBudget);
-    builder.addBlocks(promptBlocks);
-    const { prompt: systemPrompt } = builder.build();
+    const { prompt: systemPrompt } = this.buildSystemPrompt();
     contextManager.addMessage({ role: "system", content: systemPrompt });
     this.systemPromptAdded = true;
     for (const msg of messages) {

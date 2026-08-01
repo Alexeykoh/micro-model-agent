@@ -22,7 +22,8 @@ export interface SessionLogEntry {
     | "system"
     | "error"
     | "compaction"
-    | "tool_defs";
+    | "tool_defs"
+    | "audit";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{

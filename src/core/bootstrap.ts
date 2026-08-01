@@ -316,8 +316,10 @@ export async function bootstrap(
   pluginManager.register(notifyPlugin);
 
   const pluginLoader = new PluginLoader();
-  const userPluginsDir = join(dir, "plugins");
-  pluginLoader.loadFromDir(userPluginsDir, pluginManager, logger);
+  const globalPluginsDir = join(homedir(), ".mma", "plugins");
+  const projectPluginsDir = join(dir, ".mma", "plugins");
+  pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger);
+  pluginLoader.loadFromDir(projectPluginsDir, pluginManager, logger);
 
   contextManager.onCompact = (summary) => {
     const meta = sessionManager.getActiveMeta();
@@ -369,6 +371,11 @@ export async function bootstrap(
     logger,
     baseDir,
     promptBlocks,
+    getDynamicPromptBlocks: () => {
+      const planBlock = execModule.getSystemPromptBlock();
+      return planBlock ? [planBlock] : [];
+    },
+    finalAudit: () => execModule.runFinalAudit(),
     sessionManager,
     exitOnComplete,
   };

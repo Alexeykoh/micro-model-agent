@@ -22,10 +22,17 @@ function createMockDeps(overrides?: Record<string, unknown>) {
 
   const mockPluginManager = {
     getAllPlugins: vi.fn().mockReturnValue([]),
+    runOnBuildPrompt: vi.fn().mockReturnValue([]),
     runOnBeforeThink: vi.fn(),
     runOnBeforeTool: vi.fn().mockResolvedValue(true),
     runOnAfterTool: vi.fn(),
+    runOnAfterThink: vi.fn(),
     runOnToolCall: vi.fn(),
+    runOnPhase: vi.fn(),
+    runOnToolStart: vi.fn(),
+    runOnToolEnd: vi.fn(),
+    runOnText: vi.fn().mockImplementation((_ctx: unknown, chunk: string) => chunk),
+    runOnMeta: vi.fn().mockImplementation((_ctx: unknown, chunk: string) => chunk),
     runOnError: vi.fn(),
     runOnSessionStart: vi.fn(),
     runOnSessionEnd: vi.fn(),
@@ -43,6 +50,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
       responseReserve: 512,
       history: 2560,
     }),
+    updateSystemPrompt: vi.fn(),
   };
 
   const mockHallucinationDetector = {
@@ -334,6 +342,118 @@ describe("Agent", () => {
 
     expect(phases).toEqual(["thinking", "done"]);
     expect(result.success).toBe(false);
+  });
+
+  it("dispatches onPhase to plugins", async () => {
+    const deps = createMockDeps();
+    const agent = new Agent(deps as any);
+    await agent.run("test");
+
+    const calls = (deps.pluginManager.runOnPhase as any).mock.calls;
+    const phases = calls.map((c: any[]) => c[1]);
+    expect(phases).toEqual(["thinking", "done"]);
+  });
+
+  it("dispatches onAfterThink with the parsed response", async () => {
+    const deps = createMockDeps();
+    const agent = new Agent(deps as any);
+    await agent.run("test");
+
+    const calls = (deps.pluginManager.runOnAfterThink as any).mock.calls;
+    expect(calls.length).toBe(1);
+    expect(calls[0][1]).toMatchObject({
+      type: "text",
+      content: "Hello from mock LLM",
+    });
+  });
+
+  it("includes plugin prompt blocks from onBuildPrompt", async () => {
+    const deps = createMockDeps({
+      pluginManager: {
+        ...createMockDeps().pluginManager,
+        runOnBuildPrompt: vi.fn().mockReturnValue(["### Plugin rule: be brief"]),
+      },
+    });
+    const agent = new Agent(deps as any);
+    await agent.run("test");
+
+    const added = deps.contextManager.addMessage as any;
+    const systemMessage = added.mock.calls.find(
+      (c: any[]) => c[0]?.role === "system",
+    );
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage[0].content).toContain("Plugin rule: be brief");
+  });
+
+  it("dispatches onToolStart and onToolEnd around tool execution", async () => {
+    const deps = createMockDeps({
+      llmProvider: {
+        model: "test-model",
+        contextWindow: 4096,
+        chat: vi.fn().mockReturnValue(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: {
+                id: "call_1",
+                name: "write_file",
+                arguments: "{}",
+              },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+            yield { type: "text" as const, content: "Done" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+        countTokens: vi.fn().mockReturnValue(10),
+      },
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("write a file");
+
+    expect(result.success).toBe(true);
+    expect((deps.pluginManager.runOnToolStart as any).mock.calls.length).toBe(1);
+    expect((deps.pluginManager.runOnToolEnd as any).mock.calls.length).toBe(1);
+    const endCall = (deps.pluginManager.runOnToolEnd as any).mock.calls[0];
+    expect(endCall[1]).toMatchObject({ name: "write_file", id: "call_1" });
+    expect(endCall[2]).toMatchObject({ success: true, output: "tool ok" });
+    expect(typeof endCall[3]).toBe("number");
+  });
+
+  it("applies onText and onMeta transforms to streamed output", async () => {
+    const deps = createMockDeps({
+      pluginManager: {
+        ...createMockDeps().pluginManager,
+        runOnText: vi
+          .fn()
+          .mockImplementation((_ctx: unknown, chunk: string) =>
+            chunk.replace(/secret/g, "[redacted]"),
+          ),
+        runOnMeta: vi.fn().mockImplementation((_ctx: unknown, chunk: string) =>
+          chunk.replace(/secret/g, "[redacted]"),
+        ),
+      },
+      llmProvider: {
+        model: "test-model",
+        contextWindow: 4096,
+        chat: vi.fn().mockReturnValue(
+          (async function* () {
+            yield { type: "reasoning" as const, content: "secret plan" };
+            yield { type: "text" as const, content: "the secret is out" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+        countTokens: vi.fn().mockReturnValue(10),
+      },
+    });
+    const agent = new Agent(deps as any);
+    const chunks: string[] = [];
+    const meta: string[] = [];
+    await agent.run("test", (c) => chunks.push(c), (m) => meta.push(m));
+
+    expect(chunks.join("")).toContain("[redacted]");
+    expect(chunks.join("")).not.toContain("secret");
+    expect(meta.join("")).not.toContain("secret");
   });
 
   it("truncateToolOutput respects absolute max chars limit", () => {

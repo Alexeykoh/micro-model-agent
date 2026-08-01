@@ -1,5 +1,6 @@
 import type { AgentPlugin } from '../types'
 import type { ToolCall, ToolResult } from '../../tools/types'
+import type { AgentPhase, LLMResponse } from '../../core/types'
 
 export class PluginManager {
   private plugins: AgentPlugin[] = []
@@ -68,10 +69,10 @@ export class PluginManager {
     }
   }
 
-  runOnAfterThink(ctx: any): void {
+  runOnAfterThink(ctx: any, response: LLMResponse | null): void {
     for (const plugin of this.plugins) {
       if (plugin.onAfterThink) {
-        try { plugin.onAfterThink(ctx) }
+        try { plugin.onAfterThink(ctx, response) }
         catch { /* error isolation */ }
       }
     }
@@ -93,5 +94,58 @@ export class PluginManager {
         catch { /* error isolation */ }
       }
     }
+  }
+
+  runOnPhase(ctx: any, phase: AgentPhase): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onPhase) {
+        try { plugin.onPhase(ctx, phase) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
+
+  runOnToolStart(ctx: any, call: ToolCall): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onToolStart) {
+        try { plugin.onToolStart(ctx, call) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
+
+  runOnToolEnd(ctx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
+    for (const plugin of this.plugins) {
+      if (plugin.onToolEnd) {
+        try { plugin.onToolEnd(ctx, call, result, durationMs) }
+        catch { /* error isolation */ }
+      }
+    }
+  }
+
+  /** Pipe a text chunk through plugin transforms; returns the (possibly replaced) chunk. */
+  runOnText(ctx: any, chunk: string): string {
+    for (const plugin of this.plugins) {
+      if (plugin.onText) {
+        try {
+          const out = plugin.onText(ctx, chunk)
+          if (typeof out === 'string') chunk = out
+        } catch { /* error isolation */ }
+      }
+    }
+    return chunk
+  }
+
+  /** Pipe a meta chunk through plugin transforms; returns the (possibly replaced) chunk. */
+  runOnMeta(ctx: any, chunk: string): string {
+    for (const plugin of this.plugins) {
+      if (plugin.onMeta) {
+        try {
+          const out = plugin.onMeta(ctx, chunk)
+          if (typeof out === 'string') chunk = out
+        } catch { /* error isolation */ }
+      }
+    }
+    return chunk
   }
 }

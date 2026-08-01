@@ -42,6 +42,36 @@ export class ExecutionModule implements AgentModule {
     return this.stuckDetector;
   }
 
+  /**
+   * Final audit before the agent may declare the task done. Returns null when
+   * no plan is active; otherwise checks plan completion + artifact existence.
+   */
+  async runFinalAudit(): Promise<{
+    passed: boolean;
+    done: number;
+    total: number;
+    pendingSteps: string[];
+    missingFiles: string[];
+    summary: string;
+  } | null> {
+    if (!this.tracker) return null;
+    const plan = this.tracker.getPlan();
+    const audit = await this.auditor.audit(plan);
+    const pendingSteps = plan.steps
+      .filter((s) => s.status !== "done" && s.status !== "skipped")
+      .map((s) => `${s.id}. ${s.description}`);
+    const done = plan.steps.filter((s) => s.status === "done").length;
+    const passed = audit.passed && pendingSteps.length === 0;
+    return {
+      passed,
+      done,
+      total: plan.steps.length,
+      pendingSteps,
+      missingFiles: audit.missingFiles,
+      summary: audit.summary,
+    };
+  }
+
   getSystemPromptBlock(): PromptBlock | null {
     if (!this.tracker) return null;
     return {
@@ -57,11 +87,14 @@ export class ExecutionModule implements AgentModule {
       {
         name: "plan",
         description:
-          'Create, update, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress.',
+          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.',
         parameters: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["create", "update", "abort"] },
+            action: {
+              type: "string",
+              enum: ["create", "update", "show", "abort"],
+            },
             title: { type: "string" },
             steps: { type: "array", items: { type: "string" } },
             step: { type: "number" },
@@ -86,6 +119,17 @@ export class ExecutionModule implements AgentModule {
             return {
               success: true,
               output: t("plan.created", { title, steps: String(steps.length) }),
+              display,
+            };
+          }
+          if (action === "show") {
+            if (!this.tracker) {
+              return { success: false, output: t("plan.no_active") };
+            }
+            const display = this.tracker.toPromptBlock();
+            return {
+              success: true,
+              output: `${t("plan.show_header")}\n${display}`,
               display,
             };
           }

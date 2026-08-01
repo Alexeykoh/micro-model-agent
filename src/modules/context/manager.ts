@@ -189,6 +189,19 @@ export class ContextManager {
     }
   }
 
+  /**
+   * Replace the system prompt in place (keeps it first) or prepend a new one.
+   * Used to refresh dynamic prompt blocks (e.g. the plan checklist) mid-run.
+   */
+  updateSystemPrompt(content: string): void {
+    const idx = this.messages.findIndex((m) => m.role === "system");
+    if (idx >= 0) {
+      this.messages[idx] = { ...this.messages[idx], content };
+    } else {
+      this.messages.unshift({ role: "system", content });
+    }
+  }
+
   getActiveHistory(): Message[] {
     return [...this.messages];
   }

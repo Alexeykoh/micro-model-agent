@@ -1,20 +1,28 @@
 import { readFileSync, existsSync } from "fs";
-import { resolve, normalize } from "path";
+import { resolve, normalize, extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathInScope } from "./scope-check";
 
+/** Default number of lines returned when the caller omits `limit`. */
+const DEFAULT_LIMIT = 300;
+
 export const readFileTool: ToolDefinition = {
   name: "read_file",
-  description:
-    "Read a file from the filesystem. Optionally specify offset (line number) and limit (number of lines, default all).",
+  description: `Read a file from the filesystem. Reads up to ${DEFAULT_LIMIT} lines at a time by default; use offset to page through large files.`,
   tags: ["file", "code"],
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: "File path to read" },
-      offset: { type: "number", description: "Starting line (1-indexed)" },
-      limit: { type: "number", description: "Number of lines to read" },
+      offset: {
+        type: "number",
+        description: `Starting line (1-indexed). Use offset=<next> from a truncated result to continue reading.`,
+      },
+      limit: {
+        type: "number",
+        description: `Number of lines to read (default ${DEFAULT_LIMIT})`,
+      },
     },
     required: ["path"],
   },
@@ -35,13 +43,27 @@ export const readFileTool: ToolDefinition = {
     }
     ctx.trackReadPath?.(path);
     const content = readFileSync(resolved, "utf-8");
-    if (!args.offset && !args.limit) {
-      return { success: true, output: content };
-    }
     const lines = content.split("\n");
+    const total = lines.length;
     const offset = (args.offset as number) || 1;
-    const limit = (args.limit as number) || lines.length;
-    const selected = lines.slice(offset - 1, offset - 1 + limit).join("\n");
-    return { success: true, output: selected };
+    const limit = (args.limit as number) || DEFAULT_LIMIT;
+    const end = Math.min(offset - 1 + limit, total);
+    const selected = lines.slice(offset - 1, end).join("\n");
+    const ext = extname(resolved) || "(no extension)";
+    const header = t("file.read_header", {
+      path,
+      ext,
+      total: String(total),
+      from: String(offset),
+      to: String(end),
+    });
+    const truncated =
+      end < total
+        ? t("file.read_truncated", {
+            remaining: String(total - end),
+            next: String(end + 1),
+          })
+        : "";
+    return { success: true, output: `${header}\n${selected}${truncated}` };
   },
 };

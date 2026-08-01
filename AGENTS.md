@@ -499,6 +499,32 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 
 **Config:** `ui.spinner` in `config/defaults.ts` toggles the spinner. Tool `friendly` labels come from i18n `tool.friendly.*`. All user-facing strings still go through `t()` (rule #8) — this includes REPL header, `/help` groups, setup wizard, and tool cards.
 
+## Plugins
+
+> **Guide:** [docs/plugins.md](./docs/plugins.md) — hooks, загрузка, примеры.
+
+Плагины перехватывают события агента. Интерфейс — `AgentPlugin` (`src/modules/types.ts`), диспетчер — `src/modules/plugins/manager.ts`. Изоляция ошибок: падение плагина не останавливает агента и других плагинов.
+
+**Загрузка:** встроенные (`src/modules/plugins/builtin/`), глобальные `~/.mma/plugins/*.{ts,js}`, проектные `<project>/.mma/plugins/*.{ts,js}` (`.ts` — только под Bun). Экспорт `default` или `plugin`.
+
+**Хуки:**
+
+| Хук | Момент | Особенность |
+|-----|--------|-------------|
+| `onBuildPrompt` | сборка системного промпта (1 раз) | строка добавляется блоком `low`-приоритета |
+| `onBeforeThink` | перед каждым LLM-вызовом | |
+| `onAfterThink(ctx, response)` | после ответа LLM | `response` = `LLMResponse` или `null` |
+| `onBeforeTool` | перед тулом | `false` = заблокировать (короткозамыкает) |
+| `onAfterTool` | после тула | может мутировать `result.output` |
+| `onToolCall` | LLM вернул тул-вызов | `ctx.toolName`, `ctx.args` |
+| `onToolStart` / `onToolEnd` | тул-карточка открыта/закрыта | `onToolEnd` даёт `result` + `durationMs` |
+| `onPhase` | спиннер: `thinking` / `done` | |
+| `onText` / `onMeta` | чанк стриминга | вернуть строку — заменить на экране, `undefined` — пропустить |
+| `onError` | ошибка LLM | |
+| `onSessionStart` / `onSessionEnd` | жизненный цикл сессии | |
+
+**UI-хуки** (`onPhase`, `onToolStart`/`onToolEnd`, `onText`/`onMeta`) дают плагинам видимость и контроль над тем, что видит пользователь: спиннер, тул-карточки, стриминг. `onText`/`onMeta` влияют только на отображение, `result.text` не меняется.
+
 ## Context Budget (dynamic, from model.contextWindow)
 
 | contextWindow | System (10%) | Reserve (15%) | History (75%) |

@@ -483,6 +483,8 @@ Use load_skill tool with task parameter to load relevant skill before answering 
 
 ### 6.2 Plugins (`modules/plugins/`)
 
+> Актуальное руководство: `docs/plugins.md`. Интерфейс ниже — канонический (совпадает с `src/modules/types.ts`).
+
 **Interface:**
 ```ts
 interface AgentPlugin {
@@ -490,18 +492,26 @@ interface AgentPlugin {
   priority?: number          // higher = runs first
   onBuildPrompt?(): string | null
   onBeforeThink?(ctx: AgentContext): void
-  onAfterThink?(ctx: AgentContext, response: LLMResponse): void
+  onAfterThink?(ctx: AgentContext, response: LLMResponse | null): void
   onBeforeTool?(ctx: AgentContext, call: ToolCall): boolean  // false = block
-  onAfterTool?(ctx: AgentContext, result: ToolResult): void
+  onAfterTool?(ctx: AgentContext, call: ToolCall, result: ToolResult): void
+  onToolCall?(ctx: AgentContext): void
   onError?(ctx: AgentContext, error: Error): void
   onSessionStart?(ctx: AgentContext): void
   onSessionEnd?(ctx: AgentContext): void
+  // UI/output hooks
+  onPhase?(ctx, phase: 'thinking' | 'done'): void
+  onToolStart?(ctx, call: ToolCall): void
+  onToolEnd?(ctx, call: ToolCall, result: ToolResult, durationMs: number): void
+  onText?(ctx, chunk: string): string | void
+  onMeta?(ctx, chunk: string): string | void
 }
 ```
 
-**Loading:** Builtin → global `~/.mma/plugins/` → project `.mma/plugins/`
+**Loading:** Builtin → global `~/.mma/plugins/` → project `.mma/plugins/` (`.ts` — только под Bun)
 **Execution:** All plugins run for each hook. `onBeforeTool` short-circuits if any returns `false`.
 **Error isolation:** Plugin error → logged, other plugins continue.
+**UI hooks:** `onPhase` (спиннер thinking/done), `onToolStart`/`onToolEnd` (тул-карточки, `onToolEnd` даёт `result` + `durationMs`), `onText`/`onMeta` (трансформация стриминга: вернуть строку = заменить, `undefined` = пропустить; влияет только на отображение).
 
 ### 6.3 MCP Client (`modules/mcp/`)
 
