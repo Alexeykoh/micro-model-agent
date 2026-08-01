@@ -47,6 +47,10 @@ export interface ToolContext {
    * File operations counter for rate limiting
    */
   fileOperationsCount?: number;
+  /**
+   * Session context for isolation
+   */
+  sessionContext?: import("../modules/security/session-isolation").SessionContext;
 }
 
 export interface ToolResult {

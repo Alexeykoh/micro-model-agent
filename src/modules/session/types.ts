@@ -7,6 +7,18 @@ export interface SessionMeta {
   model: string;
   contextWindow: number;
   projectDir: string;
+  /**
+   * Session-specific security overrides
+   * If present, these override the global security settings for this session
+   */
+  securityOverrides?: {
+    maxFileOperations?: number;
+    maxRecursionDepth?: number;
+    rateLimits?: {
+      maxRequestsPerMinute?: number;
+      maxParallelTasks?: number;
+    };
+  };
 }
 
 export interface SessionMessage {

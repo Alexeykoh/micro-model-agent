@@ -4,6 +4,7 @@ import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
 import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
+import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
 
 export const deleteFileTool: ToolDefinition = {
@@ -22,8 +23,13 @@ export const deleteFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir);
     const resolved = resolve(baseDir, normalize(path));
     
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
+      : ctx.config.security;
+    
     // Check file operations limit
-    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
       logSecurityBlock(

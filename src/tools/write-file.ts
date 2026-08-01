@@ -5,6 +5,7 @@ import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
 import { scanContent } from "../modules/security/content-scanner";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
+import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 
 export const writeFileTool: ToolDefinition = {
@@ -42,8 +43,13 @@ export const writeFileTool: ToolDefinition = {
       };
     }
     
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
+      : ctx.config.security;
+    
     // Check file operations limit
-    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
       logSecurityBlock(

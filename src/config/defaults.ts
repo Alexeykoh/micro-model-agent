@@ -85,4 +85,9 @@ export const DEFAULTS: AppConfig = {
     },
   },
   security: DEFAULT_SECURITY_CONFIG,
+  sessionIsolation: {
+    enabled: false,
+    isolatePlugins: true,
+    isolateTempFiles: true,
+  },
 };

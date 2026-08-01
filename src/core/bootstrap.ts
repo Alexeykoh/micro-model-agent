@@ -211,6 +211,7 @@ export async function bootstrap(
     contextWindow: config.contextWindow,
     projectDir: baseDir,
     maxSessions: config.session.maxSessions,
+    isolation: config.sessionIsolation,
   });
 
   if (config.session.autoSave && !sessionManager.getActive()) {
@@ -232,6 +233,7 @@ export async function bootstrap(
      exitOnComplete,
      contextManager,
      sessionId: sessionManager.getActiveMeta()?.id,
+     sessionContext: sessionManager.getSessionContext() ?? undefined,
      recursionDepth: 0,
      fileOperationsCount: 0,
      sessionHistory: {

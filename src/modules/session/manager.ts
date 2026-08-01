@@ -1,25 +1,36 @@
 import type { SessionMeta, SessionMessage } from './types'
 import type { SessionStore, SessionLogEntry } from './store'
 import { t } from '../../i18n/index'
+import type { SessionIsolationConfig, SessionContext } from '../../modules/security/session-isolation'
+import { createSessionContext, DEFAULT_SESSION_ISOLATION } from '../../modules/security/session-isolation'
+import type { SecurityConfig } from '../../config/types'
 
 export interface SessionManagerOptions {
   model: string
   contextWindow: number
   projectDir: string
   maxSessions?: number
+  /**
+   * Session isolation configuration
+   */
+  isolation?: SessionIsolationConfig
 }
 
 export class SessionManager {
   private store: SessionStore
   private activeId: string | null = null
   private options: SessionManagerOptions
+  /**
+   * Map of session ID to session context (for isolation)
+   */
+  private sessionContexts: Map<string, SessionContext> = new Map()
 
   constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store
     this.options = options
   }
 
-  create(name?: string): SessionMeta {
+  create(name?: string, securityOverrides?: SessionMeta['securityOverrides']): SessionMeta {
     const now = new Date().toISOString()
     const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
     const sessionName = name || t('session.default_name', { date: now.slice(0, 10) })
@@ -32,10 +43,21 @@ export class SessionManager {
       model: this.options.model,
       contextWindow: this.options.contextWindow,
       projectDir: this.options.projectDir,
+      securityOverrides,
     }
     this.store.saveMeta(id, meta)
     this.activeId = id
     this.enforceMaxSessions()
+    
+    // Create session context
+    const context = createSessionContext(
+      id,
+      this.options.projectDir,
+      this.options.isolation,
+      this.normalizeSecurityOverrides(securityOverrides),
+    )
+    this.sessionContexts.set(id, context)
+    
     return meta
   }
 
@@ -48,6 +70,13 @@ export class SessionManager {
   }
 
   delete(id: string): void {
+    // Clean up session context
+    const context = this.sessionContexts.get(id)
+    if (context) {
+      // In a real implementation, we would clean up temp files here
+      this.sessionContexts.delete(id)
+    }
+    
     this.store.deleteSession(id)
     if (this.activeId === id) {
       this.activeId = null
@@ -92,13 +121,72 @@ export class SessionManager {
     return this.store.loadHistory(this.activeId)
   }
 
+  /**
+   * Get the session context for the active session
+   */
+  getSessionContext(): SessionContext | undefined {
+    if (!this.activeId) return undefined
+    return this.getSessionContextById(this.activeId)
+  }
+
+  /**
+   * Get the session context for a specific session
+   */
+  getSessionContextById(sessionId: string): SessionContext | undefined {
+    if (!this.sessionContexts.has(sessionId)) {
+      const meta = this.store.loadMeta(sessionId)
+      if (!meta) return undefined
+      
+      const context = createSessionContext(
+        sessionId,
+        meta.projectDir,
+        this.options.isolation,
+        this.normalizeSecurityOverrides(meta.securityOverrides),
+      )
+      this.sessionContexts.set(sessionId, context)
+    }
+    return this.sessionContexts.get(sessionId)
+  }
+
+  /**
+   * Get session isolation configuration
+   */
+  getIsolationConfig(): SessionIsolationConfig {
+    return this.options.isolation ?? DEFAULT_SESSION_ISOLATION
+  }
+
+  /**
+   * Check if session isolation is enabled
+   */
+  isIsolationEnabled(): boolean {
+    return this.getIsolationConfig().enabled
+  }
+
+  /**
+   * Normalize security overrides to match SecurityConfig structure
+   */
+  private normalizeSecurityOverrides(
+    overrides?: SessionMeta['securityOverrides']
+  ): Partial<SecurityConfig> | undefined {
+    if (!overrides) return undefined
+    
+    return {
+      maxFileOperations: overrides.maxFileOperations,
+      maxRecursionDepth: overrides.maxRecursionDepth,
+      rateLimits: overrides.rateLimits ? {
+        maxRequestsPerMinute: overrides.rateLimits.maxRequestsPerMinute ?? 60,
+        maxParallelTasks: overrides.rateLimits.maxParallelTasks ?? 5,
+      } : undefined,
+    }
+  }
+
   private enforceMaxSessions(): void {
     const max = this.options.maxSessions ?? 50
     const sessions = this.store.listSessions()
     if (sessions.length > max) {
       const toDelete = sessions.slice(max)
       for (const s of toDelete) {
-        this.store.deleteSession(s.id)
+        this.delete(s.id)
       }
     }
   }

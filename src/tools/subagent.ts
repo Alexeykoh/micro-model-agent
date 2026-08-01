@@ -6,6 +6,7 @@ import { HallucinationDetector } from "../modules/hallucination/detector";
 import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
+import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 
 export const subagentTool: ToolDefinition = {
   name: "subagent",
@@ -61,8 +62,13 @@ export const subagentTool: ToolDefinition = {
       return { success: false, output: t("tool.name_or_task") };
     }
 
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
+      : ctx.config.security;
+    
     // Security check: limit recursion depth
-    const maxDepth = ctx.config.security?.maxRecursionDepth ?? 3;
+    const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
     const currentDepth = ctx.recursionDepth ?? 0;
 
     if (currentDepth >= maxDepth) {

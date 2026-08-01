@@ -2,6 +2,7 @@ import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator'
 import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
+import { getSessionSecurityConfig } from '../modules/security/session-isolation'
 
 const MAX_CHARS = 15000
 
@@ -29,8 +30,10 @@ export const webFetchTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const url = String(args.url)
     
-    // Security check: validate URL
-    const securityConfig = ctx.config.security?.network
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
+      : ctx.config.security?.network
     const validation = isUrlAllowed(url, securityConfig)
     
     if (!validation.allowed) {

@@ -6,6 +6,7 @@ export * from "./data-sanitizer";
 export * from "./audit-log";
 export * from "./rate-limiter";
 export * from "./encryption";
+export * from "./session-isolation";
 
 // Re-export sanitizeUrl from network-validator to avoid conflicts
 export { sanitizeUrl } from "./network-validator";

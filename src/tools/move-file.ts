@@ -4,6 +4,7 @@ import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
+import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
 
 export const moveFileTool: ToolDefinition = {
@@ -25,8 +26,13 @@ export const moveFileTool: ToolDefinition = {
     const fromResolved = resolve(baseDir, normalize(fromPath));
     const toResolved = resolve(baseDir, normalize(toPath));
     
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
+      : ctx.config.security;
+    
     // Check file operations limit
-    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
       logSecurityBlock(

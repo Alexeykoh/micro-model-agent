@@ -3,6 +3,7 @@ import { platform } from 'os'
 import type { ToolDefinition } from './types'
 import { isCommandAllowed, sanitizeCommandForLog } from '../modules/security/command-validator'
 import { logBashCommand, logSecurityBlock } from '../modules/security/audit-log'
+import { getSessionSecurityConfig } from '../modules/security/session-isolation'
 
 function adaptCommandForWindows(command: string): string {
   if (platform() !== 'win32') return command
@@ -35,8 +36,10 @@ export const bashTool: ToolDefinition = {
     const command = adaptCommandForWindows(originalCommand)
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir
 
-    // Security check: validate command
-    const securityConfig = ctx.config.security?.bash
+    // Get session-specific security config
+    const securityConfig = ctx.sessionContext 
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).bash
+      : ctx.config.security?.bash
     const validation = isCommandAllowed(command, securityConfig)
     
     if (!validation.allowed) {
