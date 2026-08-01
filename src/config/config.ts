@@ -104,6 +104,8 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
     console.warn(t('config.decryption_warning', { error: e.message }));
   }
 
+  // Update global audit notifier with config (done in bootstrap.ts)
+
   return config
 }
 

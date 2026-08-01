@@ -129,13 +129,24 @@ export interface SessionEncryptionConfig {
   keyPath?: string;
 }
 
+export type AuditEventType = 
+  | 'security_block'
+  | 'bash_command'
+  | 'file_operation'
+  | 'network_request'
+  | 'tool_call'
+  | 'authentication'
+  | 'configuration_change'
+  | 'session_start'
+  | 'session_end';
+
 export interface AuditNotifierConfig {
   enabled: boolean;
   filePath?: string;
   webhookUrl?: string;
   webhookTimeout?: number;
   minSeverity?: 'low' | 'medium' | 'high' | 'critical';
-  eventTypes?: string[];
+  eventTypes?: AuditEventType[];
   maxRetries?: number;
 }
 

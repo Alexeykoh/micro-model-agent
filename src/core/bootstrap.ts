@@ -114,6 +114,16 @@ export async function bootstrap(
   const config = loadConfig({ configDir: dir, projectConfigPath });
   setLocale(config.locale);
 
+  // Update global audit notifier with config
+  try {
+    const { globalAuditNotifier } = await import("../modules/security/audit-notifier");
+    if (config.security?.auditNotifier) {
+      globalAuditNotifier.updateConfig(config.security.auditNotifier as Partial<typeof config.security.auditNotifier>);
+    }
+  } catch {
+    // Ignore if audit notifier is not available
+  }
+
   const logger = new Logger(config.logLevel as any);
   logger.setLogDir(join(dir, "logs"));
   logger.debug("MMA bootstrap", {

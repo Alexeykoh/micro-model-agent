@@ -1,4 +1,17 @@
 import type { BashSecurityConfig } from "../../config/types";
+import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
+
+// Fallback in case DEFAULT_SECURITY_CONFIG is not available
+const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
+  blacklist: ['rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat'],
+  whitelist: [],
+  blockDangerousFlags: true,
+  dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
+  dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '&', '`'],
+  logCommands: true,
+};
+
+export const DEFAULT_BASH_CONFIG = DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
 
 /**
  * Result of command validation
@@ -17,10 +30,13 @@ export function isCommandAllowed(
   securityConfig?: BashSecurityConfig,
 ): CommandValidationResult {
   // If no security config, allow everything (backward compatibility)
-  if (!securityConfig) {
-    return { allowed: true, sanitizedCommand: command };
+  let config = securityConfig || DEFAULT_BASH_CONFIG;
+  
+  // Ensure config has all required fields
+  if (!config.blacklist || !Array.isArray(config.blacklist)) {
+    config = FALLBACK_BASH_CONFIG;
   }
-
+  
   const trimmedCommand = command.trim();
   if (!trimmedCommand) {
     return { allowed: false, reason: "Empty command" };
@@ -30,8 +46,8 @@ export function isCommandAllowed(
   const baseCommand = trimmedCommand.split(/\s+/)[0];
 
   // Check whitelist first (if non-empty, only whitelisted commands are allowed)
-  if (securityConfig.whitelist.length > 0) {
-    if (!securityConfig.whitelist.includes(baseCommand)) {
+  if (config.whitelist.length > 0) {
+    if (!config.whitelist.includes(baseCommand)) {
       return {
         allowed: false,
         reason: `Command "${baseCommand}" is not in the whitelist`,
@@ -40,7 +56,7 @@ export function isCommandAllowed(
   }
 
   // Check blacklist
-  if (securityConfig.blacklist.includes(baseCommand)) {
+  if (config.blacklist.includes(baseCommand)) {
     return {
       allowed: false,
       reason: `Command "${baseCommand}" is blacklisted`,
@@ -48,8 +64,8 @@ export function isCommandAllowed(
   }
 
   // Check for dangerous operators
-  if (securityConfig.blockDangerousFlags) {
-    for (const op of securityConfig.dangerousOperators || []) {
+  if (config.blockDangerousFlags) {
+    for (const op of config.dangerousOperators || []) {
       if (command.includes(op)) {
         return {
           allowed: false,
@@ -60,8 +76,8 @@ export function isCommandAllowed(
   }
 
   // Check for dangerous flags
-  if (securityConfig.blockDangerousFlags) {
-    for (const flag of securityConfig.dangerousFlags || []) {
+  if (config.blockDangerousFlags) {
+    for (const flag of config.dangerousFlags || []) {
       // Check for flag as whole word or with equals
       const flagPattern = new RegExp(`(?:^|\\s)${flag}(?:\\s|$|=)`);
       if (flagPattern.test(command)) {

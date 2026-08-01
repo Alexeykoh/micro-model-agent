@@ -205,7 +205,15 @@ export function encryptSensitiveFields<T extends Record<string, unknown>>(
     if (isSensitiveFieldName(fieldName) && typeof value === 'string' && !isEncryptedString(value)) {
       result[fieldName] = encryptString(value, key);
     } else if (typeof value === 'object' && value !== null) {
-      result[fieldName] = encryptSensitiveFields(value as Record<string, unknown>, key);
+      if (Array.isArray(value)) {
+        result[fieldName] = value.map(item => 
+          typeof item === 'object' && item !== null 
+            ? encryptSensitiveFields(item as Record<string, unknown>, key)
+            : item
+        );
+      } else {
+        result[fieldName] = encryptSensitiveFields(value as Record<string, unknown>, key);
+      }
     } else {
       result[fieldName] = value;
     }
@@ -232,7 +240,15 @@ export function decryptSensitiveFields<T extends Record<string, unknown>>(
         result[fieldName] = value;
       }
     } else if (typeof value === 'object' && value !== null) {
-      result[fieldName] = decryptSensitiveFields(value as Record<string, unknown>, key);
+      if (Array.isArray(value)) {
+        result[fieldName] = value.map(item => 
+          typeof item === 'object' && item !== null 
+            ? decryptSensitiveFields(item as Record<string, unknown>, key)
+            : item
+        );
+      } else {
+        result[fieldName] = decryptSensitiveFields(value as Record<string, unknown>, key);
+      }
     } else {
       result[fieldName] = value;
     }

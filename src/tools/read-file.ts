@@ -3,6 +3,8 @@ import { resolve, normalize, extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathInScope } from "../modules/security/path-validator";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
+import { logSecurityBlock } from "../modules/security/audit-log";
 
 /** Default number of lines returned when the caller omits `limit`. */
 const DEFAULT_LIMIT = 300;
@@ -28,8 +30,12 @@ export const readFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
-    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
+    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, securityPaths);
+    
     if (!scopeCheck.allowed) {
+      const pathStr = path as string;
+      logSecurityBlock(ctx.sessionId || undefined, "file_read", scopeCheck.reason || "Path not allowed", pathStr);
       return {
         success: false,
         output: t("file.path_not_allowed", {

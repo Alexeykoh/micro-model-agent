@@ -1,6 +1,7 @@
 import { writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
+import { globalAuditNotifier } from "./audit-notifier";
 
 /**
  * Audit log entry structure
@@ -8,7 +9,7 @@ import { homedir } from "os";
 export interface AuditLogEntry {
   timestamp: string;
   sessionId?: string;
-  action: "tool_call" | "file_write" | "file_delete" | "bash_command" | "network_request" | "security_block";
+  action: "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request" | "security_block";
   tool?: string;
   path?: string;
   command?: string;
@@ -45,6 +46,13 @@ export function logAudit(entry: AuditLogEntry): void {
   } catch {
     // Silently fail if we can't write to audit log
     // This shouldn't break the agent
+  }
+  
+  // Notify audit notifier if enabled
+  try {
+    globalAuditNotifier.notify(entry);
+  } catch {
+    // Silently fail if notification fails
   }
 }
 
@@ -148,7 +156,7 @@ export function logNetworkRequest(
  */
 export function logSecurityBlock(
   sessionId: string | undefined,
-  action: "tool_call" | "file_write" | "file_delete" | "bash_command" | "network_request",
+  action: "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request",
   reason: string,
   details?: string,
 ): void {

@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Translations** for CLI security commands in `en.json` and `ru.json`
 
 ### Fixed
+- **Path validation**: Fixed arrays being converted to objects during config decryption in `encryptSensitiveFields` and `decryptSensitiveFields`
+- **Audit notifications**: Fixed `globalAuditNotifier` not being updated with config from `loadConfig` - now updates in `bootstrap.ts`
+- **Type consistency**: Fixed `AuditNotifierConfig` type mismatch between `config/types.ts` and `modules/security/audit-notifier.ts`
+- **Security logging**: Added `logSecurityBlock` calls to `read-file.ts` for path validation blocks
+- **Type additions**: Added `file_read` to `AuditEventType` and `logSecurityBlock` action types
+- **Network validation**: Added `localhost`, `127.0.0.1`, `::1` to default `deniedDomains` for testing
 - Fixed `ConfidenceCheck` test for short response validation
 - Fixed `OpenAICompatProvider` tests by adding proper mock `json()` and `text()` methods
 - Fixed retry count expectations in tests to match actual retry logic (`maxRetries + 1`)

@@ -92,7 +92,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   },
   network: {
     // Domains that are always denied
-    deniedDomains: [],
+    deniedDomains: ["localhost", "127.0.0.1", "::1"],
     // If allowedDomains is non-empty, only these domains are allowed
     allowedDomains: [],
     // Timeout for network requests (ms)
