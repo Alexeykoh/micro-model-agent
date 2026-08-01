@@ -43,6 +43,10 @@ export interface ToolContext {
    * Session ID for audit logging
    */
   sessionId?: string;
+  /**
+   * File operations counter for rate limiting
+   */
+  fileOperationsCount?: number;
 }
 
 export interface ToolResult {

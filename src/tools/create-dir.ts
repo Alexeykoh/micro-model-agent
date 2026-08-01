@@ -21,6 +21,22 @@ export const createDirTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir);
     const resolved = resolve(baseDir, normalize(path));
     
+    // Check file operations limit
+    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const currentCount = ctx.fileOperationsCount ?? 0;
+    if (currentCount >= maxFileOps) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        `Maximum file operations (${maxFileOps}) exceeded`,
+        path,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
+      };
+    }
+    
     // Check path permissions
     const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
@@ -41,6 +57,9 @@ export const createDirTool: ToolDefinition = {
     if (!existsSync(resolved)) {
       mkdirSync(resolved, { recursive: true });
     }
+    
+    // Increment file operations counter
+    (ctx as any).fileOperationsCount = currentCount + 1;
     
     // Log directory creation
     logFileWrite(ctx.sessionId, path, true, "Directory created");

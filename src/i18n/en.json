@@ -360,5 +360,7 @@
   "indexer.not_indexed": "Project has not been indexed yet",
   "indexer.find_results": "Found {count} matching files:\n{results}",
   "indexer.no_matches": "No matching files for \"{query}\"",
-  "tool.friendly.project_map": "Project map"
+  "tool.friendly.project_map": "Project map",
+  "config.decryption_warning": "Warning: Failed to decrypt config: {error}",
+  "config.encryption_warning": "Warning: Failed to encrypt config: {error}"
 }

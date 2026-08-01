@@ -6,6 +6,7 @@ import type { AppConfig } from './types'
 import { MigrationDetector } from '../migration/detect'
 import { BackupManager } from '../migration/backup'
 import { validateExpertConfig } from './experts'
+import { ConfigEncryptor, isEncryptedString } from '../modules/security/encryption'
 
 function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = { ...target as any }
@@ -90,6 +91,19 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
 
   config = applyEnvVars(config)
 
+  // Decrypt sensitive fields in the loaded config
+  try {
+    const encryptor = new ConfigEncryptor();
+    const decrypted = encryptor.decrypt(config as unknown as Record<string, unknown>);
+    // Merge decrypted sensitive fields back into config
+    for (const key of Object.keys(decrypted)) {
+      (config as any)[key] = decrypted[key];
+    }
+  } catch (e: any) {
+    // If decryption fails, log a warning but continue with the config
+    console.warn(t('config.decryption_warning', { error: e.message }));
+  }
+
   return config
 }
 
@@ -103,5 +117,15 @@ export function validateConfig(config: AppConfig, allToolTags: string[]): void {
 export function saveConfig(config: AppConfig, configPath: string): void {
   const dir = dirname(configPath)
   mkdirSync(dir, { recursive: true })
-  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  
+  // Encrypt sensitive fields before saving
+  try {
+    const encryptor = new ConfigEncryptor();
+    const encryptedConfig = encryptor.encrypt({ ...config } as unknown as Record<string, unknown>);
+    writeFileSync(configPath, JSON.stringify(encryptedConfig, null, 2), 'utf-8')
+  } catch (e: any) {
+    // If encryption fails, save without encryption
+    console.warn(t('config.encryption_warning', { error: e.message }));
+    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  }
 }

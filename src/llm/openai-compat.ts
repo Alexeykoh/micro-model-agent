@@ -1,6 +1,8 @@
 import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
+import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
+import type { RateLimitConfig } from "../config/types";
 
 export interface RetryConfig {
   maxRetries: number;
@@ -15,6 +17,7 @@ export interface OpenAICompatConfig {
   contextWindow?: number;
   maxCompletionTokens?: number;
   retry?: RetryConfig;
+  rateLimits?: RateLimitConfig;
 }
 
 interface ToolCallAcc {
@@ -29,6 +32,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private config: OpenAICompatConfig;
   private tokenCounter: TokenCounter;
   private retryConfig: RetryConfig;
+  private rateLimiter: RateLimiter;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
@@ -40,12 +44,23 @@ export class OpenAICompatProvider implements LLMProvider {
       baseDelay: 1000,
       maxDelay: 30000,
     };
+    this.rateLimiter = createRateLimiter(config.rateLimits);
   }
 
   async *chat(
     messages: Message[],
     tools?: ToolDefinition[],
   ): AsyncIterable<Chunk> {
+    // Check rate limit before making request
+    if (!this.rateLimiter.canMakeRequest()) {
+      throw new Error(
+        `Rate limit exceeded: ${this.rateLimiter.getConfig().maxRequestsPerMinute} requests per minute`,
+      );
+    }
+    
+    // Record this request
+    this.rateLimiter.recordRequest();
+
     const streamResult = this.doStream(messages, tools);
 
     let hasToolCall = false;

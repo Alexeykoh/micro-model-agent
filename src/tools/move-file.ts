@@ -25,6 +25,22 @@ export const moveFileTool: ToolDefinition = {
     const fromResolved = resolve(baseDir, normalize(fromPath));
     const toResolved = resolve(baseDir, normalize(toPath));
     
+    // Check file operations limit
+    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const currentCount = ctx.fileOperationsCount ?? 0;
+    if (currentCount >= maxFileOps) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        `Maximum file operations (${maxFileOps}) exceeded`,
+        `${fromPath} -> ${toPath}`,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
+      };
+    }
+    
     // Check source path permissions
     const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope, ctx.config.security?.paths);
     if (!fromCheck.allowed) {
@@ -71,6 +87,9 @@ export const moveFileTool: ToolDefinition = {
     }
     renameSync(fromResolved, toResolved);
     const diff = generateMoveDiff(fromPath, toPath);
+    
+    // Increment file operations counter
+    (ctx as any).fileOperationsCount = currentCount + 1;
     
     // Log file move
     logFileWrite(ctx.sessionId, `${fromPath} -> ${toPath}`, true, "File moved");

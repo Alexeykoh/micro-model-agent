@@ -360,5 +360,7 @@
   "indexer.not_indexed": "Проект ещё не проиндексирован",
   "indexer.find_results": "Найдено {count} совпадающих файлов:\n{results}",
   "indexer.no_matches": "Нет совпадающих файлов для \"{query}\"",
-  "tool.friendly.project_map": "Карта проекта"
+  "tool.friendly.project_map": "Карта проекта",
+  "config.decryption_warning": "Предупреждение: не удалось расшифровать конфигурацию: {error}",
+  "config.encryption_warning": "Предупреждение: не удалось зашифровать конфигурацию: {error}"
 }

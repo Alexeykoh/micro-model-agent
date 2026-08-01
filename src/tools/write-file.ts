@@ -42,6 +42,22 @@ export const writeFileTool: ToolDefinition = {
       };
     }
     
+    // Check file operations limit
+    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const currentCount = ctx.fileOperationsCount ?? 0;
+    if (currentCount >= maxFileOps) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        `Maximum file operations (${maxFileOps}) exceeded`,
+        path,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
+      };
+    }
+    
     // Check content for dangerous patterns
     const content = String(args.content);
     const scanResult = scanContent(content, path, ctx.config.security?.contentScan);
@@ -71,6 +87,9 @@ export const writeFileTool: ToolDefinition = {
     const diff = fileExists
       ? generateDiff(oldContent, content)
       : generateNewFileDiff(content);
+    
+    // Increment file operations counter
+    (ctx as any).fileOperationsCount = currentCount + 1;
     
     // Log successful file write
     logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? 'updated' : 'created'}`);

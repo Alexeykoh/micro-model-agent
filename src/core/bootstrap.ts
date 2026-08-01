@@ -152,6 +152,7 @@ export async function bootstrap(
     apiKey: config.provider.apiKey,
     contextWindow: config.contextWindow,
     retry: config.retry,
+    rateLimits: config.security?.rateLimits,
   });
 
   const baseDir = projectDir || process.cwd();
@@ -232,6 +233,7 @@ export async function bootstrap(
      contextManager,
      sessionId: sessionManager.getActiveMeta()?.id,
      recursionDepth: 0,
+     fileOperationsCount: 0,
      sessionHistory: {
        append: async (type: string, content: unknown) => {
          const meta = sessionManager.getActiveMeta();

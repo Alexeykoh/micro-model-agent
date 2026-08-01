@@ -22,6 +22,22 @@ export const deleteFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir);
     const resolved = resolve(baseDir, normalize(path));
     
+    // Check file operations limit
+    const maxFileOps = ctx.config.security?.maxFileOperations ?? 100;
+    const currentCount = ctx.fileOperationsCount ?? 0;
+    if (currentCount >= maxFileOps) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_delete",
+        `Maximum file operations (${maxFileOps}) exceeded`,
+        path,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
+      };
+    }
+    
     // Check path permissions
     const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
@@ -48,6 +64,9 @@ export const deleteFileTool: ToolDefinition = {
     const content = readFileSync(resolved, "utf-8");
     unlinkSync(resolved);
     const diff = generateDeleteDiff(content);
+    
+    // Increment file operations counter
+    (ctx as any).fileOperationsCount = currentCount + 1;
     
     // Log successful file deletion
     logFileDelete(ctx.sessionId, path, true);
