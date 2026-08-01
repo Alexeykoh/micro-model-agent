@@ -1,0 +1,14 @@
+name: demo-pipeline
+description: Simple 2-step pipeline
+steps:
+  - id: step1
+    name: Write file
+    tool: write_file
+    args:
+      path: tests/cat1-12/out.txt
+      content: "hello from pipeline step1\n"
+  - id: step2
+    name: Append via bash
+    tool: bash
+    args:
+      command: echo "step2 done" >> tests/cat1-12/out.txt

@@ -22,4 +22,18 @@ describe('grep', () => {
     const result = await grepTool.handler(ctx, { pattern: 'hello' })
     expect(result.success).toBe(true)
   })
+
+  it('should handle regex alternation (|) without shell interference', async () => {
+    writeFileSync(join(tmpDir, 'code.ts'), '// TODO: fix\nconst foo = 1\n// FIXME: here')
+    const result = await grepTool.handler(ctx, { pattern: 'TODO|FIXME', include: '*.ts' })
+    expect(result.success).toBe(true)
+    const output = String(result.output)
+    expect(output).toContain('TODO')
+    expect(output).toContain('FIXME')
+  })
+
+  it('should return no matches for absent pattern', async () => {
+    const result = await grepTool.handler(ctx, { pattern: 'nonexistent-string-xyz' })
+    expect(result.success).toBe(true)
+  })
 })

@@ -102,6 +102,19 @@ export const subagentTool: ToolDefinition = {
       };
     }
 
+    // Defensive guard: if the caller requested specific tool tags but none of the
+    // registered tools match, the sub-agent would have zero tools and would
+    // hallucinate instead of acting. Warn the caller so it can correct the tags.
+    if (toolTags && toolTags.length > 0) {
+      const matched = ctx.toolExecutor.getToolDefinitions(toolTags);
+      if (matched.length === 0) {
+        return {
+          success: false,
+          output: `[SECURITY BLOCKED] No tools match the requested tool_tags: [${toolTags.join(", ")}]. Check the subagent tool_tags parameter and retry with valid tags (e.g. "file", "code", "shell", "research").`,
+        };
+      }
+    }
+
     try {
       const subContextManager = new ContextManager(
         ctx.config.contextWindow,

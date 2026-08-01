@@ -1,12 +1,44 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { DEFAULTS } from './defaults'
+import { DEFAULT_SECURITY_CONFIG } from './security'
 import { t } from '../i18n/index'
 import type { AppConfig } from './types'
 import { MigrationDetector } from '../migration/detect'
 import { BackupManager } from '../migration/backup'
 import { validateExpertConfig } from './experts'
 import { ConfigEncryptor, isEncryptedString } from '../modules/security/encryption'
+
+/**
+ * Restore RegExp instances in dangerousPatterns that were serialized as {}
+ * (pre-0.8.0 configs) or as {__regex, source, flags} (new format).
+ * Falls back to default patterns for any entry that is not a real RegExp.
+ */
+function restoreDangerousPatterns(
+  patterns: unknown,
+  defaults: unknown,
+): RegExp[] {
+  const fallback = (Array.isArray(defaults) ? defaults : []) as RegExp[];
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return fallback;
+  }
+  return patterns.map((p, i) => {
+    if (p instanceof RegExp) return p;
+    // If the pattern was serialized as {__regex, source, flags}, revive it
+    if (p && typeof p === "object") {
+      const { source, flags } = p as { source?: string; flags?: string };
+      if (source && typeof source === "string") {
+        try {
+          return new RegExp(source, flags || "");
+        } catch {
+          // fall through
+        }
+      }
+    }
+    // Corrupted entry (e.g. serialized as {} pre-0.8.0): use default by index
+    return fallback[i] || fallback[0] || p as RegExp;
+  });
+}
 
 function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = { ...target as any }
@@ -26,10 +58,40 @@ function deepMerge<T>(target: T, source: Partial<T>): T {
   return result as T
 }
 
+/**
+ * JSON replacer that serializes RegExp objects as {__regex, source, flags}
+ * so they survive JSON.stringify/parse round-trips.
+ */
+function regexReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof RegExp) {
+    return { __regex: true, source: value.source, flags: value.flags };
+  }
+  return value;
+}
+
+/**
+ * JSON reviver that restores RegExp objects serialized by regexReplacer.
+ */
+function regexReviver(_key: string, value: unknown): unknown {
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as Record<string, unknown>).__regex === true
+  ) {
+    const { source, flags } = value as { source: string; flags: string };
+    try {
+      return new RegExp(source, flags);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
 function loadJSON(path: string): Record<string, unknown> | null {
   try {
     if (existsSync(path)) {
-      return JSON.parse(readFileSync(path, 'utf-8'))
+      return JSON.parse(readFileSync(path, 'utf-8'), regexReviver as (key: string, value: unknown) => unknown) as Record<string, unknown>
     }
   } catch { /* ignore malformed files */ }
   return null
@@ -89,6 +151,15 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
     config = deepMerge(config, projectData as Partial<AppConfig>)
   }
 
+  // Restore RegExp patterns in contentScan that may have been serialized
+  // as {} in pre-0.8.0 config files, or merged from user config.
+  if (config.security?.contentScan?.dangerousPatterns) {
+    config.security.contentScan.dangerousPatterns = restoreDangerousPatterns(
+      config.security.contentScan.dangerousPatterns,
+      DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns,
+    );
+  }
+
   config = applyEnvVars(config)
 
   // Decrypt sensitive fields in the loaded config
@@ -124,10 +195,10 @@ export function saveConfig(config: AppConfig, configPath: string): void {
   try {
     const encryptor = new ConfigEncryptor();
     const encryptedConfig = encryptor.encrypt({ ...config } as unknown as Record<string, unknown>);
-    writeFileSync(configPath, JSON.stringify(encryptedConfig, null, 2), 'utf-8')
+    writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), 'utf-8')
   } catch (e: any) {
     // If encryption fails, save without encryption
     console.warn(t('config.encryption_warning', { error: e.message }));
-    writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    writeFileSync(configPath, JSON.stringify(config, regexReplacer, 2), 'utf-8')
   }
 }

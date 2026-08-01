@@ -207,10 +207,12 @@ export function encryptSensitiveFields<T extends Record<string, unknown>>(
     } else if (typeof value === 'object' && value !== null) {
       if (Array.isArray(value)) {
         result[fieldName] = value.map(item => 
-          typeof item === 'object' && item !== null 
+          typeof item === 'object' && item !== null && !(item instanceof RegExp)
             ? encryptSensitiveFields(item as Record<string, unknown>, key)
             : item
         );
+      } else if (value instanceof RegExp) {
+        result[fieldName] = value;
       } else {
         result[fieldName] = encryptSensitiveFields(value as Record<string, unknown>, key);
       }
@@ -242,10 +244,12 @@ export function decryptSensitiveFields<T extends Record<string, unknown>>(
     } else if (typeof value === 'object' && value !== null) {
       if (Array.isArray(value)) {
         result[fieldName] = value.map(item => 
-          typeof item === 'object' && item !== null 
+          typeof item === 'object' && item !== null && !(item instanceof RegExp)
             ? decryptSensitiveFields(item as Record<string, unknown>, key)
             : item
         );
+      } else if (value instanceof RegExp) {
+        result[fieldName] = value;
       } else {
         result[fieldName] = decryptSensitiveFields(value as Record<string, unknown>, key);
       }
