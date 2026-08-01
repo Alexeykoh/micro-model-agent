@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-01
+
+### Added
+- **Pipeline execution** (`src/tools/pipeline-run.ts`): `pipeline_run` now actually executes
+  each step as an isolated sub-agent instead of only parsing/resolving the YAML DAG:
+  - Parallel execution waves (up to 3 concurrent steps) honoring `depends_on`
+  - Template rendering (`{param}` and `{{steps.<id>.output}}`) via `TemplateEngine`
+  - Up to 3 retries with backoff per step, fail-fast on error
+  - Recursion depth guard and audit logging on block
+
+### Fixed
+- **Content scanning**: `dangerousPatterns` RegExp objects were serialized to `{}` in
+  `~/.mma/config.json` (`JSON.stringify(/eval\(/)` → `{}`), causing `String.match({})` to
+  match any content and block all `write_file`/`edit_file` calls. Added `regexReplacer` /
+  `regexReviver` round-trip in `src/config/config.ts` and `restoreDangerousPatterns()`
+  fallback for corrupted configs.
+- **Encryption**: `encryptSensitiveFields` / `decryptSensitiveFields` no longer destroy
+  `RegExp` instances (previously converted them to `{}`).
+- **Grep tool**: `grep` no longer runs its command through the bash security validator,
+  which blocked regex patterns containing `|` as a shell pipe. Now uses `execFileSync('rg', args)`
+  with array arguments (no shell interpretation) and falls back to `grep -r`.
+- **Sub-agent tool**: when `tool_tags` matches no registered tools, the sub-agent returns a
+  clear `[SECURITY BLOCKED]` error instead of silently spawning a tool-less sub-agent that
+  hallucinates results.
+
 ## [0.8.0] - 2026-08-01
 
 ### Added
