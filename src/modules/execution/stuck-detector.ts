@@ -43,9 +43,11 @@ export class StuckDetector {
   }
 
   setCurrentStep(stepId: number, description: string): void {
-    this.currentStepId = stepId
+    if (stepId !== this.currentStepId) {
+      this.currentStepId = stepId
+      this.iterationsOnCurrentStep = 1
+    }
     this.currentStepDescription = description
-    this.iterationsOnCurrentStep = 1
   }
 
   isStuck(): boolean {

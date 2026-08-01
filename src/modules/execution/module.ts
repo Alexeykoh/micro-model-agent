@@ -206,14 +206,12 @@ export class ExecutionModule implements AgentModule {
     return {
       name: "execution",
       onBeforeThink: (ctx: any) => {
-        const currentStepId = this.tracker
-          ? (this.tracker.getCurrentStep()?.id ?? 0)
-          : 0;
-        this.stuckDetector.recordIteration(currentStepId);
-        if (this.tracker) {
-          const step = this.tracker.getCurrentStep();
-          if (step)
-            this.stuckDetector.setCurrentStep(step.id, step.description);
+        const step = this.tracker?.getCurrentStep();
+        if (this.tracker && step) {
+          this.stuckDetector.setCurrentStep(step.id, step.description);
+          this.stuckDetector.recordIteration(step.id);
+        } else {
+          this.stuckDetector.reset();
         }
         const stuckReason = this.stuckDetector.getStuckReason();
         if (stuckReason) {

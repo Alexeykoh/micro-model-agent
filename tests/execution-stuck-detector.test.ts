@@ -25,6 +25,24 @@ describe('StuckDetector', () => {
     expect(detector.isStuck()).toBe(false)
   })
 
+  it('should not reset counter when setCurrentStep repeats the same step', () => {
+    for (let i = 0; i < 6; i++) {
+      detector.setCurrentStep(1, 'step one')
+      detector.recordIteration(1)
+    }
+    expect(detector.isStuck()).toBe(true)
+  })
+
+  it('should reset counter when setCurrentStep moves to a new step', () => {
+    for (let i = 0; i < 5; i++) {
+      detector.setCurrentStep(1, 'step one')
+      detector.recordIteration(1)
+    }
+    detector.setCurrentStep(2, 'step two')
+    detector.recordIteration(2)
+    expect(detector.isStuck()).toBe(false)
+  })
+
   it('should detect repetitive tool errors', () => {
     for (let i = 0; i < 4; i++) {
       detector.recordToolError('bash')
