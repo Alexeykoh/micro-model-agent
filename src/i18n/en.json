@@ -305,6 +305,7 @@
   "exec.off_track": "[\u26a0 Outside plan: step {stepId} is \"{description}\", but you're using {tool} on a different path. Explain or return.]",
   "exec.audit_pass": "[\u2713] Task complete: {done}/{total} steps done, {files} files verified",
   "exec.audit_fail": "[\u2717] Task incomplete: {done}/{total} steps done, {files} files missing",
+  "exec.audit_fail_typecheck": "[\u2717] Task incomplete: {done}/{total} steps done, {missing} files missing, typecheck error: {typeError}",
   "exec.audit_incomplete": "[\u26a0 Final audit incomplete: {summary}. Task is NOT finished \u2014 continue working. Remaining steps: {steps}]",
   "hall.max_retries_exhausted": "Model returned empty or insufficient responses after multiple retries",
   "hall.short_response": "Response too short or empty",

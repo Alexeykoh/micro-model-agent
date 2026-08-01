@@ -305,6 +305,7 @@
   "exec.off_track": "[⚠ Вне плана: шаг {stepId} — \"{description}\", но вы используете {tool} для другого пути. Объясните или вернитесь.]",
   "exec.audit_pass": "[✓] Задача выполнена: {done}/{total} шагов, {files} файлов проверено",
   "exec.audit_fail": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов отсутствует",
+  "exec.audit_fail_typecheck": "[✗] Задача не выполнена: {done}/{total} шагов, {missing} файлов отсутствует, ошибка typecheck: {typeError}",
   "exec.audit_incomplete": "[⚠ Финальная проверка не пройдена: {summary}. Задача НЕ завершена — продолжайте работу. Оставшиеся шаги: {steps}]",
   "hall.max_retries_exhausted": "Модель вернула пустой или недостаточный ответ после нескольких попыток",
   "hall.short_response": "Слишком короткий или пустой ответ",

@@ -10,6 +10,7 @@ import { PluginLoader } from "../modules/plugins/loader";
 import { plugin as lintOnWritePlugin } from "../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../modules/plugins/builtin/notify";
 import { ContextManager } from "../modules/context/manager";
+import { TokenCounter } from "../llm/token-counter";
 import { HallucinationDetector } from "../modules/hallucination/detector";
 import { ExecutionModule } from "../modules/execution/module";
 import {
@@ -215,9 +216,12 @@ export async function bootstrap(
     sessionManager.create();
   }
 
+  const tokenCounter = new TokenCounter(config.model);
+
   const contextManager = new ContextManager(
     config.contextWindow,
     config.contextBudget,
+    tokenCounter,
   );
 
   const toolCtx: ToolContext = {

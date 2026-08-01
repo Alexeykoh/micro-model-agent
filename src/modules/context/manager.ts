@@ -11,6 +11,7 @@ export interface Message {
 }
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
+import { TokenCounter } from "../../llm/token-counter";
 
 export interface ContextBudget {
   systemPrompt: number;
@@ -31,12 +32,18 @@ export class ContextManager {
   private fileFacts: string[] = [];
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
+  private tokenCounter: TokenCounter | null;
   onCompact: ((summary: Message) => void) | null = null;
 
-  constructor(contextWindow: number, contextBudget?: ConfigContextBudget) {
+  constructor(
+    contextWindow: number,
+    contextBudget?: ConfigContextBudget,
+    tokenCounter?: TokenCounter | null,
+  ) {
     this.contextWindow = contextWindow;
     this.compactionThreshold = contextBudget?.compactionThreshold ?? 0.75;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
+    this.tokenCounter = tokenCounter ?? null;
   }
 
   private calculateBudget(
@@ -73,6 +80,18 @@ export class ContextManager {
   }
 
   private estimateMessageTokens(m: Message): number {
+    if (this.tokenCounter) {
+      let t = this.tokenCounter.count(m.content);
+      if (m.tool_calls) {
+        for (const tc of m.tool_calls) {
+          t += this.tokenCounter.count(tc.id);
+          t += this.tokenCounter.count(tc.function.name);
+          t += this.tokenCounter.count(tc.function.arguments);
+          t += 4;
+        }
+      }
+      return t;
+    }
     let t = Math.ceil(m.content.length / 2);
     if (m.tool_calls) {
       for (const tc of m.tool_calls) {

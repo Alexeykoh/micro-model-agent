@@ -4,6 +4,10 @@ import { execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { resolve, extname, join } from 'path'
 
+let projectTypeCheckPromise: Promise<string | null> | null = null
+let projectTypeCheckTimestamp = 0
+const TYPE_CHECK_DEBOUNCE_MS = 2000
+
 export class LintOnWritePlugin implements AgentPlugin {
   name = 'lint-on-write'
   priority = 10
@@ -32,6 +36,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
 
     await this.runProjectLint(ctx, result)
+    await this.runProjectTypeCheck(ctx, result)
   }
 
   private checkSyntax(filePath: string, ext: string, baseDir: string): string | null {
@@ -44,7 +49,7 @@ export class LintOnWritePlugin implements AgentPlugin {
           return null
         }
         const stderr = err.stderr?.toString() || err.stdout?.toString() || ''
-        if (stderr.includes('error TS') && !stderr.includes('Cannot find module')) {
+        if (stderr.includes('error TS')) {
           const firstError = stderr.split('\n').find((line: string) => line.includes('error TS')) || 'TypeScript syntax error'
           return firstError.trim()
         }
@@ -86,6 +91,46 @@ export class LintOnWritePlugin implements AgentPlugin {
     } catch (err: any) {
       ctx.logger.warn(`Lint failed: ${err.message}`)
       result.output += `\n\n[Project lint failed]: ${err.message}`
+    }
+  }
+
+  private async runProjectTypeCheck(ctx: ToolContext, result: ToolResult): Promise<void> {
+    const tsconfigPath = join(ctx.baseDir, 'tsconfig.json')
+    if (!existsSync(tsconfigPath)) {
+      return
+    }
+
+    const now = Date.now()
+    if (projectTypeCheckPromise && now - projectTypeCheckTimestamp < TYPE_CHECK_DEBOUNCE_MS) {
+      const error = await projectTypeCheckPromise
+      if (error) {
+        result.output += `\n\n[Project typecheck failed]: ${error}`
+      }
+      return
+    }
+
+    projectTypeCheckTimestamp = now
+    projectTypeCheckPromise = this.runTscCheck(ctx.baseDir)
+    const error = await projectTypeCheckPromise
+    if (error) {
+      result.output += `\n\n[Project typecheck failed]: ${error}`
+    }
+  }
+
+  private async runTscCheck(baseDir: string): Promise<string | null> {
+    try {
+      execSync(`npx tsc --noEmit --skipLibCheck`, { cwd: baseDir, stdio: 'pipe', timeout: 30000 })
+      return null
+    } catch (err: any) {
+      if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
+        return null
+      }
+      const stderr = err.stderr?.toString() || err.stdout?.toString() || ''
+      if (stderr.includes('error TS')) {
+        const firstError = stderr.split('\n').find((line: string) => line.includes('error TS')) || 'TypeScript type error'
+        return firstError.trim()
+      }
+      return null
     }
   }
 }

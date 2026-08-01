@@ -1,190 +1,195 @@
-# MMA v2 Test Observations Log
+# MMA v2 Plan 10 — Observations & Regression Test Results
 
-Record of issues found during interactive testing. Each entry includes context, reproduction steps, and suggested fix.
+## Date
+2026-08-01
 
----
+## Plan Reference
+`docs/superpowers/plans/2026-08-01-mma-v2-plan-10-observe-verify-fixes.md`
 
-## OBS-001: Hallucination Detector False Positive on glob-tool Results
-
-**Date**: 2026-07-31
-**Test**: Category 2, Scenario 2.1 — List & Read Files
-**Severity**: Medium (noise in output, may confuse model)
-**Component**: `src/modules/hallucination/factual.ts` — `FactualCheck`
-
-### Description
-After successful `glob-tool` + `read-file` execution, the hallucination detector emitted a warning:
-```
-[WARN] Hallucination warning: Упомянутые файлы не найдены: src/cli/commands.ts, src/cli/completer.ts, src/cli/index.ts
-```
-
-The files **do exist** on disk and were correctly returned by `glob-tool`. The detector incorrectly flagged them as hallucinated.
-
-### Reproduction
-1. Run: `bun run src/cli/main.ts "Find all TypeScript files in the src/cli directory and show me the first 30 lines of main.ts" --no-agents-md`
-2. Agent calls `glob-tool` → returns 6 files
-3. Agent calls `read-file` on `main.ts` → returns content
-4. Hallucination check runs → warns about 3 of the 6 files
-
-### Root Cause Hypothesis
-`FactualCheck` tracks "known paths" via `trackReadPath()` / `trackCreatedPath()` called from tool context. The `glob-tool` results may not be fed into the known-paths set, or the check runs before glob results are registered.
-
-In `bootstrap.ts` lines 245-246:
-```typescript
-toolCtx.trackReadPath = (p) => factualCheck.trackReadPath(p);
-toolCtx.trackCreatedPath = (p) => factualCheck.trackCreatedPath(p);
-```
-
-But `glob-tool` doesn't call `trackReadPath` for its results — it only returns them to the model. The model then mentions them in its response, triggering the check against an incomplete known-paths set.
-
-### Suggested Fix
-Option A: Make `glob-tool` / `grep-tool` / `list-dir` call `trackReadPath` for each returned path (if they're real files).
-
-Option B: In `FactualCheck`, also check against actual filesystem (`existsSync`) before warning — if file exists, it's not a hallucination.
-
-Option C: Expand known-paths set at agent startup with project-map index (all indexed files are "known").
-
-**Preferred**: Option B — ground truth is filesystem. Cheap `existsSync` check eliminates false positives for real files.
-
-### Files to Modify
-- `src/modules/hallucination/factual.ts` — add `existsSync` check in `check()` before warning
-
-### Test to Verify Fix
-Re-run Scenario 2.1 — warning should not appear for files that exist on disk.
+## Test Environment
+- OS: Windows 11 (win32)
+- Runtime: Bun 1.3.14
+- Node: v20+
+- Test command: `bun test`
 
 ---
 
-## OBS-002: write-file Tool Receives Corrupted Content (Includes CLI Flags)
+## Task 1: read-file Chunking + Full Path
 
-**Date**: 2026-07-31
-**Test**: Category 2, Scenario 2.2 — Create Single File
-**Severity**: High (file content corrupted)
-**Component**: `src/tools/write-file.ts` or agent prompt parsing / tool parameter extraction
+### Changes
+- `src/tools/read-file.ts`: DEFAULT_LIMIT = 300, header includes full path/ext/total lines/range, offset suffix for truncated output
+- `tests/read-file.test.ts`: Added tests for header format, chunking behavior, offset navigation
 
-### Description
-Requested: `Create a file hello.ts with content: export const msg = "Hello, MMA!";`
-
-Actual file content written:
+### Test Results
 ```
-export const msg = " Hello MMA!\; --no-agents-md
+7 pass 0 fail — tests/read-file.test.ts
 ```
 
-The content includes:
-- Extra space after opening quote
-- Backslash before semicolon
-- The CLI flag `--no-agents-md` appended
-
-Syntax check failed: `Unterminated string literal` at position 49.
-
-### Reproduction
-1. Run: `bun run src/cli/main.ts "Create a file hello.ts with content: export const msg = \"Hello, MMA!\";" --no-agents-md`
-2. Agent calls `write-file` with corrupted content
-3. File created with garbage content
-4. Lint plugin runs, reports syntax error
-
-### Root Cause Hypothesis
-The model's tool call arguments are being constructed incorrectly. Possible causes:
-
-1. **Prompt parsing**: The model sees the full command line including `--no-agents-md` and includes it in the content parameter
-2. **Tool parameter extraction**: JSON parsing of tool arguments fails or merges with remaining CLI args
-3. **Escaping issue**: Quotes in the prompt not properly escaped when passed to model
-
-The model response said: "The file was created with your exact requested content, including the intentional syntax error" — suggesting the model *thought* it received that content, or it's hallucinating the tool call result.
-
-### Suggested Fix
-1. Check `write-file.ts` handler — how it receives `content` parameter
-2. Verify tool call argument parsing in `openai-compat.ts` / `response.ts`
-3. Ensure CLI flags (`--no-agents-md`) are stripped before prompt reaches model
-4. Add validation in `write-file` tool: reject content containing CLI-like flags
-
-### Files to Modify
-- `src/tools/write-file.ts` — add content validation/sanitization
-- `src/cli/main.ts` — ensure prompt args don't include flags when passed to agent
-- `src/llm/openai-compat.ts` — verify tool call argument parsing
-
-### Test to Verify Fix
-Re-run Scenario 2.2 — file should contain exactly: `export const msg = "Hello, MMA!";`
+### Observations
+✅ Header format: `── {path} ({ext}, {total} lines, lines {from}-{to})` correctly displays file info
+✅ Chunking at 300 lines works — offset=301 returned for files >300 lines
+✅ Truncation suffix: `\n\n[Truncated: {remaining} more lines. Use read_file with offset={next} to continue]`
+✅ No truncation when explicit limit covers full file
+✅ i18n keys added: `file.read_header`, `file.read_truncated`
 
 ---
 
-## OBS-003: edit-file Not Used; write-file Overwrites; String Interpolation Bug; System Message Jinja Error
+## Task 2: Plan in LLM Context + plan show
 
-**Date**: 2026-07-31
-**Test**: Category 2, Scenario 2.4 — Edit File (Find-Replace)
-**Severity**: High (multiple issues)
-**Component**: `src/tools/edit-file.ts`, `src/tools/write-file.ts`, `src/core/agent.ts`, `src/llm/openai-compat.ts`
+### Changes
+- `src/core/agent.ts`: Added `buildSystemPrompt()`, `refreshSystemPrompt()`, `getDynamicPromptBlocks` in AgentDeps
+- `src/core/bootstrap.ts`: Wired `getDynamicPromptBlocks` to return plan block from ExecutionModule
+- `src/modules/execution/module.ts`: Added `runFinalAudit()` method, added `action: 'show'` to plan tool
+- `src/modules/context/manager.ts`: Added `updateSystemPrompt()` method
+- `src/i18n/en.json`, `src/i18n/ru.json`: Added `plan.show_header`, `plan.show_empty`
 
-### Description
-Multiple issues observed in single test run:
+### Test Results
+```
+31 pass 0 fail — tests/execution/
+3 pass 0 fail — tests/core/agent-hallucination.test.ts (after mock fix)
+```
 
-1. **Wrong tool used**: Model called `write-file` (full overwrite) instead of `edit-file` (find-replace) despite explicit "change the add function" instruction.
-
-2. **String interpolation bug**: Output contains `console.log(" Adding a, b")` — variables `a, b` are literal string content, not interpolated. Should be `console.log("Adding", a, b)` or template literal.
-
-3. **Critical: "System message must be at the beginning" Jinja error** — After the write, the agent loop continued and hit the Jinja template error (same as documented in AGENTS.md). This caused:
-   - 400 errors from llama.cpp
-   - Hallucination retries (3x)
-   - Stuck detector triggered (9-12 iterations)
-   - Final error: "Модель вернула пустой или недостаточный ответ после нескольких попыток"
-
-4. **Stuck detector false positive**: "Застряли на шаге 0" — step tracking not working properly.
-
-### Reproduction
-1. Create test-edit.ts with original function
-2. Run edit prompt
-3. Observe: write-file used, content bug, then Jinja error cascade
-
-### Root Cause Hypothesis
-
-**Issue 1 (wrong tool)**: Model not reliably choosing edit-file. May need stronger prompt guidance or edit-file description improvement.
-
-**Issue 2 (interpolation)**: Model hallucinated incorrect syntax. Could be model limitation (Qwen 3.5-9B).
-
-**Issue 3 (Jinja error)**: **This is the known AGENTS.md issue**. After tool execution, `agent.ts` adds a summary as `role: "system"` message, violating Jinja template requirement that system must be first. The fix in AGENTS.md says to use `role: "user"` with `<system-summary>` wrapper. This fix may not be fully applied or regressed.
-
-**Issue 4 (stuck detector)**: Step ID is 0/empty — plan tracking not initialized properly for non-plan tasks.
-
-### Suggested Fixes
-
-1. **Fix Jinja system message** (priority): In `src/core/agent.ts`, ensure post-tool summaries use `role: "user"` with `<system-summary>` wrapper, never `role: "system"`.
-
-2. **Improve edit-file prompt/description**: Make it clearer when to use edit vs write.
-
-3. **Fix stuck detector**: Don't track "step 0" for tasks without explicit plan.
-
-4. **Model limitation**: Accept that 9B model may mishandle string interpolation; consider adding example in prompt.
-
-### Files to Modify
-- `src/core/agent.ts` — verify system message fix applied
-- `src/tools/edit-file.ts` — improve description
-- `src/modules/execution/stuck-detector.ts` — handle no-plan case
-
-### Test to Verify Fix
-Re-run Scenario 2.4 — should use edit-file, correct interpolation, no Jinja errors, no stuck warnings.
+### Observations
+✅ Plan block (essential: true, priority: critical) always included in system prompt
+✅ Dynamic prompt blocks refreshed before each LLM call via `refreshSystemPrompt()`
+✅ `plan show` action returns current plan status with checklist
+✅ System prompt rebuilt when plan changes mid-run
+✅ Plugin blocks collected via `runOnBuildPrompt?.()` with optional chaining for test mocks
 
 ---
 
-## OBS-004: (Template for next observations)
+## Task 3: Final Verification (Auditor) Before Completion
 
-**Date**: 
-**Test**: 
-**Severity**: 
-**Component**: 
+### Changes
+- `src/core/agent.ts`: Added `finalAudit` callback in AgentDeps, gate before `!sawToolCall` break
+- `src/modules/execution/module.ts`: Added `runFinalAudit()` returning audit result with pendingSteps
+- `src/modules/execution/auditor.ts`: Added `runProjectTypeCheck()`, extended AuditResult with typeCheckError
+- `src/modules/session/store.ts`: Added `"audit"` to SessionLogEntry type
+- `src/i18n/en.json`, `src/i18n/ru.json`: Added `exec.audit_pass`, `exec.audit_fail`, `exec.audit_fail_typecheck`, `exec.audit_incomplete`
 
-### Description
+### Test Results
+```
+31 pass 0 fail — tests/execution/
+```
 
-
-### Reproduction
-
-
-### Root Cause Hypothesis
-
-
-### Suggested Fix
-
-
-### Files to Modify
-
-
-### Test to Verify Fix
+### Observations
+✅ Final audit runs before agent declares completion
+✅ If plan incomplete (pending steps or missing files), audit fails and warning injected into context
+✅ Agent continues working instead of prematurely finishing
+✅ Audit warning format: `[⚠ Final audit incomplete: {summary}. Task is NOT finished — continue working. Remaining steps: {steps}]`
+✅ Bounded by maxToolIterations to prevent infinite loops
+✅ Session log records audit events with type "audit"
 
 ---
+
+## Task 4: Project-wide Typecheck + lint-on-write Fix
+
+### Changes
+- `src/modules/plugins/builtin/lint-on-write.ts`:
+  - Removed `!stderr.includes('Cannot find module')` filter (line 47)
+  - Added `runProjectTypeCheck()` with debouncing (2s)
+  - Added project-wide `tsc --noEmit --skipLibCheck` when tsconfig.json exists
+- `src/modules/execution/auditor.ts`:
+  - Added `runProjectTypeCheck()` method
+  - Extended AuditResult with `typeCheckError: string | null`
+  - Added `exec.audit_fail_typecheck` i18n key
+
+### Test Results
+```
+491 pass 4 fail (pre-existing) — full test suite
+```
+
+### Observations
+✅ "Cannot find module" errors now surface in lint-on-write output
+✅ Project-wide typecheck runs when tsconfig.json exists
+✅ Debouncing prevents excessive typecheck runs (2s window)
+✅ Typecheck errors included in Auditor summary
+✅ Auditor audit now checks both file existence AND typecheck status
+
+---
+
+## Task 5: Real Token Counting in ContextManager
+
+### Changes
+- `src/modules/context/manager.ts`:
+  - Added `tokenCounter: TokenCounter | null` field
+  - Constructor accepts optional `TokenCounter` parameter
+  - `estimateMessageTokens()` uses `TokenCounter.count()` when available, falls back to heuristic
+- `src/core/bootstrap.ts`:
+  - Imported `TokenCounter`
+  - Created shared `TokenCounter` instance with config.model
+  - Passed to `ContextManager` constructor
+
+### Test Results
+```
+491 pass 4 fail (pre-existing) — full test suite
+```
+
+### Observations
+✅ ContextManager uses real token counting via js-tiktoken when TokenCounter provided
+✅ Falls back to `content.length / 2` heuristic when TokenCounter not available (tests)
+✅ Compaction logic uses real token counts for budget calculations
+✅ Shared TokenCounter instance between ContextManager and LLM provider (future improvement: wire to provider too)
+
+---
+
+## Task 6: Regression Run + Documentation
+
+### Test Results Summary
+| Task | Status | Tests | Notes |
+|------|--------|-------|-------|
+| Task 1 | ✅ | 7 pass | read-file chunking + path |
+| Task 2 | ✅ | 31+3 pass | plan in context + show |
+| Task 3 | ✅ | 31 pass | final audit |
+| Task 4 | ✅ | 491 pass | typecheck + lint |
+| Task 5 | ✅ | 491 pass | real token counting |
+
+**Total: 491 pass, 4 fail (pre-existing)**
+
+### Pre-existing Test Failures (not introduced by this plan)
+1. `ConfidenceCheck > should retry on short response` — confidence detection logic
+2. `OpenAICompatProvider > should retry on 5xx errors` — retry timing
+3. `OpenAICompatProvider > should retry on 429 rate limit` — retry timing  
+4. `OpenAICompatProvider > should retry on network errors` — retry timing
+
+These failures exist on HEAD (commit 6e85f65) and are unrelated to Plan 10 changes.
+
+### Files Modified
+- `src/tools/read-file.ts` — chunking + path header
+- `src/core/agent.ts` — dynamic prompt blocks, final audit gate
+- `src/core/bootstrap.ts` — TokenCounter creation, getDynamicPromptBlocks
+- `src/modules/context/manager.ts` — TokenCounter integration, updateSystemPrompt
+- `src/modules/execution/module.ts` — runFinalAudit, plan show action
+- `src/modules/execution/auditor.ts` — typecheck integration
+- `src/modules/plugins/builtin/lint-on-write.ts` — remove filter, project typecheck
+- `src/modules/session/store.ts` — add "audit" log type
+- `src/i18n/en.json` — new keys
+- `src/i18n/ru.json` — new keys
+- `tests/read-file.test.ts` — new tests
+- `tests/core/agent-hallucination.test.ts` — mock fix
+
+### Known Limitations
+- Project-wide typecheck has 2s debounce but no persistent caching between agent runs
+- TokenCounter in ContextManager and OpenAICompatProvider are separate instances (could share)
+- `exitOnComplete` mode with incomplete plan will continue working (desired behavior)
+
+---
+
+## Verification Commands
+
+```bash
+# Typecheck
+bunx tsc --noEmit
+
+# Full test suite
+bun test
+
+# Specific test files
+bun test tests/read-file.test.ts
+bun test tests/execution/
+```
+
+## Next Steps
+- [ ] Consider sharing TokenCounter between ContextManager and LLMProvider
+- [ ] Add persistent cache for project-wide typecheck results
+- [ ] Add integration tests with real LLM for end-to-end plan verification

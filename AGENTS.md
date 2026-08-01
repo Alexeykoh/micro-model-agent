@@ -223,7 +223,7 @@ src/
 │   ├── registry.ts     # Single source of truth for tool definitions
 │   ├── executor.ts     # Dispatch pipeline: plugins → validate → handler → plugins → log
 │   ├── types.ts        # ToolDefinition, ToolContext, ToolResult
-│   ├── read-file.ts    # Path-safe file reading with offset/limit
+│   ├── read-file.ts    # Path-safe file reading with offset/limit, chunking at 300 lines, full path in output header
 │   ├── write-file.ts   # Create/overwrite with intermediate dir creation
 │   ├── edit-file.ts    # Find-replace in existing files
 │   ├── glob-tool.ts    # Glob pattern matching
@@ -533,7 +533,7 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 | 64K           | 6K          | 10K           | 48K           |
 | 128K          | 13K         | 19K           | 96K           |
 
-Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages.
+Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
 
 ## Execution Guarantees
 
@@ -553,9 +553,18 @@ Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 t
 ### Auto-Verification
 
 - Builtin `lint-on-write` plugin runs after every `write_file` / `edit_file`
-- TypeScript files: `tsc --noEmit --skipLibCheck`
+- TypeScript files: per-file `tsc --noEmit --skipLibCheck` + project-wide `tsc --noEmit --skipLibCheck` when `tsconfig.json` exists (debounced at 2s)
 - JavaScript files: `node --check`
 - Syntax errors are appended to the tool result so the model can fix them immediately
+- **Final Audit**: Before declaring task complete, the Auditor checks plan completion (all steps done, no missing files) and runs project-wide typecheck. If incomplete, a warning is injected into context and the agent continues working.
+
+### Final Audit Gate
+
+- Triggered when the model returns a final answer (no tool calls) and a plan is active
+- Runs `Auditor.audit(plan)` which checks: file existence from step descriptions + project-wide `tsc --noEmit --skipLibCheck`
+- If audit fails (`passed: false`), injects `<system-summary>` warning with pending steps and typecheck errors
+- Agent continues the loop instead of breaking — bounded by `maxToolIterations`
+- Session log records audit events with type `"audit"`
 
 ## Agent Loop States
 
