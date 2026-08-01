@@ -1,5 +1,9 @@
 import * as readline from "readline";
+import { pc } from "../ui/colors";
 import { t, setLocale } from "../i18n/index";
+import { Spinner } from "../ui/spinner";
+import { box } from "../ui/box";
+import { renderTable } from "../ui/table";
 
 interface SetupAnswers {
   provider: string;
@@ -9,6 +13,27 @@ interface SetupAnswers {
   contextWindow: number;
   maxToolIterations: number;
   locale: string;
+}
+
+async function withSpinner<T>(
+  message: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const spinner = new Spinner();
+  spinner.start(message);
+  try {
+    return await fn();
+  } finally {
+    spinner.stop();
+  }
+}
+
+/** Render a numbered list inside a box. */
+function menuList(items: Array<{ label: string; url?: string }>): void {
+  const lines = items.map(
+    (it, i) => ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
+  );
+  for (const l of box(lines, { width: 72 })) console.log(l);
 }
 
 function ask(
@@ -132,7 +157,7 @@ export async function runSetup(): Promise<SetupAnswers> {
   setLocale(locale);
 
   console.log(t("setup.select_provider"));
-  PROVIDER_TYPES.forEach((p, i) => console.log(`    ${i + 1}. ${p.label}`));
+  menuList(PROVIDER_TYPES);
   const providerChoice = await ask(
     rl,
     t("setup.select_provider_num", { max: PROVIDER_TYPES.length }),
@@ -147,15 +172,17 @@ export async function runSetup(): Promise<SetupAnswers> {
   let apiBase = "";
 
   if (provider === "openai-compat") {
-    console.log(t("setup.scanning"));
-    const found = await scanPorts();
+    const found = await withSpinner(
+      t("setup.scanning_spinner"),
+      async () => scanPorts(),
+    );
 
     if (found.length > 0) {
       console.log(t("setup.found_servers", { count: found.length }));
-      found.forEach((f, i) =>
-        console.log(`    ${i + 1}. ${f.label.padEnd(14)} ${f.url}`),
-      );
-      console.log(`    ${found.length + 1}. ${t("setup.custom_url")}`);
+      menuList([
+        ...found.map((f) => ({ label: f.label, url: f.url })),
+        { label: t("setup.custom_url") },
+      ]);
       const choice = await ask(
         rl,
         t("setup.select_server", { max: found.length + 1 }),
@@ -184,12 +211,13 @@ export async function runSetup(): Promise<SetupAnswers> {
   const defaultKey = provider === "openai-compat" ? "not-needed" : "";
   const apiKey = await ask(rl, t("setup.api_key"), defaultKey);
 
-  console.log(t("setup.fetching_models"));
-  const models = await fetchModels(apiBase, apiKey);
+  const models = await withSpinner(t("setup.fetching_spinner"), () =>
+    fetchModels(apiBase, apiKey),
+  );
   let model = "";
   if (models.length > 0) {
     console.log(t("setup.available_models"));
-    models.slice(0, 10).forEach((m, i) => console.log(`    ${i + 1}. ${m}`));
+    menuList(models.slice(0, 10).map((m) => ({ label: m })));
     const choice = await ask(
       rl,
       t("setup.select_model", { max: Math.min(models.length, 10) }),
@@ -204,12 +232,14 @@ export async function runSetup(): Promise<SetupAnswers> {
     model = await ask(rl, t("setup.model_name"), "qwen3.5-9b");
   }
 
-  console.log(t("setup.testing", { model }));
-  const connected = await testChat(apiBase, apiKey, model);
+  const connected = await withSpinner(
+    t("setup.testing_spinner", { model }),
+    () => testChat(apiBase, apiKey, model),
+  );
   if (connected) {
-    console.log(t("setup.ok"));
+    console.log(pc.green(t("setup.ok")));
   } else {
-    console.log(t("setup.warning"));
+    console.log(pc.yellow(t("setup.warning")));
   }
 
   console.log(t("setup.agent_settings"));
@@ -230,6 +260,22 @@ export async function runSetup(): Promise<SetupAnswers> {
     locale,
   };
 
-  console.log(t("setup.complete"));
+  console.log(pc.green(pc.bold(t("setup.complete"))));
+  const summary = renderTable(
+    [
+      t("setup.summary_setting"),
+      t("setup.summary_value"),
+      t("setup.summary_setting"),
+      t("setup.summary_value"),
+    ],
+    [
+      [t("setup.provider_type"), provider, t("setup.model_name"), model],
+      ["API Base URL", apiBase, t("setup.context_window"), String(contextWindow)],
+      [t("setup.api_key"), apiKey || "not-needed", t("setup.max_iters"), String(maxIterations)],
+      [t("setup.ui_lang"), locale, "", ""],
+    ],
+    { maxColumns: 4 },
+  );
+  for (const l of summary) console.log(l);
   return answers;
 }

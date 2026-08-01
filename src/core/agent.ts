@@ -7,10 +7,10 @@ import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import type { ToolScope } from "../tools/types";
 import type { PromptBlock } from "./types";
-import type { ToolCall } from "./types";
+import type { ToolCall, ToolEvent, AgentPhase } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import { t } from "../i18n/index";
-import pc from "picocolors";
+import { pc } from "../ui/colors";
 import { PromptBuilder } from "./prompt-builder";
 import { OrchestratorClient } from "../llm/orchestrator";
 import {
@@ -97,6 +97,8 @@ export class Agent {
     input: string,
     onChunk?: (chunk: string) => void,
     onMeta?: (meta: string) => void,
+    onTool?: (ev: ToolEvent) => void,
+    onPhase?: (phase: AgentPhase) => void,
   ): Promise<AgentResult> {
     this.setScope();
     const {
@@ -164,16 +166,18 @@ export class Agent {
     }
 
     if (config.moe?.enabled) {
-      return this.runWithMoE(input, onChunk, onMeta);
+      return this.runWithMoE(input, onChunk, onMeta, onTool, onPhase);
     }
 
-    return this.executeSingleAgentLoop(input, onChunk, onMeta);
+    return this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase);
   }
 
   private async executeSingleAgentLoop(
     input: string,
     onChunk?: (chunk: string) => void,
     onMeta?: (meta: string) => void,
+    onTool?: (ev: ToolEvent) => void,
+    onPhase?: (phase: AgentPhase) => void,
   ): Promise<AgentResult> {
     const {
       config,
@@ -253,6 +257,7 @@ export class Agent {
       let sawToolCall = false;
       let emittedReasoning = false;
 
+      onPhase?.("thinking");
       try {
         for await (const chunk of llmProvider.chat(history, allTools as any)) {
           if (chunk.type === "text" && chunk.content) {
@@ -271,12 +276,6 @@ export class Agent {
           }
           if (chunk.type === "tool_call" && chunk.toolCall) {
             sawToolCall = true;
-            const friendlyKey = `tool.friendly.${chunk.toolCall.name}`;
-            const label =
-              t(friendlyKey) !== friendlyKey
-                ? t(friendlyKey)
-                : chunk.toolCall.name;
-            onMeta?.("\n" + pc.dim(t("tool.using", { label })) + "\n");
             let parsedArgs: Record<string, unknown>;
             try {
               parsedArgs = JSON.parse(chunk.toolCall.arguments);
@@ -306,6 +305,8 @@ export class Agent {
           error: t("error.llm", { message: err.message }),
           iterationCount: iteration,
         };
+      } finally {
+        onPhase?.("done");
       }
 
       if (this.deps.exitOnComplete && sawToolCall) {
@@ -366,6 +367,7 @@ export class Agent {
             toolName: call.name,
             args: call.arguments,
           });
+          onTool?.({ type: "start", tool: call.name, args: call.arguments });
           if (sessionManager) {
             sessionManager.appendLog({
               ts: new Date().toISOString(),
@@ -385,6 +387,13 @@ export class Agent {
           if (result.diff) {
             onMeta?.("\n" + result.diff + "\n");
           }
+          onTool?.({
+            type: "end",
+            tool: call.name,
+            args: call.arguments,
+            duration,
+            error: !result.success,
+          });
           const currentTokens = contextManager.getEstimatedTokens();
           const budget = contextManager.getBudget();
           const truncatedOutput = this.truncateToolOutput(
@@ -557,6 +566,8 @@ export class Agent {
     input: string,
     _onChunk?: (chunk: string) => void,
     onMeta?: (meta: string) => void,
+    onTool?: (ev: ToolEvent) => void,
+    onPhase?: (phase: AgentPhase) => void,
   ): Promise<AgentResult> {
     const { config, llmProvider, logger } = this.deps;
 
@@ -572,16 +583,18 @@ export class Agent {
       logger.debug(
         "MoE enabled but no orchestrator model configured — falling back to single-agent",
       );
-      return this.executeSingleAgentLoop(input, _onChunk, onMeta);
+      return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool, onPhase);
     }
 
     onMeta?.("🤖 Planning with MoE mode...\n");
+    onPhase?.("thinking");
     const planResult = await orchestrator.plan(input);
+    onPhase?.("done");
     if ("error" in planResult) {
       logger.warn(
         `MoE plan failed: ${planResult.error} — falling back to single-agent`,
       );
-      return this.executeSingleAgentLoop(input, _onChunk, onMeta);
+      return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool);
     }
 
     const { plan } = planResult;
@@ -600,7 +613,7 @@ export class Agent {
         onMeta?.(
           `⚠️ Plan validation failed. Falling back to single-agent mode.\n`,
         );
-        return this.executeSingleAgentLoop(input, _onChunk, onMeta);
+        return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool);
       }
       Object.assign(plan, applied);
       onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
@@ -638,6 +651,7 @@ export class Agent {
       knownTags,
     );
 
+    onPhase?.("thinking");
     const verifyResult = await orchestrator.verifyAndMerge({
       plan,
       results: planResults.results.map((r) => ({
@@ -650,6 +664,7 @@ export class Agent {
       verifierErrors: verification.errors,
       verifierWarnings: verification.warnings,
     });
+    onPhase?.("done");
 
     const outputLines: string[] = [`## MoE Execution Results\n`];
     for (const r of planResults.results) {

@@ -68,6 +68,9 @@ export const DEFAULTS: AppConfig = {
     viewportHeight: 720,
     navigationTimeout: 15000,
   },
+  ui: {
+    spinner: true,
+  },
   mcpServers: {
     context7: {
       name: "context7",

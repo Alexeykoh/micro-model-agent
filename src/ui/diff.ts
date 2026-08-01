@@ -1,4 +1,4 @@
-import picocolors from "picocolors";
+import { pc } from "./colors";
 
 const CONTEXT_LINES = 3;
 const MAX_DIFF_LINES = 100;
@@ -141,13 +141,13 @@ function formatLine(line: DiffLine, maxNumWidth: number): string {
     num !== null ? String(num).padStart(maxNumWidth) : " ".repeat(maxNumWidth);
 
   if (line.type === "remove") {
-    return picocolors.red(`${picocolors.bgRed(`${numStr} - ${line.content}`)}`);
+    return pc.red(`${pc.bgRed(`${numStr} - ${line.content}`)}`);
   } else if (line.type === "add") {
-    return picocolors.green(
-      `${picocolors.bgGreen(`${numStr} + ${line.content}`)}`,
+    return pc.green(
+      `${pc.bgGreen(`${numStr} + ${line.content}`)}`,
     );
   } else if (line.content === "...") {
-    return picocolors.dim(`  ${" ".repeat(maxNumWidth)}...`);
+    return pc.dim(`  ${" ".repeat(maxNumWidth)}...`);
   } else {
     return `  ${numStr}   ${line.content}`;
   }
@@ -188,7 +188,7 @@ export function generateDiff(oldContent: string, newContent: string): string {
   if (lines.length > MAX_DIFF_LINES) {
     const truncated = lines.slice(0, MAX_DIFF_LINES);
     truncated.push(
-      picocolors.dim(`  ... (${lines.length - MAX_DIFF_LINES} more lines)`),
+      pc.dim(`  ... (${lines.length - MAX_DIFF_LINES} more lines)`),
     );
     lines = truncated;
   }
@@ -204,14 +204,14 @@ export function generateNewFileDiff(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
     diffLines.push(
-      picocolors.green(`${picocolors.bgGreen(`${numStr} + ${lines[i]}`)}`),
+      pc.green(`${pc.bgGreen(`${numStr} + ${lines[i]}`)}`),
     );
   }
 
   if (diffLines.length > MAX_DIFF_LINES) {
     const truncated = diffLines.slice(0, MAX_DIFF_LINES);
     truncated.push(
-      picocolors.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
+      pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
     );
     return truncated.join("\n");
   }
@@ -227,14 +227,14 @@ export function generateDeleteDiff(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
     diffLines.push(
-      picocolors.red(`${picocolors.bgRed(`${numStr} - ${lines[i]}`)}`),
+      pc.red(`${pc.bgRed(`${numStr} - ${lines[i]}`)}`),
     );
   }
 
   if (diffLines.length > MAX_DIFF_LINES) {
     const truncated = diffLines.slice(0, MAX_DIFF_LINES);
     truncated.push(
-      picocolors.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
+      pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
     );
     return truncated.join("\n");
   }
@@ -244,7 +244,7 @@ export function generateDeleteDiff(content: string): string {
 
 export function generateMoveDiff(fromPath: string, toPath: string): string {
   return [
-    picocolors.red(`  - ${fromPath}`),
-    picocolors.green(`  + ${toPath}`),
+    pc.red(`  - ${fromPath}`),
+    pc.green(`  + ${toPath}`),
   ].join("\n");
 }

@@ -19,6 +19,9 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 # Run agent
 bun run mma "<prompt>"
 
+# Run agent, machine-readable JSON result (single-run mode)
+bun run mma "<prompt>" --json
+
 # Dev mode (watch)
 bun run dev
 
@@ -198,7 +201,7 @@ const body = { model, messages, stream: false, max_tokens };
 6. **Path safety** — all filesystem tools check `targetPath.startsWith(baseDir)`
 7. **TDD** — write test first, then implement, then commit
 8. **No hardcoded user-facing strings** — ALL text shown to users MUST go through `t()` from `i18n/index.ts`. Both `en.json` and `ru.json` must have matching keys. No exceptions — CLI labels, error messages, tool outputs, REPL prompts, setup wizard text, everything.
-9. **No TUI** — minimal CLI + REPL with markdown→ANSI formatting
+9. **No full-screen TUI** — no alternate screen buffer, no raw-mode, no full-frame redraw. Rich ANSI output is allowed: spinner (single-line `\r` overwrite on stderr), boxed tool cards, aligned tables. Auto-degrades to plain text when `!isTTY` or `CI`.
 10. **No keyword matching for task classification** — determining whether a task is multi-step, needs planning, or requires specific tools via keyword/word matching is an anti-pattern. It fails for non-English languages, ambiguous inputs, and novel task patterns. Instead, use the system prompt to instruct the model to use the `plan` tool when appropriate. The model decides whether to create a plan based on task complexity, not hardcoded heuristics.
 11. **Interactive tools bypass the execution timeout** — tools that block on user input (`question`, `approve`) must set `interactive: true` on their `ToolDefinition`. The executor skips the 60s timeout for them. Any new user-facing interactive tool must do the same, and must reuse `user-input.ts` instead of creating its own readline interface.
 
@@ -278,7 +281,14 @@ src/
 │   └── setup.ts        # Interactive setup wizard (port scan → test)
 ├── config/             # 3-layer config: defaults → global → project + env
 ├── i18n/               # en.json + ru.json + t() function
-├── ui/                 # Markdown→ANSI formatter + output helpers
+├── ui/                 # Rendering layer
+│   ├── md-formatter.ts # Markdown→ANSI (headings, tables, quotes, checkboxes, hr, inline)
+│   ├── table.ts        # Aligned tables via string-width + renderTable(headers, rows)
+│   ├── box.ts          # Boxes with titles, dividers, ANSI-safe text wrapping
+│   ├── spinner.ts      # Zero-dep ANSI spinner (stderr, single-line overwrite)
+│   ├── renderer.ts     # Rich/plain Renderer + boxed tool cards + summarizeArgs
+│   ├── diff.ts         # LCS-based diffs for file edits
+│   └── output.ts       # writeOutput/writeError/writeSuccess/writeWarning
 ├── logger/             # Structured logger with levels + child loggers
 └── migration/          # MMA v1→v2 detection, backup, safe startup
 ```
@@ -471,6 +481,23 @@ MMA automatically builds and maintains a map of the current workspace.
 | `find` | `query` | Search files by path or exported symbol name |
 
 - Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`).
+
+## UI Rendering
+
+Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatically: **rich** when `process.stdout.isTTY && !process.env.CI`, otherwise **plain**. Colors come from `src/ui/colors.ts` (`createColors`), enabled only on a TTY and disabled in CI / on `NO_COLOR` (overrides picocolors' win32 default-on).
+
+**Event flow:** `Agent.run()` takes `(onChunk, onMeta, onTool, onPhase)`. The renderer maps:
+- `text` → markdown-formatted streaming (via `FormattingStream`)
+- `meta` → raw status/output lines (reasoning, tool results, MoE status)
+- `onTool` `start`/`end` events → boxed tool cards (rich) or `⚙ name` prefixes (plain)
+- `onPhase` `thinking`/`done` → thinking spinner (e.g. `⠋ Thinking…`) while the model loads and generates; auto-cleared on first chunk, tool card, or `done`
+
+**Rich mode extras:**
+- Spinner (`src/ui/spinner.ts`) on stderr during LLM wait and tool execution — single-line `\r` overwrite, cleared before any text write.
+- Tool cards: `┌─ ✓ write_file ─┐` with args summary, wrapped body, duration.
+- Markdown v2: aligned tables (`│` borders), blockquotes, checkboxes, hr, italic, links.
+
+**Config:** `ui.spinner` in `config/defaults.ts` toggles the spinner. Tool `friendly` labels come from i18n `tool.friendly.*`. All user-facing strings still go through `t()` (rule #8) — this includes REPL header, `/help` groups, setup wizard, and tool cards.
 
 ## Context Budget (dynamic, from model.contextWindow)
 

@@ -290,6 +290,52 @@ describe("Agent", () => {
     expect(meta.some((c) => c.includes("Hidden thought"))).toBe(false);
   });
 
+  it("emits thinking/done phases around each LLM call", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue(
+        (async function* () {
+          yield { type: "text" as const, content: "Answer" };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        })(),
+      ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any });
+    const agent = new Agent(deps as any);
+    const phases: string[] = [];
+    await agent.run("test", undefined, undefined, undefined, (p) =>
+      phases.push(p),
+    );
+
+    expect(phases).toEqual(["thinking", "done"]);
+  });
+
+  it("emits done phase even when the LLM call throws", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue(
+        (async function* () {
+          throw new Error("boom");
+        })(),
+      ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any });
+    const agent = new Agent(deps as any);
+    const phases: string[] = [];
+    const result = await agent.run("test", undefined, undefined, undefined, (p) =>
+      phases.push(p),
+    );
+
+    expect(phases).toEqual(["thinking", "done"]);
+    expect(result.success).toBe(false);
+  });
+
   it("truncateToolOutput respects absolute max chars limit", () => {
     const deps = createMockDeps();
     const agent = new Agent(deps as any);

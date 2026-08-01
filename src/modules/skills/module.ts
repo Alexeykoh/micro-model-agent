@@ -3,7 +3,7 @@ import type { PromptBlock } from "../../core/types";
 import type { SkillMeta } from "./loader";
 import type { SkillsMatcher } from "./matcher";
 import { t } from "../../i18n/index";
-import pc from "picocolors";
+import { pc } from "../../ui/colors";
 
 export interface LoadResult {
   success: boolean;

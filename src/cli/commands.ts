@@ -13,7 +13,8 @@ export function createProgram(): Command {
     .version("0.4.0")
     .option("--no-agents-md", t("cli.no_agents_md"))
     .option("-d, --dir <path>", t("cli.dir"))
-    .option("-e, --exit-on-complete", t("cli.exit_on_complete"));
+    .option("-e, --exit-on-complete", t("cli.exit_on_complete"))
+    .option("-j, --json", t("cli.json"));
 
   program
     .command("init")

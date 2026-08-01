@@ -30,4 +30,53 @@ describe('formatMarkdown', () => {
     expect(result).toContain('item 1')
     expect(result).toContain('item 2')
   })
+
+  it('should format ordered lists', () => {
+    const result = formatMarkdown('1. first\n2. second')
+    expect(result).toContain('first')
+    expect(result).toContain('second')
+  })
+
+  it('should format tables with aligned columns', () => {
+    const md = '| Name | Value |\n|---|---|\n| alpha | 42 |'
+    const result = formatMarkdown(md)
+    expect(result).toContain('alpha')
+    expect(result).toContain('┌')
+    expect(result).toContain('│')
+  })
+
+  it('should format blockquotes', () => {
+    const result = formatMarkdown('> quoted text')
+    expect(result).toContain('quoted text')
+  })
+
+  it('should format checkboxes', () => {
+    const done = formatMarkdown('- [x] finished')
+    const todo = formatMarkdown('- [ ] pending')
+    expect(done).toContain('finished')
+    expect(todo).toContain('pending')
+  })
+
+  it('should format horizontal rules', () => {
+    const result = formatMarkdown('text\n---\ntext2')
+    expect(result).toContain('text')
+    expect(result).toContain('text2')
+    expect(result).not.toContain('---')
+  })
+
+  it('should format italic text', () => {
+    const result = formatMarkdown('*emphasized* word')
+    expect(result).toContain('emphasized')
+  })
+
+  it('should format links', () => {
+    const result = formatMarkdown('[docs](https://example.com)')
+    expect(result).toContain('docs')
+    expect(result).toContain('example.com')
+  })
+
+  it('should not double-wrap inline code that contains markdown', () => {
+    const result = formatMarkdown('Use `**x**` here')
+    expect(result).toContain('**x**')
+  })
 })

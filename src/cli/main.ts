@@ -2,10 +2,11 @@
 import { bootstrap } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { formatMarkdown } from "../ui/md-formatter";
+import { Renderer } from "../ui/renderer";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
 import { t } from "../i18n/index";
-import pc from "picocolors";
+import { pc } from "../ui/colors";
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   const noAgentsMd = opts.noAgentsMd === true;
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
+  const jsonMode = opts.json === true;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -28,26 +30,58 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
-    const chunks: string[] = [];
+    const { agent, config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+
+    if (jsonMode) {
+      const result = await agent.run(prompt);
+      agent.shutdown();
+      process.stdout.write(
+        JSON.stringify(
+          {
+            success: result.success,
+            text: result.text,
+            error: result.error ?? null,
+            iterationCount: result.iterationCount,
+            contextUsed: result.contextUsed ?? null,
+            contextLimit: result.contextLimit ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+      process.stdout.write("\n");
+      process.exit(result.success ? 0 : 1);
+    }
+
+    const renderer = new Renderer({ spinner: config.ui?.spinner ?? true });
     const result = await agent.run(
       prompt,
-      (chunk) => {
-        chunks.push(chunk);
-        process.stdout.write(chunk);
+      (chunk) => renderer.text(chunk),
+      (meta) => renderer.meta(meta),
+      (ev) => {
+        if (ev.type === "start") {
+          renderer.toolStart(ev.tool, ev.args);
+        } else {
+          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
+        }
       },
-      (meta) => process.stdout.write(meta),
+      (phase) => {
+        if (phase === "thinking") {
+          renderer.thinkingStart();
+        } else {
+          renderer.thinkingEnd();
+        }
+      },
     );
+    renderer.flush();
     if (result.success) {
-      if (!result.text && chunks.length === 0) {
+      if (!result.text) {
         console.log(pc.yellow(t("cli.no_output")));
-      } else if (!chunks.length) {
-        console.log(formatMarkdown(result.text));
       }
     } else {
       console.error(`${t("error.prefix")}${result.error}`);
-      if (result.text || chunks.length > 0) {
-        console.log(formatMarkdown(result.text || chunks.join("")));
+      if (result.text) {
+        console.log(formatMarkdown(result.text));
       }
       process.exit(1);
     }

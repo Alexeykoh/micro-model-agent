@@ -69,6 +69,10 @@ export interface BrowserToolConfig {
   navigationTimeout: number;
 }
 
+export interface UiConfig {
+  spinner: boolean;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -88,5 +92,6 @@ export interface AppConfig {
   locale: string;
   session: SessionConfig;
   browser: BrowserToolConfig;
+  ui: UiConfig;
   mcpServers: Record<string, MCPServerConfigEntry>;
 }

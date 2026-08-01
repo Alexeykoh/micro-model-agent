@@ -15,6 +15,17 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
+export interface ToolEvent {
+  type: 'start' | 'end'
+  tool: string
+  args: Record<string, unknown>
+  duration?: number
+  error?: boolean
+}
+
+/** Agent lifecycle phases surfaced to the renderer (spinner control). */
+export type AgentPhase = 'thinking' | 'done'
+
 export interface ToolResult {
   success: boolean
   output: string

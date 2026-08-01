@@ -1,5 +1,5 @@
 import * as readline from "readline";
-import pc from "picocolors";
+import { pc } from "../ui/colors";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -10,7 +10,9 @@ import {
   SubcommandProvider,
   SkillNameProvider,
 } from "./completer";
-import { FormattingStream } from "../ui/md-formatter";
+import { Renderer } from "../ui/renderer";
+import { box, divider } from "../ui/box";
+import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
@@ -24,8 +26,28 @@ interface SlashCommand {
   name: string;
   description: string;
   aliases?: string[];
+  usage?: string;
   action(args: string[]): void | Promise<void>;
 }
+
+const COMMAND_GROUPS: Record<string, string> = {
+  help: "general",
+  exit: "general",
+  clear: "general",
+  run: "general",
+  config: "agent",
+  status: "agent",
+  reasoning: "agent",
+  provider: "agent",
+  model: "agent",
+  wizard: "agent",
+  sessions: "session",
+  new: "session",
+  resume: "session",
+  rename: "session",
+  delete: "session",
+  skill: "skill",
+};
 
 function formatContextBar(used: number, limit: number): string {
   const pct = Math.min(100, Math.round((used / limit) * 100));
@@ -117,17 +139,20 @@ export class Repl {
     this.registerCommand({
       name: "help",
       description: t("repl.help"),
+      usage: t("repl.help_usage"),
       action: () => this.showHelp(),
     });
     this.registerCommand({
       name: "exit",
       description: t("repl.exit"),
       aliases: ["quit", "q"],
+      usage: t("repl.exit_usage"),
       action: () => this.stop(),
     });
     this.registerCommand({
       name: "clear",
       description: t("repl.clear"),
+      usage: t("repl.clear_usage"),
       action: () => {
         console.clear();
       },
@@ -138,6 +163,7 @@ export class Repl {
     this.registerCommand({
       name: "run",
       description: t("repl.run"),
+      usage: t("repl.run_usage"),
       action: async (args: string[]) => {
         if (args.length === 0) {
           console.log(t("repl.run_usage"));
@@ -150,6 +176,7 @@ export class Repl {
     this.registerCommand({
       name: "config",
       description: t("repl.config"),
+      usage: t("repl.config_usage"),
       action: () => {
         const ctx = this.config.contextWindow;
         const sys = Math.floor(ctx * this.config.contextBudget.systemPrompt);
@@ -181,6 +208,7 @@ export class Repl {
     this.registerCommand({
       name: "reasoning",
       description: t("repl.reasoning"),
+      usage: t("repl.reasoning_usage"),
       action: () => {
         this.config.showReasoning = !this.config.showReasoning;
         const status = this.config.showReasoning
@@ -192,6 +220,7 @@ export class Repl {
     this.registerCommand({
       name: "status",
       description: t("repl.status"),
+      usage: t("repl.status_usage"),
       action: () => {
         console.log(`${t("repl.model")} ${this.config.model}`);
         console.log(
@@ -209,6 +238,7 @@ export class Repl {
       name: "wizard",
       description: t("repl.wizard"),
       aliases: ["setup"],
+      usage: t("repl.wizard_usage"),
       action: async () => {
         console.log(pc.yellow(t("repl.wizard_running")));
         const answers = await runSetup();
@@ -227,6 +257,7 @@ export class Repl {
     this.registerCommand({
       name: "provider",
       description: t("repl.provider_list"),
+      usage: t("repl.provider_usage"),
       action: (args: string[]) => {
         const subcmd = args[0];
         if (!subcmd || subcmd === "list") {
@@ -254,6 +285,7 @@ export class Repl {
     this.registerCommand({
       name: "model",
       description: t("repl.model_list"),
+      usage: t("repl.model_usage"),
       action: (args: string[]) => {
         const subcmd = args[0];
         if (!subcmd || subcmd === "list") {
@@ -284,6 +316,7 @@ export class Repl {
       name: "sessions",
       description: t("repl.sessions"),
       aliases: ["ls"],
+      usage: t("repl.sessions_usage"),
       action: () => {
         const sessions = this.sessionManager!.list();
         const active = this.sessionManager!.getActive();
@@ -291,12 +324,24 @@ export class Repl {
           console.log(t("session.no_sessions_hint"));
           return;
         }
-        for (const s of sessions) {
-          const marker = s.id === active ? pc.green(" *") : "  ";
-          const date = s.updatedAt.slice(0, 19).replace("T", " ");
-          console.log(
-            ` ${marker} ${s.id.slice(0, 12)}  ${s.name.padEnd(25)} ${date}  ${s.messageCount} msgs`,
-          );
+        const rows = sessions.map((s) => [
+          s.id === active ? pc.green("●") : "",
+          s.id.slice(0, 12),
+          s.name,
+          s.updatedAt.slice(0, 19).replace("T", " "),
+          String(s.messageCount),
+        ]);
+        for (const line of renderTable(
+          [
+            t("session.col_active"),
+            t("session.col_id"),
+            t("session.col_name"),
+            t("session.col_updated"),
+            t("session.col_msgs"),
+          ],
+          rows,
+        )) {
+          console.log(line);
         }
         console.log(pc.dim(`\n  ${t("repl.resume_hint")}`));
       },
@@ -306,6 +351,7 @@ export class Repl {
       name: "new",
       description: t("repl.new"),
       aliases: ["create"],
+      usage: t("repl.new_usage"),
       action: (args: string[]) => {
         const name = args.join(" ") || undefined;
         const meta = this.sessionManager!.create(name);
@@ -322,6 +368,7 @@ export class Repl {
       name: "resume",
       description: t("repl.resume"),
       aliases: ["switch", "use"],
+      usage: t("repl.resume_usage"),
       action: (args: string[]) => {
         const query = args.join(" ");
         const sessions = this.sessionManager!.list();
@@ -383,6 +430,7 @@ export class Repl {
     this.registerCommand({
       name: "rename",
       description: t("repl.rename"),
+      usage: t("repl.rename_usage"),
       action: (args: string[]) => {
         const name = args.join(" ");
         if (!name) {
@@ -403,6 +451,7 @@ export class Repl {
       name: "delete",
       description: t("repl.delete"),
       aliases: ["rm"],
+      usage: t("repl.delete_usage"),
       action: (args: string[]) => {
         const query = args[0];
         if (!query) {
@@ -429,6 +478,7 @@ export class Repl {
     this.registerCommand({
       name: "skill",
       description: t("repl.skill"),
+      usage: t("repl.skill_usage"),
       action: (args: string[]) => {
         const subcmd = args[0];
         const arg = args.slice(1).join(" ");
@@ -649,15 +699,27 @@ export class Repl {
   private async runAgent(input: string): Promise<void> {
     process.stdout.write("\n" + pc.green(t("repl.agent")));
 
-    const fmt = new FormattingStream((s) => process.stdout.write(s + "\n"));
+    const renderer = new Renderer({ spinner: this.config.ui?.spinner ?? true });
     const result = await this.agent.run(
       input,
-      (c) => fmt.write(c),
-      (meta) => {
-        process.stdout.write(meta);
+      (c) => renderer.text(c),
+      (m) => renderer.meta(m),
+      (ev) => {
+        if (ev.type === "start") {
+          renderer.toolStart(ev.tool, ev.args);
+        } else {
+          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
+        }
+      },
+      (phase) => {
+        if (phase === "thinking") {
+          renderer.thinkingStart();
+        } else {
+          renderer.thinkingEnd();
+        }
       },
     );
-    fmt.flush();
+    renderer.flush();
     process.stdout.write("\n");
 
     if (!result.success) {
@@ -700,18 +762,35 @@ export class Repl {
   }
 
   private showHelp(): void {
-    console.log(t("cli.available_cmds"));
-    const shown = new Set<string>();
-    for (const [name, cmd] of this.commands) {
-      if (cmd.aliases?.includes(name)) continue;
-      if (shown.has(cmd.name)) continue;
-      shown.add(cmd.name);
-      const aliases = cmd.aliases ? ` (${pc.dim(cmd.aliases.join(", "))})` : "";
-      console.log(
-        `  ${pc.cyan("/" + name)}${aliases}  ${pc.dim(cmd.description)}`,
-      );
+    const order = ["general", "agent", "session", "skill"];
+    const seen = new Set<string>();
+
+    for (const groupKey of order) {
+      const cmds: SlashCommand[] = [];
+      for (const [name, cmd] of this.commands) {
+        if (cmd.aliases?.includes(name)) continue;
+        if (seen.has(cmd.name)) continue;
+        const group = COMMAND_GROUPS[cmd.name] ?? "general";
+        if (group !== groupKey) continue;
+        seen.add(cmd.name);
+        cmds.push(cmd);
+      }
+      if (cmds.length === 0) continue;
+
+      console.log(pc.bold(t(`repl.group.${groupKey}`)));
+      for (const cmd of cmds) {
+        const aliases = cmd.aliases?.length
+          ? ` (${pc.dim(cmd.aliases.join(", "))})`
+          : "";
+        console.log(
+          `  ${pc.cyan("/" + cmd.name)}${aliases}  ${pc.dim(cmd.description)}`,
+        );
+        if (cmd.usage) {
+          console.log(`    ${pc.dim(cmd.usage)}`);
+        }
+      }
+      console.log();
     }
-    console.log();
   }
 
   private showContextBar(result: {
@@ -731,31 +810,34 @@ export class Repl {
   start(): void {
     this.running = true;
 
-    console.log(pc.bold(pc.green(t("repl.title"))));
-    const divider = "─".repeat(50);
+    const info: string[] = [];
+    const row = (label: string, value: string): void => {
+      info.push(` ${pc.yellow(label)} ${value}`);
+    };
 
     const ctx = this.config.contextWindow;
     const sysBudget = Math.floor(ctx * this.config.contextBudget.systemPrompt);
-    const resBudget = Math.floor(
-      ctx * this.config.contextBudget.responseReserve,
-    );
+    const resBudget = Math.floor(ctx * this.config.contextBudget.responseReserve);
     const histBudget = ctx - sysBudget - resBudget;
 
-    console.log(pc.dim(divider));
-    console.log(
-      `  ${pc.yellow(t("repl.model"))}      ${pc.white(this.config.model)}`,
+    row(
+      t("repl.model"),
+      pc.white(this.config.model),
     );
-    console.log(
-      `  ${pc.yellow(t("repl.provider"))}   ${this.config.provider.type}  →  ${this.config.provider.baseUrl}`,
+    row(
+      t("repl.provider"),
+      `${this.config.provider.type}  →  ${pc.dim(this.config.provider.baseUrl)}`,
     );
-    console.log(
-      `  ${pc.yellow(t("repl.context"))}    ${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`,
+    row(
+      t("repl.context"),
+      `${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`,
     );
 
     if (this.skillsModule) {
       const budget = this.skillsModule.getBudget();
-      console.log(
-        `  ${pc.yellow(t("repl.skills_label"))}     ${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`,
+      row(
+        t("repl.skills_label"),
+        `${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`,
       );
     }
 
@@ -765,8 +847,9 @@ export class Repl {
         .filter((p) => !p.isBuiltin);
       if (plugins.length > 0) {
         const pluginNames = plugins.map((p) => p.name).join(", ");
-        console.log(
-          `  ${pc.yellow(t("repl.plugins_label"))}    ${pc.white(String(plugins.length))} active  ${pc.dim(`(${pluginNames})`)}`,
+        row(
+          t("repl.plugins_label"),
+          `${pc.white(String(plugins.length))} active  ${pc.dim(`(${pluginNames})`)}`,
         );
       }
     }
@@ -777,18 +860,17 @@ export class Repl {
     );
     if (enabledServers.length > 0) {
       const names = enabledServers.map(([name]) => name).join(", ");
-      console.log(
-        `  ${pc.yellow(t("repl.mcp_label"))}       ${pc.white(String(enabledServers.length))}  ${pc.dim(`(${names})`)}`,
+      row(
+        t("repl.mcp_label"),
+        `${pc.white(String(enabledServers.length))}  ${pc.dim(`(${names})`)}`,
       );
     }
 
     const cwd = process.cwd();
-    console.log(`  ${pc.yellow(t("repl.work_dir"))}  ${pc.dim(cwd)}`);
+    row(t("repl.work_dir"), pc.dim(cwd));
 
     if (this.noAgentsMd) {
-      console.log(
-        `  ${pc.yellow(t("repl.agents_label"))}    ${pc.red(t("repl.disabled"))}`,
-      );
+      row(t("repl.agents_label"), pc.red(t("repl.disabled")));
     } else {
       const agentsMdCandidates = [
         join(this.baseDir, "AGENTS.md"),
@@ -797,25 +879,27 @@ export class Repl {
       ];
       const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));
       if (foundAgents.length > 0) {
-        console.log(`  ${pc.yellow(t("repl.agents_label"))}`);
         for (const p of foundAgents) {
-          console.log(`    ${pc.dim(p)}`);
+          row(t("repl.agents_label"), pc.dim(p));
         }
       } else {
-        console.log(
-          `  ${pc.yellow(t("repl.agents_label"))}    ${pc.dim(t("repl.not_found"))}`,
-        );
+        row(t("repl.agents_label"), pc.dim(t("repl.not_found")));
       }
     }
 
     const meta = this.sessionManager?.getActiveMeta();
     if (meta) {
       const sessionPath = join(this.configDir, "sessions", meta.id);
-      console.log(
-        `  ${pc.yellow(t("repl.session_label"))}    ${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs  ${pc.dim(sessionPath)}`,
+      row(
+        t("repl.session_label"),
+        `${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs  ${pc.dim(sessionPath)}`,
       );
     }
-    console.log(pc.dim(divider));
+
+    const headerWidth = Math.max(50, Math.min(96, process.stdout.columns || 96));
+    for (const line of box(info, { title: t("repl.title"), width: headerWidth })) {
+      console.log(line);
+    }
     console.log();
     this.rl.prompt();
   }
