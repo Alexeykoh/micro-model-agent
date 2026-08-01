@@ -3,6 +3,7 @@ import type { ToolDefinition } from './types'
 import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator'
 import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
 import { getSessionSecurityConfig } from '../modules/security/session-isolation'
+import { DEFAULT_SECURITY_CONFIG } from '../config/security'
 
 const MAX_CHARS = 15000
 
@@ -31,9 +32,10 @@ export const webFetchTool: ToolDefinition = {
     const url = String(args.url)
     
     // Get session-specific security config
+    const config = ctx.config || {}
     const securityConfig = ctx.sessionContext 
-      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
-      : ctx.config.security?.network
+      ? getSessionSecurityConfig(config, ctx.sessionContext).network
+      : config.security?.network || DEFAULT_SECURITY_CONFIG.network
     const validation = isUrlAllowed(url, securityConfig)
     
     if (!validation.allowed) {

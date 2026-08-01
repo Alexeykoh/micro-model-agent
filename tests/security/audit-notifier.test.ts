@@ -85,21 +85,21 @@ describe('AuditNotifier', () => {
       expect(notifier.shouldNotifySeverity('low')).toBe(false);
     });
 
-    it('should determine severity from event type', () => {
+    it('should determine severity from event action', () => {
       const entry: AuditLogEntry = {
         timestamp: new Date().toISOString(),
-        type: 'security_block',
+        action: 'security_block',
         message: 'Test',
       };
       const severity = (notifier as any).determineSeverity(entry);
       expect(severity).toBe('high');
     });
 
-    it('should map event types correctly', () => {
+    it('should map event actions correctly', () => {
       const mapper = (notifier as any).mapEventType;
-      expect(mapper('bash')).toBe('bash_command');
-      expect(mapper('file_write')).toBe('file_operation');
       expect(mapper('security_block')).toBe('security_block');
+      expect(mapper('bash_command')).toBe('bash_command');
+      expect(mapper('file_write')).toBe('file_operation');
       expect(mapper('unknown')).toBeNull();
     });
   });
@@ -152,9 +152,9 @@ describe('AuditNotifier', () => {
     it('should write to file when configured', async () => {
       const entry: AuditLogEntry = {
         timestamp: new Date().toISOString(),
-        type: 'security_block',
+        action: 'security_block',
         message: 'Blocked command',
-        severity: 'high',
+        details: 'Blocked command',
       };
       await notifier.notify(entry);
       
@@ -167,9 +167,9 @@ describe('AuditNotifier', () => {
     it('should return notification object on success', async () => {
       const entry: AuditLogEntry = {
         timestamp: new Date().toISOString(),
-        type: 'security_block',
+        action: 'security_block',
         message: 'Blocked command',
-        severity: 'high',
+        details: 'Blocked command',
         sessionId: 'ses-123',
       };
       const result = await notifier.notify(entry);
@@ -195,9 +195,9 @@ describe('AuditNotifier', () => {
     it('should read notifications from file', async () => {
       const entry: AuditLogEntry = {
         timestamp: new Date().toISOString(),
-        type: 'security_block',
+        action: 'security_block',
         message: 'Test 1',
-        severity: 'high',
+        details: 'Test 1',
       };
       await notifier.notify(entry);
       
@@ -210,9 +210,9 @@ describe('AuditNotifier', () => {
       for (let i = 0; i < 5; i++) {
         const entry: AuditLogEntry = {
           timestamp: new Date().toISOString(),
-          type: 'security_block',
+          action: 'security_block',
           message: `Test ${i}`,
-          severity: 'high',
+          details: `Test ${i}`,
         };
         await notifier.notify(entry);
       }
@@ -253,12 +253,12 @@ describe('AuditNotifier', () => {
     });
 
     it('should return correct statistics', async () => {
-      // Use types that map to our configured event types
+      // Use actions that map to our configured event types
       const entries: AuditLogEntry[] = [
-        { timestamp: new Date().toISOString(), type: 'security_block', message: 'Block 1', severity: 'high' },
-        { timestamp: new Date().toISOString(), type: 'security_block', message: 'Block 2', severity: 'medium' },
-        { timestamp: new Date().toISOString(), type: 'bash', message: 'Bash 1', severity: 'low' },
-        { timestamp: new Date().toISOString(), type: 'file_write', message: 'File 1', severity: 'high' },
+        { timestamp: new Date().toISOString(), action: 'security_block', message: 'Block 1', details: 'Block 1' },
+        { timestamp: new Date().toISOString(), action: 'security_block', message: 'Block 2', details: 'Block 2' },
+        { timestamp: new Date().toISOString(), action: 'bash_command', message: 'Bash 1', details: 'Bash 1' },
+        { timestamp: new Date().toISOString(), action: 'file_write', message: 'File 1', details: 'File 1' },
       ];
       
       for (const entry of entries) {
@@ -268,9 +268,10 @@ describe('AuditNotifier', () => {
       const stats = notifier.getStats();
       // All 4 entries should be written since we configured all these event types
       expect(stats.total).toBe(4);
-      expect(stats.bySeverity.high).toBe(2);
+      // security_block (2) = high, bash_command (1) = high, file_write (1) = medium
+      expect(stats.bySeverity.high).toBe(3);
       expect(stats.bySeverity.medium).toBe(1);
-      expect(stats.bySeverity.low).toBe(1);
+      expect(stats.bySeverity.low).toBe(0);
       expect(stats.bySeverity.critical).toBe(0);
       expect(stats.byType.security_block).toBe(2);
       expect(stats.byType.bash_command).toBe(1);

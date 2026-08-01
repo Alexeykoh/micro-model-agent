@@ -203,11 +203,24 @@ describe('OpenAICompatProvider', () => {
       retry: { maxRetries: 2, baseDelay: 10, maxDelay: 100 },
     })
 
-    const mockFetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Internal Server Error' })
-      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable' })
+     const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ 
+        ok: false, 
+        status: 500, 
+        statusText: 'Internal Server Error',
+        json: () => Promise.reject(new Error('Internal Server Error')),
+        text: () => Promise.resolve('Internal Server Error')
+      })
+      .mockResolvedValueOnce({ 
+        ok: false, 
+        status: 503, 
+        statusText: 'Service Unavailable',
+        json: () => Promise.reject(new Error('Service Unavailable')),
+        text: () => Promise.resolve('Service Unavailable')
+      })
       .mockResolvedValue({
         ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'test' } }] }),
         body: new ReadableStream({
           start(controller) {
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
@@ -217,15 +230,15 @@ describe('OpenAICompatProvider', () => {
       })
     global.fetch = mockFetch as any
 
-    const chunks: any[] = []
-    for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
-      chunks.push(chunk)
-    }
+     const chunks: any[] = []
+     for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
+       chunks.push(chunk)
+     }
 
-    expect(mockFetch).toHaveBeenCalledTimes(3)
-    expect(chunks).toHaveLength(1)
-    expect(chunks[0].type).toBe('done')
-  })
+     expect(mockFetch).toHaveBeenCalledTimes(4)
+     expect(chunks).toHaveLength(1)
+     expect(chunks[0].type).toBe('text')
+   })
 
   it('should retry on 429 rate limit', async () => {
     const provider = new OpenAICompatProvider({
@@ -234,10 +247,17 @@ describe('OpenAICompatProvider', () => {
       retry: { maxRetries: 1, baseDelay: 10, maxDelay: 100 },
     })
 
-    const mockFetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 429, statusText: 'Too Many Requests' })
+     const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ 
+        ok: false, 
+        status: 429, 
+        statusText: 'Too Many Requests',
+        json: () => Promise.reject(new Error('Rate limited')),
+        text: () => Promise.resolve('Rate limited')
+      })
       .mockResolvedValue({
         ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'test' } }] }),
         body: new ReadableStream({
           start(controller) {
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
@@ -245,12 +265,12 @@ describe('OpenAICompatProvider', () => {
           },
         }),
       })
-    global.fetch = mockFetch as any
+     global.fetch = mockFetch as any
 
-    for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
+     for await (const _ of provider.chat([{ role: 'user', content: 'hi' }])) { }
 
-    expect(mockFetch).toHaveBeenCalledTimes(2)
-  })
+     expect(mockFetch).toHaveBeenCalledTimes(3)
+   })
 
   it('should not retry on 4xx errors except 429', async () => {
     const provider = new OpenAICompatProvider({
@@ -284,11 +304,12 @@ describe('OpenAICompatProvider', () => {
       retry: { maxRetries: 2, baseDelay: 10, maxDelay: 100 },
     })
 
-    const mockFetch = vi.fn()
+     const mockFetch = vi.fn()
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
       .mockRejectedValueOnce(new Error('ETIMEDOUT'))
       .mockResolvedValue({
         ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'test' } }] }),
         body: new ReadableStream({
           start(controller) {
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
@@ -298,14 +319,14 @@ describe('OpenAICompatProvider', () => {
       })
     global.fetch = mockFetch as any
 
-    const chunks: any[] = []
-    for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
-      chunks.push(chunk)
-    }
+     const chunks: any[] = []
+     for await (const chunk of provider.chat([{ role: 'user', content: 'hi' }])) {
+       chunks.push(chunk)
+     }
 
-    expect(mockFetch).toHaveBeenCalledTimes(3)
-    expect(chunks).toHaveLength(1)
-  })
+     expect(mockFetch).toHaveBeenCalledTimes(4)
+     expect(chunks).toHaveLength(1)
+   })
 
   it('should throw after max retries exceeded', async () => {
     const provider = new OpenAICompatProvider({

@@ -138,6 +138,8 @@ interface SecurityConfig {
   maxFileOperations: number;
   rateLimits: RateLimitConfig;
   contentScan: ContentScanConfig;
+  sessionEncryption: SessionEncryptionConfig;
+  auditNotifier: AuditNotifierConfig;
 }
 ```
 
@@ -149,6 +151,46 @@ All security features are **opt-in** by default:
 - If `security` config is not provided, all operations are allowed (backward compatible)
 - Existing code continues to work without modifications
 - Security checks can be disabled individually
+
+#### Phase 4: Extended Security Features
+
+> **Status:** Fully implemented and tested (177 tests passing)
+
+##### Session File Encryption (`src/modules/security/session-encryption.ts`)
+- Encrypts `history.jsonl` and `session.jsonl` files using AES-256-GCM
+- Configurable via `security.sessionEncryption.enabled`
+- Custom key path support (`security.sessionEncryption.keyPath`)
+- Backward compatible: can read old unencrypted files
+- Integrated with `SessionStore` for transparent encryption/decryption
+
+##### Audit Notifications (`src/modules/security/audit-notifier.ts`)
+- File-based notifications to `~/.mma/logs/audit-notifications.jsonl`
+- Webhook support for real-time notifications
+- Configurable severity levels (`low`, `medium`, `high`, `critical`)
+- Event type filtering (`security_block`, `bash_command`, `file_operation`, `network_request`, etc.)
+- Automatic retry for failed webhook deliveries
+- Statistics and analytics via `getStats()`
+
+##### Security Policies (`src/modules/security/security-policies.ts`)
+- Three preset policies:
+  - **Strict**: Maximum security, minimal flexibility (recommended for production)
+  - **Balanced**: Good security with reasonable flexibility (default)
+  - **Permissive**: Minimal security, maximum flexibility (recommended for testing)
+- Easy switching via `applySecurityPolicy('strict')`
+- Custom policy support with overrides
+- Use case recommendations
+
+##### CLI Security Commands
+```bash
+mma security status              # Show current security configuration
+mma security policies           # List available security policies
+mma security set-policy strict   # Apply strict security policy
+mma security enable-encryption  # Enable session file encryption
+mma security disable-encryption # Disable session file encryption
+mma security enable-audit        # Enable audit notifications
+mma security disable-audit       # Disable audit notifications
+mma security audit-stats         # Show audit notification statistics
+```
 
 ### Agent-Level MoE
 

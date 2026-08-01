@@ -5,6 +5,7 @@ import { runSetup } from "./setup";
 import { t } from "../i18n/index";
 import { join } from "path";
 import { homedir } from "os";
+import { createSecurityCommand } from "./security-commands";
 
 export function createProgram(): Command {
   const program = new Command()
@@ -153,15 +154,18 @@ export function createProgram(): Command {
       console.log(`Context:      ${meta.contextWindow}`);
       console.log(`Project:      ${meta.projectDir}`);
     });
-  session
-    .command("delete")
-    .argument("<id>", "Session id")
-    .description(t("cli.delete_session"))
-    .action(async (id: string) => {
-      const { sessionManager } = await bootstrap();
-      sessionManager.delete(id);
-      console.log(t("session.deleted", { id }));
-    });
+   session
+     .command("delete")
+     .argument("<id>", "Session id")
+     .description(t("cli.delete_session"))
+     .action(async (id: string) => {
+       const { sessionManager } = await bootstrap();
+       sessionManager.delete(id);
+       console.log(t("session.deleted", { id }));
+     });
+
+  // Add security commands
+  createSecurityCommand(program);
 
   program
     .argument("[prompt...]", "Prompt to execute")

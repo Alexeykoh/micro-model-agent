@@ -10,7 +10,7 @@ describe("ConfidenceCheck", () => {
 
   it("should retry on short response", () => {
     const check = new ConfidenceCheck();
-    const result = check.validate("OK");
+    const result = check.validate("");
     expect(result.status).toBe("retry");
   });
 

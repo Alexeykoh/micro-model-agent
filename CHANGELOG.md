@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-01
+
+### Added
+- **CLI security commands** (`src/cli/security-commands.ts`):
+  - `mma security status` - Show current security configuration
+  - `mma security policies` - List available security policies
+  - `mma security set-policy <preset>` - Apply a security policy
+  - `mma security enable-encryption` / `disable-encryption` - Toggle session file encryption
+  - `mma security enable-audit` / `disable-audit` - Toggle audit notifications
+  - `mma security audit-stats` - Show audit notification statistics
+- **Translations** for CLI security commands in `en.json` and `ru.json`
+
+### Fixed
+- Fixed `ConfidenceCheck` test for short response validation
+- Fixed `OpenAICompatProvider` tests by adding proper mock `json()` and `text()` methods
+- Fixed retry count expectations in tests to match actual retry logic (`maxRetries + 1`)
+
 ## [0.7.10] - 2026-08-01
 
 ### Added
