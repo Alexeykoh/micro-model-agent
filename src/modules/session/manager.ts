@@ -3,7 +3,7 @@ import type { SessionStore, SessionLogEntry } from './store'
 import { t } from '../../i18n/index'
 import type { SessionIsolationConfig, SessionContext } from '../../modules/security/session-isolation'
 import { createSessionContext, DEFAULT_SESSION_ISOLATION } from '../../modules/security/session-isolation'
-import type { SecurityConfig } from '../../config/types'
+import type { SecurityConfig, SessionEncryptionConfig } from '../../config/types'
 
 export interface SessionManagerOptions {
   model: string
@@ -14,6 +14,10 @@ export interface SessionManagerOptions {
    * Session isolation configuration
    */
   isolation?: SessionIsolationConfig
+  /**
+   * Session file encryption configuration
+   */
+  encryption?: SessionEncryptionConfig
 }
 
 export class SessionManager {
@@ -28,6 +32,26 @@ export class SessionManager {
   constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store
     this.options = options
+    
+    // Initialize encryption if configured
+    if (options.encryption) {
+      this.store.updateEncryption(options.encryption);
+    }
+  }
+
+  /**
+   * Check if session file encryption is enabled
+   */
+  isEncryptionEnabled(): boolean {
+    return this.store.isEncryptionEnabled();
+  }
+
+  /**
+   * Update encryption configuration
+   */
+  updateEncryption(config: SessionEncryptionConfig): void {
+    this.store.updateEncryption(config);
+    this.options.encryption = config;
   }
 
   create(name?: string, securityOverrides?: SessionMeta['securityOverrides']): SessionMeta {

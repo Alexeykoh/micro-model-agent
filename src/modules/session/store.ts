@@ -10,6 +10,8 @@ import {
 import { join } from "path";
 import { gzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
+import type { SessionEncryptionConfig } from "../../config/types";
+import { SessionFileEncryptor } from "../security/session-encryption";
 
 export interface SessionLogEntry {
   ts: string;
@@ -45,9 +47,31 @@ export interface SessionLogEntry {
 
 export class SessionStore {
   private baseDir: string;
+  private encryptor: SessionFileEncryptor | null = null;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, encryptionConfig?: SessionEncryptionConfig) {
     this.baseDir = baseDir;
+    if (encryptionConfig?.enabled) {
+      this.encryptor = new SessionFileEncryptor(encryptionConfig);
+    }
+  }
+
+  /**
+   * Update encryption configuration
+   */
+  updateEncryption(config: SessionEncryptionConfig): void {
+    if (config?.enabled) {
+      this.encryptor = new SessionFileEncryptor(config);
+    } else {
+      this.encryptor = null;
+    }
+  }
+
+  /**
+   * Check if encryption is enabled
+   */
+  isEncryptionEnabled(): boolean {
+    return this.encryptor?.isEnabled() ?? false;
   }
 
   init(): void {
@@ -77,7 +101,12 @@ export class SessionStore {
   saveMeta(id: string, meta: SessionMeta): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(this.metaPath(id), JSON.stringify(meta, null, 2), "utf-8");
+    const content = JSON.stringify(meta, null, 2);
+    if (this.encryptor) {
+      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), "utf-8");
+    } else {
+      writeFileSync(this.metaPath(id), content, "utf-8");
+    }
   }
 
   loadMeta(id: string): SessionMeta | null {
@@ -85,7 +114,8 @@ export class SessionStore {
     if (!existsSync(path)) return null;
     try {
       const raw = readFileSync(path, "utf-8");
-      return JSON.parse(raw) as SessionMeta;
+      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
+      return JSON.parse(content) as SessionMeta;
     } catch {
       return null;
     }
@@ -94,7 +124,12 @@ export class SessionStore {
   appendMessage(id: string, msg: SessionMessage): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true });
-    appendFileSync(this.historyPath(id), JSON.stringify(msg) + "\n", "utf-8");
+    const line = JSON.stringify(msg);
+    if (this.encryptor?.isEnabled()) {
+      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", "utf-8");
+    } else {
+      appendFileSync(this.historyPath(id), line + "\n", "utf-8");
+    }
     const meta = this.loadMeta(id);
     if (meta) {
       meta.messageCount = (meta.messageCount || 0) + 1;
@@ -108,10 +143,12 @@ export class SessionStore {
     if (!existsSync(path)) return [];
     try {
       const raw = readFileSync(path, "utf-8");
-      return raw
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as SessionMessage);
+      const lines = raw.split("\n").filter(Boolean);
+      if (this.encryptor?.isEnabled()) {
+        const decryptedLines = lines.map(line => this.encryptor!.decryptFileContent(line));
+        return decryptedLines.map((line) => JSON.parse(line) as SessionMessage);
+      }
+      return lines.map((line) => JSON.parse(line) as SessionMessage);
     } catch {
       return [];
     }
@@ -120,11 +157,20 @@ export class SessionStore {
   appendSessionLog(id: string, entry: SessionLogEntry): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true });
-    appendFileSync(
-      this.sessionLogPath(id),
-      JSON.stringify(entry) + "\n",
-      "utf-8",
-    );
+    const line = JSON.stringify(entry);
+    if (this.encryptor?.isEnabled()) {
+      appendFileSync(
+        this.sessionLogPath(id),
+        this.encryptor.encryptFileContent(line) + "\n",
+        "utf-8",
+      );
+    } else {
+      appendFileSync(
+        this.sessionLogPath(id),
+        line + "\n",
+        "utf-8",
+      );
+    }
   }
 
   loadSessionLog(id: string): SessionLogEntry[] {
@@ -132,10 +178,12 @@ export class SessionStore {
     if (!existsSync(path)) return [];
     try {
       const raw = readFileSync(path, "utf-8");
-      return raw
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line) as SessionLogEntry);
+      const lines = raw.split("\n").filter(Boolean);
+      if (this.encryptor?.isEnabled()) {
+        const decryptedLines = lines.map(line => this.encryptor!.decryptFileContent(line));
+        return decryptedLines.map((line) => JSON.parse(line) as SessionLogEntry);
+      }
+      return lines.map((line) => JSON.parse(line) as SessionLogEntry);
     } catch {
       return [];
     }

@@ -112,12 +112,31 @@ export interface SecurityConfig {
   maxFileOperations: number;
   rateLimits: RateLimitConfig;
   contentScan: ContentScanConfig;
+  sessionEncryption: SessionEncryptionConfig;
+  auditNotifier: AuditNotifierConfig;
 }
 
 export interface SessionIsolationConfig {
   enabled: boolean;
   isolatePlugins: boolean;
   isolateTempFiles: boolean;
+}
+
+export interface SessionEncryptionConfig {
+  enabled: boolean;
+  encryptHistory: boolean;
+  encryptSessionLog: boolean;
+  keyPath?: string;
+}
+
+export interface AuditNotifierConfig {
+  enabled: boolean;
+  filePath?: string;
+  webhookUrl?: string;
+  webhookTimeout?: number;
+  minSeverity?: 'low' | 'medium' | 'high' | 'critical';
+  eventTypes?: string[];
+  maxRetries?: number;
 }
 
 export interface AppConfig {

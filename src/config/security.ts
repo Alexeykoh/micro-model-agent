@@ -1,4 +1,4 @@
-import type { SecurityConfig } from "./types";
+import type { SecurityConfig, SessionEncryptionConfig, AuditNotifierConfig } from "./types";
 
 /**
  * Default security configuration for MMA.
@@ -109,26 +109,45 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     maxRequestsPerMinute: 60,
     maxParallelTasks: 5,
   },
-  // Content scanning settings
-  contentScan: {
-    enabled: true,
-    // Patterns that are considered dangerous in file content
-    dangerousPatterns: [
-      /eval\(/,
-      /new Function\(/,
-      /child_process\.exec\(/,
-      /child_process\.spawn\(/,
-      /require\('child_process'\)/,
-      /require\('http'\)\.createServer/,
-      /require\('net'\)\.createServer/,
-      /process\.exit\(/,
-      /while\(true\)/,
-      /for\(;;\)/,
-      /rm -rf/,
-      /dd if=/,
-      /chmod 777/,
-    ],
-  },
+   // Content scanning settings
+   contentScan: {
+     enabled: true,
+     // Patterns that are considered dangerous in file content
+     dangerousPatterns: [
+       /eval\(/,
+       /new Function\(/,
+       /child_process\.exec\(/,
+       /child_process\.spawn\(/,
+       /require\('child_process'\)/,
+       /require\('http'\)\.createServer/,
+       /require\('net'\)\.createServer/,
+       /process\.exit\(/,
+       /while\(true\)/,
+       /for\(\;\;\)/,
+       /rm -rf/,
+       /dd if=/,
+       /chmod 777/,
+     ],
+   },
+   // Session file encryption settings
+   sessionEncryption: {
+     enabled: false,
+     encryptHistory: true,
+     encryptSessionLog: true,
+   },
+   // Audit notification settings
+   auditNotifier: {
+     enabled: false,
+     minSeverity: 'medium',
+     eventTypes: [
+       'security_block',
+       'bash_command',
+       'file_operation',
+       'network_request',
+     ],
+     maxRetries: 3,
+     webhookTimeout: 5000,
+   },
 };
 
 /**
@@ -159,9 +178,17 @@ export function mergeSecurityConfig(
       ...DEFAULT_SECURITY_CONFIG.rateLimits,
       ...userConfig?.rateLimits,
     },
-    contentScan: {
-      ...DEFAULT_SECURITY_CONFIG.contentScan,
-      ...userConfig?.contentScan,
-    },
-  };
+     contentScan: {
+       ...DEFAULT_SECURITY_CONFIG.contentScan,
+       ...userConfig?.contentScan,
+     },
+     sessionEncryption: {
+       ...DEFAULT_SECURITY_CONFIG.sessionEncryption,
+       ...userConfig?.sessionEncryption,
+     },
+     auditNotifier: {
+       ...DEFAULT_SECURITY_CONFIG.auditNotifier,
+       ...userConfig?.auditNotifier,
+     },
+   };
 }
