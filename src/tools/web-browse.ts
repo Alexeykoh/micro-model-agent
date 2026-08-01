@@ -1,5 +1,7 @@
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator'
+import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
 
 export const webBrowseTool: ToolDefinition = {
   name: 'web_browse',
@@ -12,10 +14,28 @@ export const webBrowseTool: ToolDefinition = {
     },
     required: ['url'],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const url = String(args.url || '')
+    
+    // Security check: validate URL
+    const securityConfig = ctx.config.security?.network
+    const validation = isUrlAllowed(url, securityConfig)
+    
+    if (!validation.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "network_request",
+        validation.reason || "URL blocked by security policy",
+        sanitizeUrl(url),
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] URL is not allowed: ${validation.reason}`,
+      }
+    }
+    
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000) })
+      const response = await fetch(url, { signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000) })
       const text = await response.text()
       const stripped = text
         .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -24,11 +44,16 @@ export const webBrowseTool: ToolDefinition = {
         .replace(/&[^;]+;/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-      const maxLen = 8000
+      
+      // Log successful network request
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
+      
+      const maxLen = securityConfig?.maxResponseSize || 8000
       const content = stripped.length > maxLen ? stripped.slice(0, maxLen) + t('file.truncated') : stripped
       return { success: true, output: content || t('file.empty_page') }
     } catch (err: any) {
-      return { success: false, output: t('error.fetch_url_failed', { url, message: err.message }) }
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
+      return { success: false, output: t('error.fetch_url_failed', { url: sanitizeUrl(url), message: err.message }) }
     }
   },
 }

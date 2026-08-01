@@ -5,6 +5,7 @@ import { ContextManager } from "../modules/context/manager";
 import { HallucinationDetector } from "../modules/hallucination/detector";
 import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
+import { logSecurityBlock } from "../modules/security/audit-log";
 
 export const subagentTool: ToolDefinition = {
   name: "subagent",
@@ -60,6 +61,23 @@ export const subagentTool: ToolDefinition = {
       return { success: false, output: t("tool.name_or_task") };
     }
 
+    // Security check: limit recursion depth
+    const maxDepth = ctx.config.security?.maxRecursionDepth ?? 3;
+    const currentDepth = ctx.recursionDepth ?? 0;
+
+    if (currentDepth >= maxDepth) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "bash_command",
+        `Maximum recursion depth (${maxDepth}) exceeded`,
+        task,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Maximum sub-agent recursion depth (${maxDepth}) exceeded`,
+      };
+    }
+
     const scope: ToolScope | undefined =
       args.allowed_files || args.read_only_files
         ? {
@@ -93,19 +111,20 @@ export const subagentTool: ToolDefinition = {
         estimatedTokens: 100,
       };
 
-      const subDeps = {
-        config: ctx.config,
-        llmProvider: ctx.llmProvider,
-        toolExecutor: ctx.toolExecutor,
-        pluginManager: subPluginManager,
-        contextManager: subContextManager,
-        hallucinationDetector,
-        logger: ctx.logger,
-        baseDir: ctx.baseDir,
-        scope,
-        toolTags,
-        promptBlocks: [systemPrompt],
-      };
+       const subDeps = {
+         config: ctx.config,
+         llmProvider: ctx.llmProvider,
+         toolExecutor: ctx.toolExecutor,
+         pluginManager: subPluginManager,
+         contextManager: subContextManager,
+         hallucinationDetector,
+         logger: ctx.logger,
+         baseDir: ctx.baseDir,
+         scope,
+         toolTags,
+         promptBlocks: [systemPrompt],
+         recursionDepth: currentDepth + 1, // Increment recursion depth for sub-agent
+       };
 
       const subAgent = new Agent(subDeps);
       const fullTask = context ? `${task}\n\nContext: ${context}` : task;

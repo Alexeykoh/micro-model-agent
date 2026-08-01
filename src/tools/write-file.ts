@@ -2,7 +2,9 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { resolve, normalize, dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "./scope-check";
+import { isPathWritable } from "../modules/security/path-validator";
+import { scanContent } from "../modules/security/content-scanner";
+import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 
 export const writeFileTool: ToolDefinition = {
@@ -22,8 +24,16 @@ export const writeFileTool: ToolDefinition = {
     const path = String(args.path);
     const baseDir = resolve(ctx.baseDir);
     const resolved = resolve(baseDir, normalize(path));
-    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope);
+    
+    // Check path permissions
+    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        scopeCheck.reason || "Path not allowed",
+        path,
+      );
       return {
         success: false,
         output: t("file.path_not_allowed", {
@@ -31,6 +41,23 @@ export const writeFileTool: ToolDefinition = {
         }),
       };
     }
+    
+    // Check content for dangerous patterns
+    const content = String(args.content);
+    const scanResult = scanContent(content, path, ctx.config.security?.contentScan);
+    if (!scanResult.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        scanResult.reason || "Content contains dangerous patterns",
+        path,
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] ${scanResult.reason}`,
+      };
+    }
+    
     const dir = dirname(resolved);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -40,11 +67,14 @@ export const writeFileTool: ToolDefinition = {
     if (fileExists) {
       oldContent = readFileSync(resolved, "utf-8");
     }
-    const newContent = String(args.content);
-    writeFileSync(resolved, newContent, "utf-8");
+    writeFileSync(resolved, content, "utf-8");
     const diff = fileExists
-      ? generateDiff(oldContent, newContent)
-      : generateNewFileDiff(newContent);
+      ? generateDiff(oldContent, content)
+      : generateNewFileDiff(content);
+    
+    // Log successful file write
+    logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? 'updated' : 'created'}`);
+    
     ctx.trackCreatedPath?.(path);
     return { success: true, output: t("file.written", { path }), diff };
   },

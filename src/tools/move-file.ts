@@ -2,7 +2,8 @@ import { renameSync, existsSync, mkdirSync } from "fs";
 import { resolve, normalize, dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "./scope-check";
+import { isPathWritable } from "../modules/security/path-validator";
+import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { generateMoveDiff } from "../ui/diff";
 
 export const moveFileTool: ToolDefinition = {
@@ -23,9 +24,16 @@ export const moveFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir);
     const fromResolved = resolve(baseDir, normalize(fromPath));
     const toResolved = resolve(baseDir, normalize(toPath));
-    const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope);
-    const toCheck = isPathWritable(ctx.baseDir, toPath, ctx.scope);
+    
+    // Check source path permissions
+    const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope, ctx.config.security?.paths);
     if (!fromCheck.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        fromCheck.reason || "Source path not allowed",
+        fromPath,
+      );
       return {
         success: false,
         output: t("file.path_not_allowed", {
@@ -33,7 +41,16 @@ export const moveFileTool: ToolDefinition = {
         }),
       };
     }
+    
+    // Check destination path permissions
+    const toCheck = isPathWritable(ctx.baseDir, toPath, ctx.scope, ctx.config.security?.paths);
     if (!toCheck.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_write",
+        toCheck.reason || "Destination path not allowed",
+        toPath,
+      );
       return {
         success: false,
         output: t("file.path_not_allowed", {
@@ -41,6 +58,7 @@ export const moveFileTool: ToolDefinition = {
         }),
       };
     }
+    
     if (!existsSync(fromResolved)) {
       return {
         success: false,
@@ -53,6 +71,10 @@ export const moveFileTool: ToolDefinition = {
     }
     renameSync(fromResolved, toResolved);
     const diff = generateMoveDiff(fromPath, toPath);
+    
+    // Log file move
+    logFileWrite(ctx.sessionId, `${fromPath} -> ${toPath}`, true, "File moved");
+    
     return {
       success: true,
       output: t("file.moved", { from: fromPath, to: toPath }),

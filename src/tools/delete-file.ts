@@ -2,7 +2,8 @@ import { unlinkSync, existsSync, statSync, readFileSync } from "fs";
 import { resolve, normalize } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "./scope-check";
+import { isPathWritable } from "../modules/security/path-validator";
+import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { generateDeleteDiff } from "../ui/diff";
 
 export const deleteFileTool: ToolDefinition = {
@@ -20,8 +21,16 @@ export const deleteFileTool: ToolDefinition = {
     const path = String(args.path);
     const baseDir = resolve(ctx.baseDir);
     const resolved = resolve(baseDir, normalize(path));
-    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope);
+    
+    // Check path permissions
+    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "file_delete",
+        scopeCheck.reason || "Path not allowed",
+        path,
+      );
       return {
         success: false,
         output: t("file.path_not_allowed", {
@@ -29,6 +38,7 @@ export const deleteFileTool: ToolDefinition = {
         }),
       };
     }
+    
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };
     }
@@ -38,6 +48,10 @@ export const deleteFileTool: ToolDefinition = {
     const content = readFileSync(resolved, "utf-8");
     unlinkSync(resolved);
     const diff = generateDeleteDiff(content);
+    
+    // Log successful file deletion
+    logFileDelete(ctx.sessionId, path, true);
+    
     ctx.trackDeletedPath?.(path);
     return { success: true, output: t("file.deleted", { path }), diff };
   },

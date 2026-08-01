@@ -35,6 +35,14 @@ export interface ToolContext {
    * instead of blocking on stdin, and the agent exits on the first final answer.
    */
   exitOnComplete?: boolean;
+  /**
+   * Current recursion depth for sub-agents
+   */
+  recursionDepth?: number;
+  /**
+   * Session ID for audit logging
+   */
+  sessionId?: string;
 }
 
 export interface ToolResult {

@@ -224,26 +224,28 @@ export async function bootstrap(
     tokenCounter,
   );
 
-  const toolCtx: ToolContext = {
-    config,
-    baseDir,
-    logger,
-    exitOnComplete,
-    contextManager,
-    sessionHistory: {
-      append: async (type: string, content: unknown) => {
-        const meta = sessionManager.getActiveMeta();
-        if (!meta) return;
-        sessionManager.appendMessage({
-          role: "tool",
-          content:
-            typeof content === "string" ? content : JSON.stringify(content),
-          name: type,
-          timestamp: new Date().toISOString(),
-        });
-      },
-    },
-  };
+   const toolCtx: ToolContext = {
+     config,
+     baseDir,
+     logger,
+     exitOnComplete,
+     contextManager,
+     sessionId: sessionManager.getActiveMeta()?.id,
+     recursionDepth: 0,
+     sessionHistory: {
+       append: async (type: string, content: unknown) => {
+         const meta = sessionManager.getActiveMeta();
+         if (!meta) return;
+         sessionManager.appendMessage({
+           role: "tool",
+           content:
+             typeof content === "string" ? content : JSON.stringify(content),
+           name: type,
+           timestamp: new Date().toISOString(),
+         });
+       },
+     },
+   };
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   (toolCtx as any).llmProvider = llmProvider;

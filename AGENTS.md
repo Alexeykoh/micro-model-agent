@@ -78,8 +78,77 @@ CLI (main.ts → commands.ts / repl.ts)
     → LLM Layer (provider.ts → openai-compat.ts → token-counter.ts → response.ts)
     │   └── Exponential backoff retry (3 retries, 1s/2s/4s delays, 429/5xx)
     → Tools (registry.ts → executor.ts → 20+ individual tools)
-    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser)
+    → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser, security)
 ```
+
+### Security Module
+
+> **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
+> **Status:** **Phase 1 implemented** (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control).
+
+The security module provides multiple layers of protection:
+
+#### Implemented Features (Phase 1)
+
+- **Bash Command Validation** (`src/modules/security/command-validator.ts`):
+  - Blacklist of dangerous commands (`rm`, `dd`, `chmod`, `wget`, `curl`, `ssh`, etc.)
+  - Whitelist mode (optional, strict)
+  - Blocking of dangerous flags (`--force`, `-rf`, `--no-preserve-root`)
+  - Blocking of dangerous operators (`|`, `>`, `>>`, `;`, `&&`)
+  - Command logging to `~/.mma/logs/audit.jsonl`
+
+- **Path Validation** (`src/modules/security/path-validator.ts`):
+  - Global denied paths (`.git/`, `node_modules/`, `.env`, `*.key`, etc.)
+  - Global allowed paths (optional whitelist mode)
+  - Integration with existing `ToolScope` for subagents
+  - Applied to all filesystem tools (`read_file`, `write_file`, `delete_file`, `edit_file`, `create_dir`, `move_file`, `list_dir`, `file_info`)
+
+- **Network Validation** (`src/modules/security/network-validator.ts`):
+  - Denied domains blacklist
+  - Allowed domains whitelist (optional)
+  - URL sanitization (removing sensitive query parameters)
+  - Applied to `web_fetch`, `web_search`, `web_browse`
+
+- **Content Scanning** (`src/modules/security/content-scanner.ts`):
+  - Detection of dangerous patterns in file content (`eval(`, `child_process.exec(`, `rm -rf`, etc.)
+  - Applied to `write_file` and `edit_file`
+
+- **Subagent Recursion Control** (`src/tools/subagent.ts`):
+  - Maximum recursion depth limit (default: 3)
+  - Prevents infinite subagent spawning
+
+- **Audit Logging** (`src/modules/security/audit-log.ts`):
+  - Logging of all security-relevant events to `~/.mma/logs/audit.jsonl`
+  - Events: tool calls, file operations, bash commands, network requests, security blocks
+
+- **Data Sanitization** (`src/modules/security/data-sanitizer.ts`):
+  - Automatic removal of sensitive data (API keys, tokens, passwords) from logs
+  - Applied to all log messages and audit entries
+
+#### Configuration
+
+Security settings are part of `AppConfig` in `src/config/types.ts`:
+
+```typescript
+interface SecurityConfig {
+  bash: BashSecurityConfig;
+  paths: PathSecurityConfig;
+  network: NetworkSecurityConfig;
+  maxRecursionDepth: number;
+  maxFileOperations: number;
+  rateLimits: RateLimitConfig;
+  contentScan: ContentScanConfig;
+}
+```
+
+Default configuration is defined in `src/config/security.ts` and merged with user settings in `src/config/defaults.ts`.
+
+#### Backward Compatibility
+
+All security features are **opt-in** by default:
+- If `security` config is not provided, all operations are allowed (backward compatible)
+- Existing code continues to work without modifications
+- Security checks can be disabled individually
 
 ### Agent-Level MoE
 

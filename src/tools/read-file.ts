@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { resolve, normalize, extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathInScope } from "./scope-check";
+import { isPathInScope } from "../modules/security/path-validator";
 
 /** Default number of lines returned when the caller omits `limit`. */
 const DEFAULT_LIMIT = 300;
@@ -28,7 +28,7 @@ export const readFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
-    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope);
+    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       return {
         success: false,

@@ -2,6 +2,7 @@ import { readdirSync, statSync, existsSync } from 'fs'
 import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isPathInScope } from '../modules/security/path-validator'
 
 export const listDirTool: ToolDefinition = {
   name: 'list_dir',
@@ -18,9 +19,18 @@ export const listDirTool: ToolDefinition = {
     const path = String(args.path)
     const baseDir = resolve(ctx.baseDir)
     const resolved = resolve(baseDir, normalize(path))
-    if (!resolved.startsWith(baseDir)) {
-      return { success: false, output: t('file.path_not_allowed', { path }) }
+    
+    // Check path permissions
+    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    if (!scopeCheck.allowed) {
+      return {
+        success: false,
+        output: t('file.path_not_allowed', {
+          path: `${path} — ${scopeCheck.reason}`,
+        }),
+      }
     }
+    
     if (!existsSync(resolved)) {
       return { success: false, output: t('file.dir_notfound', { path }) }
     }

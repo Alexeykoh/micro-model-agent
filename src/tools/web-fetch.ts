@@ -1,5 +1,7 @@
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator'
+import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
 
 const MAX_CHARS = 15000
 
@@ -24,21 +26,44 @@ export const webFetchTool: ToolDefinition = {
     },
     required: ['url'],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const url = String(args.url)
+    
+    // Security check: validate URL
+    const securityConfig = ctx.config.security?.network
+    const validation = isUrlAllowed(url, securityConfig)
+    
+    if (!validation.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "network_request",
+        validation.reason || "URL blocked by security policy",
+        sanitizeUrl(url),
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] URL is not allowed: ${validation.reason}`,
+      }
+    }
+    
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000) })
+      const response = await fetch(url, { signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000) })
       if (!response.ok) {
         return { success: false, output: t('error.http', { status: response.status, statusText: response.statusText }) }
       }
       const contentType = response.headers.get('content-type') || ''
       const text = await response.text()
       const cleaned = contentType.includes('html') ? stripHtml(text) : text
-      if (cleaned.length > MAX_CHARS) {
-        return { success: true, output: cleaned.slice(0, MAX_CHARS) + t('file.truncated') }
+      
+      // Log successful network request
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
+      
+      if (cleaned.length > (securityConfig?.maxResponseSize || MAX_CHARS)) {
+        return { success: true, output: cleaned.slice(0, securityConfig?.maxResponseSize || MAX_CHARS) + t('file.truncated') }
       }
       return { success: true, output: cleaned || t('file.empty_page') }
     } catch (e: any) {
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
       return { success: false, output: t('error.fetch_failed', { message: e.message }) }
     }
   },

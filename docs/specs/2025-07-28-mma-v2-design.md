@@ -1374,10 +1374,216 @@ E:\projects\micro-models-agent\
 | Progress display | Per-step terminal output | `[Plan] 2/5 ██░░░ 40%` — видно всегда |
 | Model auto-load | LM Studio REST API | Auto-load model with correct context on startup |
 | Context defense | Multi-layer truncation | Tool results limited, pre-flight check, post-tool compact |
+| Security | Module-based | Command validation, path restrictions, network filtering, content scanning |
+| Security | Module-based | Command validation, path restrictions, network filtering, content scanning |
 
 ---
 
-## 14. Тестирование агента из консоли (agent-driven)
+## 14. Security Module
+
+MMA v2 includes a comprehensive security module that provides multiple layers of protection against malicious or accidental harmful actions.
+
+### 14.1 Architecture
+
+The security module is organized as follows:
+
+```
+src/modules/security/
+├── security.ts          # Default security configuration
+├── command-validator.ts # Bash command validation
+├── path-validator.ts   # File path validation
+├── network-validator.ts # URL/domain validation
+├── content-scanner.ts   # File content scanning
+├── data-sanitizer.ts   # Sensitive data removal from logs
+└── audit-log.ts        # Security event logging
+```
+
+All security checks are configurable via the `security` section in the agent configuration.
+
+### 14.2 Configuration
+
+Security configuration is part of the main `AppConfig` interface:
+
+```typescript
+interface SecurityConfig {
+  bash: BashSecurityConfig;
+  paths: PathSecurityConfig;
+  network: NetworkSecurityConfig;
+  maxRecursionDepth: number;
+  maxFileOperations: number;
+  rateLimits: RateLimitConfig;
+  contentScan: ContentScanConfig;
+}
+```
+
+Default security settings are defined in `src/config/security.ts` and provide a balance between security and usability.
+
+### 14.3 Bash Command Security
+
+**Configuration:**
+```typescript
+interface BashSecurityConfig {
+  blacklist: string[];      // Commands that are always blocked
+  whitelist: string[];      // If non-empty, only these commands are allowed
+  blockDangerousFlags: boolean; // Block flags like --force, -rf
+  logCommands: boolean;     // Log all executed commands
+  dangerousFlags: string[]; // List of dangerous flags to block
+  dangerousOperators: string[]; // List of dangerous operators (|, >, etc.)
+}
+```
+
+**Default Blacklist:**
+- System commands: `rm`, `dd`, `chmod`, `wget`, `curl`, `scp`, `ssh`, `nc`, `netcat`
+- File system: `mknod`, `mkfifo`, `ln`, `chown`, `chgrp`
+- User management: `useradd`, `usermod`, `passwd`, `sudo`, `su`
+- Process management: `kill`, `pkill`, `killall`, `exec`, `eval`, `source`
+- System control: `shutdown`, `reboot`, `halt`, `poweroff`
+- Disk operations: `format`, `fdisk`, `parted`, `mkfs`, `mount`, `umount`
+
+**Behavior:**
+1. If `whitelist` is non-empty, only commands in the whitelist are allowed
+2. Commands in `blacklist` are always blocked
+3. Dangerous flags (e.g., `--force`, `-rf`) are blocked if `blockDangerousFlags` is true
+4. Dangerous operators (e.g., `|`, `>`, `>>`) are always blocked
+5. All executed commands are logged to `~/.mma/logs/audit.jsonl` if `logCommands` is true
+
+### 14.4 Path Security
+
+**Configuration:**
+```typescript
+interface PathSecurityConfig {
+  denied: string[];   // Glob patterns for paths that are always denied
+  allowed: string[];  // If non-empty, only these paths are allowed
+}
+```
+
+**Default Denied Paths:**
+- `.git/`
+- `node_modules/`
+- `.env`
+- `*.key`, `*.pem`, `*.crt`, `*.p12`, `*.pfx`
+- `*.secret`, `*.token`
+- `package-lock.json`, `bun.lock`, `yarn.lock`, `pnpm-lock.yaml`
+
+**Behavior:**
+1. All paths must be within the `baseDir` (working directory)
+2. Paths matching `denied` patterns are blocked
+3. If `allowed` is non-empty, only paths matching these patterns are allowed
+4. Works with both filesystem tools and subagent scope restrictions
+
+### 14.5 Network Security
+
+**Configuration:**
+```typescript
+interface NetworkSecurityConfig {
+  deniedDomains: string[];   // Domains that are always denied
+  allowedDomains: string[]; // If non-empty, only these domains are allowed
+  requestTimeout: number;    // Timeout for network requests (ms)
+  maxResponseSize: number;   // Maximum response size (bytes)
+}
+```
+
+**Behavior:**
+1. URLs with domains in `deniedDomains` are blocked
+2. If `allowedDomains` is non-empty, only URLs with these domains are allowed
+3. Sensitive data (API keys, tokens, passwords) is automatically redacted from URLs in logs
+4. All network requests are logged to `~/.mma/logs/audit.jsonl`
+
+### 14.6 Content Scanning
+
+**Configuration:**
+```typescript
+interface ContentScanConfig {
+  enabled: boolean;           // Enable/disable content scanning
+  dangerousPatterns: RegExp[]; // Patterns to detect in file content
+}
+```
+
+**Default Dangerous Patterns:**
+- Code execution: `eval(`, `new Function(`
+- Process management: `child_process.exec(`, `child_process.spawn(`
+- Server creation: `require('http').createServer`, `require('net').createServer`
+- File operations: `require('fs').writeFileSync`, `require('fs').unlinkSync`
+- Process control: `process.exit(`
+- Infinite loops: `while(true)`, `for(;;)`
+- Dangerous commands: `rm -rf`, `dd if=`, `chmod 777`
+
+**Behavior:**
+1. When writing or editing files, content is scanned for dangerous patterns
+2. If dangerous patterns are found, the operation is blocked
+3. Blocked operations are logged to the audit log
+
+### 14.7 Subagent Recursion Control
+
+**Configuration:**
+```typescript
+maxRecursionDepth: number; // Maximum depth of subagent recursion (default: 3)
+```
+
+**Behavior:**
+1. Each subagent call increments the recursion depth
+2. If `maxRecursionDepth` is exceeded, the subagent creation is blocked
+3. The current depth is passed to subagents via `ToolContext.recursionDepth`
+
+### 14.8 Rate Limiting
+
+**Configuration:**
+```typescript
+interface RateLimitConfig {
+  maxRequestsPerMinute: number; // Maximum LLM requests per minute (default: 60)
+  maxParallelTasks: number;     // Maximum parallel tasks (default: 5)
+}
+```
+
+**Behavior:**
+- Limits the number of requests to the LLM provider
+- Limits the number of parallel tasks in MoE (Mixture of Experts) mode
+
+### 14.9 Audit Logging
+
+All security-related events are logged to `~/.mma/logs/audit.jsonl` with the following structure:
+
+```typescript
+interface AuditLogEntry {
+  timestamp: string;
+  sessionId?: string;
+  action: "tool_call" | "file_write" | "file_delete" | "bash_command" | "network_request" | "security_block";
+  tool?: string;
+  path?: string;
+  command?: string;
+  url?: string;
+  success: boolean;
+  details?: string;
+  reason?: string; // For security blocks
+}
+```
+
+**Logged Events:**
+- All tool calls (with success/failure status)
+- All file operations (write, delete, move)
+- All bash command executions
+- All network requests
+- All security blocks (with reason)
+
+### 14.10 Data Sanitization
+
+Sensitive data is automatically removed from logs and output:
+
+**Sanitized Patterns:**
+- API keys: `api_key=...`, `apikey=...`
+- Tokens: `token=...`, `access_token=...`
+- Passwords: `password=...`, `passwd=...`, `pwd=...`
+- Secrets: `secret=...`, `private_key=...`
+- Specific formats: OpenAI keys (`sk-...`), GitHub tokens (`ghp_...`), etc.
+
+**Behavior:**
+1. All log messages are sanitized before writing
+2. Command arguments are sanitized in audit logs
+3. URL query parameters are sanitized in network logs
+
+---
+
+## 15. Тестирование агента из консоли (agent-driven)
 
 Одноразовый headless-прогон MMA без интерактивного REPL — основной способ проверки фич и регрессий из терминала или внешним агентом (opencode).
 

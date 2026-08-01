@@ -1,4 +1,5 @@
 import type { AppConfig } from "./types";
+import { DEFAULT_SECURITY_CONFIG } from "./security";
 
 export const DEFAULTS: AppConfig = {
   version: "2.0.0",
@@ -83,4 +84,5 @@ export const DEFAULTS: AppConfig = {
       timeout: 30000,
     },
   },
+  security: DEFAULT_SECURITY_CONFIG,
 };

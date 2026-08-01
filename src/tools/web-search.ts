@@ -1,5 +1,7 @@
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
+import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator'
+import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
 
 export const webSearchTool: ToolDefinition = {
   name: 'web_search',
@@ -13,12 +15,32 @@ export const webSearchTool: ToolDefinition = {
     },
     required: ['query'],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const query = String(args.query || '')
     const numResults = Number(args.numResults) || 5
+    
+    // Build search URL
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+    
+    // Security check: validate URL
+    const securityConfig = ctx.config.security?.network
+    const validation = isUrlAllowed(url, securityConfig)
+    
+    if (!validation.allowed) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "network_request",
+        validation.reason || "URL blocked by security policy",
+        sanitizeUrl(url),
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] Search URL is not allowed: ${validation.reason}`,
+      }
+    }
+    
     try {
-      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000) })
+      const response = await fetch(url, { signal: AbortSignal.timeout(securityConfig?.requestTimeout || 10000) })
       const html = await response.text()
       const results: string[] = []
       const snippetRegex = /<a[^>]+class="result__a"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi
@@ -30,11 +52,16 @@ export const webSearchTool: ToolDefinition = {
         results.push(`${title}: ${snippet}`)
         count++
       }
+      
+      // Log successful network request
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Results: ${results.length}`);
+      
       if (results.length === 0) {
         return { success: true, output: t('tool.no_results', { query }) }
       }
       return { success: true, output: t('tool.search_results', { query, results: results.join('\n') }) }
     } catch (err: any) {
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
       return { success: false, output: t('error.search_failed', { message: err.message }) }
     }
   },

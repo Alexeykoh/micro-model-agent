@@ -73,6 +73,47 @@ export interface UiConfig {
   spinner: boolean;
 }
 
+export interface BashSecurityConfig {
+  blacklist: string[];
+  whitelist: string[];
+  blockDangerousFlags: boolean;
+  logCommands: boolean;
+  dangerousFlags: string[];
+  dangerousOperators: string[];
+}
+
+export interface PathSecurityConfig {
+  denied: string[];
+  allowed: string[];
+}
+
+export interface NetworkSecurityConfig {
+  deniedDomains: string[];
+  allowedDomains: string[];
+  requestTimeout: number;
+  maxResponseSize: number;
+}
+
+export interface RateLimitConfig {
+  maxRequestsPerMinute: number;
+  maxParallelTasks: number;
+}
+
+export interface ContentScanConfig {
+  enabled: boolean;
+  dangerousPatterns: RegExp[];
+}
+
+export interface SecurityConfig {
+  bash: BashSecurityConfig;
+  paths: PathSecurityConfig;
+  network: NetworkSecurityConfig;
+  maxRecursionDepth: number;
+  maxFileOperations: number;
+  rateLimits: RateLimitConfig;
+  contentScan: ContentScanConfig;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -94,4 +135,5 @@ export interface AppConfig {
   browser: BrowserToolConfig;
   ui: UiConfig;
   mcpServers: Record<string, MCPServerConfigEntry>;
+  security?: SecurityConfig;
 }
