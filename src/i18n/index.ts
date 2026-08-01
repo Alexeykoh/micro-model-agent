@@ -44,7 +44,7 @@ export function t(key: string, params?: Record<string, string | number>): string
 
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      template = template.replace(`{${k}}`, String(v))
+      template = template.replaceAll(`{${k}}`, String(v))
     }
   }
 

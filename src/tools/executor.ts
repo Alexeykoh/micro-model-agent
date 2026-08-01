@@ -1,5 +1,6 @@
 import type { ToolContext, ToolCall, ToolResult, PluginManager } from "./types";
 import { ToolRegistry } from "./registry";
+import { killByCallId } from "../modules/processes/runner";
 import { t } from "../i18n/index";
 
 const TOOL_EXECUTION_TIMEOUT_MS = 60000;
@@ -50,13 +51,16 @@ export class ToolExecutor {
 
     let result: ToolResult;
     try {
+      this.ctx.activeCallId = call.id;
       if (tool.interactive) {
         // Interactive tools wait for user input — no timeout.
         result = await tool.handler(this.ctx, call.arguments);
       } else {
         const timeoutPromise = new Promise<ToolResult>((_, reject) => {
           setTimeout(
-            () =>
+            () => {
+              // Kill any long-running child process registered for this call.
+              killByCallId(call.id);
               reject(
                 new Error(
                   t("tool.timeout", {
@@ -64,7 +68,8 @@ export class ToolExecutor {
                     seconds: TOOL_EXECUTION_TIMEOUT_MS / 1000,
                   }),
                 ),
-              ),
+              );
+            },
             TOOL_EXECUTION_TIMEOUT_MS,
           );
         });

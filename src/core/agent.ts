@@ -19,6 +19,7 @@ import {
 } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
+import { processRegistry } from "../modules/processes";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -838,6 +839,10 @@ export class Agent {
   shutdown(): void {
     const { pluginManager, logger, sessionManager, contextManager } = this.deps;
     contextManager.onCompact = null;
+    const killed = processRegistry.killAll();
+    if (killed > 0) {
+      logger.info(`Killed ${killed} background process(es) on shutdown`);
+    }
     pluginManager.runOnSessionEnd({
       logger,
       sessionManager: sessionManager?.getActiveMeta(),

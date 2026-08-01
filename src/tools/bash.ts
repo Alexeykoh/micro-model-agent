@@ -1,10 +1,13 @@
-import { execSync } from 'child_process'
-import { platform } from 'os'
 import type { ToolDefinition } from './types'
 import { isCommandAllowed, sanitizeCommandForLog } from '../modules/security/command-validator'
 import { logBashCommand, logSecurityBlock } from '../modules/security/audit-log'
 import { getSessionSecurityConfig } from '../modules/security/session-isolation'
 import { DEFAULT_SECURITY_CONFIG } from '../config/security'
+import { runCommand, processRegistry, isLongRunningCommand } from '../modules/processes'
+import { t } from '../i18n/index'
+import { platform } from 'os'
+
+const BASH_TIMEOUT_MS = 120_000
 
 function adaptCommandForWindows(command: string): string {
   if (platform() !== 'win32') return command
@@ -22,13 +25,14 @@ function adaptCommandForWindows(command: string): string {
 
 export const bashTool: ToolDefinition = {
   name: 'bash',
-  description: 'Execute a shell command and return its output. Use for running tests, build, git, and shell operations.',
+  description: 'Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Long-running commands (dev servers, watchers) start in the background and return a process id immediately — manage them with process_list, process_log, process_kill. Set background=true to force background execution.',
   tags: ['shell', 'code'],
   parameters: {
     type: 'object',
     properties: {
       command: { type: 'string', description: 'Shell command to execute' },
       workdir: { type: 'string', description: 'Working directory (default: baseDir)' },
+      background: { type: 'boolean', description: 'Start the command in the background and return immediately with a process id (default: auto-detect long-running commands)' },
     },
     required: ['command'],
   },
@@ -70,41 +74,69 @@ export const bashTool: ToolDefinition = {
       )
     }
 
-    try {
-      const output = execSync(command, {
-        cwd: workdir,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: 120_000,
-      })
-      
-      // Update audit log with success
+    const background = args.background === true || isLongRunningCommand(command)
+
+    if (background) {
+      const entry = processRegistry.start(command, workdir, ctx.sessionId)
       if (securityConfig?.logCommands) {
         logBashCommand(
           ctx.sessionId,
           sanitizeCommandForLog(command),
           true,
-          `Working directory: ${workdir}, Output length: ${output.length}`,
+          `Started in background: ${entry.id} (PID ${entry.pid})`,
         )
       }
-      
-      return { success: true, output: output.trimEnd() }
+      const explicit = args.background === true
+      return {
+        success: true,
+        output: `${t("proc.started", {
+          id: entry.id,
+          pid: entry.pid,
+          command,
+        })}${explicit ? "" : `\n${t("proc.detected_hint")}`}\n${t("proc.manage_hint", {
+          id: entry.id,
+        })}`,
+      }
+    }
+
+    try {
+      const res = await runCommand(command, {
+        cwd: workdir,
+        callId: ctx.activeCallId,
+        timeoutMs: BASH_TIMEOUT_MS,
+      })
+      const parts = [res.stdout.trimEnd(), res.stderr.trimEnd()].filter(Boolean)
+      let output = parts.join("\n")
+      if (res.timedOut) {
+        output = `${output ? output + "\n" : ""}${t("proc.timed_out", {
+          ms: BASH_TIMEOUT_MS,
+        })}`
+      } else if (!output && res.code !== 0) {
+        output = `(exit code ${res.code})`
+      }
+
+      // Update audit log with result
+      if (securityConfig?.logCommands) {
+        logBashCommand(
+          ctx.sessionId,
+          sanitizeCommandForLog(command),
+          res.code === 0,
+          `Working directory: ${workdir}, Output length: ${res.stdout.length}`,
+        )
+      }
+
+      return { success: res.code === 0, output }
     } catch (e: any) {
-      const stderr = e.stderr?.toString() || ''
-      const stdout = e.stdout?.toString() || ''
-      const errorOutput = stderr || stdout || e.message
-      
       // Update audit log with failure
       if (securityConfig?.logCommands) {
         logBashCommand(
           ctx.sessionId,
           sanitizeCommandForLog(command),
           false,
-          `Working directory: ${workdir}, Error: ${errorOutput.slice(0, 100)}`,
+          `Working directory: ${workdir}, Error: ${e.message?.slice(0, 100) || ""}`,
         )
       }
-      
-      return { success: false, output: errorOutput }
+      return { success: false, output: e.message || String(e) }
     }
   },
 }

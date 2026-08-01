@@ -339,7 +339,8 @@ src/
 │   ├── edit-file.ts    # Find-replace in existing files
 │   ├── glob-tool.ts    # Glob pattern matching
 │   ├── grep-tool.ts    # Regex content search (via ripgrep)
-│   ├── bash.ts         # Shell command execution
+│   ├── bash.ts         # Shell command execution (async spawn, background mode for long-running commands)
+│   ├── process-list.ts, process-log.ts, process-kill.ts  # Background process management
 │   ├── subagent.ts     # Isolated sub-agent spawning
 │   ├── web-search.ts, web-fetch.ts, web-browse.ts
 │   ├── browser.ts      # Playwright browser tool (open, click, type, scroll, screenshot)
@@ -375,6 +376,10 @@ src/
 │   │   ├── verifier.ts # File existence + syntax + test checks
 │   │   ├── stuck-detector.ts # Iteration/error thresholds, off-track guard
 │   │   └── auditor.ts  # Final audit after all steps
+│   ├── processes/      # Background & foreground process management
+│   │   ├── runner.ts   # Async spawn (non-blocking), kill-by-call-id on timeout, tree-kill
+│   │   ├── registry.ts # Background process registry: pid tracking, output buffer, kill/killAll
+│   │   └── detect.ts   # Long-running command heuristic (dev servers, watchers)
 │   ├── updater/        # Background npm registry version check
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
@@ -645,6 +650,29 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 | 128K          | 13K         | 19K           | 96K           |
 
 Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
+
+## Process Management
+
+Long-running commands (dev servers, watchers) no longer block the agent.
+
+### Bash behavior
+
+- The `bash` tool uses **async spawn** (non-blocking event loop); the old `execSync` blocking behavior is gone.
+- Commands detected as long-running (heuristic in `src/modules/processes/detect.ts`: `run dev`, `--watch`, `vite`, `next dev`, `uvicorn`, etc.) start in the **background** automatically and return a process id immediately instead of hanging.
+- Force background with `background: true`, force foreground with `background: false`.
+- Foreground commands are killed on the executor timeout (60s) via kill-by-call-id; the tool also has its own 120s backstop timeout.
+
+### Management tools
+
+| Tool | Purpose |
+|------|---------|
+| `process_list` | List background processes: id, PID, command, status, last output line |
+| `process_log` | Show buffered output of a background process (`id`, optional `tail`) |
+| `process_kill` | Kill a background process tree (`id`) — works even though `kill`/`pkill` are blocked by the bash security blacklist |
+
+- PIDs are tracked in `src/modules/processes/registry.ts` (per-session, capped at 20 entries, 300 log lines each). Output buffers are capped.
+- Windows: processes are killed with `taskkill /pid <pid> /T /F`; POSIX: process-group kill (`detached` spawn).
+- `Agent.shutdown()` kills all remaining background processes (no orphans).
 
 ## Execution Guarantees
 

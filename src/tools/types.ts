@@ -51,6 +51,12 @@ export interface ToolContext {
    * Session context for isolation
    */
   sessionContext?: import("../modules/security/session-isolation").SessionContext;
+  /**
+   * Id of the tool call currently being executed. Set by the executor so
+   * long-running tools (e.g. bash) can be killed when the execution timeout
+   * fires.
+   */
+  activeCallId?: string;
 }
 
 export interface ToolResult {

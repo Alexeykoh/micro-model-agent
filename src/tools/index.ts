@@ -12,6 +12,9 @@ import { deleteFileTool } from './delete-file'
 import { moveFileTool } from './move-file'
 import { fileInfoTool } from './file-info'
 import { bashTool } from './bash'
+import { processListTool } from './process-list'
+import { processLogTool } from './process-log'
+import { processKillTool } from './process-kill'
 import { subagentTool } from './subagent'
 import { webSearchTool } from './web-search'
 import { webFetchTool } from './web-fetch'
@@ -33,6 +36,7 @@ export {
   globTool, grepTool, listDirTool, createDirTool,
   deleteFileTool, moveFileTool, fileInfoTool,
   bashTool, subagentTool,
+  processListTool, processLogTool, processKillTool,
   webSearchTool, webFetchTool, webBrowseTool,
   questionTool, approveTool,
   createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
@@ -45,6 +49,7 @@ export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsMo
     globTool, grepTool, listDirTool, createDirTool,
     deleteFileTool, moveFileTool, fileInfoTool,
     bashTool, subagentTool,
+    processListTool, processLogTool, processKillTool,
     webSearchTool, webFetchTool, webBrowseTool,
     questionTool, approveTool,
     pipelineRunTool, mcpCallTool, searchHistoryTool,
