@@ -76,7 +76,13 @@ describe('subagentTool', () => {
       baseDir: '/tmp',
       logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
       llmProvider: {} as any,
-      toolExecutor: { execute: () => ({}) } as any,
+      toolExecutor: {
+        execute: () => ({}),
+        getToolDefinitions: (tags?: string[]) =>
+          (tags || []).length > 0
+            ? tags!.map((tag) => ({ name: 'write_file', description: 'd', parameters: {}, tags: [tag] }))
+            : [],
+      } as any,
     } as any, {
       task: 'do something',
       allowed_files: ['src/file.ts'],
