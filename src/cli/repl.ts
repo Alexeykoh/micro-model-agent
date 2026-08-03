@@ -197,6 +197,7 @@ export class Repl {
 
           let dataUrl: string;
           let label: string;
+          let warning: string | undefined;
 
           if (source.toLowerCase() === "clipboard") {
             const clipPath = await readClipboardImage();
@@ -207,6 +208,7 @@ export class Repl {
             const result = loadFileAsDataUrl(clipPath);
             dataUrl = result.dataUrl;
             label = "clipboard";
+            warning = result.warning;
           } else if (source.startsWith("http://") || source.startsWith("https://")) {
             const result = await loadUrlAsDataUrl(source);
             dataUrl = result.dataUrl;
@@ -220,6 +222,7 @@ export class Repl {
             const result = loadFileAsDataUrl(absPath);
             dataUrl = result.dataUrl;
             label = source;
+            warning = result.warning;
           }
 
           // Store the image data on the agent's context manager for the next message
@@ -236,6 +239,7 @@ export class Repl {
 
           const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
           console.log(pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })));
+          if (warning) console.log(pc.yellow(`  ${warning}`));
         } catch (err: any) {
           console.log(pc.red(t("image.error", { message: err.message })));
         }
@@ -873,10 +877,11 @@ export class Repl {
             const { readClipboardImage, loadFileAsDataUrl } = await import("../llm/image-utils");
             const clipPath = await readClipboardImage();
             if (clipPath) {
-              const { dataUrl } = loadFileAsDataUrl(clipPath);
+              const { dataUrl, warning } = loadFileAsDataUrl(clipPath);
               this.pendingClipboardImage = dataUrl;
               const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
               console.log(pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`));
+              if (warning) console.log(pc.yellow(`  ${warning}`));
               this.rl.prompt();
             }
           } catch {

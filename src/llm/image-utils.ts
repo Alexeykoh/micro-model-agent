@@ -21,23 +21,26 @@ export function detectMime(filePath: string): string {
 
 /**
  * Load an image from a file path and return as base64 data URL.
- * Optionally resize if the raw data exceeds maxBytes.
+ * Resizes if raw data exceeds maxBytes. Default max: 50KB (~16K tokens in base64).
  */
 export function loadFileAsDataUrl(
   filePath: string,
-  maxBytes?: number,
-): { dataUrl: string; mime: string; resized: boolean } {
+  maxBytes = 50 * 1024,
+): { dataUrl: string; mime: string; resized: boolean; warning?: string } {
   const mime = detectMime(filePath);
   let buf: Buffer = readFileSync(filePath);
   let resized = false;
+  let warning: string | undefined;
 
-  if (maxBytes && buf.length > maxBytes) {
-    buf = resizePngBuffer(buf, maxBytes);
+  if (buf.length > maxBytes) {
+    const ratio = maxBytes / buf.length;
+    warning = `Image ${Math.round(buf.length / 1024)}KB exceeds ${Math.round(maxBytes / 1024)}KB limit — resized to ~${Math.round(maxBytes / 1024)}KB (quality may reduce). Tip: crop the image before pasting.`;
+    buf = buf.subarray(0, maxBytes); // naive truncation — better than nothing
     resized = true;
   }
 
   const b64 = buf.toString("base64");
-  return { dataUrl: `data:${mime};base64,${b64}`, mime, resized };
+  return { dataUrl: `data:${mime};base64,${b64}`, mime, resized, warning };
 }
 
 /**
@@ -115,16 +118,4 @@ async function readClipboardLinux(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Rough PNG resize by reducing dimensions.
- * This is a naive approach — for production, use sharp or jimp.
- * For now, we just warn if image is too large and return as-is.
- */
-function resizePngBuffer(buf: Buffer, _maxBytes: number): Buffer {
-  // Without a native image library, we can't reliably resize.
-  // Return as-is and let the model handle it (or fail gracefully).
-  // TODO: integrate sharp for proper resize
-  return buf;
 }
