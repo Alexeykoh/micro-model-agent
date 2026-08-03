@@ -40,6 +40,8 @@ const COMMAND_GROUPS: Record<string, string> = {
   reasoning: "agent",
   provider: "agent",
   model: "agent",
+  context: "agent",
+  reload: "agent",
   wizard: "agent",
   sessions: "session",
   new: "session",
@@ -357,6 +359,60 @@ export class Repl {
         const configPath = join(homedir(), ".mma", "config.json");
         saveConfig(this.config, configPath);
         console.log(pc.green(t("cli.context_set", { size })));
+      },
+    });
+    this.registerCommand({
+      name: "reload",
+      description: t("repl.reload"),
+      usage: t("repl.reload_usage"),
+      action: async () => {
+        console.log(pc.yellow(t("repl.reloading")));
+        
+        // Save current session if auto-save enabled
+        if (this.sessionManager && this.config.session.autoSave) {
+          const active = this.sessionManager.getActiveMeta();
+          if (active) {
+            // Session is already auto-saved on each message
+          }
+        }
+        
+        // Shutdown current agent
+        this.agent.shutdown();
+        
+        // Reload config from disk
+        const { loadConfig } = await import("../config/config");
+        const { homedir } = await import("os");
+        const { join } = await import("path");
+        const configDir = join(homedir(), ".mma");
+        const projectConfigPath = join(process.cwd(), ".mmrc");
+        
+        const freshConfig = loadConfig({ configDir, projectConfigPath });
+        
+        // Update config reference
+        Object.assign(this.config, freshConfig);
+        
+        // Recreate agent with new config (re-bootstrap)
+        const { bootstrap } = await import("../core/bootstrap");
+        const result = await bootstrap(
+          configDir,
+          process.cwd(),
+          this.noAgentsMd,
+          false
+        );
+        
+        // Replace agent and related components
+        this.agent = result.agent;
+        this.sessionManager = result.sessionManager;
+        this.skillsModule = result.skillsModule;
+        this.pluginManager = result.pluginManager;
+        
+        // Update completer with new session/skill data
+        this.setupCompleter();
+        
+        console.log(pc.green(t("repl.reloaded")));
+        console.log(`${t("repl.model")}       ${this.config.model}`);
+        console.log(`${t("repl.context")}     ${this.config.contextWindow}`);
+        console.log(`${t("repl.provider")}    ${this.config.provider.type} @ ${this.config.provider.baseUrl}`);
       },
     });
   }
