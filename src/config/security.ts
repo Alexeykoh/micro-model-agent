@@ -43,6 +43,9 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "mkfs",
       "mount",
       "umount",
+      "powershell",
+      "pwsh",
+      "cmd",
     ],
     // If whitelist is non-empty, only these commands are allowed
     whitelist: [],

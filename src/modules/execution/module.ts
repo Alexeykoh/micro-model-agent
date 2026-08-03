@@ -301,7 +301,9 @@ export class ExecutionModule implements AgentModule {
       },
       onAfterTool: (ctx: any, call: any, result: any) => {
         if (!result.success) {
-          this.stuckDetector.recordToolError("tool");
+          this.stuckDetector.recordToolError(call.name);
+        } else {
+          this.stuckDetector.recordToolSuccess();
         }
         if (
           this.tracker &&

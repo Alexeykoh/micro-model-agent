@@ -15,6 +15,8 @@ export class StuckDetector {
   private recentToolCalls: ToolCallRecord[] = []
   private readonly maxRecentCalls = 10
   private readonly repetitionThreshold = 3
+  private consecutiveFailures = 0
+  private lastFailedTool = ''
 
   constructor(threshold = 8, errorThreshold = 3) {
     this.threshold = threshold
@@ -40,6 +42,13 @@ export class StuckDetector {
 
   recordToolError(toolName: string): void {
     this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1)
+    this.consecutiveFailures++
+    this.lastFailedTool = toolName
+  }
+
+  recordToolSuccess(): void {
+    this.consecutiveFailures = 0
+    this.lastFailedTool = ''
   }
 
   setCurrentStep(stepId: number, description: string): void {
@@ -75,6 +84,14 @@ export class StuckDetector {
     return count >= this.repetitionThreshold
   }
 
+  hasConsecutiveFailures(): boolean {
+    return this.consecutiveFailures >= this.errorThreshold
+  }
+
+  getConsecutiveFailuresCount(): number {
+    return this.consecutiveFailures
+  }
+
   getRepetitiveToolMessage(): string {
     if (!this.hasRepetitiveToolCalls()) return ''
     const last = this.recentToolCalls[this.recentToolCalls.length - 1]
@@ -96,12 +113,17 @@ export class StuckDetector {
     if (this.isStuck()) {
       return t('exec.stuck_recovery', { iterations: this.iterationsOnCurrentStep })
     }
-    if (this.hasRepetitiveToolCalls()) {
-      return this.getRepetitiveToolMessage()
-    }
+    // Per-tool error recovery (more specific — e.g., "bash failed 3 times")
     const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
     if (errorTool) {
       return t('exec.tool_errors_recovery', { tool: errorTool[0], count: errorTool[1] })
+    }
+    // Consecutive failures from different tools (generic — e.g., "5 consecutive failures")
+    if (this.hasConsecutiveFailures()) {
+      return t('exec.consecutive_failures_recovery', { count: this.consecutiveFailures })
+    }
+    if (this.hasRepetitiveToolCalls()) {
+      return this.getRepetitiveToolMessage()
     }
     return ''
   }
@@ -129,5 +151,7 @@ export class StuckDetector {
   reset(): void {
     this.iterationsOnCurrentStep = 0
     this.toolErrors.clear()
+    this.consecutiveFailures = 0
+    this.lastFailedTool = ''
   }
 }

