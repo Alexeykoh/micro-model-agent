@@ -1,8 +1,8 @@
 import { statSync, existsSync } from 'fs'
-import { resolve, normalize } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import { isPathInScope } from '../modules/security/path-validator'
+import { safeResolvePath } from './path-utils'
 
 export const fileInfoTool: ToolDefinition = {
   name: 'file_info',
@@ -17,11 +17,10 @@ export const fileInfoTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path)
-    const baseDir = resolve(ctx.baseDir)
-    const resolved = resolve(baseDir, normalize(path))
+    const resolved = safeResolvePath(ctx.baseDir, path)
     
     // Check path permissions
-    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       return {
         success: false,

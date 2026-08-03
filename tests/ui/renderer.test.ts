@@ -97,7 +97,7 @@ describe("Renderer", () => {
     renderer.text("final answer");
     renderer.flush();
     const out = text();
-    expect(out).toContain("✗");
+    expect(out).toContain("✓");
     expect(out).toContain("final answer");
   });
 

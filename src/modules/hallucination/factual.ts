@@ -12,6 +12,10 @@ const FILE_EXTENSIONS = new Set([
   "tsx",
   "js",
   "jsx",
+  "mjs",
+  "cjs",
+  "mts",
+  "cts",
   "json",
   "md",
   "yaml",
@@ -38,12 +42,17 @@ const FILE_EXTENSIONS = new Set([
   "cmd",
   "txt",
   "env",
+  "env.local",
+  "env.production",
   "gitignore",
   "dockerignore",
   "dockerfile",
   "makefile",
   "cmake",
   "toml",
+  "lock",
+  "config",
+  "log",
   "xml",
   "sql",
   "graphql",
@@ -53,7 +62,16 @@ const FILE_EXTENSIONS = new Set([
 
 const VERSION_PATTERN = /^\d+(\.\d+)*$/;
 
-const COMMON_WORDS = new Set(["node.js", "Node.js"]);
+const COMMON_WORDS = new Set([
+  "node.js", "Node.js",
+  "console.log", "console.error", "console.warn", "console.info",
+  "Math.floor", "Math.ceil", "Math.round", "Math.max", "Math.min",
+  "JSON.parse", "JSON.stringify",
+  "Object.keys", "Object.values", "Object.entries",
+  "Array.from", "Array.isArray",
+  "Date.now", "Date.parse",
+  "RegExp", "Promise",
+]);
 
 export class FactualCheck {
   private knownPaths: Set<string> = new Set();
@@ -86,12 +104,10 @@ export class FactualCheck {
 
   private pathExistsOnDisk(path: string): boolean {
     try {
-      if (
-        path.startsWith("/") ||
-        path.startsWith("~") ||
-        /^[A-Za-z]:/.test(path)
-      ) {
-        return existsSync(path);
+      // Skip absolute paths — they're either system paths or outside the project.
+      // On Windows, existsSync('/...') can hang on certain paths.
+      if (path.startsWith("/") || path.startsWith("~") || /^[A-Za-z]:/.test(path)) {
+        return false;
       }
       return existsSync(join(this.baseDir, path));
     } catch {
@@ -106,8 +122,11 @@ export class FactualCheck {
     const unknownPaths = mentionedPaths.filter((p) => {
       if (this.knownPaths.has(p)) return false;
       if (VERSION_PATTERN.test(p)) return false;
-      if (p.startsWith("/")) return false;
       if (COMMON_WORDS.has(p)) return false;
+      // Skip absolute paths — agent responses use relative paths; absolute
+      // paths are either system paths or URLs, and existsSync can hang on
+      // Windows for root-relative paths like "/page.html".
+      if (p.startsWith("/") || p.startsWith("~") || /^[A-Za-z]:/.test(p)) return false;
       if (this.pathExistsOnDisk(p)) return false;
 
       const ext = p.split(".").pop()?.toLowerCase() || "";

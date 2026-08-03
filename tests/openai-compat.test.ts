@@ -109,6 +109,7 @@ describe('OpenAICompatProvider', () => {
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'))
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
       },
@@ -155,6 +156,7 @@ describe('OpenAICompatProvider', () => {
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'))
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
       },

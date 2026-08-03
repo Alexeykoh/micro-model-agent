@@ -5,21 +5,16 @@ import type { ContextManager, Message } from "../modules/context/manager";
 import type { HallucinationDetector } from "../modules/hallucination/detector";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
-import type { ToolScope } from "../tools/types";
+import type { ToolScope, ToolDefinition } from "../tools/types";
 import type { PromptBlock } from "./types";
-import type { ToolCall, ToolEvent, AgentPhase, LLMResponse } from "./types";
+import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { PromptBuilder } from "./prompt-builder";
-import { OrchestratorClient } from "../llm/orchestrator";
-import {
-  validatePlan,
-  applyAutoFixes,
-} from "../modules/execution/plan-validator";
-import { MoEExecutor } from "../modules/execution/moe-executor";
-import { StepVerifier } from "../modules/execution/verifier";
 import { processRegistry } from "../modules/processes";
+import { SessionLogger } from "./session-logger";
+import { runWithMoE } from "./agent-moe";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -36,17 +31,7 @@ export interface AgentDeps {
   scope?: ToolScope;
   toolTags?: string[];
   promptBlocks: PromptBlock[];
-  /**
-   * Dynamic prompt blocks (e.g. the plan checklist) that may appear after the
-   * system prompt was first built. Refreshed into the system prompt before each
-   * LLM call so mid-run state (a created plan) stays visible to the model.
-   */
   getDynamicPromptBlocks?: () => PromptBlock[];
-  /**
-   * Final audit callback. Returns null when no plan is active. When a plan is
-   * active and incomplete, the loop refuses to terminate and re-injects the
-   * audit warning so the model can finish the remaining steps.
-   */
   finalAudit?: () => Promise<{
     passed: boolean;
     done: number;
@@ -56,20 +41,7 @@ export interface AgentDeps {
     summary: string;
   } | null>;
   sessionManager?: SessionManager;
-  /**
-   * One-shot headless mode: exit on the first final answer instead of
-   * retrying empty responses, so the agent terminates immediately once done.
-   */
   exitOnComplete?: boolean;
-}
-
-export interface AgentResult {
-  success: boolean;
-  text: string;
-  error?: string;
-  iterationCount: number;
-  contextUsed?: number;
-  contextLimit?: number;
 }
 
 export class Agent {
@@ -81,9 +53,8 @@ export class Agent {
   }
 
   private setScope(): void {
-    const executor = this.deps.toolExecutor as any;
-    if (executor && executor.ctx && this.deps.scope) {
-      executor.ctx.scope = this.deps.scope;
+    if (this.deps.scope) {
+      this.deps.toolExecutor.setScope(this.deps.scope);
     }
   }
 
@@ -114,7 +85,6 @@ export class Agent {
     return builder.build();
   }
 
-  /** Refresh the system prompt in context if dynamic blocks changed. */
   private refreshSystemPrompt(): void {
     const { prompt } = this.buildSystemPrompt();
     const current = this.deps.contextManager
@@ -174,10 +144,11 @@ export class Agent {
       toolExecutor,
       pluginManager,
       contextManager,
-      hallucinationDetector,
       logger,
       sessionManager,
     } = this.deps;
+
+    const slog = new SessionLogger(sessionManager);
 
     if (sessionManager && !sessionManager.getActive()) {
       sessionManager.create();
@@ -191,19 +162,9 @@ export class Agent {
       const { prompt: systemPrompt, excluded } = this.buildSystemPrompt();
       contextManager.addMessage({ role: "system", content: systemPrompt });
       this.systemPromptAdded = true;
-      if (sessionManager) {
-        sessionManager.appendLog({
-          ts: new Date().toISOString(),
-          type: "system",
-          content: systemPrompt.slice(0, 2000),
-        });
-        if (excluded.length > 0) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "system",
-            content: `[Excluded prompt blocks: ${excluded.length}]`,
-          });
-        }
+      slog.logSystem(systemPrompt.slice(0, 2000));
+      if (excluded.length > 0) {
+        slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`);
       }
       pluginManager.runOnSessionStart({
         logger,
@@ -212,22 +173,21 @@ export class Agent {
     }
 
     contextManager.addMessage({ role: "user", content: input });
-
-    if (sessionManager) {
-      sessionManager.appendMessage({
-        role: "user",
-        content: input,
-        timestamp: new Date().toISOString(),
-      });
-      sessionManager.appendLog({
-        ts: new Date().toISOString(),
-        type: "user",
-        content: input,
-      });
-    }
+    slog.logUser(input);
 
     if (config.moe?.enabled) {
-      return this.runWithMoE(input, onChunk, onMeta, onTool, onPhase);
+      return runWithMoE(
+        {
+          config,
+          llmProvider,
+          toolExecutor,
+          logger,
+          baseDir: this.deps.baseDir,
+        },
+        input,
+        () => this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase),
+        { onMeta, onTool, onPhase },
+      );
     }
 
     return this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase);
@@ -251,6 +211,7 @@ export class Agent {
       sessionManager,
     } = this.deps;
 
+    const slog = new SessionLogger(sessionManager);
     let iteration = 0;
     let lastText = "";
     let hallucinationRetries = 0;
@@ -271,14 +232,7 @@ export class Agent {
       if (contextManager.needsCompaction()) {
         contextManager.compact();
         logger.debug("Context compacted");
-        if (sessionManager) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "compaction",
-            content: `regular compaction, iteration ${iteration}`,
-            iteration,
-          });
-        }
+        slog.logCompaction(`regular compaction, iteration ${iteration}`, iteration);
       }
 
       const currentTokens = contextManager.getEstimatedTokens();
@@ -288,31 +242,20 @@ export class Agent {
         logger.warn(
           `Context overflow (${currentTokens} > ${budget.history}), forced compaction`,
         );
-        if (sessionManager) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "compaction",
-            content: `forced compaction (${currentTokens} > ${budget.history}), iteration ${iteration}`,
-            iteration,
-            contextTokens: currentTokens,
-            contextLimit: budget.history,
-          });
-        }
+        slog.logCompaction(
+          `forced compaction (${currentTokens} > ${budget.history}), iteration ${iteration}`,
+          iteration,
+          currentTokens,
+          budget.history,
+        );
       }
 
       this.refreshSystemPrompt();
       const history = contextManager.getActiveHistory();
 
       const allTools = toolExecutor.getToolDefinitions(this.deps.toolTags);
-      if (sessionManager) {
-        sessionManager.appendLog({
-          ts: new Date().toISOString(),
-          type: "tool_defs",
-          toolCount: allTools.length,
-          toolNames: allTools.map((t) => t.name),
-          iteration,
-        });
-      }
+      slog.logToolDefs(allTools.length, allTools.map((t) => t.name), iteration);
+
       let textContent = "";
       let reasoningContent = "";
       const toolCalls: ToolCall[] = [];
@@ -321,7 +264,7 @@ export class Agent {
 
       this.emitPhase(iteration, "thinking", onPhase);
       try {
-        for await (const chunk of llmProvider.chat(history, allTools as any)) {
+        for await (const chunk of llmProvider.chat(history, allTools as ToolDefinition[])) {
           if (chunk.type === "text" && chunk.content) {
             if (emittedReasoning && !textContent) {
               onMeta?.("\n\n");
@@ -363,13 +306,7 @@ export class Agent {
         }
       } catch (err: any) {
         logger.error(`LLM call failed: ${err.message}`);
-        if (sessionManager) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "error",
-            content: err.message,
-          });
-        }
+        slog.logError(err.message);
         pluginManager.runOnError({ iteration, logger }, err);
         return {
           success: false,
@@ -404,28 +341,8 @@ export class Agent {
         lastToolSignature = signature;
       }
 
-      if (sessionManager) {
-        if (reasoningContent) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "reasoning",
-            content: reasoningContent,
-            iteration,
-          });
-        }
-        if (sawToolCall) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "assistant",
-            content: textContent || "",
-            tool_calls: toolCalls.map((tc) => ({
-              id: tc.id,
-              name: tc.name,
-              arguments: tc.arguments,
-            })),
-            iteration,
-          });
-        }
+      if (sawToolCall) {
+        slog.logAssistant(textContent || "", reasoningContent, toolCalls, iteration);
       }
 
       if (sawToolCall) {
@@ -454,18 +371,11 @@ export class Agent {
             { id: call.id, name: call.name, arguments: call.arguments },
           );
           onTool?.({ type: "start", tool: call.name, args: call.arguments });
-          if (sessionManager) {
-            sessionManager.appendLog({
-              ts: new Date().toISOString(),
-              type: "tool_call",
-              tool: call.name,
-              tool_call_id: call.id,
-              args: call.arguments,
-              iteration,
-            });
-          }
+          slog.logToolCall(call, iteration);
+
           const result = await toolExecutor.execute(call);
           const duration = Date.now() - startTime;
+
           pluginManager.runOnToolEnd(
             { iteration, logger },
             { id: call.id, name: call.name, arguments: call.arguments },
@@ -490,6 +400,7 @@ export class Agent {
             duration,
             error: !result.success,
           });
+
           const currentTokens = contextManager.getEstimatedTokens();
           const budget = contextManager.getBudget();
           const truncatedOutput = this.truncateToolOutput(
@@ -506,24 +417,9 @@ export class Agent {
           summaries.push(
             `[Tool: ${call.name} (${JSON.stringify(call.arguments)}) → ${truncatedOutput.slice(0, 200)}]`,
           );
-          if (sessionManager && config.session.autoSave) {
-            sessionManager.appendMessage({
-              role: "tool",
-              content: truncatedOutput.slice(0, 500),
-              name: call.name,
-              timestamp: new Date().toISOString(),
-            });
-            sessionManager.appendLog({
-              ts: new Date().toISOString(),
-              type: "tool_result",
-              tool: call.name,
-              tool_call_id: call.id,
-              success: result.success,
-              content: result.output.slice(0, 1000),
-              diff: result.diff,
-              duration,
-              iteration,
-            });
+
+          if (config.session.autoSave) {
+            slog.logToolResult(call, result, duration, iteration);
           }
           if (contextManager.needsCompaction()) {
             contextManager.compact();
@@ -594,38 +490,8 @@ export class Agent {
 
       if (textContent) {
         contextManager.addMessage({ role: "assistant", content: textContent });
-        if (sessionManager && config.session.autoSave) {
-          sessionManager.appendMessage({
-            role: "assistant",
-            content: textContent.slice(0, 500),
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-      if (sessionManager) {
-        if (reasoningContent) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "reasoning",
-            content: reasoningContent,
-            iteration,
-          });
-        }
-        if (textContent) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "assistant",
-            content: textContent,
-            iteration,
-          });
-        } else if (reasoningContent) {
-          sessionManager.appendLog({
-            ts: new Date().toISOString(),
-            type: "assistant",
-            content: reasoningContent,
-            iteration,
-          });
-        }
+        slog.saveAssistantMessage(textContent);
+        slog.logAssistant(textContent, reasoningContent, undefined, iteration);
       }
 
       lastText = textContent;
@@ -644,14 +510,7 @@ export class Agent {
                 steps,
               })}</system-summary>`,
             });
-            if (sessionManager) {
-              sessionManager.appendLog({
-                ts: new Date().toISOString(),
-                type: "audit",
-                content: audit.summary,
-                iteration,
-              });
-            }
+            slog.logAudit(audit.summary, iteration);
             if (iteration >= config.maxToolIterations - 1) {
               break;
             }
@@ -682,134 +541,6 @@ export class Agent {
       iterationCount: iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,
-    };
-  }
-
-  private async runWithMoE(
-    input: string,
-    _onChunk?: (chunk: string) => void,
-    onMeta?: (meta: string) => void,
-    onTool?: (ev: ToolEvent) => void,
-    onPhase?: (phase: AgentPhase) => void,
-  ): Promise<AgentResult> {
-    const { config, llmProvider, logger } = this.deps;
-
-    const orchestrator = new OrchestratorClient(
-      {
-        model: config.orchestrator.model,
-        provider: config.orchestrator.provider,
-      },
-      llmProvider,
-    );
-
-    if (!orchestrator.isEnabled()) {
-      logger.debug(
-        "MoE enabled but no orchestrator model configured — falling back to single-agent",
-      );
-      return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool, onPhase);
-    }
-
-    onMeta?.("🤖 Planning with MoE mode...\n");
-    this.emitPhase(0, "thinking", onPhase);
-    const planResult = await orchestrator.plan(input);
-    this.emitPhase(0, "done", onPhase);
-    if ("error" in planResult) {
-      logger.warn(
-        `MoE plan failed: ${planResult.error} — falling back to single-agent`,
-      );
-      return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool);
-    }
-
-    const { plan } = planResult;
-    onMeta?.(
-      `📋 Plan created: "${plan.title}" (${plan.subtasks.length} subtasks)\n`,
-    );
-
-    const validation = validatePlan(plan, config);
-    if (!validation.valid) {
-      const applied = applyAutoFixes(plan, validation.autoFixes);
-      const retry = validatePlan(applied, config);
-      if (!retry.valid) {
-        logger.warn(
-          `MoE plan validation failed: ${retry.errors.join("; ")} — falling back to single-agent`,
-        );
-        onMeta?.(
-          `⚠️ Plan validation failed. Falling back to single-agent mode.\n`,
-        );
-        return this.executeSingleAgentLoop(input, _onChunk, onMeta, onTool);
-      }
-      Object.assign(plan, applied);
-      onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
-    }
-
-    const moeDeps = {
-      config,
-      toolRegistry: (this.deps.toolExecutor as any).registry,
-      toolExecutor: this.deps.toolExecutor,
-      llmProvider,
-      logger,
-      baseDir: this.deps.baseDir,
-    };
-
-    const executor = new MoEExecutor(moeDeps);
-    onMeta?.(`⚙️ Executing ${plan.subtasks.length} subtasks...\n`);
-    const planResults = await executor.executePlan(plan);
-    onMeta?.(
-      `✅ Execution complete: ${planResults.results.filter((r) => r.success).length}/${planResults.results.length} succeeded\n`,
-    );
-
-    const verifier = new StepVerifier(this.deps.baseDir);
-    const knownTags = [
-      "file",
-      "code",
-      "shell",
-      "research",
-      "browser",
-      "vision",
-      "core",
-    ];
-    const verification = await verifier.verifyMoEManifest(
-      plan,
-      config,
-      knownTags,
-    );
-
-    this.emitPhase(0, "thinking", onPhase);
-    const verifyResult = await orchestrator.verifyAndMerge({
-      plan,
-      results: planResults.results.map((r) => ({
-        subtaskId: r.subtaskId,
-        success: r.success,
-        summary: r.summary,
-        result: r.result,
-        error: r.error,
-      })),
-      verifierErrors: verification.errors,
-      verifierWarnings: verification.warnings,
-    });
-    this.emitPhase(0, "done", onPhase);
-
-    const outputLines: string[] = [`## MoE Execution Results\n`];
-    for (const r of planResults.results) {
-      const icon = r.success ? "✅" : "❌";
-      outputLines.push(
-        `${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`,
-      );
-    }
-    outputLines.push("");
-    if (verifyResult.type === "final") {
-      outputLines.push(`**Result:** ${verifyResult.finalAnswer || "Complete"}`);
-    } else {
-      outputLines.push(
-        `**Re-plan requested:** ${verifyResult.explanation || ""}`,
-      );
-    }
-
-    const failedCount = planResults.results.filter((r) => !r.success).length;
-    return {
-      success: failedCount === 0 && verification.success,
-      text: outputLines.join("\n"),
-      iterationCount: planResults.results.length,
     };
   }
 

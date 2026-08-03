@@ -27,9 +27,23 @@ export class ConsistencyCheck {
 
     for (const d of this.decisions) {
       const decisionWords = d.decision.toLowerCase().split(/\s+/).filter(w => w.length > 3)
-      const contradicts = decisionWords.some(word =>
-        lower.includes(`instead of ${word}`) || lower.includes(`not ${word}`)
-      )
+      const contradicts = decisionWords.some(word => {
+        // English patterns
+        if (lower.includes(`instead of ${word}`)) return true
+        if (lower.includes(`not ${word}`)) return true
+        if (lower.includes(`replacing ${word} with`)) return true
+        if (lower.includes(`switching to`)) return true
+        if (lower.includes(`changing from ${word}`)) return true
+        if (lower.includes(`abandoning ${word}`)) return true
+        // Russian patterns
+        if (lower.includes(`вместо ${word}`)) return true
+        if (lower.includes(`заменяя ${word}`)) return true
+        if (lower.includes(`заменяем ${word}`)) return true
+        if (lower.includes(`переключаемся на`)) return true
+        if (lower.includes(`от ${word} к`)) return true
+        if (lower.includes(`отказываемся от ${word}`)) return true
+        return false
+      })
       if (contradicts) {
         return {
           status: 'warn',

@@ -30,7 +30,7 @@ import { MCPModule } from "../modules/mcp/index";
 import { setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
@@ -64,7 +64,15 @@ function buildSystemInfo(
 
   if (isWin) {
     lines.push(
-      `OS-specific: You are on Windows. Do not use Unix-only command flags like "mkdir -p". Use the create_dir tool to create directories.`,
+      ``,
+      `Windows environment — use Windows-compatible commands:`,
+      `- Use "dir" instead of "ls". Use "dir /b" for bare listing.`,
+      `- Use "type" or "Get-Content" instead of "cat".`,
+      `- Use "cd" instead of "pwd". Use "echo %cd%" to print working directory.`,
+      `- Use "copy" instead of "cp", "move" instead of "mv", "del" instead of "rm".`,
+      `- Do not use "mkdir -p" — Windows mkdir creates intermediate dirs by default. Use the create_dir tool instead.`,
+      `- Use forward slashes (/) or escaped backslashes (\\\\) in file paths.`,
+      `- Your working directory is: ${baseDir}`,
     );
   }
 
@@ -165,7 +173,7 @@ export async function bootstrap(
     rateLimits: config.security?.rateLimits,
   });
 
-  const baseDir = projectDir || process.cwd();
+  const baseDir = projectDir ? resolve(projectDir) : process.cwd();
 
   const projectMapCacheDir = join(baseDir, ".mma");
   const indexerModule = new IndexerModule({
@@ -262,8 +270,8 @@ export async function bootstrap(
    };
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
-  (toolCtx as any).llmProvider = llmProvider;
-  (toolCtx as any).toolExecutor = toolExecutor;
+  toolCtx.llmProvider = llmProvider;
+  toolCtx.toolExecutor = toolExecutor;
 
   const hallucinationDetector = new HallucinationDetector();
   const factualCheck = hallucinationDetector.getFactualCheck();

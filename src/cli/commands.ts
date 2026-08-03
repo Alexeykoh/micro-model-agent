@@ -6,12 +6,13 @@ import { t } from "../i18n/index";
 import { join } from "path";
 import { homedir } from "os";
 import { createSecurityCommand } from "./security-commands";
+import { version } from "../../package.json";
 
 export function createProgram(): Command {
   const program = new Command()
     .name("mma")
     .description(t("cli.description"))
-    .version("0.4.0")
+    .version(version)
     .option("--no-agents-md", t("cli.no_agents_md"))
     .option("-d, --dir <path>", t("cli.dir"))
     .option("-e, --exit-on-complete", t("cli.exit_on_complete"))

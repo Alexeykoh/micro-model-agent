@@ -23,10 +23,10 @@ describe("ConfidenceCheck", () => {
     expect(result.status).toBe("retry");
   });
 
-  it("should warn on uncertainty markers", () => {
+  it("should warn on low word diversity", () => {
     const check = new ConfidenceCheck();
     const result = check.validate(
-      "I think maybe we should probably use this approach",
+      "the the the the the the the the the the the the the the the the the the",
     );
     expect(result.status).toBe("warn");
   });

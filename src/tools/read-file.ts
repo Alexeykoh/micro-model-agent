@@ -1,10 +1,11 @@
 import { readFileSync, existsSync } from "fs";
-import { resolve, normalize, extname } from "path";
+import { resolve, extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { logSecurityBlock } from "../modules/security/audit-log";
+import { safeResolvePath } from "./path-utils";
 
 /** Default number of lines returned when the caller omits `limit`. */
 const DEFAULT_LIMIT = 50;
@@ -30,8 +31,9 @@ export const readFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
+    const resolved = safeResolvePath(ctx.baseDir, path);
     const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
-    const scopeCheck = isPathInScope(ctx.baseDir, path, ctx.scope, securityPaths);
+    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
     
     if (!scopeCheck.allowed) {
       const pathStr = path as string;
@@ -43,7 +45,6 @@ export const readFileTool: ToolDefinition = {
         }),
       };
     }
-    const resolved = resolve(ctx.baseDir, normalize(path));
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };
     }

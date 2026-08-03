@@ -1,11 +1,12 @@
 import { unlinkSync, existsSync, statSync, readFileSync } from "fs";
-import { resolve, normalize } from "path";
+import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
 import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
+import { safeResolvePath } from "./path-utils";
 
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
@@ -20,8 +21,7 @@ export const deleteFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
-    const baseDir = resolve(ctx.baseDir);
-    const resolved = resolve(baseDir, normalize(path));
+    const resolved = safeResolvePath(ctx.baseDir, path);
     
     // Get session-specific security config
     const securityConfig = ctx.sessionContext 
@@ -45,7 +45,7 @@ export const deleteFileTool: ToolDefinition = {
     }
     
     // Check path permissions
-    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,

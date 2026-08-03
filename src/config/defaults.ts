@@ -78,7 +78,7 @@ export const DEFAULTS: AppConfig = {
       transport: "http",
       url: "https://mcp.context7.com/mcp",
       headers: {
-        CONTEXT7_API_KEY: "ctx7sk-f3dd1f44-bc3a-4f6b-94c0-87cacb6c084b",
+        CONTEXT7_API_KEY: process.env.CONTEXT7_API_KEY || "",
       },
       enabled: true,
       timeout: 30000,

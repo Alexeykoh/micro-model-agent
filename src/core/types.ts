@@ -63,3 +63,12 @@ export interface SubtaskContext {
   }
   input_from?: string[]
 }
+
+export interface AgentResult {
+  success: boolean
+  text: string
+  error?: string
+  iterationCount: number
+  contextUsed?: number
+  contextLimit?: number
+}

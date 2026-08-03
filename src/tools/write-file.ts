@@ -1,5 +1,5 @@
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
-import { resolve, normalize, dirname } from "path";
+import { resolve, dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
@@ -7,6 +7,7 @@ import { scanContent } from "../modules/security/content-scanner";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
+import { safeResolvePath } from "./path-utils";
 
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
@@ -23,11 +24,10 @@ export const writeFileTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
-    const baseDir = resolve(ctx.baseDir);
-    const resolved = resolve(baseDir, normalize(path));
+    const resolved = safeResolvePath(ctx.baseDir, path);
     
-    // Check path permissions
-    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    // Check path permissions using the resolved path
+    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,

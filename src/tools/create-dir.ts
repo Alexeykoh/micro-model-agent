@@ -1,10 +1,11 @@
 import { mkdirSync, existsSync } from "fs";
-import { resolve, normalize } from "path";
+import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { safeResolvePath } from "./path-utils";
 
 export const createDirTool: ToolDefinition = {
   name: "create_dir",
@@ -19,8 +20,7 @@ export const createDirTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const path = String(args.path);
-    const baseDir = resolve(ctx.baseDir);
-    const resolved = resolve(baseDir, normalize(path));
+    const resolved = safeResolvePath(ctx.baseDir, path);
     
     // Get session-specific security config
     const securityConfig = ctx.sessionContext 
@@ -44,7 +44,7 @@ export const createDirTool: ToolDefinition = {
     }
     
     // Check path permissions
-    const scopeCheck = isPathWritable(ctx.baseDir, path, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,

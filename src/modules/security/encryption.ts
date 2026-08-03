@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { homedir } from 'os';
 import { join } from 'path';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'fs';
 
 /**
  * Encryption configuration
@@ -65,12 +65,16 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
     const keyBase64 = readFileSync(keyPath, 'utf8');
     return Buffer.from(keyBase64, 'base64');
   } catch {
-    // If we can't read the key file, generate a new one
-    const key = generateEncryptionKey();
+    // Backup the corrupted key file before throwing
     try {
-      writeFileSync(keyPath, key.toString('base64'), { mode: 0o600 });
-    } catch { /* ignore */ }
-    return key;
+      const backupPath = `${keyPath}.corrupted.${Date.now()}`;
+      copyFileSync(keyPath, backupPath);
+    } catch { /* backup failed, continue */ }
+    throw new Error(
+      `Encryption key file is corrupted or unreadable: ${keyPath}. ` +
+      `All previously encrypted data will be unrecoverable. ` +
+      `Delete the key file to generate a new one.`
+    );
   }
 }
 

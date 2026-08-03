@@ -26,10 +26,6 @@ export class SessionModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: 'session',
-      onSessionStart: (_ctx: any) => {
-      },
-      onSessionEnd: (_ctx: any) => {
-      },
     }
   }
 }

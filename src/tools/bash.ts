@@ -23,6 +23,26 @@ function adaptCommandForWindows(command: string): string {
   return command
 }
 
+/** Common Unix → Windows command mapping for error hints. */
+const UNIX_TO_WIN_HINTS: Record<string, string> = {
+  'ls': 'Use "dir" or the list_dir tool instead.',
+  'pwd': 'Use "echo %cd%" or the file_info tool instead.',
+  'cat': 'Use "type" or the read_file tool instead.',
+  'cp': 'Use "copy" or the move_file tool instead.',
+  'mv': 'Use "move" or the move_file tool instead.',
+  'rm': 'Use "del" or the delete_file tool instead.',
+  'grep': 'Use "findstr" or the grep tool instead.',
+  'chmod': 'Use icacls or the chmod tool instead.',
+  'touch': 'Use type nul > file or the write_file tool instead.',
+  'find': 'Use "dir /s" or the glob tool instead.',
+  'head': 'Use the read_file tool with offset/limit instead.',
+  'tail': 'Use the read_file tool instead.',
+  'wc': 'Use the read_file tool instead.',
+  'diff': 'Use the diff tool instead.',
+  'which': 'Use "where" instead.',
+  'echo': 'echo works on Windows, but avoid pipes (|).',
+};
+
 export const bashTool: ToolDefinition = {
   name: 'bash',
   description: 'Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Long-running commands (dev servers, watchers) start in the background and return a process id immediately — manage them with process_list, process_log, process_kill. Set background=true to force background execution.',
@@ -113,6 +133,15 @@ export const bashTool: ToolDefinition = {
         })}`
       } else if (!output && res.code !== 0) {
         output = `(exit code ${res.code})`
+      }
+
+      // On Windows, hint about Unix commands that don't work
+      if (platform() === 'win32' && res.code !== 0) {
+        const firstWord = command.trim().split(/\s+/)[0]?.split(/[\\/]/).pop()
+        const hint = firstWord ? UNIX_TO_WIN_HINTS[firstWord] : undefined
+        if (hint) {
+          output = `${output}\n\nHint: "${firstWord}" may not work on Windows. ${hint}`
+        }
       }
 
       // Update audit log with result

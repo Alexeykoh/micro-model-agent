@@ -164,6 +164,12 @@ class ProcessRegistry {
     );
     const toRemove = sorted.slice(0, sorted.length - MAX_KEPT_PROCESSES + 1);
     for (const entry of toRemove) {
+      if (entry.status === "running") {
+        const child = this.children.get(entry.id);
+        if (child) {
+          killTree(child);
+        }
+      }
       this.procs.delete(entry.id);
       this.children.delete(entry.id);
     }

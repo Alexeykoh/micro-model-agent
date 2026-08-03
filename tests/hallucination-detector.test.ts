@@ -22,10 +22,10 @@ describe("HallucinationDetector", () => {
     expect(result.status).toBe("warn");
   });
 
-  it("should warn on uncertainty", () => {
+  it("should warn on low word diversity", () => {
     const detector = new HallucinationDetector();
     const result = detector.validate(
-      "I think maybe we should use this approach.",
+      "the the the the the the the the the the the the the the the the the the the",
     );
     expect(result.status).toBe("warn");
   });

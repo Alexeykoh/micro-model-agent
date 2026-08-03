@@ -67,7 +67,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "--no-confirm",
     ],
     // Dangerous operators that are always blocked
-    dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "&", "`"],
+    dangerousOperators: [">", ">>", "2>", "2>>", "&", "`"],
   },
   paths: {
     // Glob patterns for paths that are always denied

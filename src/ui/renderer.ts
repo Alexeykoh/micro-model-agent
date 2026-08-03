@@ -162,6 +162,6 @@ export class Renderer {
   private endCard(): void {
     if (!this.card) return;
     const { tool, start } = this.card;
-    this.toolEnd(tool, Date.now() - start, true);
+    this.toolEnd(tool, Date.now() - start);
   }
 }

@@ -215,6 +215,20 @@ export class MoEExecutor {
       return { success: false, results: [], errors: ['Failed to topologically sort subtasks (possible cycle)'], warnings: [] }
     }
 
+    // Verify all subtasks are included — catch silent drops from unresolved dependencies
+    const sortedCount = waves.flat().length
+    if (sortedCount < plan.subtasks.length) {
+      const missing = plan.subtasks
+        .filter(s => !waves.flat().some(w => w.id === s.id))
+        .map(s => s.id)
+      return {
+        success: false,
+        results: [],
+        errors: [`Missing subtasks after topological sort: ${missing.join(', ')} (dangling or invalid depends_on)`],
+        warnings: [],
+      }
+    }
+
     for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
       const wave = waves[waveIdx]
 

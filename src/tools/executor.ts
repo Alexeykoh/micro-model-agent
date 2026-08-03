@@ -112,4 +112,12 @@ export class ToolExecutor {
   }> {
     return this.registry.getAllForLLM(tags);
   }
+
+  getRegistry(): ToolRegistry {
+    return this.registry;
+  }
+
+  setScope(scope: import("./types").ToolScope): void {
+    this.ctx.scope = scope;
+  }
 }
