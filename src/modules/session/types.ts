@@ -1,3 +1,5 @@
+import type { ContentPart } from "../../llm/provider";
+
 export interface SessionMeta {
   id: string;
   name: string;
@@ -23,7 +25,7 @@ export interface SessionMeta {
 
 export interface SessionMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | ContentPart[];
   name?: string;
   tool_calls?: Array<{
     id: string;

@@ -16,6 +16,7 @@ import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
+import { getMessageText } from "../llm/provider";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
@@ -35,6 +36,7 @@ const COMMAND_GROUPS: Record<string, string> = {
   exit: "general",
   clear: "general",
   run: "general",
+  image: "general",
   config: "agent",
   status: "agent",
   reasoning: "agent",
@@ -174,6 +176,68 @@ export class Repl {
         }
         const prompt = args.join(" ");
         await this.runAgent(prompt);
+      },
+    });
+    this.registerCommand({
+      name: "image",
+      description: t("repl.image"),
+      aliases: ["img"],
+      usage: t("repl.image_usage"),
+      action: async (args: string[]) => {
+        const source = args.join(" ");
+        if (!source) {
+          console.log(t("repl.image_usage"));
+          return;
+        }
+        try {
+          const { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage } = await import("../llm/image-utils");
+          const { existsSync } = await import("fs");
+          const { resolve } = await import("path");
+
+          let dataUrl: string;
+          let label: string;
+
+          if (source.toLowerCase() === "clipboard") {
+            const clipPath = await readClipboardImage();
+            if (!clipPath) {
+              console.log(pc.yellow(t("image.clipboard_empty")));
+              return;
+            }
+            const result = loadFileAsDataUrl(clipPath);
+            dataUrl = result.dataUrl;
+            label = "clipboard";
+          } else if (source.startsWith("http://") || source.startsWith("https://")) {
+            const result = await loadUrlAsDataUrl(source);
+            dataUrl = result.dataUrl;
+            label = source;
+          } else {
+            const absPath = resolve(process.cwd(), source);
+            if (!existsSync(absPath)) {
+              console.log(pc.red(t("image.not_found", { path: source })));
+              return;
+            }
+            const result = loadFileAsDataUrl(absPath);
+            dataUrl = result.dataUrl;
+            label = source;
+          }
+
+          // Store the image data on the agent's context manager for the next message
+          const contextManager = this.agent.contextManager;
+          if (!contextManager) {
+            console.log(pc.red(t("image.no_context")));
+            return;
+          }
+
+          contextManager.addPendingImage({
+            type: "image_url",
+            image_url: { url: dataUrl },
+          });
+
+          const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
+          console.log(pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })));
+        } catch (err: any) {
+          console.log(pc.red(t("image.error", { message: err.message })));
+        }
       },
     });
     this.registerCommand({
@@ -522,11 +586,11 @@ export class Repl {
           for (const msg of history) {
             if (msg.role === "user") {
               console.log(pc.cyan(t("session.user_label") + ":"));
-              console.log(msg.content);
+              console.log(getMessageText(msg.content));
               console.log();
             } else if (msg.role === "assistant") {
               console.log(pc.green(t("session.assistant_label") + ":"));
-              console.log(msg.content);
+              console.log(getMessageText(msg.content));
               console.log();
             }
           }

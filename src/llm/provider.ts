@@ -1,10 +1,31 @@
 // src/llm/provider.ts
 
+export interface TextPart {
+	type: "text";
+	text: string;
+}
+
+export interface ImageUrlPart {
+	type: "image_url";
+	image_url: { url: string };
+}
+
+export type ContentPart = TextPart | ImageUrlPart;
+
 export interface Message {
 	role: "system" | "user" | "assistant" | "tool";
-	content: string;
+	content: string | ContentPart[];
 	tool_call_id?: string;
 	name?: string;
+}
+
+/** Helper: extract plain text from message content (for token counting, logging, etc.) */
+export function getMessageText(content: string | ContentPart[]): string {
+	if (typeof content === "string") return content;
+	return content
+		.filter((p): p is TextPart => p.type === "text")
+		.map((p) => p.text)
+		.join("");
 }
 
 export interface ToolDefinition {

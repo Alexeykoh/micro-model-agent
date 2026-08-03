@@ -535,3 +535,106 @@ mma security set-policy balanced
 mma security disable-encryption
 mma security disable-audit
 ```
+
+---
+
+## Category 12: Image / Vision Support
+
+*Goal: Verify that images can be attached to the conversation from files, URLs, or clipboard, and that the model can describe/analyze them.*
+
+### 12.1 Attach Image via /image Command (File)
+```
+/image ./test-image.png
+Опиши что на картинке
+```
+- **Feature**: `/image` slash command + multimodal message
+- **Pre-req**: Place a test image (e.g. `test-image.png`) in the working directory
+- **Verify**: 
+  - `/image` outputs "Image attached from ./test-image.png (XX KB)"
+  - Agent receives the image in the next user message
+  - Model responds with a description of the image content
+  - Context bar shows increased token usage
+
+### 12.2 Attach Image via attach_image Tool (Agent-Driven)
+```
+Use the attach_image tool to load the file test-image.png, then describe what you see.
+```
+- **Feature**: `attach_image` tool
+- **Pre-req**: Test image in working directory
+- **Verify**:
+  - Tool call succeeds with output "Image attached from test-image.png (XX KB)"
+  - Model responds with description of the image
+  - Tool card shows in the output with friendly name "Attach image"
+
+### 12.3 Attach Image from URL
+```
+/image https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg
+Что изображено?
+```
+- **Feature**: `/image` with URL
+- **Verify**:
+  - Image fetched from URL and attached
+  - Model describes the ant in the image
+
+### 12.4 Attach Image from Clipboard
+```
+# First: take a screenshot (Win+Shift+S on Windows, Cmd+Shift+4 on macOS)
+# Then:
+/image clipboard
+Что я только что скопировал?
+```
+- **Feature**: `/image clipboard`
+- **Verify**:
+  - If clipboard has an image → attached and model describes it
+  - If clipboard has no image → "Clipboard does not contain an image" message
+
+### 12.5 Image Error Handling
+```
+/image nonexistent.png
+```
+- **Feature**: Error handling for missing files
+- **Verify**: Shows "Image file not found: nonexistent.png"
+
+### 12.6 Image in REPL History Display
+```
+# In REPL:
+/image ./test-image.png
+Привет
+# Then /resume the session
+```
+- **Feature**: Session persistence with multimodal messages
+- **Verify**: When resuming, user messages display text only (no base64 dump), images are preserved in the context
+
+### 12.7 Context Budget with Images
+```
+/image ./large-image.png
+Помоги мне написать hello world на Python
+```
+- **Feature**: Token estimation for images
+- **Verify**: 
+  - Context bar shows significantly more tokens used after attaching image
+  - Agent still functions normally (can call tools, write code)
+
+### 12.8 Full One-Shot Test (Agent-Driven)
+```bash
+# Create test sandbox
+mkdir _testing/image-vision
+cp "images (2).jpg" _testing/image-vision/test.jpg
+
+# Run one-shot test
+bun run mma --no-agents-md --exit-on-complete -d _testing/image-vision \
+  "Use the attach_image tool to load test.jpg, then create a file description.txt with your description of the image."
+
+# Verify
+cat _testing/image-vision/description.txt
+# Should contain a description of the Bruce Lee image (man in gym locker room with leather vest)
+
+# Cleanup
+rm -rf _testing/image-vision
+```
+- **Feature**: End-to-end image → tool → file creation
+- **Verify**: 
+  - `attach_image` tool call succeeds
+  - `write_file` creates `description.txt`
+  - File content describes the image accurately
+  - Session log records both tool calls with timing

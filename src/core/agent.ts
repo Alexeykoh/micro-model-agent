@@ -1,4 +1,4 @@
-import type { LLMProvider } from "../llm/provider";
+import type { LLMProvider, ContentPart } from "../llm/provider";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../modules/context/manager";
@@ -50,6 +50,11 @@ export class Agent {
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
+  }
+
+  /** Expose context manager for REPL image attachment and other direct access. */
+  get contextManager(): ContextManager {
+    return this.deps.contextManager;
   }
 
   private setScope(): void {
@@ -560,7 +565,7 @@ export class Agent {
   }
 
   setContext(
-    messages: Array<{ role: string; content: string; name?: string }>,
+    messages: Array<{ role: string; content: string | ContentPart[]; name?: string }>,
   ): void {
     const { contextManager } = this.deps;
     contextManager.clear();

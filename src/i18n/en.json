@@ -431,5 +431,14 @@
   "indexer.no_matches": "No matching files for \"{query}\"",
   "tool.friendly.project_map": "Project map",
   "config.decryption_warning": "Warning: Failed to decrypt config: {error}",
-  "config.encryption_warning": "Warning: Failed to encrypt config: {error}"
+  "config.encryption_warning": "Warning: Failed to encrypt config: {error}",
+  "image.source_required": "Image source is required. Provide a file path, URL, or \"clipboard\".",
+  "image.clipboard_empty": "Clipboard does not contain an image. Copy an image first (e.g. screenshot with Win+Shift+S).",
+  "image.not_found": "Image file not found: {path}",
+  "image.no_context": "No context manager available. Image can only be attached during an active session.",
+  "image.attached": "Image attached from {source} ({size}). It will be included in the next message.",
+  "image.error": "Failed to load image: {message}",
+  "tool.friendly.attach_image": "Attach image",
+  "repl.image": "Attach image",
+  "repl.image_usage": "/image <path|url|clipboard> — attach an image to the next message"
 }

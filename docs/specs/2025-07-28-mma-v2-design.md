@@ -161,6 +161,20 @@ interface PromptBlock {
 ### 4.1 Provider Interface (`llm/provider.ts`)
 
 ```ts
+interface TextPart { type: "text"; text: string }
+interface ImageUrlPart { type: "image_url"; image_url: { url: string } }
+type ContentPart = TextPart | ImageUrlPart
+
+interface Message {
+  role: "system" | "user" | "assistant" | "tool"
+  content: string | ContentPart[]  // поддержка мультимодальных сообщений (изображения)
+  tool_call_id?: string
+  name?: string
+}
+
+/** Извлечь чистый текст из content (для токенов, логов и т.д.) */
+function getMessageText(content: string | ContentPart[]): string
+
 interface LLMProvider {
   chat(messages: Message[], tools?: ToolDefinition[]): AsyncIterable<Chunk>
   countTokens(text: string): number
@@ -435,6 +449,24 @@ interface ToolDefinition {
 | `mcp_call` | `{ server: string, tool: string, args: unknown }` | Вызывает инструмент внешнего MCP сервера | Для доступа к внешним API, БД |
 | `search_history` | `{ query: string, max_results?: number }` | Поиск в истории прошлых сессий | Для вспоминания деталей |
 
+**Инструменты vision/мультимедиа:**
+
+| Tool | Parameters | Что делает | Когда использовать |
+|------|-----------|------------|-------------------|
+| `attach_image` | `{ source: string }` | Загружает изображение из файла, URL или `clipboard` → base64 data URL → queue на context manager. Автоматически вкладывается в следующее user-сообщение как `ContentPart[]`. | Когда нужно вставить картинку в контекст (скриншот, диаграмма, архитектура) |
+
+**Источники изображений:**
+- **Файл:** `attach_image({ source: "./screenshot.png" })` — чтение с диска, авто-определение MIME
+- **URL:** `attach_image({ source: "https://example.com/img.png" })` — скачивание через fetch
+- **Clipboard:** `attach_image({ source: "clipboard" })` — нативный доступ через `System.Windows.Forms` (Win), `pngpaste` (macOS), `xclip` (Linux)
+
+**REPL-команда:** `/image <путь|URL|clipboard>` (алиас `/img`) — то же самое, но через REPL-ввод
+
+**Ограничения:**
+- Максимальный размер: 10 MB (настраивается)
+- Qwen3.5-9B **не поддерживает vision** — нужна vision-модель (gpt-4o, claude, qwen-vl, bonsai-27b и т.д.)
+- Streaming для vision-сообщений может не работать (нужен non-streaming fallback, уже реализован)
+
 ---
 
 ## 6. Modules
@@ -647,6 +679,13 @@ History:          63%  динамическая часть (сжимается)
 - Full detailed log appended to `~/.mma/sessions/<id>/session.jsonl` (tool calls, args, results, duration, errors)
 - Context compaction writes only the compacted summary message; old messages are not re-appended
 - Tool `search_history` searches across `history.jsonl` files
+
+**Pending Images Queue (мультимодальность):**
+- `addPendingImage(part: ContentPart)` — ставит изображение в очередь
+- При `addMessage({ role: "user" })` — автоматически вкладывает все pending images как `ContentPart[]`
+- Очищается после использования
+- Оценка токенов для изображений: ~130 токенов на 512 bytes base64
+- Источники: тул `attach_image` или REPL-команда `/image`
 
 ### 6.9 Hallucination Detection (`modules/hallucination/`)
 
@@ -884,7 +923,7 @@ Readline loop with:
 - **Colored output:** `You:` (cyan) for user messages, `Agent:` (green) for model responses
 - **Context bar:** After each response, shows `████░░░░░  40%  (8192 / 20480 tokens)` — remaining history budget
 - **REPL banner:** On startup shows model, provider, context budget breakdown, skills, plugins, MCP servers, active session
-- **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/config`, `/status`, `/model list|use`, `/context`, `/reload`, `/exit`
+- **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/image`, `/config`, `/status`, `/model list|use`, `/context`, `/reload`, `/exit`
 - **Deep tab completion** (see 7.4)
 - **Fast navigation** (see 7.5)
 - **Persistent history** across sessions (`~/.mma/repl-history`)
@@ -898,6 +937,7 @@ Readline loop with:
 | `/model use <name>` | Change active model |
 | `/context` | Show current context window size |
 | `/context <size>` | Change context window size (tokens, min 1024) |
+| `/image <path\|url\|clipboard>` | Attach image to next message (alias `/img`) |
 | `/reload` | Reload agent with current config from disk (re-bootstrap) |
 
 ### Session Management

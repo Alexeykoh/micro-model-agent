@@ -40,7 +40,7 @@ export type LLMResponse =
 export interface AgentContext {
   state: AgentState
   config: import('../config/types').AppConfig
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content: string | import('../llm/provider').ContentPart[] }>
   toolResults: ToolResult[]
   iterationCount: number
   currentStep?: number

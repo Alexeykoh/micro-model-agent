@@ -1,6 +1,9 @@
+import type { ContentPart, TextPart } from "../../llm/provider";
+import { getMessageText } from "../../llm/provider";
+
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | ContentPart[];
   name?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -33,6 +36,7 @@ export class ContextManager {
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
   private tokenCounter: TokenCounter | null;
+  private pendingImageParts: ContentPart[] = [];
   onCompact: ((summary: Message) => void) | null = null;
 
   constructor(
@@ -71,8 +75,48 @@ export class ContextManager {
   }
 
   addMessage(msg: Message): void {
+    // Auto-attach pending images to the next user message
+    if (msg.role === "user" && this.pendingImageParts.length > 0) {
+      const textPart: TextPart = {
+        type: "text",
+        text: typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
+      };
+      msg = {
+        ...msg,
+        content: [textPart, ...this.pendingImageParts],
+      };
+      this.pendingImageParts = [];
+    }
     this.messages.push(msg);
     this.iterationsSinceCompaction++;
+  }
+
+  /**
+   * Queue an image part to be attached to the next user message.
+   */
+  addPendingImage(part: ContentPart): void {
+    this.pendingImageParts.push(part);
+  }
+
+  /**
+   * Check if there are pending images waiting to be attached.
+   */
+  hasPendingImages(): boolean {
+    return this.pendingImageParts.length > 0;
+  }
+
+  /**
+   * Get pending image parts without clearing them.
+   */
+  getPendingImages(): ContentPart[] {
+    return [...this.pendingImageParts];
+  }
+
+  /**
+   * Clear pending images (e.g., if user sends a text-only message).
+   */
+  clearPendingImages(): void {
+    this.pendingImageParts = [];
   }
 
   getMessageCount(): number {
@@ -80,8 +124,21 @@ export class ContextManager {
   }
 
   private estimateMessageTokens(m: Message): number {
+    const text = getMessageText(m.content);
     if (this.tokenCounter) {
-      let t = this.tokenCounter.count(m.content);
+      let t = this.tokenCounter.count(text);
+      // Image tokens: base64 ~130 tokens per 512x512 tile; rough estimate
+      if (Array.isArray(m.content)) {
+        for (const part of m.content) {
+          if (part.type === "image_url" && part.image_url?.url) {
+            const b64Len = part.image_url.url.includes(",")
+              ? part.image_url.url.split(",")[1]?.length ?? 0
+              : part.image_url.url.length;
+            // ~130 tokens per 512 bytes of base64
+            t += Math.ceil(b64Len / 512) * 130;
+          }
+        }
+      }
       if (m.tool_calls) {
         for (const tc of m.tool_calls) {
           t += this.tokenCounter.count(tc.id);
@@ -92,7 +149,17 @@ export class ContextManager {
       }
       return t;
     }
-    let t = Math.ceil(m.content.length / 2);
+    let t = Math.ceil(text.length / 2);
+    if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (part.type === "image_url" && part.image_url?.url) {
+          const b64Len = part.image_url.url.includes(",")
+            ? part.image_url.url.split(",")[1]?.length ?? 0
+            : part.image_url.url.length;
+          t += Math.ceil(b64Len / 512) * 130;
+        }
+      }
+    }
     if (m.tool_calls) {
       for (const tc of m.tool_calls) {
         t += Math.ceil(tc.id.length / 2);
@@ -162,7 +229,7 @@ export class ContextManager {
     ];
 
     for (const msg of turns) {
-      const content = msg.content;
+      const content = getMessageText(msg.content);
 
       if (msg.role === "tool") {
         for (const pattern of filePatterns) {

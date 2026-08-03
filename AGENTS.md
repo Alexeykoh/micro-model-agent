@@ -344,6 +344,7 @@ src/
 │   ├── subagent.ts     # Isolated sub-agent spawning
 │   ├── web-search.ts, web-fetch.ts, web-browse.ts
 │   ├── browser.ts      # Playwright browser tool (open, click, type, scroll, screenshot)
+│   ├── attach-image.ts # Attach image from file/URL/clipboard → multimodal message
 │   ├── user-input.ts   # Interactive user input primitive (menu, selection parsing, askUser)
 │   ├── plan.ts, todo.ts, question.ts, approve.ts
 │   ├── load-skill.ts, pipeline-run.ts, mcp-call.ts, search-history.ts
