@@ -76,6 +76,7 @@ const COMMON_WORDS = new Set([
 export class FactualCheck {
   private knownPaths: Set<string> = new Set();
   private createdPaths: Set<string> = new Set();
+  private readFiles: Set<string> = new Set();
   private baseDir: string = process.cwd();
 
   setBaseDir(dir: string): void {
@@ -86,6 +87,8 @@ export class FactualCheck {
     this.knownPaths.add(path);
     const base = path.split(/[/\\]/).pop();
     if (base && base !== path) this.knownPaths.add(base);
+    // Track that this file was actually read by the agent
+    this.readFiles.add(base || path);
   }
 
   trackCreatedPath(path: string): void {
@@ -100,6 +103,24 @@ export class FactualCheck {
     const base = path.split(/[/\\]/).pop();
     if (base && base !== path) this.knownPaths.add(base);
     this.createdPaths.delete(path);
+  }
+
+  /**
+   * Register file paths found in a document (e.g. structure.md, README).
+   * Files mentioned in project documentation are not hallucinations.
+   */
+  trackDocumentContent(content: string): void {
+    // Match common path patterns in documentation
+    const pathPatterns = /(?:^|\s)([\w\-./]+\.\w{1,10})(?:\s|$|[,;)])/gm;
+    let match;
+    while ((match = pathPatterns.exec(content)) !== null) {
+      const file = match[1];
+      if (file.includes('/') || file.includes('\\')) {
+        this.knownPaths.add(file);
+      }
+      const base = file.split(/[/\\]/).pop();
+      if (base) this.knownPaths.add(base);
+    }
   }
 
   private pathExistsOnDisk(path: string): boolean {

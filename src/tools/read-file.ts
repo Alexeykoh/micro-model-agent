@@ -50,6 +50,8 @@ export const readFileTool: ToolDefinition = {
     }
     ctx.trackReadPath?.(path);
     const content = readFileSync(resolved, "utf-8");
+    // Track file paths mentioned in the document (e.g. structure.md, README)
+    ctx.trackDocumentContent?.(content);
     const lines = content.split("\n");
     const total = lines.length;
     const offset = (args.offset as number) || 1;

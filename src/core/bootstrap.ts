@@ -279,6 +279,7 @@ export async function bootstrap(
   toolCtx.trackReadPath = (p) => factualCheck.trackReadPath(p);
   toolCtx.trackCreatedPath = (p) => factualCheck.trackCreatedPath(p);
   toolCtx.trackDeletedPath = (p) => factualCheck.trackDeletedPath(p);
+  toolCtx.trackDocumentContent = (c) => factualCheck.trackDocumentContent(c);
 
   const moduleRegistry = new ModuleRegistry();
 
