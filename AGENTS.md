@@ -737,3 +737,62 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 2. Backs up entire `~/.mma/` → `~/.mma.bak/`
 3. Starts fresh with v2 defaults
 4. Old plugins/skills with incompatible format are skipped gracefully
+
+## Versioning Rules (Semantic Versioning)
+
+### When to bump which part:
+
+| Version Part | When to Bump | Examples |
+|-------------|--------------|----------|
+| **MAJOR** (X.0.0) | Breaking changes: API changes, config schema changes, removed commands/tools, architecture rewrites | v1.0.0 → v2.0.0 (MMA v1→v2 rewrite), config version field change |
+| **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook |
+| **PATCH** (0.0.Z) | Bug fixes, typo fixes, i18n additions, doc updates, performance improvements, test additions, dependency updates (non-breaking) | Fix crash in `bash` tool, add ru translation, update README, fix typo in error message |
+
+### Release Process:
+
+1. **Code changes complete** → `bun test` + `tsc --noEmit` must pass
+2. **Update version** in `package.json`:
+   ```bash
+   # For patch
+   npm version patch
+   
+   # For minor  
+   npm version minor
+   
+   # For major
+   npm version major
+   ```
+3. **Build**: `bun run build`
+4. **Publish**: `npm publish --access public`
+5. **Git tag**: `npm version` creates tag automatically, push with `git push --follow-tags`
+6. **Update CHANGELOG** (if exists) or AGENTS.md with notable changes
+
+### Commands that require MINOR bump:
+- New CLI subcommand (`mma <new-cmd>`)
+- New REPL slash command (`/new-cmd`)
+- New tool in `tools/`
+- New module in `modules/`
+- New provider capability (e.g., `listModels()` in LLMProvider)
+- New config option that changes behavior
+- New security policy/feature
+
+### Commands that require PATCH bump:
+- Bug fixes in existing commands/tools
+- i18n string additions/fixes
+- Documentation updates
+- Test additions
+- Performance optimizations
+- Dependency updates (non-breaking)
+
+### Commands that require MAJOR bump:
+- Removing/renaming CLI commands
+- Changing config schema (breaking)
+- Removing tools/modules
+- Changing Agent loop state machine
+- Changing LLMProvider interface (breaking)
+- Architecture rewrites
+
+### Current Version: 0.12.1
+- **0** = pre-1.0 (initial development)
+- **12** = minor features added (model list, context, reload, security policies, MoE phases, etc.)
+- **1** = patch fixes (duplicate i18n key, help auto-generation verification)
