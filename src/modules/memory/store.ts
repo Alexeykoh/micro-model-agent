@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } fr
 import { join } from 'path'
 import { MemorySearch } from './search'
 
-const MEMORY_FILES = ['conventions', 'decisions', 'errors']
+const MEMORY_FILES = ['conventions', 'decisions', 'errors', 'facts']
 
 export class MemoryStore {
   private memoryDir: string
@@ -40,5 +40,31 @@ export class MemoryStore {
   search(query: string): Array<{ file: string; match: string }> {
     const searchModule = new MemorySearch(this.memoryDir)
     return searchModule.query(query)
+  }
+
+  private prefsPath(): string {
+    return join(this.memoryDir, 'preferences.json')
+  }
+
+  getPreferences(): Record<string, string> {
+    const path = this.prefsPath()
+    if (!existsSync(path)) return {}
+    try {
+      return JSON.parse(readFileSync(path, 'utf-8'))
+    } catch { return {} }
+  }
+
+  setPreference(key: string, value: string): void {
+    const prefs = this.getPreferences()
+    prefs[key] = value
+    writeFileSync(this.prefsPath(), JSON.stringify(prefs, null, 2), 'utf-8')
+  }
+
+  deletePreference(key: string): boolean {
+    const prefs = this.getPreferences()
+    if (!(key in prefs)) return false
+    delete prefs[key]
+    writeFileSync(this.prefsPath(), JSON.stringify(prefs, null, 2), 'utf-8')
+    return true
   }
 }

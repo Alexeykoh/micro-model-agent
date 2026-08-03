@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
-const MEMORY_FILES = ['conventions', 'decisions', 'errors']
+const MEMORY_FILES = ['conventions', 'decisions', 'errors', 'facts']
 
 export interface SearchResult {
   file: string
@@ -31,6 +31,20 @@ export class MemorySearch {
           results.push({ file: name, match: line.trim() })
         }
       }
+    }
+
+    // Search preferences.json
+    const prefsPath = join(this.memoryDir, 'preferences.json')
+    if (existsSync(prefsPath)) {
+      try {
+        const prefs: Record<string, string> = JSON.parse(readFileSync(prefsPath, 'utf-8'))
+        for (const [key, value] of Object.entries(prefs)) {
+          const searchStr = `${key}=${value}`
+          if (searchStr.toLowerCase().includes(lowerQuery)) {
+            results.push({ file: 'preferences', match: `${key} = ${value}` })
+          }
+        }
+      } catch { /* skip */ }
     }
 
     return results
