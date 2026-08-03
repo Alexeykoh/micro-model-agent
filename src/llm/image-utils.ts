@@ -11,111 +11,151 @@ const MIME_MAP: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-/**
- * Detect MIME type from file extension.
- */
+/** Detect MIME type from file extension. */
 export function detectMime(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   return MIME_MAP[ext] ?? "image/png";
 }
 
 /**
- * Load an image from a file path and return as base64 data URL.
- * Resizes if raw data exceeds maxBytes. Default max: 50KB (~16K tokens in base64).
+ * Read image from system clipboard using Bun.Image (macOS/Windows).
+ * Falls back to platform-specific commands on Linux.
+ * Returns null if clipboard has no image.
  */
-export function loadFileAsDataUrl(
-  filePath: string,
-  maxBytes = 50 * 1024,
-): { dataUrl: string; mime: string; resized: boolean; warning?: string } {
-  const mime = detectMime(filePath);
-  let buf: Buffer = readFileSync(filePath);
-  let resized = false;
-  let warning: string | undefined;
-
-  if (buf.length > maxBytes) {
-    const ratio = maxBytes / buf.length;
-    warning = `Image ${Math.round(buf.length / 1024)}KB exceeds ${Math.round(maxBytes / 1024)}KB limit — resized to ~${Math.round(maxBytes / 1024)}KB (quality may reduce). Tip: crop the image before pasting.`;
-    buf = buf.subarray(0, maxBytes); // naive truncation — better than nothing
-    resized = true;
+export async function readClipboardImage(): Promise<Buffer | null> {
+  // Bun.Image.fromClipboard() works on macOS and Windows
+  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
+    try {
+      const img = (Bun as any).Image.fromClipboard();
+      if (img) {
+        const buf = await img
+          .resize(800, 800, { fit: "inside" })
+          .jpeg({ quality: 60 })
+          .buffer();
+        return Buffer.from(buf);
+      }
+    } catch {
+      // Bun.Image.fromClipboard() failed — fall through to platform fallback
+    }
   }
 
-  const b64 = buf.toString("base64");
-  return { dataUrl: `data:${mime};base64,${b64}`, mime, resized, warning };
+  // Linux fallback: xclip/wl-paste → temp file → read
+  return readClipboardFallback();
+}
+
+async function readClipboardFallback(): Promise<Buffer | null> {
+  const { platform } = await import("os");
+  const { execSync } = await import("child_process");
+  const { readFileSync, unlinkSync } = await import("fs");
+  const { join } = await import("path");
+
+  const tmpPath = join(
+    process.env.TEMP || process.env.TMP || "/tmp",
+    `mma-clip-${Date.now()}.png`,
+  );
+
+  try {
+    if (platform() === "linux") {
+      execSync(
+        `xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`,
+        { timeout: 5000 },
+      );
+    } else {
+      return null; // macOS/Windows should use Bun.Image
+    }
+
+    const buf = readFileSync(tmpPath);
+    unlinkSync(tmpPath);
+    return buf.length > 0 ? buf : null;
+  } catch {
+    try { unlinkSync(tmpPath); } catch {}
+    return null;
+  }
 }
 
 /**
- * Load an image from a URL, return as base64 data URL.
+ * Load an image from a file path, resize via Bun.Image, return as JPEG data URL.
+ * Target: ~800px wide, JPEG quality 60 — typically 5-15KB (~2-4K tokens).
+ */
+export async function loadFileAsDataUrl(
+  filePath: string,
+): Promise<{ dataUrl: string }> {
+  const buf = readFileSync(filePath);
+
+  // Use Bun.Image if available — resize + convert to JPEG
+  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
+    try {
+      const img = new (Bun as any).Image(buf);
+      const { width } = await img.metadata();
+      const targetWidth = Math.min(800, width || 800);
+      const dataUrl = await img
+        .resize(targetWidth, 800, { fit: "inside" })
+        .jpeg({ quality: 60 })
+        .dataurl();
+      return { dataUrl };
+    } catch {
+      // Bun.Image failed — fall through to raw base64
+    }
+  }
+
+  // Fallback: raw base64 (no resize)
+  const b64 = buf.toString("base64");
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
+  return { dataUrl: `data:${mime};base64,${b64}` };
+}
+
+/**
+ * Load an image from a URL, resize, return as JPEG data URL.
  */
 export async function loadUrlAsDataUrl(
   url: string,
-): Promise<{ dataUrl: string; mime: string }> {
+): Promise<{ dataUrl: string }> {
   const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`Failed to fetch image: ${resp.status} ${resp.statusText}`);
   }
-  const contentType = resp.headers.get("content-type") ?? "image/png";
-  const mime = contentType.split(";")[0].trim();
   const buf = Buffer.from(await resp.arrayBuffer());
+
+  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
+    try {
+      const img = new (Bun as any).Image(buf);
+      const { width } = await img.metadata();
+      const targetWidth = Math.min(800, width || 800);
+      const dataUrl = await img
+        .resize(targetWidth, 800, { fit: "inside" })
+        .jpeg({ quality: 60 })
+        .dataurl();
+      return { dataUrl };
+    } catch {
+      // fall through
+    }
+  }
+
   const b64 = buf.toString("base64");
-  return { dataUrl: `data:${mime};base64,${b64}`, mime };
+  return { dataUrl: `data:image/png;base64,${b64}` };
 }
 
 /**
- * Read image from system clipboard (platform-specific).
- * Returns null if clipboard has no image.
+ * Process a clipboard buffer (already resized by readClipboardImage)
+ * into a data URL. Used by Ctrl+V handler.
  */
-export async function readClipboardImage(): Promise<string | null> {
-  const { platform } = await import("os");
-
-  if (platform() === "win32") {
-    return readClipboardWindows();
-  }
-  if (platform() === "darwin") {
-    return readClipboardMacos();
-  }
-  return readClipboardLinux();
-}
-
-async function readClipboardWindows(): Promise<string | null> {
-  try {
-    const { execSync } = await import("child_process");
-    const tmpPath = `${process.env.TEMP || process.env.TMP || "/tmp"}\\mma-clip-${Date.now()}.png`;
-    // Use single quotes in PowerShell to avoid backslash issues
-    const psScript = `Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img -ne $null) { $img.Save('${tmpPath}'); Write-Output 'OK' } else { Write-Output 'EMPTY' }`;
-    const out = execSync(`powershell -NoProfile -Command "${psScript}"`, {
-      timeout: 5000,
-      encoding: "utf-8",
-    });
-    if (out.includes("OK")) {
-      return tmpPath;
+export async function bufferToDataUrl(buf: Buffer): Promise<{ dataUrl: string }> {
+  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
+    try {
+      const img = new (Bun as any).Image(buf);
+      const { width } = await img.metadata();
+      const targetWidth = Math.min(800, width || 800);
+      const dataUrl = await img
+        .resize(targetWidth, 800, { fit: "inside" })
+        .jpeg({ quality: 60 })
+        .dataurl();
+      return { dataUrl };
+    } catch {
+      // fall through
     }
-    return null;
-  } catch {
-    return null;
   }
-}
 
-async function readClipboardMacos(): Promise<string | null> {
-  try {
-    const { execSync } = await import("child_process");
-    const tmpPath = `/tmp/mma-clip-${Date.now()}.png`;
-    execSync(`pngpaste "${tmpPath}"`, { timeout: 5000 });
-    return tmpPath;
-  } catch {
-    return null;
-  }
-}
-
-async function readClipboardLinux(): Promise<string | null> {
-  try {
-    const { execSync } = await import("child_process");
-    const tmpPath = `/tmp/mma-clip-${Date.now()}.png`;
-    execSync(
-      `xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`,
-      { timeout: 5000 },
-    );
-    return tmpPath;
-  } catch {
-    return null;
-  }
+  const b64 = buf.toString("base64");
+  return { dataUrl: `data:image/png;base64,${b64}` };
 }

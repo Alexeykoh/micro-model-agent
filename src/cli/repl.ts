@@ -197,18 +197,17 @@ export class Repl {
 
           let dataUrl: string;
           let label: string;
-          let warning: string | undefined;
 
           if (source.toLowerCase() === "clipboard") {
-            const clipPath = await readClipboardImage();
-            if (!clipPath) {
+            const clipBuf = await readClipboardImage();
+            if (!clipBuf) {
               console.log(pc.yellow(t("image.clipboard_empty")));
               return;
             }
-            const result = loadFileAsDataUrl(clipPath);
+            const { bufferToDataUrl } = await import("../llm/image-utils");
+            const result = await bufferToDataUrl(clipBuf);
             dataUrl = result.dataUrl;
             label = "clipboard";
-            warning = result.warning;
           } else if (source.startsWith("http://") || source.startsWith("https://")) {
             const result = await loadUrlAsDataUrl(source);
             dataUrl = result.dataUrl;
@@ -219,10 +218,9 @@ export class Repl {
               console.log(pc.red(t("image.not_found", { path: source })));
               return;
             }
-            const result = loadFileAsDataUrl(absPath);
+            const result = await loadFileAsDataUrl(absPath);
             dataUrl = result.dataUrl;
             label = source;
-            warning = result.warning;
           }
 
           // Store the image data on the agent's context manager for the next message
@@ -239,7 +237,6 @@ export class Repl {
 
           const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
           console.log(pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })));
-          if (warning) console.log(pc.yellow(`  ${warning}`));
         } catch (err: any) {
           console.log(pc.red(t("image.error", { message: err.message })));
         }
@@ -874,14 +871,13 @@ export class Repl {
         // Ctrl+V: try to paste image from clipboard
         if (key.ctrl && key.name === "v" && !this.agentRunning) {
           try {
-            const { readClipboardImage, loadFileAsDataUrl } = await import("../llm/image-utils");
-            const clipPath = await readClipboardImage();
-            if (clipPath) {
-              const { dataUrl, warning } = loadFileAsDataUrl(clipPath);
+            const { readClipboardImage, bufferToDataUrl } = await import("../llm/image-utils");
+            const clipBuf = await readClipboardImage();
+            if (clipBuf) {
+              const { dataUrl } = await bufferToDataUrl(clipBuf);
               this.pendingClipboardImage = dataUrl;
               const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
               console.log(pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`));
-              if (warning) console.log(pc.yellow(`  ${warning}`));
               this.rl.prompt();
             }
           } catch {

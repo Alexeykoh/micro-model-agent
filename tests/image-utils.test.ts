@@ -45,37 +45,26 @@ describe("image-utils", () => {
   });
 
   describe("loadFileAsDataUrl", () => {
-    it("should load a file as data URL", () => {
+    it("should load a file as data URL", async () => {
       const buf = Buffer.from("fake image data");
       const filePath = join(TEST_DIR, "test.png");
       writeFileSync(filePath, buf);
 
-      const result = loadFileAsDataUrl(filePath);
-      expect(result.dataUrl).toContain("data:image/png;base64,");
-      expect(result.mime).toBe("image/png");
-      expect(result.resized).toBe(false);
+      const result = await loadFileAsDataUrl(filePath);
+      expect(result.dataUrl).toContain("data:");
+      expect(result.dataUrl).toContain("base64,");
     });
 
-    it("should detect correct MIME from extension", () => {
-      const buf = Buffer.from("fake");
-      const jpgPath = join(TEST_DIR, "test.jpg");
-      writeFileSync(jpgPath, buf);
-
-      const result = loadFileAsDataUrl(jpgPath);
-      expect(result.mime).toBe("image/jpeg");
-      expect(result.dataUrl).toContain("data:image/jpeg;base64,");
+    it("should throw for non-existent file", async () => {
+      await expect(loadFileAsDataUrl(join(TEST_DIR, "nope.png"))).rejects.toThrow();
     });
 
-    it("should throw for non-existent file", () => {
-      expect(() => loadFileAsDataUrl(join(TEST_DIR, "nope.png"))).toThrow();
-    });
-
-    it("should include correct base64 encoding", () => {
+    it("should include correct base64 encoding", async () => {
       const content = "hello world";
       const filePath = join(TEST_DIR, "test.txt");
       writeFileSync(filePath, content);
 
-      const result = loadFileAsDataUrl(filePath);
+      const result = await loadFileAsDataUrl(filePath);
       const expectedB64 = Buffer.from(content).toString("base64");
       expect(result.dataUrl).toContain(expectedB64);
     });

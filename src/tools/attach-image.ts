@@ -2,10 +2,8 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage } from "../llm/image-utils";
+import { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage, bufferToDataUrl } from "../llm/image-utils";
 import { logSecurityBlock } from "../modules/security/audit-log";
-
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const attachImageTool: ToolDefinition = {
   name: "attach_image",
@@ -33,14 +31,14 @@ export const attachImageTool: ToolDefinition = {
       let dataUrl: string;
 
       if (source.toLowerCase() === "clipboard") {
-        const clipPath = await readClipboardImage();
-        if (!clipPath) {
+        const clipBuf = await readClipboardImage();
+        if (!clipBuf) {
           return {
             success: false,
             output: t("image.clipboard_empty"),
           };
         }
-        const result = loadFileAsDataUrl(clipPath, MAX_IMAGE_BYTES);
+        const result = await bufferToDataUrl(clipBuf);
         dataUrl = result.dataUrl;
       } else if (source.startsWith("http://") || source.startsWith("https://")) {
         const result = await loadUrlAsDataUrl(source);
@@ -72,7 +70,7 @@ export const attachImageTool: ToolDefinition = {
           }
         }
 
-        const result = loadFileAsDataUrl(absPath, MAX_IMAGE_BYTES);
+        const result = await loadFileAsDataUrl(absPath);
         dataUrl = result.dataUrl;
       }
 
