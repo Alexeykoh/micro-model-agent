@@ -47,6 +47,7 @@ export interface AgentDeps {
 export class Agent {
   private deps: AgentDeps;
   private systemPromptAdded = false;
+  private shutdownRequested = false;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
@@ -224,8 +225,10 @@ export class Agent {
     let apiPromptTokens = 0;
     let apiCompletionTokens = 0;
     const MAX_HALLUCINATION_RETRIES = 3;
+    let consecutiveToolFailures = 0;
+    const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
 
-    while (iteration < config.maxToolIterations) {
+    while (iteration < config.maxToolIterations && !this.shutdownRequested) {
       iteration++;
 
       pluginManager.runOnBeforeThink({
@@ -380,6 +383,7 @@ export class Agent {
           })),
         });
         const summaries: string[] = [];
+        let anyToolFailed = false;
         for (const call of toolCalls) {
           this.setScope();
           const startTime = Date.now();
@@ -396,6 +400,7 @@ export class Agent {
 
           const result = await toolExecutor.execute(call);
           const duration = Date.now() - startTime;
+          if (!result.success) anyToolFailed = true;
 
           pluginManager.runOnToolEnd(
             { iteration, logger },
@@ -446,6 +451,21 @@ export class Agent {
             contextManager.compact();
             logger.debug("Context compacted after tool result");
           }
+        }
+        if (anyToolFailed) {
+          consecutiveToolFailures++;
+        } else {
+          consecutiveToolFailures = 0;
+        }
+        if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
+          const recoveryMsg = t("exec.consecutive_failures_recovery", { count: consecutiveToolFailures });
+          logger.warn(`Consecutive tool failures: ${consecutiveToolFailures}`);
+          const taskSnippet = input.length > 200 ? input.slice(0, 200) + "..." : input;
+          const taskReminder = t("exec.task_reminder", { task: taskSnippet });
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
+          });
         }
         contextManager.addMessage({
           role: "user",
@@ -595,6 +615,7 @@ export class Agent {
   }
 
   shutdown(): void {
+    this.shutdownRequested = true;
     const { pluginManager, logger, sessionManager, contextManager } = this.deps;
     contextManager.onCompact = null;
     const killed = processRegistry.killAll();

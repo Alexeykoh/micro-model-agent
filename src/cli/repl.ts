@@ -868,6 +868,19 @@ export class Repl {
         }
       });
     }
+
+    // SIGINT: first Ctrl+C sends graceful shutdown, second forces exit
+    process.on("SIGINT", () => {
+      if (this.agentRunning) {
+        console.log(pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"));
+        this.agent.shutdown();
+        this.agentRunning = false;
+        // Force exit after 2s if graceful shutdown hangs
+        setTimeout(() => process.exit(1), 2000).unref();
+      } else {
+        process.exit(0);
+      }
+    });
   }
 
   private isMultiLineInput(line: string): boolean {
