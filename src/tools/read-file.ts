@@ -7,7 +7,7 @@ import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { logSecurityBlock } from "../modules/security/audit-log";
 
 /** Default number of lines returned when the caller omits `limit`. */
-const DEFAULT_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
 
 export const readFileTool: ToolDefinition = {
   name: "read_file",
