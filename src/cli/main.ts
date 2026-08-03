@@ -102,6 +102,21 @@ async function main(): Promise<void> {
       config.contextWindow = answers.contextWindow;
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
+      if (config.security) {
+        config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
+        if (answers.securityBashBlock) {
+          config.security.bash.blacklist = [
+            ...new Set([
+              ...config.security.bash.blacklist,
+              "rm", "dd", "chmod", "wget", "curl", "scp", "ssh", "nc", "netcat",
+              "sudo", "su", "kill", "pkill", "killall", "shutdown", "reboot",
+            ]),
+          ];
+        }
+        if (!answers.securityPathsDeny) {
+          config.security.paths.denied = [];
+        }
+      }
       saveConfig(config, configPath);
     }
     const {

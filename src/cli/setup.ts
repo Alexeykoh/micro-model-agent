@@ -13,6 +13,9 @@ interface SetupAnswers {
   contextWindow: number;
   maxToolIterations: number;
   locale: string;
+  securityBashBlock: boolean;
+  securityFlagsBlock: boolean;
+  securityPathsDeny: boolean;
 }
 
 async function withSpinner<T>(
@@ -248,6 +251,19 @@ export async function runSetup(): Promise<SetupAnswers> {
   );
   const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "1000"));
 
+  // Security settings
+  console.log(t("setup.security_header"));
+  console.log(pc.dim(t("setup.security_status_off")));
+  const configureSecurity = await ask(rl, t("setup.security_configure"), "n");
+  let securityBashBlock = false;
+  let securityFlagsBlock = false;
+  let securityPathsDeny = true;
+  if (configureSecurity.toLowerCase() === "y" || configureSecurity.toLowerCase() === "yes") {
+    securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
+    securityFlagsBlock = (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() === "y";
+    securityPathsDeny = (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !== "n";
+  }
+
   rl.close();
 
   const answers: SetupAnswers = {
@@ -258,6 +274,9 @@ export async function runSetup(): Promise<SetupAnswers> {
     contextWindow,
     maxToolIterations: maxIterations,
     locale,
+    securityBashBlock,
+    securityFlagsBlock,
+    securityPathsDeny,
   };
 
   console.log(pc.green(pc.bold(t("setup.complete"))));
