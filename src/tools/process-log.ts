@@ -1,8 +1,9 @@
 import type { ToolDefinition } from './types'
 import { processRegistry } from '../modules/processes'
 import { t } from '../i18n/index'
+import { MAX_PREVIEW_LINES } from './preview'
 
-const DEFAULT_TAIL = 25
+const DEFAULT_TAIL = MAX_PREVIEW_LINES
 
 export const processLogTool: ToolDefinition = {
   name: 'process_log',

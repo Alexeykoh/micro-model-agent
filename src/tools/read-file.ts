@@ -6,9 +6,9 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
+import { MAX_PREVIEW_LINES } from "./preview";
 
-/** Default number of lines returned when the caller omits `limit`. */
-const DEFAULT_LIMIT = 25;
+const DEFAULT_LIMIT = MAX_PREVIEW_LINES;
 
 export const readFileTool: ToolDefinition = {
   name: "read_file",

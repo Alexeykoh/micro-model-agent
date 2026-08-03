@@ -4,8 +4,7 @@ import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import { isPathInScope } from '../modules/security/path-validator'
 import { safeResolvePath } from './path-utils'
-
-const MAX_PREVIEW_LINES = 25
+import { MAX_PREVIEW_LINES } from './preview'
 
 export const listDirTool: ToolDefinition = {
   name: 'list_dir',

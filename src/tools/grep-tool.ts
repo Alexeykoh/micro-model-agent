@@ -3,8 +3,7 @@ import { resolve } from 'path'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import { logBashCommand } from '../modules/security/audit-log'
-
-const MAX_PREVIEW_LINES = 25
+import { MAX_PREVIEW_LINES } from './preview'
 
 function truncateLines(output: string): string {
   const lines = output.split('\n')

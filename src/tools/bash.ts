@@ -6,9 +6,9 @@ import { DEFAULT_SECURITY_CONFIG } from '../config/security'
 import { runCommand, processRegistry, isLongRunningCommand } from '../modules/processes'
 import { t } from '../i18n/index'
 import { platform } from 'os'
+import { MAX_PREVIEW_LINES } from './preview'
 
 const BASH_TIMEOUT_MS = 120_000
-const MAX_PREVIEW_LINES = 25
 
 function adaptCommandForWindows(command: string): string {
   if (platform() !== 'win32') return command

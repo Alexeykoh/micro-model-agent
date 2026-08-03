@@ -4,8 +4,9 @@ import { isUrlAllowed, sanitizeUrl } from '../modules/security/network-validator
 import { logNetworkRequest, logSecurityBlock } from '../modules/security/audit-log'
 import { getSessionSecurityConfig } from '../modules/security/session-isolation'
 import { DEFAULT_SECURITY_CONFIG } from '../config/security'
+import { MAX_PREVIEW_LINES } from './preview'
 
-const MAX_CHARS = 15000
+const MAX_CHARS = 5000
 
 function stripHtml(html: string): string {
   return html
@@ -64,7 +65,16 @@ export const webFetchTool: ToolDefinition = {
       logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
       
       if (cleaned.length > (securityConfig?.maxResponseSize || MAX_CHARS)) {
-        return { success: true, output: cleaned.slice(0, securityConfig?.maxResponseSize || MAX_CHARS) + t('file.truncated') }
+        let content = cleaned.slice(0, securityConfig?.maxResponseSize || MAX_CHARS) + t('file.truncated')
+        const lines = content.split('\n')
+        if (lines.length > MAX_PREVIEW_LINES) {
+          content = lines.slice(0, MAX_PREVIEW_LINES).join('\n') + `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`
+        }
+        return { success: true, output: content }
+      }
+      const lines = cleaned.split('\n')
+      if (lines.length > MAX_PREVIEW_LINES) {
+        return { success: true, output: lines.slice(0, MAX_PREVIEW_LINES).join('\n') + `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)` }
       }
       return { success: true, output: cleaned || t('file.empty_page') }
     } catch (e: any) {

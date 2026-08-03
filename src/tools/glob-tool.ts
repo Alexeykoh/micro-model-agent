@@ -1,8 +1,7 @@
 import { globSync } from 'fs'
 import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
-
-const MAX_PREVIEW_LINES = 25
+import { MAX_PREVIEW_LINES } from './preview'
 
 export const globTool: ToolDefinition = {
   name: 'glob',
