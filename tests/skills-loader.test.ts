@@ -114,7 +114,7 @@ describe('SkillsModule auto-load plugin', () => {
     }
   }
 
-  it('should auto-load matching skill on onBeforeThink', () => {
+  it('should NOT auto-load matching skill on onBeforeThink', () => {
     const matcher = new SkillsMatcher()
     const mod = new SkillsModule(makeSkills() as any, matcher, 1000)
     const plugin = mod.getPlugin()
@@ -123,12 +123,10 @@ describe('SkillsModule auto-load plugin', () => {
 
     plugin.onBeforeThink!({ lastUserMessage: 'how to resolve git merge conflict?' })
 
-    const loaded = mod.getLoaded()
-    expect(loaded).toHaveLength(1)
-    expect(loaded[0].name).toBe('git-expert')
+    expect(mod.getLoaded()).toHaveLength(0)
   })
 
-  it('should add skill content to contextManager as user message', () => {
+  it('should NOT add skill content to contextManager on onBeforeThink', () => {
     const matcher = new SkillsMatcher()
     const mod = new SkillsModule(makeSkills() as any, matcher, 1000)
     const plugin = mod.getPlugin()
@@ -136,11 +134,8 @@ describe('SkillsModule auto-load plugin', () => {
 
     plugin.onBeforeThink!({ lastUserMessage: 'git merge conflict', contextManager: ctx })
 
-    expect(ctx.messages).toHaveLength(1)
-    expect(ctx.messages[0].role).toBe('user')
-    expect(ctx.messages[0].content).toContain('[Skill loaded: git-expert]')
-    expect(ctx.messages[0].content).toContain('git skill content here')
-    expect(ctx.messages[0].content).toContain('<system-instruction>')
+    expect(ctx.messages).toHaveLength(0)
+    expect(mod.getLoaded()).toHaveLength(0)
   })
 
   it('should not load skill if no match', () => {
@@ -153,7 +148,7 @@ describe('SkillsModule auto-load plugin', () => {
     expect(mod.getLoaded()).toHaveLength(0)
   })
 
-  it('should not load same skill twice', () => {
+  it('should not auto-load same skill twice (no-op onBeforeThink)', () => {
     const matcher = new SkillsMatcher()
     const mod = new SkillsModule(makeSkills() as any, matcher, 1000)
     const plugin = mod.getPlugin()
@@ -162,8 +157,8 @@ describe('SkillsModule auto-load plugin', () => {
     plugin.onBeforeThink!({ lastUserMessage: 'git branch question', contextManager: ctx })
     plugin.onBeforeThink!({ lastUserMessage: 'git merge question', contextManager: ctx })
 
-    expect(mod.getLoaded()).toHaveLength(1)
-    expect(ctx.messages).toHaveLength(1)
+    expect(mod.getLoaded()).toHaveLength(0)
+    expect(ctx.messages).toHaveLength(0)
   })
 
   it('should not load if budget exceeded', () => {
@@ -176,16 +171,16 @@ describe('SkillsModule auto-load plugin', () => {
     expect(mod.getLoaded()).toHaveLength(0)
   })
 
-  it('should not load via loadByName if already auto-loaded', () => {
+  it('should allow loadByName even after onBeforeThink (no auto-load)', () => {
     const matcher = new SkillsMatcher()
     const mod = new SkillsModule(makeSkills() as any, matcher, 1000)
     const plugin = mod.getPlugin()
 
     plugin.onBeforeThink!({ lastUserMessage: 'git merge conflict' })
-    expect(mod.getLoaded()).toHaveLength(1)
+    expect(mod.getLoaded()).toHaveLength(0)
 
     const result = mod.loadByName('git-expert')
-    expect(result.success).toBe(false)
-    expect(result.message).toContain('already loaded')
+    expect(result.success).toBe(true)
+    expect(mod.getLoaded()).toHaveLength(1)
   })
 })

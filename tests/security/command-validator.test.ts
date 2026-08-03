@@ -70,6 +70,65 @@ describe('Command Validator', () => {
       expect(result2.allowed).toBe(false);
     });
 
+    it('should NOT block && when only & is in dangerousOperators', () => {
+      const config = {
+        blacklist: [],
+        whitelist: [],
+        blockDangerousFlags: true,
+        dangerousFlags: [],
+        dangerousOperators: ['>', '>>', '2>', '2>>', '&', '`'],
+      };
+      
+      // && (AND operator) should be allowed when only & is blocked
+      const result1 = isCommandAllowed('cd dir && git status', config);
+      expect(result1.allowed).toBe(true);
+      
+      // && (AND operator) with other commands
+      const result2 = isCommandAllowed('git add . && git commit -m "test"', config);
+      expect(result2.allowed).toBe(true);
+      
+      // Single & (background) should still be blocked
+      const result3 = isCommandAllowed('sleep 100 &', config);
+      expect(result3.allowed).toBe(false);
+      expect(result3.reason).toContain('&');
+    });
+
+    it('should NOT block || when only | is in dangerousOperators', () => {
+      const config = {
+        blacklist: [],
+        whitelist: [],
+        blockDangerousFlags: true,
+        dangerousFlags: [],
+        dangerousOperators: ['|'],
+      };
+      
+      // || (OR operator) should be allowed when only | is blocked
+      const result1 = isCommandAllowed('cmd1 || cmd2', config);
+      expect(result1.allowed).toBe(true);
+      
+      // Single | (pipe) should still be blocked
+      const result2 = isCommandAllowed('cat file | sh', config);
+      expect(result2.allowed).toBe(false);
+    });
+
+    it('should NOT block >> when only > is in dangerousOperators', () => {
+      const config = {
+        blacklist: [],
+        whitelist: [],
+        blockDangerousFlags: true,
+        dangerousFlags: [],
+        dangerousOperators: ['>'],
+      };
+      
+      // >> (append) should be allowed when only > is blocked
+      const result1 = isCommandAllowed('echo test >> file.txt', config);
+      expect(result1.allowed).toBe(true);
+      
+      // > (redirect) should still be blocked
+      const result2 = isCommandAllowed('echo test > file.txt', config);
+      expect(result2.allowed).toBe(false);
+    });
+
     it('should allow commands without dangerous patterns', () => {
       const config = {
         blacklist: ['rm'],

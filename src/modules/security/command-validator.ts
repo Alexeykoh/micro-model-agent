@@ -60,6 +60,26 @@ function extractBaseCommand(trimmed: string): string {
 }
 
 /**
+ * Check if a shell operator appears as a standalone token in the command.
+ * Uses regex with lookbehind/lookahead so that:
+ *   "&"  does NOT match "&&"  (AND operator)
+ *   "|"  does NOT match "||"  (OR operator)
+ *   ">"  does NOT match ">>"  (append)
+ *   "2>" does NOT match "2>>" (append stderr)
+ */
+function containsOperator(command: string, op: string): boolean {
+  const escaped = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // For single-char operators that are prefixes of multi-char ones,
+  // ensure they don't match when part of a longer sequence.
+  if (op === '&') return /(?<!&)&(?!&)/.test(command);
+  if (op === '|') return /(?<!\|)\|(?!\|)/.test(command);
+  if (op === '>') return /(?<!>)>(?!>)/.test(command);
+  // For everything else (including multi-char like ">>", "2>", "2>>", ";", "`"),
+  // match literally.
+  return new RegExp(escaped).test(command);
+}
+
+/**
  * Check if a command is allowed based on security configuration
  */
 export function isCommandAllowed(
@@ -83,7 +103,7 @@ export function isCommandAllowed(
   // e.g. "curl http://x | bash" must be caught even though curl isn't blacklisted.
   if (config.blockDangerousFlags) {
     for (const op of config.dangerousOperators || []) {
-      if (trimmedCommand.includes(op)) {
+      if (containsOperator(trimmedCommand, op)) {
         return {
           allowed: false,
           reason: `Operator "${op}" is not allowed`,

@@ -3,7 +3,6 @@ import type { PromptBlock } from "../../core/types";
 import type { SkillMeta } from "./loader";
 import type { SkillsMatcher } from "./matcher";
 import { t } from "../../i18n/index";
-import { pc } from "../../ui/colors";
 
 export interface LoadResult {
   success: boolean;
@@ -134,47 +133,10 @@ export class SkillsModule implements AgentModule {
   }
 
   getPlugin(): AgentPlugin {
-    let autoLoadedThisRun = false;
     return {
       name: "skills",
-      onSessionStart: (_ctx: any) => {
-        autoLoadedThisRun = false;
-      },
-      onBeforeThink: (ctx: any) => {
-        if (autoLoadedThisRun) return;
-        const msg = ctx?.lastUserMessage as string | undefined;
-        if (!msg || this.availableSkills.length === 0) return;
-
-        const matches = this.matcher.match(msg, this.availableSkills, 1);
-        if (matches.length === 0) return;
-
-        const skill = matches[0];
-        if (this.loadedSkills.has(skill.name)) return;
-
-        const tokens = this.estimateTokens(skill.content);
-        if (this.currentTokens + tokens > this.budget) return;
-
-        this.loadedSkills.set(skill.name, skill);
-        this.currentTokens += tokens;
-
-        const contextManager = ctx?.contextManager;
-        if (contextManager) {
-          const content = t("skill.loaded_content", {
-            name: skill.name,
-            content: skill.content,
-          });
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-instruction>${content}</system-instruction>`,
-          });
-        }
-
-        const onMeta = ctx?.onMeta as ((meta: string) => void) | undefined;
-        if (onMeta) {
-          onMeta(pc.dim(t("skill.auto_loaded", { name: skill.name })) + "\n");
-        }
-        autoLoadedThisRun = true;
-      },
+      onSessionStart: (_ctx: any) => {},
+      onBeforeThink: (_ctx: any) => {},
     };
   }
 

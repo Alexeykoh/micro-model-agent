@@ -76,6 +76,13 @@ function buildSystemInfo(
     );
   }
 
+  lines.push(
+    ``,
+    `Bash tool rules:`,
+    `- Use the "workdir" parameter to run commands in a specific directory. Do NOT chain "cd dir && cmd" — the security module blocks the "&&" operator.`,
+    `- Run one command per tool call. Split multi-step shell operations into separate bash calls.`,
+  );
+
   if (config.autoPlan) {
     lines.push(
       ``,

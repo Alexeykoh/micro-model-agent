@@ -80,7 +80,7 @@ export const bashTool: ToolDefinition = {
       
       return {
         success: false,
-        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}`,
+        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}\nHint: Use the "workdir" parameter to run commands in a specific directory instead of "cd dir && cmd". Run one command per tool call.`,
       }
     }
 
