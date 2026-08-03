@@ -261,6 +261,7 @@ export class Agent {
       const toolCalls: ToolCall[] = [];
       let sawToolCall = false;
       let emittedReasoning = false;
+      const textChunks: string[] = [];
 
       this.emitPhase(iteration, "thinking", onPhase);
       try {
@@ -270,11 +271,7 @@ export class Agent {
               onMeta?.("\n\n");
             }
             textContent += chunk.content;
-            const textOut = pluginManager.runOnText(
-              { iteration, logger },
-              chunk.content,
-            );
-            onChunk?.(textOut);
+            textChunks.push(chunk.content);
           }
           if (chunk.type === "reasoning" && chunk.content) {
             reasoningContent += chunk.content;
@@ -316,6 +313,19 @@ export class Agent {
         };
       } finally {
         this.emitPhase(iteration, "done", onPhase);
+      }
+
+      // Display buffered text only if no tool call in this response.
+      // When a tool call is present, text is just the model describing
+      // its tool call (e.g. raw JSON args) — suppress it.
+      if (!sawToolCall && textChunks.length > 0) {
+        for (const chunk of textChunks) {
+          const textOut = pluginManager.runOnText(
+            { iteration, logger },
+            chunk,
+          );
+          onChunk?.(textOut);
+        }
       }
 
       let llmResponse: LLMResponse | null = null;
