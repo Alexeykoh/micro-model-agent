@@ -162,10 +162,11 @@ interface PromptBlock {
 
 ```ts
 interface LLMProvider {
-  chat(messages: Message[]): AsyncIterable<Chunk>
+  chat(messages: Message[], tools?: ToolDefinition[]): AsyncIterable<Chunk>
   countTokens(text: string): number
-  model: string
-  contextWindow: number
+  listModels(): Promise<string[]>
+  readonly model: string
+  readonly contextWindow: number
 }
 ```
 
@@ -869,9 +870,12 @@ mma <prompt>                          # single run
 mma init                              # interactive setup wizard
 mma config set <key> <value>
 mma config show
-mma model list | use
+mma model list                        # fetch and list models from provider
+mma model use <name>                  # change active model
+mma context <size>                    # change context window size (tokens)
 mma provider list | use
 mma session list | show <id> | delete <id>   # session management
+mma security status | policies | set-policy <name> | enable-encryption | disable-encryption | enable-audit | disable-audit | audit-stats
 ```
 
 ### 7.2 REPL (`cli/repl.ts`)
@@ -880,11 +884,21 @@ Readline loop with:
 - **Colored output:** `You:` (cyan) for user messages, `Agent:` (green) for model responses
 - **Context bar:** After each response, shows `████░░░░░  40%  (8192 / 20480 tokens)` — remaining history budget
 - **REPL banner:** On startup shows model, provider, context budget breakdown, skills, plugins, MCP servers, active session
-- **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/config`, `/status`, `/exit`
+- **Slash commands:** `/help`, `/sessions`, `/new`, `/resume`, `/rename`, `/delete`, `/run`, `/config`, `/status`, `/model list|use`, `/context`, `/reload`, `/exit`
 - **Deep tab completion** (see 7.4)
 - **Fast navigation** (see 7.5)
 - **Persistent history** across sessions (`~/.mma/repl-history`)
 - **Markdown output** with ANSI syntax highlighting via `ui/md-formatter.ts`
+
+### Model & Context Management (REPL)
+
+| Command | Description |
+|---------|-------------|
+| `/model list` | Fetch and display available models from provider (current marked with `*`) |
+| `/model use <name>` | Change active model |
+| `/context` | Show current context window size |
+| `/context <size>` | Change context window size (tokens, min 1024) |
+| `/reload` | Reload agent with current config from disk (re-bootstrap) |
 
 ### Session Management
 
