@@ -5,7 +5,7 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
   blacklist: ['rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat'],
   whitelist: [],
-  blockDangerousFlags: true,
+  blockDangerousFlags: false,
   dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
   dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '`'],
   logCommands: true,

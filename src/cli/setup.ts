@@ -246,7 +246,7 @@ export async function runSetup(): Promise<SetupAnswers> {
   const contextWindow = parseInt(
     await ask(rl, t("setup.context_window"), "32768"),
   );
-  const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "25"));
+  const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "1000"));
 
   rl.close();
 

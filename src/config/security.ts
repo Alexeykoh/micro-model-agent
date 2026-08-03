@@ -47,7 +47,8 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     // If whitelist is non-empty, only these commands are allowed
     whitelist: [],
     // Block dangerous flags like --force, -rf, etc.
-    blockDangerousFlags: true,
+    // Disabled by default — enable in config if needed.
+    blockDangerousFlags: false,
     // Log all executed commands to audit log
     logCommands: true,
     // Dangerous flags that are always blocked
