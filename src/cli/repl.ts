@@ -412,7 +412,7 @@ export class Repl {
       action: (args: string[]) => {
         if (args.length === 0) {
           console.log(`/context ${t("repl.context")}  ${this.config.contextWindow}`);
-          console.log(t("repl.model_usage").replace("/model", "/context"));
+          console.log(`Usage: /context <size>  (min 1024)`);
           return;
         }
         const size = parseInt(args[0], 10);

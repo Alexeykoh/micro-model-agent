@@ -50,7 +50,6 @@ function buildSystemInfo(
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
-    `When the task is ambiguous or has multiple reasonable options, ask the user via the "question" tool instead of guessing.`,
     `When you need to act, call a tool immediately. Do not describe your plans in text — use tools to perform operations.`,
     `After every tool call, check whether the user's request is fully satisfied. If any files, commands, or checks are still missing, call the next needed tool right away. Do not stop with an empty or "done" response until the task is complete.`,
     `If you create a directory, continue creating the files that belong inside it. A created folder alone is not a completed task.`,
