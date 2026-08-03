@@ -7,3 +7,4 @@ blog_api_test/
 *.tgz
 multi-*.txt
 _testing/
+images*.jpg
