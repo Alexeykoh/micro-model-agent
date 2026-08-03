@@ -411,6 +411,7 @@
   "migration.dir_bak": "- .mma/ → .mma.bak/ ({count} файлов)",
   "migration.migrated": "Мигрировано:",
   "migration.not_needed": "Миграция не требуется",
+  "migration.security_updated": "[MMA] Конфигурация безопасности принудительно обновлена с v{from} до v{to} (опасные операторы сброшены)",
   "ui.error_prefix": "Ошибка: ",
   "ui.success_prefix": "✓ ",
   "ui.warning_prefix": "⚠ ",

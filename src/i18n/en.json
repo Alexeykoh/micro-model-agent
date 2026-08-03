@@ -411,6 +411,7 @@
   "migration.dir_bak": "- .mma/ \u2192 .mma.bak/ ({count} files)",
   "migration.migrated": "Migrated:",
   "migration.not_needed": "No migration needed",
+  "migration.security_updated": "[MMA] Security config force-updated from v{from} to v{to} (dangerous operators reset to defaults)",
   "ui.error_prefix": "Error: ",
   "ui.success_prefix": "\u2713 ",
   "ui.warning_prefix": "\u26a0 ",
