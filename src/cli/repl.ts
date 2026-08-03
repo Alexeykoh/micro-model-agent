@@ -82,6 +82,7 @@ export class Repl {
   private configDir: string;
   private baseDir: string;
   private noAgentsMd: boolean;
+  private pendingClipboardImage: string | null = null;
 
   constructor(
     agent: Agent,
@@ -853,7 +854,7 @@ export class Repl {
 
     if (process.stdin.isTTY) {
       readline.emitKeypressEvents(process.stdin);
-      process.stdin.on("keypress", (str, key) => {
+      process.stdin.on("keypress", async (str, key) => {
         if (key.name === "escape") {
           const now = Date.now();
           if (now - this.lastEscTime < this.doubleEscDelay) {
@@ -865,6 +866,22 @@ export class Repl {
             process.exit(0);
           }
           this.lastEscTime = now;
+        }
+        // Ctrl+V: try to paste image from clipboard
+        if (key.ctrl && key.name === "v" && !this.agentRunning) {
+          try {
+            const { readClipboardImage, loadFileAsDataUrl } = await import("../llm/image-utils");
+            const clipPath = await readClipboardImage();
+            if (clipPath) {
+              const { dataUrl } = loadFileAsDataUrl(clipPath);
+              this.pendingClipboardImage = dataUrl;
+              const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
+              console.log(pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`));
+              this.rl.prompt();
+            }
+          } catch {
+            // clipboard read failed — ignore, let terminal paste text normally
+          }
         }
       });
     }
@@ -898,6 +915,18 @@ export class Repl {
     this.agentRunning = true;
     this.rl.pause();
     try {
+      // Attach pending clipboard image if Ctrl+V was pressed
+      if (this.pendingClipboardImage) {
+        const contextManager = this.agent.contextManager;
+        if (contextManager) {
+          contextManager.addPendingImage({
+            type: "image_url",
+            image_url: { url: this.pendingClipboardImage },
+          });
+        }
+        this.pendingClipboardImage = null;
+      }
+
       process.stdout.write("\n" + pc.green(t("repl.agent")));
 
       const renderer = new Renderer({ spinner: this.config.ui?.spinner ?? true });
