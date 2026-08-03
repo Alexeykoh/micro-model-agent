@@ -583,6 +583,42 @@ Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying l
 }
 ```
 
+## Image Handling
+
+MMA supports attaching images to the conversation via file path, URL, or clipboard.
+
+### Image Processing Pipeline
+
+Uses **Bun.Image** (built-in, zero dependencies) for image processing:
+
+1. **Clipboard paste** (`Ctrl+V` or `/image clipboard`):
+   - `Bun.Image.fromClipboard()` reads PNG/JPEG/WebP/GIF/BMP from system clipboard
+   - Auto-resizes to 800px max width (preserving aspect ratio)
+   - Converts to JPEG quality 60 (~5-15KB, ~2-4K tokens)
+   - Falls back to platform-specific commands on Linux (xclip/wl-paste)
+
+2. **File path** (`/image ./photo.png`):
+   - Reads file, resizes via Bun.Image, converts to JPEG
+   - Default: 800px max width, JPEG quality 60
+
+3. **URL** (`/image https://example.com/img.png`):
+   - Fetches image, resizes, converts to JPEG
+
+### Token Budget
+
+- **Before**: 200KB PNG → 260KB base64 → ~65K tokens (fills 32K context instantly)
+- **After**: 200KB PNG → ~10KB JPEG → ~2.5K tokens (fits comfortably)
+
+### Sources
+
+- `src/llm/image-utils.ts` — `readClipboardImage()`, `loadFileAsDataUrl()`, `bufferToDataUrl()`
+- `src/tools/attach-image.ts` — `attach_image` tool
+- `src/cli/repl.ts` — `/image` command + `Ctrl+V` handler
+
+### Config
+
+No configuration needed — Bun.Image is built into Bun 1.3.14+.
+
 ## Project Map
 
 MMA automatically builds and maintains a map of the current workspace.
