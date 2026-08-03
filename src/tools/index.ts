@@ -25,6 +25,8 @@ import { createLoadSkillTool } from './load-skill'
 import { pipelineRunTool } from './pipeline-run'
 import { mcpCallTool } from './mcp-call'
 import { searchHistoryTool } from './search-history'
+import { rememberTool } from './remember'
+import { recallTool } from './recall'
 import { createBrowserTool } from './browser'
 import { attachImageTool } from './attach-image'
 import type { SkillsModule } from '../modules/skills/module'
@@ -41,6 +43,7 @@ export {
   webSearchTool, webFetchTool, webBrowseTool,
   questionTool, approveTool,
   createLoadSkillTool, pipelineRunTool, mcpCallTool, searchHistoryTool,
+  rememberTool, recallTool,
   createBrowserTool, attachImageTool,
 }
 
@@ -54,6 +57,7 @@ export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsMo
     webSearchTool, webFetchTool, webBrowseTool,
     questionTool, approveTool,
     pipelineRunTool, mcpCallTool, searchHistoryTool,
+    rememberTool, recallTool,
     attachImageTool,
   ]
 
