@@ -10,14 +10,6 @@ import { validateExpertConfig } from './experts'
 import { ConfigEncryptor, isEncryptedString } from '../modules/security/encryption'
 
 /**
- * When the user's config version is older than this, force-overwrite
- * the security bash settings with the current defaults.
- * This ensures critical security changes (like operator allowlists)
- * are applied even if the user has a saved config.
- */
-const FORCE_SECURITY_UPDATE_VERSION = '2.1.0'
-
-/**
  * Restore RegExp instances in dangerousPatterns that were serialized as {}
  * (pre-0.8.0 configs) or as {__regex, source, flags} (new format).
  * Falls back to default patterns for any entry that is not a real RegExp.
@@ -124,44 +116,6 @@ function applyEnvVars(config: AppConfig): AppConfig {
   return result
 }
 
-/**
- * Force-update security settings when upgrading from an older version.
- * This overrides user config for critical security fields that must
- * match the current code defaults (e.g. dangerousOperators).
- */
-function forceSecurityUpdate(config: AppConfig): AppConfig {
-  const userVersion = config.version || '0.0.0'
-  if (userVersion >= FORCE_SECURITY_UPDATE_VERSION) return config
-
-  // Force-overwrite bash security with current defaults
-  const security = config.security || {} as any
-  const userBash = security.bash || {}
-  security.bash = {
-    ...DEFAULT_SECURITY_CONFIG.bash,
-    // Keep user's custom blacklist additions, but ensure defaults are present
-    blacklist: [...new Set([
-      ...DEFAULT_SECURITY_CONFIG.bash.blacklist,
-      ...(userBash.blacklist || []),
-    ])],
-    whitelist: userBash.whitelist || DEFAULT_SECURITY_CONFIG.bash.whitelist,
-    dangerousFlags: [...new Set([
-      ...DEFAULT_SECURITY_CONFIG.bash.dangerousFlags,
-      ...(userBash.dangerousFlags || []),
-    ])],
-    // dangerousOperators: merge user's additions with defaults (user can add but not remove critical ones)
-    dangerousOperators: [...new Set([
-      ...DEFAULT_SECURITY_CONFIG.bash.dangerousOperators,
-      ...(userBash.dangerousOperators || []),
-    ])],
-    blockDangerousFlags: DEFAULT_SECURITY_CONFIG.bash.blockDangerousFlags,
-    logCommands: DEFAULT_SECURITY_CONFIG.bash.logCommands,
-  }
-  config.security = security
-
-  console.log(t('migration.security_updated', { from: userVersion, to: FORCE_SECURITY_UPDATE_VERSION }))
-  return config
-}
-
 export interface LoadConfigOptions {
   configDir: string
   projectConfigPath: string
@@ -205,9 +159,6 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
       DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns,
     );
   }
-
-  // Force-update security settings when upgrading from older version
-  config = forceSecurityUpdate(config)
 
   config = applyEnvVars(config)
 
