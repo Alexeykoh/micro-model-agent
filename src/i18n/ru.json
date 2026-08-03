@@ -359,7 +359,7 @@
   "setup.security_configure": "  Настроить безопасность? (y/N)",
   "setup.security_bash_block": "  Блокировать опасные команды (rm, sudo, ssh и т.д.)? (y/N)",
   "setup.security_flags_block": "  Блокировать опасные флаги (--force, -rf и т.д.)? (y/N)",
-  "setup.security_paths_deny": "  Запретить .git/, .env, node_modules/? (Y/n)",
+  "setup.security_paths_deny": "  Разрешить доступ к .git/, .env, node_modules/? (y/N)",
   "skill.already_loaded": "Скилл \"{name}\" уже загружен",
   "skill.not_found": "Скилл \"{name}\" не найден ни в одном каталоге",
   "skill.no_match": "Нет скиллов подходящих для: {task}",

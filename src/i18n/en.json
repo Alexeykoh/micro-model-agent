@@ -359,7 +359,7 @@
   "setup.security_configure": "  Configure security? (y/N)",
   "setup.security_bash_block": "  Block dangerous commands (rm, sudo, ssh, etc.)? (y/N)",
   "setup.security_flags_block": "  Block dangerous flags (--force, -rf, etc.)? (y/N)",
-  "setup.security_paths_deny": "  Deny .git/, .env, node_modules/? (Y/n)",
+  "setup.security_paths_deny": "  Allow access to .git/, .env, node_modules/? (y/N)",
   "skill.already_loaded": "Skill \"{name}\" is already loaded",
   "skill.not_found": "Skill \"{name}\" not found in any source directory",
   "skill.no_match": "No skills match for: {task}",
