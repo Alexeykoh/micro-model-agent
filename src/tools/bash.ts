@@ -8,6 +8,7 @@ import { t } from '../i18n/index'
 import { platform } from 'os'
 
 const BASH_TIMEOUT_MS = 120_000
+const MAX_PREVIEW_LINES = 25
 
 function adaptCommandForWindows(command: string): string {
   if (platform() !== 'win32') return command
@@ -152,6 +153,11 @@ export const bashTool: ToolDefinition = {
           res.code === 0,
           `Working directory: ${workdir}, Output length: ${res.stdout.length}`,
         )
+      }
+
+      const lines = output.split('\n')
+      if (lines.length > MAX_PREVIEW_LINES) {
+        output = lines.slice(0, MAX_PREVIEW_LINES).join('\n') + `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`
       }
 
       return { success: res.code === 0, output }

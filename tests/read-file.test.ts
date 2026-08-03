@@ -55,9 +55,9 @@ describe('read_file', () => {
     const result = await readFileTool.handler(ctx, { path: join(tmpDir, 'test.txt') })
     expect(result.success).toBe(true)
     expect(result.output).toContain('line 1')
-    expect(result.output).toContain('line 300')
-    expect(result.output).not.toContain('line 400')
-    expect(result.output).toContain('offset=301')
+    expect(result.output).toContain('line 25')
+    expect(result.output).not.toContain('line 26')
+    expect(result.output).toContain('offset=26')
     expect(result.output).toContain('1000 lines')
   })
 

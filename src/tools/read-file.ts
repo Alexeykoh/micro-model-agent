@@ -8,7 +8,7 @@ import { logSecurityBlock } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
 
 /** Default number of lines returned when the caller omits `limit`. */
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 25;
 
 export const readFileTool: ToolDefinition = {
   name: "read_file",

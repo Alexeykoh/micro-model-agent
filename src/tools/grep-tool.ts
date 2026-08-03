@@ -4,9 +4,17 @@ import { t } from '../i18n/index'
 import type { ToolDefinition } from './types'
 import { logBashCommand } from '../modules/security/audit-log'
 
+const MAX_PREVIEW_LINES = 25
+
+function truncateLines(output: string): string {
+  const lines = output.split('\n')
+  if (lines.length <= MAX_PREVIEW_LINES) return output
+  return lines.slice(0, MAX_PREVIEW_LINES).join('\n') + `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`
+}
+
 export const grepTool: ToolDefinition = {
   name: 'grep',
-  description: 'Search file contents using a regular expression. Uses ripgrep (rg) if available, otherwise falls back to grep -r.',
+  description: `Search file contents using a regular expression. Shows up to ${MAX_PREVIEW_LINES} matching lines by default. Uses ripgrep (rg) if available, otherwise falls back to grep -r.`,
   tags: ['file', 'code', 'research'],
   parameters: {
     type: 'object',
@@ -37,7 +45,7 @@ export const grepTool: ToolDefinition = {
         maxBuffer: 1024 * 1024,
         cwd: ctx.baseDir,
       })
-      return { success: true, output: output || t('file.no_matches') }
+      return { success: true, output: truncateLines(output || t('file.no_matches')) }
     } catch (e: any) {
       if (e.status === 1) return { success: true, output: t('file.no_matches') }
       // Fall back to plain grep -r when rg is not available or fails
@@ -48,7 +56,7 @@ export const grepTool: ToolDefinition = {
           maxBuffer: 1024 * 1024,
           cwd: ctx.baseDir,
         })
-        return { success: true, output: output || t('file.no_matches') }
+        return { success: true, output: truncateLines(output || t('file.no_matches')) }
       } catch (e2: any) {
         if (e2.status === 1) return { success: true, output: t('file.no_matches') }
         return { success: false, output: t('error.grep_failed', { message: e2.message }) }

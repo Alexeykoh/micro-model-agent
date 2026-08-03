@@ -5,9 +5,11 @@ import type { ToolDefinition } from './types'
 import { isPathInScope } from '../modules/security/path-validator'
 import { safeResolvePath } from './path-utils'
 
+const MAX_PREVIEW_LINES = 25
+
 export const listDirTool: ToolDefinition = {
   name: 'list_dir',
-  description: 'List files and directories in a given path.',
+  description: `List files and directories in a given path. Shows up to ${MAX_PREVIEW_LINES} entries by default.`,
   tags: ['file'],
   parameters: {
     type: 'object',
@@ -39,6 +41,12 @@ export const listDirTool: ToolDefinition = {
       const full = resolve(resolved, e)
       return statSync(full).isDirectory() ? `${e}/` : e
     })
-    return { success: true, output: lines.join('\n') || t('file.empty') }
+    if (lines.length === 0) {
+      return { success: true, output: t('file.empty') }
+    }
+    const truncated = lines.length > MAX_PREVIEW_LINES
+      ? `\n... (${lines.length - MAX_PREVIEW_LINES} more entries)`
+      : ''
+    return { success: true, output: lines.slice(0, MAX_PREVIEW_LINES).join('\n') + truncated }
   },
 }
