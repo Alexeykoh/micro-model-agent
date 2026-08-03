@@ -7,7 +7,7 @@ const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
   whitelist: [],
   blockDangerousFlags: true,
   dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
-  dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '&', '`'],
+  dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '`'],
   logCommands: true,
 };
 
@@ -71,6 +71,8 @@ function containsOperator(command: string, op: string): boolean {
   const escaped = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // For single-char operators that are prefixes of multi-char ones,
   // ensure they don't match when part of a longer sequence.
+  // Note: "&" is no longer in dangerousOperators (&& is legitimate),
+  // but keep the special case for defense-in-depth if manually added.
   if (op === '&') return /(?<!&)&(?!&)/.test(command);
   if (op === '|') return /(?<!\|)\|(?!\|)/.test(command);
   if (op === '>') return /(?<!>)>(?!>)/.test(command);

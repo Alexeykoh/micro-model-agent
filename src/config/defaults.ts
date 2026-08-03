@@ -50,7 +50,7 @@ export const DEFAULTS: AppConfig = {
     baseDelay: 1000,
     maxDelay: 30000,
   },
-  maxToolIterations: 25,
+  maxToolIterations: 1000,
   stuckThreshold: 8,
   autoPlan: true,
   showReasoning: false,

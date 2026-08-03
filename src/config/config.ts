@@ -148,8 +148,11 @@ function forceSecurityUpdate(config: AppConfig): AppConfig {
       ...DEFAULT_SECURITY_CONFIG.bash.dangerousFlags,
       ...(userBash.dangerousFlags || []),
     ])],
-    // dangerousOperators: ALWAYS use defaults — user overrides are dangerous
-    dangerousOperators: [...DEFAULT_SECURITY_CONFIG.bash.dangerousOperators],
+    // dangerousOperators: merge user's additions with defaults (user can add but not remove critical ones)
+    dangerousOperators: [...new Set([
+      ...DEFAULT_SECURITY_CONFIG.bash.dangerousOperators,
+      ...(userBash.dangerousOperators || []),
+    ])],
     blockDangerousFlags: DEFAULT_SECURITY_CONFIG.bash.blockDangerousFlags,
     logCommands: DEFAULT_SECURITY_CONFIG.bash.logCommands,
   }

@@ -990,6 +990,9 @@ export class Repl {
   private showContextBar(result: {
     contextUsed?: number;
     contextLimit?: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
   }): void {
     if (
       result.contextUsed !== undefined &&
@@ -997,7 +1000,14 @@ export class Repl {
       result.contextLimit > 0
     ) {
       console.log();
-      console.log(formatContextBar(result.contextUsed, result.contextLimit));
+      const ctxLine = formatContextBar(result.contextUsed, result.contextLimit);
+      console.log(ctxLine);
+      if (result.totalTokens !== undefined && result.totalTokens > 0) {
+        const apiLine = pc.dim(
+          `  API: ${result.promptTokens} prompt + ${result.completionTokens} completion = ${result.totalTokens} total`,
+        );
+        console.log(apiLine);
+      }
     }
   }
 

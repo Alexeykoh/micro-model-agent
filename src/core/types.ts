@@ -71,4 +71,7 @@ export interface AgentResult {
   iterationCount: number
   contextUsed?: number
   contextLimit?: number
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
 }

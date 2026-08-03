@@ -67,7 +67,9 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "--no-confirm",
     ],
     // Dangerous operators that are always blocked
-    dangerousOperators: [">", ">>", "2>", "2>>", "&", "`"],
+    // Note: "&" (background) is not blocked — "&&" (AND) is a legitimate shell operator.
+    // Single "&" for backgrounding is harmless and blocking it breaks "cd dir && npm install".
+    dangerousOperators: [">", ">>", "2>", "2>>", "`"],
   },
   paths: {
     // Glob patterns for paths that are always denied

@@ -43,6 +43,11 @@ export interface Chunk {
 		arguments: string;
 	};
 	finishReason?: "stop" | "length" | "tool_calls";
+	usage?: {
+		promptTokens: number;
+		completionTokens: number;
+		totalTokens: number;
+	};
 }
 
 export interface LLMProvider {

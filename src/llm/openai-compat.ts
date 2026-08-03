@@ -149,6 +149,8 @@ export class OpenAICompatProvider implements LLMProvider {
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
 
+    let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -168,7 +170,17 @@ export class OpenAICompatProvider implements LLMProvider {
           try {
             const parsed = JSON.parse(data);
             const choice = parsed.choices?.[0];
-            if (!choice) continue;
+            if (!choice) {
+              // Usage comes in the last chunk with empty choices
+              if (parsed.usage) {
+                usage = {
+                  promptTokens: parsed.usage.prompt_tokens ?? 0,
+                  completionTokens: parsed.usage.completion_tokens ?? 0,
+                  totalTokens: parsed.usage.total_tokens ?? 0,
+                };
+              }
+              continue;
+            }
 
             const delta = choice.delta || {};
             const finishReason = choice.finish_reason;
@@ -215,6 +227,9 @@ export class OpenAICompatProvider implements LLMProvider {
             // Skip malformed JSON lines
           }
         }
+      }
+      if (usage) {
+        yield { type: "done", usage };
       }
     } finally {
       clearTimeout(timeoutId);
@@ -298,6 +313,18 @@ export class OpenAICompatProvider implements LLMProvider {
             },
           });
         }
+      }
+
+      // Append usage from API response
+      if (data.usage) {
+        chunks.push({
+          type: "done",
+          usage: {
+            promptTokens: data.usage.prompt_tokens ?? 0,
+            completionTokens: data.usage.completion_tokens ?? 0,
+            totalTokens: data.usage.total_tokens ?? 0,
+          },
+        });
       }
 
       return chunks;

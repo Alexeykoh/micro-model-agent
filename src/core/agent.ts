@@ -221,6 +221,8 @@ export class Agent {
     let lastText = "";
     let hallucinationRetries = 0;
     let lastToolSignature = "";
+    let apiPromptTokens = 0;
+    let apiCompletionTokens = 0;
     const MAX_HALLUCINATION_RETRIES = 3;
 
     while (iteration < config.maxToolIterations) {
@@ -304,6 +306,10 @@ export class Agent {
               name: chunk.toolCall.name,
               arguments: parsedArgs,
             });
+          }
+          if (chunk.type === "done" && chunk.usage) {
+            apiPromptTokens += chunk.usage.promptTokens;
+            apiCompletionTokens += chunk.usage.completionTokens;
           }
         }
       } catch (err: any) {
@@ -547,6 +553,9 @@ export class Agent {
         iterationCount: iteration,
         contextUsed: tokensUsed,
         contextLimit: budget.history,
+        promptTokens: apiPromptTokens,
+        completionTokens: apiCompletionTokens,
+        totalTokens: apiPromptTokens + apiCompletionTokens,
       };
     }
 
@@ -556,6 +565,9 @@ export class Agent {
       iterationCount: iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,
+      promptTokens: apiPromptTokens,
+      completionTokens: apiCompletionTokens,
+      totalTokens: apiPromptTokens + apiCompletionTokens,
     };
   }
 
