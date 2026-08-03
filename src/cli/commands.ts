@@ -76,6 +76,36 @@ export function createProgram(): Command {
     .action(async () => {
       const { config } = await bootstrap();
       console.log(t("cli.current_model"), config.model);
+      
+      // Fetch available models from provider
+      const { OpenAICompatProvider } = await import("../llm/openai-compat");
+      const provider = new OpenAICompatProvider({
+        model: config.model,
+        baseUrl: config.provider.baseUrl,
+        apiKey: config.provider.apiKey,
+        contextWindow: config.contextWindow,
+      });
+      
+      const spinner = (await import("../ui/spinner")).Spinner;
+      const s = new spinner();
+      s.start(t("cli.fetching_models"));
+      try {
+        const models = await provider.listModels();
+        s.stop();
+        if (models.length > 0) {
+          console.log(t("cli.available_models"));
+          for (const m of models) {
+            const marker = m === config.model ? "* " : "  ";
+            console.log(` ${marker}${m}`);
+          }
+        } else {
+          console.log(t("cli.no_models_found"));
+        }
+      } catch (err) {
+        s.stop();
+        console.log(t("cli.model_fetch_failed", { error: String(err) }));
+      }
+      
       console.log(t("cli.model_hint"));
     });
   model
@@ -88,6 +118,24 @@ export function createProgram(): Command {
       config.model = name;
       saveConfig(config, configPath);
       console.log(t("cli.model_set", { name }));
+    });
+
+  // Context window command
+  program
+    .command("context")
+    .description(t("cli.manage_context"))
+    .argument("<size>", "Context window size in tokens")
+    .action(async (size: string) => {
+      const configPath = join(homedir(), ".mma", "config.json");
+      const { config } = await bootstrap();
+      const contextWindow = parseInt(size, 10);
+      if (isNaN(contextWindow) || contextWindow < 1024) {
+        console.log(t("cli.invalid_context_size"));
+        return;
+      }
+      config.contextWindow = contextWindow;
+      saveConfig(config, configPath);
+      console.log(t("cli.context_set", { size: contextWindow }));
     });
 
   const provider = program

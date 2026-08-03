@@ -31,4 +31,6 @@ export interface LLMProvider {
 	chat(messages: Message[], tools?: ToolDefinition[]): AsyncIterable<Chunk>;
 
 	countTokens(text: string): number;
+
+	listModels(): Promise<string[]>;
 }

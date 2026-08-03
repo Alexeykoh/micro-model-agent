@@ -286,10 +286,41 @@ export class Repl {
       name: "model",
       description: t("repl.model_list"),
       usage: t("repl.model_usage"),
-      action: (args: string[]) => {
+      action: async (args: string[]) => {
         const subcmd = args[0];
         if (!subcmd || subcmd === "list") {
           console.log(`${t("repl.model_current")}  ${this.config.model}`);
+          
+          // Fetch available models from provider
+          const { OpenAICompatProvider } = await import("../llm/openai-compat");
+          const provider = new OpenAICompatProvider({
+            model: this.config.model,
+            baseUrl: this.config.provider.baseUrl,
+            apiKey: this.config.provider.apiKey,
+            contextWindow: this.config.contextWindow,
+          });
+          
+          const { Spinner } = await import("../ui/spinner");
+          const s = new Spinner();
+          s.start(t("cli.fetching_models"));
+          try {
+            const models = await provider.listModels();
+            s.stop();
+            if (models.length > 0) {
+              console.log(t("cli.available_models"));
+              for (const m of models) {
+                const marker = m === this.config.model ? pc.green("* ") : "  ";
+                console.log(` ${marker}${m}`);
+              }
+            } else {
+              console.log(t("cli.no_models_found"));
+            }
+          } catch (err) {
+            s.stop();
+            console.log(t("cli.model_fetch_failed", { error: String(err) }));
+          }
+          
+          console.log(t("cli.model_hint"));
           return;
         }
         if (subcmd === "use") {
@@ -305,6 +336,27 @@ export class Repl {
           return;
         }
         console.log(t("repl.model_usage"));
+      },
+    });
+    this.registerCommand({
+      name: "context",
+      description: t("cli.manage_context"),
+      usage: "/context <size>",
+      action: (args: string[]) => {
+        if (args.length === 0) {
+          console.log(`/context ${t("repl.context")}  ${this.config.contextWindow}`);
+          console.log(t("repl.model_usage").replace("/model", "/context"));
+          return;
+        }
+        const size = parseInt(args[0], 10);
+        if (isNaN(size) || size < 1024) {
+          console.log(t("cli.invalid_context_size"));
+          return;
+        }
+        this.config.contextWindow = size;
+        const configPath = join(homedir(), ".mma", "config.json");
+        saveConfig(this.config, configPath);
+        console.log(pc.green(t("cli.context_set", { size })));
       },
     });
   }

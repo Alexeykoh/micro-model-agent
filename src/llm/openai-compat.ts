@@ -327,6 +327,35 @@ export class OpenAICompatProvider implements LLMProvider {
     return this.tokenCounter.count(text);
   }
 
+  async listModels(): Promise<string[]> {
+    try {
+      const url = `${this.config.baseUrl.replace(/\/+$/, "")}/models`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.config.apiKey && this.config.apiKey !== "not-needed") {
+        headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      }
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = (await response.json()) as any;
+      const models = (data.data || data || [])
+        .map((m: any) => m.id || m.name || m.model || "")
+        .filter(Boolean);
+      return models;
+    } catch {
+      return [];
+    }
+  }
+
   private async fetchWithRetry(
     url: string,
     init: RequestInit,
