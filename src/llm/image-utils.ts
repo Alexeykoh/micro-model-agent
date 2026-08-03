@@ -77,17 +77,9 @@ async function readClipboardWindows(): Promise<string | null> {
   try {
     const { execSync } = await import("child_process");
     const tmpPath = `${process.env.TEMP || process.env.TMP || "/tmp"}\\mma-clip-${Date.now()}.png`;
-    const ps = [
-      "Add-Type -AssemblyName System.Windows.Forms",
-      "$img = [System.Windows.Forms.Clipboard]::GetImage()",
-      "if ($img -ne $null) {",
-      `  $img.Save("${tmpPath}")`,
-      '  Write-Output "OK"',
-      "} else {",
-      '  Write-Output "EMPTY"',
-      "}",
-    ].join("; ");
-    const out = execSync(`powershell -NoProfile -Command "${ps}"`, {
+    // Use single quotes in PowerShell to avoid backslash issues
+    const psScript = `Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img -ne $null) { $img.Save('${tmpPath}'); Write-Output 'OK' } else { Write-Output 'EMPTY' }`;
+    const out = execSync(`powershell -NoProfile -Command "${psScript}"`, {
       timeout: 5000,
       encoding: "utf-8",
     });
