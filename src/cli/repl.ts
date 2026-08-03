@@ -66,6 +66,7 @@ export class Repl {
   private commands: Map<string, SlashCommand> = new Map();
   private completer: Completer = new Completer();
   private running = false;
+  private agentRunning = false;
   private agent: Agent;
   private config: AppConfig;
   private sessionManager?: SessionManager;
@@ -716,6 +717,17 @@ export class Repl {
 
     this.rl.on("line", async (line: string) => {
       const trimmed = line.trim();
+
+      if (this.agentRunning) {
+        if (trimmed) {
+          this.history.push(trimmed);
+          if (this.history.length > this.maxHistory) {
+            this.history = this.history.slice(-this.maxHistory);
+          }
+        }
+        return;
+      }
+
       if (trimmed) {
         this.history.push(trimmed);
         if (this.history.length > this.maxHistory) {
@@ -805,35 +817,45 @@ export class Repl {
   }
 
   private async runAgent(input: string): Promise<void> {
-    process.stdout.write("\n" + pc.green(t("repl.agent")));
+    if (this.agentRunning) return;
+    this.agentRunning = true;
+    this.rl.pause();
+    try {
+      process.stdout.write("\n" + pc.green(t("repl.agent")));
 
-    const renderer = new Renderer({ spinner: this.config.ui?.spinner ?? true });
-    const result = await this.agent.run(
-      input,
-      (c) => renderer.text(c),
-      (m) => renderer.meta(m),
-      (ev) => {
-        if (ev.type === "start") {
-          renderer.toolStart(ev.tool, ev.args);
-        } else {
-          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
-        }
-      },
-      (phase) => {
-        if (phase === "thinking") {
-          renderer.thinkingStart();
-        } else {
-          renderer.thinkingEnd();
-        }
-      },
-    );
-    renderer.flush();
-    process.stdout.write("\n");
+      const renderer = new Renderer({ spinner: this.config.ui?.spinner ?? true });
+      const result = await this.agent.run(
+        input,
+        (c) => renderer.text(c),
+        (m) => renderer.meta(m),
+        (ev) => {
+          if (ev.type === "start") {
+            renderer.toolStart(ev.tool, ev.args);
+          } else {
+            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
+          }
+        },
+        (phase) => {
+          if (phase === "thinking") {
+            renderer.thinkingStart();
+          } else {
+            renderer.thinkingEnd();
+          }
+        },
+      );
+      renderer.flush();
+      process.stdout.write("\n");
 
-    if (!result.success) {
-      console.error(pc.red(`${t("error.prefix")}${result.error}`));
+      if (!result.success) {
+        console.error(pc.red(`${t("error.prefix")}${result.error}`));
+      }
+      this.showContextBar(result);
+    } finally {
+      this.agentRunning = false;
+      if (this.running) {
+        this.rl.resume();
+      }
     }
-    this.showContextBar(result);
   }
 
   registerCommand(cmd: SlashCommand): void {
