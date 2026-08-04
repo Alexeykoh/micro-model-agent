@@ -27,6 +27,7 @@ import {
 import { BrowserModule } from "../modules/browser/index";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
+import { MemoryModule } from "../modules/memory/module";
 import { setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
@@ -301,6 +302,9 @@ export async function bootstrap(
   const mcpModule = new MCPModule(config);
   await mcpModule.initialize();
   moduleRegistry.register(mcpModule);
+
+  const memoryModule = new MemoryModule(join(dir, 'memory'));
+  moduleRegistry.register(memoryModule);
 
   if (config.browser.enabled) {
     const browserModule = new BrowserModule();
