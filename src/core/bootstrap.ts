@@ -50,15 +50,14 @@ function buildSystemInfo(
     `Date: ${now}`,
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
-    `Reply in the user's language. Use tools for filesystem, bash, web access.`,
-    `Use tools when needed. Explain briefly what you're doing if it's not obvious.`,
-    `Answer the user's question directly. Only take action when the user explicitly asks you to change, create, or fix something.`,
-    `If a tool call fails, report the error and ask the user how to proceed.`,
+    `Reply in the user's language. Use tools for: read/write/edit/delete files, search (glob/grep), shell commands (bash), web access (web_search, web_fetch), subagents, browser, MCP.`,
+    `Use tools when needed — explain briefly what you're doing if it's not obvious.`,
+    `If a tool call fails, analyze the error and correct the call — try up to 2 times with different approaches before asking the user for help.`,
     ``,
-    `Design principles — apply them automatically without naming them:`,
-    `- Do not add code, files, or abstractions that are not needed right now (YAGNI — You Ain't Gonna Need It). If something is not required by the current task, omit it.`,
-    `- Prefer simple, straightforward solutions over clever or complex ones (KISS — Keep It Simple, Stupid). Flat code beats nested, minimal config beats flexible, explicit beats generic.`,
-    `- Do not duplicate code, logic, or configuration (DRY — Don't Repeat Yourself). Extract shared logic into a single place, reuse existing utilities and patterns before writing new ones.`,
+    `Design principles:`,
+    `- YAGNI: Do not add code, files, or abstractions not needed right now.`,
+    `- KISS: Prefer simple, straightforward solutions over clever or complex ones.`,
+    `- DRY: Do not duplicate code, logic, or configuration — reuse existing utilities and patterns.`,
   ];
 
   if (isWin) {
@@ -78,7 +77,7 @@ function buildSystemInfo(
   lines.push(
     ``,
     `Bash tool rules:`,
-    `- Use the "workdir" parameter to run commands in a specific directory. Do NOT chain "cd dir && cmd" — the security module blocks the "&&" operator.`,
+    `- Use the "workdir" parameter to run commands in a specific directory. Prefer workdir over "cd dir && cmd" chaining.`,
     `- Run one command per tool call. Split multi-step shell operations into separate bash calls.`,
     `- Background processes (dev servers, watchers, long-running npm install): use the "background: true" parameter or the tool will auto-detect and background them. Check output with process_log.`,
   );
@@ -96,8 +95,8 @@ function buildSystemInfo(
     ``,
     `=== PLAN QUALITY RULES — your plan MUST follow these ===`,
     ``,
-    `- Each step must describe CONCRETE deliverables: exact filenames with paths, exact packages to install, exact CLI commands to run. Steps shorter than 50 characters or without file paths/commands are REJECTED.`,
-    `- A step like "Настройка проекта" or "Setup the project" is USELESS and will be REJECTED.`,
+    `- Each step must describe CONCRETE deliverables: exact filenames with paths, exact packages to install, exact CLI commands to run. Avoid vague steps — be specific.`,
+    `- A step like "Настройка проекта" or "Setup the project" is too vague — describe what exactly needs to be configured or set up.`,
     `- A step like "Создать src/components/Header.tsx с навигацией и логотипом, добавить в src/App.tsx импорт <Header />" is GOOD.`,
     `- Include file extensions (.tsx, .css, .json) and directory paths. Every step must mention at least one file or command.`,
     `- The plan must cover EVERYTHING needed: init → deps → framework setup → code → verification.`,

@@ -1,10 +1,14 @@
-import type { SecurityConfig } from '../../config/types';
-import { DEFAULT_SECURITY_CONFIG, mergeSecurityConfig } from '../../config/security';
+import type { SecurityConfig } from "../../config/types";
+import {
+  DEFAULT_SECURITY_CONFIG,
+  mergeSecurityConfig,
+} from "../../config/security";
 
 /**
  * Security policy presets
  */
-export type SecurityPolicyPreset = 'strict' | 'balanced' | 'permissive' | 'custom';
+export type SecurityPolicyPreset =
+  "strict" | "balanced" | "permissive" | "custom";
 
 /**
  * Security policy definition
@@ -37,43 +41,132 @@ export interface SecurityPolicy {
  * Recommended for: production environments, sensitive data, multi-user systems
  */
 export const STRICT_POLICY: SecurityPolicy = {
-  name: 'Strict',
-  description: 'Maximum security with minimal flexibility. Blocks most dangerous operations.',
-  preset: 'strict',
-  recommendedFor: ['production', 'sensitive-data', 'multi-user', 'enterprise'],
+  name: "Strict",
+  description:
+    "Maximum security with minimal flexibility. Blocks most dangerous operations.",
+  preset: "strict",
+  recommendedFor: ["production", "sensitive-data", "multi-user", "enterprise"],
   config: {
+    enabled: true,
     bash: {
+      enabled: true,
       blacklist: [
-        'rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat',
-        'mknod', 'mkfifo', 'ln', 'chown', 'chgrp', 'useradd', 'usermod',
-        'passwd', 'sudo', 'su', 'exec', 'eval', 'source', 'kill', 'pkill',
-        'killall', 'shutdown', 'reboot', 'halt', 'poweroff', 'format',
-        'fdisk', 'parted', 'mkfs', 'mount', 'umount', 'mv', 'cp',
+        "rm",
+        "dd",
+        "chmod",
+        "wget",
+        "curl",
+        "scp",
+        "ssh",
+        "nc",
+        "netcat",
+        "mknod",
+        "mkfifo",
+        "ln",
+        "chown",
+        "chgrp",
+        "useradd",
+        "usermod",
+        "passwd",
+        "sudo",
+        "su",
+        "exec",
+        "eval",
+        "source",
+        "kill",
+        "pkill",
+        "killall",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "format",
+        "fdisk",
+        "parted",
+        "mkfs",
+        "mount",
+        "umount",
+        "mv",
+        "cp",
       ],
-      whitelist: ['ls', 'cat', 'echo', 'grep', 'find', 'pwd', 'whoami', 'date'],
+      whitelist: ["ls", "cat", "echo", "grep", "find", "pwd", "whoami", "date"],
       blockDangerousFlags: true,
       dangerousFlags: [
-        '--force', '-rf', '--no-preserve-root', '--recursive', '--all',
-        '-x', '-e', '--delete', '--remove', '--dangerous', '--yes', '-y',
-        '--no-confirm', '-R', '--no-clobber',
+        "--force",
+        "-rf",
+        "--no-preserve-root",
+        "--recursive",
+        "--all",
+        "-x",
+        "-e",
+        "--delete",
+        "--remove",
+        "--dangerous",
+        "--yes",
+        "-y",
+        "--no-confirm",
+        "-R",
+        "--no-clobber",
       ],
-      dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '&', '`'],
+      dangerousOperators: [
+        ">",
+        ">>",
+        "2>",
+        "2>>",
+        "|",
+        "&&",
+        "||",
+        ";",
+        "&",
+        "`",
+      ],
       logCommands: true,
     },
     paths: {
+      enabled: true,
       denied: [
-        '.git/', 'node_modules/', '.env', '*.key', '*.pem', '*.crt',
-        '*.p12', '*.pfx', '*.secret', '*.token', 'package-lock.json',
-        'bun.lock', 'yarn.lock', 'pnpm-lock.yaml', '.ssh/', '.config/',
-        '.bashrc', '.bash_profile', '.zshrc', '.profile', '/etc/',
-        '/usr/', '/var/', '/bin/', '/sbin/', '/root/', '/home/',
+        ".git/",
+        "node_modules/",
+        ".env",
+        "*.key",
+        "*.pem",
+        "*.crt",
+        "*.p12",
+        "*.pfx",
+        "*.secret",
+        "*.token",
+        "package-lock.json",
+        "bun.lock",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".ssh/",
+        ".config/",
+        ".bashrc",
+        ".bash_profile",
+        ".zshrc",
+        ".profile",
+        "/etc/",
+        "/usr/",
+        "/var/",
+        "/bin/",
+        "/sbin/",
+        "/root/",
+        "/home/",
       ],
       allowed: [],
     },
     network: {
+      enabled: true,
       deniedDomains: [
-        'localhost', '127.0.0.1', '0.0.0.0', '::1',
-        '*.internal', '*.local', '192.168.*', '10.*', '172.16.*',
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "*.internal",
+        "*.local",
+        "192.168.*",
+        "10.*",
+        "172.16.*",
       ],
       allowedDomains: [],
       requestTimeout: 10000,
@@ -114,11 +207,16 @@ export const STRICT_POLICY: SecurityPolicy = {
     },
     auditNotifier: {
       enabled: true,
-      minSeverity: 'low',
+      minSeverity: "low",
       eventTypes: [
-        'security_block', 'bash_command', 'file_operation',
-        'network_request', 'authentication', 'configuration_change',
-        'session_start', 'session_end',
+        "security_block",
+        "bash_command",
+        "file_operation",
+        "network_request",
+        "authentication",
+        "configuration_change",
+        "session_start",
+        "session_end",
       ],
       maxRetries: 3,
     },
@@ -130,37 +228,81 @@ export const STRICT_POLICY: SecurityPolicy = {
  * Recommended for: development, single-user systems, general use
  */
 export const BALANCED_POLICY: SecurityPolicy = {
-  name: 'Balanced',
-  description: 'Good security with reasonable flexibility. Default policy.',
-  preset: 'balanced',
-  recommendedFor: ['development', 'single-user', 'general-use', 'testing'],
+  name: "Balanced",
+  description: "Good security with reasonable flexibility. Default policy.",
+  preset: "balanced",
+  recommendedFor: ["development", "single-user", "general-use", "testing"],
   config: {
+    enabled: true,
     bash: {
+      enabled: true,
       blacklist: [
-        'rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat',
-        'mknod', 'mkfifo', 'useradd', 'usermod', 'passwd', 'sudo', 'su',
-        'shutdown', 'reboot', 'halt', 'poweroff', 'format',
-        'fdisk', 'parted', 'mkfs',
+        "rm",
+        "dd",
+        "chmod",
+        "wget",
+        "curl",
+        "scp",
+        "ssh",
+        "nc",
+        "netcat",
+        "mknod",
+        "mkfifo",
+        "useradd",
+        "usermod",
+        "passwd",
+        "sudo",
+        "su",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "format",
+        "fdisk",
+        "parted",
+        "mkfs",
       ],
       whitelist: [],
       blockDangerousFlags: true,
       dangerousFlags: [
-        '--force', '-rf', '--no-preserve-root', '--recursive', '--all',
-        '--delete', '--remove', '--dangerous', '--yes', '-y',
-        '--no-confirm',
+        "--force",
+        "-rf",
+        "--no-preserve-root",
+        "--recursive",
+        "--all",
+        "--delete",
+        "--remove",
+        "--dangerous",
+        "--yes",
+        "-y",
+        "--no-confirm",
       ],
-      dangerousOperators: ['|', '&&', '||', ';', '&', '`'],
+      dangerousOperators: ["|", "&&", "||", ";", "&", "`"],
       logCommands: true,
     },
     paths: {
+      enabled: true,
       denied: [
-        '.git/', 'node_modules/', '.env', '*.key', '*.pem', '*.crt',
-        '*.p12', '*.pfx', '*.secret', '*.token', 'package-lock.json',
-        'bun.lock', 'yarn.lock', 'pnpm-lock.yaml', '.ssh/',
+        ".git/",
+        "node_modules/",
+        ".env",
+        "*.key",
+        "*.pem",
+        "*.crt",
+        "*.p12",
+        "*.pfx",
+        "*.secret",
+        "*.token",
+        "package-lock.json",
+        "bun.lock",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        ".ssh/",
       ],
       allowed: [],
     },
     network: {
+      enabled: true,
       deniedDomains: [],
       allowedDomains: [],
       requestTimeout: 15000,
@@ -195,8 +337,13 @@ export const BALANCED_POLICY: SecurityPolicy = {
     },
     auditNotifier: {
       enabled: false,
-      minSeverity: 'medium',
-      eventTypes: ['security_block', 'bash_command', 'file_operation', 'network_request'],
+      minSeverity: "medium",
+      eventTypes: [
+        "security_block",
+        "bash_command",
+        "file_operation",
+        "network_request",
+      ],
       maxRetries: 3,
     },
   },
@@ -207,27 +354,39 @@ export const BALANCED_POLICY: SecurityPolicy = {
  * Recommended for: trusted environments, local development, testing
  */
 export const PERMISSIVE_POLICY: SecurityPolicy = {
-  name: 'Permissive',
-  description: 'Minimal security with maximum flexibility. Use with caution.',
-  preset: 'permissive',
-  recommendedFor: ['trusted-environment', 'local-dev', 'testing', 'sandbox'],
+  name: "Permissive",
+  description: "Minimal security with maximum flexibility. Use with caution.",
+  preset: "permissive",
+  recommendedFor: ["trusted-environment", "local-dev", "testing", "sandbox"],
   config: {
+    enabled: true,
     bash: {
+      enabled: true,
       blacklist: [
-        'rm', 'dd', 'shutdown', 'reboot', 'halt', 'poweroff',
-        'format', 'fdisk', 'parted', 'mkfs',
+        "rm",
+        "dd",
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "format",
+        "fdisk",
+        "parted",
+        "mkfs",
       ],
       whitelist: [],
       blockDangerousFlags: false,
-      dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
+      dangerousFlags: ["--force", "-rf", "--no-preserve-root"],
       dangerousOperators: [],
       logCommands: true,
     },
     paths: {
-      denied: ['.env', '*.key', '*.pem', '*.crt', '*.p12', '*.pfx'],
+      enabled: true,
+      denied: [".env", "*.key", "*.pem", "*.crt", "*.p12", "*.pfx"],
       allowed: [],
     },
     network: {
+      enabled: true,
       deniedDomains: [],
       allowedDomains: [],
       requestTimeout: 30000,
@@ -257,8 +416,8 @@ export const PERMISSIVE_POLICY: SecurityPolicy = {
     },
     auditNotifier: {
       enabled: false,
-      minSeverity: 'high',
-      eventTypes: ['security_block'],
+      minSeverity: "high",
+      eventTypes: ["security_block"],
       maxRetries: 2,
     },
   },
@@ -272,9 +431,9 @@ export const SECURITY_POLICIES: Record<SecurityPolicyPreset, SecurityPolicy> = {
   balanced: BALANCED_POLICY,
   permissive: PERMISSIVE_POLICY,
   custom: {
-    name: 'Custom',
-    description: 'Custom security configuration',
-    preset: 'custom',
+    name: "Custom",
+    description: "Custom security configuration",
+    preset: "custom",
     recommendedFor: [],
     config: {},
   },
@@ -284,7 +443,7 @@ export const SECURITY_POLICIES: Record<SecurityPolicyPreset, SecurityPolicy> = {
  * Security policy manager
  */
 export class SecurityPolicyManager {
-  private currentPolicy: SecurityPolicyPreset = 'balanced';
+  private currentPolicy: SecurityPolicyPreset = "balanced";
   private customConfig: Partial<SecurityConfig> = {};
 
   /**
@@ -305,7 +464,7 @@ export class SecurityPolicyManager {
    * Get the current policy
    */
   getCurrentPolicy(): SecurityPolicy {
-    if (this.currentPolicy === 'custom') {
+    if (this.currentPolicy === "custom") {
       return {
         ...SECURITY_POLICIES.custom,
         config: this.customConfig,
@@ -326,7 +485,7 @@ export class SecurityPolicyManager {
    */
   setCustomConfig(config: Partial<SecurityConfig>): void {
     this.customConfig = config;
-    this.currentPolicy = 'custom';
+    this.currentPolicy = "custom";
   }
 
   /**
@@ -336,18 +495,21 @@ export class SecurityPolicyManager {
     const policy = this.getCurrentPolicy();
     return mergeSecurityConfig({
       ...policy.config,
-      ...(this.currentPolicy === 'custom' ? this.customConfig : {}),
+      ...(this.currentPolicy === "custom" ? this.customConfig : {}),
     });
   }
 
   /**
    * Apply a policy and return the merged configuration
    */
-  applyPolicy(preset: SecurityPolicyPreset, customOverrides?: Partial<SecurityConfig>): SecurityConfig {
+  applyPolicy(
+    preset: SecurityPolicyPreset,
+    customOverrides?: Partial<SecurityConfig>,
+  ): SecurityConfig {
     this.setPolicy(preset);
     if (customOverrides) {
       this.customConfig = customOverrides;
-      this.currentPolicy = 'custom';
+      this.currentPolicy = "custom";
     }
     return this.getConfig();
   }
@@ -367,37 +529,40 @@ export class SecurityPolicyManager {
   /**
    * Check if current policy allows a specific action
    */
-  allowsAction(action: string, context?: { type: string; path?: string; command?: string }): boolean {
+  allowsAction(
+    action: string,
+    context?: { type: string; path?: string; command?: string },
+  ): boolean {
     const config = this.getConfig();
-    
+
     switch (action) {
-      case 'bash':
+      case "bash":
         if (context?.command) {
-          const cmd = context.command.split(' ')[0];
+          const cmd = context.command.split(" ")[0];
           return !config.bash.blacklist.includes(cmd);
         }
         return true;
-      
-      case 'file_access':
+
+      case "file_access":
         if (context?.path) {
           for (const denied of config.paths.denied) {
-            if (context.path.includes(denied.replace('*', ''))) {
+            if (context.path.includes(denied.replace("*", ""))) {
               return false;
             }
           }
         }
         return true;
-      
-      case 'network':
+
+      case "network":
         if (context?.path) {
           for (const denied of config.network.deniedDomains) {
-            if (context.path.includes(denied.replace('*', ''))) {
+            if (context.path.includes(denied.replace("*", ""))) {
               return false;
             }
           }
         }
         return true;
-      
+
       default:
         return true;
     }
@@ -406,12 +571,16 @@ export class SecurityPolicyManager {
   /**
    * Get policy comparison
    */
-  comparePolicies(policy1: SecurityPolicyPreset, policy2: SecurityPolicyPreset): Record<string, { policy1: unknown; policy2: unknown }> {
+  comparePolicies(
+    policy1: SecurityPolicyPreset,
+    policy2: SecurityPolicyPreset,
+  ): Record<string, { policy1: unknown; policy2: unknown }> {
     const config1 = this.getPolicy(policy1).config;
     const config2 = this.getPolicy(policy2).config;
-    
-    const comparison: Record<string, { policy1: unknown; policy2: unknown }> = {};
-    
+
+    const comparison: Record<string, { policy1: unknown; policy2: unknown }> =
+      {};
+
     const keys = new Set([...Object.keys(config1), ...Object.keys(config2)]);
     for (const key of keys) {
       comparison[key] = {
@@ -419,7 +588,7 @@ export class SecurityPolicyManager {
         policy2: (config2 as any)[key],
       };
     }
-    
+
     return comparison;
   }
 }
@@ -439,13 +608,18 @@ export function createSecurityPolicyManager(): SecurityPolicyManager {
 /**
  * Get a policy by name
  */
-export function getSecurityPolicy(preset: SecurityPolicyPreset): SecurityPolicy {
+export function getSecurityPolicy(
+  preset: SecurityPolicyPreset,
+): SecurityPolicy {
   return globalSecurityPolicyManager.getPolicy(preset);
 }
 
 /**
  * Apply a security policy
  */
-export function applySecurityPolicy(preset: SecurityPolicyPreset, customOverrides?: Partial<SecurityConfig>): SecurityConfig {
+export function applySecurityPolicy(
+  preset: SecurityPolicyPreset,
+  customOverrides?: Partial<SecurityConfig>,
+): SecurityConfig {
   return globalSecurityPolicyManager.applyPolicy(preset, customOverrides);
 }

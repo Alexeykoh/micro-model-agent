@@ -16,8 +16,8 @@ export function isUrlAllowed(
   url: string,
   securityConfig?: NetworkSecurityConfig,
 ): NetworkValidationResult {
-  // If no security config, allow everything (backward compatibility)
-  if (!securityConfig) {
+  // If security is disabled, allow everything
+  if (!securityConfig?.enabled) {
     return { allowed: true };
   }
 
@@ -84,15 +84,15 @@ export function sanitizeUrl(url: string): string {
 
     urlObj.search = sanitizedParams.toString();
     let result = urlObj.toString();
-    
+
     // Also sanitize credentials in URL (user:pass@host)
     if (urlObj.username || urlObj.password) {
       result = result.replace(/:\/\/[^:]+:[^@]+@/, "://[REDACTED]:[REDACTED]@");
     }
-    
+
     // Decode URL-encoded [REDACTED] back to plain text
     result = decodeURIComponent(result);
-    
+
     return result;
   } catch {
     return sanitizeLogMessage(url);

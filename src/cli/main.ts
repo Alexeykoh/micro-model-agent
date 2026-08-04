@@ -30,7 +30,12 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    const { agent, config } = await bootstrap(
+      undefined,
+      projectDir,
+      noAgentsMd,
+      exitOnComplete,
+    );
 
     if (jsonMode) {
       const result = await agent.run(prompt);
@@ -94,7 +99,12 @@ async function main(): Promise<void> {
     if (!existsSync(configPath)) {
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup();
-      const { config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+      const { config } = await bootstrap(
+        undefined,
+        projectDir,
+        noAgentsMd,
+        exitOnComplete,
+      );
       config.provider.type = answers.provider;
       config.provider.baseUrl = answers.apiBase;
       config.provider.apiKey = answers.apiKey;
@@ -103,13 +113,32 @@ async function main(): Promise<void> {
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
       if (config.security) {
+        config.security.enabled =
+          answers.securityBashBlock ||
+          answers.securityFlagsBlock ||
+          !answers.securityPathsDeny;
+        config.security.bash.enabled = config.security.enabled;
         config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
         if (answers.securityBashBlock) {
           config.security.bash.blacklist = [
             ...new Set([
               ...config.security.bash.blacklist,
-              "rm", "dd", "chmod", "wget", "curl", "scp", "ssh", "nc", "netcat",
-              "sudo", "su", "kill", "pkill", "killall", "shutdown", "reboot",
+              "rm",
+              "dd",
+              "chmod",
+              "wget",
+              "curl",
+              "scp",
+              "ssh",
+              "nc",
+              "netcat",
+              "sudo",
+              "su",
+              "kill",
+              "pkill",
+              "killall",
+              "shutdown",
+              "reboot",
             ]),
           ];
         }

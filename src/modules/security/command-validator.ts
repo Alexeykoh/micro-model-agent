@@ -3,15 +3,30 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 
 // Fallback in case DEFAULT_SECURITY_CONFIG is not available
 const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
-  blacklist: ['rm', 'dd', 'chmod', 'wget', 'curl', 'scp', 'ssh', 'nc', 'netcat', 'powershell', 'pwsh', 'cmd'],
+  enabled: false,
+  blacklist: [
+    "rm",
+    "dd",
+    "chmod",
+    "wget",
+    "curl",
+    "scp",
+    "ssh",
+    "nc",
+    "netcat",
+    "powershell",
+    "pwsh",
+    "cmd",
+  ],
   whitelist: [],
   blockDangerousFlags: false,
-  dangerousFlags: ['--force', '-rf', '--no-preserve-root'],
-  dangerousOperators: ['>', '>>', '2>', '2>>', '|', '&&', '||', ';', '`'],
+  dangerousFlags: ["--force", "-rf", "--no-preserve-root"],
+  dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "`"],
   logCommands: true,
 };
 
-export const DEFAULT_BASH_CONFIG = DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
+export const DEFAULT_BASH_CONFIG =
+  DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
 
 /**
  * Result of command validation
@@ -46,7 +61,13 @@ function extractBaseCommand(trimmed: string): string {
       i++;
       continue;
     }
-    if (tok === "sudo" || tok === "env" || tok === "command" || tok === "exec" || tok === "nohup") {
+    if (
+      tok === "sudo" ||
+      tok === "env" ||
+      tok === "command" ||
+      tok === "exec" ||
+      tok === "nohup"
+    ) {
       i++;
       continue;
     }
@@ -60,7 +81,7 @@ function extractBaseCommand(trimmed: string): string {
   const parts = raw.split(/[\\/]/);
   const basename = parts[parts.length - 1] || raw;
   // Strip .exe/.cmd/.bat extensions for blacklist matching (e.g. powershell.exe → powershell)
-  return basename.replace(/\.(exe|cmd|bat)$/i, '') || basename;
+  return basename.replace(/\.(exe|cmd|bat)$/i, "") || basename;
 }
 
 /**
@@ -72,14 +93,14 @@ function extractBaseCommand(trimmed: string): string {
  *   "2>" does NOT match "2>>" (append stderr)
  */
 function containsOperator(command: string, op: string): boolean {
-  const escaped = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = op.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // For single-char operators that are prefixes of multi-char ones,
   // ensure they don't match when part of a longer sequence.
   // Note: "&" is no longer in dangerousOperators (&& is legitimate),
   // but keep the special case for defense-in-depth if manually added.
-  if (op === '&') return /(?<!&)&(?!&)/.test(command);
-  if (op === '|') return /(?<!\|)\|(?!\|)/.test(command);
-  if (op === '>') return /(?<!>)>(?!>)/.test(command);
+  if (op === "&") return /(?<!&)&(?!&)/.test(command);
+  if (op === "|") return /(?<!\|)\|(?!\|)/.test(command);
+  if (op === ">") return /(?<!>)>(?!>)/.test(command);
   // For everything else (including multi-char like ">>", "2>", "2>>", ";", "`"),
   // match literally.
   return new RegExp(escaped).test(command);
@@ -92,14 +113,21 @@ export function isCommandAllowed(
   command: string,
   securityConfig?: BashSecurityConfig,
 ): CommandValidationResult {
-  // If no security config, allow everything (backward compatibility)
-  let config = securityConfig || DEFAULT_BASH_CONFIG;
-  
-  // Ensure config has all required fields
-  if (!config.blacklist || !Array.isArray(config.blacklist)) {
-    config = FALLBACK_BASH_CONFIG;
+  // If security is disabled, allow everything
+  if (!securityConfig?.enabled) {
+    return { allowed: true, sanitizedCommand: command };
   }
-  
+
+  // Ensure config has all required fields
+  let config = securityConfig;
+
+  if (!config.blacklist || !Array.isArray(config.blacklist)) {
+    config = {
+      ...FALLBACK_BASH_CONFIG,
+      enabled: config.enabled ?? FALLBACK_BASH_CONFIG.enabled,
+    };
+  }
+
   const trimmedCommand = command.trim();
   if (!trimmedCommand) {
     return { allowed: false, reason: "Empty command" };
@@ -107,7 +135,7 @@ export function isCommandAllowed(
 
   // Shell wrappers are always blocked — they bypass all command validation.
   // The agent should use the bash tool directly, not shell interpreters.
-  const ALWAYS_BLOCKED = ['powershell', 'pwsh', 'cmd'];
+  const ALWAYS_BLOCKED = ["powershell", "pwsh", "cmd"];
   const baseForShellCheck = extractBaseCommand(trimmedCommand);
   if (ALWAYS_BLOCKED.includes(baseForShellCheck)) {
     return {
@@ -151,7 +179,9 @@ export function isCommandAllowed(
   }
 
   // Also check the raw first token in case it's a simple name
-  const rawFirst = trimmedCommand.split(/\s+/)[0].replace(/\.(exe|cmd|bat)$/i, '');
+  const rawFirst = trimmedCommand
+    .split(/\s+/)[0]
+    .replace(/\.(exe|cmd|bat)$/i, "");
   if (rawFirst !== baseCommand && config.blacklist.includes(rawFirst)) {
     return {
       allowed: false,
@@ -199,14 +229,14 @@ export function sanitizeCommandForLog(command: string): string {
 
   let sanitized = command;
   for (const pattern of patterns) {
-    if (pattern.toString().includes('($1')) {
+    if (pattern.toString().includes("($1")) {
       // For patterns with capture groups, use the group in replacement
       sanitized = sanitized.replace(pattern, (match, p1) => {
         return `${p1}=[REDACTED]`;
       });
     } else {
       // For simple patterns, just replace with [REDACTED]
-      sanitized = sanitized.replace(pattern, '[REDACTED]');
+      sanitized = sanitized.replace(pattern, "[REDACTED]");
     }
   }
   return sanitized;

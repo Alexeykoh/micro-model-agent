@@ -94,7 +94,7 @@ The security module provides multiple layers of protection:
   - Blacklist of dangerous commands (`rm`, `dd`, `chmod`, `wget`, `curl`, `ssh`, etc.)
   - Whitelist mode (optional, strict)
   - Blocking of dangerous flags (`--force`, `-rf`, `--no-preserve-root`)
-  - Blocking of dangerous operators (`|`, `>`, `>>`, `;`, `&&`)
+  - Blocking of dangerous operators (`|`, `>`, `>>`, `;`, `&&` — when `blockDangerousFlags` is enabled)
   - Command logging to `~/.mma/logs/audit.jsonl`
 
 - **Path Validation** (`src/modules/security/path-validator.ts`):
@@ -131,6 +131,7 @@ Security settings are part of `AppConfig` in `src/config/types.ts`:
 
 ```typescript
 interface SecurityConfig {
+  enabled: boolean;
   bash: BashSecurityConfig;
   paths: PathSecurityConfig;
   network: NetworkSecurityConfig;
@@ -147,10 +148,12 @@ Default configuration is defined in `src/config/security.ts` and merged with use
 
 #### Backward Compatibility
 
-All security features are **opt-in** by default:
-- If `security` config is not provided, all operations are allowed (backward compatible)
+Security is **disabled by default** (`SecurityConfig.enabled: false`):
+- All validators (command, path, network, content scan) return `allowed: true` when `enabled` is `false`
+- The default `DEFAULT_SECURITY_CONFIG` has empty/benign defaults — blacklists exist as templates, not active rules
+- To enable security: set `security.enabled: true` and configure individual modules (bash, paths, network, contentScan)
+- Each sub-module also has its own `enabled` flag for granular control
 - Existing code continues to work without modifications
-- Security checks can be disabled individually
 
 #### Phase 4: Extended Security Features
 

@@ -53,7 +53,7 @@ describe("StuckDetector - recovery with step context", () => {
       detector.recordIteration(1);
     }
     const recovery = detector.getRecoveryMessage();
-    expect(recovery).toContain("?");
+    expect(recovery).toContain("has had no progress");
   });
 
   it("tool errors recovery message is still generated", () => {

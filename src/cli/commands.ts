@@ -50,6 +50,41 @@ export function createProgram(): Command {
       config.contextWindow = answers.contextWindow;
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
+      // Apply security settings from wizard
+      if (config.security) {
+        config.security.enabled =
+          answers.securityBashBlock ||
+          answers.securityFlagsBlock ||
+          !answers.securityPathsDeny;
+        config.security.bash.enabled = config.security.enabled;
+        config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
+        if (answers.securityBashBlock) {
+          config.security.bash.blacklist = [
+            ...new Set([
+              ...config.security.bash.blacklist,
+              "rm",
+              "dd",
+              "chmod",
+              "wget",
+              "curl",
+              "scp",
+              "ssh",
+              "nc",
+              "netcat",
+              "sudo",
+              "su",
+              "kill",
+              "pkill",
+              "killall",
+              "shutdown",
+              "reboot",
+            ]),
+          ];
+        }
+        if (!answers.securityPathsDeny) {
+          config.security.paths.denied = [];
+        }
+      }
       saveConfig(config, configPath);
       console.log(t("cli.config_saved"));
     });

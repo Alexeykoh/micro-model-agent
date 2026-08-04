@@ -58,7 +58,7 @@ describe("StuckDetector", () => {
     });
     expect(result).toBeDefined();
     if (result) {
-      expect(result).toContain("OFF PLAN");
+      expect(result).toContain("different path");
     }
   });
 
@@ -78,7 +78,7 @@ describe("StuckDetector", () => {
     expect(detector.isStuck()).toBe(true);
     const recovery = detector.getRecoveryMessage();
     expect(recovery).toBeTruthy();
-    expect(recovery).toContain("STUCK");
+    expect(recovery).toContain("different approach");
   });
 
   it("should return empty recovery message when not stuck", () => {

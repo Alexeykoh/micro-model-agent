@@ -25,14 +25,40 @@ export function isPathInScope(
 
   // First, check that path is within baseDir
   if (!targetResolved.startsWith(baseResolved)) {
-    return { allowed: false, reason: "Path is outside the base working directory" };
+    return {
+      allowed: false,
+      reason: "Path is outside the base working directory",
+    };
+  }
+
+  // If security is disabled, skip pattern validation
+  if (!securityConfig?.enabled) {
+    // Still enforce subagent scope if present
+    if (scope) {
+      const isReadScope = scope.read_only_files.some((f: string) =>
+        targetResolved.startsWith(resolve(baseDir, f)),
+      );
+      const isWriteScope = scope.allowed_files.some((f: string) =>
+        targetResolved.startsWith(resolve(baseDir, f)),
+      );
+      if (isWriteScope) return { allowed: true };
+      if (isReadScope) return { allowed: true, reason: "Read-only file" };
+      return {
+        allowed: false,
+        reason: "Path is not within the allowed scope for this sub-agent",
+      };
+    }
+    return { allowed: true };
   }
 
   // Check global denied patterns
   if (securityConfig?.denied?.length) {
     for (const pattern of securityConfig.denied) {
       if (matchesGlobPattern(targetResolved, baseDir, pattern)) {
-        return { allowed: false, reason: `Path matches denied pattern: ${pattern}` };
+        return {
+          allowed: false,
+          reason: `Path matches denied pattern: ${pattern}`,
+        };
       }
     }
   }
@@ -47,7 +73,10 @@ export function isPathInScope(
       }
     }
     if (!isAllowed) {
-      return { allowed: false, reason: "Path does not match any allowed pattern" };
+      return {
+        allowed: false,
+        reason: "Path does not match any allowed pattern",
+      };
     }
   }
 
@@ -86,14 +115,36 @@ export function isPathWritable(
 
   // First, check that path is within baseDir
   if (!targetResolved.startsWith(baseResolved)) {
-    return { allowed: false, reason: "Path is outside the base working directory" };
+    return {
+      allowed: false,
+      reason: "Path is outside the base working directory",
+    };
+  }
+
+  // If security is disabled, skip pattern validation
+  if (!securityConfig?.enabled) {
+    // Still enforce subagent scope if present
+    if (scope) {
+      const isWriteScope = scope.allowed_files.some((f: string) =>
+        targetResolved.startsWith(resolve(baseDir, f)),
+      );
+      if (isWriteScope) return { allowed: true };
+      return {
+        allowed: false,
+        reason: "Path is not within the allowed scope for this sub-agent",
+      };
+    }
+    return { allowed: true };
   }
 
   // Check global denied patterns
   if (securityConfig?.denied?.length) {
     for (const pattern of securityConfig.denied) {
       if (matchesGlobPattern(targetResolved, baseDir, pattern)) {
-        return { allowed: false, reason: `Path matches denied pattern: ${pattern}` };
+        return {
+          allowed: false,
+          reason: `Path matches denied pattern: ${pattern}`,
+        };
       }
     }
   }
@@ -108,7 +159,10 @@ export function isPathWritable(
       }
     }
     if (!isAllowed) {
-      return { allowed: false, reason: "Path does not match any allowed pattern" };
+      return {
+        allowed: false,
+        reason: "Path does not match any allowed pattern",
+      };
     }
   }
 
@@ -140,22 +194,25 @@ function matchesGlobPattern(
 ): boolean {
   const resolvedBaseDir = resolve(baseDir);
   const resolvedTargetPath = resolve(targetPath);
-  
+
   // Handle directory patterns (ending with /)
   if (pattern.endsWith("/")) {
     const dirPattern = pattern.slice(0, -1);
     const resolvedDirPattern = resolve(baseDir, dirPattern);
-    
+
     // Exact match
     if (resolvedTargetPath === resolvedDirPattern) {
       return true;
     }
-    
+
     // Check if target is inside the directory
-    if (resolvedTargetPath.startsWith(resolvedDirPattern + "/") || resolvedTargetPath.startsWith(resolvedDirPattern + "\\")) {
+    if (
+      resolvedTargetPath.startsWith(resolvedDirPattern + "/") ||
+      resolvedTargetPath.startsWith(resolvedDirPattern + "\\")
+    ) {
       return true;
     }
-    
+
     return false;
   }
 
@@ -164,17 +221,20 @@ function matchesGlobPattern(
     const parts = pattern.split("**/");
     const prefix = parts[0];
     const suffix = parts[1];
-    
+
     const resolvedPrefix = resolve(baseDir, prefix);
-    if (!resolvedTargetPath.startsWith(resolvedPrefix + "/") && !resolvedTargetPath.startsWith(resolvedPrefix + "\\")) {
+    if (
+      !resolvedTargetPath.startsWith(resolvedPrefix + "/") &&
+      !resolvedTargetPath.startsWith(resolvedPrefix + "\\")
+    ) {
       return false;
     }
-    
+
     const remainingPath = resolvedTargetPath.slice(resolvedPrefix.length);
     if (suffix === "*" || suffix === "") {
       return true; // Any path after prefix
     }
-    
+
     // Check if remaining path contains the suffix
     return remainingPath.includes(suffix.replace(/\*/g, ""));
   }
@@ -184,16 +244,19 @@ function matchesGlobPattern(
     const parts = pattern.split("**");
     const prefix = parts[0];
     const suffix = parts[1];
-    
+
     const resolvedPrefix = resolve(baseDir, prefix);
-    if (!resolvedTargetPath.startsWith(resolvedPrefix + "/") && !resolvedTargetPath.startsWith(resolvedPrefix + "\\")) {
+    if (
+      !resolvedTargetPath.startsWith(resolvedPrefix + "/") &&
+      !resolvedTargetPath.startsWith(resolvedPrefix + "\\")
+    ) {
       return false;
     }
-    
+
     if (!suffix) {
       return true; // ** at the end matches anything after prefix
     }
-    
+
     return resolvedTargetPath.includes(suffix.replace(/\//g, ""));
   }
 
@@ -203,9 +266,11 @@ function matchesGlobPattern(
       .replace(/\*/g, "[^/\\\\]*")
       .replace(/\?/g, ".")
       .replace(/\./g, "\\.");
-    
+
     const regex = new RegExp(`^${regexPattern}$`);
-    const relativePath = resolvedTargetPath.slice(resolvedBaseDir.length + 1).replace(/\\/g, "/");
+    const relativePath = resolvedTargetPath
+      .slice(resolvedBaseDir.length + 1)
+      .replace(/\\/g, "/");
     return regex.test(relativePath);
   }
 
