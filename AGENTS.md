@@ -25,8 +25,8 @@ bun run mma "<prompt>" --json
 # Dev mode (watch)
 bun run dev
 
-# Build (tsc + copy skills)
-bun run build
+# Build (bundle + copy skills — use this for npm releases)
+bun run build:prod
 
 # Test (component tests)
 bun test
@@ -800,7 +800,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
    # For major
    npm version major
    ```
-3. **Build**: `bun run build`
+3. **Build**: `bun run build:prod`
 4. **Publish**: `npm publish --access public`
 5. **Git tag**: `npm version` creates tag automatically, push with `git push --follow-tags`
 6. **Update CHANGELOG** (if exists) or AGENTS.md with notable changes
@@ -830,7 +830,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.18.2
+### Current Version: 0.19.2
 - **0** = pre-1.0 (initial development)
 - **18** = minor features added (model list, context, reload, security policies, MoE phases, etc.)
 - **2** = patch fixes (dynamic version resolution, REPL header version display)
