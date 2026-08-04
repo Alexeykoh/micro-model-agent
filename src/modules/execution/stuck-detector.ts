@@ -5,6 +5,30 @@ interface ToolCallRecord {
   argsKey: string;
 }
 
+export type ErrorClassification = 'transient' | 'systematic' | 'blocking'
+
+const TRANSIENT_PATTERNS = [
+  /timeout/i, /timed out/i, /ECONNREFUSED/i, /ETIMEDOUT/i,
+  /ECONNRESET/i, /killed/i, /SIGTERM/i, /SIGKILL/i,
+  /rate limit/i, /429/i, /503/i, /502/i,
+]
+
+const BLOCKING_PATTERNS = [
+  /EACCES/i, /permission denied/i, /EPERM/i,
+  /ENOENT.*node_modules/i, /ENOTDIR/i,
+  /invalid.*token/i, /unauthorized/i, /401/i, /403/i,
+]
+
+export function classifyError(output: string): ErrorClassification {
+  for (const p of TRANSIENT_PATTERNS) {
+    if (p.test(output)) return 'transient'
+  }
+  for (const p of BLOCKING_PATTERNS) {
+    if (p.test(output)) return 'blocking'
+  }
+  return 'systematic'
+}
+
 export class StuckDetector {
   private threshold: number;
   private errorThreshold: number;
@@ -17,6 +41,11 @@ export class StuckDetector {
   private readonly repetitionThreshold = 3;
   private consecutiveFailures = 0;
   private lastFailedTool = "";
+  private lastErrorOutput = "";
+  private escalationCount = 0;
+  private readonly escalationThreshold = 3;
+  private fileRewriteCount: Map<string, number> = new Map()
+  private readonly fileRewriteThreshold = 3
 
   constructor(threshold = 8, errorThreshold = 3) {
     this.threshold = threshold;
@@ -40,15 +69,29 @@ export class StuckDetector {
     }
   }
 
-  recordToolError(toolName: string): void {
+  recordToolError(toolName: string, output?: string): void {
     this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1);
     this.consecutiveFailures++;
     this.lastFailedTool = toolName;
+    if (output) this.lastErrorOutput = output;
+  }
+
+  getLastErrorOutput(): string {
+    return this.lastErrorOutput
+  }
+
+  getLastFailedTool(): string {
+    return this.lastFailedTool
+  }
+
+  getIterationsOnCurrentStep(): number {
+    return this.iterationsOnCurrentStep
   }
 
   recordToolSuccess(): void {
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
+    this.escalationCount = 0;
   }
 
   setCurrentStep(stepId: number, description: string): void {
@@ -95,6 +138,150 @@ export class StuckDetector {
 
   getConsecutiveFailuresCount(): number {
     return this.consecutiveFailures;
+  }
+
+  recordEscalation(): void {
+    this.escalationCount++
+  }
+
+  shouldEscalate(): boolean {
+    return this.escalationCount >= this.escalationThreshold
+  }
+
+  resetEscalation(): void {
+    this.escalationCount = 0
+  }
+
+  getEscalationCount(): number {
+    return this.escalationCount
+  }
+
+  getHints(): string[] {
+    const hints: string[] = []
+    const desc = this.currentStepDescription.toLowerCase()
+
+    if (desc.includes('install') || desc.includes('npm') || desc.includes('pip')) {
+      hints.push('Check if a lock file exists (package-lock.json, poetry.lock). If missing, run the install command first.')
+    }
+    if (desc.includes('test') || desc.includes('spec')) {
+      hints.push('Make sure the source files exist and have real code before running tests.')
+    }
+    if (desc.includes('build') || desc.includes('compile')) {
+      hints.push('Check that all dependencies are installed and source files are not empty.')
+    }
+    if (desc.includes('deploy') || desc.includes('publish')) {
+      hints.push('Verify credentials and network access before deploying.')
+    }
+    if (this.hasRepetitiveToolCalls()) {
+      hints.push('You are calling the same tool repeatedly with the same arguments. Try a different approach.')
+    }
+    if (this.hasConsecutiveFailures()) {
+      hints.push('Multiple different tools are failing. Check if the environment is set up correctly.')
+    }
+    return hints
+  }
+
+  getActionableHints(): string[] {
+    const hints: string[] = []
+    const error = this.lastErrorOutput
+
+    if (!error) return hints
+
+    // Runtime incompatibility — tool/module crashes on this Node version
+    if (/Cannot read properties of undefined|is not a function|is not a constructor/i.test(error)) {
+      if (/node_modules/.test(error)) {
+        hints.push('A dependency is incompatible with your Node.js version. Check if there is an alternative package or use a different runtime.')
+      }
+    }
+
+    // TypeScript syntax errors — model generated invalid code
+    if (/TS1005|TS1003|TS1109|TS1128|TS1434/i.test(error)) {
+      hints.push('TypeScript syntax error. Read the error message carefully — it tells you the exact line and column. Fix the syntax before retrying.')
+    }
+
+    // TypeScript type errors — model doesn't understand the types
+    if (/TS2322|TS2345|TS2769|TS7006|TS7016/i.test(error)) {
+      hints.push('TypeScript type mismatch. Check the type signature of the function/API you are using. If a package lacks type declarations, install @types/<package> or use skipLibCheck.')
+    }
+
+    // Module not found — missing dependency or wrong import
+    if (/Cannot find module|Module not found|ERR_MODULE_NOT_FOUND/i.test(error)) {
+      hints.push('Module not found. Run npm install or check if the import path is correct.')
+    }
+
+    // Permission / access errors
+    if (/EACCES|EPERM|permission denied/i.test(error)) {
+      hints.push('Permission denied. Check file permissions or run with appropriate privileges.')
+    }
+
+    // Network errors
+    if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed/i.test(error)) {
+      hints.push('Network error. Check if the server is running and accessible.')
+    }
+
+    // Command not found
+    if (/is not recognized|command not found|not found in path/i.test(error)) {
+      hints.push('Command not found. Check if the tool is installed and in PATH.')
+    }
+
+    // File rewrite loop — same file keeps failing
+    if (this.hasExcessiveRewrites()) {
+      const file = this.getExcessiveRewriteFile()
+      hints.push(`File ${file} has been rewritten ${this.getFileRewriteCount(file!)} times without success. Stop rewriting and try a fundamentally different approach.`)
+    }
+
+    return hints
+  }
+
+  getToolAlternative(): string | null {
+    const tool = this.lastFailedTool
+    const error = this.lastErrorOutput
+
+    if (!tool) return null
+
+    // If a tool fails with a runtime crash, suggest alternatives
+    if (/Cannot read properties of undefined|is not a function|TypeError|ReferenceError/i.test(error)) {
+      // Map of tools to their common alternatives
+      const alternatives: Record<string, string> = {
+        'ts-node': 'tsx',
+        'jest': 'vitest',
+        'mocha': 'vitest',
+        'webpack': 'vite',
+        'rollup': 'vite',
+        'parcel': 'vite',
+        'babel': 'tsc',
+        'eslint': 'biome',
+        'prettier': 'biome',
+      }
+
+      for (const [failed, alt] of Object.entries(alternatives)) {
+        if (tool.includes(failed) || error.includes(failed)) {
+          return alt
+        }
+      }
+    }
+
+    return null
+  }
+
+  recordFileRewrite(filePath: string): void {
+    const count = (this.fileRewriteCount.get(filePath) || 0) + 1
+    this.fileRewriteCount.set(filePath, count)
+  }
+
+  getFileRewriteCount(filePath: string): number {
+    return this.fileRewriteCount.get(filePath) || 0
+  }
+
+  hasExcessiveRewrites(): boolean {
+    return Array.from(this.fileRewriteCount.values()).some(c => c >= this.fileRewriteThreshold)
+  }
+
+  getExcessiveRewriteFile(): string | null {
+    for (const [file, count] of this.fileRewriteCount) {
+      if (count >= this.fileRewriteThreshold) return file
+    }
+    return null
   }
 
   getRepetitiveToolMessage(): string {

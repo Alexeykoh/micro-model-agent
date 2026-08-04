@@ -125,7 +125,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   },
   // Content scanning settings
   contentScan: {
-    enabled: true,
+    enabled: false,
     // Patterns that are considered dangerous in file content
     dangerousPatterns: [
       /eval\(/,

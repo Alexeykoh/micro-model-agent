@@ -67,4 +67,9 @@ export class MemoryStore {
     writeFileSync(this.prefsPath(), JSON.stringify(prefs, null, 2), 'utf-8')
     return true
   }
+
+  appendRule(category: string, pattern: string, cause: string, solution: string): void {
+    const entry = `**pattern:** ${pattern}\n  **cause:** ${cause}\n  **solution:** ${solution}`
+    this.append(category, entry)
+  }
 }

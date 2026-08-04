@@ -4,6 +4,8 @@ import { resolve, join } from 'path'
 import { t } from '../../i18n/index'
 import type { Plan } from './planner'
 
+const MASS_EDIT_THRESHOLD = 10
+
 export interface AuditResult {
   passed: boolean
   missingFiles: string[]
@@ -11,6 +13,7 @@ export interface AuditResult {
   modifiedFiles: string[]
   summary: string
   typeCheckError: string | null
+  massEditWarning: string | null
 }
 
 export class Auditor {
@@ -42,6 +45,11 @@ export class Auditor {
 
     const typeCheckError = await this.runProjectTypeCheck()
 
+    let massEditWarning: string | null = null
+    if (uniqueFiles.length > MASS_EDIT_THRESHOLD) {
+      massEditWarning = t('exec.mass_edit_warning', { count: String(uniqueFiles.length) })
+    }
+
     const passed = missingFiles.length === 0 && !typeCheckError
 
     let summary: string
@@ -63,6 +71,7 @@ export class Auditor {
       modifiedFiles: [],
       summary,
       typeCheckError,
+      massEditWarning,
     }
   }
 

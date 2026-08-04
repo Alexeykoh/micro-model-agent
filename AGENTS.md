@@ -318,7 +318,8 @@ const body = { model, messages, stream: false, max_tokens };
 9. **No full-screen TUI** — no alternate screen buffer, no raw-mode, no full-frame redraw. Rich ANSI output is allowed: spinner (single-line `\r` overwrite on stderr), boxed tool cards, aligned tables. Auto-degrades to plain text when `!isTTY` or `CI`.
 10. **No keyword matching for task classification** — determining whether a task is multi-step, needs planning, or requires specific tools via keyword/word matching is an anti-pattern. It fails for non-English languages, ambiguous inputs, and novel task patterns. Instead, use the system prompt to instruct the model to use the `plan` tool when appropriate. The model decides whether to create a plan based on task complexity, not hardcoded heuristics.
 11. **Interactive tools bypass the execution timeout** — tools that block on user input (`question`, `approve`) must set `interactive: true` on their `ToolDefinition`. The executor skips the 60s timeout for them. Any new user-facing interactive tool must do the same, and must reuse `user-input.ts` instead of creating its own readline interface.
-12. **Dynamic version resolution** — never use `import { version } from "../../package.json"` (static import gets inlined by bundler with stale value). Always read `package.json` at runtime via `readFileSync` + `fileURLToPath(import.meta.url)` with path candidates for both source (`src/cli/`) and bundled (`dist/`) layouts. See `src/cli/commands.ts` `readVersion()` for the pattern.
+12. **No static imports for build-time values** — never use a static import to load a value that a bundler resolves at build time (package version, build metadata). Bundlers inline it with a stale value. Always read it from disk at runtime. (Concrete repo case: read `package.json` via `readFileSync` + `fileURLToPath(import.meta.url)` with path candidates for both source `src/cli/` and bundled `dist/` layouts — see `readVersion()` in `src/cli/commands.ts`.)
+13. **Separate app creation from server start** — when creating a web server (Express, FastAPI, Go http, etc.), always export the app/handler object separately from the `listen()` call. This allows tests to import and test the app without binding to a port. Pattern: create app → export app → if main module, call listen().
 
 ## Project Structure
 
@@ -416,9 +417,11 @@ src/
 
 ## Question Tool
 
+> **Status: DISABLED** — interactive menus are too disruptive for small models (Qwen3.5-9B). The model should ask questions as plain text in its response instead. Source files (`question.ts`, `approve.ts`) exist but imports are commented out in `src/tools/index.ts:29-32`. Re-enable requires uncommenting imports + adding to `registerAllTools()`.
+
 Interactive Q&A for clarifying ambiguous tasks, gathering preferences, and offering choices to the user.
 
-### API
+### API (disabled — kept for reference)
 
 The model sends a `question` tool call with one or more questions:
 

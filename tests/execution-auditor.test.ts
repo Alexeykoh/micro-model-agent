@@ -70,4 +70,36 @@ describe("Auditor", () => {
     const result = await auditor.audit(plan);
     expect(result.summary).toMatch(/complete/i);
   });
+
+  it("should warn on mass edit (>10 files)", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    const files = Array.from({ length: 15 }, (_, i) => `src/file${i}.ts`);
+    files.forEach((f) => writeFileSync(join(tmpDir, f), ""));
+
+    const plan = PlanCreator.createPlan(
+      "test",
+      files.map((f) => `Create ${f}`),
+      tmpDir,
+    );
+    plan.steps.forEach((s) => (s.status = "done"));
+
+    const result = await auditor.audit(plan);
+    expect(result.massEditWarning).toBeTruthy();
+    expect(result.massEditWarning).toContain("15");
+  });
+
+  it("should not warn on small edit (<=10 files)", async () => {
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src/index.ts"), "");
+
+    const plan = PlanCreator.createPlan(
+      "test",
+      ["Create src/index.ts"],
+      tmpDir,
+    );
+    plan.steps[0].status = "done";
+
+    const result = await auditor.audit(plan);
+    expect(result.massEditWarning).toBeNull();
+  });
 });

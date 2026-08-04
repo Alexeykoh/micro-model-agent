@@ -1,347 +1,217 @@
-# MMA v2 Test Scenarios
+# Сценарии тестирования MMA v2
 
-Interactive one-shot test scenarios organized by category.
-
----
-
-## Test Environment
-
-- **Sandbox directory**: `C:\projects\mma_test_sandbox` (create fresh for each test)
-- **Command pattern**: `bun run mma --no-agents-md "<prompt>"` (or without flag for baseline)
-- **Model**: Currently configured model (Qwen3.5-9B via llama.cpp)
+Интерактивные одноразовые сценарии тестирования, organised по категориям.
 
 ---
 
-## Category 1: Feature Usage Verification
+## Тестовая среда
 
-*Goal: Verify the agent actually uses its available features — asks questions, searches web, loads skills, reads project map/index.*
+- **Песочница**: `C:\projects\mma_test_sandbox` (создавать заново для каждого теста)
+- **Шаблон команды**: `bun run mma --no-agents-md "<prompt>"` (или без флага для базового теста)
+- **Модель**: текущая настроенная модель (Qwen3.5-9B через llama.cpp)
 
-### 1.1 Question Tool (Interactive)
+---
+
+## Категория 1: Проверка использования функций
+
+*Цель: убедиться, что агент действительно использует доступные функции — задаёт вопросы, ищет в интернете, загружает скиллы, читает карту проекта/индекс.*
+
+### 1.1 Инструмент «Вопрос» (интерактивный)
 ```
 Ask me which testing framework I prefer: Vitest, Jest, or Playwright.
 Use the question tool with these three options. Then create a file test-framework.txt with my answer.
 ```
-- **Feature**: `question` tool with options
-- **Tester action**: Type `1`, `2`, or `3` + Enter
-- **Verify**: File contains chosen framework name
+- **Функция**: инструмент `question` с вариантами ответов
+- **Действие тестера**: ввести `1`, `2` или `3` + Enter
+- **Проверка**: файл содержит название выбранного фреймворка
 
-### 1.2 Approve Tool (Interactive)
+### 1.2 Инструмент «Одобрение» (интерактивный)
 ```
 Ask me for approval to create a file named approved.txt with content "yes".
 Use the approve tool. If approved, create approved.txt. If rejected, create rejected.txt.
 ```
-- **Feature**: `approve` tool
-- **Tester action**: Type `1` (Yes) or `2` (No) + Enter
-- **Verify**: Correct file created
+- **Функция**: инструмент `approve`
+- **Действие тестера**: ввести `1` (Да) или `2` (Нет) + Enter
+- **Проверка**: создан правильный файл
 
-### 1.3 Web Search + Fetch
+### 1.3 Веб-поиск + загрузка страницы
 ```
 Search for "TypeScript 5.5 new features" and fetch the first result.
 Show me a summary of what's new in TypeScript 5.5.
 ```
-- **Feature**: `web-search` → `web-fetch`
-- **Verify**: Returns relevant summary (not hallucinated)
+- **Функция**: `web-search` → `web-fetch`
+- **Проверка**: возвращается релевантная сводка (не галлюцинация)
 
-### 1.4 Project Map - Summary
+### 1.4 Карта проекта — сводка
 ```
 Show me the project map summary for the current workspace.
 ```
-- **Feature**: `project-map` action="summary"
-- **Verify**: Shows languages, file counts, top directories, key exports
+- **Функция**: `project-map` action="summary"
+- **Проверка**: отображаются языки, количество файлов, топ-директории, ключевые экспорты
 
-### 1.5 Project Map - Find
+### 1.5 Карта проекта — поиск
 ```
 Search the project map for files containing "bootstrap" in their path or exports.
 ```
-- **Feature**: `project-map` action="find" query="bootstrap"
-- **Verify**: Returns relevant files (bootstrap.ts, etc.)
+- **Функция**: `project-map` action="find" query="bootstrap"
+- **Проверка**: возвращаются релевантные файлы (bootstrap.ts и т.д.)
 
-### 1.6 Project Map - Refresh
+### 1.6 Карта проекта — обновление
 ```
 Force a refresh of the project map index, then show the summary.
 ```
-- **Feature**: `project-map` action="refresh" then "summary"
-- **Verify**: Index rebuilt, updated summary shown
+- **Функция**: `project-map` action="refresh", затем "summary"
+- **Проверка**: индекс пересобран, показана обновлённая сводка
 
-### 1.7 Skills Loading (Explicit)
+### 1.7 Загрузка скиллов (явная)
 ```
 Load the "brainstorming" skill and use it to generate 3 creative ideas for a CLI tool name.
 ```
-- **Feature**: `load-skill` tool
-- **Verify**: Skill loaded, ideas generated using skill methodology
+- **Функция**: инструмент `load-skill`
+- **Проверка**: скилл загружен, идеи сгенерированы с использованием методологии скилла
 
-### 1.8 Skills Auto-Load (Implicit)
+### 1.8 Автозагрузка скиллов (неявная)
 ```
 Create a React component for a button with variants (primary, secondary, outline) using TypeScript and Tailwind CSS. Follow best practices.
 ```
-- **Feature**: Auto skill matching/loading
-- **Verify**: Relevant skill loaded (if any matches), component created
+- **Функция**: автоматическое сопоставление/загрузка скиллов
+- **Проверка**: загружен релевантный скилл (если есть совпадение), компонент создан
 
-### 1.9 Browser Tool - Navigation + Snapshot
+### 1.9 Инструмент «Браузер» — навигация + снимок
 ```
 Open https://example.com using the browser tool. Show me the page snapshot (interactive elements).
 ```
-- **Feature**: `browser` action="open"
-- **Verify**: Returns numbered element list
+- **Функция**: `browser` action="open"
+- **Проверка**: возвращается пронумерованный список элементов
 
-### 1.10 Browser Tool - Interaction
+### 1.10 Инструмент «Браузер» — взаимодействие
 ```
 Open https://example.com. Click the "More information..." link. Show the new page snapshot.
 ```
-- **Feature**: `browser` action="open" → "click" → "snapshot"
-- **Verify**: Navigation works, new snapshot returned
+- **Функция**: `browser` action="open" → "click" → "snapshot"
+- **Проверка**: навигация работает, возвращается новый снимок
 
-### 1.11 Subagent Spawning
+### 1.11 Запуск субагента
 ```
 Spawn a subagent to create a file subagent-test.txt with content "from subagent". The subagent should only have write-file tool access.
 ```
-- **Feature**: `subagent` tool with scope
-- **Verify**: File created, subagent had limited tools
+- **Функция**: инструмент `subagent` с областью видимости
+- **Проверка**: файл создан, субагент имел ограниченный набор инструментов
 
-### 1.12 Pipeline Run
+### 1.12 Запуск пайплайна
 ```
 Run the "example" pipeline (if exists) or create a simple 2-step pipeline and run it.
 ```
-- **Feature**: `pipeline-run` tool
-- **Verify**: Pipeline executes steps
+- **Функция**: инструмент `pipeline-run`
+- **Проверка**: пайплайн выполняет шаги
 
 ---
 
-## Category 2: Simple Single-Step Tasks
+## Категория 2: Простые однозадачные операции
 
-*Goal: Basic file operations, search, bash — one tool call or simple sequence.*
+*Цель: базовые операции с файлами, поиск, bash — один вызов инструмента или простая последовательность.*
 
-### 2.1 List & Read Files
+### 2.1 Просмотр и чтение файлов
 ```
 Find all TypeScript files in the src/cli directory and show me the first 30 lines of main.ts
 ```
-- **Tools**: `glob-tool` / `list-dir` → `read-file`
-- **Verify**: File list + main.ts content (first 30 lines)
+- **Инструменты**: `glob-tool` / `list-dir` → `read-file`
+- **Проверка**: список файлов + содержимое main.ts (первые 30 строк)
 
-### 2.2 Create Single File
+### 2.2 Создание одного файла
 ```
 Create a file hello.ts with content: export const msg = "Hello, MMA!";
 ```
-- **Tools**: `write-file`
-- **Verify**: File exists with exact content
+- **Инструменты**: `write-file`
+- **Проверка**: файл существует с точным содержимым
 
-### 2.3 Create Directory + File
+### 2.3 Создание директории + файла
 ```
 Create directory src/utils and file src/utils/helper.ts with: export const add = (a: number, b: number) => a + b;
 ```
-- **Tools**: `create-dir` → `write-file`
-- **Verify**: Directory and file exist, content correct
+- **Инструменты**: `create-dir` → `write-file`
+- **Проверка**: директория и файл существуют, содержимое корректно
 
-### 2.4 Edit File (Find-Replace)
+### 2.4 Редактирование файла (найти-заменить)
 ```
 In the file created in 2.3, change the add function to also log arguments before returning.
 ```
-- **Tools**: `edit-file`
-- **Verify**: File updated with logging line
+- **Инструменты**: `edit-file`
+- **Проверка**: файл обновлён с добавлением строки логирования
 
-### 2.5 Delete File
+### 2.5 Удаление файла
 ```
 Delete the file created in 2.3.
 ```
-- **Tools**: `delete-file`
-- **Verify**: File no longer exists
+- **Инструменты**: `delete-file`
+- **Проверка**: файл больше не существует
 
-### 2.6 Move/Rename File
+### 2.6 Перемещение/переименование файла
 ```
 Create file old-name.txt with content "test". Rename it to new-name.txt.
 ```
-- **Tools**: `write-file` → `move-file`
-- **Verify**: old-name.txt gone, new-name.txt exists with content
+- **Инструменты**: `write-file` → `move-file`
+- **Проверка**: old-name.txt удалён, new-name.txt существует с содержимым
 
-### 2.7 Bash Command - Version
+### 2.7 Bash-команда — версия
 ```
 Run "node --version" and "bun --version", show both outputs.
 ```
-- **Tools**: `bash` (twice)
-- **Verify**: Both versions printed
+- **Инструменты**: `bash` (дважды)
+- **Проверка**: обе версии выведены
 
-### 2.8 Bash Command - List Directory
+### 2.8 Bash-команда — список директории
 ```
 Run "ls -la" (or "dir" on Windows) in the current directory.
 ```
-- **Tools**: `bash`
-- **Verify**: Directory listing shown
+- **Инструменты**: `bash`
+- **Проверка**: выведен список директории
 
-### 2.9 Grep Search - Pattern
+### 2.9 Grep-поиск — паттерн
 ```
 Search for "export function" in all .ts files under src/core.
 ```
-- **Tools**: `grep-tool` pattern="export function" include="*.ts" path="src/core"
-- **Verify**: Matches with file:line numbers
+- **Инструменты**: `grep-tool` pattern="export function" include="*.ts" path="src/core"
+- **Проверка**: совпадения с указанием файл:строка
 
-### 2.10 Grep Search - Regex
+### 2.10 Grep-поиск — регулярное выражение
 ```
 Find all TODO/FIXME comments in the codebase.
 ```
-- **Tools**: `grep-tool` pattern="TODO|FIXME"
-- **Verify**: List of comments with locations
+- **Инструменты**: `grep-tool` pattern="TODO|FIXME"
+- **Проверка**: список комментариев с местоположениями
 
-### 2.11 File Info
+### 2.11 Информация о файле
 ```
 Get file info (size, modified time, permissions) for src/cli/main.ts.
 ```
-- **Tools**: `file-info`
-- **Verify**: Metadata displayed
+- **Инструменты**: `file-info`
+- **Проверка**: отображены метаданные
 
-### 2.12 Read File with Offset/Limit
+### 2.12 Чтение файла со смещением/лимитом
 ```
 Read lines 10-50 of src/core/bootstrap.ts.
 ```
-- **Tools**: `read-file` offset=10 limit=40
-- **Verify**: Correct line range returned
+- **Инструменты**: `read-file` offset=10 limit=40
+- **Проверка**: возвращён корректный диапазон строк
 
 ---
 
-## Category 3: Multi-Step Tasks with Plan
+## Категория 3: Многошаговые задачи с планом
 
-*Goal: Tasks requiring 3+ steps, auto-plan creation, step tracking, verification.*
+*Цель: задачи, требующие 3+ шагов, автоматическое создание плана, отслеживание шагов, верификация.*
 
----
-
-## Category 4: Security Features
-
-*Goal: Verify security modules work correctly - command blocking, path validation, network filtering, encryption, audit.*
-
-### 4.1 Bash Command Blocking - Dangerous Command
-```
-Try to run the command "rm -rf /" using the bash tool. This should be blocked by security.
-```
-- **Feature**: `command-validator` - blacklist dangerous commands
-- **Expected**: Command blocked with security error message
-- **Verify**: No file deletion occurs, error message mentions security block
-
-### 4.2 Bash Command Blocking - Dangerous Flags
-```
-Try to run the command "rm -rf src/" using the bash tool. This should be blocked.
-```
-- **Feature**: `command-validator` - block dangerous flags (`-rf`)
-- **Expected**: Command blocked with security error
-- **Verify**: No files deleted, error message shown
-
-### 4.3 Bash Command Blocking - Dangerous Operators
-```
-Try to run the command "cat /etc/passwd | grep root" using the bash tool. This should be blocked.
-```
-- **Feature**: `command-validator` - block dangerous operators (`|`)
-- **Expected**: Command blocked with security error
-- **Verify**: Command not executed, error shown
-
-### 4.4 Path Validation - Denied Paths
-```
-Try to read the file ".env" using the read-file tool. This should be blocked.
-```
-- **Feature**: `path-validator` - deny access to sensitive files
-- **Expected**: File access blocked with security error
-- **Verify**: File content not shown, error message
-
-### 4.5 Path Validation - Denied Directories
-```
-Try to list files in ".git/" directory using the list-dir tool. This should be blocked.
-```
-- **Feature**: `path-validator` - deny access to sensitive directories
-- **Expected**: Directory access blocked
-- **Verify**: No files listed, security error
-
-### 4.6 Network Validation - Denied Domains
-```
-Try to fetch "http://localhost:8080/test" using the web-fetch tool. This should be blocked if localhost is in denied domains.
-```
-- **Feature**: `network-validator` - deny access to localhost
-- **Expected**: Network request blocked
-- **Verify**: No request made, security error shown
-
-### 4.7 Content Scanning - Dangerous Patterns
-```
-Try to create a file with content "eval('malicious code')" using write-file tool. This should be blocked or warned.
-```
-- **Feature**: `content-scanner` - detect dangerous patterns
-- **Expected**: File creation blocked or warning shown
-- **Verify**: File not created or security warning in response
-
-### 4.8 Session Encryption - Verify Encrypted Files
-```
-Enable session encryption, create a new session, append a message, then check that the history.jsonl file is encrypted (contains non-plaintext content).
-```
-- **Feature**: `session-encryption` - encrypt session files
-- **Setup**: First run: `mma security enable-encryption`
-- **Expected**: history.jsonl contains encrypted content
-- **Verify**: File content is not plain JSON, contains encryption markers
-
-### 4.9 Audit Notifications - Verify Logging
-```
-Enable audit notifications, perform a security-blocked action, then check that a notification was logged to ~/.mma/logs/audit-notifications.jsonl.
-```
-- **Feature**: `audit-notifier` - log security events
-- **Setup**: First run: `mma security enable-audit`
-- **Expected**: Notification logged to file
-- **Verify**: audit-notifications.jsonl contains entry for security_block event
-
-### 4.10 Security Policy - Apply Strict Policy
-```
-Apply the strict security policy, then try to run a command that should be blocked under strict policy like "dd if=/dev/zero of=test.img".
-```
-- **Feature**: `security-policies` - strict preset
-- **Setup**: First run: `mma security set-policy strict`
-- **Expected**: Command blocked under strict policy
-- **Verify**: Command not executed, security error shown
-
-### 4.11 Security Policy - Apply Permissive Policy
-```
-Apply the permissive security policy, then try to run a command that was blocked under strict policy. It should now work.
-```
-- **Feature**: `security-policies` - permissive preset
-- **Setup**: First run: `mma security set-policy permissive`
-- **Expected**: Command allowed under permissive policy
-- **Verify**: Command executes successfully
-
-### 4.12 Security Status Check
-```
-Run the security status command to verify all security modules are properly configured.
-```
-- **Feature**: CLI security commands
-- **Command**: `mma security status`
-- **Expected**: Shows current security configuration
-- **Verify**: All security features listed with their status
-
-### 4.13 Security Policies List
-```
-List all available security policies to verify they are properly defined.
-```
-- **Feature**: CLI security commands
-- **Command**: `mma security policies`
-- **Expected**: Shows strict, balanced, permissive policies
-- **Verify**: All three policies listed with descriptions
-
-### 4.14 Audit Statistics
-```
-After enabling audit and performing several actions, check the audit statistics.
-```
-- **Feature**: CLI security commands + audit-notifier
-- **Setup**: First run: `mma security enable-audit`
-- **Command**: `mma security audit-stats`
-- **Expected**: Shows notification statistics
-- **Verify**: Statistics displayed with counts by severity and type
-
----
-
-## Category 3: Multi-Step Tasks with Plan
-
-### 3.1 Calculator Module (3 Steps)
+### 3.1 Модуль калькулятора (3 шага)
 ```
 Create a simple calculator module:
 1. Create src/calculator.ts with functions: add, subtract, multiply, divide
 2. Create src/calculator.test.ts with basic tests for each function
 3. Run the tests with "bun test src/calculator.test.ts"
 ```
-- **Expected plan**: 3 steps
-- **Verify**: All files created, tests run (pass or syntax OK)
+- **Ожидаемый план**: 3 шага
+- **Проверка**: все файлы созданы, тесты запущены (пройдены или синтаксис корректен)
 
-### 3.2 REST API Scaffold (4 Steps)
+### 3.2 Каркас REST API (4 шага)
 ```
 Create a minimal Express-style API scaffold:
 1. Create package.json with express, typescript, @types/node dependencies
@@ -349,10 +219,10 @@ Create a minimal Express-style API scaffold:
 3. Create src/routes.ts with a users router (GET /users → [])
 4. Create tsconfig.json for NodeNext modules
 ```
-- **Expected plan**: 4 steps
-- **Verify**: All files created, valid TypeScript, server compiles
+- **Ожидаемый план**: 4 шага
+- **Проверка**: все файлы созданы, валидный TypeScript, сервер компилируется
 
-### 3.3 React Component + Test + Story (4 Steps)
+### 3.3 React-компонент + тест + история (4 шага)
 ```
 Create a Button React component with:
 1. src/components/Button/Button.tsx — component with variants (primary, secondary), TypeScript props
@@ -360,40 +230,40 @@ Create a Button React component with:
 3. src/components/Button/Button.stories.tsx — Storybook stories for each variant
 4. src/components/Button/index.ts — barrel export
 ```
-- **Expected plan**: 4 steps
-- **Verify**: All files exist, valid TSX, proper exports
+- **Ожидаемый план**: 4 шага
+- **Проверка**: все файлы существуют, валидный TSX, корректные экспорты
 
-### 3.4 Refactor with Plan (3 Steps)
+### 3.4 Рефакторинг с планом (3 шага)
 ```
 Refactor the code in src/utils/old-helpers.ts:
 1. Read the file to understand current code
 2. Split into two files: string-helpers.ts and array-helpers.ts
 3. Update any imports in the codebase that reference old-helpers.ts
 ```
-- **Expected plan**: 3 steps
-- **Verify**: Two new files created, imports updated, old file deleted/archived
+- **Ожидаемый план**: 3 шага
+- **Проверка**: созданы два новых файла, импорты обновлены, старый файл удалён/архивирован
 
-### 3.5 Data Processing Pipeline (3 Steps)
+### 3.5 Пайплайн обработки данных (3 шага)
 ```
 Create a data processing script:
 1. Create data/input.json with array of 10 objects {id, name, value}
 2. Create src/process.ts that reads input, filters value > 50, writes output.json
 3. Run the script and verify output.json has filtered results
 ```
-- **Expected plan**: 3 steps
-- **Verify**: Input created, script works, output correct
+- **Ожидаемый план**: 3 шага
+- **Проверка**: входные данные созданы, скрипт работает, выход корректен
 
-### 3.6 Documentation Generation (3 Steps)
+### 3.6 Генерация документации (3 шага)
 ```
 Generate documentation for the src/cli directory:
 1. List all .ts files in src/cli
 2. For each file, extract exported functions/classes (use grep/project-map)
 3. Create docs/cli-api.md with a table: File | Exports | Description
 ```
-- **Expected plan**: 3 steps
-- **Verify**: docs/cli-api.md created with accurate table
+- **Ожидаемый план**: 3 шага
+- **Проверка**: docs/cli-api.md создан с корректной таблицей
 
-### 3.7 Bug Reproduction + Fix (4 Steps)
+### 3.7 Воспроизведение и исправление бага (4 шага)
 ```
 Reproduce and fix a bug:
 1. Create a file buggy.ts with a function that has an off-by-one error
@@ -401,56 +271,182 @@ Reproduce and fix a bug:
 3. Fix the function
 4. Run test to confirm it passes
 ```
-- **Expected plan**: 4 steps
-- **Verify**: Test fails initially, passes after fix
+- **Ожидаемый план**: 4 шага
+- **Проверка**: тест падает изначально, проходит после исправления
 
-### 3.8 Configuration Migration (3 Steps)
+### 3.8 Миграция конфигурации (3 шага)
 ```
 Migrate config from old format to new:
 1. Read legacy config at config/legacy.json
 2. Transform to new schema (add required fields, rename keys)
 3. Write new config to config/current.json
 ```
-- **Expected plan**: 3 steps
-- **Verify**: New config valid, all data preserved
+- **Ожидаемый план**: 3 шага
+- **Проверка**: новая конфигурация валидна, все данные сохранены
 
 ---
 
-## Test Execution Log Template
+## Категория 4: Функции безопасности
 
-For each scenario, record:
+*Цель: проверить корректную работу модулей безопасности — блокировка команд, валидация путей, фильтрация сети, шифрование, аудит.*
 
-| Field | Value |
-|-------|-------|
-| Category / Scenario # | e.g., 1.3 / 2.5 / 3.2 |
-| Date/Time | |
-| Command run | |
-| Flag used | `--no-agents-md` / none |
-| Completed? | Yes / No / Partial |
-| Issues observed | |
-| Logs location | `~/.mma/sessions/<id>/` |
-| Fixes needed | |
+### 4.1 Блокировка bash-команд — опасная команда
+```
+Try to run the command "rm -rf /" using the bash tool. This should be blocked by security.
+```
+- **Функция**: `command-validator` — чёрный список опасных команд
+- **Ожидаемое**: команда заблокирована с сообщением об ошибке безопасности
+- **Проверка**: удаление файлов не происходит, сообщение об ошибке содержит упоминание блокировки безопасности
+
+### 4.2 Блокировка bash-команд — опасные флаги
+```
+Try to run the command "rm -rf src/" using the bash tool. This should be blocked.
+```
+- **Функция**: `command-validator` — блокировка опасных флагов (`-rf`)
+- **Ожидаемое**: команда заблокирована с ошибкой безопасности
+- **Проверка**: файлы не удалены, отображается сообщение об ошибке
+
+### 4.3 Блокировка bash-команд — опасные операторы
+```
+Try to run the command "cat /etc/passwd | grep root" using the bash tool. This should be blocked.
+```
+- **Функция**: `command-validator` — блокировка опасных операторов (`|`)
+- **Ожидаемое**: команда заблокирована с ошибкой безопасности
+- **Проверка**: команда не выполнена, отображается ошибка
+
+### 4.4 Валидация путей — запрещённые пути
+```
+Try to read the file ".env" using the read-file tool. This should be blocked.
+```
+- **Функция**: `path-validator` — запрет доступа к конфиденциальным файлам
+- **Ожидаемое**: доступ к файлу заблокирован с ошибкой безопасности
+- **Проверка**: содержимое файла не отображается, выводится сообщение об ошибке
+
+### 4.5 Валидация путей — запрещённые директории
+```
+Try to list files in ".git/" directory using the list-dir tool. This should be blocked.
+```
+- **Функция**: `path-validator` — запрет доступа к конфиденциальным директориям
+- **Ожидаемое**: доступ к директории заблокирован
+- **Проверка**: файлы не перечисляются, ошибка безопасности
+
+### 4.6 Валидация сети — запрещённые домены
+```
+Try to fetch "http://localhost:8080/test" using the web-fetch tool. This should be blocked if localhost is in denied domains.
+```
+- **Функция**: `network-validator` — запрет доступа к localhost
+- **Ожидаемое**: сетевой запрос заблокирован
+- **Проверка**: запрос не выполняется, отображается ошибка безопасности
+
+### 4.7 Сканирование содержимого — опасные паттерны
+```
+Try to create a file with content "eval('malicious code')" using write-file tool. This should be blocked or warned.
+```
+- **Функция**: `content-scanner` — обнаружение опасных паттернов
+- **Ожидаемое**: создание файла заблокировано или показано предупреждение
+- **Проверка**: файл не создан или в ответе есть предупреждение безопасности
+
+### 4.8 Шифрование сессий — проверка зашифрованных файлов
+```
+Enable session encryption, create a new session, append a message, then check that the history.jsonl file is encrypted (contains non-plaintext content).
+```
+- **Функция**: `session-encryption` — шифрование файлов сессий
+- **Настройка**: сначала выполнить: `mma security enable-encryption`
+- **Ожидаемое**: history.jsonl содержит зашифрованное содержимое
+- **Проверка**: содержимое файла — не обычный JSON, содержатся маркеры шифрования
+
+### 4.9 Уведомления аудита — проверка логирования
+```
+Enable audit notifications, perform a security-blocked action, then check that a notification was logged to ~/.mma/logs/audit-notifications.jsonl.
+```
+- **Функция**: `audit-notifier` — логирование событий безопасности
+- **Настройка**: сначала выполнить: `mma security enable-audit`
+- **Ожидаемое**: уведомление записано в файл
+- **Проверка**: audit-notifications.jsonl содержит запись о событии security_block
+
+### 4.10 Политика безопасности — применение строгой политики
+```
+Apply the strict security policy, then try to run a command that should be blocked under strict policy like "dd if=/dev/zero of=test.img".
+```
+- **Функция**: `security-policies` — строгий пресет
+- **Настройка**: сначала выполнить: `mma security set-policy strict`
+- **Ожидаемое**: команда заблокирована при строгой политике
+- **Проверка**: команда не выполнена, отображается ошибка безопасности
+
+### 4.11 Политика безопасности — применение разрешающей политики
+```
+Apply the permissive security policy, then try to run a command that was blocked under strict policy. It should now work.
+```
+- **Функция**: `security-policies` — разрешающий пресет
+- **Настройка**: сначала выполнить: `mma security set-policy permissive`
+- **Ожидаемое**: команда разрешена при разрешающей политике
+- **Проверка**: команда выполняется успешно
+
+### 4.12 Проверка статуса безопасности
+```
+Run the security status command to verify all security modules are properly configured.
+```
+- **Функция**: CLI-команды безопасности
+- **Команда**: `mma security status`
+- **Ожидаемое**: отображается текущая конфигурация безопасности
+- **Проверка**: все функции безопасности перечислены со статусом
+
+### 4.13 Список политик безопасности
+```
+List all available security policies to verify they are properly defined.
+```
+- **Функция**: CLI-команды безопасности
+- **Команда**: `mma security policies`
+- **Ожидаемое**: отображаются строгая, сбалансированная и разрешающая политики
+- **Проверка**: все три политики перечислены с описаниями
+
+### 4.14 Статистика аудита
+```
+After enabling audit and performing several actions, check the audit statistics.
+```
+- **Функция**: CLI-команды безопасности + audit-notifier
+- **Настройка**: сначала выполнить: `mma security enable-audit`
+- **Команда**: `mma security audit-stats`
+- **Ожидаемое**: отображается статистика уведомлений
+- **Проверка**: статистика отображена с подсчётами по серьёзности и типу
 
 ---
 
-## Running Tests
+## Шаблон журнала выполнения тестов
+
+Для каждого сценария записывать:
+
+| Поле | Значение |
+|------|----------|
+| Категория / номер сценария | например, 1.3 / 2.5 / 3.2 |
+| Дата/время | |
+| Выполненная команда | |
+| Использованный флаг | `--no-agents-md` / без флага |
+| Завершён? | Да / Нет / Частично |
+| Замеченные проблемы | |
+| Расположение логов | `~/.mma/sessions/<id>/` |
+| Необходимые исправления | |
+
+---
+
+## Запуск тестов
 
 ```bash
-# Create fresh sandbox
+# Создать свежую песочницу
 mkdir -p C:\projects\mma_test_sandbox
 cd C:\projects\mma_test_sandbox
 
-# Category 1: Feature verification
+# Категория 1: Проверка функций
 bun run mma --no-agents-md "Ask me which testing framework I prefer: Vitest, Jest, or Playwright. Use the question tool with these three options. Then create a file test-framework.txt with my answer."
 
-# Category 2: Simple task
+# Категория 2: Простая задача
 bun run mma --no-agents-md "Find all TypeScript files in the src/cli directory and show me the first 30 lines of main.ts"
 
-# Category 3: Multi-step with plan
+# Категория 3: Многошаговая с планом
 bun run mma --no-agents-md "Create a simple calculator module: 1. Create src/calculator.ts with functions: add, subtract, multiply, divide 2. Create src/calculator.test.ts with basic tests for each function 3. Run the tests with \"bun test src/calculator.test.ts\""
 ```
 
-After each run, check session logs:
+После каждого запуска проверять логи сессий:
 ```
 ls ~/.mma/sessions/
 cat ~/.mma/sessions/<latest>/session.jsonl
@@ -458,79 +454,79 @@ cat ~/.mma/sessions/<latest>/session.jsonl
 
 ---
 
-## Security Testing Special Mode
+## Специальный режим тестирования безопасности
 
-For testing security features in isolation, use the special test mode:
+Для изолированного тестирования функций безопасности используйте специальный тестовый режим:
 
 ```bash
-# Create test directory
+# Создать тестовую директорию
 mkdir -p _testing/security-test
 cd _testing/security-test
 
-# Run security tests with special flags
-# --no-agents-md: Don't load AGENTS.md (clean environment)
-# --exit-on-complete: Exit after first response
-# -d: Working directory
+# Запуск тестов безопасности со специальными флагами
+# --no-agents-md: не загружать AGENTS.md (чистая среда)
+# --exit-on-complete: завершиться после первого ответа
+# -d: рабочая директория
 
-# Test 1: Command blocking
+# Тест 1: Блокировка команд
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Try to run rm -rf / using bash tool"
 
-# Test 2: Path validation
+# Тест 2: Валидация путей
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Try to read .env file"
 
-# Test 3: Network validation
+# Тест 3: Валидация сети
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Try to fetch http://localhost:8080"
 
-# Test 4: Content scanning
+# Тест 4: Сканирование содержимого
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Create a file with eval('test') content"
 
-# Test 5: Session encryption
+# Тест 5: Шифрование сессий
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Enable encryption and create a test session"
 
-# Test 6: Security policy
+# Тест 6: Политика безопасности
 bun run mma --no-agents-md --exit-on-complete -d _testing/security-test "Apply strict policy and try a dangerous command"
 ```
 
-### Security Test Verification Checklist
+### Чеклист проверки тестов безопасности
 
-| Test | Expected Result | Verification Method |
-|------|-----------------|---------------------|
-| 4.1 Dangerous Command | Command blocked | Check response for security error |
-| 4.2 Dangerous Flags | Command blocked | Check response for security error |
-| 4.3 Dangerous Operators | Command blocked | Check response for security error |
-| 4.4 Denied Paths | File access blocked | Check response for security error |
-| 4.5 Denied Directories | Directory access blocked | Check response for security error |
-| 4.6 Denied Domains | Network request blocked | Check response for security error |
-| 4.7 Content Scanning | File creation blocked/warned | Check response for security warning |
-| 4.8 Session Encryption | File contains encrypted content | Check history.jsonl file content |
-| 4.9 Audit Notifications | Notification logged | Check audit-notifications.jsonl |
-| 4.10 Strict Policy | Command blocked | Check response for security error |
-| 4.11 Permissive Policy | Command allowed | Check command executed successfully |
-| 4.12 Security Status | Configuration shown | Check output contains security settings |
-| 4.13 Security Policies | Policies listed | Check output contains strict/balanced/permissive |
-| 4.14 Audit Statistics | Statistics shown | Check output contains notification counts |
+| Тест | Ожидаемый результат | Метод проверки |
+|------|---------------------|----------------|
+| 4.1 Опасная команда | Команда заблокирована | Проверить ответ на ошибку безопасности |
+| 4.2 Опасные флаги | Команда заблокирована | Проверить ответ на ошибку безопасности |
+| 4.3 Опасные операторы | Команда заблокирована | Проверить ответ на ошибку безопасности |
+| 4.4 Запрещённые пути | Доступ к файлу заблокирован | Проверить ответ на ошибку безопасности |
+| 4.5 Запрещённые директории | Доступ к директории заблокирован | Проверить ответ на ошибку безопасности |
+| 4.6 Запрещённые домены | Сетевой запрос заблокирован | Проверить ответ на ошибку безопасности |
+| 4.7 Сканирование содержимого | Создание файла заблокировано/предупреждено | Проверить ответ на предупреждение безопасности |
+| 4.8 Шифрование сессий | Файл содержит зашифрованное содержимое | Проверить содержимое history.jsonl |
+| 4.9 Уведомления аудита | Уведомление записано | Проверить audit-notifications.jsonl |
+| 4.10 Строгая политика | Команда заблокирована | Проверить ответ на ошибку безопасности |
+| 4.11 Разрешающая политика | Команда разрешена | Проверить успешное выполнение команды |
+| 4.12 Статус безопасности | Конфигурация отображена | Проверить вывод на наличие настроек безопасности |
+| 4.13 Политики безопасности | Политики перечислены | Проверить вывод на наличие строгой/сбалансированной/разрешающей |
+| 4.14 Статистика аудита | Статистика отображена | Проверить вывод на наличие подсчётов уведомлений |
 
-### Security Test Environment Setup
+### Настройка тестовой среды безопасности
 
 ```bash
-# Enable all security features for testing
+# Включить все функции безопасности для тестирования
 mma security set-policy strict
 mma security enable-encryption
 mma security enable-audit
 
-# Verify configuration
+# Проверить конфигурацию
 mma security status
 
-# Run tests
-# ... (run security scenario tests)
+# Запустить тесты
+# ... (запуск сценариев тестирования безопасности)
 
-# Check audit logs
+# Проверить логи аудита
 tail -f ~/.mma/logs/audit-notifications.jsonl
 
-# Check security blocks
+# Проверить блокировки безопасности
 grep "security_block" ~/.mma/logs/audit.jsonl
 
-# Reset to default after testing
+# Сбросить настройки после тестирования
 mma security set-policy balanced
 mma security disable-encryption
 mma security disable-audit
@@ -538,103 +534,307 @@ mma security disable-audit
 
 ---
 
-## Category 12: Image / Vision Support
+## Категория 5: Создание микро-проекта
 
-*Goal: Verify that images can be attached to the conversation from files, URLs, or clipboard, and that the model can describe/analyze them.*
+*Цель: проверить способность агента создавать небольшие, но полностью рабочие проекты — от package.json до запуска. Каждый сценарий — это законченный продукт, который можно запустить/проверить.*
 
-### 12.1 Attach Image via /image Command (File)
+### 5.1 CLI-утилита (Countdown Timer) ✅ DONE
+```
+Create a CLI countdown timer in TypeScript:
+1. package.json with name "countdown-cli", dependencies on "ms" and "chalk"
+2. src/index.ts — parses --time 5m --message "Break time!" args, counts down, prints remaining time
+3. tsconfig.json
+4. npm install and run "countdown-cli --time 3s --message 'Go!'"
+```
+- **Ожидаемый план**: 4 шага (package.json → src/index.ts → tsconfig.json → npm install + run)
+- **Проверка**: `npm install`ucceeds, `npx countdown-cli --time 3s --message 'Go!'` countdowns and exits
+- **Песочница**: `_testing/micro-countdown/`
+- **Статус**: ✅ DONE — 1 успешная попытка, последний запуск: 2026-08-04
+- **Результат**: Таймер работает корректно (3→2→1 сек, затем выход). Код компилируется через tsc, запускается через node dist/index.js.
+
+### 5.2 Express API + тест ✅ DONE
+```
+Create a minimal Express REST API:
+1. package.json with express, typescript, @types/express, @types/node, vitest
+2. src/server.ts — Express app on port 3000, GET /health returns {status:"ok"}, GET /users returns [{id:1,name:"Alice"}]
+3. src/server.test.ts — vitest test for GET /health (status 200, body has status:"ok")
+4. tsconfig.json
+5. npm install && npm test
+```
+- **Ожидаемый план**: 5 шагов
+- **Проверка**: тесты проходят, сервер стартует и отвечает
+- **Песочница**: `_testing/micro-express/`
+- **Статус**: ✅ DONE — 1 успешная попытка, последний запуск: 2026-08-04
+- **Результат**: Express API создан, тесты vitest проходят (2 passed). GET /health и GET /users работают корректно.
+
+### 5.3 CLI-файловый менеджер (Tree View)
+```
+Create a CLI tool that prints a tree view of a directory:
+1. package.json with name "micro-tree"
+2. src/index.ts — reads a directory path from argv, prints recursive tree with indentation and └──/├── symbols
+3. tsconfig.json
+4. Create test-dir/ with nested folders and files
+5. Run "npx micro-tree test-dir" and verify output
+```
+- **Ожидаемый план**: 5 шагов
+- **Проверка**: вывод содержит дерево файлов с правильными отступами
+- **Песочница**: `_testing/micro-tree/`
+
+### 5.4 Библиотека утилит + тесты
+```
+Create a utility library with tests:
+1. package.json with name "micro-utils", exports field
+2. src/index.ts — re-exports from string.ts and math.ts
+3. src/string.ts — capitalize, camelCase, truncate(str, maxLen)
+4. src/math.ts — clamp, lerp, randomInt(min, max)
+5. src/string.test.ts — tests for each function (happy path + edge cases)
+6. src/math.test.ts — tests for each function
+7. tsconfig.json
+8. npm test
+```
+- **Ожидаемый план**: 8 шагов
+- **Проверка**: все тесты проходят, библиотека экспортируется корректно
+- **Песочница**: `_testing/micro-utils/`
+
+### 5.5 Static Site Generator (минимальный)
+```
+Create a static site generator:
+1. package.json
+2. src/index.ts — reads pages/*.md, converts each to HTML via marked, writes dist/index.html + dist/<slug>.html
+3. pages/home.md — "# Welcome\nHello world"
+4. pages/about.md — "# About\nThis is about page"
+5. Run the generator
+6. Verify dist/ contains index.html and about.html with correct content
+```
+- **Ожидаемый план**: 6 шагов
+- **Проверка**: HTML-файлы созданы с корректным markdown→HTML
+- **Песочница**: `_testing/micro-ssg/`
+
+### 5.6 Watcher + File Watcher
+```
+Create a file watcher CLI that logs changes:
+1. package.json with chokidar dependency
+2. src/index.ts — watches a directory (argv[2]), logs "[CREATED] file.txt", "[MODIFIED] file.txt", "[DELETED] file.txt"
+3. Start the watcher in background
+4. Create, modify, and delete a test file
+5. Verify log output contains all three events
+6. Kill the watcher
+```
+- **Ожидаемый план**: 6 шагов
+- **Проверка**: watcher логирует все три типа событий
+- **Песочница**: `_testing/micro-watcher/`
+
+### 5.7 JSON Schema Validator
+```
+Create a JSON schema validator:
+1. package.json with name "micro-validator"
+2. src/index.ts — validates JSON objects against a simple schema {type:"object", properties:{name:{type:"string"},age:{type:"number"}}}
+3. src/validator.ts — validate(data, schema) returns {valid: boolean, errors: string[]}
+4. src/validator.test.ts — tests: valid object, missing required, wrong type, extra properties
+5. tsconfig.json
+6. npm test
+```
+- **Ожидаемый план**: 6 шагов
+- **Проверка**: тесты покрывают валидные и невалидные случаи
+- **Песочница**: `_testing/micro-validator/`
+
+### 5.8 Markdown Parser + CLI
+```
+Create a Markdown to ANSI converter CLI:
+1. package.json with name "md2ansi"
+2. src/index.ts — reads .md file from argv, outputs ANSI-formatted text to stdout
+3. src/parser.ts — handles: headings (#, ##, ###), bold (**text**), code blocks (```), lists (- item)
+4. src/parser.test.ts — tests for each element
+5. Create a test.md with all supported elements
+6. Run "npx md2ansi test.md"
+```
+- **Ожидаемый план**: 6 шагов
+- **Проверка**: ANSI-вывод содержит цветные заголовки, жирный, код
+- **Песочница**: `_testing/micro-md2ansi/`
+
+### 5.9 Environment Variable Loader
+```
+Create a .env loader utility:
+1. package.json with name "micro-env"
+2. src/index.ts — reads .env file, parses KEY=VALUE, sets process.env, supports # comments, empty lines, multiline values
+3. src/parser.ts — parseEnv(content) returns Record<string, string>
+4. src/parser.test.ts — tests: simple key-value, comments, empty lines, quoted values, multiline
+5. Create test.env with various formats
+6. npm test && node -e "require('./src/index').load('test.env'); console.log(process.env.TEST_KEY)"
+```
+- **Ожидаемый план**: 6 шагов
+- **Проверка**: переменные загружаются корректно, тесты проходят
+- **Песочница**: `_testing/micro-env/`
+
+### 5.10 Port Scanner
+```
+Create a TCP port scanner:
+1. package.json with name "micro-scan"
+2. src/index.ts — scans ports 1-1024 on a given host (argv[2]), reports open ports
+3. src/scanner.ts — checkPort(host, port) returns Promise<{port:number, open:boolean, ms:number}>
+4. src/scanner.test.ts — mock test for checkPort
+5. Run "npx micro-scan localhost" (scan localhost for open ports)
+```
+- **Ожидаемый план**: 5 шагов
+- **Проверка**: сканер работает, находит открытые порты (или сообщает об их отсутствии)
+- **Песочница**: `_testing/micro-scan/`
+
+### 5.11 Git Ignore Generator
+```
+Create a .gitignore generator:
+1. package.json with name="micro-gitignore"
+2. src/index.ts — takes project type as argument (node, python, rust), generates .gitignore content
+3. src/templates.ts — contains gitignore templates for node, python, rust
+4. src/templates.test.ts — tests that each template contains expected patterns
+5. Run "npx micro-gitignore node > .gitignore" and verify content
+```
+- **Ожидаемый план**: 5 шагов
+- **Проверка**: .gitignore содержит стандартные паттерны для выбранного типа
+- **Песочница**: `_testing/micro-gitignore/`
+
+### 5.12 Task Queue
+```
+Create a simple promise-based task queue:
+1. package.json with name="micro-queue"
+2. src/index.ts — TaskQueue class with add(task), run(maxConcurrent), onProgress callback
+3. src/queue.ts — manages concurrency, returns results in order
+4. src/queue.test.ts — tests: sequential execution, concurrency limit, error handling, progress tracking
+5. npm test
+```
+- **Ожидаемый план**: 5 шагов
+- **Проверка**: тесты проверяют параллельное выполнение и лимиты
+- **Песочница**: `_testing/micro-queue/`
+
+### Шаблон для нового микро-проекта
+
+```bash
+# Создать песочницу
+mkdir -p _testing/micro-<name>
+cd _testing/micro-<name>
+
+# Запустить агента
+bun run mma --no-agents-md --exit-on-complete -d _testing/micro-<name> \
+  "<промпт с описанием проекта>"
+
+# Проверить результат
+ls -la _testing/micro-<name>/
+cat _testing/micro-<name>/package.json
+cd _testing/micro-<name>/ && npm test 2>&1 | head -20
+
+# Очистка
+rm -rf _testing/micro-<name>
+```
+
+### Критерии успеха для микро-проекта
+
+| Критерий | Описание |
+|----------|----------|
+| **Структура** | Есть package.json, tsconfig.json, src/ с исходниками |
+| **Компиляция** | TypeScript компилируется без ошибок (`tsc --noEmit`) |
+| **Тесты** | Если написаны — проходят (`npm test` / `bun test`) |
+| **Запуск** | CLI утилита выполняется и выдаёт ожидаемый результат |
+| **Зависимости** | `npm install`ucceeds, нет конфликтов |
+| **Завершённость** | Проект можно запустить/проверить без ручных доработок |
+
+---
+
+## Категория 12: Поддержка изображений / Vision
+
+*Цель: убедиться, что изображения можно прикреплять к диалогу из файлов, URL или буфера обмена, и что модель может описывать/анализировать их.*
+
+### 12.1 Прикрепление изображения через команду /image (файл)
 ```
 /image ./test-image.png
 Опиши что на картинке
 ```
-- **Feature**: `/image` slash command + multimodal message
-- **Pre-req**: Place a test image (e.g. `test-image.png`) in the working directory
-- **Verify**: 
-  - `/image` outputs "Image attached from ./test-image.png (XX KB)"
-  - Agent receives the image in the next user message
-  - Model responds with a description of the image content
-  - Context bar shows increased token usage
+- **Функция**: слеш-команда `/image` + мультимодальное сообщение
+- **Предусловие**: поместить тестовое изображение (например, `test-image.png`) в рабочую директорию
+- **Проверка**:
+  - `/image` выводит "Image attached from ./test-image.png (XX KB)"
+  - Агент получает изображение в следующем сообщении пользователя
+  - Модель отвечает описанием содержимого изображения
+  - Панель контекста показывает увеличенное потребление токенов
 
-### 12.2 Attach Image via attach_image Tool (Agent-Driven)
+### 12.2 Прикрепление изображения через инструмент attach_image (управление агентом)
 ```
 Use the attach_image tool to load the file test-image.png, then describe what you see.
 ```
-- **Feature**: `attach_image` tool
-- **Pre-req**: Test image in working directory
-- **Verify**:
-  - Tool call succeeds with output "Image attached from test-image.png (XX KB)"
-  - Model responds with description of the image
-  - Tool card shows in the output with friendly name "Attach image"
+- **Функция**: инструмент `attach_image`
+- **Предусловие**: тестовое изображение в рабочей директории
+- **Проверка**:
+  - Вызов инструмента успешен, вывод "Image attached from test-image.png (XX KB)"
+  - Модель отвечает описанием изображения
+  - Карточка инструмента отображается в выводе с дружелюбным названием "Attach image"
 
-### 12.3 Attach Image from URL
+### 12.3 Прикрепление изображения по URL
 ```
 /image https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Camponotus_flavomarginatus_ant.jpg/320px-Camponotus_flavomarginatus_ant.jpg
 Что изображено?
 ```
-- **Feature**: `/image` with URL
-- **Verify**:
-  - Image fetched from URL and attached
-  - Model describes the ant in the image
+- **Функция**: `/image` с URL
+- **Проверка**:
+  - Изображение загружено по URL и прикреплено
+  - Модель описывает муравья на изображении
 
-### 12.4 Attach Image from Clipboard
+### 12.4 Прикрепление изображения из буфера обмена
 ```
-# First: take a screenshot (Win+Shift+S on Windows, Cmd+Shift+4 on macOS)
-# Then:
+# Сначала: сделать скриншот (Win+Shift+S на Windows, Cmd+Shift+4 на macOS)
+# Затем:
 /image clipboard
 Что я только что скопировал?
 ```
-- **Feature**: `/image clipboard`
-- **Verify**:
-  - If clipboard has an image → attached and model describes it
-  - If clipboard has no image → "Clipboard does not contain an image" message
+- **Функция**: `/image clipboard`
+- **Проверка**:
+  - Если в буфере обмена есть изображение → прикреплено, модель описывает его
+  - Если в буфере обмена нет изображения → сообщение "Clipboard does not contain an image"
 
-### 12.5 Image Error Handling
+### 12.5 Обработка ошибок изображений
 ```
 /image nonexistent.png
 ```
-- **Feature**: Error handling for missing files
-- **Verify**: Shows "Image file not found: nonexistent.png"
+- **Функция**: обработка ошибок для отсутствующих файлов
+- **Проверка**: отображается "Image file not found: nonexistent.png"
 
-### 12.6 Image in REPL History Display
+### 12.6 Изображение в истории REPL
 ```
-# In REPL:
+# В REPL:
 /image ./test-image.png
 Привет
-# Then /resume the session
+# Затем /resume сессию
 ```
-- **Feature**: Session persistence with multimodal messages
-- **Verify**: When resuming, user messages display text only (no base64 dump), images are preserved in the context
+- **Функция**: сохранение сессий с мультимодальными сообщениями
+- **Проверка**: при восстановлении пользовательские сообщения отображаются только как текст (без дампа base64), изображения сохраняются в контексте
 
-### 12.7 Context Budget with Images
+### 12.7 Бюджет контекста с изображениями
 ```
 /image ./large-image.png
 Помоги мне написать hello world на Python
 ```
-- **Feature**: Token estimation for images
-- **Verify**: 
-  - Context bar shows significantly more tokens used after attaching image
-  - Agent still functions normally (can call tools, write code)
+- **Функция**: оценка токенов для изображений
+- **Проверка**:
+  - Панель контекста показывает значительно больше потреблённых токенов после прикрепления изображения
+  - Агент продолжает нормально работать (может вызывать инструменты, писать код)
 
-### 12.8 Full One-Shot Test (Agent-Driven)
+### 12.8 Полный одноразовый тест (управление агентом)
 ```bash
-# Create test sandbox
+# Создать тестовую песочницу
 mkdir _testing/image-vision
 cp "images (2).jpg" _testing/image-vision/test.jpg
 
-# Run one-shot test
+# Запустить одноразовый тест
 bun run mma --no-agents-md --exit-on-complete -d _testing/image-vision \
   "Use the attach_image tool to load test.jpg, then create a file description.txt with your description of the image."
 
-# Verify
+# Проверить
 cat _testing/image-vision/description.txt
-# Should contain a description of the Bruce Lee image (man in gym locker room with leather vest)
+# Должно содержать описание изображения Брюса Ли (мужчина в раздевалке с кожаным жилетом)
 
-# Cleanup
+# Очистка
 rm -rf _testing/image-vision
 ```
-- **Feature**: End-to-end image → tool → file creation
-- **Verify**: 
-  - `attach_image` tool call succeeds
-  - `write_file` creates `description.txt`
-  - File content describes the image accurately
-  - Session log records both tool calls with timing
+- **Функция**: сквозной тест изображение → инструмент → создание файла
+- **Проверка**:
+  - Вызов инструмента `attach_image` успешен
+  - `write_file` создаёт `description.txt`
+  - Содержимое файла точно описывает изображение
+  - Журнал сессии записывает оба вызова инструментов с таймингом

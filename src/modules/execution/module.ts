@@ -12,9 +12,11 @@ import { PlanPersister } from "./plan-persister";
 import type { Plan } from "./planner";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
+import { suggestSkill } from "../skills/error-skill-map";
 
 const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
+const FORCE_SKIP_THRESHOLD = 15;
 
 export class ExecutionModule implements AgentModule {
   name = "execution";
@@ -302,12 +304,56 @@ export class ExecutionModule implements AgentModule {
           ) {
             const recovery = this.stuckDetector.getRecoveryMessage();
             if (recovery && ctx.contextManager) {
+              const lastError = this.stuckDetector.getLastErrorOutput();
+              const suggestedSkill = suggestSkill(lastError);
+              const skillHint = suggestedSkill
+                ? `\nConsider loading the "${suggestedSkill}" skill for expert guidance on this error.`
+                : '';
+
+              // Actionable hints based on actual error output
+              const actionableHints = this.stuckDetector.getActionableHints();
+              const actionableHintStr = actionableHints.length > 0
+                ? `\n${t("exec.hints", { hints: actionableHints.map(h => `- ${h}`).join('\n') })}`
+                : '';
+
+              // Tool alternative suggestion
+              const alternative = this.stuckDetector.getToolAlternative();
+              const altHint = alternative
+                ? `\nTool "${this.stuckDetector.getLastFailedTool()}" is failing. Try "${alternative}" instead.`
+                : '';
+
               ctx.contextManager.addMessage({
                 role: "user",
-                content: `<system-summary>${recovery}</system-summary>`,
+                content: `<system-summary>${recovery}${skillHint}${actionableHintStr}${altHint}</system-summary>`,
               });
             }
+            const hints = this.stuckDetector.getHints()
+            if (hints.length > 0 && ctx.contextManager) {
+              const hintMsg = t("exec.hints", { hints: hints.map(h => `- ${h}`).join('\n') })
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>${hintMsg}</system-summary>`,
+              })
+            }
+            this.stuckDetector.recordEscalation();
             this.lastRecoveryIteration = currentIter;
+
+            if (this.stuckDetector.shouldEscalate() && ctx.onMeta) {
+              const escalation = t("exec.escalation", {
+                stepId: String(this.tracker?.getCurrentStep()?.id ?? "?"),
+                description: this.tracker?.getCurrentStep()?.description ?? "",
+              });
+              ctx.onMeta(escalation);
+            }
+
+            // Force skip after too many iterations on the same step
+            if (this.stuckDetector.getIterationsOnCurrentStep() >= FORCE_SKIP_THRESHOLD && ctx.contextManager) {
+              const step = this.tracker?.getCurrentStep();
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>CRITICAL: You have been stuck on step ${step?.id ?? "?"} ("${step?.description ?? ""}") for ${this.stuckDetector.getIterationsOnCurrentStep()} iterations. You MUST stop trying the same approach. Options: 1) Skip this step via plan update step=${step?.id ?? "?"} status=skipped with a note explaining why. 2) Mark the step as done if the code runs correctly, even if there are type errors. 3) Try a completely different approach. Do NOT continue with the current approach.</system-summary>`,
+              });
+            }
           }
         }
       },
@@ -340,15 +386,48 @@ export class ExecutionModule implements AgentModule {
       },
       onAfterTool: (ctx: any, call: any, result: any) => {
         if (!result.success) {
-          this.stuckDetector.recordToolError(call.name);
+          this.stuckDetector.recordToolError(call.name, result.output);
+
+          // Immediately inject actionable hint on failure (don't wait for stuck threshold)
+          const actionableHints = this.stuckDetector.getActionableHints();
+          const alternative = this.stuckDetector.getToolAlternative();
+          if ((actionableHints.length > 0 || alternative) && ctx.contextManager) {
+            const parts = [...actionableHints];
+            if (alternative) {
+              parts.push(`Tool "${call.name}" crashed. Try "${alternative}" instead.`);
+            }
+            ctx.contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>${t("exec.hints", { hints: parts.map(h => `- ${h}`).join('\n') })}</system-summary>`,
+            });
+          }
         } else {
           this.stuckDetector.recordToolSuccess();
+
+          // When a bash command runs code successfully, suggest marking step as done
+          if (call.name === "bash" && result.success && ctx.contextManager) {
+            const cmd = String(call.arguments?.command ?? "");
+            if (/node|tsx|ts-node|python|npm\s+(start|test|run)/.test(cmd)) {
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>The command "${cmd}" completed successfully. If this was testing your code, mark the current step as done via plan update step=N status=done.</system-summary>`,
+              });
+            }
+          }
         }
-        if (
-          this.tracker &&
-          result.success &&
-          (call.name === "write_file" || call.name === "edit_file")
-        ) {
+
+        if (result.success && (call.name === "write_file" || call.name === "edit_file")) {
+          const filePath = call.arguments?.path as string;
+          if (filePath) {
+            this.stuckDetector.recordFileRewrite(filePath);
+            if (this.stuckDetector.hasExcessiveRewrites()) {
+              const file = this.stuckDetector.getExcessiveRewriteFile();
+              const count = this.stuckDetector.getFileRewriteCount(file!);
+              if (ctx.onMeta) {
+                ctx.onMeta(t("exec.file_rewrite_warning", { file: file!, count: String(count) }));
+              }
+            }
+          }
           this.advancePlanIfStepComplete(ctx.contextManager);
         }
       },

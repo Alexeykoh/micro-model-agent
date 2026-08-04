@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { StuckDetector } from "../src/modules/execution/stuck-detector";
+import { StuckDetector, classifyError } from "../src/modules/execution/stuck-detector";
+import { suggestSkill } from "../src/modules/skills/error-skill-map";
 
 describe("StuckDetector", () => {
   let detector: StuckDetector;
@@ -95,4 +96,116 @@ describe("StuckDetector", () => {
     expect(recovery).toBeTruthy();
     expect(recovery).toContain("bash");
   });
+
+  it("should classify timeout as transient", () => {
+    expect(classifyError("request timed out after 30s")).toBe("transient")
+  })
+
+  it("should classify permission denied as blocking", () => {
+    expect(classifyError("EACCES: permission denied")).toBe("blocking")
+  })
+
+  it("should classify file not found as systematic", () => {
+    expect(classifyError("ENOENT: no such file or directory")).toBe("systematic")
+  })
+
+  it("should escalate after threshold", () => {
+    const d = new StuckDetector(8, 3)
+    expect(d.shouldEscalate()).toBe(false)
+    d.recordEscalation()
+    d.recordEscalation()
+    d.recordEscalation()
+    expect(d.shouldEscalate()).toBe(true)
+  })
+
+  it("should reset escalation on success", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordEscalation()
+    d.recordEscalation()
+    d.recordToolSuccess()
+    expect(d.getEscalationCount()).toBe(0)
+  })
+
+  it("should track file rewrites", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordFileRewrite("src/index.ts")
+    d.recordFileRewrite("src/index.ts")
+    d.recordFileRewrite("src/index.ts")
+    expect(d.hasExcessiveRewrites()).toBe(true)
+    expect(d.getExcessiveRewriteFile()).toBe("src/index.ts")
+  })
+
+  it("should not flag files rewritten less than threshold", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordFileRewrite("src/index.ts")
+    d.recordFileRewrite("src/index.ts")
+    expect(d.hasExcessiveRewrites()).toBe(false)
+  })
+
+  it("should suggest typescript-expert for TS errors", () => {
+    expect(suggestSkill("src/index.ts(16,25): error TS2769: No overload matches this call.")).toBe("typescript-expert")
+  })
+
+  it("should return null for unknown errors", () => {
+    expect(suggestSkill("Some random error")).toBeNull()
+  })
+
+  it("should track last error output", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "EACCES: permission denied")
+    expect(d.getLastErrorOutput()).toBe("EACCES: permission denied")
+  })
+
+  it("should return last failed tool", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "some error")
+    expect(d.getLastFailedTool()).toBe("bash")
+  })
+
+  it("should suggest actionable hints for TypeScript syntax errors", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "src/index.ts(10,12): error TS1005: ',' expected.")
+    const hints = d.getActionableHints()
+    expect(hints.some(h => h.includes("syntax error"))).toBe(true)
+  })
+
+  it("should suggest actionable hints for runtime incompatibility", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "TypeError: Cannot read properties of undefined (reading 'fileExists') at node_modules/ts-node/dist/configuration.js")
+    const hints = d.getActionableHints()
+    expect(hints.some(h => h.includes("incompatible"))).toBe(true)
+  })
+
+  it("should suggest actionable hints for TypeScript type errors", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "src/index.ts(16,17): error TS2769: No overload matches this call.")
+    const hints = d.getActionableHints()
+    expect(hints.some(h => h.includes("type mismatch"))).toBe(true)
+  })
+
+  it("should suggest actionable hints for command not found", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "'ts-node' is not recognized as an internal or external command")
+    const hints = d.getActionableHints()
+    expect(hints.some(h => h.includes("not found"))).toBe(true)
+  })
+
+  it("should suggest tool alternative for ts-node crash", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "TypeError: Cannot read properties of undefined (reading 'fileExists') at node_modules/ts-node/dist/configuration.js")
+    const alt = d.getToolAlternative()
+    expect(alt).toBe("tsx")
+  })
+
+  it("should return null for tool alternative when no crash pattern", () => {
+    const d = new StuckDetector(8, 3)
+    d.recordToolError("bash", "some random error")
+    const alt = d.getToolAlternative()
+    expect(alt).toBeNull()
+  })
+
+  it("should return empty actionable hints when no error", () => {
+    const d = new StuckDetector(8, 3)
+    expect(d.getActionableHints()).toEqual([])
+  })
 });

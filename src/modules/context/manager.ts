@@ -6,6 +6,8 @@ export interface Message {
   content: string | ContentPart[];
   name?: string;
   tool_call_id?: string;
+  success?: boolean;
+  arguments?: Record<string, unknown>;
   tool_calls?: Array<{
     id: string;
     type: "function";
@@ -24,6 +26,56 @@ export interface ContextBudget {
 
 const COMPACTION_INTERVAL = 15;
 const KEEP_LAST_N = 6;
+
+export interface TriedAndFailed {
+  tool: string;
+  args: string;
+  error: string;
+  count: number;
+}
+
+function summarizeArgs(args: unknown): string {
+  if (!args) return "";
+  if (typeof args === "string") return args.slice(0, 80);
+  try {
+    const keys = Object.keys(args as Record<string, unknown>);
+    return keys.slice(0, 3).join(", ");
+  } catch {
+    return String(args).slice(0, 80);
+  }
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 3) + "...";
+}
+
+export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
+  const failures: Map<string, TriedAndFailed> = new Map();
+
+  for (const msg of messages) {
+    if (msg.role === "tool" && msg.name && msg.success === false) {
+      const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
+      const existing = failures.get(key);
+      const errorText = truncate(
+        typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
+        100,
+      );
+      if (existing) {
+        existing.count++;
+      } else {
+        failures.set(key, {
+          tool: msg.name,
+          args: summarizeArgs(msg.arguments),
+          error: errorText,
+          count: 1,
+        });
+      }
+    }
+  }
+
+  return Array.from(failures.values()).filter((f) => f.count >= 2);
+}
 
 export class ContextManager {
   private contextWindow: number;
@@ -200,6 +252,16 @@ export class ContextManager {
     }
     if (this.errorFacts.length > 0) {
       parts.push(`[Errors: ${this.errorFacts.slice(-3).join("; ")}]`);
+    }
+
+    const triedAndFailed = extractTriedAndFailed(this.messages);
+    if (triedAndFailed.length > 0) {
+      const lines = triedAndFailed.map(
+        (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,
+      );
+      parts.push(
+        `[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`,
+      );
     }
 
     this.compactedBlock = parts.join(" ");

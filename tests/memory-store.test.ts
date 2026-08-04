@@ -42,4 +42,12 @@ describe('MemoryStore', () => {
     const results = store.search('Type')
     expect(results).toHaveLength(2)
   })
+
+  it('should append structured rule', () => {
+    store.appendRule('errors', 'write_file fails with ENOENT', 'Directory does not exist', 'Run create_dir before write_file')
+    const content = store.read('errors')
+    expect(content).toContain('write_file fails with ENOENT')
+    expect(content).toContain('Directory does not exist')
+    expect(content).toContain('Run create_dir before write_file')
+  })
 })

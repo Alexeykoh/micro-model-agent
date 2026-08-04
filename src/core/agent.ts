@@ -15,12 +15,14 @@ import type {
   AgentResult,
 } from "./types";
 import type { SessionManager } from "../modules/session/manager";
+import { join } from "path";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
+import { MemoryStore } from "../modules/memory/store";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -161,6 +163,7 @@ export class Agent {
       contextManager,
       logger,
       sessionManager,
+      baseDir,
     } = this.deps;
 
     const slog = new SessionLogger(sessionManager);
@@ -225,6 +228,7 @@ export class Agent {
       hallucinationDetector,
       logger,
       sessionManager,
+      baseDir,
     } = this.deps;
 
     const slog = new SessionLogger(sessionManager);
@@ -461,6 +465,8 @@ export class Agent {
             content: truncatedOutput,
             name: call.name,
             tool_call_id: call.id,
+            success: result.success,
+            arguments: call.arguments,
           });
           summaries.push(
             `[Tool: ${call.name} (${JSON.stringify(call.arguments)}) → ${truncatedOutput.slice(0, 200)}]`,
@@ -491,6 +497,20 @@ export class Agent {
             role: "user",
             content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
           });
+
+          if (sessionManager) {
+            const activeSession = sessionManager.getActiveMeta()
+            if (activeSession) {
+              const memDir = join(baseDir, '.mma', 'memory')
+              const memStore = new MemoryStore(memDir)
+              memStore.appendRule(
+                'errors',
+                `${consecutiveToolFailures} consecutive tool failures`,
+                'Multiple tools failing suggests environment or configuration issue',
+                'Check dependencies, verify file paths, try write_file directly instead of shell commands'
+              )
+            }
+          }
         }
         contextManager.addMessage({
           role: "user",
