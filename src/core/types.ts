@@ -21,6 +21,7 @@ export interface ToolEvent {
   args: Record<string, unknown>
   duration?: number
   error?: boolean
+  ctxDelta?: number
 }
 
 /** Agent lifecycle phases surfaced to the renderer (spinner control). */
@@ -74,4 +75,6 @@ export interface AgentResult {
   promptTokens?: number
   completionTokens?: number
   totalTokens?: number
+  compactionCount?: number
+  contextQuality?: number
 }

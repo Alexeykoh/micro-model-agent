@@ -426,6 +426,7 @@ export class Agent {
           onTool?.({ type: "start", tool: call.name, args: call.arguments });
           slog.logToolCall(call, iteration);
 
+          const tokensBeforeTool = contextManager.getEstimatedTokens();
           const result = await toolExecutor.execute(call);
           const duration = Date.now() - startTime;
           if (!result.success) anyToolFailed = true;
@@ -447,12 +448,14 @@ export class Agent {
           if (result.diff) {
             onMeta?.("\n" + result.diff + "\n");
           }
+          const tokensAfterTool = contextManager.getEstimatedTokens();
           onTool?.({
             type: "end",
             tool: call.name,
             args: call.arguments,
             duration,
             error: !result.success,
+            ctxDelta: tokensAfterTool - tokensBeforeTool,
           });
 
           const currentTokens = contextManager.getEstimatedTokens();
@@ -530,8 +533,11 @@ export class Agent {
         const ctxBar =
           pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
         const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
+        const compCount = contextManager.getCompactionCount();
+        const quality = contextManager.getQuality();
+        const qualityColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
         onMeta?.(
-          `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}\n`,
+          `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
         );
 
         continue;
@@ -645,6 +651,8 @@ export class Agent {
         promptTokens: apiPromptTokens,
         completionTokens: apiCompletionTokens,
         totalTokens: apiPromptTokens + apiCompletionTokens,
+        compactionCount: contextManager.getCompactionCount(),
+        contextQuality: contextManager.getQuality(),
       };
     }
 
@@ -657,6 +665,8 @@ export class Agent {
       promptTokens: apiPromptTokens,
       completionTokens: apiCompletionTokens,
       totalTokens: apiPromptTokens + apiCompletionTokens,
+      compactionCount: contextManager.getCompactionCount(),
+      contextQuality: contextManager.getQuality(),
     };
   }
 

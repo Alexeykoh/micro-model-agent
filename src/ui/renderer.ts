@@ -118,9 +118,18 @@ export class Renderer {
     );
   }
 
-  toolEnd(_tool: string, duration: number, error?: boolean): void {
+  toolEnd(_tool: string, duration: number, error?: boolean, ctxDelta?: number): void {
     this.spinner.stop();
-    if (!this.rich) return;
+    if (!this.rich) {
+      if (ctxDelta !== undefined && ctxDelta !== 0) {
+        const deltaStr =
+          ctxDelta > 0
+            ? pc.green(`+${ctxDelta}`)
+            : pc.yellow(`${ctxDelta} ↓`);
+        this.out.write(`${pc.dim("ctx")} ${deltaStr}\n`);
+      }
+      return;
+    }
     if (!this.card) return;
     const { tool, args, body } = this.card;
     const lines: string[] = [];
@@ -132,7 +141,15 @@ export class Renderer {
       }
     }
     const marker = error ? pc.red("✗") : pc.green("✓");
-    lines.push(`${marker} ${pc.dim(`${duration}ms`)}`);
+    let footer = `${marker} ${pc.dim(`${duration}ms`)}`;
+    if (ctxDelta !== undefined && ctxDelta !== 0) {
+      const deltaStr =
+        ctxDelta > 0
+          ? pc.green(`+${ctxDelta}`)
+          : pc.yellow(`${ctxDelta} ↓`);
+      footer += `  ${pc.dim("ctx")} ${deltaStr}`;
+    }
+    lines.push(footer);
     const title = `${marker} ${friendlyTool(tool)}`;
     for (const line of box(lines, { title, width: this.width })) {
       this.out.write(`${line}\n`);

@@ -71,14 +71,27 @@ const COMMAND_GROUPS: Record<string, string> = {
   skill: "skill",
 };
 
-function formatContextBar(used: number, limit: number): string {
+function formatContextBar(
+  used: number,
+  limit: number,
+  compactions?: number,
+  quality?: number,
+): string {
   const pct = Math.min(100, Math.round((used / limit) * 100));
   const barLen = 20;
   const filled = Math.round((pct / 100) * barLen);
   const bar =
     pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
   const pctStr = pct >= 75 ? pc.yellow(`${pct}%`) : pc.dim(`${pct}%`);
-  return `  ${bar}  ${pctStr}  ${pc.dim(`(${used} / ${limit} tokens)`)}`;
+  let line = `  ${bar}  ${pctStr}  ${pc.dim(`(${used} / ${limit} tokens)`)}`;
+  if (compactions !== undefined) {
+    line += pc.dim(`  compactions: ${compactions}`);
+  }
+  if (quality !== undefined) {
+    const qColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
+    line += `  ${qColor(`quality: ${quality}%`)}`;
+  }
+  return line;
 }
 
 export class Repl {
@@ -978,7 +991,7 @@ export class Repl {
           if (ev.type === "start") {
             renderer.toolStart(ev.tool, ev.args);
           } else {
-            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
+            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
           }
         },
         (phase) => {
@@ -1072,6 +1085,8 @@ export class Repl {
   private showContextBar(result: {
     contextUsed?: number;
     contextLimit?: number;
+    compactionCount?: number;
+    contextQuality?: number;
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
@@ -1082,7 +1097,12 @@ export class Repl {
       result.contextLimit > 0
     ) {
       console.log();
-      const ctxLine = formatContextBar(result.contextUsed, result.contextLimit);
+      const ctxLine = formatContextBar(
+        result.contextUsed,
+        result.contextLimit,
+        result.compactionCount,
+        result.contextQuality,
+      );
       console.log(ctxLine);
       if (result.totalTokens !== undefined && result.totalTokens > 0) {
         const apiLine = pc.dim(

@@ -82,6 +82,8 @@ export class ContextManager {
   private messages: Message[] = [];
   private compactedBlock: string | null = null;
   private iterationsSinceCompaction = 0;
+  private compactionCount = 0;
+  private peakTokens = 0;
   private budget: ContextBudget;
   private compactionThreshold: number;
   private fileFacts: string[] = [];
@@ -126,6 +128,20 @@ export class ContextManager {
     return { ...this.budget };
   }
 
+  getCompactionCount(): number {
+    return this.compactionCount;
+  }
+
+  getIterationsSinceCompaction(): number {
+    return this.iterationsSinceCompaction;
+  }
+
+  getQuality(): number {
+    const freshness = 1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL;
+    const depth = 1 / (1 + this.compactionCount);
+    return Math.round(freshness * depth * 100);
+  }
+
   addMessage(msg: Message): void {
     // Auto-attach pending images to the next user message
     if (msg.role === "user" && this.pendingImageParts.length > 0) {
@@ -141,6 +157,8 @@ export class ContextManager {
     }
     this.messages.push(msg);
     this.iterationsSinceCompaction++;
+    const tokens = this.getEstimatedTokens();
+    if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
 
   /**
@@ -234,6 +252,7 @@ export class ContextManager {
 
   compact(): void {
     if (this.messages.length <= KEEP_LAST_N * 2) return;
+    this.compactionCount++;
 
     const cutoff = this.messages.length - KEEP_LAST_N * 2;
     const oldTurns = this.messages.slice(0, cutoff);
@@ -358,6 +377,8 @@ export class ContextManager {
     this.messages = [];
     this.compactedBlock = null;
     this.iterationsSinceCompaction = 0;
+    this.compactionCount = 0;
+    this.peakTokens = 0;
   }
 
   getEstimatedTokens(): number {

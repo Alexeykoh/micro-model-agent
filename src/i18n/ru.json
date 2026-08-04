@@ -144,6 +144,7 @@
   "tool.friendly.process_kill": "Остановка процесса",
   "plan.no_steps": "Не указаны шаги плана. Укажите конкретные шаги с файлами и командами.",
   "plan.created": "План создан: {title} ({steps} шагов)",
+  "plan.coverage_warning": "План может не покрывать требуемые файлы из постановки: {missing}. Добавьте шаги, покрывающие их.",
   "plan.step_done": "Шаг {n}/{total}: {description} ✓",
   "plan.complete": "Задача выполнена: {summary}",
   "plan.title_steps": "План \"{title}\" создан с {count} шагами",
@@ -466,5 +467,10 @@
   "tool.remember.entry_required": "Требуется текст записи",
   "tool.recall.empty": "Ничего не найдено по \"{query}\"",
   "tool.recall.no_memory": "Память пуста",
-  "tool.recall.search_results": "Результаты {category}:\n{results}"
+  "tool.recall.search_results": "Результаты {category}:\n{results}",
+  "ctx.compactions": "сжатий: {count}",
+  "ctx.quality": "качество: {percent}%",
+  "ctx.delta_pos": "контекст +{tokens}",
+  "ctx.delta_neg": "контекст -{tokens} ↓",
+  "ctx.delta_zero": "контекст ±0"
 }

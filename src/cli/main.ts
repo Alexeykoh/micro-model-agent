@@ -70,7 +70,7 @@ async function main(): Promise<void> {
         if (ev.type === "start") {
           renderer.toolStart(ev.tool, ev.args);
         } else {
-          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error);
+          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
         }
       },
       (phase) => {

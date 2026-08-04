@@ -144,6 +144,7 @@
   "tool.friendly.process_kill": "Stopping process",
   "plan.no_steps": "No plan steps specified. Provide concrete steps with files and commands.",
   "plan.created": "Plan created: {title} ({steps} steps)",
+  "plan.coverage_warning": "Plan may be missing required files from the task: {missing}. Add steps covering them.",
   "plan.step_done": "Step {n}/{total}: {description} \u2713",
   "plan.complete": "Task complete: {summary}",
   "plan.title_steps": "Plan \"{title}\" created with {count} steps",
@@ -466,5 +467,10 @@
   "tool.remember.entry_required": "Entry text is required",
   "tool.recall.empty": "Nothing found for \"{query}\"",
   "tool.recall.no_memory": "Memory is empty",
-  "tool.recall.search_results": "{category} results:\n{results}"
+  "tool.recall.search_results": "{category} results:\n{results}",
+  "ctx.compactions": "compactions: {count}",
+  "ctx.quality": "quality: {percent}%",
+  "ctx.delta_pos": "ctx +{tokens}",
+  "ctx.delta_neg": "ctx -{tokens} ↓",
+  "ctx.delta_zero": "ctx ±0"
 }
