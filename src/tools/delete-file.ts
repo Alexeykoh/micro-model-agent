@@ -22,12 +22,12 @@ export const deleteFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-    
+
     // Get session-specific security config
-    const securityConfig = ctx.sessionContext 
+    const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
-    
+
     // Check file operations limit
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
@@ -43,9 +43,14 @@ export const deleteFileTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
       };
     }
-    
+
     // Check path permissions
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathWritable(
+      ctx.baseDir,
+      resolved,
+      ctx.scope,
+      ctx.config.security?.paths,
+    );
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -60,7 +65,7 @@ export const deleteFileTool: ToolDefinition = {
         }),
       };
     }
-    
+
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };
     }
@@ -70,14 +75,13 @@ export const deleteFileTool: ToolDefinition = {
     const content = readFileSync(resolved, "utf-8");
     unlinkSync(resolved);
     const diff = generateDeleteDiff(content);
-    
+
     // Increment file operations counter
     (ctx as any).fileOperationsCount = currentCount + 1;
-    
+
     // Log successful file deletion
     logFileDelete(ctx.sessionId, path, true);
-    
-    ctx.trackDeletedPath?.(path);
+
     return { success: true, output: t("file.deleted", { path }), diff };
   },
 };

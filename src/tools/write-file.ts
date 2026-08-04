@@ -25,9 +25,14 @@ export const writeFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-    
+
     // Check path permissions using the resolved path
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathWritable(
+      ctx.baseDir,
+      resolved,
+      ctx.scope,
+      ctx.config.security?.paths,
+    );
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -42,12 +47,12 @@ export const writeFileTool: ToolDefinition = {
         }),
       };
     }
-    
+
     // Get session-specific security config
-    const securityConfig = ctx.sessionContext 
+    const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
-    
+
     // Check file operations limit
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
@@ -63,10 +68,14 @@ export const writeFileTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
       };
     }
-    
+
     // Check content for dangerous patterns
     const content = String(args.content);
-    const scanResult = scanContent(content, path, ctx.config.security?.contentScan);
+    const scanResult = scanContent(
+      content,
+      path,
+      ctx.config.security?.contentScan,
+    );
     if (!scanResult.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -79,7 +88,7 @@ export const writeFileTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] ${scanResult.reason}`,
       };
     }
-    
+
     const dir = dirname(resolved);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -93,14 +102,18 @@ export const writeFileTool: ToolDefinition = {
     const diff = fileExists
       ? generateDiff(oldContent, content)
       : generateNewFileDiff(content);
-    
+
     // Increment file operations counter
     (ctx as any).fileOperationsCount = currentCount + 1;
-    
+
     // Log successful file write
-    logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? 'updated' : 'created'}`);
-    
-    ctx.trackCreatedPath?.(path);
+    logFileWrite(
+      ctx.sessionId,
+      path,
+      true,
+      `File ${fileExists ? "updated" : "created"}`,
+    );
+
     return { success: true, output: t("file.written", { path }), diff };
   },
 };

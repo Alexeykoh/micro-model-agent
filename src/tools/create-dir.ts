@@ -21,12 +21,12 @@ export const createDirTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-    
+
     // Get session-specific security config
-    const securityConfig = ctx.sessionContext 
+    const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
-    
+
     // Check file operations limit
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
@@ -42,9 +42,14 @@ export const createDirTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
       };
     }
-    
+
     // Check path permissions
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
+    const scopeCheck = isPathWritable(
+      ctx.baseDir,
+      resolved,
+      ctx.scope,
+      ctx.config.security?.paths,
+    );
     if (!scopeCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -59,18 +64,17 @@ export const createDirTool: ToolDefinition = {
         }),
       };
     }
-    
+
     if (!existsSync(resolved)) {
       mkdirSync(resolved, { recursive: true });
     }
-    
+
     // Increment file operations counter
     (ctx as any).fileOperationsCount = currentCount + 1;
-    
+
     // Log directory creation
     logFileWrite(ctx.sessionId, path, true, "Directory created");
-    
-    ctx.trackCreatedPath?.(path);
+
     return { success: true, output: t("file.created", { path }) };
   },
 };

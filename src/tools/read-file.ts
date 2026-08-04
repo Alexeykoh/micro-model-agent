@@ -32,12 +32,23 @@ export const readFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-    const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
-    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
-    
+    const securityPaths =
+      ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
+    const scopeCheck = isPathInScope(
+      ctx.baseDir,
+      resolved,
+      ctx.scope,
+      securityPaths,
+    );
+
     if (!scopeCheck.allowed) {
       const pathStr = path as string;
-      logSecurityBlock(ctx.sessionId || undefined, "file_read", scopeCheck.reason || "Path not allowed", pathStr);
+      logSecurityBlock(
+        ctx.sessionId || undefined,
+        "file_read",
+        scopeCheck.reason || "Path not allowed",
+        pathStr,
+      );
       return {
         success: false,
         output: t("file.path_not_allowed", {
@@ -48,10 +59,7 @@ export const readFileTool: ToolDefinition = {
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };
     }
-    ctx.trackReadPath?.(path);
     const content = readFileSync(resolved, "utf-8");
-    // Track file paths mentioned in the document (e.g. structure.md, README)
-    ctx.trackDocumentContent?.(content);
     const lines = content.split("\n");
     const total = lines.length;
     const offset = (args.offset as number) || 1;

@@ -1,5 +1,6 @@
-export { HallucinationDetector } from './detector'
-export { FactualCheck } from './factual'
-export { ConsistencyCheck } from './consistency'
-export { ConfidenceCheck } from './confidence'
-export type { HallucinationCheckResult } from './factual'
+export {
+  HallucinationDetector,
+  type HallucinationCheckResult,
+} from "./detector";
+export { ConsistencyCheck } from "./consistency";
+export { ConfidenceCheck } from "./confidence";

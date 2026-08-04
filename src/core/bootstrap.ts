@@ -51,10 +51,9 @@ function buildSystemInfo(
     `Workspace: ${baseDir}`,
     `${profileCompressed}`,
     `Reply in the user's language. Use tools for filesystem, bash, web access.`,
-    `When you need to act, call a tool immediately. Do not describe your plans in text — use tools to perform operations.`,
-    `After every tool call, check whether the user's request is fully satisfied. If any files, commands, or checks are still missing, call the next needed tool right away. Do not stop with an empty or "done" response until the task is complete.`,
-    `If you create a directory, continue creating the files that belong inside it. A created folder alone is not a completed task.`,
-    `If a tool call fails (e.g., a skill is too large), try an alternative approach or continue without it. Do not reply with empty text when the task is unfinished.`,
+    `Use tools when needed. Explain briefly what you're doing if it's not obvious.`,
+    `Answer the user's question directly. Only take action when the user explicitly asks you to change, create, or fix something.`,
+    `If a tool call fails, report the error and ask the user how to proceed.`,
     ``,
     `Design principles — apply them automatically without naming them:`,
     `- Do not add code, files, or abstractions that are not needed right now (YAGNI — You Ain't Gonna Need It). If something is not required by the current task, omit it.`,
@@ -86,7 +85,7 @@ function buildSystemInfo(
   if (config.autoPlan) {
     lines.push(
       ``,
-      `Plan rule: For any task with 2+ steps, create a plan first using the "plan" tool. After each step, call "plan update" to mark progress. Stay focused on the current step.`,
+      `Plan rule: For complex tasks with 3+ steps, you may create a plan using the "plan" tool. For simple questions, just answer directly.`,
     );
   }
 
@@ -131,9 +130,14 @@ export async function bootstrap(
 
   // Update global audit notifier with config
   try {
-    const { globalAuditNotifier } = await import("../modules/security/audit-notifier");
+    const { globalAuditNotifier } =
+      await import("../modules/security/audit-notifier");
     if (config.security?.auditNotifier) {
-      globalAuditNotifier.updateConfig(config.security.auditNotifier as Partial<typeof config.security.auditNotifier>);
+      globalAuditNotifier.updateConfig(
+        config.security.auditNotifier as Partial<
+          typeof config.security.auditNotifier
+        >,
+      );
     }
   } catch {
     // Ignore if audit notifier is not available
@@ -251,42 +255,36 @@ export async function bootstrap(
     tokenCounter,
   );
 
-   const toolCtx: ToolContext = {
-     config,
-     baseDir,
-     logger,
-     exitOnComplete,
-     contextManager,
-     sessionId: sessionManager.getActiveMeta()?.id,
-     sessionContext: sessionManager.getSessionContext() ?? undefined,
-     recursionDepth: 0,
-     fileOperationsCount: 0,
-     sessionHistory: {
-       append: async (type: string, content: unknown) => {
-         const meta = sessionManager.getActiveMeta();
-         if (!meta) return;
-         sessionManager.appendMessage({
-           role: "tool",
-           content:
-             typeof content === "string" ? content : JSON.stringify(content),
-           name: type,
-           timestamp: new Date().toISOString(),
-         });
-       },
-     },
-   };
+  const toolCtx: ToolContext = {
+    config,
+    baseDir,
+    logger,
+    exitOnComplete,
+    contextManager,
+    sessionId: sessionManager.getActiveMeta()?.id,
+    sessionContext: sessionManager.getSessionContext() ?? undefined,
+    recursionDepth: 0,
+    fileOperationsCount: 0,
+    sessionHistory: {
+      append: async (type: string, content: unknown) => {
+        const meta = sessionManager.getActiveMeta();
+        if (!meta) return;
+        sessionManager.appendMessage({
+          role: "tool",
+          content:
+            typeof content === "string" ? content : JSON.stringify(content),
+          name: type,
+          timestamp: new Date().toISOString(),
+        });
+      },
+    },
+  };
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 
   const hallucinationDetector = new HallucinationDetector();
-  const factualCheck = hallucinationDetector.getFactualCheck();
-  factualCheck.setBaseDir(baseDir);
-  toolCtx.trackReadPath = (p) => factualCheck.trackReadPath(p);
-  toolCtx.trackCreatedPath = (p) => factualCheck.trackCreatedPath(p);
-  toolCtx.trackDeletedPath = (p) => factualCheck.trackDeletedPath(p);
-  toolCtx.trackDocumentContent = (c) => factualCheck.trackDocumentContent(c);
 
   const moduleRegistry = new ModuleRegistry();
 
@@ -303,7 +301,7 @@ export async function bootstrap(
   await mcpModule.initialize();
   moduleRegistry.register(mcpModule);
 
-  const memoryModule = new MemoryModule(join(dir, 'memory'));
+  const memoryModule = new MemoryModule(join(dir, "memory"));
   moduleRegistry.register(memoryModule);
 
   if (config.browser.enabled) {

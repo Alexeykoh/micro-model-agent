@@ -1,4 +1,4 @@
-import type { HallucinationCheckResult } from "./factual";
+import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
 
 const MIN_CHARS = 1;
@@ -38,14 +38,19 @@ export class ConfidenceCheck {
     }
 
     // Language-agnostic: very low word diversity (same words repeated)
-    const words = response.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const words = response
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
     if (words.length >= 10) {
       const unique = new Set(words);
       const diversity = unique.size / words.length;
       if (diversity < 0.25) {
         return {
           status: "warn",
-          reason: t("hall.repetitive", { pct: Math.round((1 - diversity) * 100) }),
+          reason: t("hall.repetitive", {
+            pct: Math.round((1 - diversity) * 100),
+          }),
         };
       }
     }

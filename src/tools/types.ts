@@ -27,10 +27,6 @@ export interface ToolContext {
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>;
   };
-  trackReadPath?: (path: string) => void;
-  trackCreatedPath?: (path: string) => void;
-  trackDeletedPath?: (path: string) => void;
-  trackDocumentContent?: (content: string) => void;
   /**
    * One-shot headless mode: interactive tools (question/approve) fail fast
    * instead of blocking on stdin, and the agent exits on the first final answer.

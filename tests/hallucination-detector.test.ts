@@ -16,23 +16,11 @@ describe("HallucinationDetector", () => {
     expect(result.status).toBe("retry");
   });
 
-  it("should warn on unknown paths", () => {
-    const detector = new HallucinationDetector();
-    const result = detector.validate("I modified src/unknown-file.ts");
-    expect(result.status).toBe("warn");
-  });
-
   it("should warn on low word diversity", () => {
     const detector = new HallucinationDetector();
     const result = detector.validate(
       "the the the the the the the the the the the the the the the the the the the",
     );
-    expect(result.status).toBe("warn");
-  });
-
-  it("should aggregate multiple warnings", () => {
-    const detector = new HallucinationDetector();
-    const result = detector.validate("I think maybe we changed src/mystery.ts");
     expect(result.status).toBe("warn");
   });
 });
