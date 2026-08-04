@@ -290,7 +290,7 @@
   "repl.skill_unknown_sub": "Unknown skill subcommand: {subcmd}",
   "repl.skill_usage": "Usage: /skill [list|loaded|load|unload|search]",
   "repl.agent": "Agent: ",
-  "repl.title": "MMA REPL v2",
+  "repl.title": "MMA REPL v{version}",
   "repl.model": "Model:",
   "repl.provider": "Provider:",
   "repl.context": "Context:",

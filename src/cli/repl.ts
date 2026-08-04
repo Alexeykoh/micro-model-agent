@@ -1,8 +1,9 @@
 import * as readline from "readline";
 import { pc } from "../ui/colors";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
 import {
   Completer,
   SlashCommandProvider,
@@ -22,6 +23,23 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+
+function readVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "..", "package.json"),
+    join(here, "..", "package.json"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      if (raw.version) return raw.version;
+    }
+  }
+  return "0.0.0";
+}
+
+const version = readVersion();
 
 interface SlashCommand {
   name: string;
@@ -191,7 +209,8 @@ export class Repl {
           return;
         }
         try {
-          const { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage } = await import("../llm/image-utils");
+          const { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage } =
+            await import("../llm/image-utils");
           const { existsSync } = await import("fs");
           const { resolve } = await import("path");
 
@@ -208,7 +227,10 @@ export class Repl {
             const result = await bufferToDataUrl(clipBuf);
             dataUrl = result.dataUrl;
             label = "clipboard";
-          } else if (source.startsWith("http://") || source.startsWith("https://")) {
+          } else if (
+            source.startsWith("http://") ||
+            source.startsWith("https://")
+          ) {
             const result = await loadUrlAsDataUrl(source);
             dataUrl = result.dataUrl;
             label = source;
@@ -236,7 +258,11 @@ export class Repl {
           });
 
           const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-          console.log(pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })));
+          console.log(
+            pc.green(
+              t("image.attached", { source: label, size: `${sizeKb} KB` }),
+            ),
+          );
         } catch (err: any) {
           console.log(pc.red(t("image.error", { message: err.message })));
         }
@@ -359,7 +385,7 @@ export class Repl {
         const subcmd = args[0];
         if (!subcmd || subcmd === "list") {
           console.log(`${t("repl.model_current")}  ${this.config.model}`);
-          
+
           // Fetch available models from provider
           const { OpenAICompatProvider } = await import("../llm/openai-compat");
           const provider = new OpenAICompatProvider({
@@ -368,7 +394,7 @@ export class Repl {
             apiKey: this.config.provider.apiKey,
             contextWindow: this.config.contextWindow,
           });
-          
+
           const { Spinner } = await import("../ui/spinner");
           const s = new Spinner();
           s.start(t("cli.fetching_models"));
@@ -388,7 +414,7 @@ export class Repl {
             s.stop();
             console.log(t("cli.model_fetch_failed", { error: String(err) }));
           }
-          
+
           console.log(t("cli.model_hint"));
           return;
         }
@@ -413,7 +439,9 @@ export class Repl {
       usage: "/context <size>",
       action: (args: string[]) => {
         if (args.length === 0) {
-          console.log(`/context ${t("repl.context")}  ${this.config.contextWindow}`);
+          console.log(
+            `/context ${t("repl.context")}  ${this.config.contextWindow}`,
+          );
           console.log(`Usage: /context <size>  (min 1024)`);
           return;
         }
@@ -434,7 +462,7 @@ export class Repl {
       usage: t("repl.reload_usage"),
       action: async () => {
         console.log(pc.yellow(t("repl.reloading")));
-        
+
         // Save current session if auto-save enabled
         if (this.sessionManager && this.config.session.autoSave) {
           const active = this.sessionManager.getActiveMeta();
@@ -442,44 +470,46 @@ export class Repl {
             // Session is already auto-saved on each message
           }
         }
-        
+
         // Shutdown current agent
         this.agent.shutdown();
-        
+
         // Reload config from disk
         const { loadConfig } = await import("../config/config");
         const { homedir } = await import("os");
         const { join } = await import("path");
         const configDir = join(homedir(), ".mma");
         const projectConfigPath = join(process.cwd(), ".mmrc");
-        
+
         const freshConfig = loadConfig({ configDir, projectConfigPath });
-        
+
         // Update config reference
         Object.assign(this.config, freshConfig);
-        
+
         // Recreate agent with new config (re-bootstrap)
         const { bootstrap } = await import("../core/bootstrap");
         const result = await bootstrap(
           configDir,
           process.cwd(),
           this.noAgentsMd,
-          false
+          false,
         );
-        
+
         // Replace agent and related components
         this.agent = result.agent;
         this.sessionManager = result.sessionManager;
         this.skillsModule = result.skillsModule;
         this.pluginManager = result.pluginManager;
-        
+
         // Update completer with new session/skill data
         this.setupCompleter();
-        
+
         console.log(pc.green(t("repl.reloaded")));
         console.log(`${t("repl.model")}       ${this.config.model}`);
         console.log(`${t("repl.context")}     ${this.config.contextWindow}`);
-        console.log(`${t("repl.provider")}    ${this.config.provider.type} @ ${this.config.provider.baseUrl}`);
+        console.log(
+          `${t("repl.provider")}    ${this.config.provider.type} @ ${this.config.provider.baseUrl}`,
+        );
       },
     });
   }
@@ -871,13 +901,18 @@ export class Repl {
         // Ctrl+V: try to paste image from clipboard
         if (key.ctrl && key.name === "v" && !this.agentRunning) {
           try {
-            const { readClipboardImage, bufferToDataUrl } = await import("../llm/image-utils");
+            const { readClipboardImage, bufferToDataUrl } =
+              await import("../llm/image-utils");
             const clipBuf = await readClipboardImage();
             if (clipBuf) {
               const { dataUrl } = await bufferToDataUrl(clipBuf);
               this.pendingClipboardImage = dataUrl;
               const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-              console.log(pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`));
+              console.log(
+                pc.green(
+                  `\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`,
+                ),
+              );
               this.rl.prompt();
             }
           } catch {
@@ -890,7 +925,9 @@ export class Repl {
     // SIGINT: first Ctrl+C sends graceful shutdown, second forces exit
     process.on("SIGINT", () => {
       if (this.agentRunning) {
-        console.log(pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"));
+        console.log(
+          pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"),
+        );
         this.agent.shutdown();
         this.agentRunning = false;
         // Force exit after 2s if graceful shutdown hangs
@@ -930,7 +967,9 @@ export class Repl {
 
       process.stdout.write("\n" + pc.green(t("repl.agent")));
 
-      const renderer = new Renderer({ spinner: this.config.ui?.spinner ?? true });
+      const renderer = new Renderer({
+        spinner: this.config.ui?.spinner ?? true,
+      });
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
@@ -1064,13 +1103,12 @@ export class Repl {
 
     const ctx = this.config.contextWindow;
     const sysBudget = Math.floor(ctx * this.config.contextBudget.systemPrompt);
-    const resBudget = Math.floor(ctx * this.config.contextBudget.responseReserve);
+    const resBudget = Math.floor(
+      ctx * this.config.contextBudget.responseReserve,
+    );
     const histBudget = ctx - sysBudget - resBudget;
 
-    row(
-      t("repl.model"),
-      pc.white(this.config.model),
-    );
+    row(t("repl.model"), pc.white(this.config.model));
     row(
       t("repl.provider"),
       `${this.config.provider.type}  →  ${pc.dim(this.config.provider.baseUrl)}`,
@@ -1143,8 +1181,14 @@ export class Repl {
       );
     }
 
-    const headerWidth = Math.max(50, Math.min(96, process.stdout.columns || 96));
-    for (const line of box(info, { title: t("repl.title"), width: headerWidth })) {
+    const headerWidth = Math.max(
+      50,
+      Math.min(96, process.stdout.columns || 96),
+    );
+    for (const line of box(info, {
+      title: t("repl.title", { version }),
+      width: headerWidth,
+    })) {
       console.log(line);
     }
     console.log();

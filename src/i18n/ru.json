@@ -286,7 +286,7 @@
   "repl.skill_unknown_sub": "Неизвестная подкоманда скилла: {subcmd}",
   "repl.skill_usage": "Использование: /skill [list|loaded|load|unload|search]",
   "repl.agent": "Агент: ",
-  "repl.title": "MMA REPL v2",
+  "repl.title": "MMA REPL v{version}",
   "repl.model": "Модель:",
   "repl.provider": "Провайдер:",
   "repl.context": "Контекст:",

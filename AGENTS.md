@@ -315,6 +315,7 @@ const body = { model, messages, stream: false, max_tokens };
 9. **No full-screen TUI** — no alternate screen buffer, no raw-mode, no full-frame redraw. Rich ANSI output is allowed: spinner (single-line `\r` overwrite on stderr), boxed tool cards, aligned tables. Auto-degrades to plain text when `!isTTY` or `CI`.
 10. **No keyword matching for task classification** — determining whether a task is multi-step, needs planning, or requires specific tools via keyword/word matching is an anti-pattern. It fails for non-English languages, ambiguous inputs, and novel task patterns. Instead, use the system prompt to instruct the model to use the `plan` tool when appropriate. The model decides whether to create a plan based on task complexity, not hardcoded heuristics.
 11. **Interactive tools bypass the execution timeout** — tools that block on user input (`question`, `approve`) must set `interactive: true` on their `ToolDefinition`. The executor skips the 60s timeout for them. Any new user-facing interactive tool must do the same, and must reuse `user-input.ts` instead of creating its own readline interface.
+12. **Dynamic version resolution** — never use `import { version } from "../../package.json"` (static import gets inlined by bundler with stale value). Always read `package.json` at runtime via `readFileSync` + `fileURLToPath(import.meta.url)` with path candidates for both source (`src/cli/`) and bundled (`dist/`) layouts. See `src/cli/commands.ts` `readVersion()` for the pattern.
 
 ## Project Structure
 
@@ -829,7 +830,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.12.1
+### Current Version: 0.18.2
 - **0** = pre-1.0 (initial development)
-- **12** = minor features added (model list, context, reload, security policies, MoE phases, etc.)
-- **1** = patch fixes (duplicate i18n key, help auto-generation verification)
+- **18** = minor features added (model list, context, reload, security policies, MoE phases, etc.)
+- **2** = patch fixes (dynamic version resolution, REPL header version display)

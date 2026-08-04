@@ -3,10 +3,28 @@ import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
 import { runSetup } from "./setup";
 import { t } from "../i18n/index";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { existsSync, readFileSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
-import { version } from "../../package.json";
+import { fileURLToPath } from "url";
+
+function readVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "..", "package.json"),
+    join(here, "..", "package.json"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      const raw = JSON.parse(readFileSync(p, "utf8"));
+      if (raw.version) return raw.version;
+    }
+  }
+  return "0.0.0";
+}
+
+const version = readVersion();
 
 export function createProgram(): Command {
   const program = new Command()
@@ -77,7 +95,7 @@ export function createProgram(): Command {
     .action(async () => {
       const { config } = await bootstrap();
       console.log(t("cli.current_model"), config.model);
-      
+
       // Fetch available models from provider
       const { OpenAICompatProvider } = await import("../llm/openai-compat");
       const provider = new OpenAICompatProvider({
@@ -86,7 +104,7 @@ export function createProgram(): Command {
         apiKey: config.provider.apiKey,
         contextWindow: config.contextWindow,
       });
-      
+
       const spinner = (await import("../ui/spinner")).Spinner;
       const s = new spinner();
       s.start(t("cli.fetching_models"));
@@ -106,7 +124,7 @@ export function createProgram(): Command {
         s.stop();
         console.log(t("cli.model_fetch_failed", { error: String(err) }));
       }
-      
+
       console.log(t("cli.model_hint"));
     });
   model
@@ -203,15 +221,15 @@ export function createProgram(): Command {
       console.log(`Context:      ${meta.contextWindow}`);
       console.log(`Project:      ${meta.projectDir}`);
     });
-   session
-     .command("delete")
-     .argument("<id>", "Session id")
-     .description(t("cli.delete_session"))
-     .action(async (id: string) => {
-       const { sessionManager } = await bootstrap();
-       sessionManager.delete(id);
-       console.log(t("session.deleted", { id }));
-     });
+  session
+    .command("delete")
+    .argument("<id>", "Session id")
+    .description(t("cli.delete_session"))
+    .action(async (id: string) => {
+      const { sessionManager } = await bootstrap();
+      sessionManager.delete(id);
+      console.log(t("session.deleted", { id }));
+    });
 
   // Add security commands
   createSecurityCommand(program);
