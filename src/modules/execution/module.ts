@@ -9,6 +9,8 @@ import { StepVerifier } from "./verifier";
 import { StuckDetector } from "./stuck-detector";
 import { Auditor } from "./auditor";
 import { PlanPersister } from "./plan-persister";
+import { checkPlanCoverage } from "./plan-coverage";
+import { getMessageText } from "../../llm/provider";
 import type { Plan } from "./planner";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
@@ -139,10 +141,23 @@ export class ExecutionModule implements AgentModule {
             const plan = PlanCreator.createPlan(title, steps, this.baseDir);
             this.setPlan(plan);
             const display = PlanCreator.toPromptBlock(plan, 0);
+            let output = t("plan.created", { title, steps: String(steps.length) });
+            let displayOut = display;
+            const taskText = this.getTaskText(_ctx);
+            if (taskText) {
+              const { missing } = checkPlanCoverage(taskText, steps);
+              if (missing.length > 0) {
+                const warn = t("plan.coverage_warning", {
+                  missing: missing.join(", "),
+                });
+                output += `\n⚠️ ${warn}`;
+                displayOut = `${display}\n⚠️ ${warn}`;
+              }
+            }
             return {
               success: true,
-              output: t("plan.created", { title, steps: String(steps.length) }),
-              display,
+              output,
+              display: displayOut,
             };
           }
           if (action === "show") {
@@ -565,5 +580,20 @@ export class ExecutionModule implements AgentModule {
         content: `<system-summary>${nextMsg}</system-summary>`,
       });
     }
+  }
+
+  /**
+   * Extract the original task statement from the first user message in the
+   * conversation history. Used to validate plan coverage against requirements.
+   */
+  private getTaskText(ctx: any): string {
+    const manager = ctx?.contextManager;
+    if (!manager) return "";
+    const history = manager.getActiveHistory();
+    const firstUser = history.find(
+      (m: { role: string }) => m.role === "user",
+    );
+    if (!firstUser) return "";
+    return getMessageText(firstUser.content).trim();
   }
 }

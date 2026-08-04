@@ -582,7 +582,7 @@ Create a CLI tool that prints a tree view of a directory:
 - **Статус**: ✅ DONE — 1 успешная попытка, последний запуск: 2026-08-04
 - **Результат**: CLI запускается через `node dist/index.js test-dir` и выводит дерево с правильными отступами и символами ├──/└── (вложенные folder1/subfolder, folder2, файлы). Код компилируется через `tsc` (exit 0). `npx micro-tree` требовал установки локального bin, поэтому агент верифицировал через `node dist/index.js` — это не дефект кода. Также починен агентный баг бесконечного зацикливания при неудачном финальном аудите (добавлен лимит audit-retries, `MAX_AUDIT_RETRIES=3`).
 
-### 5.4 Библиотека утилит + тесты
+### 5.4 Библиотека утилит + тесты ✅ DONE
 ```
 Create a utility library with tests:
 1. package.json with name "micro-utils", exports field
