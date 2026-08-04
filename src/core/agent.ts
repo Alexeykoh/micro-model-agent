@@ -7,7 +7,13 @@ import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import type { ToolScope, ToolDefinition } from "../tools/types";
 import type { PromptBlock } from "./types";
-import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
+import type {
+  ToolCall,
+  ToolEvent,
+  AgentPhase,
+  LLMResponse,
+  AgentResult,
+} from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -132,7 +138,10 @@ export class Agent {
     phase: AgentPhase,
     onPhase?: (phase: AgentPhase) => void,
   ): void {
-    this.deps.pluginManager.runOnPhase?.({ iteration, logger: this.deps.logger }, phase);
+    this.deps.pluginManager.runOnPhase?.(
+      { iteration, logger: this.deps.logger },
+      phase,
+    );
     onPhase?.(phase);
   }
 
@@ -191,7 +200,8 @@ export class Agent {
           baseDir: this.deps.baseDir,
         },
         input,
-        () => this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase),
+        () =>
+          this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase),
         { onMeta, onTool, onPhase },
       );
     }
@@ -242,7 +252,10 @@ export class Agent {
       if (contextManager.needsCompaction()) {
         contextManager.compact();
         logger.debug("Context compacted");
-        slog.logCompaction(`regular compaction, iteration ${iteration}`, iteration);
+        slog.logCompaction(
+          `regular compaction, iteration ${iteration}`,
+          iteration,
+        );
       }
 
       const currentTokens = contextManager.getEstimatedTokens();
@@ -264,7 +277,11 @@ export class Agent {
       const history = contextManager.getActiveHistory();
 
       const allTools = toolExecutor.getToolDefinitions(this.deps.toolTags);
-      slog.logToolDefs(allTools.length, allTools.map((t) => t.name), iteration);
+      slog.logToolDefs(
+        allTools.length,
+        allTools.map((t) => t.name),
+        iteration,
+      );
 
       let textContent = "";
       let reasoningContent = "";
@@ -275,7 +292,10 @@ export class Agent {
 
       this.emitPhase(iteration, "thinking", onPhase);
       try {
-        for await (const chunk of llmProvider.chat(history, allTools as ToolDefinition[])) {
+        for await (const chunk of llmProvider.chat(
+          history,
+          allTools as ToolDefinition[],
+        )) {
           if (chunk.type === "text" && chunk.content) {
             if (emittedReasoning && !textContent) {
               onMeta?.("\n\n");
@@ -334,10 +354,7 @@ export class Agent {
       // its tool call (e.g. raw JSON args) — suppress it.
       if (!sawToolCall && textChunks.length > 0) {
         for (const chunk of textChunks) {
-          const textOut = pluginManager.runOnText(
-            { iteration, logger },
-            chunk,
-          );
+          const textOut = pluginManager.runOnText({ iteration, logger }, chunk);
           onChunk?.(textOut);
         }
       }
@@ -366,7 +383,12 @@ export class Agent {
       }
 
       if (sawToolCall) {
-        slog.logAssistant(textContent || "", reasoningContent, toolCalls, iteration);
+        slog.logAssistant(
+          textContent || "",
+          reasoningContent,
+          toolCalls,
+          iteration,
+        );
       }
 
       if (sawToolCall) {
@@ -458,9 +480,12 @@ export class Agent {
           consecutiveToolFailures = 0;
         }
         if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
-          const recoveryMsg = t("exec.consecutive_failures_recovery", { count: consecutiveToolFailures });
+          const recoveryMsg = t("exec.consecutive_failures_recovery", {
+            count: consecutiveToolFailures,
+          });
           logger.warn(`Consecutive tool failures: ${consecutiveToolFailures}`);
-          const taskSnippet = input.length > 200 ? input.slice(0, 200) + "..." : input;
+          const taskSnippet =
+            input.length > 200 ? input.slice(0, 200) + "..." : input;
           const taskReminder = t("exec.task_reminder", { task: taskSnippet });
           contextManager.addMessage({
             role: "user",
@@ -471,6 +496,22 @@ export class Agent {
           role: "user",
           content: `<system-summary>${summaries.join("\n")}</system-summary>`,
         });
+
+        const ctxTokens = contextManager.getEstimatedTokens();
+        const ctxBudget = contextManager.getBudget();
+        const ctxPct = Math.min(
+          100,
+          Math.round((ctxTokens / ctxBudget.history) * 100),
+        );
+        const barLen = 10;
+        const filled = Math.round((ctxPct / 100) * barLen);
+        const ctxBar =
+          pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
+        const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
+        onMeta?.(
+          `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}\n`,
+        );
+
         continue;
       }
 
@@ -542,8 +583,7 @@ export class Agent {
           const audit = await this.deps.finalAudit();
           if (audit && !audit.passed) {
             logger.warn(`Final audit incomplete: ${audit.summary}`);
-            const steps =
-              audit.pendingSteps.slice(0, 5).join("; ") || "—";
+            const steps = audit.pendingSteps.slice(0, 5).join("; ") || "—";
             contextManager.addMessage({
               role: "user",
               content: `<system-summary>${t("exec.audit_incomplete", {
@@ -597,7 +637,11 @@ export class Agent {
   }
 
   setContext(
-    messages: Array<{ role: string; content: string | ContentPart[]; name?: string }>,
+    messages: Array<{
+      role: string;
+      content: string | ContentPart[];
+      name?: string;
+    }>,
   ): void {
     const { contextManager } = this.deps;
     contextManager.clear();
