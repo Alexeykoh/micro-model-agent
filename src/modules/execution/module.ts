@@ -108,7 +108,7 @@ export class ExecutionModule implements AgentModule {
       {
         name: "plan",
         description:
-          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.',
+          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.\n\nIMPORTANT — each step MUST be detailed and concrete:\n- Specify WHICH files to create (filenames with paths, e.g. "create src/components/Header.tsx...")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH commands to run with exact arguments\n- Minimum 20 characters per step description\n- BAD: "Настройка проекта"\n- GOOD: "Создать package.json с зависимостями react@18, vite@5, установить их через npm install"',
         parameters: {
           type: "object",
           properties: {
@@ -134,7 +134,16 @@ export class ExecutionModule implements AgentModule {
             if (steps.length === 0) {
               return { success: false, output: t("plan.no_steps") };
             }
-            const plan = PlanCreator.createPlan(title, steps);
+            const validation = PlanCreator.validateSteps(steps);
+            if (!validation.valid) {
+              return {
+                success: false,
+                output: t("plan.bad_steps", {
+                  errors: validation.errors.join("; "),
+                }),
+              };
+            }
+            const plan = PlanCreator.createPlan(title, steps, this.baseDir);
             this.setPlan(plan);
             const display = PlanCreator.toPromptBlock(plan, 0);
             return {

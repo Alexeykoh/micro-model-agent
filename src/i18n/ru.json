@@ -142,6 +142,8 @@
   "tool.friendly.process_list": "Список фоновых процессов",
   "tool.friendly.process_log": "Вывод процесса",
   "tool.friendly.process_kill": "Остановка процесса",
+  "plan.no_steps": "Не указаны шаги плана. Укажите конкретные шаги с файлами и командами.",
+  "plan.bad_steps": "Качество шагов плана неприемлемо. Каждый шаг должен описывать конкретные deliverables (файлы, пакеты, команды). Минимум 20 символов на шаг. Ошибки: {errors}",
   "plan.created": "План создан: {title} ({steps} шагов)",
   "plan.step_done": "Шаг {n}/{total}: {description} ✓",
   "plan.complete": "Задача выполнена: {summary}",

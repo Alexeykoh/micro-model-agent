@@ -3,10 +3,12 @@ import { join, dirname } from "path";
 import { type Plan, type PlanStep, type StepStatus } from "./planner";
 
 export interface PlanFile {
+  id?: string;
   title: string;
   steps: PlanStep[];
   createdAt: string;
   updatedAt: string;
+  baseDir?: string;
 }
 
 export class PlanPersister {
@@ -22,10 +24,12 @@ export class PlanPersister {
 
   save(plan: Plan): void {
     const file: PlanFile = {
+      id: plan.id,
       title: plan.title,
       steps: plan.steps,
       createdAt: plan.createdAt,
       updatedAt: new Date().toISOString(),
+      baseDir: plan.baseDir,
     };
     writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
   }
@@ -36,9 +40,11 @@ export class PlanPersister {
       const raw = readFileSync(this.filePath, "utf-8");
       const file: PlanFile = JSON.parse(raw);
       return {
+        id: file.id || "plan_legacy",
         title: file.title,
         steps: file.steps,
         createdAt: file.createdAt,
+        baseDir: file.baseDir || process.cwd(),
       };
     } catch {
       return null;

@@ -19,14 +19,20 @@ describe("PlanPersister", () => {
   });
 
   it("should save and load a plan", () => {
-    const plan = PlanCreator.createPlan("Test Plan", ["step 1", "step 2"]);
+    const plan = PlanCreator.createPlan(
+      "Test Plan",
+      ["step one with enough length", "step two with enough length"],
+      "/test/dir",
+    );
     persister.save(plan);
 
     const loaded = persister.load();
     expect(loaded).not.toBeNull();
-    expect(loaded!.title).toBe("Test Plan");
+    expect(loaded!.title).toBe("[2 ст.] Test Plan");
     expect(loaded!.steps).toHaveLength(2);
-    expect(loaded!.steps[0].description).toBe("step 1");
+    expect(loaded!.steps[0].description).toBe("step one with enough length");
+    expect(loaded!.id).toMatch(/^plan_/);
+    expect(loaded!.baseDir).toBe("/test/dir");
   });
 
   it("should return null when no plan file exists", () => {
@@ -35,7 +41,11 @@ describe("PlanPersister", () => {
   });
 
   it("should persist step status changes", () => {
-    const plan = PlanCreator.createPlan("Test", ["a", "b"]);
+    const plan = PlanCreator.createPlan(
+      "Test",
+      ["a step with enough chars here", "another step that is long enough"],
+      "/test/dir",
+    );
     persister.save(plan);
 
     plan.steps[0].status = "done";
@@ -48,7 +58,11 @@ describe("PlanPersister", () => {
   });
 
   it("should clear the plan file", () => {
-    const plan = PlanCreator.createPlan("Test", ["x"]);
+    const plan = PlanCreator.createPlan(
+      "Test",
+      ["a step with enough characters to pass validation"],
+      "/test/dir",
+    );
     persister.save(plan);
     persister.clear();
 
@@ -57,7 +71,11 @@ describe("PlanPersister", () => {
   });
 
   it("should include updatedAt timestamp", () => {
-    const plan = PlanCreator.createPlan("T", ["s"]);
+    const plan = PlanCreator.createPlan(
+      "T",
+      ["a step that is at least long enough to be valid"],
+      "/test/dir",
+    );
     persister.save(plan);
 
     const raw = JSON.parse(

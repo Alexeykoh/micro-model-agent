@@ -25,6 +25,12 @@ function mockToolCall(overrides: any = {}): any {
   return { id: "call-1", name: "write_file", arguments: {}, ...overrides };
 }
 
+const TEST_DIR = "/test/plan";
+
+function mkPlan(title: string, steps: string[]) {
+  return PlanCreator.createPlan(title, steps, TEST_DIR);
+}
+
 describe("StuckDetector - recovery with step context", () => {
   let detector: StuckDetector;
 
@@ -91,9 +97,9 @@ describe("StuckDetector - recovery with step context", () => {
 
 describe("PlanTracker - auto-advance without step gate", () => {
   it("advances to next step and marks current as in_progress", () => {
-    const plan = PlanCreator.createPlan("Test", [
-      "Create index.html",
-      "Create src/main.ts",
+    const plan = mkPlan("Test", [
+      "Create index.html in public dir",
+      "Create src/main.ts with entry point",
     ]);
     const tracker = new PlanTracker(plan);
     const step1 = tracker.getCurrentStep();
@@ -110,7 +116,7 @@ describe("PlanTracker - auto-advance without step gate", () => {
   });
 
   it("does not advance past last step", () => {
-    const plan = PlanCreator.createPlan("Test", ["Step 1"]);
+    const plan = mkPlan("Test", ["Step 1"]);
     const tracker = new PlanTracker(plan);
     tracker.updateStepStatus(1, "done");
     const advanced = tracker.advance();
@@ -118,7 +124,7 @@ describe("PlanTracker - auto-advance without step gate", () => {
   });
 
   it("shows correct progress string", () => {
-    const plan = PlanCreator.createPlan("Build App", [
+    const plan = mkPlan("Build App", [
       "Init project",
       "Add components",
       "Add tests",
@@ -133,11 +139,7 @@ describe("PlanTracker - auto-advance without step gate", () => {
 
 describe("PlanCreator - prompt block format", () => {
   it("renders steps with correct icons", () => {
-    const plan = PlanCreator.createPlan("Test Plan", [
-      "Step one",
-      "Step two",
-      "Step three",
-    ]);
+    const plan = mkPlan("Test Plan", ["Step one", "Step two", "Step three"]);
     plan.steps[0].status = "done";
     plan.steps[1].status = "in_progress";
     const block = PlanCreator.toPromptBlock(plan, 1);
@@ -149,7 +151,7 @@ describe("PlanCreator - prompt block format", () => {
   });
 
   it("shows failed and skipped statuses", () => {
-    const plan = PlanCreator.createPlan("Test", ["A", "B", "C"]);
+    const plan = mkPlan("Test", ["A", "B", "C"]);
     plan.steps[0].status = "failed";
     plan.steps[1].status = "skipped";
     plan.steps[2].status = "done";
@@ -177,7 +179,7 @@ describe("Scenario: Progressive plan enforcement", () => {
 
   it("creates a plan and tracks steps", () => {
     execModule.setPlan(
-      PlanCreator.createPlan("Test", [
+      mkPlan("Test", [
         "create src/index.ts with content",
         "create src/utils.ts",
       ]),
@@ -189,10 +191,7 @@ describe("Scenario: Progressive plan enforcement", () => {
 
   it("restores a plan from disk", () => {
     execModule.setPlan(
-      PlanCreator.createPlan("Test Restore", [
-        "create file-a.ts",
-        "create file-b.ts",
-      ]),
+      mkPlan("Test Restore", ["create file-a.ts", "create file-b.ts"]),
     );
     // Mark step 1 done and advance tracker
     execModule.getTracker()!.updateStepStatus(1, "done");
@@ -214,7 +213,7 @@ describe("Scenario: Progressive plan enforcement", () => {
   });
 
   it("plugin onBeforeTool blocks after 3 off-step violations", () => {
-    execModule.setPlan(PlanCreator.createPlan("Test", ["create src/hello.ts"]));
+    execModule.setPlan(mkPlan("Test", ["create src/hello.ts"]));
     const plugin = execModule.getPlugin();
     const ctx = mockCtx();
     const offStepCall = mockToolCall({ arguments: { path: "src/other.ts" } });
@@ -228,9 +227,7 @@ describe("Scenario: Progressive plan enforcement", () => {
   });
 
   it("resets warning counter on step change via onBeforeThink", () => {
-    execModule.setPlan(
-      PlanCreator.createPlan("Test", ["create src/a.ts", "create src/b.ts"]),
-    );
+    execModule.setPlan(mkPlan("Test", ["create src/a.ts", "create src/b.ts"]));
     const plugin = execModule.getPlugin();
     const ctx = mockCtx();
     const offStepCall = mockToolCall({ arguments: { path: "other.ts" } });
@@ -252,7 +249,7 @@ describe("Scenario: Progressive plan enforcement", () => {
   });
 
   it("on-track calls do not trigger warnings", () => {
-    execModule.setPlan(PlanCreator.createPlan("Test", ["create src/hello.ts"]));
+    execModule.setPlan(mkPlan("Test", ["create src/hello.ts"]));
     const plugin = execModule.getPlugin();
     const ctx = mockCtx();
 
@@ -284,10 +281,7 @@ describe("Scenario: Step Gate verification", () => {
   it("does NOT advance when files are empty (< 10 chars)", () => {
     const execModule = new ExecutionModule(tempDir, 8);
     execModule.setPlan(
-      PlanCreator.createPlan("Test", [
-        "create src/greet.ts",
-        "create src/util.ts",
-      ]),
+      mkPlan("Test", ["create src/greet.ts", "create src/util.ts"]),
     );
 
     mkdirSync(join(tempDir, "src"), { recursive: true });
@@ -309,10 +303,7 @@ describe("Scenario: Step Gate verification", () => {
   it("advances when all step files exist with real content", () => {
     const execModule = new ExecutionModule(tempDir, 8);
     execModule.setPlan(
-      PlanCreator.createPlan("Test", [
-        "create src/main.ts",
-        "create lib/helper.ts",
-      ]),
+      mkPlan("Test", ["create src/main.ts", "create lib/helper.ts"]),
     );
 
     mkdirSync(join(tempDir, "src"), { recursive: true });
@@ -344,7 +335,7 @@ describe("Scenario: Step Gate verification", () => {
   it("blocks advancement for dependency steps without lock file", () => {
     const execModule = new ExecutionModule(tempDir, 8);
     execModule.setPlan(
-      PlanCreator.createPlan("Test", [
+      mkPlan("Test", [
         "Install dependencies and create package.json",
         "create src/app.ts",
       ]),
@@ -382,7 +373,7 @@ describe("Scenario: Step Gate verification", () => {
   it("advances dependency step when lock file exists", () => {
     const execModule = new ExecutionModule(tempDir, 8);
     execModule.setPlan(
-      PlanCreator.createPlan("Test", [
+      mkPlan("Test", [
         "Run npm install, create package.json",
         "create src/index.ts",
       ]),
@@ -410,9 +401,7 @@ describe("Scenario: Step Gate verification", () => {
 
   it("advances past last step with final message", () => {
     const execModule = new ExecutionModule(tempDir, 8);
-    execModule.setPlan(
-      PlanCreator.createPlan("Test", ["create final/config.ts"]),
-    );
+    execModule.setPlan(mkPlan("Test", ["create final/config.ts"]));
 
     mkdirSync(join(tempDir, "final"), { recursive: true });
     writeFileSync(

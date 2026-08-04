@@ -93,6 +93,15 @@ function buildSystemInfo(
     `4. VERIFY YOUR WORK: After creating/modifying files, verify they exist on disk. After installing dependencies, verify the package manager completed successfully. After any command, check its output for errors. Don't assume operations succeeded.`,
     `5. NO PREMATURE WORK: Do not create files for future steps. Do not add imports/references to packages or modules that haven't been installed yet. Do not reference files or components that don't exist yet. Build incrementally — one layer at a time.`,
     `6. WHEN STUCK: If a command fails 2+ times, STOP and try a different approach. Write files directly instead of using commands. Ask the user for help. Never repeat the same failing command more than twice.`,
+    ``,
+    `=== PLAN QUALITY RULES — your plan MUST follow these ===`,
+    ``,
+    `- Each step must describe CONCRETE deliverables: exact filenames with paths, exact packages to install, exact CLI commands to run.`,
+    `- A step like "Настройка проекта" or "Setup the project" is USELESS and will be REJECTED.`,
+    `- A step like "Создать src/components/Header.tsx с хедером навигации, подключить в App.tsx" is GOOD.`,
+    `- Include file extensions (.tsx, .css, .json) and directory paths. Never write vague steps.`,
+    `- The plan must cover EVERYTHING needed: init → deps → framework setup → code → verification.`,
+    `- Number of steps: 5-8 for a typical task. Too few means you're being vague. Too many means you're over-splitting.`,
   );
 
   if (config.autoPlan) {
