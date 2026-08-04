@@ -1,157 +1,193 @@
-import { t } from '../../i18n/index'
+import { t } from "../../i18n/index";
 
 interface ToolCallRecord {
-  name: string
-  argsKey: string
+  name: string;
+  argsKey: string;
 }
 
 export class StuckDetector {
-  private threshold: number
-  private errorThreshold: number
-  private iterationsOnCurrentStep = 0
-  private currentStepId: number | null = null
-  private toolErrors: Map<string, number> = new Map()
-  private currentStepDescription = ''
-  private recentToolCalls: ToolCallRecord[] = []
-  private readonly maxRecentCalls = 10
-  private readonly repetitionThreshold = 3
-  private consecutiveFailures = 0
-  private lastFailedTool = ''
+  private threshold: number;
+  private errorThreshold: number;
+  private iterationsOnCurrentStep = 0;
+  private currentStepId: number | null = null;
+  private toolErrors: Map<string, number> = new Map();
+  private currentStepDescription = "";
+  private recentToolCalls: ToolCallRecord[] = [];
+  private readonly maxRecentCalls = 10;
+  private readonly repetitionThreshold = 3;
+  private consecutiveFailures = 0;
+  private lastFailedTool = "";
 
   constructor(threshold = 8, errorThreshold = 3) {
-    this.threshold = threshold
-    this.errorThreshold = errorThreshold
+    this.threshold = threshold;
+    this.errorThreshold = errorThreshold;
   }
 
   recordIteration(stepId: number): void {
     if (stepId === this.currentStepId) {
-      this.iterationsOnCurrentStep++
+      this.iterationsOnCurrentStep++;
     } else {
-      this.currentStepId = stepId
-      this.iterationsOnCurrentStep = 1
+      this.currentStepId = stepId;
+      this.iterationsOnCurrentStep = 1;
     }
   }
 
   recordToolCall(name: string, args: Record<string, unknown>): void {
-    const argsKey = JSON.stringify(args)
-    this.recentToolCalls.push({ name, argsKey })
+    const argsKey = JSON.stringify(args);
+    this.recentToolCalls.push({ name, argsKey });
     if (this.recentToolCalls.length > this.maxRecentCalls) {
-      this.recentToolCalls.shift()
+      this.recentToolCalls.shift();
     }
   }
 
   recordToolError(toolName: string): void {
-    this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1)
-    this.consecutiveFailures++
-    this.lastFailedTool = toolName
+    this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1);
+    this.consecutiveFailures++;
+    this.lastFailedTool = toolName;
   }
 
   recordToolSuccess(): void {
-    this.consecutiveFailures = 0
-    this.lastFailedTool = ''
+    this.consecutiveFailures = 0;
+    this.lastFailedTool = "";
   }
 
   setCurrentStep(stepId: number, description: string): void {
     if (stepId !== this.currentStepId) {
-      this.currentStepId = stepId
-      this.iterationsOnCurrentStep = 1
+      this.currentStepId = stepId;
+      this.iterationsOnCurrentStep = 1;
     }
-    this.currentStepDescription = description
+    this.currentStepDescription = description;
   }
 
   isStuck(): boolean {
-    return this.iterationsOnCurrentStep > this.threshold
+    return this.iterationsOnCurrentStep > this.threshold;
   }
 
   hasRepetitiveErrors(toolName?: string): boolean {
     if (toolName) {
-      return (this.toolErrors.get(toolName) || 0) >= this.errorThreshold
+      return (this.toolErrors.get(toolName) || 0) >= this.errorThreshold;
     }
-    return Array.from(this.toolErrors.values()).some(c => c >= this.errorThreshold)
+    return Array.from(this.toolErrors.values()).some(
+      (c) => c >= this.errorThreshold,
+    );
   }
 
   hasRepetitiveToolCalls(): boolean {
-    if (this.recentToolCalls.length < this.repetitionThreshold) return false
-    const last = this.recentToolCalls[this.recentToolCalls.length - 1]
-    let count = 1
+    if (this.recentToolCalls.length < this.repetitionThreshold) return false;
+    const last = this.recentToolCalls[this.recentToolCalls.length - 1];
+    let count = 1;
     for (let i = this.recentToolCalls.length - 2; i >= 0; i--) {
-      if (this.recentToolCalls[i].name === last.name && this.recentToolCalls[i].argsKey === last.argsKey) {
-        count++
+      if (
+        this.recentToolCalls[i].name === last.name &&
+        this.recentToolCalls[i].argsKey === last.argsKey
+      ) {
+        count++;
       } else {
-        break
+        break;
       }
     }
-    return count >= this.repetitionThreshold
+    return count >= this.repetitionThreshold;
   }
 
   hasConsecutiveFailures(): boolean {
-    return this.consecutiveFailures >= this.errorThreshold
+    return this.consecutiveFailures >= this.errorThreshold;
   }
 
   getConsecutiveFailuresCount(): number {
-    return this.consecutiveFailures
+    return this.consecutiveFailures;
   }
 
   getRepetitiveToolMessage(): string {
-    if (!this.hasRepetitiveToolCalls()) return ''
-    const last = this.recentToolCalls[this.recentToolCalls.length - 1]
-    return t('exec.repetitive_tool', { tool: last.name, count: this.repetitionThreshold })
+    if (!this.hasRepetitiveToolCalls()) return "";
+    const last = this.recentToolCalls[this.recentToolCalls.length - 1];
+    return t("exec.repetitive_tool", {
+      tool: last.name,
+      count: this.repetitionThreshold,
+    });
   }
 
   getStuckReason(): string {
     if (this.isStuck()) {
-      return t('exec.stuck', { stepId: String(this.currentStepId), description: this.currentStepDescription, iterations: this.iterationsOnCurrentStep })
+      return t("exec.stuck", {
+        stepId: String(this.currentStepId ?? "?"),
+        description: this.currentStepDescription,
+        iterations: this.iterationsOnCurrentStep,
+      });
     }
-    const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
+    const errorTool = Array.from(this.toolErrors.entries()).find(
+      ([_, c]) => c >= this.errorThreshold,
+    );
     if (errorTool) {
-      return t('exec.tool_errors', { tool: errorTool[0], count: errorTool[1] })
+      return t("exec.tool_errors", { tool: errorTool[0], count: errorTool[1] });
     }
-    return ''
+    return "";
   }
 
   getRecoveryMessage(): string {
     if (this.isStuck()) {
-      return t('exec.stuck_recovery', { iterations: this.iterationsOnCurrentStep })
+      return t("exec.stuck_recovery", {
+        iterations: this.iterationsOnCurrentStep,
+        stepId: String(this.currentStepId ?? "?"),
+        description: this.currentStepDescription,
+      });
     }
     // Per-tool error recovery (more specific — e.g., "bash failed 3 times")
-    const errorTool = Array.from(this.toolErrors.entries()).find(([_, c]) => c >= this.errorThreshold)
+    const errorTool = Array.from(this.toolErrors.entries()).find(
+      ([_, c]) => c >= this.errorThreshold,
+    );
     if (errorTool) {
-      return t('exec.tool_errors_recovery', { tool: errorTool[0], count: errorTool[1] })
+      return t("exec.tool_errors_recovery", {
+        tool: errorTool[0],
+        count: errorTool[1],
+      });
     }
     // Consecutive failures from different tools (generic — e.g., "5 consecutive failures")
     if (this.hasConsecutiveFailures()) {
-      return t('exec.consecutive_failures_recovery', { count: this.consecutiveFailures })
+      return t("exec.consecutive_failures_recovery", {
+        count: this.consecutiveFailures,
+      });
     }
     if (this.hasRepetitiveToolCalls()) {
-      return this.getRepetitiveToolMessage()
+      return this.getRepetitiveToolMessage();
     }
-    return ''
+    return "";
   }
 
-  checkOffTrack(toolName: string, call: { name: string; arguments: Record<string, unknown> }): string | null {
-    if (!this.currentStepDescription) return null
+  checkOffTrack(
+    toolName: string,
+    call: { name: string; arguments: Record<string, unknown> },
+  ): string | null {
+    if (!this.currentStepDescription) return null;
 
-    const toolArgStr = JSON.stringify(call.arguments).toLowerCase()
+    const toolArgStr = JSON.stringify(call.arguments).toLowerCase();
 
-    const pathInStep = (this.currentStepDescription.match(/\b[\w./-]+\.[a-z]+/gi) || [])
-      .map(p => p.toLowerCase())
+    const pathInStep = (
+      this.currentStepDescription.match(/\b[\w./-]+\.[a-z]+/gi) || []
+    ).map((p) => p.toLowerCase());
 
-    const pathInCall = (toolArgStr.match(/\b[\w./-]+\.[a-z]+/gi) || [])
-      .map(p => p.toLowerCase())
+    const pathInCall = (toolArgStr.match(/\b[\w./-]+\.[a-z]+/gi) || []).map(
+      (p) => p.toLowerCase(),
+    );
 
-    const overlaps = pathInCall.some(p => pathInStep.some(s => p.includes(s) || s.includes(p)))
+    const overlaps = pathInCall.some((p) =>
+      pathInStep.some((s) => p.includes(s) || s.includes(p)),
+    );
 
     if (!overlaps && pathInStep.length > 0 && pathInCall.length > 0) {
-      return t('exec.off_track', { stepId: String(this.currentStepId), description: this.currentStepDescription, tool: toolName })
+      return t("exec.off_track", {
+        stepId: String(this.currentStepId),
+        description: this.currentStepDescription,
+        tool: toolName,
+      });
     }
 
-    return null
+    return null;
   }
 
   reset(): void {
-    this.iterationsOnCurrentStep = 0
-    this.toolErrors.clear()
-    this.consecutiveFailures = 0
-    this.lastFailedTool = ''
+    this.iterationsOnCurrentStep = 0;
+    this.toolErrors.clear();
+    this.consecutiveFailures = 0;
+    this.lastFailedTool = "";
   }
 }

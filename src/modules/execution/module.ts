@@ -10,10 +10,11 @@ import { StuckDetector } from "./stuck-detector";
 import { Auditor } from "./auditor";
 import { PlanPersister } from "./plan-persister";
 import type { Plan } from "./planner";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
 const STUCK_RECOVERY_COOLDOWN = 5;
+const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
 
 export class ExecutionModule implements AgentModule {
   name = "execution";
@@ -24,6 +25,8 @@ export class ExecutionModule implements AgentModule {
   private persister: PlanPersister;
   private baseDir: string;
   private lastRecoveryIteration = -STUCK_RECOVERY_COOLDOWN;
+  private consecutivePlanWarnings = 0;
+  private lastStepId = -1;
 
   constructor(baseDir: string, stuckThreshold = 8) {
     this.baseDir = baseDir;
@@ -272,10 +275,16 @@ export class ExecutionModule implements AgentModule {
       onBeforeThink: (ctx: any) => {
         const step = this.tracker?.getCurrentStep();
         if (this.tracker && step) {
+          if (step.id !== this.lastStepId) {
+            this.consecutivePlanWarnings = 0;
+            this.lastStepId = step.id;
+          }
           this.stuckDetector.setCurrentStep(step.id, step.description);
           this.stuckDetector.recordIteration(step.id);
         } else {
           this.stuckDetector.reset();
+          this.consecutivePlanWarnings = 0;
+          this.lastStepId = -1;
         }
         const stuckReason = this.stuckDetector.getStuckReason();
         if (stuckReason) {
@@ -309,6 +318,16 @@ export class ExecutionModule implements AgentModule {
             role: "user",
             content: `<system-summary>${warning}</system-summary>`,
           });
+          this.consecutivePlanWarnings++;
+          if (this.consecutivePlanWarnings >= MAX_PLAN_WARNINGS_BEFORE_BLOCK) {
+            ctx.contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>${t("exec.plan_blocked", { step: String(this.tracker?.getCurrentStep()?.id ?? "?"), max: MAX_PLAN_WARNINGS_BEFORE_BLOCK })}</system-summary>`,
+            });
+            return false;
+          }
+        } else {
+          this.consecutivePlanWarnings = 0;
         }
         return true;
       },
@@ -330,7 +349,7 @@ export class ExecutionModule implements AgentModule {
           result.success &&
           (call.name === "write_file" || call.name === "edit_file")
         ) {
-          this.advancePlanIfStepComplete();
+          this.advancePlanIfStepComplete(ctx.contextManager);
         }
       },
     };
@@ -380,22 +399,94 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
-  private advancePlanIfStepComplete(): void {
+  private advancePlanIfStepComplete(contextManager?: any): void {
     const step = this.tracker?.getCurrentStep();
     if (!step) return;
+    const stepText = step.description.toLowerCase();
     const stepPaths = step.description.match(/\b[\w./\\-]+\.[a-z]+/gi) || [];
+
+    // Step gate: verify dependencies when mentioned — check BEFORE file paths
+    const isDepsStep =
+      stepText.includes("install") ||
+      stepText.includes("зависим") ||
+      stepText.includes("init") ||
+      stepText.includes("инициализац");
+    if (isDepsStep) {
+      const lockFiles = [
+        "package-lock.json",
+        "bun.lockb",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "node_modules",
+        "go.sum",
+        "Cargo.lock",
+        "Pipfile.lock",
+        "poetry.lock",
+        "requirements.txt",
+      ];
+      const hasLockFile = lockFiles.some((f) =>
+        existsSync(resolve(this.baseDir, f)),
+      );
+      if (!hasLockFile) {
+        if (contextManager) {
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>${t("exec.step_gate_deps", { step: String(step.id), description: step.description })}</system-summary>`,
+          });
+        }
+        return;
+      }
+    }
+
     if (stepPaths.length === 0) return;
 
     const allExist = stepPaths.every((p) =>
       existsSync(resolve(this.baseDir, p)),
     );
 
-    if (allExist) {
-      this.tracker?.updateStepStatus(step.id, "done");
-      this.tracker?.advance();
-      if (this.tracker) {
-        this.persister.save(this.tracker.getPlan());
+    if (!allExist) return;
+
+    // Step gate: verify files have content (not empty)
+    const emptyFiles: string[] = [];
+    for (const p of stepPaths) {
+      try {
+        const content = readFileSync(resolve(this.baseDir, p), "utf-8");
+        if (content.trim().length < 10) {
+          emptyFiles.push(p);
+        }
+      } catch {
+        // If we can't read it, rely on existsSync result
       }
+    }
+
+    if (emptyFiles.length > 0 && contextManager) {
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
+      });
+      return;
+    }
+
+    // All checks passed — advance
+    this.tracker?.updateStepStatus(step.id, "done");
+    const hadNext = this.tracker?.advance() ?? false;
+    if (this.tracker) {
+      this.persister.save(this.tracker.getPlan());
+    }
+
+    if (contextManager) {
+      const nextStep = hadNext ? this.tracker?.getCurrentStep() : null;
+      const nextMsg = nextStep
+        ? t("exec.step_gate_ok", {
+            step: String(step.id),
+            nextStep: String(nextStep.id),
+            nextDesc: nextStep.description,
+          })
+        : t("exec.step_gate_last", { step: String(step.id) });
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${nextMsg}</system-summary>`,
+      });
     }
   }
 }

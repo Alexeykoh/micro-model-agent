@@ -80,12 +80,25 @@ function buildSystemInfo(
     `Bash tool rules:`,
     `- Use the "workdir" parameter to run commands in a specific directory. Do NOT chain "cd dir && cmd" — the security module blocks the "&&" operator.`,
     `- Run one command per tool call. Split multi-step shell operations into separate bash calls.`,
+    `- Background processes (dev servers, watchers, long-running npm install): use the "background: true" parameter or the tool will auto-detect and background them. Check output with process_log.`,
+  );
+
+  lines.push(
+    ``,
+    `=== DEVELOPMENT RULES — follow these strictly ===`,
+    ``,
+    `1. DEPENDENCIES FIRST: Before writing any source code, ALWAYS install project dependencies (e.g., "npm install", "pip install -r requirements.txt", "cargo build", "go mod tidy"). Verify the package manager's lock file or dependency directory exists. Never write code that imports/uses packages that aren't installed yet.`,
+    `2. TOOLKIT/FWK FIRST: If the task specifies a framework or UI library, initialize and configure it BEFORE writing application code. Run its project init command first, then add components/modules. Never write your own version of what the framework already provides.`,
+    `3. ONE STEP AT A TIME: Follow the plan sequentially. Complete step N before starting step N+1. When a step is done: verify the deliverables exist and have real content (not empty), then call "plan update step=N status=done". Do not redo completed work.`,
+    `4. VERIFY YOUR WORK: After creating/modifying files, verify they exist on disk. After installing dependencies, verify the package manager completed successfully. After any command, check its output for errors. Don't assume operations succeeded.`,
+    `5. NO PREMATURE WORK: Do not create files for future steps. Do not add imports/references to packages or modules that haven't been installed yet. Do not reference files or components that don't exist yet. Build incrementally — one layer at a time.`,
+    `6. WHEN STUCK: If a command fails 2+ times, STOP and try a different approach. Write files directly instead of using commands. Ask the user for help. Never repeat the same failing command more than twice.`,
   );
 
   if (config.autoPlan) {
     lines.push(
       ``,
-      `Plan rule: For complex tasks with 3+ steps, you may create a plan using the "plan" tool. For simple questions, just answer directly.`,
+      `Plan rule (MANDATORY): For ANY task that requires creating files, installing packages, or multiple actions — you MUST create a plan using the "plan" tool BEFORE starting work. Each step must describe a concrete deliverable (specific files to create, packages to install, commands to run). Do not combine unrelated work into one step.`,
     );
   }
 
