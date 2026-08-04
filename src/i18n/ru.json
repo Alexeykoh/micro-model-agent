@@ -448,5 +448,14 @@
   "image.error": "Не удалось загрузить изображение: {message}",
   "tool.friendly.attach_image": "Прикрепить изображение",
   "repl.image": "Прикрепить изображение",
-  "repl.image_usage": "/image <путь|URL|clipboard> — прикрепить изображение к следующему сообщению"
+  "repl.image_usage": "/image <путь|URL|clipboard> — прикрепить изображение к следующему сообщению",
+  "tool.friendly.remember": "Запомнить",
+  "tool.friendly.recall": "Вспомнить",
+  "tool.remember.preference": "Запомнено: {key} = {value}",
+  "tool.remember.entry": "Запомнено: {category} — \"{entry}\"",
+  "tool.remember.key_required": "Для preferences требуется ключ (key)",
+  "tool.remember.entry_required": "Требуется текст записи",
+  "tool.recall.empty": "Ничего не найдено по \"{query}\"",
+  "tool.recall.no_memory": "Память пуста",
+  "tool.recall.search_results": "Результаты {category}:\n{results}"
 }

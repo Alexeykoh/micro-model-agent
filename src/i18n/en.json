@@ -448,5 +448,14 @@
   "image.error": "Failed to load image: {message}",
   "tool.friendly.attach_image": "Attach image",
   "repl.image": "Attach image",
-  "repl.image_usage": "/image <path|url|clipboard> — attach an image to the next message"
+  "repl.image_usage": "/image <path|url|clipboard> — attach an image to the next message",
+  "tool.friendly.remember": "Remember",
+  "tool.friendly.recall": "Recall",
+  "tool.remember.preference": "Remembered: {key} = {value}",
+  "tool.remember.entry": "Remembered: {category} — \"{entry}\"",
+  "tool.remember.key_required": "Key is required for preferences",
+  "tool.remember.entry_required": "Entry text is required",
+  "tool.recall.empty": "Nothing found for \"{query}\"",
+  "tool.recall.no_memory": "Memory is empty",
+  "tool.recall.search_results": "{category} results:\n{results}"
 }
