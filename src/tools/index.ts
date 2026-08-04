@@ -57,7 +57,6 @@ export function registerAllTools(registry: ToolRegistry, skillsModule?: SkillsMo
     webSearchTool, webFetchTool, webBrowseTool,
     questionTool, approveTool,
     pipelineRunTool, mcpCallTool, searchHistoryTool,
-    rememberTool, recallTool,
     attachImageTool,
   ]
 
