@@ -42,27 +42,31 @@ export const rememberTool: ToolDefinition = {
     const memoryDir = join(homedir(), '.mma', 'memory')
     const store = new MemoryStore(memoryDir)
 
-    if (category === 'preferences') {
-      const key = String(args.key || '')
-      const value = String(args.value || '')
-      if (!key) {
-        return { success: false, output: t('tool.remember.key_required') }
+    try {
+      if (category === 'preferences') {
+        const key = String(args.key || '')
+        const value = String(args.value || '')
+        if (!key) {
+          return { success: false, output: t('tool.remember.key_required') }
+        }
+        store.setPreference(key, value)
+        return {
+          success: true,
+          output: t('tool.remember.preference', { key, value }),
+        }
       }
-      store.setPreference(key, value)
+
+      const entry = String(args.entry || '')
+      if (!entry) {
+        return { success: false, output: t('tool.remember.entry_required') }
+      }
+      store.append(category, entry)
       return {
         success: true,
-        output: t('tool.remember.preference', { key, value }),
+        output: t('tool.remember.entry', { category, entry }),
       }
-    }
-
-    const entry = String(args.entry || '')
-    if (!entry) {
-      return { success: false, output: t('tool.remember.entry_required') }
-    }
-    store.append(category, entry)
-    return {
-      success: true,
-      output: t('tool.remember.entry', { category, entry }),
+    } catch (err) {
+      return { success: true, output: t('tool.memory_error', { error: String(err) }) }
     }
   },
 }

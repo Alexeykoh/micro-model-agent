@@ -120,6 +120,7 @@
   "tool.no_history": "Нет записей истории по \"{query}\"",
   "tool.no_sessions_dir": "Каталог сессий не найден по {dir}",
   "tool.history_error": "Ошибка поиска истории: {error}",
+  "tool.memory_error": "Ошибка памяти: {error}",
   "tool.screenshot_unavailable": "[Скриншот сделан — изображение недоступно для текстовой модели]",
   "tool.timeout": "Инструмент {name} превысил таймаут ({seconds} сек)",
   "tool.interactive_disabled": "Интерактивный инструмент отключён в режиме exit-on-complete. Продолжай без вопроса пользователю.",

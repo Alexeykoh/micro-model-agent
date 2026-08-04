@@ -30,32 +30,36 @@ export const recallTool: ToolDefinition = {
     const memoryDir = join(homedir(), '.mma', 'memory')
     const store = new MemoryStore(memoryDir)
 
-    // No query, no category → show everything
-    if (!query && !category) {
-      return { success: true, output: formatAll(store) }
-    }
+    try {
+      // No query, no category → show everything
+      if (!query && !category) {
+        return { success: true, output: formatAll(store) }
+      }
 
-    // Category only → show that category
-    if (!query && category) {
-      return { success: true, output: formatCategory(store, category) }
-    }
+      // Category only → show that category
+      if (!query && category) {
+        return { success: true, output: formatCategory(store, category) }
+      }
 
-    // Query with optional category → search
-    if (category) {
-      const results = searchCategory(store, category, query)
+      // Query with optional category → search
+      if (category) {
+        const results = searchCategory(store, category, query)
+        if (results.length === 0) {
+          return { success: true, output: t('tool.recall.empty', { query }) }
+        }
+        return { success: true, output: t('tool.recall.search_results', { category, results: results.join('\n') }) }
+      }
+
+      // Query across all
+      const results = store.search(query)
       if (results.length === 0) {
         return { success: true, output: t('tool.recall.empty', { query }) }
       }
-      return { success: true, output: t('tool.recall.search_results', { category, results: results.join('\n') }) }
+      const formatted = results.map(r => `[${r.file}] ${r.match}`).join('\n')
+      return { success: true, output: t('tool.recall.search_results', { category: 'all', results: formatted }) }
+    } catch (err) {
+      return { success: true, output: t('tool.memory_error', { error: String(err) }) }
     }
-
-    // Query across all
-    const results = store.search(query)
-    if (results.length === 0) {
-      return { success: true, output: t('tool.recall.empty', { query }) }
-    }
-    const formatted = results.map(r => `[${r.file}] ${r.match}`).join('\n')
-    return { success: true, output: t('tool.recall.search_results', { category: 'all', results: formatted }) }
   },
 }
 
