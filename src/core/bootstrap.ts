@@ -289,6 +289,7 @@ export async function bootstrap(
   const moduleRegistry = new ModuleRegistry();
 
   const execModule = new ExecutionModule(baseDir, config.stuckThreshold);
+  execModule.restorePlan();
   moduleRegistry.register(execModule);
 
   const sessionModule = new SessionModule(sessionManager);

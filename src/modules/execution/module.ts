@@ -8,6 +8,7 @@ import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
 import { StuckDetector } from "./stuck-detector";
 import { Auditor } from "./auditor";
+import { PlanPersister } from "./plan-persister";
 import type { Plan } from "./planner";
 import { existsSync } from "fs";
 import { resolve } from "path";
@@ -20,6 +21,7 @@ export class ExecutionModule implements AgentModule {
   private verifier: StepVerifier;
   private stuckDetector: StuckDetector;
   private auditor: Auditor;
+  private persister: PlanPersister;
   private baseDir: string;
   private lastRecoveryIteration = -STUCK_RECOVERY_COOLDOWN;
 
@@ -28,10 +30,26 @@ export class ExecutionModule implements AgentModule {
     this.verifier = new StepVerifier(baseDir);
     this.stuckDetector = new StuckDetector(stuckThreshold);
     this.auditor = new Auditor(baseDir);
+    this.persister = new PlanPersister(baseDir);
   }
 
   setPlan(plan: Plan): void {
     this.tracker = new PlanTracker(plan);
+    this.persister.save(plan);
+  }
+
+  restorePlan(): boolean {
+    const plan = this.persister.load();
+    if (!plan) return false;
+    this.tracker = new PlanTracker(plan);
+    // Advance to the first non-done step
+    while (
+      this.tracker.getCurrentStep()?.status === "done" ||
+      this.tracker.getCurrentStep()?.status === "skipped"
+    ) {
+      if (!this.tracker.advance()) break;
+    }
+    return true;
   }
 
   getTracker(): PlanTracker | null {
@@ -140,6 +158,7 @@ export class ExecutionModule implements AgentModule {
             );
             if (args.note)
               this.tracker.addNote(Number(args.step), String(args.note));
+            this.persister.save(this.tracker.getPlan());
             const progress = this.tracker.getProgressString();
             const display = this.tracker.toPromptBlock();
             return {
@@ -150,6 +169,7 @@ export class ExecutionModule implements AgentModule {
           }
           if (action === "abort") {
             this.tracker = null;
+            this.persister.clear();
             return { success: true, output: t("plan.aborted") };
           }
           if (!this.tracker) {
@@ -373,6 +393,9 @@ export class ExecutionModule implements AgentModule {
     if (allExist) {
       this.tracker?.updateStepStatus(step.id, "done");
       this.tracker?.advance();
+      if (this.tracker) {
+        this.persister.save(this.tracker.getPlan());
+      }
     }
   }
 }
