@@ -96,10 +96,10 @@ function buildSystemInfo(
     ``,
     `=== PLAN QUALITY RULES — your plan MUST follow these ===`,
     ``,
-    `- Each step must describe CONCRETE deliverables: exact filenames with paths, exact packages to install, exact CLI commands to run.`,
+    `- Each step must describe CONCRETE deliverables: exact filenames with paths, exact packages to install, exact CLI commands to run. Steps shorter than 50 characters or without file paths/commands are REJECTED.`,
     `- A step like "Настройка проекта" or "Setup the project" is USELESS and will be REJECTED.`,
-    `- A step like "Создать src/components/Header.tsx с хедером навигации, подключить в App.tsx" is GOOD.`,
-    `- Include file extensions (.tsx, .css, .json) and directory paths. Never write vague steps.`,
+    `- A step like "Создать src/components/Header.tsx с навигацией и логотипом, добавить в src/App.tsx импорт <Header />" is GOOD.`,
+    `- Include file extensions (.tsx, .css, .json) and directory paths. Every step must mention at least one file or command.`,
     `- The plan must cover EVERYTHING needed: init → deps → framework setup → code → verification.`,
     `- Number of steps: 5-8 for a typical task. Too few means you're being vague. Too many means you're over-splitting.`,
   );

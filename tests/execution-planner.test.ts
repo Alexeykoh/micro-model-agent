@@ -38,17 +38,4 @@ describe("PlanCreator", () => {
     expect(plan.id).toMatch(/^plan_/);
     expect(plan.baseDir).toBe("/test/dir");
   });
-
-  it("should reject too-short step descriptions", () => {
-    const result = PlanCreator.validateSteps(["short step"]);
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBe(1);
-  });
-
-  it("should accept valid step descriptions", () => {
-    const result = PlanCreator.validateSteps([
-      "Create src/index.ts with React root render and StrictMode wrapper",
-    ]);
-    expect(result.valid).toBe(true);
-  });
 });

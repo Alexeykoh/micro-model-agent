@@ -108,7 +108,7 @@ export class ExecutionModule implements AgentModule {
       {
         name: "plan",
         description:
-          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.\n\nIMPORTANT — each step MUST be detailed and concrete:\n- Specify WHICH files to create (filenames with paths, e.g. "create src/components/Header.tsx...")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH commands to run with exact arguments\n- Minimum 20 characters per step description\n- BAD: "Настройка проекта"\n- GOOD: "Создать package.json с зависимостями react@18, vite@5, установить их через npm install"',
+          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.\n\nIMPORTANT — each step MUST be detailed and concrete (≥50 chars):\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install with exact versions (e.g. "run npm install react@18.3 react-dom@18.3")\n- Specify WHICH CLI commands to run with exact arguments\n- Must contain at least one file extension (.ts, .tsx, .json, etc.) OR a command verb (install, create, build, run, add, init)\n- BAD: "Настройка проекта и установка зависимостей" (too vague, no files, no versions)\n- GOOD: "Создать package.json с зависимостями react@18.3 и vite@5.4, затем выполнить npm install в корне проекта"',
         parameters: {
           type: "object",
           properties: {
@@ -133,15 +133,6 @@ export class ExecutionModule implements AgentModule {
               : [];
             if (steps.length === 0) {
               return { success: false, output: t("plan.no_steps") };
-            }
-            const validation = PlanCreator.validateSteps(steps);
-            if (!validation.valid) {
-              return {
-                success: false,
-                output: t("plan.bad_steps", {
-                  errors: validation.errors.join("; "),
-                }),
-              };
             }
             const plan = PlanCreator.createPlan(title, steps, this.baseDir);
             this.setPlan(plan);

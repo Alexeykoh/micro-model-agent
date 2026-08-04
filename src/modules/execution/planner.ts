@@ -25,8 +25,6 @@ function generatePlanId(): string {
   return `plan_${id}`;
 }
 
-const MIN_STEP_DESC_LENGTH = 20;
-
 export class PlanCreator {
   static isMultiStep(task: string): boolean {
     const fileCount = (task.match(/\b[\w./-]+\.[a-z]+\b/gi) || []).length;
@@ -68,19 +66,6 @@ export class PlanCreator {
       createdAt: new Date().toISOString(),
       baseDir,
     };
-  }
-
-  static validateSteps(steps: string[]): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-    for (let i = 0; i < steps.length; i++) {
-      const s = steps[i].trim();
-      if (s.length < MIN_STEP_DESC_LENGTH) {
-        errors.push(
-          `Step ${i + 1} too short (${s.length} chars). Describe WHAT files to create, WHICH packages to install, WHICH commands to run. Minimum ${MIN_STEP_DESC_LENGTH} chars.`,
-        );
-      }
-    }
-    return { valid: errors.length === 0, errors };
   }
 
   static toPromptBlock(plan: Plan, currentStepIndex: number): string {

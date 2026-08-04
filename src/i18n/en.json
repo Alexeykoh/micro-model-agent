@@ -143,7 +143,6 @@
   "tool.friendly.process_log": "Process output",
   "tool.friendly.process_kill": "Stopping process",
   "plan.no_steps": "No plan steps specified. Provide concrete steps with files and commands.",
-  "plan.bad_steps": "Plan step quality unacceptable. Each step must describe concrete deliverables (files, packages, commands). Minimum 20 chars per step. Errors: {errors}",
   "plan.created": "Plan created: {title} ({steps} steps)",
   "plan.step_done": "Step {n}/{total}: {description} \u2713",
   "plan.complete": "Task complete: {summary}",

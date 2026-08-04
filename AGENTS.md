@@ -830,7 +830,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.21.0
+### Current Version: 0.21.1
 - **0** = pre-1.0 (initial development)
 - **21** = plan quality enforcement (step validation, IDs, working dir display, concrete deliverables), stricter plan enforcement (progressive blocking, step gate), removed interactive question/approve tools
 - **0** = (patch level)
