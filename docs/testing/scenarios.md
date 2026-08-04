@@ -567,7 +567,7 @@ Create a minimal Express REST API:
 - **Статус**: ✅ DONE — 1 успешная попытка, последний запуск: 2026-08-04
 - **Результат**: Express API создан, тесты vitest проходят (2 passed). GET /health и GET /users работают корректно.
 
-### 5.3 CLI-файловый менеджер (Tree View)
+### 5.3 CLI-файловый менеджер (Tree View) ✅ DONE
 ```
 Create a CLI tool that prints a tree view of a directory:
 1. package.json with name "micro-tree"
@@ -579,6 +579,8 @@ Create a CLI tool that prints a tree view of a directory:
 - **Ожидаемый план**: 5 шагов
 - **Проверка**: вывод содержит дерево файлов с правильными отступами
 - **Песочница**: `_testing/micro-tree/`
+- **Статус**: ✅ DONE — 1 успешная попытка, последний запуск: 2026-08-04
+- **Результат**: CLI запускается через `node dist/index.js test-dir` и выводит дерево с правильными отступами и символами ├──/└── (вложенные folder1/subfolder, folder2, файлы). Код компилируется через `tsc` (exit 0). `npx micro-tree` требовал установки локального bin, поэтому агент верифицировал через `node dist/index.js` — это не дефект кода. Также починен агентный баг бесконечного зацикливания при неудачном финальном аудите (добавлен лимит audit-retries, `MAX_AUDIT_RETRIES=3`).
 
 ### 5.4 Библиотека утилит + тесты
 ```

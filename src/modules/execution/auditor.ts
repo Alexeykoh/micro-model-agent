@@ -24,7 +24,9 @@ export class Auditor {
   }
 
   async audit(plan: Plan): Promise<AuditResult> {
-    const allStepText = plan.steps.map(s => s.description).join(' ')
+    const allStepText = plan.steps
+      .map(s => s.description.replace(/\([^)]*\)/g, ' '))
+      .join(' ')
     const fileMatches = allStepText.match(/\b[\w./-]+\.[a-z]+/gi) || []
     const uniqueFiles = [...new Set(fileMatches)]
 

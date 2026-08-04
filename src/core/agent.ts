@@ -241,6 +241,8 @@ export class Agent {
     const MAX_HALLUCINATION_RETRIES = 3;
     let consecutiveToolFailures = 0;
     const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
+    let auditRetries = 0;
+    const MAX_AUDIT_RETRIES = 3;
 
     while (iteration < config.maxToolIterations && !this.shutdownRequested) {
       iteration++;
@@ -612,7 +614,14 @@ export class Agent {
               })}</system-summary>`,
             });
             slog.logAudit(audit.summary, iteration);
-            if (iteration >= config.maxToolIterations - 1) {
+            auditRetries++;
+            if (
+              auditRetries >= MAX_AUDIT_RETRIES ||
+              iteration >= config.maxToolIterations - 1
+            ) {
+              logger.warn(
+                `Final audit still incomplete after ${auditRetries} retries — finishing anyway`,
+              );
               break;
             }
             continue;

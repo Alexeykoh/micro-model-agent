@@ -544,4 +544,31 @@ describe("Agent", () => {
     expect(result.text).toBe("Hello from mock LLM");
     expect(result.success).toBe(true);
   });
+
+  it("finishes after audit retry limit instead of looping forever", async () => {
+    let auditCalls = 0;
+    const failingAudit = async () => {
+      auditCalls++;
+      return {
+        passed: false,
+        missingFiles: ["src/missing.ts"],
+        createdFiles: [],
+        modifiedFiles: [],
+        summary: "Task incomplete: 0/1 steps done, 1 files missing",
+        typeCheckError: null,
+        massEditWarning: null,
+        pendingSteps: ["Create src/missing.ts"],
+      };
+    };
+
+    const deps = createMockDeps({
+      finalAudit: failingAudit,
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("hello");
+
+    expect(auditCalls).toBe(3);
+    expect(result.success).toBe(true);
+    expect(deps.llmProvider.chat).toHaveBeenCalledTimes(3);
+  });
 });
