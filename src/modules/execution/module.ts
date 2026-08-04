@@ -370,8 +370,6 @@ export class ExecutionModule implements AgentModule {
       "grep",
       "file_info",
       "load_skill",
-      "question",
-      "approve",
     ];
     if (allowedAlways.includes(call.name)) return null;
 

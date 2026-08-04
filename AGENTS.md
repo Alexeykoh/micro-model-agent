@@ -830,7 +830,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.20.1
+### Current Version: 0.20.2
 - **0** = pre-1.0 (initial development)
 - **18** = minor features added (model list, context, reload, security policies, MoE phases, etc.)
 - **2** = patch fixes (dynamic version resolution, REPL header version display)
