@@ -21,6 +21,8 @@ function adaptCommandForWindows(command: string): string {
   if (trimmed === 'mkdir -p' || trimmed.startsWith('mkdir -p ')) {
     return trimmed.replace(/mkdir -p/g, 'mkdir')
   }
+
+  // No encoding adaptation needed — runner.ts handles UTF-8 decoding
   return command
 }
 

@@ -91,21 +91,39 @@ export function runCommand(
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const append = (ref: { value: string }, chunk: Buffer) => {
-      const text = chunk.toString();
-      const next = ref.value.length + text.length;
-      if (next > maxBuffer) {
-        ref.value =
-          ref.value.slice(ref.value.length + text.length - maxBuffer) + text;
-      } else {
-        ref.value = ref.value + text;
-      }
-    };
-
     const stdoutRef = { value: stdout };
     const stderrRef = { value: stderr };
-    child.stdout?.on("data", (chunk: Buffer) => append(stdoutRef, chunk));
-    child.stderr?.on("data", (chunk: Buffer) => append(stderrRef, chunk));
+
+    // On Windows, child processes spawned via cmd.exe output in the OEM code
+    // page (typically CP866 for Russian), NOT UTF-8 — even when the parent
+    // console reports code page 65001 via `chcp`.  Always decode with ibm866
+    // so that Cyrillic and other non-ASCII text is not garbled.
+    const decoder: TextDecoder | null =
+      platform() === "win32" ? new TextDecoder("ibm866") : null;
+
+    const decodeChunk = (chunk: Buffer): string =>
+      decoder ? decoder.decode(chunk, { stream: true }) : chunk.toString("utf-8");
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      const text = decodeChunk(chunk);
+      const next = stdoutRef.value.length + text.length;
+      if (next > maxBuffer) {
+        stdoutRef.value =
+          stdoutRef.value.slice(stdoutRef.value.length + text.length - maxBuffer) + text;
+      } else {
+        stdoutRef.value = stdoutRef.value + text;
+      }
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      const text = decodeChunk(chunk);
+      const next = stderrRef.value.length + text.length;
+      if (next > maxBuffer) {
+        stderrRef.value =
+          stderrRef.value.slice(stderrRef.value.length + text.length - maxBuffer) + text;
+      } else {
+        stderrRef.value = stderrRef.value + text;
+      }
+    });
 
     const entry: ActiveChild = {
       kill: () => killTree(child),
