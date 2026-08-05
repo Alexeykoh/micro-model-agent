@@ -907,8 +907,9 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.24.2
+### Current Version: 0.24.3
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
 - **23** = model certification module (`mma model certify`), cert checkmarks in model lists, `--model/--provider-url` env-var overrides used by the harness
 - **24** = context quality formula upgrade (token load + compaction loss + error density + freshness), quality tests
+- **24** = read_file display mode (show only header in REPL, full content to LLM)

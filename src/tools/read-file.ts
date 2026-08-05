@@ -81,6 +81,11 @@ export const readFileTool: ToolDefinition = {
             next: String(end + 1),
           })
         : "";
-    return { success: true, output: `${header}\n${selected}${truncated}` };
+    const display = truncated ? `${header}${truncated}` : header;
+    return {
+      success: true,
+      output: `${header}\n${selected}${truncated}`,
+      display,
+    };
   },
 };

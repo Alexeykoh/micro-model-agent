@@ -456,12 +456,13 @@ export class Agent {
           );
           if (result.display) {
             onMeta?.("\n" + result.display + "\n");
+          } else {
+            const metaOut = pluginManager.runOnMeta(
+              { iteration, logger },
+              result.output,
+            );
+            onMeta?.("\n" + pc.dim(metaOut) + "\n");
           }
-          const metaOut = pluginManager.runOnMeta(
-            { iteration, logger },
-            result.output,
-          );
-          onMeta?.("\n" + pc.dim(metaOut) + "\n");
           if (result.diff) {
             onMeta?.("\n" + result.diff + "\n");
           }
