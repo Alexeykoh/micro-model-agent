@@ -58,7 +58,9 @@ export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
       const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
       const existing = failures.get(key);
       const errorText = truncate(
-        typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
+        typeof msg.content === "string"
+          ? msg.content
+          : getMessageText(msg.content),
         100,
       );
       if (existing) {
@@ -136,10 +138,13 @@ export class ContextManager {
     return this.iterationsSinceCompaction;
   }
 
+  noteIteration(): void {
+    this.iterationsSinceCompaction++;
+  }
+
   getQuality(): number {
     const freshness = 1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL;
-    const depth = 1 / (1 + this.compactionCount);
-    return Math.round(freshness * depth * 100);
+    return Math.round(freshness * 100);
   }
 
   addMessage(msg: Message): void {
@@ -147,7 +152,10 @@ export class ContextManager {
     if (msg.role === "user" && this.pendingImageParts.length > 0) {
       const textPart: TextPart = {
         type: "text",
-        text: typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
+        text:
+          typeof msg.content === "string"
+            ? msg.content
+            : getMessageText(msg.content),
       };
       msg = {
         ...msg,
@@ -156,7 +164,6 @@ export class ContextManager {
       this.pendingImageParts = [];
     }
     this.messages.push(msg);
-    this.iterationsSinceCompaction++;
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
@@ -202,7 +209,7 @@ export class ContextManager {
         for (const part of m.content) {
           if (part.type === "image_url" && part.image_url?.url) {
             const b64Len = part.image_url.url.includes(",")
-              ? part.image_url.url.split(",")[1]?.length ?? 0
+              ? (part.image_url.url.split(",")[1]?.length ?? 0)
               : part.image_url.url.length;
             // ~130 tokens per 512 bytes of base64
             t += Math.ceil(b64Len / 512) * 130;
@@ -224,7 +231,7 @@ export class ContextManager {
       for (const part of m.content) {
         if (part.type === "image_url" && part.image_url?.url) {
           const b64Len = part.image_url.url.includes(",")
-            ? part.image_url.url.split(",")[1]?.length ?? 0
+            ? (part.image_url.url.split(",")[1]?.length ?? 0)
             : part.image_url.url.length;
           t += Math.ceil(b64Len / 512) * 130;
         }
@@ -386,5 +393,17 @@ export class ContextManager {
       (sum, m) => sum + this.estimateMessageTokens(m),
       0,
     );
+  }
+
+  resize(
+    contextWindow: number,
+    contextBudget?: ConfigContextBudget,
+    tokenCounter?: TokenCounter | null,
+  ): void {
+    this.contextWindow = contextWindow;
+    this.budget = this.calculateBudget(contextWindow, contextBudget);
+    if (tokenCounter !== undefined) {
+      this.tokenCounter = tokenCounter ?? null;
+    }
   }
 }

@@ -56,6 +56,7 @@ export class Agent {
   private deps: AgentDeps;
   private systemPromptAdded = false;
   private shutdownRequested = false;
+  private abortController: AbortController | null = null;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
@@ -242,6 +243,7 @@ export class Agent {
     } = this.deps;
 
     const slog = new SessionLogger(sessionManager);
+    this.abortController = new AbortController();
     let iteration = 0;
     let lastText = "";
     let hallucinationRetries = 0;
@@ -256,6 +258,7 @@ export class Agent {
 
     while (iteration < config.maxToolIterations && !this.shutdownRequested) {
       iteration++;
+      contextManager.noteIteration();
 
       pluginManager.runOnBeforeThink({
         iteration,
@@ -312,6 +315,7 @@ export class Agent {
           history,
           allTools as ToolDefinition[],
         )) {
+          if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
             if (emittedReasoning && !textContent) {
               onMeta?.("\n\n");
@@ -437,7 +441,10 @@ export class Agent {
           slog.logToolCall(call, iteration);
 
           const tokensBeforeTool = contextManager.getEstimatedTokens();
-          const result = await toolExecutor.execute(call);
+          const result = await toolExecutor.execute(
+            call,
+            this.abortController?.signal,
+          );
           const duration = Date.now() - startTime;
           if (!result.success) anyToolFailed = true;
 
@@ -458,15 +465,6 @@ export class Agent {
           if (result.diff) {
             onMeta?.("\n" + result.diff + "\n");
           }
-          const tokensAfterTool = contextManager.getEstimatedTokens();
-          onTool?.({
-            type: "end",
-            tool: call.name,
-            args: call.arguments,
-            duration,
-            error: !result.success,
-            ctxDelta: tokensAfterTool - tokensBeforeTool,
-          });
 
           const currentTokens = contextManager.getEstimatedTokens();
           const budget = contextManager.getBudget();
@@ -483,6 +481,17 @@ export class Agent {
             success: result.success,
             arguments: call.arguments,
           });
+
+          const tokensAfterTool = contextManager.getEstimatedTokens();
+          onTool?.({
+            type: "end",
+            tool: call.name,
+            args: call.arguments,
+            duration,
+            error: !result.success,
+            ctxDelta: tokensAfterTool - tokensBeforeTool,
+          });
+
           summaries.push(
             `[Tool: ${call.name} (${JSON.stringify(call.arguments)}) → ${truncatedOutput.slice(0, 200)}]`,
           );
@@ -514,16 +523,16 @@ export class Agent {
           });
 
           if (sessionManager) {
-            const activeSession = sessionManager.getActiveMeta()
+            const activeSession = sessionManager.getActiveMeta();
             if (activeSession) {
-              const memDir = join(baseDir, '.mma', 'memory')
-              const memStore = new MemoryStore(memDir)
+              const memDir = join(baseDir, ".mma", "memory");
+              const memStore = new MemoryStore(memDir);
               memStore.appendRule(
-                'errors',
+                "errors",
                 `${consecutiveToolFailures} consecutive tool failures`,
-                'Multiple tools failing suggests environment or configuration issue',
-                'Check dependencies, verify file paths, try write_file directly instead of shell commands'
-              )
+                "Multiple tools failing suggests environment or configuration issue",
+                "Check dependencies, verify file paths, try write_file directly instead of shell commands",
+              );
             }
           }
         }
@@ -545,7 +554,8 @@ export class Agent {
         const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
         const compCount = contextManager.getCompactionCount();
         const quality = contextManager.getQuality();
-        const qualityColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
+        const qualityColor =
+          quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
         onMeta?.(
           `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
         );
@@ -685,6 +695,28 @@ export class Agent {
     this.systemPromptAdded = false;
   }
 
+  async reconfigure(config: AppConfig): Promise<void> {
+    const { OpenAICompatProvider } = await import("../llm/openai-compat");
+    const { TokenCounter } = await import("../llm/token-counter");
+    const newProvider = new OpenAICompatProvider({
+      model: config.model,
+      baseUrl: config.provider.baseUrl,
+      apiKey: config.provider.apiKey,
+      contextWindow: config.contextWindow,
+      retry: config.retry,
+      rateLimits: config.security?.rateLimits,
+    });
+    this.deps.llmProvider = newProvider;
+    this.deps.toolExecutor.updateProvider(newProvider);
+    const newTokenCounter = new TokenCounter(config.model);
+    this.deps.contextManager.resize(
+      config.contextWindow,
+      config.contextBudget,
+      newTokenCounter,
+    );
+    this.deps.config = config;
+  }
+
   setContext(
     messages: Array<{
       role: string;
@@ -709,6 +741,7 @@ export class Agent {
 
   shutdown(): void {
     this.shutdownRequested = true;
+    this.abortController?.abort();
     const { pluginManager, logger, sessionManager, contextManager } = this.deps;
     contextManager.onCompact = null;
     const killed = processRegistry.killAll();

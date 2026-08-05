@@ -271,6 +271,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         ctx.config.maxToolIterations = answers.maxToolIterations;
         ctx.config.locale = answers.locale;
         saveConfig(ctx.config, configPath);
+        await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("cli.config_saved")));
       });
     },
@@ -301,7 +302,7 @@ function registerMmaCommands(ctx: ReplContext): void {
     name: "provider",
     description: t("repl.provider_list"),
     usage: t("repl.provider_usage"),
-    action: (args: string[]) => {
+    action: async (args: string[]) => {
       const subcmd = args[0];
       if (!subcmd || subcmd === "list") {
         console.log(
@@ -319,6 +320,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         ctx.config.provider.type = name;
         const configPath = join(homedir(), ".mma", "config.json");
         saveConfig(ctx.config, configPath);
+        await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("repl.provider_set", { name })));
         return;
       }
@@ -383,6 +385,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         ctx.config.model = name;
         const configPath = join(homedir(), ".mma", "config.json");
         saveConfig(ctx.config, configPath);
+        await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("repl.model_set", { name })));
         return;
       }
@@ -393,7 +396,7 @@ function registerMmaCommands(ctx: ReplContext): void {
     name: "context",
     description: t("cli.manage_context"),
     usage: "/context <size>",
-    action: (args: string[]) => {
+    action: async (args: string[]) => {
       if (args.length === 0) {
         console.log(
           `/context ${t("repl.context")}  ${ctx.config.contextWindow}`,
@@ -409,6 +412,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       ctx.config.contextWindow = size;
       const configPath = join(homedir(), ".mma", "config.json");
       saveConfig(ctx.config, configPath);
+      await ctx.agent.reconfigure(ctx.config);
       console.log(pc.green(t("cli.context_set", { size })));
     },
   });

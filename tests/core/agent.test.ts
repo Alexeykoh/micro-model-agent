@@ -31,8 +31,12 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     runOnPhase: vi.fn(),
     runOnToolStart: vi.fn(),
     runOnToolEnd: vi.fn(),
-    runOnText: vi.fn().mockImplementation((_ctx: unknown, chunk: string) => chunk),
-    runOnMeta: vi.fn().mockImplementation((_ctx: unknown, chunk: string) => chunk),
+    runOnText: vi
+      .fn()
+      .mockImplementation((_ctx: unknown, chunk: string) => chunk),
+    runOnMeta: vi
+      .fn()
+      .mockImplementation((_ctx: unknown, chunk: string) => chunk),
     runOnError: vi.fn(),
     runOnSessionStart: vi.fn(),
     runOnSessionEnd: vi.fn(),
@@ -54,6 +58,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     getCompactionCount: vi.fn().mockReturnValue(0),
     getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
     getQuality: vi.fn().mockReturnValue(100),
+    noteIteration: vi.fn(),
   };
 
   const mockHallucinationDetector = {
@@ -339,8 +344,12 @@ describe("Agent", () => {
     const deps = createMockDeps({ llmProvider: mockProvider as any });
     const agent = new Agent(deps as any);
     const phases: string[] = [];
-    const result = await agent.run("test", undefined, undefined, undefined, (p) =>
-      phases.push(p),
+    const result = await agent.run(
+      "test",
+      undefined,
+      undefined,
+      undefined,
+      (p) => phases.push(p),
     );
 
     expect(phases).toEqual(["thinking", "done"]);
@@ -374,7 +383,9 @@ describe("Agent", () => {
     const deps = createMockDeps({
       pluginManager: {
         ...createMockDeps().pluginManager,
-        runOnBuildPrompt: vi.fn().mockReturnValue(["### Plugin rule: be brief"]),
+        runOnBuildPrompt: vi
+          .fn()
+          .mockReturnValue(["### Plugin rule: be brief"]),
       },
     });
     const agent = new Agent(deps as any);
@@ -403,7 +414,10 @@ describe("Agent", () => {
                 arguments: "{}",
               },
             };
-            yield { type: "done" as const, finishReason: "tool_calls" as const };
+            yield {
+              type: "done" as const,
+              finishReason: "tool_calls" as const,
+            };
             yield { type: "text" as const, content: "Done" };
             yield { type: "done" as const, finishReason: "stop" as const };
           })(),
@@ -415,7 +429,9 @@ describe("Agent", () => {
     const result = await agent.run("write a file");
 
     expect(result.success).toBe(true);
-    expect((deps.pluginManager.runOnToolStart as any).mock.calls.length).toBe(1);
+    expect((deps.pluginManager.runOnToolStart as any).mock.calls.length).toBe(
+      1,
+    );
     expect((deps.pluginManager.runOnToolEnd as any).mock.calls.length).toBe(1);
     const endCall = (deps.pluginManager.runOnToolEnd as any).mock.calls[0];
     expect(endCall[1]).toMatchObject({ name: "write_file", id: "call_1" });
@@ -432,9 +448,11 @@ describe("Agent", () => {
           .mockImplementation((_ctx: unknown, chunk: string) =>
             chunk.replace(/secret/g, "[redacted]"),
           ),
-        runOnMeta: vi.fn().mockImplementation((_ctx: unknown, chunk: string) =>
-          chunk.replace(/secret/g, "[redacted]"),
-        ),
+        runOnMeta: vi
+          .fn()
+          .mockImplementation((_ctx: unknown, chunk: string) =>
+            chunk.replace(/secret/g, "[redacted]"),
+          ),
       },
       llmProvider: {
         model: "test-model",
@@ -452,7 +470,11 @@ describe("Agent", () => {
     const agent = new Agent(deps as any);
     const chunks: string[] = [];
     const meta: string[] = [];
-    await agent.run("test", (c) => chunks.push(c), (m) => meta.push(m));
+    await agent.run(
+      "test",
+      (c) => chunks.push(c),
+      (m) => meta.push(m),
+    );
 
     expect(chunks.join("")).toContain("[redacted]");
     expect(chunks.join("")).not.toContain("secret");

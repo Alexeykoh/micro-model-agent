@@ -20,7 +20,7 @@ export class ToolExecutor {
     this.pluginManager = pluginManager;
   }
 
-  async execute(call: ToolCall): Promise<ToolResult> {
+  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
     const tool = this.registry.get(call.name);
     if (!tool) {
       return {
@@ -57,26 +57,38 @@ export class ToolExecutor {
         result = await tool.handler(this.ctx, call.arguments);
       } else {
         const timeoutPromise = new Promise<ToolResult>((_, reject) => {
-          setTimeout(
-            () => {
-              // Kill any long-running child process registered for this call.
-              killByCallId(call.id);
-              reject(
-                new Error(
-                  t("tool.timeout", {
-                    name: call.name,
-                    seconds: TOOL_EXECUTION_TIMEOUT_MS / 1000,
-                  }),
-                ),
-              );
-            },
-            TOOL_EXECUTION_TIMEOUT_MS,
-          );
+          setTimeout(() => {
+            // Kill any long-running child process registered for this call.
+            killByCallId(call.id);
+            reject(
+              new Error(
+                t("tool.timeout", {
+                  name: call.name,
+                  seconds: TOOL_EXECUTION_TIMEOUT_MS / 1000,
+                }),
+              ),
+            );
+          }, TOOL_EXECUTION_TIMEOUT_MS);
         });
-        result = await Promise.race([
+        const racePromises: Promise<ToolResult>[] = [
           tool.handler(this.ctx, call.arguments),
           timeoutPromise,
-        ]);
+        ];
+        if (signal) {
+          const abortPromise = new Promise<ToolResult>((_, reject) => {
+            const onAbort = () => {
+              killByCallId(call.id);
+              reject(new Error(t("tool.aborted", { name: call.name })));
+            };
+            if (signal.aborted) {
+              onAbort();
+            } else {
+              signal.addEventListener("abort", onAbort, { once: true });
+            }
+          });
+          racePromises.push(abortPromise);
+        }
+        result = await Promise.race(racePromises);
       }
       result.toolCallId = call.id;
     } catch (e: any) {
@@ -103,9 +115,7 @@ export class ToolExecutor {
     return result;
   }
 
-  getToolDefinitions(
-    tags?: string[],
-  ): Array<{
+  getToolDefinitions(tags?: string[]): Array<{
     name: string;
     description: string;
     parameters: Record<string, unknown>;
@@ -119,5 +129,9 @@ export class ToolExecutor {
 
   setScope(scope: import("./types").ToolScope): void {
     this.ctx.scope = scope;
+  }
+
+  updateProvider(provider: import("../llm/provider").LLMProvider): void {
+    this.ctx.llmProvider = provider;
   }
 }

@@ -123,6 +123,7 @@
   "tool.memory_error": "Memory error: {error}",
   "tool.screenshot_unavailable": "[Screenshot captured \u2014 image not available for text-only model]",
   "tool.timeout": "Tool {name} timed out after {seconds} seconds",
+  "tool.aborted": "Tool {name} was interrupted by user",
   "tool.interactive_disabled": "Interactive tool is disabled in exit-on-complete mode. Proceed without asking the user.",
   "proc.started": "Started background process {id} (PID {pid}).\nCommand: {command}",
   "proc.detected_hint": "[Long-running command detected — started in background]",

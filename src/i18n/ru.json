@@ -123,6 +123,7 @@
   "tool.memory_error": "Ошибка памяти: {error}",
   "tool.screenshot_unavailable": "[Скриншот сделан — изображение недоступно для текстовой модели]",
   "tool.timeout": "Инструмент {name} превысил таймаут ({seconds} сек)",
+  "tool.aborted": "Инструмент {name} прерван пользователем",
   "tool.interactive_disabled": "Интерактивный инструмент отключён в режиме exit-on-complete. Продолжай без вопроса пользователю.",
   "proc.started": "Фоновый процесс запущен: {id} (PID {pid}).\nКоманда: {command}",
   "proc.detected_hint": "[Обнаружена длительная команда — запущена в фоне]",
