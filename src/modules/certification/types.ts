@@ -1,0 +1,62 @@
+export type CertTag = "core" | "security" | "image" | "network" | "browser";
+
+export type CertCheck =
+  | { type: "fileExists"; path: string }
+  | { type: "fileNotExists"; path: string }
+  | { type: "dirExists"; path: string }
+  | { type: "fileContent"; path: string; contains?: string; equals?: string }
+  | { type: "fileRegex"; path: string; pattern: string }
+  | { type: "exitCode"; code?: number }
+  | { type: "outputContains"; text: string };
+
+export interface CertFixture {
+  source: string;
+  dest: string;
+}
+
+export interface CertScenario {
+  id: string;
+  title: string;
+  tags: CertTag[];
+  mode: "run" | "skip";
+  prompt: string;
+  reps?: number;
+  passThreshold?: number;
+  fixtures?: CertFixture[];
+  checks: CertCheck[];
+  skipReason?: string;
+}
+
+export type ScenarioStatus = "pass" | "fail" | "error" | "skipped";
+
+export interface ScenarioResult {
+  id: string;
+  title: string;
+  status: ScenarioStatus;
+  passed: number;
+  of: number;
+  error?: string;
+}
+
+export interface SuiteSummary {
+  passed: number;
+  failed: number;
+  skipped: number;
+  total: number;
+}
+
+export interface CertificationEntry {
+  model: string;
+  providerUrl: string;
+  mmaVersion: string;
+  certifiedAt: string;
+  suite: SuiteSummary;
+  results: ScenarioResult[];
+}
+
+export interface CertManifest {
+  version: 1;
+  certifications: CertificationEntry[];
+}
+
+export type CertMark = "certified" | "stale" | "none";
