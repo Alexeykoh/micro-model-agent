@@ -143,8 +143,28 @@ export class ContextManager {
   }
 
   getQuality(): number {
-    const freshness = 1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL;
-    return Math.round(freshness * 100);
+    const usedTokens = this.getEstimatedTokens();
+    const tokenLoad = Math.max(0, 1 - usedTokens / this.budget.history);
+
+    const compactionLoss = Math.max(0, 1 - this.compactionCount * 0.15);
+
+    const msgCount = this.messages.length || 1;
+    const errorDensity = Math.max(
+      0,
+      1 - Math.min(1, this.errorFacts.length / msgCount),
+    );
+
+    const freshness = Math.max(
+      0,
+      1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL,
+    );
+
+    const score =
+      tokenLoad * 0.4 +
+      compactionLoss * 0.25 +
+      errorDensity * 0.2 +
+      freshness * 0.15;
+    return Math.round(Math.min(100, Math.max(0, score * 100)));
   }
 
   addMessage(msg: Message): void {

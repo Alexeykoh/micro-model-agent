@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { ContextManager, extractTriedAndFailed } from "../src/modules/context/manager";
+import {
+  ContextManager,
+  extractTriedAndFailed,
+} from "../src/modules/context/manager";
 import type { Message } from "../src/modules/context/manager";
 
 describe("ContextManager", () => {
@@ -53,12 +56,83 @@ describe("ContextManager", () => {
   });
 });
 
+describe("getQuality", () => {
+  it("should return ~100 for empty context", () => {
+    const cm = new ContextManager(32768);
+    const q = cm.getQuality();
+    expect(q).toBeGreaterThanOrEqual(95);
+    expect(q).toBeLessThanOrEqual(100);
+  });
+
+  it("should decrease as tokens fill up", () => {
+    const cm = new ContextManager(1000);
+    const q1 = cm.getQuality();
+    for (let i = 0; i < 20; i++) {
+      cm.addMessage({ role: "user", content: "x".repeat(200) });
+    }
+    const q2 = cm.getQuality();
+    expect(q2).toBeLessThan(q1);
+  });
+
+  it("should decrease after compaction", () => {
+    const cm = new ContextManager(1000);
+    const q1 = cm.getQuality();
+    cm.addMessage({ role: "system", content: "SYS" });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `msg ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const q2 = cm.getQuality();
+    expect(q2).toBeLessThan(q1);
+  });
+
+  it("should decrease with iterations", () => {
+    const cm = new ContextManager(32768);
+    const q1 = cm.getQuality();
+    cm.noteIteration();
+    cm.noteIteration();
+    cm.noteIteration();
+    const q2 = cm.getQuality();
+    expect(q2).toBeLessThan(q1);
+  });
+
+  it("should always be between 0 and 100", () => {
+    const cm = new ContextManager(100);
+    for (let i = 0; i < 50; i++) {
+      cm.addMessage({ role: "user", content: "x".repeat(100) });
+    }
+    for (let i = 0; i < 30; i++) cm.noteIteration();
+    const q = cm.getQuality();
+    expect(q).toBeGreaterThanOrEqual(0);
+    expect(q).toBeLessThanOrEqual(100);
+  });
+});
+
 describe("extractTriedAndFailed", () => {
   it("should extract repeated failures from tool messages", () => {
     const messages: Message[] = [
-      { role: "tool", name: "write_file", arguments: { path: "src/index.ts" }, content: "TS2769 error", success: false },
-      { role: "tool", name: "write_file", arguments: { path: "src/index.ts" }, content: "TS2769 error", success: false },
-      { role: "tool", name: "write_file", arguments: { path: "src/index.ts" }, content: "TS2769 error", success: false },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "src/index.ts" },
+        content: "TS2769 error",
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "src/index.ts" },
+        content: "TS2769 error",
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "src/index.ts" },
+        content: "TS2769 error",
+        success: false,
+      },
     ];
     const result = extractTriedAndFailed(messages);
     expect(result).toHaveLength(1);
@@ -69,7 +143,13 @@ describe("extractTriedAndFailed", () => {
 
   it("should not include failures with count < 2", () => {
     const messages: Message[] = [
-      { role: "tool", name: "bash", arguments: { command: "npm test" }, content: "exit code 1", success: false },
+      {
+        role: "tool",
+        name: "bash",
+        arguments: { command: "npm test" },
+        content: "exit code 1",
+        success: false,
+      },
     ];
     const result = extractTriedAndFailed(messages);
     expect(result).toHaveLength(0);
@@ -77,8 +157,20 @@ describe("extractTriedAndFailed", () => {
 
   it("should not include successful tool calls", () => {
     const messages: Message[] = [
-      { role: "tool", name: "write_file", arguments: { path: "a.ts" }, content: "ok", success: true },
-      { role: "tool", name: "write_file", arguments: { path: "a.ts" }, content: "ok", success: true },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "a.ts" },
+        content: "ok",
+        success: true,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "a.ts" },
+        content: "ok",
+        success: true,
+      },
     ];
     const result = extractTriedAndFailed(messages);
     expect(result).toHaveLength(0);
@@ -86,10 +178,34 @@ describe("extractTriedAndFailed", () => {
 
   it("should track different tools separately", () => {
     const messages: Message[] = [
-      { role: "tool", name: "bash", arguments: { command: "test" }, content: "fail", success: false },
-      { role: "tool", name: "bash", arguments: { command: "test" }, content: "fail", success: false },
-      { role: "tool", name: "write_file", arguments: { path: "a.ts" }, content: "error", success: false },
-      { role: "tool", name: "write_file", arguments: { path: "a.ts" }, content: "error", success: false },
+      {
+        role: "tool",
+        name: "bash",
+        arguments: { command: "test" },
+        content: "fail",
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "bash",
+        arguments: { command: "test" },
+        content: "fail",
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "a.ts" },
+        content: "error",
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "a.ts" },
+        content: "error",
+        success: false,
+      },
     ];
     const result = extractTriedAndFailed(messages);
     expect(result).toHaveLength(2);
@@ -100,8 +216,20 @@ describe("extractTriedAndFailed", () => {
   it("should truncate long error messages to 100 chars", () => {
     const longError = "x".repeat(200);
     const messages: Message[] = [
-      { role: "tool", name: "bash", arguments: { command: "test" }, content: longError, success: false },
-      { role: "tool", name: "bash", arguments: { command: "test" }, content: longError, success: false },
+      {
+        role: "tool",
+        name: "bash",
+        arguments: { command: "test" },
+        content: longError,
+        success: false,
+      },
+      {
+        role: "tool",
+        name: "bash",
+        arguments: { command: "test" },
+        content: longError,
+        success: false,
+      },
     ];
     const result = extractTriedAndFailed(messages);
     expect(result).toHaveLength(1);
