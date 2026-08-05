@@ -20,6 +20,11 @@ export function isSpinnerSupported(stream?: NodeJS.WritableStream): boolean {
  * Zero-dependency ANSI spinner. Writes to stderr using a single
  * overwritten line (`\r` + text + clear-to-end). Disabled automatically
  * when the target stream is not a TTY.
+ *
+ * Supports:
+ * - topBar mode: renders context bar at terminal line 1 (save/restore cursor)
+ * - extra text: right-aligned context info appended to the spinner line
+ * - non-animated mode: static display without frame animation
  */
 export class Spinner {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -29,6 +34,8 @@ export class Spinner {
   private stream: NodeJS.WritableStream;
   private intervalMs: number;
   private width: number;
+  private topBar = false;
+  private extraText = "";
 
   constructor(opts: SpinnerOptions = {}) {
     this.stream = opts.stream ?? process.stderr;
@@ -55,11 +62,26 @@ export class Spinner {
     if (this.timer) this.tick();
   }
 
+  setTopBar(enable: boolean): void {
+    this.topBar = enable;
+  }
+
+  setExtra(text: string): void {
+    this.extraText = text;
+    if (this.timer) this.tick();
+  }
+
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      this.stream.write("\r\x1b[K");
+      if (this.topBar) {
+        // Clear top bar line
+        this.stream.write("\x1B[s\x1B[1;1H\x1B[K\x1B[u");
+      } else {
+        this.stream.write("\r\x1b[K");
+      }
+      this.topBar = false;
     }
   }
 
@@ -77,6 +99,17 @@ export class Spinner {
     if (!this.timer) return;
     const frame = FRAMES[this.frame % FRAMES.length];
     this.frame++;
-    this.stream.write("\r" + pc.cyan(frame) + " " + this.message + "\x1b[K");
+
+    if (this.topBar) {
+      // Top-bar mode: context bar at terminal line 1
+      const extra = this.extraText ? `  │  ${this.extraText}` : "";
+      const bar = `${pc.cyan(frame)} ${this.message}${extra}`;
+      this.stream.write(`\x1B[s\x1B[1;1H\x1B[K${bar}\x1B[u`);
+    } else {
+      // Normal mode: spinner on current line
+      const extra = this.extraText ? `  │  ${this.extraText}` : "";
+      const line = `${pc.cyan(frame)} ${this.message}${extra}`;
+      this.stream.write(`\r${line}\x1b[K`);
+    }
   }
 }

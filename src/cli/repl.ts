@@ -11,8 +11,9 @@ import {
   SubcommandProvider,
   SkillNameProvider,
 } from "./completer";
-import { Renderer } from "../ui/renderer";
-import { box, divider } from "../ui/box";
+import { Renderer, formatContextBarCompact } from "../ui/renderer";
+import { InputBar } from "../ui/input-bar";
+import { box } from "../ui/box";
 import { t } from "../i18n/index";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
@@ -77,6 +78,8 @@ export class Repl implements ReplContext {
   private baseDir: string;
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
+  private inputBar?: InputBar;
+  private inputQueue: string[] = [];
 
   public rl: readline.Interface;
   public agent: Agent;
@@ -306,6 +309,8 @@ export class Repl implements ReplContext {
   public async runAgent(input: string): Promise<void> {
     if (this.agentRunning) return;
     this.agentRunning = true;
+    const inputBar = new InputBar();
+    this.inputBar = inputBar;
     try {
       if (this.pendingClipboardImage) {
         const contextManager = this.agent.contextManager;
@@ -318,11 +323,29 @@ export class Repl implements ReplContext {
         this.pendingClipboardImage = null;
       }
 
-      process.stdout.write("\n" + pc.green(t("repl.agent")));
-
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
       });
+      renderer.setContextInfoProvider(() => this.getAgentContextInfo());
+
+      // Start raw mode input bar for queuing messages during agent run
+      inputBar.start(
+        // onSubmit: called when user presses Enter during agent run
+        (queuedInput: string) => {
+          if (queuedInput.trim()) {
+            this.inputQueue.push(queuedInput.trim());
+            inputBar.setQueueCount(this.inputQueue.length);
+          }
+        },
+        // onCancel: Ctrl+C during agent run
+        () => {
+          this.agent.shutdown();
+        },
+      );
+
+      // Show "Agent thinking" on stdout
+      process.stdout.write("\n" + pc.green(t("repl.agent")));
+
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
@@ -350,7 +373,38 @@ export class Repl implements ReplContext {
       }
       this.showContextBar(result);
     } finally {
+      inputBar.stop();
+      this.inputBar = undefined;
       this.agentRunning = false;
+
+      // Process any queued inputs
+      await this.processInputQueue();
+    }
+  }
+
+  private getAgentContextInfo(): string {
+    const ctx = this.agent.contextManager;
+    if (!ctx) return "";
+    const used = ctx.getEstimatedTokens();
+    const budget = this.config.contextBudget;
+    const sysBudget = Math.floor(
+      this.config.contextWindow * budget.systemPrompt,
+    );
+    const histBudget = this.config.contextWindow - sysBudget;
+    return formatContextBarCompact(
+      used,
+      histBudget,
+      ctx.getCompactionCount() ?? 0,
+      ctx.getQuality() ?? 0,
+    );
+  }
+
+  private async processInputQueue(): Promise<void> {
+    while (this.inputQueue.length > 0 && this.running) {
+      const next = this.inputQueue.shift()!;
+      if (next) {
+        await this.runAgent(next);
+      }
     }
   }
 
