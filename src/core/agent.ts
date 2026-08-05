@@ -99,6 +99,16 @@ export class Agent {
     return builder.build();
   }
 
+  getSystemPromptInfo(): {
+    text: string;
+    tokenCount: number;
+    excluded: string[];
+  } {
+    const { prompt, excluded } = this.buildSystemPrompt();
+    const tokenCount = this.deps.llmProvider.countTokens(prompt);
+    return { text: prompt, tokenCount, excluded };
+  }
+
   private refreshSystemPrompt(): void {
     const { prompt } = this.buildSystemPrompt();
     const current = this.deps.contextManager

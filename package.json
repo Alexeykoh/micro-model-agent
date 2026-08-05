@@ -1,6 +1,6 @@
 {
   "name": "micro-models-agent",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context)",
   "type": "module",
   "bin": {
@@ -33,7 +33,8 @@
     "jsonrepair": "^3.15.0",
     "picocolors": "^1.1.1",
     "playwright": "^1.62.0",
-    "string-width": "^8.2.2"
+    "string-width": "^8.2.2",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

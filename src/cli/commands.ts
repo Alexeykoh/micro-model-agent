@@ -148,9 +148,14 @@ export function createProgram(): Command {
         s.stop();
         if (models.length > 0) {
           console.log(t("cli.available_models"));
+          const { getCertMark } =
+            await import("../modules/certification/manifest");
           for (const m of models) {
             const marker = m === config.model ? "* " : "  ";
-            console.log(` ${marker}${m}`);
+            const mark = getCertMark(m, config.provider.baseUrl, version);
+            const cert =
+              mark === "certified" ? "✔" : mark === "stale" ? "○" : "·";
+            console.log(` ${marker}${cert} ${m}`);
           }
         } else {
           console.log(t("cli.no_models_found"));
@@ -172,6 +177,60 @@ export function createProgram(): Command {
       config.model = name;
       saveConfig(config, configPath);
       console.log(t("cli.model_set", { name }));
+    });
+  model
+    .command("certify")
+    .argument("<name>", "Model name")
+    .option("--provider-url <url>", t("cli.cert_provider_url"))
+    .option("--provider-key <key>", t("cli.cert_provider_key"))
+    .option("--context-window <n>", t("cli.cert_context_window"))
+    .option("--tags <tags>", t("cli.cert_tags"), "core")
+    .option("--reps <n>", t("cli.cert_reps"))
+    .option("--force", t("cli.cert_force"))
+    .option("--clean", t("cli.cert_clean"))
+    .description(t("cli.certify"))
+    .action(async (name: string, cmdOpts: any) => {
+      const { config } = await bootstrap();
+      const { certify, parseTags } =
+        await import("../modules/certification/cli");
+      await certify({
+        name,
+        providerUrl: cmdOpts.providerUrl,
+        providerKey: cmdOpts.providerKey,
+        contextWindow: cmdOpts.contextWindow
+          ? parseInt(cmdOpts.contextWindow, 10)
+          : undefined,
+        tags: parseTags(cmdOpts.tags),
+        reps: cmdOpts.reps ? parseInt(cmdOpts.reps, 10) : 3,
+        force: cmdOpts.force === true,
+        clean: cmdOpts.clean === true,
+        config,
+      });
+    });
+  model
+    .command("cert-status")
+    .argument("<name>", "Model name")
+    .description(t("cli.cert_status"))
+    .action(async (name: string) => {
+      const { config } = await bootstrap();
+      const { certStatus } = await import("../modules/certification/cli");
+      await certStatus(name, config);
+    });
+  model
+    .command("cert-list")
+    .description(t("cli.cert_list"))
+    .action(async () => {
+      const { certList } = await import("../modules/certification/cli");
+      await certList();
+    });
+  model
+    .command("uncertify")
+    .argument("<name>", "Model name")
+    .description(t("cli.cert_uncertify"))
+    .action(async (name: string) => {
+      const { config } = await bootstrap();
+      const { uncertify } = await import("../modules/certification/cli");
+      await uncertify(name, config);
     });
 
   // Context window command

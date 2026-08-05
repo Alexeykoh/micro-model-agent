@@ -195,10 +195,25 @@ mma security disable-audit       # Disable audit notifications
 mma security audit-stats         # Show audit notification statistics
 ```
 
+## Model Certification
+
+> **Spec:** `docs/specs/2026-08-05-model-certification-design.md` — offline harness that runs test scenarios through the real agent against a (model, provider) pair.
+
+**Status:** Implemented.
+
+Purpose: distinguish "this model works with MMA on this backend" from "untested". A certification is **not** a general endorsement — it states that on a specific provider URL the model ran the suite and passed N/M repetitions.
+
+- **Commands:** `mma model certify <name> [--provider-url <url>] [--tags core,security,image,network,browser] [--reps N] [--force] [--clean]`, `mma model cert-status <name>`, `mma model cert-list`, `mma model uncertify <name>`.
+- **Tags:** `core` (default, no external deps), `security` (requires `security.enabled`, pre-check fails fast), `image`, `network`, `browser`.
+- **Manifest:** `~/.mma/certifications.json` — entries keyed by `(model, providerUrl)`, recording `mmaVersion`, suite summary, and per-scenario results.
+- **Checkmarks:** `mma model list` and REPL `/model` show `✔` (certified on this provider, MMA version matches), `○` (certified on an older MMA version — re-run `--force`), `·` (not certified).
+- **Harness mechanics:** spawns `bun src/cli/main.ts` per scenario rep with `--no-agents-md --exit-on-complete -d <sandbox>`, injecting `(model, provider)` via the existing env overrides (`MMA_MODEL`, `MMA_PROVIDER_BASEURL`, `MMA_PROVIDER_APIKEY`, `MMA_CONTEXT_WINDOW`). Fact-checks: files, exit code, output substring (`outputContains` for security scenarios). M/N tally per scenario (default 2/3).
+- **Source:** `src/modules/certification/` (`types`, `scenarios`, `loader`, `fact-checker`, `runner`, `manifest`, `cli`). It is an offline tool independent of the agent loop — never part of the system prompt or context.
+- **Scenarios:** builtin in `scenarios.ts` (ported from `docs/testing/scenarios.md`); user-defined YAML in `~/.mma/certification/scenarios/*.yaml`. Image fixtures in `docs/testing/fixtures/`.
+
 ### Agent-Level MoE
 
 > **Spec:** `docs/specs/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
-> **Plan:** `docs/specs/2025-07-30-agent-level-moe-plan.md`
 >
 > Status: **partially implemented (MVP)**. When `moe.enabled: true` is set in config and an orchestrator model is configured, the agent uses a Router → plan → validate → execute (parallel waves) → verify/merge flow. Falls back to single-agent when MoE fails or is disabled.
 >
@@ -399,6 +414,7 @@ src/
 │   ├── main.ts         # Entry point (commander subcommands)
 │   ├── commands.ts     # init, config, model, provider, session subcommands
 │   ├── repl.ts         # Readline loop with slash commands
+│   ├── repl-commands.ts # REPL slash command definitions (separate from loop)
 │   ├── completer.ts    # Provider-based tab completion
 │   └── setup.ts        # Interactive setup wizard (port scan → test)
 ├── config/             # 3-layer config: defaults → global → project + env
@@ -476,6 +492,53 @@ The model sends a `question` tool call with one or more questions:
 - Multiple subagents in MoE parallel waves asking questions on the same stdin would conflict. Not supported.
 - No REST/SSE event system (unlike opencode). Questions work only in CLI/REPL with direct stdin.
 
+### REPL Input Locking (`withExclusiveInput`)
+
+When a slash command needs exclusive access to stdin (e.g., interactive setup wizard, multi-step prompt), use `Repl.withExclusiveInput(fn)` to prevent the REPL's line handler from processing input during the interactive flow:
+
+```typescript
+// In any slash command action:
+action: async () => {
+  await repl.withExclusiveInput(async () => {
+    // Interactive readline — no REPL handler interference
+    const answers = await runSetup(repl.rl);
+  });
+}
+```
+
+**How it works:**
+- `withExclusiveInput()` sets `inputLocked = true` before running the callback
+- REPL line handler checks `this.agentRunning || this.inputLocked` — skips routing to agent/commands when locked
+- `finally` block guarantees `inputLocked` is cleared on errors
+
+**When to use:**
+- Any REPL command that takes over stdin for a multi-step interactive flow
+- Whenever a new `readline.Interface` on `process.stdin` would conflict with the REPL's own readline
+- Interactive tools should accept the REPL's existing readline instead of creating their own (see `runSetup(externalRl?)`)
+
+### REPL Command Architecture
+
+REPL commands are defined in `src/cli/repl-commands.ts` (separate from the REPL loop in `repl.ts`). Commands receive a `ReplContext` interface that grants access to configuration, agent, session manager, skills, plugins, readline, and control methods (`registerCommand`, `withExclusiveInput`, `runAgent`, `showHelp`).
+
+```typescript
+// src/cli/repl/commands.ts
+export interface ReplContext {
+  readonly config: AppConfig;
+  readonly agent: Agent;
+  readonly rl: readline.Interface;
+  readonly sessionManager?: SessionManager;
+  readonly skillsModule?: SkillsModule;
+  readonly pluginManager?: PluginManager;
+  registerCommand(cmd: SlashCommand): void;
+  runAgent(input: string): Promise<void>;
+  withExclusiveInput(fn: () => Promise<void>): Promise<void>;
+  showHelp(): void;
+  setupCompleter(): void;
+}
+```
+
+**To add a new slash command:** define its action in `repl-commands.ts` — no changes to `repl.ts` needed.
+
 ## Session Management
 
 Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`, `history.jsonl`, and `session.jsonl`.
@@ -489,6 +552,14 @@ Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`,
 | `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
 | `/rename <name>` | | Rename current session |
 | `/delete <id>` | `/rm` | Delete a session |
+
+### REPL Keybindings
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `Esc` `Esc` | Agent/tool running | Interrupt current operation, return to prompt |
+| `Ctrl+C` | Any | Graceful shutdown (forces exit after 2s if agent running) |
+| `Ctrl+V` | Idle (in prompt) | Paste image from clipboard |
 
 ### CLI subcommands
 
@@ -836,6 +907,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.22.0
+### Current Version: 0.23.0
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
+- **23** = model certification module (`mma model certify`), cert checkmarks in model lists, `--model/--provider-url` env-var overrides used by the harness

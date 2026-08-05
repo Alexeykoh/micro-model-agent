@@ -929,6 +929,49 @@ Readline loop with:
 - **Persistent history** across sessions (`~/.mma/repl-history`)
 - **Markdown output** with ANSI syntax highlighting via `ui/md-formatter.ts`
 
+#### REPL Architecture
+
+Commands are defined in `src/cli/repl-commands.ts` (not in `repl.ts`). The `ReplContext` interface decouples command logic from the REPL loop:
+
+```typescript
+// src/cli/repl-commands.ts
+export interface ReplContext {
+  readonly config: AppConfig;
+  readonly agent: Agent;
+  readonly rl: readline.Interface;
+  readonly sessionManager?: SessionManager;
+  readonly skillsModule?: SkillsModule;
+  readonly pluginManager?: PluginManager;
+  registerCommand(cmd: SlashCommand): void;
+  runAgent(input: string): Promise<void>;
+  withExclusiveInput(fn: () => Promise<void>): Promise<void>;
+  showHelp(): void;
+  setupCompleter(): void;
+}
+
+export function registerAllCommands(ctx: ReplContext): void;
+```
+
+`Repl` class implements `ReplContext` and calls `registerAllCommands(this)` in its constructor.
+
+#### REPL Input Locking (`withExclusiveInput`)
+
+When a slash command needs exclusive stdin access (e.g., interactive setup wizard), `withExclusiveInput()` locks the REPL's line handler:
+
+```typescript
+async withExclusiveInput(fn: () => Promise<void>): Promise<void> {
+  this.inputLocked = true;
+  try { await fn(); } 
+  finally { this.inputLocked = false; }
+}
+```
+
+REPL line handler checks `this.agentRunning || this.inputLocked` — skips routing to agent/commands when locked. Used by `/wizard` and available for any future interactive command.
+
+#### Setup Wizard (`cli/setup.ts`)
+
+`runSetup(externalRl?)` accepts an optional external `readline.Interface`. When called from REPL, it receives the REPL's readline to avoid stdin conflicts. When called standalone (CLI `init`), it creates its own readline.
+
 ### Model & Context Management (REPL)
 
 | Command | Description |
@@ -1367,6 +1410,7 @@ E:\projects\micro-models-agent\
 │   │   ├── main.ts
 │   │   ├── commands.ts
 │   │   ├── repl.ts
+│   │   ├── repl-commands.ts    # REPL slash command definitions + ReplContext
 │   │   ├── completer.ts          # Deep tab completion
 │   │   ├── setup.ts              # Interactive setup wizard
 │   │   └── index.ts

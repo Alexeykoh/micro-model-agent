@@ -34,7 +34,8 @@ async function withSpinner<T>(
 /** Render a numbered list inside a box. */
 function menuList(items: Array<{ label: string; url?: string }>): void {
   const lines = items.map(
-    (it, i) => ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
+    (it, i) =>
+      ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
   );
   for (const l of box(lines, { width: 72 })) console.log(l);
 }
@@ -147,13 +148,18 @@ async function testChat(
   }
 }
 
-export async function runSetup(): Promise<SetupAnswers> {
+export async function runSetup(
+  externalRl?: readline.Interface,
+): Promise<SetupAnswers> {
   console.log(t("setup.title"));
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  const rl =
+    externalRl ||
+    readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+  const ownRl = !externalRl;
 
   console.log(t("setup.language"));
   const locale = await ask(rl, t("setup.ui_lang"), "en");
@@ -175,9 +181,8 @@ export async function runSetup(): Promise<SetupAnswers> {
   let apiBase = "";
 
   if (provider === "openai-compat") {
-    const found = await withSpinner(
-      t("setup.scanning_spinner"),
-      async () => scanPorts(),
+    const found = await withSpinner(t("setup.scanning_spinner"), async () =>
+      scanPorts(),
     );
 
     if (found.length > 0) {
@@ -258,13 +263,22 @@ export async function runSetup(): Promise<SetupAnswers> {
   let securityBashBlock = false;
   let securityFlagsBlock = false;
   let securityPathsDeny = true;
-  if (configureSecurity.toLowerCase() === "y" || configureSecurity.toLowerCase() === "yes") {
-    securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
-    securityFlagsBlock = (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() === "y";
-    securityPathsDeny = (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !== "n";
+  if (
+    configureSecurity.toLowerCase() === "y" ||
+    configureSecurity.toLowerCase() === "yes"
+  ) {
+    securityBashBlock =
+      (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() ===
+      "y";
+    securityFlagsBlock =
+      (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() ===
+      "y";
+    securityPathsDeny =
+      (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !==
+      "n";
   }
 
-  rl.close();
+  if (ownRl) rl.close();
 
   const answers: SetupAnswers = {
     provider,
@@ -289,8 +303,18 @@ export async function runSetup(): Promise<SetupAnswers> {
     ],
     [
       [t("setup.provider_type"), provider, t("setup.model_name"), model],
-      ["API Base URL", apiBase, t("setup.context_window"), String(contextWindow)],
-      [t("setup.api_key"), apiKey || "not-needed", t("setup.max_iters"), String(maxIterations)],
+      [
+        "API Base URL",
+        apiBase,
+        t("setup.context_window"),
+        String(contextWindow),
+      ],
+      [
+        t("setup.api_key"),
+        apiKey || "not-needed",
+        t("setup.max_iters"),
+        String(maxIterations),
+      ],
       [t("setup.ui_lang"), locale, "", ""],
     ],
     { maxColumns: 4 },
