@@ -17,7 +17,7 @@
     "mma": "bun run src/cli/main.ts",
     "build": "bun run build:tsc && bun run build:copy-assets",
     "build:tsc": "tsc -p tsconfig.build.json",
-    "build:copy-assets": "powershell -Command \"Copy-Item -Recurse -Force 'src/modules/skills/builtin' 'dist/skills/builtin'\"",
+    "build:copy-assets": "bun run scripts/copy-assets.ts",
     "build:prod": "bun run 'build:bundle' && bun run 'build:copy-assets'",
     "build:clean": "cmd /c \"if exist dist rmdir /s /q dist\"",
     "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --external playwright",
