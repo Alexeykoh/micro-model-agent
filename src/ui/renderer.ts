@@ -37,23 +37,6 @@ function friendlyTool(tool: string): string {
   return value !== key ? value : tool;
 }
 
-/** Compact context bar for the spinner's extra text: "ctx: 42% ████░░░░░░  compactions: 1  quality: 63%" */
-export function formatContextBarCompact(
-  tokens: number,
-  limit: number,
-  compactions: number,
-  quality: number,
-): string {
-  const pct = Math.min(100, Math.round((tokens / limit) * 100));
-  const barLen = 8;
-  const filled = Math.round((pct / 100) * barLen);
-  const bar =
-    pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
-  const pctColor = pct >= 75 ? pc.yellow : pc.dim;
-  const qColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
-  return `ctx: ${pctColor(`${pct}%`)} ${bar}  compactions: ${compactions}  quality: ${qColor(`${quality}%`)}`;
-}
-
 /**
  * Streams agent events to the terminal. Rich mode (TTY) adds a spinner
  * and boxed tool cards; plain mode falls back to simple prefixed lines.
@@ -72,7 +55,6 @@ export class Renderer {
     body: string[];
     start: number;
   } | null = null;
-  private contextInfoFn?: () => string;
 
   constructor(opts: RendererOptions = {}) {
     this.rich = opts.rich ?? isRichTerminal();
@@ -84,33 +66,19 @@ export class Renderer {
       stream: this.err,
       width: this.width,
     });
-    this.fmt = new FormattingStream(
-      (line) => this.out.write(`${line}\n`),
-      this.width,
-    );
-  }
-
-  /** Set a callback that returns the context info string for the spinner's extra text. */
-  setContextInfoProvider(fn: () => string): void {
-    this.contextInfoFn = fn;
-  }
-
-  /** Refresh the spinner's extra text with current context info. */
-  refreshContextBar(): void {
-    if (this.contextInfoFn && this.spinner.running) {
-      this.spinner.setExtra(this.contextInfoFn());
-    }
+    this.fmt = new FormattingStream((line) => this.out.write(`${line}\n`), this.width);
   }
 
   /** Final answer streamed from the model (markdown-formatted). */
   text(chunk: string): void {
     this.endCard();
-    this.spinner.setTopBar(false);
+    this.spinner.stop();
     this.fmt.write(chunk);
   }
 
   /** Arbitrary status/meta text (tool output, reasoning, MoE status). */
   meta(chunk: string): void {
+    this.spinner.stop();
     if (this.card) {
       this.card.body.push(chunk);
     } else {
@@ -120,25 +88,22 @@ export class Renderer {
 
   /** Dimmed reasoning stream (already colored by the agent). */
   reasoning(chunk: string): void {
+    this.spinner.stop();
     this.out.write(pc.dim(chunk));
   }
 
-  /** Model is loading / generating — show the thinking spinner in top-bar mode. */
+  /** Model is loading / generating — show the thinking spinner. */
   thinkingStart(): void {
-    this.spinner.setTopBar(true);
     this.spinner.start(t("ui.thinking"));
-    this.refreshContextBar();
   }
 
-  /** LLM call finished; switch spinner to non-animated context bar (top-bar). */
+  /** LLM call finished; clear the thinking spinner. */
   thinkingEnd(): void {
-    this.spinner.setMessage("");
-    this.refreshContextBar();
+    this.spinner.stop();
   }
 
   toolStart(tool: string, args: Record<string, unknown>): void {
     this.endCard();
-    this.spinner.setTopBar(false);
     this.spinner.stop();
     const summary = summarizeArgs(args);
     if (!this.rich) {
@@ -153,17 +118,14 @@ export class Renderer {
     );
   }
 
-  toolEnd(
-    _tool: string,
-    duration: number,
-    error?: boolean,
-    ctxDelta?: number,
-  ): void {
+  toolEnd(_tool: string, duration: number, error?: boolean, ctxDelta?: number): void {
     this.spinner.stop();
     if (!this.rich) {
       if (ctxDelta !== undefined && ctxDelta !== 0) {
         const deltaStr =
-          ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
+          ctxDelta > 0
+            ? pc.green(`+${ctxDelta}`)
+            : pc.yellow(`${ctxDelta} ↓`);
         this.out.write(`${pc.dim("ctx")} ${deltaStr}\n`);
       }
       return;
@@ -182,7 +144,9 @@ export class Renderer {
     let footer = `${marker} ${pc.dim(`${duration}ms`)}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {
       const deltaStr =
-        ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
+        ctxDelta > 0
+          ? pc.green(`+${ctxDelta}`)
+          : pc.yellow(`${ctxDelta} ↓`);
       footer += `  ${pc.dim("ctx")} ${deltaStr}`;
     }
     lines.push(footer);
@@ -191,32 +155,23 @@ export class Renderer {
       this.out.write(`${line}\n`);
     }
     this.card = null;
-
-    // After tool card, restore spinner to top-bar context display
-    this.spinner.setTopBar(true);
-    this.spinner.setMessage("");
-    this.refreshContextBar();
-    // Don't start the timer — just show context bar on demand via refreshContextBar
   }
 
   /** Raw pre-formatted text (diff blocks, warnings). */
   raw(text: string): void {
     this.endCard();
-    this.spinner.setTopBar(false);
     this.spinner.stop();
     this.out.write(text);
   }
 
   error(text: string): void {
     this.endCard();
-    this.spinner.setTopBar(false);
     this.spinner.stop();
     this.err.write(`${pc.red(text)}\n`);
   }
 
   flush(): void {
     this.endCard();
-    this.spinner.setTopBar(false);
     this.spinner.stop();
     this.fmt.flush();
   }
