@@ -66,6 +66,7 @@ graph TB
         UPDATER["updater/"]
         EXEC["execution/"]
         BROWSER["browser/"]
+        LSP["lsp/"]
     end
 
     subgraph SUPPORT["Support"]
@@ -900,6 +901,88 @@ mma session delete <id>       # удалить
 - `search_history` ищет по всем `history.jsonl` в sessions/
 - ToolContext.sessionHistory пишет результаты tool в active сессию
 
+### 6.13 LSP Module (`modules/lsp/`)
+
+**Purpose:** Language-agnostic static analysis via Language Server Protocol (JSON-RPC 2.0 over stdio). Catches type errors, unused variables, and other diagnostics for TS/JS, Python, Go, Rust, JSON, HTML, CSS — without hardcoding language-specific checkers.
+
+**Status:** Implemented. Tested with `typescript-language-server` for TS/JS files.
+
+#### 6.13.1 How it works
+
+```
+onAfterTool(write_file src/app.ts)
+  → getServerForFile("*.ts") → "typescript-language-server --stdio"
+  → spawn process
+  → initialize (workspace root + capabilities)
+  → textDocument/didOpen (full file content)
+  → wait for textDocument/publishDiagnostics
+  → filter: errors (severity 1) + warnings (severity 2)
+  → append to result.output as [LSP errors] / [LSP warnings]
+  → shutdown + exit + kill
+```
+
+#### 6.13.2 Architecture
+
+| File | Purpose |
+|------|---------|
+| `types.ts` | LSP protocol types: Diagnostic, PublishDiagnosticsParams, LspServerConfig, LspConfig |
+| `client.ts` | JSON-RPC 2.0 client over stdio: spawn, initialize, didOpen, receive publishDiagnostics, shutdown |
+| `config.ts` | Extension→language→LSP server mapping. `npx`-based servers auto-download; native servers check PATH |
+| `module.ts` | AgentModule + `lsp-check` plugin (priority 15), hooks into `onAfterTool` for `write_file`/`edit_file` |
+
+#### 6.13.3 Supported languages
+
+| Language | Extensions | LSP Server | Auto-download | Status |
+|----------|-----------|------------|--------------|--------|
+| TypeScript/JS | `.ts`, `.tsx`, `.js`, `.jsx` | `typescript-language-server` | ✅ `npx` | Tested |
+| Python | `.py` | `pyright` | ✅ `npx` | Untested |
+| JSON | `.json` | `vscode-json-languageserver` | ✅ `npx` | Untested |
+| HTML | `.html` | `vscode-html-languageserver` | ✅ `npx` | Untested |
+| CSS | `.css`, `.scss` | `vscode-css-languageserver` | ✅ `npx` | Untested |
+| Rust | `.rs` | `rust-analyzer` | ❌ needs `rustup` | Untested |
+| Go | `.go` | `gopls` | ❌ needs `go install` | Untested |
+
+`npx` servers are downloaded automatically on first use (lazy). `rust-analyzer` and `gopls` require manual installation — if not found in PATH, the module silently skips.
+
+#### 6.13.4 Configuration
+
+```typescript
+interface LspConfig {
+  enabled: boolean          // default: true
+  timeout: number           // default: 15000ms per file check
+  servers: Record<string, LspServerConfig>
+}
+
+interface LspServerConfig {
+  command: string           // binary name
+  args?: string[]           // CLI args
+  env?: Record<string, string>
+  timeout?: number          // per-server timeout override
+  autoInstall?: boolean     // true = npx auto-download, false = expect in PATH
+}
+```
+
+Part of `AppConfig.lsp` in `config/types.ts`. Defaults in `config/defaults.ts` via `DEFAULT_LSP_CONFIG`.
+
+#### 6.13.5 Error handling
+
+- LSP server not installed → `autoInstall: false` servers: `where` check, fail silently if not found
+- LSP server crash → catch, return empty diagnostics
+- Timeout (no diagnostics received) → return empty after `timeout` ms
+- `EPIPE` on write → caught, process killed gracefully
+- All errors isolated — never blocks or crashes the agent
+
+#### 6.13.6 Relationship with lint-on-write
+
+Both plugins fire on `onAfterTool(write_file/edit_file)`:
+
+| Plugin | Priority | What it does |
+|--------|----------|-------------|
+| `lint-on-write` | 10 | TS: `tsc --noEmit`, JS: `node --check`, project-level `npm run lint` |
+| `lsp-check` | 15 | Language-agnostic LSP diagnostics for all configured languages |
+
+They complement each other — `lint-on-write` is a fast built-in for JS/TS, `lsp-check` is extensible for any language with an LSP server.
+
 ## 7. CLI + REPL
 
 ### 7.1 CLI (`cli/main.ts`)
@@ -1406,6 +1489,12 @@ E:\projects\micro-models-agent\
 │   │       ├── stuck-detector.ts
 │   │       ├── auditor.ts
 │   │       └── index.ts
+│   │   ├── lsp/
+│   │   │   ├── types.ts
+│   │   │   ├── client.ts
+│   │   │   ├── config.ts
+│   │   │   ├── module.ts
+│   │   │   └── index.ts
 │   ├── cli/
 │   │   ├── main.ts
 │   │   ├── commands.ts
@@ -1473,7 +1562,8 @@ E:\projects\micro-models-agent\
 | Model auto-load | LM Studio REST API | Auto-load model with correct context on startup |
 | Context defense | Multi-layer truncation | Tool results limited, pre-flight check, post-tool compact |
 | Security | Module-based | Command validation, path restrictions, network filtering, content scanning |
-| Security | Module-based | Command validation, path restrictions, network filtering, content scanning |
+| LSP diagnostics | Language Server Protocol over stdio | Language-agnostic, one client for all languages, lazy npx download |
+| LSP diagnostics | Language Server Protocol over stdio | Language-agnostic, one client for all languages, lazy npx download |
 
 ---
 

@@ -154,6 +154,8 @@ export interface AuditNotifierConfig {
   maxRetries?: number;
 }
 
+import type { LspConfig, LspServerConfig } from '../modules/lsp/types'
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -177,4 +179,5 @@ export interface AppConfig {
   mcpServers: Record<string, MCPServerConfigEntry>;
   security?: SecurityConfig;
   sessionIsolation?: SessionIsolationConfig;
+  lsp?: LspConfig;
 }

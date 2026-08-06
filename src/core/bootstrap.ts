@@ -25,6 +25,7 @@ import {
   SkillsModule,
 } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
+import { LspModule } from "../modules/lsp/index";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
 import { MemoryModule } from "../modules/memory/module";
@@ -69,6 +70,7 @@ function buildSystemInfo(
       `- Use "cd" instead of "pwd". Use "echo %cd%" to print working directory.`,
       `- Use "copy" instead of "cp", "move" instead of "mv", "del" instead of "rm".`,
       `- Do not use "mkdir -p" — Windows mkdir creates intermediate dirs by default. Use the create_dir tool instead.`,
+      `- Do not use "head" or "tail" — they are Unix commands. Use "Select-Object -First N" or "Get-Content ... | Select-Object -First N" instead (PowerShell).`,
       `- Use forward slashes (/) or escaped backslashes (\\\\) in file paths.`,
       `- Your working directory is: ${baseDir}`,
     );
@@ -334,6 +336,14 @@ export async function bootstrap(
       browserPlugin.isBuiltin = true;
       pluginManager.register(browserPlugin);
     }
+  }
+
+  const lspModule = new LspModule(config.lsp);
+  moduleRegistry.register(lspModule);
+  const lspPlugin = lspModule.getPlugin();
+  if (lspPlugin) {
+    lspPlugin.isBuiltin = true;
+    pluginManager.register(lspPlugin);
   }
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
