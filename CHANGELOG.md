@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-08-06
+
+### Added
+- **LSP module** (`src/modules/lsp/`): language server diagnostics after every `write_file`/`edit_file`:
+  - JSON-RPC 2.0 client over stdio with Content-Length framing (`client.ts`)
+  - 7 languages: TS/JS (`typescript-language-server` via `npx`), Python (`pyright`), JSON (`vscode-json-languageserver`),
+    HTML (`vscode-html-language-server`), CSS (`vscode-css-language-server`), Rust (`rust-analyzer`), Go (`gopls`)
+  - Lazy server startup on first check; `autoInstall: false` — `npx` servers download on first use,
+    `rust-analyzer`/`gopls` must be on PATH (`where` check with clear error)
+  - `lsp-check` plugin (priority 15), severity 1 (errors) appended as `[LSP errors]` to tool output
+  - Config via `config.lsp` (`DEFAULT_LSP_CONFIG` in `src/config/defaults.ts`), new module per design spec §6.13
+
+### Fixed
+- **Audit gate language-agnostic** (`src/modules/execution/auditor.ts`): removed hardcoded
+  `tsc --noEmit` — auditor now only checks file existence from plan steps, works for any language
+- **Windows command hints** (`src/core/bootstrap.ts`): added `head`/`tail` to the platform-specific
+  command availability block so the model knows to use `Get-Content -TotalCount`/`Select-Object` on Windows
+
 ## [0.9.0] - 2026-08-01
 
 ### Added
