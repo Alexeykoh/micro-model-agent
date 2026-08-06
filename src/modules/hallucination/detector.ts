@@ -1,5 +1,6 @@
 import { ConsistencyCheck } from "./consistency";
 import { ConfidenceCheck } from "./confidence";
+import { FactualCheck } from "./factual";
 
 export interface HallucinationCheckResult {
   status: "pass" | "warn" | "retry" | "block";
@@ -9,10 +10,12 @@ export interface HallucinationCheckResult {
 export class HallucinationDetector {
   private consistency: ConsistencyCheck;
   private confidence: ConfidenceCheck;
+  private factual: FactualCheck | null;
 
-  constructor() {
+  constructor(baseDir?: string) {
     this.consistency = new ConsistencyCheck();
     this.confidence = new ConfidenceCheck();
+    this.factual = baseDir ? new FactualCheck(baseDir) : null;
   }
 
   getConsistencyCheck(): ConsistencyCheck {
@@ -30,6 +33,11 @@ export class HallucinationDetector {
       confidenceResult.status === "block"
     ) {
       return confidenceResult;
+    }
+
+    const factualResult = this.factual?.validate(response);
+    if (factualResult && factualResult.status !== "pass") {
+      return factualResult;
     }
 
     const consistencyResult = this.consistency.validate(response);

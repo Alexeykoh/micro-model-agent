@@ -81,7 +81,7 @@ function buildSystemInfo(
     `Bash tool rules:`,
     `- Use the "workdir" parameter to run commands in a specific directory. Prefer workdir over "cd dir && cmd" chaining.`,
     `- Run one command per tool call. Split multi-step shell operations into separate bash calls.`,
-    `- Background processes (dev servers, watchers, long-running npm install): use the "background: true" parameter or the tool will auto-detect and background them. Check output with process_log.`,
+    `- Dev servers, watchers and other long-running processes: pass "background: true" to get a process id immediately. Without it, any command still running after a few seconds is automatically moved to the background — check output with process_log.`,
   );
 
   lines.push(
@@ -307,7 +307,7 @@ export async function bootstrap(
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 
-  const hallucinationDetector = new HallucinationDetector();
+  const hallucinationDetector = new HallucinationDetector(baseDir);
 
   const moduleRegistry = new ModuleRegistry();
 

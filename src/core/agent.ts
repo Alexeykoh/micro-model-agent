@@ -23,9 +23,11 @@ import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
+import { StepVerifier } from "../modules/execution/verifier";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
+const QUALITY_TRIGGER_THRESHOLD = 40;
 
 export interface AgentDeps {
   config: AppConfig;
@@ -199,6 +201,21 @@ export class Agent {
         logger,
         sessionManager: sessionManager?.getActiveMeta(),
       });
+
+      if (config.session?.baselineCheck !== false) {
+        const verifier = new StepVerifier(baseDir);
+        verifier
+          .runTypeCheck()
+          .then((tc) => {
+            if (!tc.passed) {
+              logger.warn(
+                `Baseline typecheck has issues: ${tc.message?.slice(0, 500)}`,
+              );
+              onMeta?.(pc.yellow(`\n⚠ Baseline typecheck has issues\n`));
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     contextManager.addMessage({ role: "user", content: input });
@@ -279,6 +296,22 @@ export class Agent {
 
       const currentTokens = contextManager.getEstimatedTokens();
       const budget = contextManager.getBudget();
+      const quality = contextManager.getQuality();
+      if (
+        quality < QUALITY_TRIGGER_THRESHOLD &&
+        contextManager.getCompactionCount() > 0
+      ) {
+        contextManager.compact();
+        logger.warn(
+          `Low context quality (${quality}%) — forced compaction`,
+        );
+        slog.logCompaction(
+          `quality-triggered compaction (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%), iteration ${iteration}`,
+          iteration,
+          currentTokens,
+          budget.history,
+        );
+      }
       if (currentTokens > budget.history) {
         contextManager.compact();
         logger.warn(
@@ -448,6 +481,19 @@ export class Agent {
           const duration = Date.now() - startTime;
           if (!result.success) anyToolFailed = true;
 
+          if (result.success && call.arguments.path) {
+            const filePath = String(call.arguments.path);
+            if (call.name === "write_file" || call.name === "edit_file") {
+              hallucinationDetector
+                .getConsistencyCheck()
+                .trackCreatedFile(filePath);
+            } else if (call.name === "delete_file") {
+              hallucinationDetector
+                .getConsistencyCheck()
+                .trackDeletedFile(filePath);
+            }
+          }
+
           pluginManager.runOnToolEnd(
             { iteration, logger },
             { id: call.id, name: call.name, arguments: call.arguments },
@@ -564,6 +610,9 @@ export class Agent {
         continue;
       }
 
+      hallucinationDetector
+        .getConfidenceCheck()
+        .setPreviousResponse(lastText);
       const hallucinationResult = hallucinationDetector.validate(textContent);
       if (hallucinationResult.status === "block") {
         logger.warn(`Response blocked: ${hallucinationResult.reason}`);
@@ -626,6 +675,19 @@ export class Agent {
       }
 
       lastText = textContent;
+
+      {
+        const decisionPatterns = [
+          ...textContent.matchAll(
+            /(?:plan|decided|decision|решено|план|решение):\s*(.+?)(?:\n|$)/gi,
+          ),
+        ];
+        for (const match of decisionPatterns) {
+          hallucinationDetector
+            .getConsistencyCheck()
+            .trackDecision(match[1].trim(), "agent_response");
+        }
+      }
 
       if (!sawToolCall) {
         if (this.deps.finalAudit) {

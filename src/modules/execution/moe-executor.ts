@@ -5,6 +5,9 @@ import { filterToolsByTags } from '../../tools/filter-tools'
 import type { ToolRegistry } from '../../tools/registry'
 import type { LLMProvider } from '../../llm/provider'
 import type { Logger } from '../../logger/app-logger'
+import { StuckDetector } from './stuck-detector'
+import { suggestSkill } from '../skills/error-skill-map'
+import { t } from '../../i18n/index'
 
 const TRANSIENT_ERROR_PATTERNS = [
   'timeout', 'Timeout', 'TIMEOUT',
@@ -108,8 +111,10 @@ async function executeSubtask(
   const maxAttempts = expertConfig.max_attempts || 3
   let lastError = ''
   let lastResult: any = null
+  const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts)
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    stuckDetector.recordIteration(1)
     try {
       const allowedFiles = subtask.allowed_files || []
       const readOnlyFiles = subtask.read_only_files || []
@@ -150,6 +155,23 @@ async function executeSubtask(
 
       lastError = result.output
       lastResult = result
+      stuckDetector.recordToolError('subagent', result.output)
+
+      // Inject actionable hints into the next retry's prompt
+      if (attempt < maxAttempts) {
+        const hints = stuckDetector.getActionableHints()
+        const recovery = stuckDetector.getRecoveryMessage()
+        if (hints.length > 0) {
+          deps.logger.debug(
+            `Hint for subtask "${subtask.id}" retry: ${hints.join('; ')}`,
+          )
+        }
+        if (recovery) {
+          deps.logger.debug(
+            `Recovery for subtask "${subtask.id}": ${recovery}`,
+          )
+        }
+      }
 
       if (isTransientError(lastError) && attempt < maxAttempts) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000)
@@ -158,16 +180,28 @@ async function executeSubtask(
         continue
       }
 
+      // Non-transient failure — build detailed error with hints
+      const hints = stuckDetector.getActionableHints()
+      const suggestedSkill = suggestSkill(lastError)
+      let errorDetail = result.output
+      if (hints.length > 0) {
+        errorDetail += `\n\n${t("exec.hints", { hints: hints.map(h => `- ${h}`).join('\n') })}`
+      }
+      if (suggestedSkill) {
+        errorDetail += `\n\nConsider loading the "${suggestedSkill}" skill for expert guidance.`
+      }
+
       return {
         subtaskId: subtask.id,
         success: false,
         summary: `Failed: ${subtask.id}`,
         result: result.output,
-        error: result.output,
+        error: errorDetail,
         durationMs: Date.now() - startTime,
       }
     } catch (e: any) {
       lastError = e.message
+      stuckDetector.recordToolError('subagent', e.message)
 
       if (isTransientError(lastError) && attempt < maxAttempts) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000)
@@ -176,15 +210,32 @@ async function executeSubtask(
         continue
       }
 
+      const hints = stuckDetector.getActionableHints()
+      const suggestedSkill = suggestSkill(lastError)
+      let errorDetail = e.message
+      if (hints.length > 0) {
+        errorDetail += `\n\n${t("exec.hints", { hints: hints.map(h => `- ${h}`).join('\n') })}`
+      }
+      if (suggestedSkill) {
+        errorDetail += `\n\nConsider loading the "${suggestedSkill}" skill for expert guidance.`
+      }
+
       return {
         subtaskId: subtask.id,
         success: false,
         summary: `Error: ${subtask.id}`,
         result: '',
-        error: e.message,
+        error: errorDetail,
         durationMs: Date.now() - startTime,
       }
     }
+  }
+
+  // Exhausted retries — build detailed failure
+  const stuckReason = stuckDetector.getStuckReason()
+  let finalError = lastError
+  if (stuckReason) {
+    finalError += `\n${stuckReason}`
   }
 
   return {
@@ -192,7 +243,7 @@ async function executeSubtask(
     success: false,
     summary: `Failed after ${maxAttempts} attempts: ${subtask.id}`,
     result: '',
-    error: lastError,
+    error: finalError,
     durationMs: Date.now() - startTime,
   }
 }

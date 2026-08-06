@@ -4,3 +4,5 @@ export {
 } from "./detector";
 export { ConsistencyCheck } from "./consistency";
 export { ConfidenceCheck } from "./confidence";
+export { FactualCheck } from "./factual";
+

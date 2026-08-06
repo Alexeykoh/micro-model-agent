@@ -43,7 +43,7 @@ async function runStep(
         toolExecutor: ctx.toolExecutor!,
         pluginManager: subPluginManager,
         contextManager: subContextManager,
-        hallucinationDetector: new HallucinationDetector(),
+        hallucinationDetector: new HallucinationDetector(ctx.baseDir),
         logger: ctx.logger,
         baseDir: ctx.baseDir,
         scope: ctx.scope,

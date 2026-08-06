@@ -63,6 +63,14 @@ function createMockDeps(overrides?: Record<string, unknown>) {
 
   const mockHallucinationDetector = {
     validate: vi.fn().mockReturnValue({ status: "pass" as const }),
+    getConfidenceCheck: vi.fn().mockReturnValue({
+      setPreviousResponse: vi.fn(),
+    }),
+    getConsistencyCheck: vi.fn().mockReturnValue({
+      trackDecision: vi.fn(),
+      trackCreatedFile: vi.fn(),
+      trackDeletedFile: vi.fn(),
+    }),
   };
 
   const mockLogger = {
@@ -240,6 +248,14 @@ describe("Agent", () => {
       validate: vi.fn().mockReturnValue({
         status: "block" as const,
         reason: "Dangerous action detected",
+      }),
+      getConfidenceCheck: vi.fn().mockReturnValue({
+        setPreviousResponse: vi.fn(),
+      }),
+      getConsistencyCheck: vi.fn().mockReturnValue({
+        trackDecision: vi.fn(),
+        trackCreatedFile: vi.fn(),
+        trackDeletedFile: vi.fn(),
       }),
     };
 

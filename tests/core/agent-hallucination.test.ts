@@ -52,13 +52,6 @@ describe("Agent hallucination reactions", () => {
       runOnSessionStart: () => {},
       runOnSessionEnd: () => {},
       runOnBuildPrompt: () => [],
-      runOnPhase: () => {},
-      runOnAfterThink: async () => {},
-      runOnToolCall: () => {},
-      runOnToolStart: () => {},
-      runOnToolEnd: () => {},
-      runOnText: () => {},
-      runOnMeta: () => {},
     } as any,
     contextManager: {
       addMessage: () => {},
@@ -78,7 +71,15 @@ describe("Agent hallucination reactions", () => {
       getQuality: () => 100,
       noteIteration: () => {},
     } as any,
-    hallucinationDetector: { validate: () => ({ status: "pass" }) } as any,
+    hallucinationDetector: {
+      validate: () => ({ status: "pass" as const }),
+      getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
+      getConsistencyCheck: () => ({
+        trackDecision: () => {},
+        trackCreatedFile: () => {},
+        trackDeletedFile: () => {},
+      }),
+    } as any,
     logger: {
       debug: () => {},
       info: () => {},
@@ -94,8 +95,14 @@ describe("Agent hallucination reactions", () => {
     const mockDeps = createMockDeps({
       hallucinationDetector: {
         validate: () => ({
-          status: "warn",
+          status: "warn" as const,
           reason: "Uncertainty markers detected",
+        }),
+        getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
+        getConsistencyCheck: () => ({
+          trackDecision: () => {},
+          trackCreatedFile: () => {},
+          trackDeletedFile: () => {},
         }),
       } as any,
     });
@@ -115,9 +122,15 @@ describe("Agent hallucination reactions", () => {
         validate: (response: string) => {
           callCount++;
           if (callCount === 1)
-            return { status: "retry", reason: "Low confidence" };
-          return { status: "pass" };
+            return { status: "retry" as const, reason: "Low confidence" };
+          return { status: "pass" as const };
         },
+        getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
+        getConsistencyCheck: () => ({
+          trackDecision: () => {},
+          trackCreatedFile: () => {},
+          trackDeletedFile: () => {},
+        }),
       } as any,
     });
 
@@ -131,7 +144,14 @@ describe("Agent hallucination reactions", () => {
   it("should block on hallucination block status", async () => {
     const mockDeps = createMockDeps({
       hallucinationDetector: {
-        validate: () => ({ status: "block", reason: "Critical error" }),
+        validate: () =>
+          ({ status: "block" as const, reason: "Critical error" }),
+        getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
+        getConsistencyCheck: () => ({
+          trackDecision: () => {},
+          trackCreatedFile: () => {},
+          trackDeletedFile: () => {},
+        }),
       } as any,
     });
 
