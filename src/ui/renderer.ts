@@ -1,7 +1,7 @@
 import { pc } from "./colors";
 import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
-import { box } from "./box";
+import { box, divider } from "./box";
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
 
@@ -11,6 +11,33 @@ export interface RendererOptions {
   width?: number;
   out?: NodeJS.WritableStream;
   err?: NodeJS.WritableStream;
+  /** "box" keeps the legacy boxed tool cards; "inline" uses opencode-like headers. */
+  toolStyle?: "box" | "inline";
+}
+
+const GUTTER = "  ";
+
+/** opencode-like leading marker per tool category. */
+export function toolMarker(tool: string): string {
+  switch (tool) {
+    case "write_file":
+    case "edit_file":
+    case "create_dir":
+    case "move_file":
+    case "delete_file":
+      return "←";
+    case "read_file":
+    case "list_dir":
+    case "file_info":
+      return "→";
+    case "glob":
+    case "grep":
+      return "✱";
+    case "bash":
+      return "$";
+    default:
+      return "⚙";
+  }
 }
 
 export function isRichTerminal(): boolean {
@@ -49,6 +76,7 @@ export class Renderer {
   private out: NodeJS.WritableStream;
   private err: NodeJS.WritableStream;
   private width: number;
+  private toolStyle: "box" | "inline";
   private card: {
     tool: string;
     args: Record<string, unknown>;
@@ -61,6 +89,7 @@ export class Renderer {
     this.out = opts.out ?? process.stdout;
     this.err = opts.err ?? process.stderr;
     this.width = opts.width ?? getTerminalWidth();
+    this.toolStyle = opts.toolStyle ?? "inline";
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
       stream: this.err,
@@ -80,9 +109,21 @@ export class Renderer {
   meta(chunk: string): void {
     this.spinner.stop();
     if (this.card) {
-      this.card.body.push(chunk);
+      if (this.toolStyle === "inline") {
+        this.writeInlineBody(chunk);
+      } else {
+        this.card.body.push(chunk);
+      }
     } else {
       this.out.write(chunk);
+    }
+  }
+
+  /** Stream tool body lines with the gutter prefix, skipping blank lines. */
+  private writeInlineBody(chunk: string): void {
+    for (const line of chunk.split("\n")) {
+      if (line.trim() === "") continue;
+      this.out.write(`${GUTTER}${line}\n`);
     }
   }
 
@@ -113,6 +154,13 @@ export class Renderer {
       return;
     }
     this.card = { tool, args, body: [], start: Date.now() };
+    if (this.toolStyle === "inline") {
+      const marker = toolMarker(tool);
+      this.out.write(
+        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+      );
+      return;
+    }
     this.spinner.start(
       `${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}`,
     );
@@ -132,14 +180,6 @@ export class Renderer {
     }
     if (!this.card) return;
     const { tool, args, body } = this.card;
-    const lines: string[] = [];
-    const summary = summarizeArgs(args);
-    if (summary) lines.push(pc.dim(summary));
-    for (const chunk of body) {
-      for (const line of chunk.split("\n")) {
-        if (line.trim() !== "") lines.push(line);
-      }
-    }
     const marker = error ? pc.red("✗") : pc.green("✓");
     let footer = `${marker} ${pc.dim(`${duration}ms`)}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {
@@ -148,6 +188,20 @@ export class Renderer {
           ? pc.green(`+${ctxDelta}`)
           : pc.yellow(`${ctxDelta} ↓`);
       footer += `  ${pc.dim("ctx")} ${deltaStr}`;
+    }
+    if (this.toolStyle === "inline") {
+      this.out.write(`${GUTTER}${footer}\n`);
+      this.out.write(`${divider(this.width)}\n`);
+      this.card = null;
+      return;
+    }
+    const lines: string[] = [];
+    const summary = summarizeArgs(args);
+    if (summary) lines.push(pc.dim(summary));
+    for (const chunk of body) {
+      for (const line of chunk.split("\n")) {
+        if (line.trim() !== "") lines.push(line);
+      }
     }
     lines.push(footer);
     const title = `${marker} ${friendlyTool(tool)}`;

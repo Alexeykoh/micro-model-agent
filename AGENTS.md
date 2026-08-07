@@ -719,15 +719,18 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 **Event flow:** `Agent.run()` takes `(onChunk, onMeta, onTool, onPhase)`. The renderer maps:
 - `text` → markdown-formatted streaming (via `FormattingStream`)
 - `meta` → raw status/output lines (reasoning, tool results, MoE status)
-- `onTool` `start`/`end` events → boxed tool cards (rich) or `⚙ name` prefixes (plain)
+- `onTool` `start`/`end` events → inline tool headers (rich, default) or `⚙ name` prefixes (plain)
 - `onPhase` `thinking`/`done` → thinking spinner (e.g. `⠋ Thinking…`) while the model loads and generates; auto-cleared on first chunk, tool card, or `done`
 
 **Rich mode extras:**
 - Spinner (`src/ui/spinner.ts`) on stderr during LLM wait and tool execution — single-line `\r` overwrite, cleared before any text write.
-- Tool cards: `┌─ ✓ write_file ─┐` with args summary, wrapped body, duration.
+- **Inline tool headers** (default, opencode-style): each tool call opens with a marker line — `← Editing path` (write/edit/create/move/delete), `→ Reading path` (read/list/file_info), `✱ Searching ...` (glob/grep), `$ Running command ...` (bash), `⚙ ...` (others). Tool output streams under a 2-space gutter (no box); `toolEnd` prints `✓ Nms` + a dim `divider()` + blank line to separate tool calls.
+- **Boxed tool cards** (`ui.toolStyle: "box"`): legacy `┌─ ✓ write_file ─┐` cards with args summary, wrapped body, duration.
+- Model commentary accompanying a tool call is shown by default (`ui.toolComments: true`), with a sanitizer that drops raw JSON payloads (`isToolCallJson` in `src/core/agent.ts`).
 - Markdown v2: aligned tables (`│` borders), blockquotes, checkboxes, hr, italic, links.
+- Diffs (`src/ui/diff.ts`) render the plain content with colored `+`/`-` markers only — no background color.
 
-**Config:** `ui.spinner` in `config/defaults.ts` toggles the spinner. Tool `friendly` labels come from i18n `tool.friendly.*`. All user-facing strings still go through `t()` (rule #8) — this includes REPL header, `/help` groups, setup wizard, and tool cards.
+**Config:** `ui.spinner`, `ui.toolStyle` (`"inline"` default, `"box"` legacy), and `ui.toolComments` in `config/defaults.ts`. Tool `friendly` labels come from i18n `tool.friendly.*`. All user-facing strings still go through `t()` (rule #8) — this includes REPL header, `/help` groups, setup wizard, and tool cards.
 
 ## Plugins
 
@@ -907,7 +910,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.25.1
+### Current Version: 0.28.0
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
 - **23** = model certification module (`mma model certify`), cert checkmarks in model lists, `--model/--provider-url` env-var overrides used by the harness
@@ -915,3 +918,6 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **24** = read_file display mode (show only header in REPL, full content to LLM)
 - **25** = LSP module, audit gate language-agnostic, Windows command hints
 - **25** = behavior-based background detection for `bash` (grace window instead of command-text heuristic), spawn error surfacing, CP866 process output decoding
+- **26** = opencode-style inline tool headers (`ui.toolStyle`, default "inline"), model commentary next to tool calls (`ui.toolComments`), diffs without background color
+- **27** = Windows hardening, hallucination fixes
+- **28** = double-Esc interrupt fix (Bun readline collapses fast Esc Esc into one keypress — ESC bytes counted instead of events), abortable in-flight LLM requests on interrupt (`LLMProvider.chat` accepts an `AbortSignal`), clipboard paste hint when the buffer has no image

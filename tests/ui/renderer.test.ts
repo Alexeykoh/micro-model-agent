@@ -12,7 +12,7 @@ function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   return { text: () => parts.join(""), stream };
 }
 
-function makeRenderer(opts: { rich: boolean }): {
+function makeRenderer(opts: { rich: boolean; toolStyle?: "box" | "inline" }): {
   renderer: Renderer;
   text: () => string;
 } {
@@ -20,6 +20,7 @@ function makeRenderer(opts: { rich: boolean }): {
   const renderer = new Renderer({
     rich: opts.rich,
     spinner: false,
+    toolStyle: opts.toolStyle ?? "inline",
     out: out.stream,
     err: out.stream,
     width: 60,
@@ -44,8 +45,8 @@ describe("summarizeArgs", () => {
 });
 
 describe("Renderer", () => {
-  it("renders a boxed card in rich mode", () => {
-    const { renderer, text } = makeRenderer({ rich: true });
+  it("renders a boxed card in rich mode with box toolStyle", () => {
+    const { renderer, text } = makeRenderer({ rich: true, toolStyle: "box" });
     renderer.toolStart("write_file", { path: "src/a.ts" });
     renderer.meta("\ncreated src/a.ts\n");
     renderer.toolEnd("write_file", 12, false);
@@ -55,6 +56,20 @@ describe("Renderer", () => {
     expect(out).toContain("✓");
     expect(out).toContain("12ms");
     expect(out).toContain("src/a.ts");
+  });
+
+  it("renders an inline header in rich mode by default (no box)", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("edit_file", { path: "src/a.ts" });
+    renderer.meta("\nupdated\n");
+    renderer.toolEnd("edit_file", 12, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("←");
+    expect(out).toContain("src/a.ts");
+    expect(out).toContain("12ms");
+    expect(out).not.toContain("┌");
+    expect(out).not.toContain("┐");
   });
 
   it("marks failed tools with an error marker", () => {

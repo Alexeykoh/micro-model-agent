@@ -61,7 +61,10 @@ async function main(): Promise<void> {
       process.exit(result.success ? 0 : 1);
     }
 
-    const renderer = new Renderer({ spinner: config.ui?.spinner ?? true });
+    const renderer = new Renderer({
+      spinner: config.ui?.spinner ?? true,
+      toolStyle: config.ui?.toolStyle ?? "inline",
+    });
     const result = await agent.run(
       prompt,
       (chunk) => renderer.text(chunk),

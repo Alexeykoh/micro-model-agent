@@ -141,11 +141,9 @@ function formatLine(line: DiffLine, maxNumWidth: number): string {
     num !== null ? String(num).padStart(maxNumWidth) : " ".repeat(maxNumWidth);
 
   if (line.type === "remove") {
-    return pc.red(`${pc.bgRed(`${numStr} - ${line.content}`)}`);
+    return `${numStr} ${pc.red("-")} ${line.content}`;
   } else if (line.type === "add") {
-    return pc.green(
-      `${pc.bgGreen(`${numStr} + ${line.content}`)}`,
-    );
+    return `${numStr} ${pc.green("+")} ${line.content}`;
   } else if (line.content === "...") {
     return pc.dim(`  ${" ".repeat(maxNumWidth)}...`);
   } else {
@@ -204,7 +202,7 @@ export function generateNewFileDiff(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
     diffLines.push(
-      pc.green(`${pc.bgGreen(`${numStr} + ${lines[i]}`)}`),
+      `${numStr} ${pc.green("+")} ${lines[i]}`,
     );
   }
 
@@ -227,7 +225,7 @@ export function generateDeleteDiff(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
     diffLines.push(
-      pc.red(`${pc.bgRed(`${numStr} - ${lines[i]}`)}`),
+      `${numStr} ${pc.red("-")} ${lines[i]}`,
     );
   }
 
