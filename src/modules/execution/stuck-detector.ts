@@ -56,8 +56,7 @@ export class StuckDetector {
     if (stepId === this.currentStepId) {
       this.iterationsOnCurrentStep++;
     } else {
-      this.currentStepId = stepId;
-      this.iterationsOnCurrentStep = 1;
+      this.resetStepState(stepId);
     }
   }
 
@@ -96,8 +95,7 @@ export class StuckDetector {
 
   setCurrentStep(stepId: number, description: string): void {
     if (stepId !== this.currentStepId) {
-      this.currentStepId = stepId;
-      this.iterationsOnCurrentStep = 1;
+      this.resetStepState(stepId);
     }
     this.currentStepDescription = description;
   }
@@ -372,9 +370,31 @@ export class StuckDetector {
   }
 
   reset(): void {
+    this.currentStepId = null;
     this.iterationsOnCurrentStep = 0;
     this.toolErrors.clear();
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
+    this.lastErrorOutput = "";
+    this.recentToolCalls = [];
+    this.fileRewriteCount.clear();
+    this.escalationCount = 0;
+  }
+
+  /**
+   * Reset all per-step state when moving to a new step. Prevents errors and
+   * tool repetitions from one step leaking into the next (false-positive
+   * stuck/recovery on the first iteration of the new step).
+   */
+  private resetStepState(stepId: number): void {
+    this.currentStepId = stepId;
+    this.iterationsOnCurrentStep = 1;
+    this.toolErrors.clear();
+    this.consecutiveFailures = 0;
+    this.lastFailedTool = "";
+    this.lastErrorOutput = "";
+    this.recentToolCalls = [];
+    this.fileRewriteCount.clear();
+    this.escalationCount = 0;
   }
 }

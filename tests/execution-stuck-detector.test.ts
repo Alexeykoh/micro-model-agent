@@ -208,4 +208,66 @@ describe("StuckDetector", () => {
     const d = new StuckDetector(8, 3)
     expect(d.getActionableHints()).toEqual([])
   })
+
+  it("should clear toolErrors on step change", () => {
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    expect(detector.hasRepetitiveErrors("bash")).toBe(true);
+    detector.setCurrentStep(2, "step two");
+    expect(detector.hasRepetitiveErrors("bash")).toBe(false);
+  })
+
+  it("should clear consecutiveFailures on step change", () => {
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    expect(detector.hasConsecutiveFailures()).toBe(true);
+    detector.setCurrentStep(2, "step two");
+    expect(detector.hasConsecutiveFailures()).toBe(false);
+  })
+
+  it("should clear recentToolCalls on step change", () => {
+    for (let i = 0; i < 3; i++) {
+      detector.recordToolCall("read_file", { path: "src/index.ts" });
+    }
+    expect(detector.hasRepetitiveToolCalls()).toBe(true);
+    detector.setCurrentStep(2, "step two");
+    expect(detector.hasRepetitiveToolCalls()).toBe(false);
+  })
+
+  it("should clear fileRewriteCount on step change", () => {
+    for (let i = 0; i < 3; i++) detector.recordFileRewrite("src/index.ts");
+    expect(detector.hasExcessiveRewrites()).toBe(true);
+    detector.setCurrentStep(2, "step two");
+    expect(detector.hasExcessiveRewrites()).toBe(false);
+  })
+
+  it("should clear escalation on step change", () => {
+    detector.recordEscalation();
+    detector.recordEscalation();
+    detector.recordEscalation();
+    expect(detector.shouldEscalate()).toBe(true);
+    detector.setCurrentStep(2, "step two");
+    expect(detector.shouldEscalate()).toBe(false);
+  })
+
+  it("should clear last error output on step change", () => {
+    detector.recordToolError("bash", "EACCES: permission denied");
+    expect(detector.getLastErrorOutput()).toBe("EACCES: permission denied");
+    detector.setCurrentStep(2, "step two");
+    expect(detector.getLastErrorOutput()).toBe("");
+  })
+
+  it("should keep error state when setCurrentStep repeats the same step", () => {
+    detector.setCurrentStep(1, "step one");
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    detector.setCurrentStep(1, "step one");
+    expect(detector.hasRepetitiveErrors("bash")).toBe(true);
+    expect(detector.hasConsecutiveFailures()).toBe(true);
+  })
+
+  it("should clear state on recordIteration step change", () => {
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    expect(detector.hasConsecutiveFailures()).toBe(true);
+    detector.recordIteration(2);
+    expect(detector.hasConsecutiveFailures()).toBe(false);
+    expect(detector.getIterationsOnCurrentStep()).toBe(1);
+  })
 });
