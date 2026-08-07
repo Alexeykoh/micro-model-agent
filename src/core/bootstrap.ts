@@ -301,6 +301,17 @@ export async function bootstrap(
         });
       },
     },
+    sessionLog: {
+      plan: (event: string, detail: string, iteration?: number) => {
+        sessionManager.appendLog({
+          ts: new Date().toISOString(),
+          type: "plan",
+          tool: event,
+          content: detail,
+          ...(iteration !== undefined ? { iteration } : {}),
+        });
+      },
+    },
   };
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);

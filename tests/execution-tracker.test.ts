@@ -56,4 +56,33 @@ describe("PlanTracker", () => {
     tracker.addNote(1, "need to check config first");
     expect(tracker.getStep(1)!.note).toContain("check config");
   });
+
+  it("syncCurrentStep should advance past done steps after plan update", () => {
+    tracker.updateStepStatus(1, "done");
+    tracker.syncCurrentStep();
+    expect(tracker.getCurrentStepIndex()).toBe(1);
+    expect(tracker.getCurrentStep()!.id).toBe(2);
+  });
+
+  it("syncCurrentStep should skip multiple done steps", () => {
+    tracker.updateStepStatus(1, "done");
+    tracker.updateStepStatus(2, "done");
+    tracker.updateStepStatus(3, "done");
+    tracker.syncCurrentStep();
+    expect(tracker.getCurrentStepIndex()).toBe(2);
+    expect(tracker.getCurrentStep()!.id).toBe(3);
+  });
+
+  it("syncCurrentStep should not mutate done status to in_progress", () => {
+    tracker.updateStepStatus(1, "done");
+    tracker.syncCurrentStep();
+    expect(tracker.getStep(1)!.status).toBe("done");
+    expect(tracker.getStep(2)!.status).toBe("pending");
+  });
+
+  it("syncCurrentStep should be a no-op when current step is not done", () => {
+    tracker.syncCurrentStep();
+    expect(tracker.getCurrentStepIndex()).toBe(0);
+    expect(tracker.getCurrentStep()!.id).toBe(1);
+  });
 });

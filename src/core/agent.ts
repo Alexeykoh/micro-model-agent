@@ -283,6 +283,10 @@ export class Agent {
         lastUserMessage: input,
         contextManager,
         onMeta,
+        sessionLog: {
+          plan: (event: string, detail: string, iter?: number) =>
+            slog.logPlan(event, detail, iter),
+        },
       });
 
       if (contextManager.needsCompaction()) {

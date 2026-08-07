@@ -28,6 +28,13 @@ export interface ToolContext {
     append(type: string, content: unknown): Promise<void>;
   };
   /**
+   * Append a structured entry to the session execution log (session.jsonl).
+   * Used by execution/module to record plan progress for post-mortem analysis.
+   */
+  sessionLog?: {
+    plan(event: string, detail: string, iteration?: number): void;
+  };
+  /**
    * One-shot headless mode: interactive tools (question/approve) fail fast
    * instead of blocking on stdin, and the agent exits on the first final answer.
    */

@@ -43,6 +43,23 @@ export class PlanTracker {
     return false;
   }
 
+  /**
+   * Advance the pointer past any done/skipped steps without mutating their
+   * status. Keeps currentStepIndex in sync when the model marks steps done via
+   * the `plan update` tool (which never calls advance()). Without this,
+   * getCurrentStep() stays on the first step forever and the stuck detector
+   * accumulates false-positive "no progress" warnings.
+   */
+  syncCurrentStep(): void {
+    while (
+      this.currentStepIndex < this.plan.steps.length - 1 &&
+      (this.plan.steps[this.currentStepIndex].status === "done" ||
+        this.plan.steps[this.currentStepIndex].status === "skipped")
+    ) {
+      this.currentStepIndex++;
+    }
+  }
+
   isComplete(): boolean {
     return this.plan.steps.every(
       (s) => s.status === "done" || s.status === "skipped",

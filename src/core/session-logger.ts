@@ -135,4 +135,18 @@ export class SessionLogger {
       iteration,
     });
   }
+
+  logPlan(
+    event: string,
+    detail: string,
+    iteration?: number,
+  ): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "plan",
+      content: detail,
+      tool: event,
+      ...(iteration !== undefined ? { iteration } : {}),
+    });
+  }
 }

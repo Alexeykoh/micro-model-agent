@@ -50,12 +50,7 @@ export class ExecutionModule implements AgentModule {
     if (!plan) return false;
     this.tracker = new PlanTracker(plan);
     // Advance to the first non-done step
-    while (
-      this.tracker.getCurrentStep()?.status === "done" ||
-      this.tracker.getCurrentStep()?.status === "skipped"
-    ) {
-      if (!this.tracker.advance()) break;
-    }
+    this.tracker.syncCurrentStep();
     return true;
   }
 
@@ -178,9 +173,14 @@ export class ExecutionModule implements AgentModule {
             );
             if (args.note)
               this.tracker.addNote(Number(args.step), String(args.note));
+            this.tracker.syncCurrentStep();
             this.persister.save(this.tracker.getPlan());
             const progress = this.tracker.getProgressString();
             const display = this.tracker.toPromptBlock();
+            _ctx.sessionLog?.plan(
+              "step-update",
+              `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })} | ${progress} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
+            );
             return {
               success: true,
               output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}`,
@@ -306,6 +306,11 @@ export class ExecutionModule implements AgentModule {
         const stuckReason = this.stuckDetector.getStuckReason();
         if (stuckReason) {
           ctx.logger?.warn(stuckReason);
+          ctx.sessionLog?.plan(
+            "stuck-warning",
+            stuckReason,
+            typeof ctx.iteration === "number" ? ctx.iteration : undefined,
+          );
         }
         if (
           this.stuckDetector.isStuck() ||
@@ -443,7 +448,7 @@ export class ExecutionModule implements AgentModule {
               }
             }
           }
-          this.advancePlanIfStepComplete(ctx.contextManager);
+          this.advancePlanIfStepComplete(ctx.contextManager, ctx.sessionLog);
         }
       },
     };
@@ -491,7 +496,10 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
-  private advancePlanIfStepComplete(contextManager?: any): void {
+  private advancePlanIfStepComplete(
+    contextManager?: any,
+    sessionLog?: { plan(event: string, detail: string, iteration?: number): void },
+  ): void {
     const step = this.tracker?.getCurrentStep();
     if (!step) return;
     const stepText = step.description.toLowerCase();
@@ -564,6 +572,10 @@ export class ExecutionModule implements AgentModule {
     const hadNext = this.tracker?.advance() ?? false;
     if (this.tracker) {
       this.persister.save(this.tracker.getPlan());
+      sessionLog?.plan(
+        "auto-advance",
+        `Step ${step.id} auto-completed | ${this.tracker.getProgressString()} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
+      );
     }
 
     if (contextManager) {
