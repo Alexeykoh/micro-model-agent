@@ -5,21 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.25.1] - 2026-08-07
+## [0.27.0] - 2026-08-07
 
-### Changed
+### Added
+- **LLM-as-judge consistency check** (`src/modules/hallucination/consistency.ts`): the keyword-based
+  contradiction heuristic is replaced with a judge-provider call when configured. Detects decision
+  reversals (e.g. switching DBs mid-task) and degrades to `pass` when the judge provider is
+  unavailable or errors.
 - **Behavior-based background detection** (`src/tools/bash.ts`, `src/modules/processes/`): the
   `bash` tool no longer classifies long-running commands by text matching (heuristic in
   `src/modules/processes/detect.ts` removed). Any command still running after the 5s grace window
   is auto-promoted to the background and returns a process id. A command that mentions "vite"/"dev"
   now runs normally; a genuinely long-running command is always caught.
-- **Spawn errors surfaced**: a command that fails to spawn (bad `workdir`, missing shell) returns
-  `[process error] ...` with `success: false` instead of a fake "Started" line with PID 0.
+
+### Changed
+- **Async process execution in verifier** (`src/modules/execution/verifier.ts`, `lint-on-write`
+  plugin): blocking `execSync` replaced with async spawn so long syntax checks don't freeze the agent
+  loop.
+- **Spawn errors surfaced** (`src/tools/bash.ts`): a command that fails to spawn (bad `workdir`,
+  missing shell) returns `[process error] ...` with `success: false` instead of a fake "Started"
+  line with PID 0.
 - **Process output encoding** (`src/modules/processes/registry.ts`): Windows output is decoded from
   the OEM code page (CP866) so Cyrillic is not garbled; log buffer raised to 2000 lines.
 - **Process management API** (`src/modules/processes/`): `runCommand`/`isLongRunningCommand`
   removed; `processRegistry` gains `waitForExit()`/`remove()` and `spawnError`; `runner.ts` is now
   a kill-by-call-id registry (`registerKillable`/`unregisterKillable`/`killByCallId`).
+
+### Fixed
+- **Hallucination factual check false positives on Windows** (`src/modules/hallucination/factual.ts`):
+  the path-extraction regex matched absolute Windows paths starting at the first word boundary after
+  the drive letter, so `E:\project\src\a.ts` became `project\src\a.ts` and `resolve()` glued it onto
+  `baseDir` — producing a bogus path and a false "unknown file" warning for files that actually exist.
+  The regex now captures the drive letter and absolute paths resolve as-is. Well-known tech names
+  (`Node.js`, `React.js`, `Next.js`, ...) are excluded from file-path detection so "used Node.js
+  runtime" no longer flags a warning. Added `tests/hallucination-factual.test.ts` (6 cases).
+- **Model tool/command confusion on Windows** (`src/tools/bash.ts`, `src/tools/executor.ts`): the
+  agent would emit tool-call syntax inside `bash` (e.g. `create_dir path=...`) and use Unix commands
+  that don't exist in `cmd.exe` (`ls`, `cat`, `head`). The system prompt now states the shell is
+  `cmd.exe`; `adaptCommandForWindows` translates `ls→dir`, `cat→type`, `pwd→echo %cd%`, `wc→find`;
+  `detectToolCallInBash` redirects tool-call-shaped bash input to the real tool via
+  `ToolExecutor.executeByName()`.
+- **Plan step tracking** (`src/modules/execution/tracker.ts`, `src/core/agent.ts`): plan updates no
+  longer leave the tracker stuck on step 1, which caused false "No progress" / stuck warnings. The
+  pointer is synced on plan update and step progress is logged to `session.jsonl` as `"plan"` events
+  (`step-update`, `auto-advance`, `stuck-warning`).
+- **Stuck detector reset on step change** (`src/modules/execution/stuck-detector.ts`): per-step
+  iteration/error counters are reset when the current step changes, preventing false stuck warnings
+  after legitimate progress.
+
+## [0.26.0] - 2026-08-07
+
+### Fixed
+- **Dead hallucination pipeline wired up** (`src/core/agent.ts`, `src/modules/hallucination/`):
+  the factual check (pre-existing paths cross-check) and MoE stuck detection were never invoked —
+  both are now active. `HallucinationDetector` runs factual/confidence checks on every response and
+  the MoE executor uses the detector for per-subtask stuck detection.
 
 ## [0.25.0] - 2026-08-06
 
