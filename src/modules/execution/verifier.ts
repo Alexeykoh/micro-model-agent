@@ -1,6 +1,6 @@
 import { existsSync } from 'fs'
 import { resolve, extname } from 'path'
-import { execSync } from 'child_process'
+import { spawn } from 'child_process'
 import { t } from '../../i18n/index'
 import type { MoEPlan } from './types'
 import type { AppConfig } from '../../config/types'
@@ -42,12 +42,7 @@ export class StepVerifier {
 
   async runScript(scriptName: string): Promise<VerificationItem> {
     try {
-      execSync(`bun run ${scriptName}`, {
-        cwd: this.baseDir,
-        encoding: 'utf-8',
-        timeout: 60_000,
-        stdio: 'pipe',
-      })
+      await this.runAsync(`bun run ${scriptName}`, this.baseDir, 60_000)
       return { passed: true, message: t('verify.script_passed', { script: scriptName }) }
     } catch (e: any) {
       return { passed: false, message: t('verify.script_failed', { script: scriptName, message: e.message }) }
@@ -60,12 +55,7 @@ export class StepVerifier {
       return { passed: true, message: 'No tsconfig.json found — skipping type check' }
     }
     try {
-      execSync('npx tsc --noEmit', {
-        cwd: this.baseDir,
-        encoding: 'utf-8',
-        timeout: 60_000,
-        stdio: 'pipe',
-      })
+      await this.runAsync('npx tsc --noEmit', this.baseDir, 60_000)
       return { passed: true, message: 'TypeScript type check passed' }
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message
@@ -137,7 +127,7 @@ export class StepVerifier {
 
       if (result.passed) {
         const fullPath = resolve(this.baseDir, filePath)
-        if (!this.validateSyntax(fullPath)) {
+        if (!(await this.validateSyntax(fullPath))) {
           syntaxValid = false
           results.push({ passed: false, message: t('verify.syntax_error', { path: filePath }) })
         }
@@ -151,12 +141,12 @@ export class StepVerifier {
     }
   }
 
-  private validateSyntax(filePath: string): boolean {
+  private async validateSyntax(filePath: string): Promise<boolean> {
     const ext = extname(filePath)
 
     if (ext === '.ts' || ext === '.tsx') {
       try {
-        execSync(`npx tsc --noEmit --skipLibCheck ${filePath}`, { stdio: 'pipe', timeout: 10000 })
+        await this.runAsync(`npx tsc --noEmit --skipLibCheck ${filePath}`, this.baseDir, 10000)
         return true
       } catch (err: any) {
         if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
@@ -172,7 +162,7 @@ export class StepVerifier {
 
     if (ext === '.js' || ext === '.jsx') {
       try {
-        execSync(`node --check ${filePath}`, { stdio: 'pipe', timeout: 5000 })
+        await this.runAsync(`node --check ${filePath}`, this.baseDir, 5000)
         return true
       } catch {
         return false
@@ -180,5 +170,44 @@ export class StepVerifier {
     }
 
     return true
+  }
+
+  /**
+   * Run a command asynchronously (non-blocking event loop) and resolve when it
+   * exits. Rejects with the captured stderr/stdout on non-zero exit or timeout.
+   */
+  private runAsync(command: string, cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(command, {
+        cwd,
+        shell: true,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let stdout = ''
+      let stderr = ''
+      child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+      child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+      const timer = setTimeout(() => {
+        child.kill()
+        reject(new Error(`Command timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+      child.on('error', (err) => {
+        clearTimeout(timer)
+        reject(err)
+      })
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        if (code === 0) {
+          resolve({ stdout, stderr })
+        } else {
+          const err: any = new Error(`Command failed with exit code ${code}`)
+          err.stdout = stdout
+          err.stderr = stderr
+          err.status = code
+          reject(err)
+        }
+      })
+    })
   }
 }

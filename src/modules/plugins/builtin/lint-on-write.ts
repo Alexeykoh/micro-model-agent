@@ -1,6 +1,6 @@
 import type { AgentPlugin } from '../../types'
 import type { ToolContext, ToolCall, ToolResult } from '../../../tools/types'
-import { execSync } from 'child_process'
+import { spawn } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { resolve, extname, join } from 'path'
 
@@ -28,7 +28,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     if (!existsSync(fullPath)) return
 
     const ext = extname(fullPath)
-    const syntaxError = this.checkSyntax(fullPath, ext, ctx.baseDir)
+    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir)
 
     if (syntaxError) {
       result.output += `\n\n[Syntax check failed]: ${syntaxError}`
@@ -39,10 +39,10 @@ export class LintOnWritePlugin implements AgentPlugin {
     await this.runProjectTypeCheck(ctx, result)
   }
 
-  private checkSyntax(filePath: string, ext: string, baseDir: string): string | null {
+  private async checkSyntax(filePath: string, ext: string, baseDir: string): Promise<string | null> {
     if (ext === '.ts' || ext === '.tsx') {
       try {
-        execSync(`npx tsc --noEmit --skipLibCheck "${filePath}"`, { cwd: baseDir, stdio: 'pipe', timeout: 10000 })
+        await runAsync(`npx tsc --noEmit --skipLibCheck "${filePath}"`, baseDir, 10000)
         return null
       } catch (err: any) {
         if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
@@ -59,7 +59,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
     if (ext === '.js' || ext === '.jsx') {
       try {
-        execSync(`node --check "${filePath}"`, { cwd: baseDir, stdio: 'pipe', timeout: 5000 })
+        await runAsync(`node --check "${filePath}"`, baseDir, 5000)
         return null
       } catch (err: any) {
         const stderr = err.stderr?.toString() || ''
@@ -86,7 +86,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       }
 
       ctx.logger.debug(`Running lint: ${lintScript}`)
-      execSync(lintScript, { cwd: ctx.baseDir, stdio: 'pipe' })
+      await runAsync(lintScript, ctx.baseDir, 30_000)
       ctx.logger.debug('Lint passed')
     } catch (err: any) {
       ctx.logger.warn(`Lint failed: ${err.message}`)
@@ -119,7 +119,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
   private async runTscCheck(baseDir: string): Promise<string | null> {
     try {
-      execSync(`npx tsc --noEmit --skipLibCheck`, { cwd: baseDir, stdio: 'pipe', timeout: 30000 })
+      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000)
       return null
     } catch (err: any) {
       if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
@@ -133,6 +133,45 @@ export class LintOnWritePlugin implements AgentPlugin {
       return null
     }
   }
+}
+
+/**
+ * Run a command asynchronously (non-blocking event loop) and resolve when it
+ * exits. Rejects with captured stderr/stdout on non-zero exit or timeout.
+ */
+function runAsync(command: string, cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+    const timer = setTimeout(() => {
+      child.kill()
+      reject(new Error(`Command timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        const err: any = new Error(`Command failed with exit code ${code}`)
+        err.stdout = stdout
+        err.stderr = stderr
+        err.status = code
+        reject(err)
+      }
+    })
+  })
 }
 
 export const plugin = new LintOnWritePlugin()

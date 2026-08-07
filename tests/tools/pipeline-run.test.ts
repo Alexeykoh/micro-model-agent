@@ -3,7 +3,11 @@ import { pipelineRunTool } from '../../src/tools/pipeline-run'
 
 function makeCtx(overrides: Record<string, unknown> = {}) {
   return {
-    config: { contextWindow: 64000, contextBudget: {} },
+    config: {
+      contextWindow: 64000,
+      contextBudget: {},
+      session: { baselineCheck: false },
+    },
     baseDir: process.cwd(),
     logger: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
     llmProvider: { chat: async () => {}, countTokens: () => 1 },
