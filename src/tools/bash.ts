@@ -37,6 +37,15 @@ function adaptCommandForWindows(command: string): string {
     return trimmed.replace(/mkdir -p/g, 'mkdir')
   }
 
+  // Translate simple Unix commands to their cmd.exe equivalents. Only the
+  // leading word is rewritten; flags are passed through (ls -la → dir -la,
+  // which cmd tolerates). Pipe-using forms are left alone — they would break.
+  const firstWord = trimmed.split(/\s+/)[0]?.split(/[\\/]/).pop()
+  const translated = firstWord ? UNIX_TO_WIN_TRANSLATE[firstWord] : undefined
+  if (translated && !trimmed.includes('|') && !trimmed.includes('>') && !trimmed.includes('&&') && !trimmed.includes(';')) {
+    return trimmed.replace(firstWord!, translated)
+  }
+
   // No encoding adaptation needed — registry.ts handles UTF-8/OEM decoding
   return command
 }
@@ -59,7 +68,68 @@ const UNIX_TO_WIN_HINTS: Record<string, string> = {
   'diff': 'Use the diff tool instead.',
   'which': 'Use "where" instead.',
   'echo': 'echo works on Windows, but avoid pipes (|).',
+  'Get-Content': 'The shell is cmd.exe, not PowerShell. Use "type" or the read_file tool instead.',
+  'Select-Object': 'The shell is cmd.exe, not PowerShell. Use the read_file tool with offset/limit instead.',
 };
+
+/** Unix commands that can be transparently translated to a cmd.exe equivalent. */
+const UNIX_TO_WIN_TRANSLATE: Record<string, string> = {
+  'ls': 'dir',
+  'pwd': 'echo %cd%',
+  'cat': 'type',
+  'wc': 'find /c /v ""',
+};
+
+/**
+ * Detect when the model mistakes a tool call for a shell command — e.g.
+ * `bash` with command "create_dir path=C:\...\src" or "read_file file=x".
+ * These are tool invocations, not commands; running them through cmd.exe
+ * fails. The matched tool name and raw args are returned so the caller can
+ * redirect into the real tool.
+ */
+export function detectToolCallInBash(command: string): {
+  tool: string;
+  args: string;
+} | null {
+  const match = command.trim().match(/^([\w-]+)\s+(.+)$/s);
+  if (!match) return null;
+  const tool = match[1];
+  const rest = match[2].trim();
+  // Only treat as a tool call when the first word looks like a snake_case
+  // tool name and the rest has at least one '=' or a JSON object shape.
+  if (!/^[a-z][a-z0-9_]+$/.test(tool)) return null;
+  if (!rest.includes('=') && !rest.startsWith('{')) return null;
+  return { tool, args: rest };
+}
+
+/**
+ * Parse the raw argument string of a mistaken tool call captured in a bash
+ * command into a Record. Supports JSON objects ("{"path": "..."}") and
+ * key=value pairs ("path=C:\...\src"). Values keep their literal text.
+ */
+export function parseToolArgs(raw: string): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      return JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      /* fall through to key=value parsing */
+    }
+  }
+  const args: Record<string, unknown> = {};
+  // Tokenize respecting double/single-quoted values.
+  const tokens = trimmed.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+  for (const token of tokens) {
+    const eq = token.indexOf('=');
+    if (eq > 0) {
+      const key = token.slice(0, eq);
+      const value = token.slice(eq + 1);
+      // Strip surrounding quotes from values.
+      args[key] = value.replace(/^["']|["']$/g, "");
+    }
+  }
+  return args;
+}
 
 export const bashTool: ToolDefinition = {
   name: 'bash',
@@ -76,6 +146,23 @@ export const bashTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const originalCommand = String(args.command)
+
+    // The model sometimes sends a tool invocation (e.g. "create_dir path=...")
+    // as a bash command instead of calling the tool directly. Redirect into
+    // the real tool so the intent succeeds instead of failing in cmd.exe.
+    const toolCall = detectToolCallInBash(originalCommand)
+    if (toolCall && toolCall.tool !== 'bash' && ctx.toolExecutor) {
+      const redirected = await ctx.toolExecutor.executeByName(
+        toolCall.tool,
+        parseToolArgs(toolCall.args),
+        ctx,
+      )
+      return {
+        success: redirected.success,
+        output: `[redirected to tool "${toolCall.tool}"]\n${redirected.output}`,
+      }
+    }
+
     const command = adaptCommandForWindows(originalCommand)
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir
 

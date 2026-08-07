@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { bashTool, setBashGraceMs } from '../src/tools/bash'
+import { bashTool, setBashGraceMs, detectToolCallInBash, parseToolArgs } from '../src/tools/bash'
 import { processRegistry } from '../src/modules/processes'
 
 const tmpProject = mkdtempSync(join(tmpdir(), 'mma-bash-'))
@@ -100,5 +100,97 @@ describe('bash', () => {
     })
     expect(result.success).toBe(false)
     expect(result.output).toContain('[process error]')
+  })
+})
+
+describe('detectToolCallInBash', () => {
+  it('should detect a tool call with key=value args', () => {
+    const result = detectToolCallInBash('create_dir path=E:\\project\\src')
+    expect(result).toEqual({ tool: 'create_dir', args: 'path=E:\\project\\src' })
+  })
+
+  it('should detect a tool call with JSON args', () => {
+    const result = detectToolCallInBash('read_file {"path":"src/x.ts","limit":50}')
+    expect(result).toEqual({ tool: 'read_file', args: '{"path":"src/x.ts","limit":50}' })
+  })
+
+  it('should return null for plain commands', () => {
+    expect(detectToolCallInBash('echo hello')).toBeNull()
+    expect(detectToolCallInBash('ls -la')).toBeNull()
+    expect(detectToolCallInBash('npm test')).toBeNull()
+  })
+
+  it('should return null for commands without = or JSON', () => {
+    expect(detectToolCallInBash('bun init')).toBeNull()
+  })
+
+  it('should not match hyphenated commands as tool names', () => {
+    expect(detectToolCallInBash('npm-run-all test=1')).toBeNull()
+  })
+})
+
+describe('parseToolArgs', () => {
+  it('should parse JSON args', () => {
+    expect(parseToolArgs('{"path":"src/x.ts","limit":50}')).toEqual({
+      path: 'src/x.ts',
+      limit: 50,
+    })
+  })
+
+  it('should parse key=value pairs', () => {
+    expect(parseToolArgs('path=E:\\project\\src')).toEqual({
+      path: 'E:\\project\\src',
+    })
+  })
+
+  it('should strip surrounding quotes', () => {
+    expect(parseToolArgs('path="E:\\project\\src"')).toEqual({
+      path: 'E:\\project\\src',
+    })
+  })
+
+  it('should parse multiple key=value tokens', () => {
+    expect(parseToolArgs('action=create title="My Task"')).toEqual({
+      action: 'create',
+      title: 'My Task',
+    })
+  })
+})
+
+describe('bash tool-call redirection', () => {
+  it('should redirect a mistaken tool call into the real tool', async () => {
+    const realToolResult = { success: true, output: 'Created dir' }
+    const toolExecutor = {
+      executeByName: async (name: string) => {
+        expect(name).toBe('create_dir')
+        return realToolResult
+      },
+    }
+    const ctx = makeCtx({ toolExecutor })
+    const result = await bashTool.handler(ctx, {
+      command: 'create_dir path=E:\\project\\src',
+    })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('[redirected to tool "create_dir"]')
+    expect(result.output).toContain('Created dir')
+  })
+
+  it('should not redirect when toolExecutor is missing', async () => {
+    const ctx = makeCtx()
+    const result = await bashTool.handler(ctx, {
+      command: 'create_dir path=E:\\project\\src',
+    })
+    expect(result.success).toBe(false)
+    expect(result.output).not.toContain('[redirected to tool')
+  })
+
+  it('should not redirect bash into itself', async () => {
+    const toolExecutor = { executeByName: async () => ({ success: true, output: 'x' }) }
+    const ctx = makeCtx({ toolExecutor })
+    const result = await bashTool.handler(ctx, {
+      command: 'bash echo=hello',
+    })
+    // No redirection — runs through cmd.exe (may fail on the bogus command).
+    expect(result.output).not.toContain('[redirected to tool "bash"]')
   })
 })

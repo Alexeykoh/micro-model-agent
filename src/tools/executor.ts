@@ -20,8 +20,27 @@ export class ToolExecutor {
     this.pluginManager = pluginManager;
   }
 
-  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
-    const tool = this.registry.get(call.name);
+  /**
+   * Execute a tool by name with plain arguments (no call id, no timeout
+   * wiring). Used internally — e.g. bash redirects a mistaken tool-call-as-
+   * command into the real tool. Runs through the same registry and plugin
+   * hooks as a normal call.
+   */
+  async executeByName(
+    name: string,
+    args: Record<string, unknown>,
+    ctx?: ToolContext,
+  ): Promise<ToolResult> {
+    const prevCtx = this.ctx;
+    if (ctx) this.ctx = ctx;
+    try {
+      return await this.execute({ id: `redirect_${Date.now()}`, name, arguments: args });
+    } finally {
+      this.ctx = prevCtx;
+    }
+  }
+
+  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {    const tool = this.registry.get(call.name);
     if (!tool) {
       return {
         success: false,

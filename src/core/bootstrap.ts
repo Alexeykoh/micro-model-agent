@@ -64,13 +64,14 @@ function buildSystemInfo(
   if (isWin) {
     lines.push(
       ``,
-      `Windows environment — use Windows-compatible commands:`,
-      `- Use "dir" instead of "ls". Use "dir /b" for bare listing.`,
-      `- Use "type" or "Get-Content" instead of "cat".`,
+      `Windows environment — use Windows-compatible commands (shell is cmd.exe, not PowerShell):`,
+      `- Use "dir" instead of "ls". Use "dir /b" for bare listing. For file listings prefer the list_dir tool.`,
+      `- Use "type" instead of "cat". For reading files prefer the read_file tool.`,
       `- Use "cd" instead of "pwd". Use "echo %cd%" to print working directory.`,
       `- Use "copy" instead of "cp", "move" instead of "mv", "del" instead of "rm".`,
       `- Do not use "mkdir -p" — Windows mkdir creates intermediate dirs by default. Use the create_dir tool instead.`,
-      `- Do not use "head" or "tail" — they are Unix commands. Use "Select-Object -First N" or "Get-Content ... | Select-Object -First N" instead (PowerShell).`,
+      `- Do not use "head" or "tail" — they are Unix commands. Use the read_file tool with offset/limit instead.`,
+      `- Do not use "grep" — use the grep tool instead. Do not use PowerShell cmdlets (Get-Content, Select-Object, cat) in bash — the shell is cmd.exe.`,
       `- Use forward slashes (/) or escaped backslashes (\\\\) in file paths.`,
       `- Your working directory is: ${baseDir}`,
     );
