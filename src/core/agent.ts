@@ -29,6 +29,20 @@ const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
 const QUALITY_TRIGGER_THRESHOLD = 40;
 
+/** True when the text looks like a raw JSON tool payload (garbage to display). */
+function isToolCallJson(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      JSON.parse(trimmed);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export interface AgentDeps {
   config: AppConfig;
   llmProvider: LLMProvider;
@@ -351,6 +365,7 @@ export class Agent {
         for await (const chunk of llmProvider.chat(
           history,
           allTools as ToolDefinition[],
+          this.abortController?.signal,
         )) {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
@@ -393,6 +408,10 @@ export class Agent {
           }
         }
       } catch (err: any) {
+        if (this.shutdownRequested || err?.name === "AbortError") {
+          logger.info("LLM call aborted (interrupt)");
+          break;
+        }
         logger.error(`LLM call failed: ${err.message}`);
         slog.logError(err.message);
         pluginManager.runOnError({ iteration, logger }, err);
@@ -406,10 +425,20 @@ export class Agent {
         this.emitPhase(iteration, "done", onPhase);
       }
 
-      // Display buffered text only if no tool call in this response.
-      // When a tool call is present, text is just the model describing
-      // its tool call (e.g. raw JSON args) — suppress it.
-      if (!sawToolCall && textChunks.length > 0) {
+      if (this.shutdownRequested) {
+        break;
+      }
+
+      // Show the model's commentary text. When a tool call accompanies the
+      // response, keep the text too (opencode-like narration), unless it is
+      // a raw JSON payload that small models sometimes emit instead of
+      // describing the call. `toolComments: false` restores the old behavior
+      // of suppressing text next to a tool call.
+      const toolComments = this.deps.config.ui?.toolComments ?? true;
+      const showText =
+        textChunks.length > 0 &&
+        (!sawToolCall || (toolComments && !isToolCallJson(textContent)));
+      if (showText) {
         for (const chunk of textChunks) {
           const textOut = pluginManager.runOnText({ iteration, logger }, chunk);
           onChunk?.(textOut);

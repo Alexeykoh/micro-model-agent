@@ -245,16 +245,24 @@ export class Repl implements ReplContext {
       readline.emitKeypressEvents(process.stdin);
       process.stdin.on("keypress", async (str, key) => {
         if (key.name === "escape") {
+          // Bun/Node's readline collapses a fast double-Esc into a single
+          // keypress whose `sequence` contains two ESC bytes ("\x1b\x1b").
+          // Counting bytes (not events) catches both the collapsed case and
+          // the case where two separate escape keypresses land in the window.
+          const escBytes = key.sequence
+            ? (key.sequence.match(/\x1b/g) || []).length
+            : 1;
           const now = Date.now();
-          if (now - this.lastEscTime < this.doubleEscDelay) {
+          const withinWindow = now - this.lastEscTime < this.doubleEscDelay;
+          this.lastEscTime = now;
+          if (escBytes >= 2 || withinWindow) {
+            this.lastEscTime = 0;
             if (this.agentRunning) {
               process.stdout.write(pc.yellow(`\n${t("repl.interrupt")}\n`));
               this.agent.shutdown();
             }
-            this.lastEscTime = 0;
-            return;
           }
-          this.lastEscTime = now;
+          return;
         }
         if (key.ctrl && key.name === "v" && !this.agentRunning) {
           try {
@@ -270,6 +278,9 @@ export class Repl implements ReplContext {
                   `\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`,
                 ),
               );
+              this.rl.prompt();
+            } else {
+              console.log(pc.yellow(`\n${t("image.clipboard_empty")}`));
               this.rl.prompt();
             }
           } catch {
@@ -322,6 +333,7 @@ export class Repl implements ReplContext {
 
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
+        toolStyle: this.config.ui?.toolStyle ?? "inline",
       });
       const result = await this.agent.run(
         input,

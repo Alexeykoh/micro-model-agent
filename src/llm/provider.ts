@@ -54,7 +54,11 @@ export interface LLMProvider {
 	readonly model: string;
 	readonly contextWindow: number;
 
-	chat(messages: Message[], tools?: ToolDefinition[]): AsyncIterable<Chunk>;
+	chat(
+		messages: Message[],
+		tools?: ToolDefinition[],
+		signal?: AbortSignal,
+	): AsyncIterable<Chunk>;
 
 	countTokens(text: string): number;
 

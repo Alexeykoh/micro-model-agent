@@ -50,6 +50,7 @@ export class OpenAICompatProvider implements LLMProvider {
   async *chat(
     messages: Message[],
     tools?: ToolDefinition[],
+    signal?: AbortSignal,
   ): AsyncIterable<Chunk> {
     // Check rate limit before making request
     if (!this.rateLimiter.canMakeRequest()) {
@@ -61,7 +62,7 @@ export class OpenAICompatProvider implements LLMProvider {
     // Record this request
     this.rateLimiter.recordRequest();
 
-    const streamResult = this.doStream(messages, tools);
+    const streamResult = this.doStream(messages, tools, signal);
 
     let hasToolCall = false;
     let hasText = false;
@@ -77,7 +78,7 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (!hasToolCall && !hasText) {
-      const fallback = await this.doNonStreaming(messages, tools);
+      const fallback = await this.doNonStreaming(messages, tools, signal);
       for (const chunk of fallback) {
         yield chunk;
       }
@@ -87,6 +88,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private async *doStream(
     messages: Message[],
     tools?: ToolDefinition[],
+    signal?: AbortSignal,
   ): AsyncIterable<Chunk> {
     const body: Record<string, unknown> = {
       model: this.model,
@@ -116,6 +118,9 @@ export class OpenAICompatProvider implements LLMProvider {
     const controller = new AbortController();
     const totalTimeoutMs = 120000;
     const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
+    const abortSignal = signal
+      ? AbortSignal.any([controller.signal, signal])
+      : controller.signal;
 
     const response = await this.fetchWithRetry(
       `${this.config.baseUrl}/chat/completions`,
@@ -123,7 +128,7 @@ export class OpenAICompatProvider implements LLMProvider {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: abortSignal,
       },
     );
 
@@ -240,6 +245,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private async doNonStreaming(
     messages: Message[],
     tools?: ToolDefinition[],
+    signal?: AbortSignal,
   ): Promise<Chunk[]> {
     const body: Record<string, unknown> = {
       model: this.model,
@@ -273,6 +279,7 @@ export class OpenAICompatProvider implements LLMProvider {
           method: "POST",
           headers,
           body: JSON.stringify(body),
+          signal,
         },
       );
 
@@ -390,7 +397,7 @@ export class OpenAICompatProvider implements LLMProvider {
       if (attempt < maxRetries) {
         const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
         const jitter = Math.random() * baseDelay * 0.1;
-        await this.sleep(delay + jitter);
+        await this.sleep(delay + jitter, init.signal ?? undefined);
       }
     }
 
@@ -401,7 +408,22 @@ export class OpenAICompatProvider implements LLMProvider {
     return status === 429 || status >= 500;
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      let timer: ReturnType<typeof setTimeout>;
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 }
