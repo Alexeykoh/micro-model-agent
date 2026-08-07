@@ -398,9 +398,8 @@ src/
 │   │   ├── stuck-detector.ts # Iteration/error thresholds, off-track guard
 │   │   └── auditor.ts  # Final audit after all steps
 │   ├── processes/      # Background & foreground process management
-│   │   ├── runner.ts   # Async spawn (non-blocking), kill-by-call-id on timeout, tree-kill
-│   │   ├── registry.ts # Background process registry: pid tracking, output buffer, kill/killAll
-│   │   └── detect.ts   # Long-running command heuristic (dev servers, watchers)
+│   │   ├── runner.ts   # Kill-by-call-id registry (executor timeout/abort)
+│   │   ├── registry.ts # Process registry: pid tracking, output buffer, waitForExit, kill/killAll/remove
 │   ├── updater/        # Background npm registry version check
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
@@ -773,9 +772,10 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 ### Bash behavior
 
 - The `bash` tool uses **async spawn** (non-blocking event loop); the old `execSync` blocking behavior is gone.
-- Commands detected as long-running (heuristic in `src/modules/processes/detect.ts`: `run dev`, `--watch`, `vite`, `next dev`, `uvicorn`, etc.) start in the **background** automatically and return a process id immediately instead of hanging.
-- Force background with `background: true`, force foreground with `background: false`.
-- Foreground commands are killed on the executor timeout (60s) via kill-by-call-id; the tool also has its own 120s backstop timeout.
+- Any command still running after the grace window (5s, `BASH_GRACE_MS` in `src/tools/bash.ts`) is **auto-promoted to the background** — it returns a process id and partial output instead of hanging. Detection is behavioral (process still alive), never text matching, so a command mentioning "vite"/"dev" runs normally while a genuinely long-running command is always caught.
+- Force background immediately with `background: true` (short settle window to surface spawn failures), force foreground with `background: false`.
+- A command that fails to spawn (bad `workdir`, missing shell) returns `[process error] ...` with `success: false` instead of a fake "Started" line.
+- Foreground commands are killed on the executor timeout (60s) via kill-by-call-id (`registerKillable` in `src/modules/processes/runner.ts`).
 
 ### Management tools
 
@@ -785,7 +785,7 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 | `process_log` | Show buffered output of a background process (`id`, optional `tail`) |
 | `process_kill` | Kill a background process tree (`id`) — works even though `kill`/`pkill` are blocked by the bash security blacklist |
 
-- PIDs are tracked in `src/modules/processes/registry.ts` (per-session, capped at 20 entries, 300 log lines each). Output buffers are capped.
+- PIDs are tracked in `src/modules/processes/registry.ts` (per-session, capped at 20 entries, 2000 log lines each). Windows output is decoded from the OEM code page (CP866) so Cyrillic is not garbled. Output buffers are capped.
 - Windows: processes are killed with `taskkill /pid <pid> /T /F`; POSIX: process-group kill (`detached` spawn).
 - `Agent.shutdown()` kills all remaining background processes (no orphans).
 
@@ -907,9 +907,11 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.24.3
+### Current Version: 0.25.1
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
 - **23** = model certification module (`mma model certify`), cert checkmarks in model lists, `--model/--provider-url` env-var overrides used by the harness
 - **24** = context quality formula upgrade (token load + compaction loss + error density + freshness), quality tests
 - **24** = read_file display mode (show only header in REPL, full content to LLM)
+- **25** = LSP module, audit gate language-agnostic, Windows command hints
+- **25** = behavior-based background detection for `bash` (grace window instead of command-text heuristic), spawn error surfacing, CP866 process output decoding

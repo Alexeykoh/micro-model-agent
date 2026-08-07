@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { bashTool } from '../src/tools/bash'
+import { bashTool, setBashGraceMs } from '../src/tools/bash'
 import { processRegistry } from '../src/modules/processes'
 
 const tmpProject = mkdtempSync(join(tmpdir(), 'mma-bash-'))
@@ -17,6 +17,7 @@ writeFileSync(
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 afterAll(async () => {
+  setBashGraceMs(5000)
   processRegistry.killAll()
   await sleep(200)
   try {
@@ -71,18 +72,33 @@ describe('bash', () => {
     expect(processRegistry.get(entry!.id)?.status).toBe('killed')
   })
 
-  it('should auto-detect long-running commands', async () => {
-    const ctx = makeCtx({ baseDir: tmpProject })
+  it('should auto-promote commands still running after the grace window', async () => {
+    setBashGraceMs(200)
+    const ctx = makeCtx({ baseDir: tmpProject, sessionId: 'bash-ses2' })
     const result = await bashTool.handler(ctx, { command: 'npm run dev' })
     expect(result.success).toBe(true)
     expect(result.output).toContain('proc_')
-    expect(result.output).toContain('Long-running')
+    expect(result.output).toContain('process_log')
+
+    const idMatch = result.output.match(/proc_\d+_\d+/)
+    expect(idMatch).not.toBeNull()
+    processRegistry.kill(idMatch![0])
   })
 
-  it('should not auto-background one-shot commands', async () => {
+  it('should not background one-shot commands, even when they mention long-running words', async () => {
     const ctx = makeCtx()
-    const result = await bashTool.handler(ctx, { command: 'node -p 42' })
+    const result = await bashTool.handler(ctx, { command: 'node -e "console.log(\'vite dev server\')"' })
     expect(result.success).toBe(true)
-    expect(result.output.trim()).toBe('42')
+    expect(result.output.trim()).toBe('vite dev server')
+  })
+
+  it('should fail with a spawn error for an invalid workdir', async () => {
+    const ctx = makeCtx()
+    const result = await bashTool.handler(ctx, {
+      command: 'echo hi',
+      workdir: 'E:\\definitely\\missing\\dir\\xyz',
+    })
+    expect(result.success).toBe(false)
+    expect(result.output).toContain('[process error]')
   })
 })

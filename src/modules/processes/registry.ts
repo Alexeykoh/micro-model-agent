@@ -13,9 +13,11 @@ export interface ManagedProcess {
   exitCode: number | null;
   startedAt: string;
   log: string[];
+  /** Set when the child failed to spawn (bad cwd, missing shell, etc.). */
+  spawnError?: string;
 }
 
-const MAX_LOG_LINES = 300;
+const MAX_LOG_LINES = 2000;
 const MAX_KEPT_PROCESSES = 20;
 
 let seq = 0;
@@ -41,13 +43,19 @@ function killTree(child: ChildProcess): void {
   }
 }
 
+interface ExitWaiter {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
 class ProcessRegistry {
   private procs = new Map<string, ManagedProcess>();
   private children = new Map<string, ChildProcess>();
+  private exitWaiters = new Map<string, ExitWaiter>();
 
   /**
-   * Start a background process. Returns immediately with the entry; output is
-   * buffered into `entry.log` as it arrives.
+   * Start a command. The returned entry buffers output and reports status; a
+   * call may check `waitForExit(id)` to learn when (if ever) it finishes.
    */
   start(
     command: string,
@@ -69,27 +77,61 @@ class ProcessRegistry {
     this.trimOldEntries();
     this.procs.set(id, entry);
 
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      windowsHide: true,
-      detached: platform() !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child: ChildProcess | undefined;
+    try {
+      child = spawn(command, {
+        cwd,
+        shell: true,
+        windowsHide: true,
+        detached: platform() !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (e: any) {
+      entry.status = "killed";
+      entry.spawnError = e?.message || String(e);
+      entry.log.push(`[process error] ${entry.spawnError}`);
+      return entry;
+    }
+
     this.children.set(id, child);
     entry.pid = child.pid ?? 0;
 
-    let partial = "";
-    const append = (chunk: Buffer) => {
-      const text = partial + chunk.toString();
-      const lines = text.split(/\r?\n/);
-      partial = lines.pop() ?? "";
-      for (const line of lines) {
-        if (entry.log.length >= MAX_LOG_LINES) {
-          entry.log.shift();
-        }
-        entry.log.push(line);
+    // On Windows, children spawned via cmd.exe output in the OEM code page
+    // (typically CP866 for Russian), NOT UTF-8. Always decode with ibm866 so
+    // Cyrillic and other non-ASCII text is not garbled.
+    const decoder: TextDecoder | null =
+      platform() === "win32" ? new TextDecoder("ibm866") : null;
+
+    let buf = "";
+    const pushLine = (line: string) => {
+      if (entry.log.length >= MAX_LOG_LINES) {
+        entry.log.shift();
       }
+      entry.log.push(line);
+    };
+    const append = (chunk: Buffer) => {
+      const decoded = decoder
+        ? decoder.decode(chunk, { stream: true })
+        : chunk.toString();
+      buf += decoded;
+      const lines = buf.split(/\r?\n/);
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        pushLine(line);
+      }
+    };
+    const flush = () => {
+      if (decoder) {
+        buf += decoder.decode();
+      }
+      if (buf) {
+        pushLine(buf);
+        buf = "";
+      }
+    };
+
+    const resolveExit = () => {
+      this.exitWaiters.get(id)?.resolve();
     };
 
     child.stdout?.on("data", append);
@@ -99,20 +141,26 @@ class ProcessRegistry {
       if (entry.status === "running") {
         entry.status = "killed";
       }
+      entry.spawnError = err.message;
       append(Buffer.from(`[process error] ${err.message}`));
+      resolveExit();
     });
 
     child.on("close", (code) => {
+      flush();
       if (entry.status === "running") {
         entry.status = "exited";
       }
       entry.exitCode = code;
       this.children.delete(id);
-      if (partial) {
-        entry.log.push(partial);
-        partial = "";
-      }
+      resolveExit();
     });
+
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    this.exitWaiters.set(id, { promise, resolve });
 
     return entry;
   }
@@ -157,6 +205,45 @@ class ProcessRegistry {
     return targets.length;
   }
 
+  /**
+   * Resolve `true` when the process exits (or fails to spawn) within
+   * `timeoutMs`, otherwise `false` (still running → a background process).
+   */
+  waitForExit(id: string, timeoutMs: number): Promise<boolean> {
+    const entry = this.procs.get(id);
+    const waiter = this.exitWaiters.get(id);
+    if (!entry || entry.status !== "running" || !waiter) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), timeoutMs);
+      waiter.promise.then(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+  }
+
+  /**
+   * Remove a finished entry (foreground results do not linger). A still-running
+   * entry is killed first so nothing is orphaned.
+   */
+  remove(id: string): boolean {
+    const entry = this.procs.get(id);
+    if (!entry) return false;
+    if (entry.status === "running") {
+      const child = this.children.get(id);
+      if (child) {
+        killTree(child);
+      }
+      entry.status = "killed";
+    }
+    this.procs.delete(id);
+    this.children.delete(id);
+    this.exitWaiters.delete(id);
+    return true;
+  }
+
   private trimOldEntries(): void {
     if (this.procs.size < MAX_KEPT_PROCESSES) return;
     const sorted = Array.from(this.procs.values()).sort((a, b) =>
@@ -164,14 +251,7 @@ class ProcessRegistry {
     );
     const toRemove = sorted.slice(0, sorted.length - MAX_KEPT_PROCESSES + 1);
     for (const entry of toRemove) {
-      if (entry.status === "running") {
-        const child = this.children.get(entry.id);
-        if (child) {
-          killTree(child);
-        }
-      }
-      this.procs.delete(entry.id);
-      this.children.delete(entry.id);
+      this.remove(entry.id);
     }
   }
 }

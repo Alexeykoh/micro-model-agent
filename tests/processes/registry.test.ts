@@ -73,4 +73,41 @@ describe("processRegistry", () => {
     expect(processRegistry.get("nope")).toBeUndefined();
     expect(processRegistry.kill("nope")).toBe(false);
   });
+
+  it("waitForExit resolves true for a quick process", async () => {
+    const entry = processRegistry.start("node -p 1", process.cwd(), "ses-wfe");
+    const exited = await processRegistry.waitForExit(entry.id, 3000);
+    expect(exited).toBe(true);
+    expect(processRegistry.get(entry.id)?.status).toBe("exited");
+  });
+
+  it("waitForExit resolves false for a still-running process", async () => {
+    const entry = processRegistry.start(`node ${idleScript}`, process.cwd(), "ses-wfe2");
+    const exited = await processRegistry.waitForExit(entry.id, 150);
+    expect(exited).toBe(false);
+    processRegistry.kill(entry.id);
+  });
+
+  it("remove deletes a finished entry", async () => {
+    const entry = processRegistry.start("node -p 1", process.cwd(), "ses-rm");
+    await processRegistry.waitForExit(entry.id, 3000);
+    expect(processRegistry.remove(entry.id)).toBe(true);
+    expect(processRegistry.get(entry.id)).toBeUndefined();
+    expect(processRegistry.remove(entry.id)).toBe(false);
+  });
+
+  it("remove kills and deletes a running entry", async () => {
+    const entry = processRegistry.start(`node ${idleScript}`, process.cwd(), "ses-rm2");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(processRegistry.remove(entry.id)).toBe(true);
+    expect(processRegistry.get(entry.id)).toBeUndefined();
+  });
+
+  it("records a spawn error for an invalid workdir", async () => {
+    const entry = processRegistry.start("node -p 1", "Z:\\no\\such\\dir", "ses-err");
+    const exited = await processRegistry.waitForExit(entry.id, 3000);
+    expect(exited).toBe(true);
+    expect(entry.spawnError).toBeTruthy();
+    expect(processRegistry.getLog(entry.id)).toContain("[process error]");
+  });
 });

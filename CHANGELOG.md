@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.1] - 2026-08-07
+
+### Changed
+- **Behavior-based background detection** (`src/tools/bash.ts`, `src/modules/processes/`): the
+  `bash` tool no longer classifies long-running commands by text matching (heuristic in
+  `src/modules/processes/detect.ts` removed). Any command still running after the 5s grace window
+  is auto-promoted to the background and returns a process id. A command that mentions "vite"/"dev"
+  now runs normally; a genuinely long-running command is always caught.
+- **Spawn errors surfaced**: a command that fails to spawn (bad `workdir`, missing shell) returns
+  `[process error] ...` with `success: false` instead of a fake "Started" line with PID 0.
+- **Process output encoding** (`src/modules/processes/registry.ts`): Windows output is decoded from
+  the OEM code page (CP866) so Cyrillic is not garbled; log buffer raised to 2000 lines.
+- **Process management API** (`src/modules/processes/`): `runCommand`/`isLongRunningCommand`
+  removed; `processRegistry` gains `waitForExit()`/`remove()` and `spawnError`; `runner.ts` is now
+  a kill-by-call-id registry (`registerKillable`/`unregisterKillable`/`killByCallId`).
+
 ## [0.25.0] - 2026-08-06
 
 ### Added
