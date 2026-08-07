@@ -1,6 +1,8 @@
 import { ConsistencyCheck } from "./consistency";
 import { ConfidenceCheck } from "./confidence";
 import { FactualCheck } from "./factual";
+import { LLMJudge } from "./llm-judge";
+import type { LLMProvider } from "../../llm/provider";
 
 export interface HallucinationCheckResult {
   status: "pass" | "warn" | "retry" | "block";
@@ -11,11 +13,13 @@ export class HallucinationDetector {
   private consistency: ConsistencyCheck;
   private confidence: ConfidenceCheck;
   private factual: FactualCheck | null;
+  private judge: LLMJudge | null;
 
-  constructor(baseDir?: string) {
+  constructor(baseDir?: string, llmProvider?: LLMProvider) {
     this.consistency = new ConsistencyCheck();
     this.confidence = new ConfidenceCheck();
     this.factual = baseDir ? new FactualCheck(baseDir) : null;
+    this.judge = llmProvider ? new LLMJudge(llmProvider) : null;
   }
 
   getConsistencyCheck(): ConsistencyCheck {
@@ -26,7 +30,7 @@ export class HallucinationDetector {
     return this.confidence;
   }
 
-  validate(response: string): HallucinationCheckResult {
+  async validate(response: string): Promise<HallucinationCheckResult> {
     const confidenceResult = this.confidence.validate(response);
     if (
       confidenceResult.status === "retry" ||
@@ -40,11 +44,14 @@ export class HallucinationDetector {
       return factualResult;
     }
 
-    const consistencyResult = this.consistency.validate(response);
+    // LLM-as-judge consistency: fast path (no decisions) skips any LLM call.
+    const judgeResult = this.judge
+      ? await this.judge.validate(response, this.consistency)
+      : null;
 
     const warnings: string[] = [];
-    if (consistencyResult.status === "warn")
-      warnings.push(consistencyResult.reason || "");
+    if (judgeResult && judgeResult.status === "warn")
+      warnings.push(judgeResult.reason || "");
     if (confidenceResult.status === "warn")
       warnings.push(confidenceResult.reason || "");
 

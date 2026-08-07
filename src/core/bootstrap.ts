@@ -307,7 +307,7 @@ export async function bootstrap(
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 
-  const hallucinationDetector = new HallucinationDetector(baseDir);
+  const hallucinationDetector = new HallucinationDetector(baseDir, llmProvider);
 
   const moduleRegistry = new ModuleRegistry();
 

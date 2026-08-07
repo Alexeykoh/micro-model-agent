@@ -613,7 +613,9 @@ export class Agent {
       hallucinationDetector
         .getConfidenceCheck()
         .setPreviousResponse(lastText);
-      const hallucinationResult = hallucinationDetector.validate(textContent);
+      const hallucinationResult = await hallucinationDetector.validate(
+        textContent,
+      );
       if (hallucinationResult.status === "block") {
         logger.warn(`Response blocked: ${hallucinationResult.reason}`);
         return {

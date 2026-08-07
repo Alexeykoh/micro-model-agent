@@ -121,7 +121,10 @@ export const subagentTool: ToolDefinition = {
         ctx.config.contextBudget,
       );
       const subPluginManager = new PluginManager();
-      const hallucinationDetector = new HallucinationDetector(ctx.baseDir);
+      const hallucinationDetector = new HallucinationDetector(
+        ctx.baseDir,
+        ctx.llmProvider,
+      );
 
       const systemPrompt: PromptBlock = {
         content: `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`,
