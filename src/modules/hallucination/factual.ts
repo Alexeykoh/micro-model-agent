@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, isAbsolute } from "path";
 import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
 
@@ -26,7 +26,24 @@ const NON_FILE_EXTENSIONS = new Set([
   "br",
 ]);
 
+/** Well-known runtime/library names that end in .js/.ts but are NOT files. */
+const TECH_NAMES = new Set([
+  "node.js",
+  "react.js",
+  "vue.js",
+  "next.js",
+  "angular.js",
+  "express.js",
+  "deno.js",
+  "qwik.js",
+  "svelte.js",
+  "jquery.js",
+]);
+
 function looksLikeFilePath(s: string): boolean {
+  const lower = s.toLowerCase();
+  // "Node.js" etc. are technologies, not files — never flag them.
+  if (TECH_NAMES.has(lower)) return false;
   if (!s.includes("/") && !s.includes("\\") && !s.match(/^\w+\.[a-z]{2,4}$/i))
     return false;
   const ext = s.split(".").pop()?.toLowerCase() || "";
@@ -46,7 +63,7 @@ export class FactualCheck {
 
     const nonExistent: string[] = [];
     for (const fp of filePaths) {
-      const abs = resolve(this.baseDir, fp);
+      const abs = isAbsolute(fp) ? fp : resolve(this.baseDir, fp);
       if (!existsSync(abs)) {
         nonExistent.push(fp);
       }
@@ -65,7 +82,13 @@ export class FactualCheck {
   }
 
   private extractFilePaths(text: string): string[] {
-    const pattern = /\b[\w./\\-]+\.[a-z]{2,6}\b/gi;
+    // Capture absolute Windows paths (with drive letter) and relative paths.
+    // The old pattern started at a word boundary, so "E:\project\src\a.ts"
+    // only matched "project\src\a.ts" — resolve() then glued that onto
+    // baseDir producing a bogus path and a false "unknown file" warning
+    // even for files that actually exist on disk.
+    const pattern =
+      /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{2,6}\b/gi;
     const matches = text.match(pattern) || [];
     return [...new Set(matches)].filter(looksLikeFilePath);
   }
