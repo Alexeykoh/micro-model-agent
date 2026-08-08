@@ -278,6 +278,9 @@ export class ContextManager {
   }
 
   compact(): void {
+    // Reset the counter even when nothing to compact — otherwise
+    // needsCompaction() returns true forever after 15 iterations with few messages.
+    this.iterationsSinceCompaction = 0;
     if (this.messages.length <= KEEP_LAST_N * 2) return;
     this.compactionCount++;
 
@@ -300,7 +303,7 @@ export class ContextManager {
       parts.push(`[Errors: ${this.errorFacts.slice(-3).join("; ")}]`);
     }
 
-    const triedAndFailed = extractTriedAndFailed(this.messages);
+    const triedAndFailed = extractTriedAndFailed(oldTurns);
     if (triedAndFailed.length > 0) {
       const lines = triedAndFailed.map(
         (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,

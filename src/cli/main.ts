@@ -4,7 +4,7 @@ import { Repl } from "./repl";
 import { formatMarkdown } from "../ui/md-formatter";
 import { Renderer } from "../ui/renderer";
 import { runSetup } from "./setup";
-import { saveConfig } from "../config/config";
+import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { existsSync } from "fs";
@@ -102,12 +102,12 @@ async function main(): Promise<void> {
     if (!existsSync(configPath)) {
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup();
-      const { config } = await bootstrap(
-        undefined,
-        projectDir,
-        noAgentsMd,
-        exitOnComplete,
-      );
+      const config = loadConfig({
+        configDir: join(homedir(), ".mma"),
+        projectConfigPath: projectDir
+          ? join(projectDir, ".mmrc")
+          : join(process.cwd(), ".mmrc"),
+      });
       config.provider.type = answers.provider;
       config.provider.baseUrl = answers.apiBase;
       config.provider.apiKey = answers.apiKey;

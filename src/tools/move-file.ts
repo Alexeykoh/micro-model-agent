@@ -6,6 +6,7 @@ import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
+import { safeResolvePath } from "./path-utils";
 
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
@@ -23,14 +24,14 @@ export const moveFileTool: ToolDefinition = {
     const fromPath = String(args.from);
     const toPath = String(args.to);
     const baseDir = resolve(ctx.baseDir);
-    const fromResolved = resolve(baseDir, normalize(fromPath));
-    const toResolved = resolve(baseDir, normalize(toPath));
-    
+    const fromResolved = safeResolvePath(baseDir, normalize(fromPath));
+    const toResolved = safeResolvePath(baseDir, normalize(toPath));
+
     // Get session-specific security config
-    const securityConfig = ctx.sessionContext 
+    const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
-    
+
     // Check file operations limit
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
@@ -46,9 +47,14 @@ export const moveFileTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
       };
     }
-    
+
     // Check source path permissions
-    const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope, ctx.config.security?.paths);
+    const fromCheck = isPathWritable(
+      ctx.baseDir,
+      fromPath,
+      ctx.scope,
+      ctx.config.security?.paths,
+    );
     if (!fromCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -63,9 +69,14 @@ export const moveFileTool: ToolDefinition = {
         }),
       };
     }
-    
+
     // Check destination path permissions
-    const toCheck = isPathWritable(ctx.baseDir, toPath, ctx.scope, ctx.config.security?.paths);
+    const toCheck = isPathWritable(
+      ctx.baseDir,
+      toPath,
+      ctx.scope,
+      ctx.config.security?.paths,
+    );
     if (!toCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -80,7 +91,7 @@ export const moveFileTool: ToolDefinition = {
         }),
       };
     }
-    
+
     if (!existsSync(fromResolved)) {
       return {
         success: false,
@@ -93,13 +104,13 @@ export const moveFileTool: ToolDefinition = {
     }
     renameSync(fromResolved, toResolved);
     const diff = generateMoveDiff(fromPath, toPath);
-    
+
     // Increment file operations counter
     (ctx as any).fileOperationsCount = currentCount + 1;
-    
+
     // Log file move
     logFileWrite(ctx.sessionId, `${fromPath} -> ${toPath}`, true, "File moved");
-    
+
     return {
       success: true,
       output: t("file.moved", { from: fromPath, to: toPath }),

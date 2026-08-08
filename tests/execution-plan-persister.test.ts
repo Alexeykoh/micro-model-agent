@@ -28,7 +28,7 @@ describe("PlanPersister", () => {
 
     const loaded = persister.load();
     expect(loaded).not.toBeNull();
-    expect(loaded!.title).toBe("[2 ст.] Test Plan");
+    expect(loaded!.title).toBe("[2] Test Plan");
     expect(loaded!.steps).toHaveLength(2);
     expect(loaded!.steps[0].description).toBe("step one with enough length");
     expect(loaded!.id).toMatch(/^plan_/);

@@ -31,7 +31,7 @@ describe("PlanCreator", () => {
       ],
       "/test/dir",
     );
-    expect(plan.title).toBe("[2 ст.] implement login");
+    expect(plan.title).toBe("[2] implement login");
     expect(plan.steps).toHaveLength(2);
     expect(plan.steps[0].id).toBe(1);
     expect(plan.steps[0].status).toBe("pending");

@@ -73,8 +73,8 @@ export class Repl implements ReplContext {
   private maxHistory = 1000;
   private lastEscTime = 0;
   private readonly doubleEscDelay = 500;
-  private configDir: string;
-  private baseDir: string;
+  public readonly configDir: string;
+  public readonly baseDir: string;
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
 
@@ -290,6 +290,8 @@ export class Repl implements ReplContext {
       });
     }
 
+    let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
+
     process.on("SIGINT", () => {
       if (this.agentRunning) {
         console.log(
@@ -297,7 +299,8 @@ export class Repl implements ReplContext {
         );
         this.agent.shutdown();
         this.agentRunning = false;
-        setTimeout(() => process.exit(1), 2000).unref();
+        if (forceExitTimer) clearTimeout(forceExitTimer);
+        forceExitTimer = setTimeout(() => process.exit(1), 2000).unref();
       } else {
         process.exit(0);
       }

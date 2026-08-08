@@ -47,6 +47,8 @@ export interface ReplContext {
   readonly sessionManager?: SessionManager;
   readonly skillsModule?: SkillsModule;
   readonly pluginManager?: PluginManager;
+  readonly configDir: string;
+  readonly baseDir: string;
   registerCommand(cmd: SlashCommand): void;
   runAgent(input: string): Promise<void>;
   withExclusiveInput(fn: () => Promise<void>): Promise<void>;
@@ -435,15 +437,16 @@ function registerMmaCommands(ctx: ReplContext): void {
       const { loadConfig } = await import("../config/config");
       const { homedir } = await import("os");
       const { join } = await import("path");
-      const configDir = join(homedir(), ".mma");
-      const projectConfigPath = join(process.cwd(), ".mmrc");
+      const configDir = ctx.configDir;
+      const baseDir = ctx.baseDir;
+      const projectConfigPath = join(baseDir, ".mmrc");
 
       const freshConfig = loadConfig({ configDir, projectConfigPath });
 
       Object.assign(ctx.config, freshConfig);
 
       const { bootstrap } = await import("../core/bootstrap");
-      const result = await bootstrap(configDir, process.cwd(), false, false);
+      const result = await bootstrap(configDir, baseDir, false, false);
 
       (ctx as any).agent = result.agent;
       (ctx as any).sessionManager = result.sessionManager;

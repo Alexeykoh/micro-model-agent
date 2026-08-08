@@ -19,7 +19,6 @@ const IGNORED_EXT = new Set([
   "scss",
   "less",
   "html",
-  "jsx",
 ]);
 
 /**

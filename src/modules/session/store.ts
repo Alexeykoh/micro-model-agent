@@ -49,6 +49,8 @@ export interface SessionLogEntry {
 export class SessionStore {
   private baseDir: string;
   private encryptor: SessionFileEncryptor | null = null;
+  // In-memory meta cache to avoid O(N²) disk reads on appendMessage.
+  private _metaCache = new Map<string, SessionMeta>();
 
   constructor(baseDir: string, encryptionConfig?: SessionEncryptionConfig) {
     this.baseDir = baseDir;
@@ -100,23 +102,34 @@ export class SessionStore {
   }
 
   saveMeta(id: string, meta: SessionMeta): void {
+    this._metaCache.set(id, meta);
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(meta, null, 2);
     if (this.encryptor) {
-      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), "utf-8");
+      writeFileSync(
+        this.metaPath(id),
+        this.encryptor.encryptFileContent(content),
+        "utf-8",
+      );
     } else {
       writeFileSync(this.metaPath(id), content, "utf-8");
     }
   }
 
   loadMeta(id: string): SessionMeta | null {
+    const cached = this._metaCache.get(id);
+    if (cached) return cached;
     const path = this.metaPath(id);
     if (!existsSync(path)) return null;
     try {
       const raw = readFileSync(path, "utf-8");
-      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
-      return JSON.parse(content) as SessionMeta;
+      const content = this.encryptor
+        ? this.encryptor.decryptFileContent(raw)
+        : raw;
+      const meta = JSON.parse(content) as SessionMeta;
+      this._metaCache.set(id, meta);
+      return meta;
     } catch {
       return null;
     }
@@ -127,7 +140,11 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(msg);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", "utf-8");
+      appendFileSync(
+        this.historyPath(id),
+        this.encryptor.encryptFileContent(line) + "\n",
+        "utf-8",
+      );
     } else {
       appendFileSync(this.historyPath(id), line + "\n", "utf-8");
     }
@@ -145,11 +162,29 @@ export class SessionStore {
     try {
       const raw = readFileSync(path, "utf-8");
       const lines = raw.split("\n").filter(Boolean);
+      const parseLine = (line: string): SessionMessage | null => {
+        try {
+          return JSON.parse(line) as SessionMessage;
+        } catch {
+          return null;
+        }
+      };
       if (this.encryptor?.isEnabled()) {
-        const decryptedLines = lines.map(line => this.encryptor!.decryptFileContent(line));
-        return decryptedLines.map((line) => JSON.parse(line) as SessionMessage);
+        return lines
+          .map((line) => {
+            try {
+              return this.encryptor!.decryptFileContent(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter((l): l is string => l !== null)
+          .map(parseLine)
+          .filter((m): m is SessionMessage => m !== null);
       }
-      return lines.map((line) => JSON.parse(line) as SessionMessage);
+      return lines
+        .map(parseLine)
+        .filter((m): m is SessionMessage => m !== null);
     } catch {
       return [];
     }
@@ -166,11 +201,7 @@ export class SessionStore {
         "utf-8",
       );
     } else {
-      appendFileSync(
-        this.sessionLogPath(id),
-        line + "\n",
-        "utf-8",
-      );
+      appendFileSync(this.sessionLogPath(id), line + "\n", "utf-8");
     }
   }
 
@@ -180,11 +211,29 @@ export class SessionStore {
     try {
       const raw = readFileSync(path, "utf-8");
       const lines = raw.split("\n").filter(Boolean);
+      const parseLine = (line: string): SessionLogEntry | null => {
+        try {
+          return JSON.parse(line) as SessionLogEntry;
+        } catch {
+          return null;
+        }
+      };
       if (this.encryptor?.isEnabled()) {
-        const decryptedLines = lines.map(line => this.encryptor!.decryptFileContent(line));
-        return decryptedLines.map((line) => JSON.parse(line) as SessionLogEntry);
+        return lines
+          .map((line) => {
+            try {
+              return this.encryptor!.decryptFileContent(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter((l): l is string => l !== null)
+          .map(parseLine)
+          .filter((e): e is SessionLogEntry => e !== null);
       }
-      return lines.map((line) => JSON.parse(line) as SessionLogEntry);
+      return lines
+        .map(parseLine)
+        .filter((e): e is SessionLogEntry => e !== null);
     } catch {
       return [];
     }
@@ -208,6 +257,7 @@ export class SessionStore {
   }
 
   deleteSession(id: string): void {
+    this._metaCache.delete(id);
     const dir = this.sessionDir(id);
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true });

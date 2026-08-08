@@ -157,24 +157,13 @@ export function generateDiff(oldContent: string, newContent: string): string {
   const oldLines = oldContent.split("\n");
   const newLines = newContent.split("\n");
 
-  if (
-    oldLines.length === 1 &&
-    oldLines[0] === "" &&
-    newLines.length === 1 &&
-    newLines[0] === ""
-  ) {
-    return "";
-  }
-
   const diff = buildDiff(oldLines, newLines);
   if (diff.length === 0) return "";
 
-  const maxOldNum = Math.max(
-    ...diff.filter((l) => l.oldNum !== null).map((l) => l.oldNum!),
-  );
-  const maxNewNum = Math.max(
-    ...diff.filter((l) => l.newNum !== null).map((l) => l.newNum!),
-  );
+  const oldNums = diff.filter((l) => l.oldNum !== null).map((l) => l.oldNum!);
+  const newNums = diff.filter((l) => l.newNum !== null).map((l) => l.newNum!);
+  const maxOldNum = oldNums.length > 0 ? Math.max(...oldNums) : 0;
+  const maxNewNum = newNums.length > 0 ? Math.max(...newNums) : 0;
   const maxNumWidth = Math.max(
     String(maxOldNum).length,
     String(maxNewNum).length,
@@ -201,9 +190,7 @@ export function generateNewFileDiff(content: string): string {
   const diffLines: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
-    diffLines.push(
-      `${numStr} ${pc.green("+")} ${lines[i]}`,
-    );
+    diffLines.push(`${numStr} ${pc.green("+")} ${lines[i]}`);
   }
 
   if (diffLines.length > MAX_DIFF_LINES) {
@@ -224,9 +211,7 @@ export function generateDeleteDiff(content: string): string {
   const diffLines: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const numStr = String(i + 1).padStart(maxNumWidth);
-    diffLines.push(
-      `${numStr} ${pc.red("-")} ${lines[i]}`,
-    );
+    diffLines.push(`${numStr} ${pc.red("-")} ${lines[i]}`);
   }
 
   if (diffLines.length > MAX_DIFF_LINES) {
@@ -241,8 +226,5 @@ export function generateDeleteDiff(content: string): string {
 }
 
 export function generateMoveDiff(fromPath: string, toPath: string): string {
-  return [
-    pc.red(`  - ${fromPath}`),
-    pc.green(`  + ${toPath}`),
-  ].join("\n");
+  return [pc.red(`  - ${fromPath}`), pc.green(`  + ${toPath}`)].join("\n");
 }

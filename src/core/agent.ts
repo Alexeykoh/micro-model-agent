@@ -320,9 +320,7 @@ export class Agent {
         contextManager.getCompactionCount() > 0
       ) {
         contextManager.compact();
-        logger.warn(
-          `Low context quality (${quality}%) — forced compaction`,
-        );
+        logger.warn(`Low context quality (${quality}%) — forced compaction`);
         slog.logCompaction(
           `quality-triggered compaction (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%), iteration ${iteration}`,
           iteration,
@@ -643,12 +641,9 @@ export class Agent {
         continue;
       }
 
-      hallucinationDetector
-        .getConfidenceCheck()
-        .setPreviousResponse(lastText);
-      const hallucinationResult = await hallucinationDetector.validate(
-        textContent,
-      );
+      hallucinationDetector.getConfidenceCheck().setPreviousResponse(lastText);
+      const hallucinationResult =
+        await hallucinationDetector.validate(textContent);
       if (hallucinationResult.status === "block") {
         logger.warn(`Response blocked: ${hallucinationResult.reason}`);
         return {
@@ -806,6 +801,7 @@ export class Agent {
     });
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
+    (this.deps.toolExecutor as any).ctx.llmProvider = newProvider;
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(
       config.contextWindow,

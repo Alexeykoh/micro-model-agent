@@ -324,7 +324,10 @@ export async function bootstrap(
   const moduleRegistry = new ModuleRegistry();
 
   const execModule = new ExecutionModule(baseDir, config.stuckThreshold);
-  execModule.restorePlan();
+  const activeMeta = sessionManager.getActiveMeta();
+  if (activeMeta && activeMeta.messageCount > 0) {
+    execModule.restorePlan();
+  }
   moduleRegistry.register(execModule);
 
   const sessionModule = new SessionModule(sessionManager);
@@ -398,7 +401,7 @@ export async function bootstrap(
 
   const pluginLoader = new PluginLoader();
   const globalPluginsDir = join(homedir(), ".mma", "plugins");
-  const projectPluginsDir = join(dir, ".mma", "plugins");
+  const projectPluginsDir = join(baseDir, ".mma", "plugins");
   pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger);
   pluginLoader.loadFromDir(projectPluginsDir, pluginManager, logger);
 

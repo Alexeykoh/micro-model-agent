@@ -131,14 +131,19 @@ export class MCPClient {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
+      let _resolved = false;
       child.on("error", (err) => {
         this._connected = false;
-        reject(err);
+        if (!_resolved) {
+          _resolved = true;
+          reject(err);
+        }
       });
 
       child.on("exit", (code) => {
         this._connected = false;
-        if (code !== 0) {
+        if (code !== 0 && !_resolved) {
+          _resolved = true;
           reject(new Error(`MCP server exited with code ${code}`));
         }
       });
@@ -146,6 +151,7 @@ export class MCPClient {
       child.on("spawn", () => {
         this._connected = true;
         this.process = child;
+        _resolved = true;
         resolve();
       });
     });

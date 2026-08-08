@@ -151,6 +151,7 @@
   "plan.step_marked": "Шаг {step} отмечен как {status}",
   "plan.aborted": "План отменён",
   "plan.unknown_action": "Неизвестное действие плана: {action}",
+  "plan.updated": "План обновлён: {title} ({steps} шагов)",
   "plan.acknowledged": "План {action}: принято",
   "plan.step_status": "Шаг {step}: {status}",
   "plan.no_active": "Нет активного плана",

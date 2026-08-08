@@ -31,6 +31,9 @@ export class ExecutionModule implements AgentModule {
   private lastRecoveryIteration = -STUCK_RECOVERY_COOLDOWN;
   private consecutivePlanWarnings = 0;
   private lastStepId = -1;
+  // Skip the first audit after restoring a plan from disk — gives the user
+  // one chance to change the subject before the audit gate locks in.
+  private _auditSkipsRemaining = 0;
 
   constructor(baseDir: string, stuckThreshold = 8) {
     this.baseDir = baseDir;
@@ -43,6 +46,7 @@ export class ExecutionModule implements AgentModule {
   setPlan(plan: Plan): void {
     this.tracker = new PlanTracker(plan);
     this.persister.save(plan);
+    this._auditSkipsRemaining = 0; // plan explicitly created — arm the audit gate
   }
 
   restorePlan(): boolean {
@@ -51,6 +55,7 @@ export class ExecutionModule implements AgentModule {
     this.tracker = new PlanTracker(plan);
     // Advance to the first non-done step
     this.tracker.syncCurrentStep();
+    this._auditSkipsRemaining = 1; // restored plan — one free pass
     return true;
   }
 
@@ -75,6 +80,10 @@ export class ExecutionModule implements AgentModule {
     summary: string;
   } | null> {
     if (!this.tracker) return null;
+    if (this._auditSkipsRemaining > 0) {
+      this._auditSkipsRemaining--;
+      return null;
+    }
     const plan = this.tracker.getPlan();
     const audit = await this.auditor.audit(plan);
     const pendingSteps = plan.steps
@@ -136,7 +145,10 @@ export class ExecutionModule implements AgentModule {
             const plan = PlanCreator.createPlan(title, steps, this.baseDir);
             this.setPlan(plan);
             const display = PlanCreator.toPromptBlock(plan, 0);
-            let output = t("plan.created", { title, steps: String(steps.length) });
+            let output = t("plan.created", {
+              title,
+              steps: String(steps.length),
+            });
             let displayOut = display;
             const taskText = this.getTaskText(_ctx);
             if (taskText) {
@@ -184,6 +196,27 @@ export class ExecutionModule implements AgentModule {
             return {
               success: true,
               output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}`,
+              display,
+            };
+          }
+          if (
+            action === "update" &&
+            Array.isArray(args.steps) &&
+            args.steps.length > 0 &&
+            this.tracker
+          ) {
+            const title = String(args.title || this.tracker.getPlan().title);
+            const steps = args.steps.map(String);
+            const plan = PlanCreator.createPlan(title, steps, this.baseDir);
+            this.setPlan(plan);
+            const display = PlanCreator.toPromptBlock(plan, 0);
+            const output = t("plan.updated", {
+              title,
+              steps: String(steps.length),
+            });
+            return {
+              success: true,
+              output,
               display,
             };
           }
@@ -236,9 +269,20 @@ export class ExecutionModule implements AgentModule {
             };
           }
           if (action === "done") {
+            if (!currentStep) {
+              return { success: false, output: t("plan.step_not_found") };
+            }
+            this.tracker.updateStepStatus(currentStep.id, "done");
+            this.tracker.syncCurrentStep();
+            this.persister.save(this.tracker.getPlan());
+            const display = this.tracker.toPromptBlock();
             return {
               success: true,
-              output: t("todo.marked_done", { count: "1" }),
+              output: t("plan.step_status", {
+                step: String(currentStep.id),
+                status: "done",
+              }),
+              display,
             };
           }
           if (action === "list") {
@@ -328,32 +372,35 @@ export class ExecutionModule implements AgentModule {
               const suggestedSkill = suggestSkill(lastError);
               const skillHint = suggestedSkill
                 ? `\nConsider loading the "${suggestedSkill}" skill for expert guidance on this error.`
-                : '';
+                : "";
 
               // Actionable hints based on actual error output
               const actionableHints = this.stuckDetector.getActionableHints();
-              const actionableHintStr = actionableHints.length > 0
-                ? `\n${t("exec.hints", { hints: actionableHints.map(h => `- ${h}`).join('\n') })}`
-                : '';
+              const actionableHintStr =
+                actionableHints.length > 0
+                  ? `\n${t("exec.hints", { hints: actionableHints.map((h) => `- ${h}`).join("\n") })}`
+                  : "";
 
               // Tool alternative suggestion
               const alternative = this.stuckDetector.getToolAlternative();
               const altHint = alternative
                 ? `\nTool "${this.stuckDetector.getLastFailedTool()}" is failing. Try "${alternative}" instead.`
-                : '';
+                : "";
 
               ctx.contextManager.addMessage({
                 role: "user",
                 content: `<system-summary>${recovery}${skillHint}${actionableHintStr}${altHint}</system-summary>`,
               });
             }
-            const hints = this.stuckDetector.getHints()
+            const hints = this.stuckDetector.getHints();
             if (hints.length > 0 && ctx.contextManager) {
-              const hintMsg = t("exec.hints", { hints: hints.map(h => `- ${h}`).join('\n') })
+              const hintMsg = t("exec.hints", {
+                hints: hints.map((h) => `- ${h}`).join("\n"),
+              });
               ctx.contextManager.addMessage({
                 role: "user",
                 content: `<system-summary>${hintMsg}</system-summary>`,
-              })
+              });
             }
             this.stuckDetector.recordEscalation();
             this.lastRecoveryIteration = currentIter;
@@ -367,7 +414,11 @@ export class ExecutionModule implements AgentModule {
             }
 
             // Force skip after too many iterations on the same step
-            if (this.stuckDetector.getIterationsOnCurrentStep() >= FORCE_SKIP_THRESHOLD && ctx.contextManager) {
+            if (
+              this.stuckDetector.getIterationsOnCurrentStep() >=
+                FORCE_SKIP_THRESHOLD &&
+              ctx.contextManager
+            ) {
               const step = this.tracker?.getCurrentStep();
               ctx.contextManager.addMessage({
                 role: "user",
@@ -411,14 +462,19 @@ export class ExecutionModule implements AgentModule {
           // Immediately inject actionable hint on failure (don't wait for stuck threshold)
           const actionableHints = this.stuckDetector.getActionableHints();
           const alternative = this.stuckDetector.getToolAlternative();
-          if ((actionableHints.length > 0 || alternative) && ctx.contextManager) {
+          if (
+            (actionableHints.length > 0 || alternative) &&
+            ctx.contextManager
+          ) {
             const parts = [...actionableHints];
             if (alternative) {
-              parts.push(`Tool "${call.name}" crashed. Try "${alternative}" instead.`);
+              parts.push(
+                `Tool "${call.name}" crashed. Try "${alternative}" instead.`,
+              );
             }
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>${t("exec.hints", { hints: parts.map(h => `- ${h}`).join('\n') })}</system-summary>`,
+              content: `<system-summary>${t("exec.hints", { hints: parts.map((h) => `- ${h}`).join("\n") })}</system-summary>`,
             });
           }
         } else {
@@ -436,7 +492,10 @@ export class ExecutionModule implements AgentModule {
           }
         }
 
-        if (result.success && (call.name === "write_file" || call.name === "edit_file")) {
+        if (
+          result.success &&
+          (call.name === "write_file" || call.name === "edit_file")
+        ) {
           const filePath = call.arguments?.path as string;
           if (filePath) {
             this.stuckDetector.recordFileRewrite(filePath);
@@ -444,7 +503,12 @@ export class ExecutionModule implements AgentModule {
               const file = this.stuckDetector.getExcessiveRewriteFile();
               const count = this.stuckDetector.getFileRewriteCount(file!);
               if (ctx.onMeta) {
-                ctx.onMeta(t("exec.file_rewrite_warning", { file: file!, count: String(count) }));
+                ctx.onMeta(
+                  t("exec.file_rewrite_warning", {
+                    file: file!,
+                    count: String(count),
+                  }),
+                );
               }
             }
           }
@@ -498,7 +562,9 @@ export class ExecutionModule implements AgentModule {
 
   private advancePlanIfStepComplete(
     contextManager?: any,
-    sessionLog?: { plan(event: string, detail: string, iteration?: number): void },
+    sessionLog?: {
+      plan(event: string, detail: string, iteration?: number): void;
+    },
   ): void {
     const step = this.tracker?.getCurrentStep();
     if (!step) return;
@@ -602,9 +668,7 @@ export class ExecutionModule implements AgentModule {
     const manager = ctx?.contextManager;
     if (!manager) return "";
     const history = manager.getActiveHistory();
-    const firstUser = history.find(
-      (m: { role: string }) => m.role === "user",
-    );
+    const firstUser = history.find((m: { role: string }) => m.role === "user");
     if (!firstUser) return "";
     return getMessageText(firstUser.content).trim();
   }

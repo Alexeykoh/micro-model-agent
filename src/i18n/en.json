@@ -151,6 +151,7 @@
   "plan.step_marked": "Step {step} marked as {status}",
   "plan.aborted": "Plan aborted",
   "plan.unknown_action": "Unknown plan action: {action}",
+  "plan.updated": "Plan updated: {title} ({steps} steps)",
   "plan.acknowledged": "Plan {action}: acknowledged",
   "plan.step_status": "Step {step}: {status}",
   "plan.no_active": "No active plan",

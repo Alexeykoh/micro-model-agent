@@ -1,7 +1,10 @@
 import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
-import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
+import {
+  RateLimiter,
+  createRateLimiter,
+} from "../modules/security/rate-limiter";
 import type { RateLimitConfig } from "../config/types";
 
 export interface RetryConfig {
@@ -58,7 +61,7 @@ export class OpenAICompatProvider implements LLMProvider {
         `Rate limit exceeded: ${this.rateLimiter.getConfig().maxRequestsPerMinute} requests per minute`,
       );
     }
-    
+
     // Record this request
     this.rateLimiter.recordRequest();
 
@@ -118,9 +121,17 @@ export class OpenAICompatProvider implements LLMProvider {
     const controller = new AbortController();
     const totalTimeoutMs = 120000;
     const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
-    const abortSignal = signal
-      ? AbortSignal.any([controller.signal, signal])
-      : controller.signal;
+    const abortSignal: AbortSignal = (() => {
+      if (!signal) return controller.signal;
+      try {
+        return AbortSignal.any([controller.signal, signal]);
+      } catch {
+        signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+        return controller.signal;
+      }
+    })();
 
     const response = await this.fetchWithRetry(
       `${this.config.baseUrl}/chat/completions`,
@@ -154,7 +165,9 @@ export class OpenAICompatProvider implements LLMProvider {
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
 
-    let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+    let usage:
+      | { promptTokens: number; completionTokens: number; totalTokens: number }
+      | undefined;
 
     try {
       while (true) {

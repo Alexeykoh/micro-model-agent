@@ -119,18 +119,29 @@ export async function runWithMoE(
   );
 
   onPhase?.("thinking");
-  const verifyResult = await orchestrator.verifyAndMerge({
-    plan,
-    results: planResults.results.map((r) => ({
-      subtaskId: r.subtaskId,
-      success: r.success,
-      summary: r.summary,
-      result: r.result,
-      error: r.error,
-    })),
-    verifierErrors: verification.errors,
-    verifierWarnings: verification.warnings,
-  });
+  let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
+  try {
+    verifyResult = await orchestrator.verifyAndMerge({
+      plan,
+      results: planResults.results.map((r) => ({
+        subtaskId: r.subtaskId,
+        success: r.success,
+        summary: r.summary,
+        result: r.result,
+        error: r.error,
+      })),
+      verifierErrors: verification.errors,
+      verifierWarnings: verification.warnings,
+    });
+  } catch (err: any) {
+    onPhase?.("done");
+    return {
+      success: false,
+      text: `MoE verifyAndMerge crashed: ${err.message}`,
+      error: err.message,
+      iterationCount: 0,
+    };
+  }
   onPhase?.("done");
 
   const outputLines: string[] = [`## MoE Execution Results\n`];

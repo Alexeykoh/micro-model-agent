@@ -57,11 +57,7 @@ class ProcessRegistry {
    * Start a command. The returned entry buffers output and reports status; a
    * call may check `waitForExit(id)` to learn when (if ever) it finishes.
    */
-  start(
-    command: string,
-    cwd: string,
-    sessionId?: string,
-  ): ManagedProcess {
+  start(command: string, cwd: string, sessionId?: string): ManagedProcess {
     const id = `proc_${Date.now()}_${++seq}`;
     const entry: ManagedProcess = {
       id,
@@ -96,11 +92,28 @@ class ProcessRegistry {
     this.children.set(id, child);
     entry.pid = child.pid ?? 0;
 
-    // On Windows, children spawned via cmd.exe output in the OEM code page
-    // (typically CP866 for Russian), NOT UTF-8. Always decode with ibm866 so
-    // Cyrillic and other non-ASCII text is not garbled.
+    // On Windows, children spawned via cmd.exe output in the OEM code page,
+    // NOT UTF-8. Detect the active code page via chcp.com instead of assuming
+    // CP866 (Cyrillic). Falls back to UTF-8 on detection failure.
     const decoder: TextDecoder | null =
-      platform() === "win32" ? new TextDecoder("ibm866") : null;
+      platform() === "win32"
+        ? (() => {
+            try {
+              const cpOut = require("child_process")
+                .execSync("chcp.com", {
+                  encoding: "utf-8",
+                  timeout: 2000,
+                  windowsHide: true,
+                })
+                .toString();
+              const m = cpOut.match(/(\d+)/);
+              if (m) return new TextDecoder("ibm" + m[1]);
+            } catch {
+              /* ignore */
+            }
+            return null;
+          })()
+        : null;
 
     let buf = "";
     const pushLine = (line: string) => {

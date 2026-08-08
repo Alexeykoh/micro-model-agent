@@ -63,10 +63,10 @@ export const subagentTool: ToolDefinition = {
     }
 
     // Get session-specific security config
-    const securityConfig = ctx.sessionContext 
+    const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
-    
+
     // Security check: limit recursion depth
     const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
     const currentDepth = ctx.recursionDepth ?? 0;
@@ -126,6 +126,13 @@ export const subagentTool: ToolDefinition = {
         ctx.llmProvider,
       );
 
+      // Save/restore the shared executor scope so the sub-agent doesn't
+      // permanently mutate the parent's scope.
+      const parentScope = ctx.scope;
+      ctx.toolExecutor.setScope(
+        scope || { allowed_files: [], read_only_files: [] },
+      );
+
       const systemPrompt: PromptBlock = {
         content: `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`,
         priority: "critical",
@@ -133,35 +140,41 @@ export const subagentTool: ToolDefinition = {
         estimatedTokens: 100,
       };
 
-       const subDeps = {
-         config: ctx.config,
-         llmProvider: ctx.llmProvider,
-         toolExecutor: ctx.toolExecutor,
-         pluginManager: subPluginManager,
-         contextManager: subContextManager,
-         hallucinationDetector,
-         logger: ctx.logger,
-         baseDir: ctx.baseDir,
-         scope,
-         toolTags,
-         promptBlocks: [systemPrompt],
-         recursionDepth: currentDepth + 1, // Increment recursion depth for sub-agent
-       };
+      const subDeps = {
+        config: ctx.config,
+        llmProvider: ctx.llmProvider,
+        toolExecutor: ctx.toolExecutor,
+        pluginManager: subPluginManager,
+        contextManager: subContextManager,
+        hallucinationDetector,
+        logger: ctx.logger,
+        baseDir: ctx.baseDir,
+        scope,
+        toolTags,
+        promptBlocks: [systemPrompt],
+        recursionDepth: currentDepth + 1, // Increment recursion depth for sub-agent
+      };
 
       const subAgent = new Agent(subDeps);
       const fullTask = context ? `${task}\n\nContext: ${context}` : task;
-      const result = await subAgent.run(fullTask);
-
-      if (result.success) {
-        return {
-          success: true,
-          output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
-        };
-      } else {
-        return {
-          success: false,
-          output: `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`,
-        };
+      let scopeRestored = false;
+      try {
+        const result = await subAgent.run(fullTask);
+        return result.success
+          ? {
+              success: true,
+              output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
+            }
+          : {
+              success: false,
+              output: `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`,
+            };
+      } finally {
+        if (!scopeRestored) {
+          ctx.toolExecutor.setScope(
+            parentScope || { allowed_files: [], read_only_files: [] },
+          );
+        }
       }
     } catch (e: any) {
       return { success: false, output: `Sub-agent error: ${e.message}` };

@@ -57,7 +57,7 @@ export class PlanCreator {
     const stepCount = stepDescriptions.length;
     return {
       id: generatePlanId(),
-      title: `[${stepCount} ст.] ${title}`,
+      title: `[${stepCount}] ${title}`,
       steps: stepDescriptions.map((desc, i) => ({
         id: i + 1,
         description: desc,

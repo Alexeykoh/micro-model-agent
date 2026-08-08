@@ -1,136 +1,175 @@
-import type { AgentPlugin } from '../../types'
-import type { ToolContext, ToolCall, ToolResult } from '../../../tools/types'
-import { spawn } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
-import { resolve, extname, join } from 'path'
+import type { AgentPlugin } from "../../types";
+import type { ToolContext, ToolCall, ToolResult } from "../../../tools/types";
+import { spawn } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { resolve, extname, join } from "path";
 
-let projectTypeCheckPromise: Promise<string | null> | null = null
-let projectTypeCheckTimestamp = 0
-const TYPE_CHECK_DEBOUNCE_MS = 2000
+const TYPE_CHECK_DEBOUNCE_MS = 2000;
 
 export class LintOnWritePlugin implements AgentPlugin {
-  name = 'lint-on-write'
-  priority = 10
+  name = "lint-on-write";
+  priority = 10;
+  private _checkPromise: Promise<string | null> | null = null;
+  private _checkTimestamp = 0;
 
-  async onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
-    if (call.name !== 'write_file' && call.name !== 'edit_file') {
-      return
+  async onAfterTool(
+    ctx: ToolContext,
+    call: ToolCall,
+    result: ToolResult,
+  ): Promise<void> {
+    if (call.name !== "write_file" && call.name !== "edit_file") {
+      return;
     }
 
     if (!result.success) {
-      return
+      return;
     }
 
-    const path = String(call.arguments.path || '')
-    if (!path) return
+    const path = String(call.arguments.path || "");
+    if (!path) return;
 
-    const fullPath = resolve(ctx.baseDir, path)
-    if (!existsSync(fullPath)) return
+    const fullPath = resolve(ctx.baseDir, path);
+    if (!existsSync(fullPath)) return;
 
-    const ext = extname(fullPath)
-    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir)
+    const ext = extname(fullPath);
+    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir);
 
     if (syntaxError) {
-      result.output += `\n\n[Syntax check failed]: ${syntaxError}`
-      return
+      result.output += `\n\n[Syntax check failed]: ${syntaxError}`;
+      return;
     }
 
-    await this.runProjectLint(ctx, result)
-    await this.runProjectTypeCheck(ctx, result)
+    await this.runProjectLint(ctx, result);
+    await this.runProjectTypeCheck(ctx, result);
   }
 
-  private async checkSyntax(filePath: string, ext: string, baseDir: string): Promise<string | null> {
-    if (ext === '.ts' || ext === '.tsx') {
+  private async checkSyntax(
+    filePath: string,
+    ext: string,
+    baseDir: string,
+  ): Promise<string | null> {
+    if (ext === ".ts" || ext === ".tsx") {
       try {
-        await runAsync(`npx tsc --noEmit --skipLibCheck "${filePath}"`, baseDir, 10000)
-        return null
+        await runAsync(
+          `npx tsc --noEmit --skipLibCheck "${filePath}"`,
+          baseDir,
+          10000,
+        );
+        return null;
       } catch (err: any) {
-        if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
-          return null
+        if (
+          err.status === 127 ||
+          err.message.includes("not found") ||
+          err.message.includes("ENOENT")
+        ) {
+          return null;
         }
-        const stderr = err.stderr?.toString() || err.stdout?.toString() || ''
-        if (stderr.includes('error TS')) {
-          const firstError = stderr.split('\n').find((line: string) => line.includes('error TS')) || 'TypeScript syntax error'
-          return firstError.trim()
+        const stderr = err.stderr?.toString() || err.stdout?.toString() || "";
+        if (stderr.includes("error TS")) {
+          const firstError =
+            stderr
+              .split("\n")
+              .find((line: string) => line.includes("error TS")) ||
+            "TypeScript syntax error";
+          return firstError.trim();
         }
-        return null
+        return null;
       }
     }
 
-    if (ext === '.js' || ext === '.jsx') {
+    if (ext === ".js" || ext === ".jsx") {
       try {
-        await runAsync(`node --check "${filePath}"`, baseDir, 5000)
-        return null
+        await runAsync(`node --check "${filePath}"`, baseDir, 5000);
+        return null;
       } catch (err: any) {
-        const stderr = err.stderr?.toString() || ''
-        const firstError = stderr.split('\n').find((line: string) => line.trim()) || 'JavaScript syntax error'
-        return firstError.trim()
+        const stderr = err.stderr?.toString() || "";
+        const firstError =
+          stderr.split("\n").find((line: string) => line.trim()) ||
+          "JavaScript syntax error";
+        return firstError.trim();
       }
     }
 
-    return null
+    return null;
   }
 
-  private async runProjectLint(ctx: ToolContext, result: ToolResult): Promise<void> {
+  private async runProjectLint(
+    ctx: ToolContext,
+    result: ToolResult,
+  ): Promise<void> {
     try {
-      const packageJsonPath = join(ctx.baseDir, 'package.json')
+      const packageJsonPath = join(ctx.baseDir, "package.json");
       if (!existsSync(packageJsonPath)) {
-        return
+        return;
       }
 
-      const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'))
-      const lintScript = packageJson.scripts?.lint
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+      const lintScript = packageJson.scripts?.lint;
 
       if (!lintScript) {
-        return
+        return;
       }
 
-      ctx.logger.debug(`Running lint: ${lintScript}`)
-      await runAsync(lintScript, ctx.baseDir, 30_000)
-      ctx.logger.debug('Lint passed')
+      ctx.logger.debug(`Running lint: ${lintScript}`);
+      await runAsync(lintScript, ctx.baseDir, 30_000);
+      ctx.logger.debug("Lint passed");
     } catch (err: any) {
-      ctx.logger.warn(`Lint failed: ${err.message}`)
-      result.output += `\n\n[Project lint failed]: ${err.message}`
+      ctx.logger.warn(`Lint failed: ${err.message}`);
+      result.output += `\n\n[Project lint failed]: ${err.message}`;
     }
   }
 
-  private async runProjectTypeCheck(ctx: ToolContext, result: ToolResult): Promise<void> {
-    const tsconfigPath = join(ctx.baseDir, 'tsconfig.json')
+  private async runProjectTypeCheck(
+    ctx: ToolContext,
+    result: ToolResult,
+  ): Promise<void> {
+    const tsconfigPath = join(ctx.baseDir, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
-      return
+      return;
     }
 
-    const now = Date.now()
-    if (projectTypeCheckPromise && now - projectTypeCheckTimestamp < TYPE_CHECK_DEBOUNCE_MS) {
-      const error = await projectTypeCheckPromise
+    const now = Date.now();
+    if (
+      this._checkPromise &&
+      now - this._checkTimestamp < TYPE_CHECK_DEBOUNCE_MS
+    ) {
+      const error = await this._checkPromise;
       if (error) {
-        result.output += `\n\n[Project typecheck failed]: ${error}`
+        result.output += `\n\n[Project typecheck failed]: ${error}`;
       }
-      return
+      return;
     }
 
-    projectTypeCheckTimestamp = now
-    projectTypeCheckPromise = this.runTscCheck(ctx.baseDir)
-    const error = await projectTypeCheckPromise
+    this._checkTimestamp = now;
+    this._checkPromise = this.runTscCheck(ctx.baseDir);
+    const error = await this._checkPromise;
     if (error) {
-      result.output += `\n\n[Project typecheck failed]: ${error}`
+      result.output += `\n\n[Project typecheck failed]: ${error}`;
     }
   }
 
   private async runTscCheck(baseDir: string): Promise<string | null> {
     try {
-      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000)
-      return null
+      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000);
+      return null;
     } catch (err: any) {
-      if (err.status === 127 || err.message.includes('not found') || err.message.includes('ENOENT')) {
-        return null
+      if (
+        err.status === 127 ||
+        err.message.includes("not found") ||
+        err.message.includes("ENOENT")
+      ) {
+        return null;
       }
-      const stderr = err.stderr?.toString() || err.stdout?.toString() || ''
-      if (stderr.includes('error TS')) {
-        const firstError = stderr.split('\n').find((line: string) => line.includes('error TS')) || 'TypeScript type error'
-        return firstError.trim()
+      const stderr = err.stderr?.toString() || err.stdout?.toString() || "";
+      if (stderr.includes("error TS")) {
+        const firstError =
+          stderr
+            .split("\n")
+            .find((line: string) => line.includes("error TS")) ||
+          "TypeScript type error";
+        return firstError.trim();
       }
-      return null
+      return null;
     }
   }
 }
@@ -139,39 +178,47 @@ export class LintOnWritePlugin implements AgentPlugin {
  * Run a command asynchronously (non-blocking event loop) and resolve when it
  * exits. Rejects with captured stderr/stdout on non-zero exit or timeout.
  */
-function runAsync(command: string, cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+function runAsync(
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, {
       cwd,
       shell: true,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    let stdout = ''
-    let stderr = ''
-    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
-    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
     const timer = setTimeout(() => {
-      child.kill()
-      reject(new Error(`Command timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-    child.on('error', (err) => {
-      clearTimeout(timer)
-      reject(err)
-    })
-    child.on('close', (code) => {
-      clearTimeout(timer)
+      child.kill();
+      reject(new Error(`Command timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
       if (code === 0) {
-        resolve({ stdout, stderr })
+        resolve({ stdout, stderr });
       } else {
-        const err: any = new Error(`Command failed with exit code ${code}`)
-        err.stdout = stdout
-        err.stderr = stderr
-        err.status = code
-        reject(err)
+        const err: any = new Error(`Command failed with exit code ${code}`);
+        err.stdout = stdout;
+        err.stderr = stderr;
+        err.status = code;
+        reject(err);
       }
-    })
-  })
+    });
+  });
 }
 
-export const plugin = new LintOnWritePlugin()
+export const plugin = new LintOnWritePlugin();
