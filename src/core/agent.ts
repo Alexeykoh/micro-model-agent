@@ -193,7 +193,7 @@ export class Agent {
       baseDir,
     } = this.deps;
 
-    const slog = new SessionLogger(sessionManager);
+    const slog = new SessionLogger(sessionManager, logger);
 
     if (sessionManager && !sessionManager.getActive()) {
       sessionManager.create();
@@ -273,7 +273,7 @@ export class Agent {
       baseDir,
     } = this.deps;
 
-    const slog = new SessionLogger(sessionManager);
+    const slog = new SessionLogger(sessionManager, logger);
     this.abortController = new AbortController();
     let iteration = 0;
     let lastText = "";

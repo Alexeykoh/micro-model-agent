@@ -1,38 +1,47 @@
-import type { SessionMeta, SessionMessage } from './types'
-import type { SessionStore, SessionLogEntry } from './store'
-import { t } from '../../i18n/index'
-import type { SessionIsolationConfig, SessionContext } from '../../modules/security/session-isolation'
-import { createSessionContext, DEFAULT_SESSION_ISOLATION } from '../../modules/security/session-isolation'
-import type { SecurityConfig, SessionEncryptionConfig } from '../../config/types'
+import type { SessionMeta, SessionMessage } from "./types";
+import type { SessionStore, SessionLogEntry } from "./store";
+import { t } from "../../i18n/index";
+import type {
+  SessionIsolationConfig,
+  SessionContext,
+} from "../../modules/security/session-isolation";
+import {
+  createSessionContext,
+  DEFAULT_SESSION_ISOLATION,
+} from "../../modules/security/session-isolation";
+import type {
+  SecurityConfig,
+  SessionEncryptionConfig,
+} from "../../config/types";
 
 export interface SessionManagerOptions {
-  model: string
-  contextWindow: number
-  projectDir: string
-  maxSessions?: number
+  model: string;
+  contextWindow: number;
+  projectDir: string;
+  maxSessions?: number;
   /**
    * Session isolation configuration
    */
-  isolation?: SessionIsolationConfig
+  isolation?: SessionIsolationConfig;
   /**
    * Session file encryption configuration
    */
-  encryption?: SessionEncryptionConfig
+  encryption?: SessionEncryptionConfig;
 }
 
 export class SessionManager {
-  private store: SessionStore
-  private activeId: string | null = null
-  private options: SessionManagerOptions
+  private store: SessionStore;
+  private activeId: string | null = null;
+  private options: SessionManagerOptions;
   /**
    * Map of session ID to session context (for isolation)
    */
-  private sessionContexts: Map<string, SessionContext> = new Map()
+  private sessionContexts: Map<string, SessionContext> = new Map();
 
   constructor(store: SessionStore, options: SessionManagerOptions) {
-    this.store = store
-    this.options = options
-    
+    this.store = store;
+    this.options = options;
+
     // Initialize encryption if configured
     if (options.encryption) {
       this.store.updateEncryption(options.encryption);
@@ -54,10 +63,14 @@ export class SessionManager {
     this.options.encryption = config;
   }
 
-  create(name?: string, securityOverrides?: SessionMeta['securityOverrides']): SessionMeta {
-    const now = new Date().toISOString()
-    const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-    const sessionName = name || t('session.default_name', { date: now.slice(0, 10) })
+  create(
+    name?: string,
+    securityOverrides?: SessionMeta["securityOverrides"],
+  ): SessionMeta {
+    const now = new Date().toISOString();
+    const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const sessionName =
+      name || t("session.default_name", { date: now.slice(0, 10) });
     const meta: SessionMeta = {
       id,
       name: sessionName,
@@ -68,149 +81,156 @@ export class SessionManager {
       contextWindow: this.options.contextWindow,
       projectDir: this.options.projectDir,
       securityOverrides,
-    }
-    this.store.saveMeta(id, meta)
-    this.activeId = id
-    this.enforceMaxSessions()
-    
+    };
+    this.store.saveMeta(id, meta);
+    this.activeId = id;
+    this.enforceMaxSessions();
+
     // Create session context
     const context = createSessionContext(
       id,
       this.options.projectDir,
       this.options.isolation,
       this.normalizeSecurityOverrides(securityOverrides),
-    )
-    this.sessionContexts.set(id, context)
-    
-    return meta
+    );
+    this.sessionContexts.set(id, context);
+
+    return meta;
   }
 
   list(): SessionMeta[] {
-    return this.store.listSessions()
+    return this.store.listSessions();
   }
 
   get(id: string): SessionMeta | null {
-    return this.store.loadMeta(id)
+    return this.store.loadMeta(id);
   }
 
   delete(id: string): void {
     // Clean up session context
-    const context = this.sessionContexts.get(id)
+    const context = this.sessionContexts.get(id);
     if (context) {
       // In a real implementation, we would clean up temp files here
-      this.sessionContexts.delete(id)
+      this.sessionContexts.delete(id);
     }
-    
-    this.store.deleteSession(id)
+
+    this.store.deleteSession(id);
     if (this.activeId === id) {
-      this.activeId = null
+      this.activeId = null;
     }
   }
 
   rename(id: string, name: string): void {
-    const meta = this.store.loadMeta(id)
-    if (!meta) throw new Error(t('session.not_found', { id }))
-    meta.name = name
-    this.store.saveMeta(id, meta)
+    const meta = this.store.loadMeta(id);
+    if (!meta) throw new Error(t("session.not_found", { id }));
+    meta.name = name;
+    this.store.saveMeta(id, meta);
   }
 
   getActive(): string | null {
-    return this.activeId
+    return this.activeId;
   }
 
   getActiveMeta(): SessionMeta | null {
-    if (!this.activeId) return null
-    return this.store.loadMeta(this.activeId)
+    if (!this.activeId) return null;
+    return this.store.loadMeta(this.activeId);
   }
 
   setActive(id: string): void {
     if (!this.store.sessionExists(id)) {
-      throw new Error(t('session.not_found', { id }))
+      throw new Error(t("session.not_found", { id }));
     }
-    this.activeId = id
+    this.activeId = id;
   }
 
   appendMessage(msg: SessionMessage): void {
-    if (!this.activeId) throw new Error(t('session.no_active'))
-    this.store.appendMessage(this.activeId, msg)
+    if (!this.activeId) throw new Error(t("session.no_active"));
+    this.store.appendMessage(this.activeId, msg);
   }
 
   appendLog(entry: SessionLogEntry): void {
-    if (!this.activeId) return
-    this.store.appendSessionLog(this.activeId, entry)
+    if (!this.activeId) return;
+    this.store.appendSessionLog(this.activeId, entry);
   }
 
   loadHistory(): SessionMessage[] {
-    if (!this.activeId) return []
-    return this.store.loadHistory(this.activeId)
+    if (!this.activeId) return [];
+    return this.store.loadHistory(this.activeId);
   }
 
   /**
    * Get the session context for the active session
    */
   getSessionContext(): SessionContext | undefined {
-    if (!this.activeId) return undefined
-    return this.getSessionContextById(this.activeId)
+    if (!this.activeId) return undefined;
+    return this.getSessionContextById(this.activeId);
   }
 
   /**
    * Get the session context for a specific session
    */
+  getSessionDirectory(id: string): string {
+    return this.store.getSessionDir(id);
+  }
+
   getSessionContextById(sessionId: string): SessionContext | undefined {
     if (!this.sessionContexts.has(sessionId)) {
-      const meta = this.store.loadMeta(sessionId)
-      if (!meta) return undefined
-      
+      const meta = this.store.loadMeta(sessionId);
+      if (!meta) return undefined;
+
       const context = createSessionContext(
         sessionId,
         meta.projectDir,
         this.options.isolation,
         this.normalizeSecurityOverrides(meta.securityOverrides),
-      )
-      this.sessionContexts.set(sessionId, context)
+      );
+      this.sessionContexts.set(sessionId, context);
     }
-    return this.sessionContexts.get(sessionId)
+    return this.sessionContexts.get(sessionId);
   }
 
   /**
    * Get session isolation configuration
    */
   getIsolationConfig(): SessionIsolationConfig {
-    return this.options.isolation ?? DEFAULT_SESSION_ISOLATION
+    return this.options.isolation ?? DEFAULT_SESSION_ISOLATION;
   }
 
   /**
    * Check if session isolation is enabled
    */
   isIsolationEnabled(): boolean {
-    return this.getIsolationConfig().enabled
+    return this.getIsolationConfig().enabled;
   }
 
   /**
    * Normalize security overrides to match SecurityConfig structure
    */
   private normalizeSecurityOverrides(
-    overrides?: SessionMeta['securityOverrides']
+    overrides?: SessionMeta["securityOverrides"],
   ): Partial<SecurityConfig> | undefined {
-    if (!overrides) return undefined
-    
+    if (!overrides) return undefined;
+
     return {
       maxFileOperations: overrides.maxFileOperations,
       maxRecursionDepth: overrides.maxRecursionDepth,
-      rateLimits: overrides.rateLimits ? {
-        maxRequestsPerMinute: overrides.rateLimits.maxRequestsPerMinute ?? 60,
-        maxParallelTasks: overrides.rateLimits.maxParallelTasks ?? 5,
-      } : undefined,
-    }
+      rateLimits: overrides.rateLimits
+        ? {
+            maxRequestsPerMinute:
+              overrides.rateLimits.maxRequestsPerMinute ?? 60,
+            maxParallelTasks: overrides.rateLimits.maxParallelTasks ?? 5,
+          }
+        : undefined,
+    };
   }
 
   private enforceMaxSessions(): void {
-    const max = this.options.maxSessions ?? 50
-    const sessions = this.store.listSessions()
+    const max = this.options.maxSessions ?? 50;
+    const sessions = this.store.listSessions();
     if (sessions.length > max) {
-      const toDelete = sessions.slice(max)
+      const toDelete = sessions.slice(max);
       for (const s of toDelete) {
-        this.delete(s.id)
+        this.delete(s.id);
       }
     }
   }

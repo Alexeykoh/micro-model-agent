@@ -59,6 +59,10 @@ export class SessionStore {
     }
   }
 
+  getSessionDir(id: string): string {
+    return join(this.baseDir, id);
+  }
+
   /**
    * Update encryption configuration
    */

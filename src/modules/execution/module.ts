@@ -18,7 +18,7 @@ import { suggestSkill } from "../skills/error-skill-map";
 
 const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
-const FORCE_SKIP_THRESHOLD = 15;
+const FORCE_SKIP_THRESHOLD = 10;
 
 export class ExecutionModule implements AgentModule {
   name = "execution";
@@ -35,7 +35,7 @@ export class ExecutionModule implements AgentModule {
   // one chance to change the subject before the audit gate locks in.
   private _auditSkipsRemaining = 0;
 
-  constructor(baseDir: string, stuckThreshold = 8) {
+  constructor(baseDir: string, stuckThreshold = 6) {
     this.baseDir = baseDir;
     this.verifier = new StepVerifier(baseDir);
     this.stuckDetector = new StuckDetector(stuckThreshold);
@@ -422,7 +422,7 @@ export class ExecutionModule implements AgentModule {
               const step = this.tracker?.getCurrentStep();
               ctx.contextManager.addMessage({
                 role: "user",
-                content: `<system-summary>CRITICAL: You have been stuck on step ${step?.id ?? "?"} ("${step?.description ?? ""}") for ${this.stuckDetector.getIterationsOnCurrentStep()} iterations. You MUST stop trying the same approach. Options: 1) Skip this step via plan update step=${step?.id ?? "?"} status=skipped with a note explaining why. 2) Mark the step as done if the code runs correctly, even if there are type errors. 3) Try a completely different approach. Do NOT continue with the current approach.</system-summary>`,
+                content: `<system-summary>STOP. Step ${step?.id ?? "?"} ("${step?.description ?? ""}") took ${this.stuckDetector.getIterationsOnCurrentStep()} iterations with no progress. DO NOT continue this step. Immediately call: plan update step=${step?.id ?? "?"} status=done (if code works despite warnings) OR plan update step=${step?.id ?? "?"} status=skipped note="reason". Do NOT make any other tool calls before updating the plan.</system-summary>`,
               });
             }
           }

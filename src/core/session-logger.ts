@@ -1,13 +1,39 @@
 import type { SessionManager } from "../modules/session/manager";
 import type { ToolCall } from "./types";
+import type { Logger } from "../logger/app-logger";
+import { setAuditSessionDir } from "../modules/security/audit-log";
 
 /**
  * Thin wrapper around SessionManager that eliminates repetitive
  * `if (sessionManager)` + `new Date().toISOString()` boilerplate
  * from the agent loop.
+ *
+ * When constructed, it configures the app logger and audit log to write into
+ * the session directory (instead of global ~/.mma/logs/).
  */
 export class SessionLogger {
-  constructor(private session: SessionManager | undefined) {}
+  private logger: Logger | undefined;
+
+  constructor(
+    private session: SessionManager | undefined,
+    logger?: Logger,
+  ) {
+    this.logger = logger;
+    this.bindSessionDir();
+  }
+
+  private bindSessionDir(): void {
+    const meta = this.session?.getActiveMeta();
+    if (!meta) return;
+
+    const dir = this.session!.getSessionDirectory(meta.id);
+
+    if (this.logger) {
+      this.logger.setSessionDir(dir);
+    }
+
+    setAuditSessionDir(dir);
+  }
 
   get active(): boolean {
     return !!this.session?.getActive();
@@ -34,7 +60,12 @@ export class SessionLogger {
     });
   }
 
-  logAssistant(content: string, reasoning?: string, toolCalls?: ToolCall[], iteration?: number): void {
+  logAssistant(
+    content: string,
+    reasoning?: string,
+    toolCalls?: ToolCall[],
+    iteration?: number,
+  ): void {
     if (reasoning) {
       this.session?.appendLog({
         ts: new Date().toISOString(),
@@ -48,7 +79,13 @@ export class SessionLogger {
       type: "assistant",
       content,
       ...(toolCalls
-        ? { tool_calls: toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) }
+        ? {
+            tool_calls: toolCalls.map((tc) => ({
+              id: tc.id,
+              name: tc.name,
+              arguments: tc.arguments,
+            })),
+          }
         : {}),
       iteration,
     });
@@ -108,7 +145,12 @@ export class SessionLogger {
     });
   }
 
-  logCompaction(content: string, iteration: number, contextTokens?: number, contextLimit?: number): void {
+  logCompaction(
+    content: string,
+    iteration: number,
+    contextTokens?: number,
+    contextLimit?: number,
+  ): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "compaction",
@@ -136,11 +178,7 @@ export class SessionLogger {
     });
   }
 
-  logPlan(
-    event: string,
-    detail: string,
-    iteration?: number,
-  ): void {
+  logPlan(event: string, detail: string, iteration?: number): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "plan",

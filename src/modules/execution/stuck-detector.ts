@@ -62,7 +62,7 @@ export class StuckDetector {
   private fileRewriteCount: Map<string, number> = new Map();
   private readonly fileRewriteThreshold = 3;
 
-  constructor(threshold = 8, errorThreshold = 3) {
+  constructor(threshold = 6, errorThreshold = 3) {
     this.threshold = threshold;
     this.errorThreshold = errorThreshold;
   }

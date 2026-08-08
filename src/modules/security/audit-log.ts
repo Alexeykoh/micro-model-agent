@@ -1,5 +1,5 @@
-import { writeFileSync, existsSync, mkdirSync, appendFileSync } from "fs";
-import { resolve } from "path";
+import { existsSync, mkdirSync, appendFileSync } from "fs";
+import { resolve, join } from "path";
 import { homedir } from "os";
 import { globalAuditNotifier } from "./audit-notifier";
 
@@ -9,7 +9,14 @@ import { globalAuditNotifier } from "./audit-notifier";
 export interface AuditLogEntry {
   timestamp: string;
   sessionId?: string;
-  action: "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request" | "security_block";
+  action:
+    | "tool_call"
+    | "file_read"
+    | "file_write"
+    | "file_delete"
+    | "bash_command"
+    | "network_request"
+    | "security_block";
   tool?: string;
   path?: string;
   command?: string;
@@ -19,18 +26,38 @@ export interface AuditLogEntry {
   reason?: string; // For security blocks
 }
 
-/**
- * Directory and file path for audit logs
- */
-const AUDIT_LOG_DIR = resolve(homedir(), ".mma", "logs");
-const AUDIT_LOG_PATH = resolve(AUDIT_LOG_DIR, "audit.jsonl");
+let _globalAuditDir = resolve(homedir(), ".mma", "logs");
+let _sessionAuditDir: string | null = null;
+
+function getAuditDir(): string {
+  return _sessionAuditDir ?? _globalAuditDir;
+}
 
 /**
- * Ensure audit log directory exists
+ * Set the session directory for audit logs. When set, all audit entries
+ * are written to the session-specific directory instead of the global one.
  */
-function ensureAuditLogDir(): void {
-  if (!existsSync(AUDIT_LOG_DIR)) {
-    mkdirSync(AUDIT_LOG_DIR, { recursive: true, mode: 0o700 });
+export function setAuditSessionDir(dir: string): void {
+  _sessionAuditDir = dir;
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  }
+}
+
+/**
+ * Clear the session directory — fall back to global audit dir.
+ */
+export function clearAuditSessionDir(): void {
+  _sessionAuditDir = null;
+}
+
+/**
+ * Set the global audit log directory (used when no session dir is active).
+ */
+export function setGlobalAuditDir(dir: string): void {
+  _globalAuditDir = dir;
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -38,16 +65,19 @@ function ensureAuditLogDir(): void {
  * Write an audit log entry
  */
 export function logAudit(entry: AuditLogEntry): void {
-  ensureAuditLogDir();
-  
+  const dir = getAuditDir();
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  }
+
   try {
     const logEntry = JSON.stringify(entry);
-    appendFileSync(AUDIT_LOG_PATH, logEntry + "\n", "utf8");
+    appendFileSync(join(dir, "audit.jsonl"), logEntry + "\n", "utf8");
   } catch {
     // Silently fail if we can't write to audit log
     // This shouldn't break the agent
   }
-  
+
   // Notify audit notifier if enabled
   try {
     globalAuditNotifier.notify(entry);
@@ -156,7 +186,13 @@ export function logNetworkRequest(
  */
 export function logSecurityBlock(
   sessionId: string | undefined,
-  action: "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request",
+  action:
+    | "tool_call"
+    | "file_read"
+    | "file_write"
+    | "file_delete"
+    | "bash_command"
+    | "network_request",
   reason: string,
   details?: string,
 ): void {

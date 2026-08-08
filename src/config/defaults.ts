@@ -52,7 +52,7 @@ export const DEFAULTS: AppConfig = {
     maxDelay: 30000,
   },
   maxToolIterations: 1000,
-  stuckThreshold: 8,
+  stuckThreshold: 6,
   autoPlan: true,
   showReasoning: false,
   logLevel: "info",
