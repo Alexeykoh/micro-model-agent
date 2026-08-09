@@ -447,6 +447,8 @@ export class Repl implements ReplContext {
     }
   }
 
+  private lastCompactionShown = 0;
+
   private showContextBar(result: {
     contextUsed?: number;
     contextLimit?: number;
@@ -457,10 +459,15 @@ export class Repl implements ReplContext {
     totalTokens?: number;
   }): void {
     if (
-      result.contextUsed !== undefined &&
-      result.contextLimit !== undefined &&
-      result.contextLimit > 0
+      result.contextUsed === undefined ||
+      result.contextLimit === undefined ||
+      result.contextLimit <= 0
     ) {
+      return;
+    }
+
+    const ui = this.config.ui;
+    if (ui?.showContextStats) {
       console.log();
       const ctxLine = formatContextBar(
         result.contextUsed,
@@ -474,6 +481,13 @@ export class Repl implements ReplContext {
           `  API: ${result.promptTokens} prompt + ${result.completionTokens} completion = ${result.totalTokens} total`,
         );
         console.log(apiLine);
+      }
+    } else if (ui?.showCompaction && result.compactionCount !== undefined) {
+      if (result.compactionCount > this.lastCompactionShown) {
+        this.lastCompactionShown = result.compactionCount;
+        console.log(
+          pc.dim(`\n  ⟳ Context compacted (${result.compactionCount})`),
+        );
       }
     }
   }
