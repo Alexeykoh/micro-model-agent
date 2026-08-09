@@ -1,10 +1,34 @@
 import type { AgentPlugin } from "../../types";
 import type { ToolContext, ToolCall, ToolResult } from "../../../tools/types";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { resolve, extname, join } from "path";
+import { platform } from "os";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
+
+let _winDecoder: TextDecoder | null | undefined;
+
+function getWinDecoder(): TextDecoder {
+  if (_winDecoder === undefined) {
+    if (platform() !== "win32") {
+      _winDecoder = null;
+    } else {
+      try {
+        const cpOut = execSync("chcp.com", {
+          encoding: "buffer",
+          timeout: 2000,
+          windowsHide: true,
+        }).toString("latin1");
+        const m = cpOut.match(/(\d+)/);
+        _winDecoder = m ? new TextDecoder("ibm" + m[1]) : null;
+      } catch {
+        _winDecoder = null;
+      }
+    }
+  }
+  return _winDecoder ?? new TextDecoder("utf-8");
+}
 
 export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
@@ -192,11 +216,12 @@ function runAsync(
     });
     let stdout = "";
     let stderr = "";
+    const decoder = getWinDecoder();
     child.stdout?.on("data", (d: Buffer) => {
-      stdout += d.toString();
+      stdout += decoder.decode(d, { stream: true });
     });
     child.stderr?.on("data", (d: Buffer) => {
-      stderr += d.toString();
+      stderr += decoder.decode(d, { stream: true });
     });
     const timer = setTimeout(() => {
       child.kill();
@@ -208,6 +233,8 @@ function runAsync(
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      stdout += decoder.decode();
+      stderr += decoder.decode();
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {

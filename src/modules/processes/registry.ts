@@ -93,27 +93,28 @@ class ProcessRegistry {
     entry.pid = child.pid ?? 0;
 
     // On Windows, children spawned via cmd.exe output in the OEM code page,
-    // NOT UTF-8. Detect the active code page via chcp.com instead of assuming
-    // CP866 (Cyrillic). Falls back to UTF-8 on detection failure.
-    const decoder: TextDecoder | null =
+    // NOT UTF-8. Detect the active code page via chcp.com; fall back to
+    // ibm866 (Russian CP866) when detection fails — still correct for the
+    // majority of users, and always better than the UTF-8 default.
+    const decoder: TextDecoder =
       platform() === "win32"
         ? (() => {
             try {
               const cpOut = require("child_process")
                 .execSync("chcp.com", {
-                  encoding: "utf-8",
+                  encoding: "buffer",
                   timeout: 2000,
                   windowsHide: true,
                 })
-                .toString();
+                .toString("latin1");
               const m = cpOut.match(/(\d+)/);
               if (m) return new TextDecoder("ibm" + m[1]);
             } catch {
               /* ignore */
             }
-            return null;
+            return new TextDecoder("ibm866");
           })()
-        : null;
+        : new TextDecoder("utf-8");
 
     let buf = "";
     const pushLine = (line: string) => {
@@ -123,9 +124,7 @@ class ProcessRegistry {
       entry.log.push(line);
     };
     const append = (chunk: Buffer) => {
-      const decoded = decoder
-        ? decoder.decode(chunk, { stream: true })
-        : chunk.toString();
+      const decoded = decoder.decode(chunk, { stream: true });
       buf += decoded;
       const lines = buf.split(/\r?\n/);
       buf = lines.pop() ?? "";
@@ -134,9 +133,7 @@ class ProcessRegistry {
       }
     };
     const flush = () => {
-      if (decoder) {
-        buf += decoder.decode();
-      }
+      buf += decoder.decode();
       if (buf) {
         pushLine(buf);
         buf = "";

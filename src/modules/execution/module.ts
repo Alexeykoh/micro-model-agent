@@ -346,6 +346,21 @@ export class ExecutionModule implements AgentModule {
           this.stuckDetector.reset();
           this.consecutivePlanWarnings = 0;
           this.lastStepId = -1;
+
+          const iter: number =
+            typeof ctx.iteration === "number" ? ctx.iteration : 0;
+          if (iter === 3 && !this.tracker && ctx.contextManager) {
+            ctx.contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>You have made 3 tool calls without creating a plan. For any task that involves creating files, installing packages, or multiple steps — you MUST use plan create BEFORE continuing. Use the plan tool now with concrete steps (exact filenames, commands, deliverables). Do NOT make any more write/edit/bash calls until you have a plan.</system-summary>`,
+            });
+          }
+          if (iter >= 6 && !this.tracker && ctx.contextManager) {
+            ctx.contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>STOP. ${iter} iterations without a plan. You MUST call plan create RIGHT NOW. No more tool calls until you create a plan.</system-summary>`,
+            });
+          }
         }
         const stuckReason = this.stuckDetector.getStuckReason();
         if (stuckReason) {

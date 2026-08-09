@@ -38,6 +38,13 @@ export function setBashGraceMs(ms: number): void {
 function adaptCommandForWindows(command: string): string {
   if (platform() !== "win32") return command;
 
+  // The model sometimes appends `|| true` (bash error-suppression idiom)
+  // which PowerShell doesn't understand. Replace with `; exit 0` which
+  // forces a successful exit code regardless of the previous command's result.
+  if (/\|\|\s*true\b/.test(command)) {
+    command = command.replace(/\s*\|\|\s*true\b/g, "; exit 0");
+  }
+
   // Windows mkdir does not support -p flag, but creates intermediate dirs by default
   const trimmed = command.trim();
   if (trimmed.startsWith("mkdir -p ")) {
