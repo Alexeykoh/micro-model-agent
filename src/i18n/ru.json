@@ -112,7 +112,7 @@
   "tool.question.answered": "Пользователь ответил на ваши вопросы: {formatted}. Теперь продолжайте с учётом ответов.",
   "tool.name_or_task": "Укажите параметр \"name\" или \"task\"",
   "tool.invalid_params": "Неверные параметры",
-  "tool.skill_budget": "[Скилл загружен. Осталось {remaining} токенов в бюджете скиллов]",
+  "tool.skill_budget": "Скилл \"{name}\" загружен ({tokens} токенов, осталось {remaining} в бюджете скиллов). Контент скилла теперь в системном промпте — перезагрузка после компрессии не нужна.",
   "tool.skill_available_hint": "Доступные скиллы",
   "tool.no_results": "Нет результатов по \"{query}\"",
   "tool.search_results": "Результаты поиска \"{query}\":\n{results}",

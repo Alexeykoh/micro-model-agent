@@ -3,7 +3,6 @@ import {
   StuckDetector,
   classifyError,
 } from "../src/modules/execution/stuck-detector";
-import { suggestSkill } from "../src/modules/skills/error-skill-map";
 
 describe("StuckDetector", () => {
   let detector: StuckDetector;
@@ -126,18 +125,6 @@ describe("StuckDetector", () => {
     d.recordFileRewrite("src/index.ts");
     d.recordFileRewrite("src/index.ts");
     expect(d.hasExcessiveRewrites()).toBe(false);
-  });
-
-  it("should suggest typescript-expert for TS errors", () => {
-    expect(
-      suggestSkill(
-        "src/index.ts(16,25): error TS2769: No overload matches this call.",
-      ),
-    ).toBe("typescript-expert");
-  });
-
-  it("should return null for unknown errors", () => {
-    expect(suggestSkill("Some random error")).toBeNull();
   });
 
   it("should track last error output", () => {

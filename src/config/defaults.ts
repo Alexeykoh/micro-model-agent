@@ -95,5 +95,8 @@ export const DEFAULTS: AppConfig = {
     isolatePlugins: true,
     isolateTempFiles: true,
   },
+  skills: {
+    budget: 0.15,
+  },
   lsp: DEFAULT_LSP_CONFIG,
 };

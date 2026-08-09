@@ -9,33 +9,26 @@ export function createLoadSkillTool(
     name: "load_skill",
     tags: ["core"],
     description:
-      "Load a skill by name or task description. Skills provide specialized instructions and workflows. Only use when the task clearly requires domain-specific knowledge. If loading fails because the skill is too large, continue the task without it.",
+      "Load a skill by name. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Only use when the task clearly requires domain-specific knowledge.",
     parameters: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Skill name to load directly" },
-        task: {
+        name: {
           type: "string",
-          description: "Task description to find matching skill",
+          description:
+            "Exact skill name to load (see [Available Skills] for names)",
         },
       },
+      required: ["name"],
     },
     handler: async (_ctx, args) => {
       const name = args.name ? String(args.name) : undefined;
-      const task = args.task ? String(args.task) : undefined;
 
-      if (!name && !task) {
-        return { success: false, output: t("tool.name_or_task") };
-      }
-
-      let result;
-      if (name) {
-        result = skillsModule.loadByName(name);
-      } else if (task) {
-        result = skillsModule.loadByMatch(task);
-      } else {
+      if (!name) {
         return { success: false, output: t("tool.invalid_params") };
       }
+
+      const result = skillsModule.loadByName(name);
 
       if (!result.success) {
         const available = skillsModule.getAvailable();
@@ -46,11 +39,17 @@ export function createLoadSkillTool(
         return { success: false, output: result.message + hint };
       }
 
-      const skill = result.skill!;
       const budget = skillsModule.getBudget();
+      const tokens = result.skill
+        ? Math.ceil(result.skill.content.length / 4)
+        : 0;
       return {
         success: true,
-        output: `${result.message}\n\n--- Skill Content ---\n${skill.content}\n\n${t("tool.skill_budget", { remaining: budget.remaining })}`,
+        output: t("tool.skill_budget", {
+          name,
+          tokens,
+          remaining: budget.remaining,
+        }),
       };
     },
   };

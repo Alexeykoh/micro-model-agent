@@ -1,7 +1,6 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { SkillMeta } from "./loader";
-import type { SkillsMatcher } from "./matcher";
 import { t } from "../../i18n/index";
 
 export interface LoadResult {
@@ -15,17 +14,11 @@ export class SkillsModule implements AgentModule {
 
   private availableSkills: SkillMeta[];
   private loadedSkills: Map<string, SkillMeta> = new Map();
-  private matcher: SkillsMatcher;
   private budget: number;
   private currentTokens = 0;
 
-  constructor(
-    availableSkills: SkillMeta[],
-    matcher: SkillsMatcher,
-    budget: number,
-  ) {
+  constructor(availableSkills: SkillMeta[], budget: number) {
     this.availableSkills = availableSkills;
-    this.matcher = matcher;
     this.budget = budget;
   }
 
@@ -36,29 +29,10 @@ export class SkillsModule implements AgentModule {
 
     const skill = this.availableSkills.find((s) => s.name === name);
     if (!skill) {
-      const fuzzyMatches = this.matcher.match(name, this.availableSkills, 1);
-      if (fuzzyMatches.length > 0) {
-        return this.tryLoad(fuzzyMatches[0]);
-      }
       return { success: false, message: t("skill.not_found", { name }) };
     }
 
     return this.tryLoad(skill);
-  }
-
-  loadByMatch(taskDescription: string): LoadResult {
-    const matches = this.matcher.match(
-      taskDescription,
-      this.availableSkills,
-      1,
-    );
-    if (matches.length === 0) {
-      return {
-        success: false,
-        message: t("skill.no_match", { task: taskDescription }),
-      };
-    }
-    return this.tryLoad(matches[0]);
   }
 
   unload(name: string): boolean {
@@ -82,7 +56,12 @@ export class SkillsModule implements AgentModule {
   }
 
   search(query: string): SkillMeta[] {
-    return this.matcher.match(query, this.availableSkills, 10);
+    const q = query.toLowerCase();
+    return this.availableSkills.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q),
+    );
   }
 
   getBudget(): { used: number; total: number; remaining: number } {
@@ -105,17 +84,20 @@ export class SkillsModule implements AgentModule {
       lines.push("[Available Skills]");
       lines.push(t("skill.prompt_hint"));
       for (const skill of this.availableSkills) {
-        const desc = skill.description.slice(0, 60);
+        const desc = skill.description.slice(0, 80);
         lines.push(`- ${skill.name}: ${desc}`);
       }
-      lines.push(t("skill.prompt_fallback"));
     }
 
     if (this.loadedSkills.size > 0) {
+      lines.push("");
       lines.push("[Loaded Skills]");
       for (const skill of this.loadedSkills.values()) {
-        const desc = skill.description.slice(0, 80);
-        lines.push(`- ${skill.name}: ${desc}`);
+        lines.push(
+          `--- ${skill.name} (${this.estimateTokens(skill.content)} tokens) ---`,
+        );
+        lines.push(skill.content);
+        lines.push("");
       }
     }
 
@@ -126,7 +108,7 @@ export class SkillsModule implements AgentModule {
 
     return {
       content,
-      priority: "normal",
+      priority: "high",
       essential: false,
       estimatedTokens: tokens,
     };

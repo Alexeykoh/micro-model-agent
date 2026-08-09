@@ -445,7 +445,7 @@ interface ToolDefinition {
 
 | Tool | Parameters | Что делает | Когда использовать |
 |------|-----------|------------|-------------------|
-| `load_skill` | `{ task: string }` | Загружает SKILL.md по описанию задачи | Когда агенту нужны специфические знания |
+| `load_skill` | `{ name: string }` | Загружает скил по точному имени; контент инжектится в системный промпт | Когда модель видит релевантный скил в [Available Skills] |
 | `pipeline_run` | `{ name: string, params: Record<string, string> }` | Запускает task workflow пайплайн | Для повторяющихся процессов |
 | `mcp_call` | `{ server: string, tool: string, args: unknown }` | Вызывает инструмент внешнего MCP сервера | Для доступа к внешним API, БД |
 | `search_history` | `{ query: string, max_results?: number }` | Поиск в истории прошлых сессий | Для вспоминания деталей |
@@ -485,34 +485,41 @@ interface AgentModule {
 
 ### 6.1 Skills (`modules/skills/`)
 
-**Loading:** 3 sources — builtin `modules/skills/builtin/`, global `~/.mma/skills/`, project `.mma/skills/`
+**Loading:** 3 sources — builtin `modules/skills/builtin/`, global `~/.agents/skills/`, project `.mma/skills/`. Рекурсивный обход, `.md` и `.skill.md` файлы с YAML frontmatter (`name`, `description`, `keywords`, `mma_version`).
 
-**Matching by description (not name):**
-- Each skill has `name`, `description`, `keywords[]` in YAML frontmatter
-- On startup: keyword overlap between task prompt and skill keywords
-- At runtime: LLM calls `load_skill`, system matches description overlap
+**Progressive Disclosure (L1/L2/L3):**
+- **L1** — `[Available Skills]` в системном промпте (динамический блок, обновляется каждую итерацию): только `name` + `description` (до 80 символов). Модель сама решает, какой скил загрузить, на основе описаний.
+- **L2** — полный контент `SKILL.md` загружается через `load_skill(name:)` и инжектится в системный промпт как `[Loaded Skills]` блок. Не попадает в history.
+- **L3** — `references/` и `scripts/` в папке скила, читаются моделью через `read_file` по требованию.
 
-**Auto-loading:**
-- Plugin `onBeforeThink` analyzes user message and auto-loads best matching skill
-- Loaded skill content injected into context as system message: `[Auto-loaded Skill: name]\n<content>`
-- Respects budget limit — skips if skill would exceed remaining budget
-- Same skill not loaded twice
-- Agent can also call `load_skill(task="...")` manually if needed
+**Модель-driven selection (без keyword matching):**
+- Модель вызывает `load_skill(name: "exact-name")` на основе L1-описаний в `[Available Skills]`.
+- Параметр `task` удалён. Автозагрузка удалена (тесты проверяют что `onBeforeThink` не загружает скилы).
+- `SkillsMatcher` и `error-skill-map.ts` удалены — keyword matching признан anti-pattern (правило #10 AGENTS.md).
 
-**Prompt integration:**
-- `[Available Skills]` — list of all available skills with short descriptions, so agent knows what can be loaded
-- `[Loaded Skills]` — list of currently loaded skills (auto-loaded or manually)
-- Agent can also call `load_skill(task="...")` manually if needed
+**Бюджет и контекст:**
+- Отдельный пул: `config.skills.budget` (доля от contextWindow, по умолчанию 0.15 = 15%).
+- Для 32K: 4,800 токенов на скилы, не отнимается от системного промпта (10%) или истории (75%).
+- При загрузке: проверка `currentTokens + newSkill <= budget`. При превышении — отказ с предложением выгрузить старые.
+- Контент скила в системном промпте (динамический блок `high` priority, `essential: false`).
+- Не теряется при компрессии контекста (в отличие от старой схемы, где контент был в history).
+- Tool result `load_skill` — лёгкий: только статус `"Skill X loaded (N tokens, M remaining)"`.
 
-**Format in prompt:**
+**Формат в системном промпте:**
 ```
 [Available Skills]
-Use load_skill tool with task parameter to load relevant skill before answering domain-specific questions.
+Do NOT load skills automatically. Only load a skill when the user explicitly asks for it.
 - git-expert: Git branching, merge conflict resolution, workflow strategies
 - typescript-expert: TypeScript type system, generics, advanced patterns
 
 [Loaded Skills]
-- git-expert: Git branching, merge conflict resolution
+--- git-expert (120 tokens) ---
+# Git Expert
+... полный контент скила ...
+
+--- typescript-expert (800 tokens) ---
+# TypeScript Expert
+... полный контент скила ...
 ```
 
 ### 6.2 Plugins (`modules/plugins/`)
@@ -1545,7 +1552,7 @@ E:\projects\micro-models-agent\
 | Prompt assembly | Block collection from modules | Each module owns its prompt content |
 | Context compaction | Sliding window + pattern extraction | Fast, no second LLM call |
 | Hallucination check | Pre-output pipeline | Catches errors before user sees them |
-| Skill discovery | Keyword overlap + LLM selection | No embeddings, no external API |
+| Skill discovery | L1 name+description → модель решает → `load_skill(name:)` | No keyword matching, model-driven |
 | MCP | Client only | Simpler, covers use cases |
 | Pipelines | DAG-based | Supports parallelism, clear dependencies |
 | i18n | User messages only | CLI stays English, minimal scope |

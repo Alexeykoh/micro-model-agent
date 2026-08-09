@@ -19,11 +19,7 @@ import {
   SessionModule,
 } from "../modules/session/index";
 import { UserProfile } from "../modules/user-profile/profile";
-import {
-  SkillsLoader,
-  SkillsMatcher,
-  SkillsModule,
-} from "../modules/skills/index";
+import { SkillsLoader, SkillsModule } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
 import { LspModule } from "../modules/lsp/index";
 import { IndexerModule } from "../modules/indexer/index";
@@ -230,13 +226,8 @@ export async function bootstrap(
     projectSkillsDir,
   );
 
-  const skillsMatcher = new SkillsMatcher();
-  const skillsBudget = Math.floor(config.contextWindow * 0.1);
-  const skillsModule = new SkillsModule(
-    availableSkills,
-    skillsMatcher,
-    skillsBudget,
-  );
+  const skillsBudget = Math.floor(config.contextWindow * config.skills.budget);
+  const skillsModule = new SkillsModule(availableSkills, skillsBudget);
 
   const toolRegistry = new ToolRegistry();
   registerAllTools(toolRegistry, skillsModule);
@@ -332,7 +323,6 @@ export async function bootstrap(
   const sessionModule = new SessionModule(sessionManager);
   moduleRegistry.register(sessionModule);
 
-  moduleRegistry.register(skillsModule);
   moduleRegistry.register(indexerModule);
 
   const mcpModule = new MCPModule(config);
@@ -455,8 +445,12 @@ export async function bootstrap(
     baseDir,
     promptBlocks,
     getDynamicPromptBlocks: () => {
+      const blocks: PromptBlock[] = [];
       const planBlock = execModule.getSystemPromptBlock();
-      return planBlock ? [planBlock] : [];
+      if (planBlock) blocks.push(planBlock);
+      const skillsBlock = skillsModule.getSystemPromptBlock();
+      if (skillsBlock) blocks.push(skillsBlock);
+      return blocks;
     },
     finalAudit: () => execModule.runFinalAudit(),
     sessionManager,

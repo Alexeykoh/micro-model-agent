@@ -148,7 +148,7 @@ line handler (на каждый Enter):
 | 8 | `new OpenAICompatProvider(...)` | 202-209 |
 | 9 | `baseDir = resolve(projectDir) \|\| process.cwd()` | 211 |
 | 10 | `IndexerModule + buildIndex()` (с try/catch) | 213-222 |
-| 11 | Skills: `SkillsLoader.loadFromAllSources()` → `SkillsModule` | 224-240 |
+| 11 | Skills: `SkillsLoader.loadFromAllSources()` → `SkillsModule` (бюджет = `config.skills.budget * contextWindow`) | 220-231 |
 | 12 | `new ToolRegistry()` + `registerAllTools()` (~25 тулов) | 242-243 |
 | 13 | `new PluginManager()` | 245 |
 | 14 | `buildSystemInfo()` → PromptBlock (critical, essential) | 247-252 |
@@ -161,7 +161,7 @@ line handler (на каждый Enter):
 | 21 | `new ModuleRegistry()` | 324 |
 | 22 | `new ExecutionModule()` + **restorePlan()** (только при messageCount > 0) | 326-331 |
 | 23 | `new SessionModule()` | 333-334 |
-| 24 | Регистрация Skills + Indexer | 336-337 |
+| 24 | Регистрация Indexer (Skills — через `getDynamicPromptBlocks`, не в moduleRegistry) | 335 |
 | 25 | `new MCPModule()` + `await initialize()` | 339-341 |
 | 26 | `new MemoryModule()` | 343-344 |
 | 27 | `new BrowserModule()` (если `browser.enabled`) | 346-354 |
@@ -285,9 +285,9 @@ systemBudget = contextWindow * contextBudget.systemPrompt
 | Источник | Блоки | Приоритет |
 |----------|-------|-----------|
 | `buildSystemInfo()` | System info (OS, shell, workspace, design rules, Windows hints, bash rules, development rules, plan quality rules, autoPlan directive) | critical, essential |
-| `moduleRegistry.collectPromptBlocks()` | От всех модулей (execution, session, skills, indexer, MCP, memory, browser, LSP) | зависит от модуля |
+| `moduleRegistry.collectPromptBlocks()` | От всех модулей (execution, session, indexer, MCP, memory, browser, LSP) | зависит от модуля |
 | AgentsMd files | До 3-х файлов: project/AGENTS.md + project/.mma/AGENTS.md + ~/.mma/AGENTS.md | high |
-| `getDynamicPromptBlocks()` | **План** (execution module) — обновляется КАЖДУЮ итерацию | critical, essential |
+| `getDynamicPromptBlocks()` | **План** (execution) + **Skills** (L1 available + L2 loaded content) — обновляется КАЖДУЮ итерацию | high (skills), critical (plan) |
 | Plugin `onBuildPrompt` | Строки от плагинов | low |
 
 **⚠️ Слабые места:**
@@ -470,7 +470,7 @@ Pipeline: `lookup → onBeforeTool (плагины, может заблокир�
 
 - Порог застревания: 8 итераций на одном шаге
 - Порог повторяющихся tool calls: 3 одинаковых
-- Механика восстановления: hints, skill suggestions, альтернативные тулы, escalation, force-skip (>15 итераций)
+- Механика восстановления: hints, generic skill hint ("если есть подходящие скилы — загрузи через load_skill"), альтернативные тулы, escalation, force-skip (>15 итераций)
 - `checkOffTrack()` (строки 341-370) — **dead code**, нигде не вызывается
 
 ### 7.6 Final Audit (`auditor.ts` + `module.ts:69-93`)
@@ -663,14 +663,36 @@ LLM-as-judge для проверки противоречий в решения�
 
 - Загрузка из builtin/global/project директорий (`.md` и `.skill.md` файлы)
 - Frontmatter: `name` (required), `description`, `keywords`, `mma_version`
-- Бюджет: 10% от contextWindow
-- Матчинг: keyword overlap (анти-паттерн, документирован в AGENTS.md #10)
+- Глобальная директория: `~/.agents/skills/` (стандарт agentskills.io)
+- Проектная директория: `<project>/.mma/skills/`
+
+**Progressive Disclosure (L1/L2/L3):**
+- **L1** — `[Available Skills]` в системном промпте: name + description, динамический блок
+- **L2** — `load_skill(name:)` → полный контент в системном промпте как `[Loaded Skills]`
+- **L3** — `references/`, `scripts/` читаются через `read_file` по требованию
+
+**Бюджет:** отдельный пул `config.skills.budget` (доля от contextWindow, по умолчанию 0.15 = 15%).
+Для 32K: 4,800 токенов. Не отнимается от системного промпта или истории.
+
+**Модель-driven selection:**
+- `SkillsMatcher` и `error-skill-map.ts` **удалены** (keyword matching = anti-pattern, правило #10 AGENTS.md).
+- `load_skill` принимает только параметр `name` (точное имя скила). Модель выбирает по L1-описаниям.
+- Автозагрузка через `onBeforeThink` удалена. Плагин skills — no-op хуки.
+- `skillsModule.search()` — простой substring-матч для REPL `/skill search`, не используется агентом.
+
+**Динамический системный промпт:**
+- `SkillsModule` НЕ регистрируется в `ModuleRegistry` — его блок добавляется через `getDynamicPromptBlocks()`.
+- `getSystemPromptBlock()` вызывается каждую итерацию → `refreshSystemPrompt()` обновляет system-сообщение.
+- При загрузке скила: `loadedSkills` Map обновляется → следующий вызов `getSystemPromptBlock()` включает полный контент.
+- Скилы не теряются при компрессии контекста (в отличие от старой схемы с history).
+
+**Tool result (лёгкий):**
+- `load_skill` возвращает только статус: `"Skill X loaded (N tokens, M remaining in skills budget)"`.
+- Полный контент скила в history НЕ сохраняется.
 
 **⚠️ Слабые места:**
 - **`loader.ts:65-80`**: YAML-парсер не поддерживает многострочные значения и вложенные объекты.
-- **`matcher.ts:19`**: `kw.includes(word)` — false-positive матчинг.
-- **`module.ts:104-112`**: Все available skills всегда в системном промпте — без обрезания по бюджету.
-- **`module.ts:146`**: Оценка токенов `content.length / 4` вместо использования js-tiktoken.
+- **`module.ts:183-185`**: Оценка токенов `content.length / 4` вместо использования js-tiktoken.
 
 ---
 

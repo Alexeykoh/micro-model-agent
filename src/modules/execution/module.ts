@@ -14,7 +14,6 @@ import { getMessageText } from "../../llm/provider";
 import type { Plan } from "./planner";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { suggestSkill } from "../skills/error-skill-map";
 
 const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
@@ -384,9 +383,8 @@ export class ExecutionModule implements AgentModule {
             const recovery = this.stuckDetector.getRecoveryMessage();
             if (recovery && ctx.contextManager) {
               const lastError = this.stuckDetector.getLastErrorOutput();
-              const suggestedSkill = suggestSkill(lastError);
-              const skillHint = suggestedSkill
-                ? `\nConsider loading the "${suggestedSkill}" skill for expert guidance on this error.`
+              const skillHint = lastError
+                ? "\nIf you have relevant skills available, consider loading one with load_skill for expert guidance."
                 : "";
 
               // Actionable hints based on actual error output

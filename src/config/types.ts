@@ -129,6 +129,10 @@ export interface SecurityConfig {
   auditNotifier: AuditNotifierConfig;
 }
 
+export interface SkillsConfig {
+  budget: number;
+}
+
 export interface SessionIsolationConfig {
   enabled: boolean;
   isolatePlugins: boolean;
@@ -188,5 +192,6 @@ export interface AppConfig {
   mcpServers: Record<string, MCPServerConfigEntry>;
   security?: SecurityConfig;
   sessionIsolation?: SessionIsolationConfig;
+  skills: SkillsConfig;
   lsp?: LspConfig;
 }

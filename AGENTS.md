@@ -372,7 +372,7 @@ src/
 ├── modules/            # All modules implement AgentModule interface
 │   ├── registry.ts     # ModuleRegistry: collect blocks/tools/plugins from modules
 │   ├── types.ts        # AgentModule, AgentPlugin interfaces
-│   ├── skills/         # Skills loader (builtin/global/project) + keyword matcher (anti-pattern — needs LLM-based matching)
+│   ├── skills/         # Skills loader (builtin/global/project) + progressive disclosure L1/L2/L3
 │   ├── plugins/        # PluginManager with lifecycle hooks + error isolation
 │   ├── mcp/            # MCP client (stdio/SSE) + server registry
 │   ├── pipelines/      # DAG-based workflow engine (YAML → execute)
