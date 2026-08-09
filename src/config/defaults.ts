@@ -74,6 +74,8 @@ export const DEFAULTS: AppConfig = {
     spinner: true,
     toolStyle: "inline",
     toolComments: true,
+    showContextStats: false,
+    showCompaction: true,
   },
   mcpServers: {
     context7: {

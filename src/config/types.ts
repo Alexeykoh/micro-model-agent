@@ -76,6 +76,10 @@ export interface UiConfig {
   toolStyle: "box" | "inline";
   /** Show model commentary text that accompanies a tool call (sanitized). */
   toolComments: boolean;
+  /** Show context usage bar after each tool cycle (ctx: N/M, compactions, quality). */
+  showContextStats: boolean;
+  /** Show a one-line indicator when context compaction happens. */
+  showCompaction: boolean;
 }
 
 export interface BashSecurityConfig {
@@ -159,7 +163,7 @@ export interface AuditNotifierConfig {
   maxRetries?: number;
 }
 
-import type { LspConfig, LspServerConfig } from '../modules/lsp/types'
+import type { LspConfig, LspServerConfig } from "../modules/lsp/types";
 
 export interface AppConfig {
   version: string;

@@ -73,6 +73,7 @@ export class Agent {
   private systemPromptAdded = false;
   private shutdownRequested = false;
   private abortController: AbortController | null = null;
+  private lastCompactionShown = 0;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
@@ -619,24 +620,33 @@ export class Agent {
           content: `<system-summary>${summaries.join("\n")}</system-summary>`,
         });
 
-        const ctxTokens = contextManager.getEstimatedTokens();
-        const ctxBudget = contextManager.getBudget();
-        const ctxPct = Math.min(
-          100,
-          Math.round((ctxTokens / ctxBudget.history) * 100),
-        );
-        const barLen = 10;
-        const filled = Math.round((ctxPct / 100) * barLen);
-        const ctxBar =
-          pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
-        const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
-        const compCount = contextManager.getCompactionCount();
-        const quality = contextManager.getQuality();
-        const qualityColor =
-          quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
-        onMeta?.(
-          `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
-        );
+        const ui = this.deps.config.ui;
+        if (ui?.showContextStats) {
+          const ctxTokens = contextManager.getEstimatedTokens();
+          const ctxBudget = contextManager.getBudget();
+          const ctxPct = Math.min(
+            100,
+            Math.round((ctxTokens / ctxBudget.history) * 100),
+          );
+          const barLen = 10;
+          const filled = Math.round((ctxPct / 100) * barLen);
+          const ctxBar =
+            pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
+          const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
+          const compCount = contextManager.getCompactionCount();
+          const quality = contextManager.getQuality();
+          const qualityColor =
+            quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
+          onMeta?.(
+            `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
+          );
+        } else if (ui?.showCompaction) {
+          const compCount = contextManager.getCompactionCount();
+          if (compCount > this.lastCompactionShown) {
+            this.lastCompactionShown = compCount;
+            onMeta?.(pc.dim(`\n  ⟳ Context compacted (${compCount})\n`));
+          }
+        }
 
         continue;
       }
