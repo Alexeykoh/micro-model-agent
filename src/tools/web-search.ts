@@ -87,6 +87,10 @@ export const webSearchTool: ToolDefinition = {
           query,
           results: results.join("\n"),
         }),
+        display: t("tool.web_search_result", {
+          query,
+          count: String(results.length),
+        }),
       };
     } catch (err: any) {
       logNetworkRequest(

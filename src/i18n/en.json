@@ -84,6 +84,7 @@
   "tool.friendly.web_browse": "Browsing page",
   "tool.web_fetch_result": "Fetched page: {url} — {chars} chars, {lines} lines{truncated}",
   "tool.web_browse_result": "Browsed page: {url} — {chars} chars, {lines} lines{truncated}",
+  "tool.web_search_result": "Search results for \"{query}\" — {count} results",
   "tool.friendly.browser": "Browser",
   "tool.friendly.subagent": "Sub-agent task",
   "tool.friendly.question": "Question to user",

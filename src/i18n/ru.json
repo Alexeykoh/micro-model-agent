@@ -84,6 +84,7 @@
   "tool.friendly.web_browse": "Просмотр страницы",
   "tool.web_fetch_result": "Загружена страница: {url} — {chars} симв., {lines} строк{truncated}",
   "tool.web_browse_result": "Просмотрена страница: {url} — {chars} симв., {lines} строк{truncated}",
+  "tool.web_search_result": "Результаты поиска \"{query}\" — {count} результатов",
   "tool.friendly.browser": "Браузер",
   "tool.friendly.subagent": "Задача подагенту",
   "tool.friendly.question": "Вопрос пользователю",
