@@ -667,11 +667,14 @@ export class Agent {
       }
       if (hallucinationResult.status === "warn") {
         logger.warn(`Hallucination warning: ${hallucinationResult.reason}`);
-        const warnPrefix = t("hall.uncertainty_prefix");
-        if (onChunk) {
-          onChunk(warnPrefix);
+        const warnLine = `${t("hall.uncertainty_prefix").trim()} ${
+          hallucinationResult.reason ?? ""
+        }`;
+        if (onMeta) {
+          onMeta(`\n${pc.yellow(warnLine)}\n`);
+        } else if (onChunk) {
+          onChunk(`\n${warnLine}\n`);
         }
-        lastText = warnPrefix + lastText;
       }
       if (hallucinationResult.status === "retry") {
         if (this.deps.exitOnComplete) {

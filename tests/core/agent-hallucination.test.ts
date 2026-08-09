@@ -108,11 +108,14 @@ describe("Agent hallucination reactions", () => {
     });
 
     const agent = new Agent(mockDeps);
-    const chunks: string[] = [];
-    const result = await agent.run("test", (chunk) => chunks.push(chunk));
+    const metas: string[] = [];
+    const result = await agent.run("test", undefined, (meta) =>
+      metas.push(meta),
+    );
 
     expect(result.success).toBe(true);
-    expect(chunks.join("")).toContain("[⚠️ Uncertainty]");
+    expect(metas.join("")).toContain("[⚠️ Uncertainty]");
+    expect(metas.join("")).toContain("Uncertainty markers detected");
   });
 
   it("should retry on hallucination retry status", async () => {
@@ -144,8 +147,10 @@ describe("Agent hallucination reactions", () => {
   it("should block on hallucination block status", async () => {
     const mockDeps = createMockDeps({
       hallucinationDetector: {
-        validate: () =>
-          ({ status: "block" as const, reason: "Critical error" }),
+        validate: () => ({
+          status: "block" as const,
+          reason: "Critical error",
+        }),
         getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
         getConsistencyCheck: () => ({
           trackDecision: () => {},
