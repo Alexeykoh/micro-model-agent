@@ -8,7 +8,7 @@ import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
 import { StuckDetector } from "./stuck-detector";
 import { Auditor } from "./auditor";
-import { PlanPersister } from "./plan-persister";
+import { PlanStore } from "./plan-store";
 import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
 import type { Plan } from "./planner";
@@ -25,7 +25,7 @@ export class ExecutionModule implements AgentModule {
   private verifier: StepVerifier;
   private stuckDetector: StuckDetector;
   private auditor: Auditor;
-  private persister: PlanPersister;
+  private store: PlanStore;
   private baseDir: string;
   private lastRecoveryIteration = -STUCK_RECOVERY_COOLDOWN;
   private consecutivePlanWarnings = 0;
@@ -33,23 +33,31 @@ export class ExecutionModule implements AgentModule {
   // Skip the first audit after restoring a plan from disk — gives the user
   // one chance to change the subject before the audit gate locks in.
   private _auditSkipsRemaining = 0;
+  private stuckNotified = false;
+  /**
+   * Deferred <system-summary> messages. Injected by onBeforeTool/onAfterTool
+   * but flushed in onBeforeThink, so they never land between an assistant
+   * tool_call message and its tool results (which breaks message pairing and
+   * buries the warnings the model should react to).
+   */
+  private pendingMessages: Array<{ role: "user"; content: string }> = [];
 
   constructor(baseDir: string, stuckThreshold = 6) {
     this.baseDir = baseDir;
     this.verifier = new StepVerifier(baseDir);
     this.stuckDetector = new StuckDetector(stuckThreshold);
     this.auditor = new Auditor(baseDir);
-    this.persister = new PlanPersister(baseDir);
+    this.store = new PlanStore(baseDir);
   }
 
   setPlan(plan: Plan): void {
     this.tracker = new PlanTracker(plan);
-    this.persister.save(plan);
+    this.store.saveActive(plan);
     this._auditSkipsRemaining = 0; // plan explicitly created — arm the audit gate
   }
 
   restorePlan(): boolean {
-    const plan = this.persister.load();
+    const plan = this.store.loadActive();
     if (!plan) return false;
     this.tracker = new PlanTracker(plan);
     // Advance to the first non-done step
@@ -60,6 +68,10 @@ export class ExecutionModule implements AgentModule {
 
   getTracker(): PlanTracker | null {
     return this.tracker;
+  }
+
+  getStore(): PlanStore {
+    return this.store;
   }
 
   getStuckDetector(): StuckDetector {
@@ -115,24 +127,100 @@ export class ExecutionModule implements AgentModule {
       {
         name: "plan",
         description:
-          'Create, update, show, or abort a multi-step plan. Use "create" at the start of complex tasks. Use "update" after completing each step to track progress. Use "show" to re-print the current plan checklist.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)',
+          'Create, update, show, abort, list, switch, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive current plan and clear active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)',
         parameters: {
           type: "object",
           properties: {
             action: {
               type: "string",
-              enum: ["create", "update", "show", "abort"],
+              enum: ["create", "update", "show", "abort", "list", "switch", "re-plan"],
             },
             title: { type: "string" },
             steps: { type: "array", items: { type: "string" } },
             step: { type: "number" },
             status: { type: "string", enum: ["done", "failed", "skipped"] },
             note: { type: "string" },
+            id: { type: "string", description: "Plan id (for switch action)" },
           },
           required: ["action"],
         },
         handler: async (_ctx, args) => {
           const action = String(args.action);
+
+          if (action === "list") {
+            const metas = this.store.listAll();
+            if (metas.length === 0) {
+              return { success: true, output: t("plan.list_empty") };
+            }
+            const lines = metas.map((m) => {
+              const icon =
+                m.status === "active"
+                  ? "[*]"
+                  : m.status === "draft"
+                    ? "[ ]"
+                    : "[-]";
+              const namePart = m.name ? ` (${m.name})` : "";
+              return `${icon} ${m.id}${namePart} — ${m.title}  ${m.doneCount}/${m.stepCount}`;
+            });
+            return {
+              success: true,
+              output: `${t("plan.list_header")}\n${lines.join("\n")}`,
+            };
+          }
+
+          if (action === "switch") {
+            const planId = String(args.id || "");
+            if (!planId) {
+              return { success: false, output: t("plan.switch_no_id") };
+            }
+            const found = this.store.find(planId);
+            if (!found) {
+              return { success: false, output: t("plan.not_found", { id: planId }) };
+            }
+            this.preserveActive();
+            if (found.status === "draft") {
+              this.store.removeDraft(found.plan.id);
+            } else if (found.status === "archived") {
+              this.store.removeArchived(found.plan.id);
+            }
+            this.setPlan(found.plan);
+            const display = PlanCreator.toPromptBlock(found.plan, 0);
+            return {
+              success: true,
+              output: t("plan.switched", { id: found.plan.id, title: found.plan.title }),
+              display,
+            };
+          }
+
+          if (action === "re-plan") {
+            if (!this.tracker) {
+              return { success: false, output: t("plan.no_active") };
+            }
+            const newSteps = Array.isArray(args.steps)
+              ? args.steps.map(String)
+              : [];
+            if (newSteps.length === 0) {
+              return { success: false, output: t("plan.replan_no_steps") };
+            }
+            const oldPlan = this.tracker.getPlan();
+            const replanned = PlanCreator.replan(
+              oldPlan,
+              newSteps,
+              args.title ? String(args.title) : undefined,
+            );
+            const keptCount = replanned.steps.length - newSteps.length;
+            this.setPlan(replanned);
+            const display = PlanCreator.toPromptBlock(replanned, keptCount);
+            return {
+              success: true,
+              output: t("plan.replanned", {
+                kept: String(keptCount),
+                steps: String(newSteps.length),
+              }),
+              display,
+            };
+          }
+
           if (action === "create") {
             const title = String(args.title || "Task Plan");
             const steps = Array.isArray(args.steps)
@@ -141,6 +229,7 @@ export class ExecutionModule implements AgentModule {
             if (steps.length === 0) {
               return { success: false, output: t("plan.no_steps") };
             }
+            this.preserveActive();
             const plan = PlanCreator.createPlan(title, steps, this.baseDir);
             this.setPlan(plan);
             const display = PlanCreator.toPromptBlock(plan, 0);
@@ -185,7 +274,7 @@ export class ExecutionModule implements AgentModule {
             if (args.note)
               this.tracker.addNote(Number(args.step), String(args.note));
             this.tracker.syncCurrentStep();
-            this.persister.save(this.tracker.getPlan());
+            this.store.saveActive(this.tracker.getPlan());
             const progress = this.tracker.getProgressString();
             const display = this.tracker.toPromptBlock();
             _ctx.sessionLog?.plan(
@@ -220,8 +309,11 @@ export class ExecutionModule implements AgentModule {
             };
           }
           if (action === "abort") {
+            if (this.tracker) {
+              this.store.archivePlan(this.tracker.getPlan());
+            }
             this.tracker = null;
-            this.persister.clear();
+            this.store.clearActive();
             return { success: true, output: t("plan.aborted") };
           }
           if (!this.tracker) {
@@ -273,7 +365,7 @@ export class ExecutionModule implements AgentModule {
             }
             this.tracker.updateStepStatus(currentStep.id, "done");
             this.tracker.syncCurrentStep();
-            this.persister.save(this.tracker.getPlan());
+            this.store.saveActive(this.tracker.getPlan());
             const display = this.tracker.toPromptBlock();
             return {
               success: true,
@@ -333,42 +425,67 @@ export class ExecutionModule implements AgentModule {
     return {
       name: "execution",
       onBeforeThink: (ctx: any) => {
-        const step = this.tracker?.getCurrentStep();
-        if (this.tracker && step) {
-          if (step.id !== this.lastStepId) {
-            this.consecutivePlanWarnings = 0;
-            this.lastStepId = step.id;
+        // Flush deferred <system-summary> messages first so they are visible
+        // to the next model call but never interleave tool messages.
+        if (ctx.contextManager && this.pendingMessages.length > 0) {
+          for (const m of this.pendingMessages.splice(0)) {
+            ctx.contextManager.addMessage(m);
           }
-          this.stuckDetector.setCurrentStep(step.id, step.description);
-          this.stuckDetector.recordIteration(step.id);
-        } else {
+        }
+        if (this.tracker?.isComplete()) {
+          // All steps done/skipped — stop counting "no progress" against the
+          // last step and silence stuck warnings for a finished plan.
           this.stuckDetector.reset();
           this.consecutivePlanWarnings = 0;
           this.lastStepId = -1;
+          this.stuckNotified = false;
+        } else {
+          const step = this.tracker?.getCurrentStep();
+          if (this.tracker && step) {
+            if (step.id !== this.lastStepId) {
+              this.consecutivePlanWarnings = 0;
+              this.lastStepId = step.id;
+              this.stuckNotified = false;
+            }
+            this.stuckDetector.setCurrentStep(step.id, step.description);
+            this.stuckDetector.recordIteration(step.id);
+          } else {
+            this.stuckDetector.reset();
+            this.consecutivePlanWarnings = 0;
+            this.lastStepId = -1;
+            this.stuckNotified = false;
 
-          const iter: number =
-            typeof ctx.iteration === "number" ? ctx.iteration : 0;
-          if (iter === 3 && !this.tracker && ctx.contextManager) {
-            ctx.contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>You have made 3 tool calls without creating a plan. For any task that involves creating files, installing packages, or multiple steps — you MUST use plan create BEFORE continuing. Use the plan tool now with concrete steps (exact filenames, commands, deliverables). Do NOT make any more write/edit/bash calls until you have a plan.</system-summary>`,
-            });
-          }
-          if (iter >= 6 && !this.tracker && ctx.contextManager) {
-            ctx.contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>STOP. ${iter} iterations without a plan. You MUST call plan create RIGHT NOW. No more tool calls until you create a plan.</system-summary>`,
-            });
+            const iter: number =
+              typeof ctx.iteration === "number" ? ctx.iteration : 0;
+            if (iter === 3 && !this.tracker && ctx.contextManager) {
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>You have made 3 tool calls without creating a plan. For any task that involves creating files, installing packages, or multiple steps — you MUST use plan create BEFORE continuing. Use the plan tool now with concrete steps (exact filenames, commands, deliverables). Do NOT make any more write/edit/bash calls until you have a plan.</system-summary>`,
+              });
+            }
+            if (iter >= 6 && !this.tracker && ctx.contextManager) {
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>STOP. ${iter} iterations without a plan. You MUST call plan create RIGHT NOW. No more tool calls until you create a plan.</system-summary>`,
+              });
+            }
           }
         }
         const stuckReason = this.stuckDetector.getStuckReason();
         if (stuckReason) {
-          ctx.logger?.warn(stuckReason);
-          ctx.sessionLog?.plan(
-            "stuck-warning",
-            stuckReason,
-            typeof ctx.iteration === "number" ? ctx.iteration : undefined,
-          );
+          // Log once per stuck episode instead of spamming every iteration.
+          const logIt = this.stuckDetector.isStuck()
+            ? !this.stuckNotified
+            : true;
+          if (logIt) {
+            ctx.logger?.warn(stuckReason);
+            ctx.sessionLog?.plan(
+              "stuck-warning",
+              stuckReason,
+              typeof ctx.iteration === "number" ? ctx.iteration : undefined,
+            );
+            if (this.stuckDetector.isStuck()) this.stuckNotified = true;
+          }
         }
         if (
           this.stuckDetector.isStuck() ||
@@ -443,14 +560,14 @@ export class ExecutionModule implements AgentModule {
       },
       onBeforeTool: (ctx: any, call: any) => {
         const warning = this.checkPlanAlignment(call);
-        if (warning && ctx.contextManager) {
-          ctx.contextManager.addMessage({
+        if (warning) {
+          this.pendingMessages.push({
             role: "user",
             content: `<system-summary>${warning}</system-summary>`,
           });
           this.consecutivePlanWarnings++;
           if (this.consecutivePlanWarnings >= MAX_PLAN_WARNINGS_BEFORE_BLOCK) {
-            ctx.contextManager.addMessage({
+            this.pendingMessages.push({
               role: "user",
               content: `<system-summary>${t("exec.plan_blocked", { step: String(this.tracker?.getCurrentStep()?.id ?? "?"), max: MAX_PLAN_WARNINGS_BEFORE_BLOCK })}</system-summary>`,
             });
@@ -472,20 +589,19 @@ export class ExecutionModule implements AgentModule {
         if (!result.success) {
           this.stuckDetector.recordToolError(call.name, result.output);
 
-          // Immediately inject actionable hint on failure (don't wait for stuck threshold)
+          // Immediately queue an actionable hint on failure (don't wait for
+          // the stuck threshold). Flushed in onBeforeThink so it does not
+          // land between tool messages.
           const actionableHints = this.stuckDetector.getActionableHints();
           const alternative = this.stuckDetector.getToolAlternative();
-          if (
-            (actionableHints.length > 0 || alternative) &&
-            ctx.contextManager
-          ) {
+          if (actionableHints.length > 0 || alternative) {
             const parts = [...actionableHints];
             if (alternative) {
               parts.push(
                 `Tool "${call.name}" crashed. Try "${alternative}" instead.`,
               );
             }
-            ctx.contextManager.addMessage({
+            this.pendingMessages.push({
               role: "user",
               content: `<system-summary>${t("exec.hints", { hints: parts.map((h) => `- ${h}`).join("\n") })}</system-summary>`,
             });
@@ -494,10 +610,10 @@ export class ExecutionModule implements AgentModule {
           this.stuckDetector.recordToolSuccess();
 
           // When a bash command runs code successfully, suggest marking step as done
-          if (call.name === "bash" && result.success && ctx.contextManager) {
+          if (call.name === "bash" && result.success) {
             const cmd = String(call.arguments?.command ?? "");
             if (/node|tsx|ts-node|python|npm\s+(start|test|run)/.test(cmd)) {
-              ctx.contextManager.addMessage({
+              this.pendingMessages.push({
                 role: "user",
                 content: `<system-summary>The command "${cmd}" completed successfully. If this was testing your code, mark the current step as done via plan update step=N status=done.</system-summary>`,
               });
@@ -529,6 +645,16 @@ export class ExecutionModule implements AgentModule {
         }
       },
     };
+  }
+
+  private preserveActive(): void {
+    if (!this.tracker) return;
+    const plan = this.tracker.getPlan();
+    if (plan.steps.every((s) => s.status === "done" || s.status === "skipped")) {
+      this.store.archivePlan(plan);
+    } else {
+      this.store.saveDraft(plan);
+    }
   }
 
   private checkPlanAlignment(call: any): string | null {
@@ -650,7 +776,7 @@ export class ExecutionModule implements AgentModule {
     this.tracker?.updateStepStatus(step.id, "done");
     const hadNext = this.tracker?.advance() ?? false;
     if (this.tracker) {
-      this.persister.save(this.tracker.getPlan());
+      this.store.saveActive(this.tracker.getPlan());
       sessionLog?.plan(
         "auto-advance",
         `Step ${step.id} auto-completed | ${this.tracker.getProgressString()} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,

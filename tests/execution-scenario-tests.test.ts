@@ -198,9 +198,9 @@ describe("Scenario: Progressive plan enforcement", () => {
     execModule.getTracker()!.advance();
     // Write updated plan to disk so restorePlan picks it up
     const plan = execModule.getTracker()!.getPlan();
-    mkdirSync(join(tempDir, ".mma"), { recursive: true });
+    mkdirSync(join(tempDir, ".mma", "plans"), { recursive: true });
     writeFileSync(
-      join(tempDir, ".mma", "plan.json"),
+      join(tempDir, ".mma", "plans", "active.json"),
       JSON.stringify(plan, null, 2),
     );
 

@@ -801,6 +801,39 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 - The execution module warns the model when a tool call targets files outside the current step
 - After `write_file` / `edit_file`, the execution module auto-advances the plan if all files mentioned in the current step exist
 
+### Plan Management (Multi-Plan)
+
+Plans are stored in `<project>/.mma/plans/` with automatic history management:
+
+```
+.mma/plans/
+├── active.json          # current active plan
+├── drafts/              # preserved incomplete plans
+│   └── <plan-id>.json
+└── archive/             # completed or aborted plans
+    └── <plan-id>.json
+```
+
+**Source:** `src/modules/execution/plan-store.ts` (`PlanStore`)
+
+**Plan tool actions:**
+
+| Action | Description |
+|--------|-------------|
+| `create` | Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive. |
+| `update` | Mark step status (done/failed/skipped). |
+| `show` | Print current plan checklist. |
+| `abort` | Archive current plan and clear active slot. |
+| `list` | Show all plans (active, drafts, archived) with progress. |
+| `switch` | Make a different plan active by plan id. |
+| `re-plan` | Iterative replanning: keep completed steps, replace remaining with new steps. |
+
+**Key behaviors:**
+- Creating a new plan never destroys an existing active plan — it's automatically preserved as draft or archive
+- `re-plan` keeps all done/skipped steps and appends new pending steps with sequential ids
+- Legacy `.mma/plan.json` is automatically migrated to `.mma/plans/active.json` on first load
+- The `Plan` interface supports optional `name` field for named plans
+
 ### Stuck Detection
 
 - `stuckThreshold` (default 8) — too many iterations on the same step injects a recovery message

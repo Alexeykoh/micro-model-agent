@@ -14,6 +14,7 @@ export interface Plan {
   steps: PlanStep[];
   createdAt: string;
   baseDir: string;
+  name?: string;
 }
 
 function generatePlanId(): string {
@@ -65,6 +66,28 @@ export class PlanCreator {
       })),
       createdAt: new Date().toISOString(),
       baseDir,
+    };
+  }
+
+  static replan(plan: Plan, newSteps: string[], title?: string): Plan {
+    const kept = plan.steps.filter(
+      (s) => s.status === "done" || s.status === "skipped",
+    );
+    const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
+    const newTitle = title || baseTitle;
+    const totalSteps = kept.length + newSteps.length;
+    const added: PlanStep[] = newSteps.map((desc, i) => ({
+      id: kept.length + i + 1,
+      description: desc,
+      status: "pending" as StepStatus,
+    }));
+    return {
+      id: plan.id,
+      title: `[${totalSteps}] ${newTitle}`,
+      steps: [...kept, ...added],
+      createdAt: plan.createdAt,
+      baseDir: plan.baseDir,
+      name: plan.name,
     };
   }
 
