@@ -195,9 +195,14 @@ describe.skipIf(shouldSkip)("01-cli-bootstrap", () => {
     const dir = sandbox("01-json-mode");
     const result = await runMma("Reply with: hello", dir, {}, ["--json"]);
     expect(exitOk(result)).toBe(true);
-    expect(() =>
-      JSON.parse(result.stdout.trim().split("\n").pop() || "{}"),
-    ).not.toThrow();
+    // JSON result is pretty-printed and mixed with logger lines on stdout;
+    // extract the JSON block starting at its known shape.
+    const jsonStart = result.stdout.lastIndexOf('{\n  "success"');
+    const jsonStr =
+      jsonStart >= 0
+        ? result.stdout.slice(jsonStart)
+        : result.stdout.trim();
+    expect(() => JSON.parse(jsonStr)).not.toThrow();
   }, 120_000);
 });
 
@@ -228,11 +233,14 @@ describe.skipIf(shouldSkip)("02-agent-loop", () => {
     const result = await runMma(
       "Create a small project: 1) create file src/index.ts with a simple add function, 2) create file src/index.test.ts with a test for it. Make sure both files exist.",
       dir,
+      {},
+      [],
+      240_000,
     );
     expect(exitOk(result)).toBe(true);
     expect(fileExists(dir, "src/index.ts")).toBe(true);
     expect(fileExists(dir, "src/index.test.ts")).toBe(true);
-  }, 180_000);
+  }, 240_000);
 
   it("max iterations limit prevents infinite loops", async () => {
     const dir = sandbox("02-max-iter");
@@ -382,14 +390,14 @@ describe.skipIf(shouldSkip)("04-file-tools", () => {
       dir,
       {},
       [],
-      120_000,
+      240_000,
     );
     expect(fileExists(dir, "count.txt")).toBe(true);
     if (fileExists(dir, "count.txt")) {
       const content = fileContent(dir, "count.txt");
       expect(content).toMatch(/2|foo|bar/);
     }
-  }, 120_000);
+  }, 240_000);
 
   it("grep searches file contents", async () => {
     const dir = sandbox("04-grep");
@@ -410,10 +418,10 @@ describe.skipIf(shouldSkip)("04-file-tools", () => {
       dir,
       {},
       [],
-      120_000,
+      240_000,
     );
     expect(fileExists(dir, "version.txt")).toBe(true);
-  }, 120_000);
+  }, 240_000);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

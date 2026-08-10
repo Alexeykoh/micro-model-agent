@@ -53,6 +53,7 @@ function quietLogger() {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    setSessionDir: vi.fn(),
   }
 }
 
@@ -312,9 +313,9 @@ describe('Agent (mock-based integration)', () => {
   it('delivers streaming chunks via onChunk callback', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('chunk1')
-      yield textChunk('chunk2')
-      yield textChunk('chunk3')
+      yield textChunk('This is ')
+      yield textChunk('a normal ')
+      yield textChunk('response')
       yield doneChunk('stop')
     })
     const logger = quietLogger()
@@ -335,7 +336,7 @@ describe('Agent (mock-based integration)', () => {
     const result = await agent.run('test', (chunk) => received.push(chunk))
 
     expect(result.success).toBe(true)
-    expect(received).toEqual(['chunk1', 'chunk2', 'chunk3'])
+    expect(received).toEqual(['This is ', 'a normal ', 'response'])
     agent.shutdown()
   })
 
@@ -552,7 +553,7 @@ describe('Agent (mock-based integration)', () => {
   it('passes normal responses through hallucination check', async () => {
     const config = makeConfig()
     const llmProvider = makeLLMProvider(async function* () {
-      yield textChunk('Normal safe response')
+      yield textChunk('This is a completely normal safe response')
       yield doneChunk('stop')
     })
     const detector = new HallucinationDetector()
@@ -574,7 +575,8 @@ describe('Agent (mock-based integration)', () => {
 
     expect(result.success).toBe(true)
     expect(validateSpy).toHaveBeenCalled()
-    expect(validateSpy.mock.results[0].value.status).toBe('pass')
+    const firstResult = await validateSpy.mock.results[0].value
+    expect(firstResult.status).toBe('pass')
     agent.shutdown()
     vi.restoreAllMocks()
   })
@@ -748,7 +750,7 @@ describe('Agent (mock-based integration)', () => {
         hookLog.push(`before:${call.name}`)
         return true
       },
-      onAfterTool: async (_ctx, result) => {
+      onAfterTool: async (_ctx, _call, result) => {
         hookLog.push(`after:${result.output}`)
       },
     })
@@ -1411,8 +1413,9 @@ describe('ContextManager (integration)', () => {
     const mgr = new ContextManager(32768)
     expect(mgr.needsCompaction()).toBe(false)
 
-    for (let i = 0; i < 20; i++) {
-      mgr.addMessage({ role: 'user', content: 'a' })
+    // Simulate COMPACTION_INTERVAL (15) agent loop iterations
+    for (let i = 0; i < 15; i++) {
+      mgr.noteIteration()
     }
     expect(mgr.needsCompaction()).toBe(true)
   })

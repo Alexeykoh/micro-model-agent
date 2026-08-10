@@ -713,7 +713,9 @@ export class Agent {
 
       if (textContent) {
         contextManager.addMessage({ role: "assistant", content: textContent });
-        slog.saveAssistantMessage(textContent);
+        if (config.session.autoSave) {
+          slog.saveAssistantMessage(textContent);
+        }
         slog.logAssistant(textContent, reasoningContent, undefined, iteration);
       }
 

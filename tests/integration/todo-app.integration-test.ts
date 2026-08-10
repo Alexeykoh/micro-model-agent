@@ -47,7 +47,13 @@ function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
 }
 
 function quietLogger() {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    setSessionDir: vi.fn(),
+  }
 }
 
 function makePluginManager() { return new PluginManager() }
