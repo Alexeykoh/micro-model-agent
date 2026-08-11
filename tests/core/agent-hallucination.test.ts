@@ -70,6 +70,7 @@ describe("Agent hallucination reactions", () => {
       getIterationsSinceCompaction: () => 0,
       getQuality: () => 100,
       noteIteration: () => {},
+      setToolTokens: () => {},
     } as any,
     hallucinationDetector: {
       validate: () => ({ status: "pass" as const }),

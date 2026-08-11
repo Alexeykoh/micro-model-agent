@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { platform } from "os";
 
 export type ProcessStatus = "running" | "exited" | "killed";
@@ -26,10 +26,15 @@ function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (!pid) return;
   if (platform() === "win32") {
-    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      stdio: "ignore",
-    });
+    try {
+      spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+        timeout: 3000,
+      });
+    } catch {
+      /* already dead */
+    }
     return;
   }
   try {

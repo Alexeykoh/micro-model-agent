@@ -94,6 +94,7 @@ export class ContextManager {
   private static readonly MAX_FACTS = 20;
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
+  private toolTokens = 0;
   onCompact: ((summary: Message) => void) | null = null;
 
   constructor(
@@ -435,10 +436,14 @@ export class ContextManager {
   }
 
   getEstimatedTokens(): number {
-    return this.messages.reduce(
-      (sum, m) => sum + this.estimateMessageTokens(m),
-      0,
+    return (
+      this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0) +
+      this.toolTokens
     );
+  }
+
+  setToolTokens(tokens: number): void {
+    this.toolTokens = tokens;
   }
 
   resize(

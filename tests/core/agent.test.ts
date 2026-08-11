@@ -59,6 +59,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
     getQuality: vi.fn().mockReturnValue(100),
     noteIteration: vi.fn(),
+    setToolTokens: vi.fn(),
   };
 
   const mockHallucinationDetector = {

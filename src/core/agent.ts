@@ -288,6 +288,20 @@ export class Agent {
     let auditRetries = 0;
     const MAX_AUDIT_RETRIES = 3;
 
+    // Account for tool definitions in context budget (they're sent via body.tools, not messages)
+    const allToolsForBudget = toolExecutor.getToolDefinitions(
+      this.deps.toolTags,
+    );
+    const toolTokenEstimate = allToolsForBudget.reduce(
+      (sum, t) =>
+        sum +
+        Math.ceil(
+          (t.description.length + JSON.stringify(t.parameters).length) / 4,
+        ),
+      0,
+    );
+    contextManager.setToolTokens(toolTokenEstimate);
+
     while (iteration < config.maxToolIterations && !this.shutdownRequested) {
       iteration++;
       contextManager.noteIteration();
@@ -345,10 +359,9 @@ export class Agent {
       this.refreshSystemPrompt();
       const history = contextManager.getActiveHistory();
 
-      const allTools = toolExecutor.getToolDefinitions(this.deps.toolTags);
       slog.logToolDefs(
-        allTools.length,
-        allTools.map((t) => t.name),
+        allToolsForBudget.length,
+        allToolsForBudget.map((t) => t.name),
         iteration,
       );
 
@@ -365,7 +378,7 @@ export class Agent {
       try {
         for await (const chunk of llmProvider.chat(
           history,
-          allTools as ToolDefinition[],
+          allToolsForBudget as ToolDefinition[],
           this.abortController?.signal,
         )) {
           if (this.shutdownRequested) break;
