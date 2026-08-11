@@ -1,0 +1,7 @@
+{
+  "ignore": [
+    "tests/**",
+    "**/*.test.ts",
+    "**/*.integration-test.ts"
+  ]
+}
