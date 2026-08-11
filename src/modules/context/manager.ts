@@ -91,6 +91,7 @@ export class ContextManager {
   private fileFacts: string[] = [];
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
+  private static readonly MAX_FACTS = 20;
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   onCompact: ((summary: Message) => void) | null = null;
@@ -320,10 +321,16 @@ export class ContextManager {
     };
 
     const firstSystem = this.messages.find((m) => m.role === "system");
+    // Filter out stale system-summary messages from recent turns to prevent nesting
+    const freshRecent = recentTurns.filter((m) => {
+      if (m.role !== "user") return true;
+      const text = getMessageText(m.content);
+      return !text.startsWith("<system-summary>");
+    });
     this.messages = [
       ...(firstSystem ? [firstSystem] : []),
       summary,
-      ...recentTurns,
+      ...freshRecent,
     ];
     this.iterationsSinceCompaction = 0;
 
@@ -339,13 +346,17 @@ export class ContextManager {
       /file (?:created|updated|written|deleted|moved):? ([\w./\\-]+\.[a-z]+)/gi,
     ];
 
+    const newFiles: string[] = [];
+    const newDecisions: string[] = [];
+    const newErrors: string[] = [];
+
     for (const msg of turns) {
       const content = getMessageText(msg.content);
 
       if (msg.role === "tool") {
         for (const pattern of filePatterns) {
           for (const match of content.matchAll(pattern)) {
-            this.fileFacts.push(match[1]);
+            newFiles.push(match[1]);
           }
         }
 
@@ -353,7 +364,7 @@ export class ContextManager {
           const planLine = content
             .split("\n")
             .find((line) => line.includes("Plan:"));
-          if (planLine) this.decisionFacts.push(planLine.trim());
+          if (planLine) newDecisions.push(planLine.trim());
         }
       }
 
@@ -362,7 +373,7 @@ export class ContextManager {
           const line = content
             .split("\n")
             .find((l) => l.includes("decided:") || l.includes("decision:"));
-          if (line) this.decisionFacts.push(line.trim().slice(0, 200));
+          if (line) newDecisions.push(line.trim().slice(0, 200));
         }
       }
 
@@ -381,9 +392,21 @@ export class ContextManager {
               l.includes("Ошибка:") ||
               l.includes("не удалось"),
           );
-        if (line) this.errorFacts.push(line.trim().slice(0, 250));
+        if (line) newErrors.push(line.trim().slice(0, 250));
       }
     }
+
+    // Deduplicate and cap facts to prevent unbounded growth
+    const dedup = (arr: string[]): string[] => [...new Set(arr)];
+    this.fileFacts = dedup([...this.fileFacts, ...newFiles]).slice(
+      -ContextManager.MAX_FACTS,
+    );
+    this.decisionFacts = dedup([...this.decisionFacts, ...newDecisions]).slice(
+      -ContextManager.MAX_FACTS,
+    );
+    this.errorFacts = dedup([...this.errorFacts, ...newErrors]).slice(
+      -ContextManager.MAX_FACTS,
+    );
   }
 
   /**

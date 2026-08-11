@@ -131,18 +131,30 @@ export class StuckDetector {
   hasRepetitiveToolCalls(): boolean {
     if (this.recentToolCalls.length < this.repetitionThreshold) return false;
     const last = this.recentToolCalls[this.recentToolCalls.length - 1];
-    let count = 1;
+    // Check consecutive identical calls (original logic)
+    let consecutiveCount = 1;
     for (let i = this.recentToolCalls.length - 2; i >= 0; i--) {
       if (
         this.recentToolCalls[i].name === last.name &&
         this.recentToolCalls[i].argsKey === last.argsKey
       ) {
-        count++;
+        consecutiveCount++;
       } else {
         break;
       }
     }
-    return count >= this.repetitionThreshold;
+    if (consecutiveCount >= this.repetitionThreshold) return true;
+    // Also detect interleaved patterns (A, B, A, B, A) — count any single
+    // tool+args combo in the window and flag if it appears >= threshold times
+    const counts = new Map<string, number>();
+    for (const call of this.recentToolCalls) {
+      const key = `${call.name}::${call.argsKey}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    for (const count of counts.values()) {
+      if (count >= this.repetitionThreshold) return true;
+    }
+    return false;
   }
 
   hasConsecutiveFailures(): boolean {
@@ -421,6 +433,7 @@ export class StuckDetector {
     this.lastErrorOutput = "";
     this.recentToolCalls = [];
     this.fileRewriteCount.clear();
-    this.escalationCount = 0;
+    // Preserve escalationCount — prevents agent from "gaming" stuck detection
+    // by marking a step done and moving to the next one
   }
 }

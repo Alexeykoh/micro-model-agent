@@ -231,13 +231,14 @@ describe("StuckDetector", () => {
     expect(detector.hasExcessiveRewrites()).toBe(false);
   });
 
-  it("should clear escalation on step change", () => {
+  it("should preserve escalation across step change", () => {
     detector.recordEscalation();
     detector.recordEscalation();
     detector.recordEscalation();
     expect(detector.shouldEscalate()).toBe(true);
     detector.setCurrentStep(2, "step two");
-    expect(detector.shouldEscalate()).toBe(false);
+    // Escalation count is preserved — agent cannot escape by moving to next step
+    expect(detector.shouldEscalate()).toBe(true);
   });
 
   it("should clear last error output on step change", () => {
