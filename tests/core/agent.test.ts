@@ -78,6 +78,12 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    logLLMRequest: vi.fn(),
+    logLLMResponse: vi.fn(),
+    logToolCall: vi.fn(),
+    logToolOutput: vi.fn(),
+    initSessionLog: vi.fn(),
+    closeSessionLog: vi.fn(),
   };
 
   const config: AppConfig = {

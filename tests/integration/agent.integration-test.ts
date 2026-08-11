@@ -54,6 +54,12 @@ function quietLogger() {
     warn: vi.fn(),
     error: vi.fn(),
     setSessionDir: vi.fn(),
+    initSessionLog: vi.fn(),
+    closeSessionLog: vi.fn(),
+    logLLMRequest: vi.fn(),
+    logLLMResponse: vi.fn(),
+    logToolCall: vi.fn(),
+    logToolOutput: vi.fn(),
   }
 }
 

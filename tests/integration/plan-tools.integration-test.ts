@@ -46,7 +46,7 @@ function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
 }
 
 function quietLogger() {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn(), logToolCall: vi.fn(), logToolOutput: vi.fn() }
 }
 
 describe.skipIf(shouldSkip)('Plan & Todo Tools (integration — real LLM)', () => {

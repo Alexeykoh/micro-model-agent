@@ -360,6 +360,8 @@ export class Agent {
       const textChunks: string[] = [];
 
       this.emitPhase(iteration, "thinking", onPhase);
+      const llmStart = Date.now();
+      logger.logLLMRequest(config.model, history.length, input, "agent");
       try {
         for await (const chunk of llmProvider.chat(
           history,
@@ -411,6 +413,13 @@ export class Agent {
           logger.info("LLM call aborted (interrupt)");
           break;
         }
+        logger.logLLMResponse(
+          config.model,
+          textContent.length,
+          Date.now() - llmStart,
+          err.message,
+          "agent",
+        );
         logger.error(`LLM call failed: ${err.message}`);
         slog.logError(err.message);
         pluginManager.runOnError({ iteration, logger }, err);
@@ -423,6 +432,14 @@ export class Agent {
       } finally {
         this.emitPhase(iteration, "done", onPhase);
       }
+
+      logger.logLLMResponse(
+        config.model,
+        (textContent || reasoningContent).length,
+        Date.now() - llmStart,
+        undefined,
+        "agent",
+      );
 
       if (this.shutdownRequested) {
         break;
@@ -857,6 +874,7 @@ export class Agent {
     if (killed > 0) {
       logger.info(`Killed ${killed} background process(es) on shutdown`);
     }
+    logger.closeSessionLog();
     pluginManager.runOnSessionEnd({
       logger,
       sessionManager: sessionManager?.getActiveMeta(),

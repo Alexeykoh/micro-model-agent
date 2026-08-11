@@ -138,7 +138,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: registry,
       toolExecutor: mockToolExecutor,
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 
@@ -162,7 +162,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: registry,
       toolExecutor: mockToolExecutor,
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 
@@ -194,7 +194,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: registry,
       toolExecutor: mockToolExecutor,
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 
@@ -209,7 +209,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: registry,
       toolExecutor: mockToolExecutor,
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 
@@ -227,7 +227,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: registry,
       toolExecutor: mockToolExecutor,
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 
@@ -246,7 +246,7 @@ describe('MoEExecutor executePlan', () => {
       toolRegistry: emptyRegistry,
       toolExecutor: { ...mockToolExecutor, registry: emptyRegistry },
       llmProvider: {} as any,
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), logLLMRequest: vi.fn(), logLLMResponse: vi.fn() } as any,
       baseDir: tmpDir,
     })
 

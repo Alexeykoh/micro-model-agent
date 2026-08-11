@@ -56,7 +56,10 @@ export async function runScenario(
   }
 
   const reps = scenario.reps ?? opts.defaultReps;
-  const threshold = scenario.passThreshold ?? opts.defaultThreshold;
+  const threshold = Math.min(
+    scenario.passThreshold ?? opts.defaultThreshold,
+    reps,
+  );
   const runner: RepRunner = opts.runner ?? defaultRunner;
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const entryPoint = resolveMmaEntry(opts.mmaRoot);

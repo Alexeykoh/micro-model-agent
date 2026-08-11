@@ -30,6 +30,7 @@ export class SessionLogger {
 
     if (this.logger) {
       this.logger.setSessionDir(dir);
+      this.logger.initSessionLog(meta.id);
     }
 
     setAuditSessionDir(dir);

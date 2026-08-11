@@ -159,6 +159,7 @@ async function main(): Promise<void> {
       pluginManager,
       configDir,
       baseDir,
+      logger,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
     const repl = new Repl(
       agent,
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
       configDir,
       baseDir,
       noAgentsMd,
+      logger,
     );
     repl.start();
   }

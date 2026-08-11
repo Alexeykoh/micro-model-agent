@@ -18,6 +18,8 @@ describe("ToolExecutor", () => {
         error: vi.fn(),
         warn: vi.fn(),
         debug: vi.fn(),
+        logToolCall: vi.fn(),
+        logToolOutput: vi.fn(),
       } as any,
     };
     executor = new ToolExecutor(registry, ctx, { getAllPlugins: () => [] });

@@ -14,6 +14,7 @@ import {
 import { Renderer } from "../ui/renderer";
 import { box, divider } from "../ui/box";
 import { t } from "../i18n/index";
+import type { Logger } from "../logger/app-logger";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
@@ -84,6 +85,7 @@ export class Repl implements ReplContext {
   public sessionManager?: SessionManager;
   public skillsModule?: SkillsModule;
   public pluginManager?: PluginManager;
+  public logger?: Logger;
 
   constructor(
     agent: Agent,
@@ -94,12 +96,14 @@ export class Repl implements ReplContext {
     configDir?: string,
     baseDir?: string,
     noAgentsMd?: boolean,
+    logger?: Logger,
   ) {
     this.agent = agent;
     this.config = config;
     this.sessionManager = sessionManager;
     this.skillsModule = skillsModule;
     this.pluginManager = pluginManager;
+    this.logger = logger;
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
@@ -332,6 +336,8 @@ export class Repl implements ReplContext {
         this.pendingClipboardImage = null;
       }
 
+      this.logger?.logREPL("user", input);
+
       process.stdout.write("\n" + pc.green(t("repl.agent")));
 
       const renderer = new Renderer({
@@ -359,6 +365,11 @@ export class Repl implements ReplContext {
       );
       renderer.flush();
       process.stdout.write("\n");
+
+      this.logger?.logREPL(
+        result.success ? "assistant" : "system",
+        result.text?.slice(0, 400) || result.error || "",
+      );
 
       if (!result.success) {
         console.error(pc.red(`${t("error.prefix")}${result.error}`));

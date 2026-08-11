@@ -162,4 +162,26 @@ describe("cert runner", () => {
     expect(res.status).toBe("fail");
     expect(res.passed).toBe(0);
   });
+
+  it("passes 1/1 when reps < default threshold", async () => {
+    // defaultThreshold: 2 but only 1 rep — threshold must clamp to reps
+    const s = scenario({ checks: [{ type: "exitCode", code: 0 }] });
+    const res = await runScenario(s, {
+      model: "m",
+      providerUrl: "http://localhost:8080",
+      mmaRoot,
+      sandboxBase,
+      defaultReps: 1,
+      defaultThreshold: 2,
+      runner: async () => ({
+        code: 0,
+        stdout: "",
+        stderr: "",
+        timedOut: false,
+      }),
+    });
+    expect(res.status).toBe("pass");
+    expect(res.passed).toBe(1);
+    expect(res.of).toBe(1);
+  });
 });

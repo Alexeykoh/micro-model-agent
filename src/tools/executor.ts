@@ -128,6 +128,16 @@ export class ToolExecutor {
       }
     }
 
+    this.ctx.logger.logToolCall(
+      call.name,
+      JSON.stringify(call.arguments)?.slice(0, 200) ?? "",
+      result.success ? "OK" : `FAIL: ${result.output?.slice(0, 200)}`,
+    );
+    this.ctx.logger.logToolOutput(
+      call.name,
+      result.output ?? "",
+      result.success ? 0 : 1,
+    );
     this.ctx.logger.debug(
       `Tool ${call.name}: ${result.success ? "OK" : "FAIL"}`,
     );

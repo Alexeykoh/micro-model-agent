@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
+import { FileLogWriter, type FileLogLevel } from "./file-log";
 import pc from "picocolors";
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
@@ -24,10 +25,12 @@ export class Logger {
   private prefix: string;
   private logDir: string | null = null;
   private sessionDir: string | null = null;
+  private fileLog: FileLogWriter;
 
   constructor(level: LogLevel = "info", prefix = "") {
     this.level = level;
     this.prefix = prefix;
+    this.fileLog = new FileLogWriter();
   }
 
   setLevel(level: LogLevel): void {
@@ -39,6 +42,7 @@ export class Logger {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
+    this.fileLog.setLogDir(dir);
   }
 
   setSessionDir(dir: string): void {
@@ -50,6 +54,63 @@ export class Logger {
 
   clearSessionDir(): void {
     this.sessionDir = null;
+  }
+
+  /** Open a per-session `.log` file (legacy v1 behavior). */
+  initSessionLog(sessionId: string): void {
+    this.fileLog.initSessionLog(sessionId);
+  }
+
+  /** Fall back to daily log files when no session is active. */
+  closeSessionLog(): void {
+    this.fileLog.closeSessionLog();
+  }
+
+  getLogPath(): string {
+    return this.fileLog.getLogPath();
+  }
+
+  cleanupOldLogs(maxDays?: number, maxFiles?: number): void {
+    this.fileLog.cleanupOldLogs(maxDays, maxFiles);
+  }
+
+  // --- Tagged helpers (legacy v1 API) ---
+
+  logLLMRequest(
+    model: string,
+    messagesCount: number,
+    promptPreview: string,
+    caller?: string,
+  ): void {
+    this.fileLog.logLLMRequest(model, messagesCount, promptPreview, caller);
+  }
+
+  logLLMResponse(
+    model: string,
+    responseLength: number,
+    genTimeMs: number,
+    error?: string,
+    caller?: string,
+  ): void {
+    this.fileLog.logLLMResponse(
+      model,
+      responseLength,
+      genTimeMs,
+      error,
+      caller,
+    );
+  }
+
+  logToolCall(tool: string, preview: string, result?: string): void {
+    this.fileLog.logToolCall(tool, preview, result);
+  }
+
+  logToolOutput(tool: string, output: string, exitCode: number): void {
+    this.fileLog.logToolOutput(tool, output, exitCode);
+  }
+
+  logREPL(tag: "user" | "assistant" | "system", content: string): void {
+    this.fileLog.logREPL(tag, content);
   }
 
   child(prefix: string): Logger {
@@ -95,6 +156,13 @@ export class Logger {
 
     const line = `[${level.toUpperCase()}]${prefix} ${ts} — ${sanitizedMsg}${metaStr}`;
     console.log(isColorEnabled() ? LEVEL_COLORS[level](line) : line);
+
+    // Legacy v1 behavior: also append to the tagged `.log` file (session or daily).
+    this.fileLog.log(
+      level.toUpperCase() as FileLogLevel,
+      this.prefix || "MMA",
+      `${ts} — ${sanitizedMsg}${metaStr}`,
+    );
 
     const logTarget = this.sessionDir ?? this.logDir;
     if (logTarget) {
