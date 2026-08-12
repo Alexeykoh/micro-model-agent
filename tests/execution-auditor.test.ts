@@ -123,3 +123,92 @@ describe("Auditor", () => {
 		expect(result.massEditWarning).toBeNull();
 	});
 });
+
+describe("Auditor test-run verification (R4)", () => {
+	let tmpDir: string;
+	let auditor: Auditor;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "mma-audit-tests-"));
+		auditor = new Auditor(tmpDir);
+	});
+
+	afterEach(() => {
+		if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
+	});
+
+	it("fails the audit when a test step exists and tests actually fail", async () => {
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src/util.ts"), "export const add = (a: number, b: number) => a + b;\n");
+		mkdirSync(join(tmpDir, "test"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "test", "util.test.ts"),
+			`import { describe, it, expect } from "bun:test";
+import { add } from "../src/util";
+describe("util", () => {
+  it("adds", () => { expect(add(1, 2)).toBe(3); });
+  it("fails", () => { expect(add(1, 2)).toBe(42); });
+});\n`,
+		);
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/util.ts with add function", "Run tests with bun test"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+		plan.steps[1].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(false);
+		expect(result.testRun).not.toBeNull();
+		expect(result.testRun!.checked).toBe(true);
+		expect(result.testRun!.failed).toBeGreaterThan(0);
+		expect(result.summary).toContain("FAILING");
+	});
+
+	it("passes the audit when tests all pass", async () => {
+		mkdirSync(join(tmpDir, "test"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "test", "ok.test.ts"),
+			`import { describe, it, expect } from "bun:test";
+describe("ok", () => { it("passes", () => { expect(1).toBe(1); }); });\n`,
+		);
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create test/ok.test.ts", "Run tests via bun test"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+		plan.steps[1].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(true);
+		expect(result.testRun).not.toBeNull();
+		expect(result.testRun!.failed).toBe(0);
+	});
+
+	it("does not run tests when no step mentions testing", async () => {
+		// A failing test file exists, but the plan never mentions tests —
+		// the audit must not run bun test (and must not fail on it).
+		mkdirSync(join(tmpDir, "test"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "test", "bad.test.ts"),
+			`import { describe, it, expect } from "bun:test";
+describe("bad", () => { it("fails", () => { expect(1).toBe(2); }); });\n`,
+		);
+		writeFileSync(join(tmpDir, "src.ts"), "export const x = 1;\n");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(true);
+		expect(result.testRun).toBeNull();
+	});
+});

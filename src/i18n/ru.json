@@ -435,6 +435,7 @@
   "exec.step_gate_last": "[✓] Шаг {step} завершён — это был последний шаг. Проверьте всё вместе и предоставьте финальный ответ.]",
   "exec.audit_pass": "[✓] Задача выполнена: {done}/{total} шагов, {files} файлов проверено",
   "exec.audit_fail": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов отсутствует",
+  "exec.audit_fail_tests": "[✗] Задача не выполнена: {done}/{total} шагов, тесты ПАДАЮТ: {failed} failed / {passed} passed — {detail}",
   "exec.audit_fail_typecheck": "[✗] Задача не выполнена: {done}/{total} шагов, {missing} файлов отсутствует, ошибка typecheck: {typeError}",
   "exec.audit_incomplete": "[⚠ Финальная проверка не пройдена: {summary}. Задача НЕ завершена — продолжайте работу. Оставшиеся шаги: {steps}]",
   "exec.mass_edit_warning": "⚠️ План затрагивает {count} файлов — проверьте полный список перед продолжением.",

@@ -1,10 +1,42 @@
-import { existsSync } from "fs";
-import { resolve } from "path";
+import { existsSync, readdirSync } from "fs";
+import type { Dirent } from "fs";
+import { resolve, join } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { isJsMemberAccess } from "../hallucination/js-identifiers";
+import { detectTestResults } from "../../tools/bash";
+import { processRegistry } from "../processes";
 
 const MASS_EDIT_THRESHOLD = 10;
+
+/** Directories never searched for test files. */
+const SKIP_DIRS = new Set([
+	"node_modules",
+	".git",
+	".mma",
+	"dist",
+	"build",
+	"coverage",
+	".next",
+	".nuxt",
+	"vendor",
+]);
+
+const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
+const TEST_STEP_RE =
+	/\b(test(ing|s)?|тест(ы|ирование|ировать)?|провер\w*\s+тест|запустить\s+тест)\b|bun test|npm test|vitest|pytest|go test|jest|mocha/i;
+
+export interface TestRunCheck {
+	/** Whether a real test run was executed at all. */
+	checked: boolean;
+	/** All detected tests passed. */
+	passed: boolean;
+	failed: number;
+	passedCount: number;
+	/** Short list of failing test names (up to 5), or the runner summary. */
+	detail: string;
+	command: string;
+}
 
 export interface AuditResult {
 	passed: boolean;
@@ -13,6 +45,91 @@ export interface AuditResult {
 	modifiedFiles: string[];
 	summary: string;
 	massEditWarning: string | null;
+	testRun: TestRunCheck | null;
+}
+
+/** Recursive, depth-limited walk that stops early on the first test file. */
+function findTestFile(dir: string, depth = 0): string | null {
+	if (depth > 5) return null;
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return null;
+	}
+	for (const e of entries) {
+		const full = join(dir, e.name);
+		if (e.isDirectory()) {
+			if (SKIP_DIRS.has(e.name)) continue;
+			const found = findTestFile(full, depth + 1);
+			if (found) return found;
+		} else if (TEST_EXT_RE.test(e.name)) {
+			return full;
+		}
+	}
+	return null;
+}
+
+/** The plan's step descriptions mention running/checking tests. */
+function hasTestStep(plan: Plan): boolean {
+	return plan.steps.some((s) => TEST_STEP_RE.test(s.description));
+}
+
+/** Extract failing test names from a runner's output (bun/vitest style). */
+function extractFailingNames(output: string, limit = 5): string[] {
+	const names: string[] = [];
+	for (const m of output.matchAll(/\(fail\)\s*([^\n]+)/g)) {
+		const name = m[1].trim();
+		if (name && !names.includes(name)) names.push(name);
+		if (names.length >= limit) break;
+	}
+	return names;
+}
+
+async function runTests(baseDir: string): Promise<TestRunCheck> {
+	const entry = processRegistry.start("bun test", baseDir);
+	const exited = await processRegistry.waitForExit(entry.id, 90_000);
+	const output = entry.log.join("\n");
+	processRegistry.remove(entry.id);
+
+	if (!exited) {
+		// Timed out — we cannot claim success or failure from an unfinished run.
+		return {
+			checked: true,
+			passed: true, // don't block completion on an inconclusive run
+			failed: 0,
+			passedCount: 0,
+			detail: "test run timed out after 90s — result unknown",
+			command: "bun test",
+		};
+	}
+
+	const run = detectTestResults(output);
+	if (!run) {
+		// No recognizable runner summary. If the process exited non-zero we
+		// cannot tell whether tests failed or the runner is missing, so treat
+		// as checked-but-inconclusive (do not block).
+		return {
+			checked: true,
+			passed: entry.exitCode === 0,
+			failed: entry.exitCode === 0 ? 0 : -1,
+			passedCount: 0,
+			detail: output.slice(0, 200).trim(),
+			command: "bun test",
+		};
+	}
+
+	const names = extractFailingNames(output);
+	return {
+		checked: true,
+		passed: run.failed === 0,
+		failed: run.failed,
+		passedCount: run.passed,
+		detail: names.length
+			? names.join("; ")
+			: run.summary || `${run.failed} failed / ${run.passed} passed`,
+		command: "bun test",
+	};
 }
 
 export class Auditor {
@@ -46,6 +163,19 @@ export class Auditor {
 			}
 		}
 
+		// Real test run: when the plan includes a verification step, do not
+		// trust the model's word (or exit codes) — actually execute the tests
+		// and check the runner summary. This catches the "all 7 passing ✅"
+		// final answers that hide 3 failing tests.
+		let testRun: TestRunCheck | null = null;
+		if (hasTestStep(plan) && findTestFile(this.baseDir)) {
+			try {
+				testRun = await runTests(this.baseDir);
+			} catch {
+				testRun = null; // infra failure — don't block on it
+			}
+		}
+
 		const doneSteps = plan.steps.filter((s) => s.status === "done").length;
 		const totalSteps = plan.steps.length;
 
@@ -56,20 +186,29 @@ export class Auditor {
 			});
 		}
 
-		const passed = missingFiles.length === 0;
+		const testsFailing = testRun !== null && testRun.failed > 0;
+		const passed = missingFiles.length === 0 && !testsFailing;
 
 		let summary: string;
-		if (passed) {
-			summary = t("exec.audit_pass", {
-				done: doneSteps,
-				total: totalSteps,
-				files: existingFiles.length,
-			});
-		} else {
+		if (missingFiles.length > 0) {
 			summary = t("exec.audit_fail", {
 				done: doneSteps,
 				total: totalSteps,
 				files: missingFiles.length,
+			});
+		} else if (testsFailing) {
+			summary = t("exec.audit_fail_tests", {
+				done: doneSteps,
+				total: totalSteps,
+				failed: String(testRun!.failed),
+				passed: String(testRun!.passedCount),
+				detail: testRun!.detail,
+			});
+		} else {
+			summary = t("exec.audit_pass", {
+				done: doneSteps,
+				total: totalSteps,
+				files: existingFiles.length,
 			});
 		}
 
@@ -80,6 +219,7 @@ export class Auditor {
 			modifiedFiles: [],
 			summary,
 			massEditWarning,
+			testRun,
 		};
 	}
 }
