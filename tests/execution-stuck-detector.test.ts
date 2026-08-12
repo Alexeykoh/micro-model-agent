@@ -264,3 +264,57 @@ describe("StuckDetector", () => {
     expect(detector.getIterationsOnCurrentStep()).toBe(1);
   });
 });
+
+describe("StuckDetector bash awareness (R3)", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3);
+  });
+
+  it("suggests checking the entry point after repeated empty CLI runs", () => {
+    for (let i = 0; i < 3; i++) {
+      detector.recordBashOutput("bun run src/cli.ts data.csv", "");
+    }
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("EMPTY output"))).toBe(true);
+    expect(hints.some((h) => h.includes("entry point"))).toBe(true);
+  });
+
+  it("does not fire the empty-output hint on a single empty run", () => {
+    detector.recordBashOutput("bun run src/cli.ts data.csv", "");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("EMPTY output"))).toBe(false);
+  });
+
+  it("hints about PowerShell cmdlets in cmd.exe", () => {
+    detector.recordToolError("bash", '"Write-Host" не является внутренней или внешней командой');
+    detector.recordBashOutput("bun run ./src/cli.ts | Write-Host", "err");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("PowerShell"))).toBe(true);
+  });
+
+  it("hints about invented Bun APIs", () => {
+    detector.recordToolError("bash", "TypeError: Bun.fileExistsSync is not a function");
+    detector.recordBashOutput("bun test", "TypeError: Bun.fileExistsSync is not a function");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("does not exist"))).toBe(true);
+  });
+
+  it("hints about bash heredoc inside cmd.exe", () => {
+    detector.recordToolError("bash", "Непредвиденное появление: <<.");
+    detector.recordBashOutput("cat > out.txt << 'EOF'", "Непредвиденное появление: <<.");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("Heredoc"))).toBe(true);
+  });
+
+  it("resets bash awareness on step change", () => {
+    for (let i = 0; i < 3; i++) {
+      detector.recordBashOutput("bun run src/cli.ts data.csv", "");
+    }
+    detector.setCurrentStep(2, "next step");
+    detector.recordBashOutput("bun run src/cli.ts data.csv", "");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("EMPTY output"))).toBe(false);
+  });
+});

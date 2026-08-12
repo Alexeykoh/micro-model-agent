@@ -221,6 +221,77 @@ export function parseToolArgs(raw: string): Record<string, unknown> {
 	return args;
 }
 
+export interface TestRunSummary {
+	framework: string;
+	/** Number of passing test cases (when the runner reports them). */
+	passed: number;
+	/** Number of failing test cases. */
+	failed: number;
+	/** Line of the runner's aggregate summary, if any. */
+	summary?: string;
+}
+
+/**
+ * Detect a test-runner report embedded in command output (bun test / vitest /
+ * jest / mocha / `go test` / pytest). Returns null when the output does not
+ * look like a test run. Used to inject a warning when tests fail so the model
+ * cannot close a "run the tests" step as done.
+ */
+export function detectTestResults(output: string): TestRunSummary | null {
+	if (!output) return null;
+
+	// Framework-specific quantifiers first (unambiguous).
+	const jest = output.match(/Tests:\s+(\d+)\s+passed,\s*(\d+)\s+failed/i);
+	if (jest) {
+		return { framework: "jest", passed: +jest[1], failed: +jest[2] };
+	}
+	const mochaPass = output.match(/(\d+)\s+passing/i);
+	const mochaFail = output.match(/(\d+)\s+failing/i);
+	if (mochaPass || mochaFail) {
+		return {
+			framework: "mocha",
+			passed: mochaPass ? +mochaPass[1] : 0,
+			failed: mochaFail ? +mochaFail[1] : 0,
+		};
+	}
+	const pytest = output.match(/(\d+)\s+passed[^\n]*?(?:,\s*(\d+)\s+failed)?/i);
+	if (
+		pytest &&
+		/pytest|passed|failed/i.test(output) &&
+		/(=====|short test summary|tests\s+ok)/i.test(output) === false &&
+		/pytest|collect/i.test(output)
+	) {
+		return {
+			framework: "pytest",
+			passed: +pytest[1],
+			failed: pytest[2] ? +pytest[2] : 0,
+		};
+	}
+
+	// bun test / vitest: per-case markers + trailing "N pass / M fail".
+	const failMarkers = output.match(/\(fail\)/g)?.length ?? 0;
+	const passMarkers = output.match(/\(pass\)/g)?.length ?? 0;
+	const xMarkers = output.match(/\s×\s/g)?.length ?? 0;
+	const summaryMatch = output.match(/^\s*(\d+)\s+pass[^\n]*$/m);
+	const failSummary = output.match(/^\s*(\d+)\s+fail[^\n]*$/m);
+	const ran = output.match(/(?:Ran|ran)\s+\d+\s+tests/i);
+
+	if (failMarkers > 0 || passMarkers > 0 || xMarkers > 0 || ran) {
+		const failed = Math.max(
+			failMarkers + xMarkers,
+			failSummary ? +failSummary[1] : 0,
+		);
+		const passed = Math.max(passMarkers, summaryMatch ? +summaryMatch[1] : 0);
+		return {
+			framework: ran ? "bun/vitest" : "vitest",
+			passed,
+			failed,
+			summary: summaryMatch?.[0] ?? failSummary?.[0],
+		};
+	}
+	return null;
+}
+
 export const bashTool: ToolDefinition = {
 	name: "bash",
 	description:
@@ -340,6 +411,18 @@ export const bashTool: ToolDefinition = {
 				let output = entry.log.join("\n");
 				processRegistry.remove(entry.id);
 
+				// Auto-verify test runs: a failing suite must not be reported as a
+				// clean success. Inject a prominent marker the model cannot miss
+				// (the tpical failure: tests fail but the CLI exit code is 0).
+				const testRun = detectTestResults(output);
+				if (testRun && testRun.failed > 0) {
+					output =
+						`[test-runner] ${testRun.framework}: ${testRun.failed} test(s) FAILING, ${testRun.passed} passing — do NOT mark verification steps as done while tests fail. Investigate the failures, fix the code, then re-run the tests.\n\n` +
+						output;
+				} else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
+					output = `[test-runner] ${testRun.framework}: all ${testRun.passed} test(s) passing.\n\n${output}`;
+				}
+
 				if (!output && code !== 0) {
 					output = `(exit code ${code})`;
 				}
@@ -368,7 +451,18 @@ export const bashTool: ToolDefinition = {
 				}
 
 				const lines = output.split("\n");
-				if (lines.length > MAX_PREVIEW_LINES) {
+				if (testRun && testRun.failed > 0) {
+					// Keep the failure details: test runners print passing markers
+					// first and the errors + summary at the very end. A short head
+					// preview hides exactly what the model needs to fix the failures.
+					const TEST_TAIL_LINES = 400;
+					const kept = lines.slice(-TEST_TAIL_LINES);
+					const skipped = lines.length - kept.length;
+					output =
+						(skipped > 0
+							? `[... ${skipped} earlier lines omitted — failing tests below]\n`
+							: "") + kept.join("\n");
+				} else if (lines.length > MAX_PREVIEW_LINES) {
 					output =
 						lines.slice(0, MAX_PREVIEW_LINES).join("\n") +
 						`\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`;

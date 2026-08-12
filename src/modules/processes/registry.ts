@@ -22,6 +22,64 @@ const MAX_KEPT_PROCESSES = 20;
 
 let seq = 0;
 
+/** OEM decoder (Russian CP866 / active code page) — cached after first use. */
+let oemDecoder: TextDecoder | null | undefined;
+
+function getOemDecoder(): TextDecoder | null {
+  if (oemDecoder !== undefined) return oemDecoder;
+  oemDecoder = null;
+  try {
+    const cpOut = spawnSync("chcp.com", {
+      encoding: "buffer",
+      timeout: 2000,
+      windowsHide: true,
+    }).stdout;
+    const m = cpOut ? cpOut.toString("latin1").match(/(\d+)/) : null;
+    if (m) {
+      try {
+        oemDecoder = new TextDecoder("ibm" + m[1]);
+      } catch {
+        oemDecoder = null;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!oemDecoder) {
+    try {
+      oemDecoder = new TextDecoder("ibm866");
+    } catch {
+      oemDecoder = null;
+    }
+  }
+  return oemDecoder;
+}
+
+/**
+ * Decode one complete line of output to UTF-8.
+ *
+ * Modern tools (Bun, Node, npm, git) write UTF-8 into the pipe regardless of
+ * the console code page, while built-in cmd.exe commands (echo, type, dir)
+ * emit the OEM code page (CP866 on Russian Windows). Try strict UTF-8 first;
+ * fall back to the OEM decoder when the bytes are not valid UTF-8.
+ */
+function decodeLineToUtf8(buf: Buffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    /* not valid UTF-8 → OEM code page output */
+  }
+  const oem = getOemDecoder();
+  if (oem) {
+    try {
+      return oem.decode(buf);
+    } catch {
+      /* unknown encoding — latin1 fallback */
+    }
+  }
+  return buf.toString("latin1");
+}
+
 function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (!pid) return;
@@ -97,31 +155,10 @@ class ProcessRegistry {
     this.children.set(id, child);
     entry.pid = child.pid ?? 0;
 
-    // On Windows, children spawned via cmd.exe output in the OEM code page,
-    // NOT UTF-8. Detect the active code page via chcp.com; fall back to
-    // ibm866 (Russian CP866) when detection fails — still correct for the
-    // majority of users, and always better than the UTF-8 default.
-    const decoder: TextDecoder =
-      platform() === "win32"
-        ? (() => {
-            try {
-              const cpOut = require("child_process")
-                .execSync("chcp.com", {
-                  encoding: "buffer",
-                  timeout: 2000,
-                  windowsHide: true,
-                })
-                .toString("latin1");
-              const m = cpOut.match(/(\d+)/);
-              if (m) return new TextDecoder("ibm" + m[1]);
-            } catch {
-              /* ignore */
-            }
-            return new TextDecoder("ibm866");
-          })()
-        : new TextDecoder("utf-8");
-
     let buf = "";
+    let byteBuf = Buffer.alloc(0);
+    const isWin = platform() === "win32";
+    const unixDecoder = new TextDecoder("utf-8");
     const pushLine = (line: string) => {
       if (entry.log.length >= MAX_LOG_LINES) {
         entry.log.shift();
@@ -129,19 +166,40 @@ class ProcessRegistry {
       entry.log.push(line);
     };
     const append = (chunk: Buffer) => {
-      const decoded = decoder.decode(chunk, { stream: true });
-      buf += decoded;
-      const lines = buf.split(/\r?\n/);
-      buf = lines.pop() ?? "";
-      for (const line of lines) {
-        pushLine(line);
+      if (!isWin) {
+        const decoded = unixDecoder.decode(chunk, { stream: true });
+        buf += decoded;
+        const lines = buf.split(/\r?\n/);
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          pushLine(line);
+        }
+        return;
+      }
+      // Windows: buffer raw bytes and decode per line. Modern tools (Bun, Node,
+      // npm, git) write UTF-8 into the pipe regardless of the console code
+      // page; cmd.exe builtins (echo, type, dir) emit the OEM code page. Pick
+      // the right decoding per line so Russian text survives either way.
+      byteBuf = byteBuf.length ? Buffer.concat([byteBuf, chunk]) : Buffer.from(chunk);
+      let nl: number;
+      while ((nl = byteBuf.indexOf(0x0a)) !== -1) {
+        const raw = byteBuf.subarray(0, nl);
+        byteBuf = byteBuf.subarray(nl + 1);
+        pushLine(decodeLineToUtf8(raw).replace(/\r$/, ""));
       }
     };
     const flush = () => {
-      buf += decoder.decode();
-      if (buf) {
-        pushLine(buf);
-        buf = "";
+      if (!isWin) {
+        buf += unixDecoder.decode();
+        if (buf) {
+          pushLine(buf);
+          buf = "";
+        }
+        return;
+      }
+      if (byteBuf.length) {
+        pushLine(decodeLineToUtf8(byteBuf));
+        byteBuf = Buffer.alloc(0);
       }
     };
 

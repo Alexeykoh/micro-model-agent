@@ -9,6 +9,7 @@ import {
 	parseToolArgs,
 	translateSemicolonsForCmd,
 	extractEchoFileWrite,
+	detectTestResults,
 } from "../src/tools/bash";
 import { processRegistry } from "../src/modules/processes";
 
@@ -266,4 +267,67 @@ describe("bash tool-call redirection", () => {
 		// No redirection — runs through cmd.exe (may fail on the bogus command).
 		expect(result.output).not.toContain('[redirected to tool "bash"]');
 	});
+});
+
+describe("detectTestResults", () => {
+  it("detects bun test failing run from markers and summary", () => {
+    const out = [
+      "(pass) CSV Transaction Analyzer > должен парсить CSV [1.77ms]",
+      "(fail) CSV Transaction Analyzer > должен обрабатывать пустой файл [0.31ms]",
+      "",
+      " 8 pass",
+      " 3 fail",
+      "22 expect() calls",
+      "Ran 11 tests across 1 file. [46.00ms]",
+    ].join("\n");
+    const r = detectTestResults(out);
+    expect(r).not.toBeNull();
+    expect(r!.failed).toBe(3);
+    expect(r!.passed).toBe(8);
+    expect(r!.framework).toBe("bun/vitest");
+  });
+
+  it("detects all-passing bun test run", () => {
+    const out = [
+      "(pass) test one",
+      "(pass) test two",
+      "",
+      " 2 pass",
+      "Ran 2 tests across 1 file.",
+    ].join("\n");
+    const r = detectTestResults(out);
+    expect(r).not.toBeNull();
+    expect(r!.failed).toBe(0);
+    expect(r!.passed).toBe(2);
+  });
+
+  it("detects jest summary", () => {
+    const r = detectTestResults("Tests: 5 passed, 2 failed\nTest Suites: 1 failed");
+    expect(r).not.toBeNull();
+    expect(r!.framework).toBe("jest");
+    expect(r!.failed).toBe(2);
+    expect(r!.passed).toBe(5);
+  });
+
+  it("detects mocha failing count", () => {
+    const r = detectTestResults("9 passing (1s)\n2 failing\n1 pending");
+    expect(r).not.toBeNull();
+    expect(r!.framework).toBe("mocha");
+    expect(r!.failed).toBe(2);
+    expect(r!.passed).toBe(9);
+  });
+
+  it("returns null for non-test output", () => {
+    expect(detectTestResults("bun run build\n✓ built in 728ms")).toBeNull();
+    expect(detectTestResults("")).toBeNull();
+    expect(detectTestResults("No tests found")).toBeNull();
+  });
+
+  it("counts only the failing summary when vitest reports bare numbers", () => {
+    // Some runners print only the aggregate line without (pass)/(fail) markers.
+    const r = detectTestResults(" 7 pass\n 1 fail\nRan 8 tests");
+    expect(r).not.toBeNull();
+    expect(r!.failed).toBe(1);
+    expect(r!.passed).toBe(7);
+  });
 });

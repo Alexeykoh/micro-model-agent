@@ -11,6 +11,7 @@ import { Auditor } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
+import { detectTestResults } from "../../tools/bash";
 import type { Plan } from "./planner";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
@@ -611,6 +612,14 @@ export class ExecutionModule implements AgentModule {
 				}
 			},
 			onAfterTool: (ctx: any, call: any, result: any) => {
+				// Remember every bash invocation (successful or not) so stuck
+				// detection can reason about e.g. repeated runs with empty output.
+				if (call.name === "bash") {
+					this.stuckDetector.recordBashOutput(
+						String(call.arguments?.command ?? ""),
+						String(result.output ?? ""),
+					);
+				}
 				if (!result.success) {
 					this.stuckDetector.recordToolError(call.name, result.output);
 
@@ -634,10 +643,25 @@ export class ExecutionModule implements AgentModule {
 				} else {
 					this.stuckDetector.recordToolSuccess();
 
-					// When a bash command runs code successfully, suggest marking step as done
+					// When a bash command runs code successfully, suggest marking the
+					// step done — unless the output shows failing tests, which must
+					// never be reported as a clean success.
 					if (call.name === "bash" && result.success) {
 						const cmd = String(call.arguments?.command ?? "");
-						if (/node|tsx|ts-node|python|npm\s+(start|test|run)/.test(cmd)) {
+						const testRun = detectTestResults(String(result.output ?? ""));
+						if (testRun && testRun.failed > 0) {
+							this.pendingMessages.push({
+								role: "user",
+								content: `<system-summary>${testRun.framework} reported ${testRun.failed} FAILING test(s) (${testRun.passed} passing). Do NOT mark the current step as done — fix the failing tests (read the failure output, correct the code) and re-run them until all pass.</system-summary>`,
+							});
+						} else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
+							this.pendingMessages.push({
+								role: "user",
+								content: `<system-summary>${testRun.framework}: all ${testRun.passed} test(s) passed for "${cmd}". You may mark the current step as done via plan update step=N status=done.</system-summary>`,
+							});
+						} else if (
+							/node|tsx|ts-node|python|npm\s+(start|test|run)/.test(cmd)
+						) {
 							this.pendingMessages.push({
 								role: "user",
 								content: `<system-summary>The command "${cmd}" completed successfully. If this was testing your code, mark the current step as done via plan update step=N status=done.</system-summary>`,

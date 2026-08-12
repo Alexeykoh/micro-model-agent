@@ -111,3 +111,33 @@ describe("processRegistry", () => {
     expect(processRegistry.getLog(entry.id)).toContain("[process error]");
   });
 });
+
+describe("processRegistry encoding (R1)", () => {
+  it("decodes Russian UTF-8 output from a bun child process cleanly", async () => {
+    const entry = processRegistry.start(
+      `bun -e "console.log('Тест кириллицы: анализ транзакций')"`,
+      process.cwd(),
+      "ses-enc",
+    );
+    const done = await processRegistry.waitForExit(entry.id, 15000);
+    expect(done).toBe(true);
+    const joined = entry.log.join("\n");
+    expect(joined).toContain("Тест кириллицы: анализ транзакций");
+    expect(joined).not.toMatch(/╨|╤|╥/); // no mojibake
+    processRegistry.remove(entry.id);
+  });
+
+  it("decodes mixed ASCII + Russian output without garbling", async () => {
+    const entry = processRegistry.start(
+      `bun -e "console.log('OK ' + 'Привет мир')"`,
+      process.cwd(),
+      "ses-enc2",
+    );
+    const done = await processRegistry.waitForExit(entry.id, 15000);
+    expect(done).toBe(true);
+    const joined = entry.log.join("\n");
+    expect(joined).toContain("OK Привет мир");
+    expect(joined).not.toMatch(/╨|╤|╥/);
+    processRegistry.remove(entry.id);
+  });
+});
