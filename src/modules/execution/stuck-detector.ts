@@ -357,6 +357,14 @@ export class StuckDetector {
 			);
 		}
 
+		// The model keeps writing a file whose output shows a type/syntax
+		// error — read the actual error and fix it, don't rewrite blindly.
+		if (/error TS\d+|typecheck failed|syntax check failed/i.test(error)) {
+			hints.push(
+				"The file still has a type/syntax error (see the error line in the output). Read the file with read_file around the reported line, fix the actual error, then re-run — rewriting the whole file blindly usually makes it worse.",
+			);
+		}
+
 		// Bash heredoc in cmd.exe.
 		if (/unexpected.*<<|Непредвиденное появление/i.test(error)) {
 			hints.push(

@@ -620,6 +620,21 @@ export class ExecutionModule implements AgentModule {
 						String(result.output ?? ""),
 					);
 				}
+				// A write/edit/bash that reports success but still carries a
+				// type/syntax error in its output is NOT a success — the model must
+				// fix the actual error, not keep rewriting the file blindly. Feed it
+				// to the stuck detector so the rewrite-loop hint fires.
+				const toolText = String(result.output ?? "");
+				if (
+					/error TS\d+|\[Project typecheck failed\]|\[Syntax check failed\]/.test(
+						toolText,
+					)
+				) {
+					this.stuckDetector.recordToolError(
+						call.name,
+						toolText.slice(0, 300),
+					);
+				}
 				if (!result.success) {
 					this.stuckDetector.recordToolError(call.name, result.output);
 

@@ -128,6 +128,12 @@ const UNIX_TO_WIN_HINTS: Record<string, string> = {
 	echo: "echo works on Windows, but avoid pipes (|).",
 	"Get-Content": "Use the read_file tool instead.",
 	"Select-Object": "Use the read_file tool with offset/limit instead.",
+	"Write-Host": "PowerShell cmdlet — this shell is cmd.exe. Print with plain echo instead.",
+	"Select-String": "Use the grep tool instead.",
+	"Out-File": "Write files with the write_file tool instead.",
+	"Set-Content": "Write files with the write_file tool instead.",
+	"Get-ChildItem": "Use the list_dir tool instead.",
+	"Remove-Item": "Use the delete_file tool instead.",
 };
 
 /** Unix commands that can be transparently translated to cmd.exe equivalents. */
@@ -292,10 +298,31 @@ export function detectTestResults(output: string): TestRunSummary | null {
 	return null;
 }
 
+/**
+ * R5: a command that runs a script file (bun/node/python/...) exited 0 but
+ * printed nothing. The most common cause in agent sessions: the program has
+ * no entry point — nobody calls its main() with the CLI args. Surface a
+ * concrete hint instead of letting the model stare at an empty output.
+ */
+const CLI_FILE_RUN_RE =
+	/\b(bun|node|deno|python|python3|tsx|ts-node|php|ruby|go\s+run)\S*\s+(run\s+)?["']?[\w./\\-]+\.(ts|js|tsx|jsx|mjs|cjs|py)\b/;
+
+export function emptyCliRunHint(
+	command: string,
+	output: string,
+	code: number | null,
+): string | null {
+	if (code !== 0 || output.trim()) return null;
+	if (/[>|]/.test(command)) return null; // redirection/pipes — output went elsewhere
+	if (/\b(bun test|vitest|pytest|jest|mocha|--test)\b/i.test(command)) return null;
+	if (!CLI_FILE_RUN_RE.test(command)) return null;
+	return "the command exited 0 but printed NOTHING to stdout. If this should run a CLI program, the file probably has no entry point: read it with read_file and check the code actually calls its main function with command-line arguments (e.g. main(process.argv[2])) and prints results with console.log.";
+}
+
 export const bashTool: ToolDefinition = {
 	name: "bash",
 	description:
-		"Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_kill. Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).",
+		"Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_kill. Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Sequential commands: use && (a leading ; is auto-converted to &).",
 	tags: ["shell", "code"],
 	parameters: {
 		type: "object",
@@ -410,6 +437,13 @@ export const bashTool: ToolDefinition = {
 				const code = entry.exitCode;
 				let output = entry.log.join("\n");
 				processRegistry.remove(entry.id);
+
+				// R5: script file ran with exit 0 but empty output — likely a
+				// missing entry point (main is never called with argv).
+				const cliHint = emptyCliRunHint(command, output, code);
+				if (cliHint) {
+					output = `(exit code 0, no output)\n\nHint: ${cliHint}`;
+				}
 
 				// Auto-verify test runs: a failing suite must not be reported as a
 				// clean success. Inject a prominent marker the model cannot miss

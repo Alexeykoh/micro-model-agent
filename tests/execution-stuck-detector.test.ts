@@ -318,3 +318,28 @@ describe("StuckDetector bash awareness (R3)", () => {
     expect(hints.some((h) => h.includes("EMPTY output"))).toBe(false);
   });
 });
+
+describe("StuckDetector typecheck awareness (R5.2)", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3);
+  });
+
+  it("hints to read the file instead of rewriting blindly on typecheck errors", () => {
+    detector.recordToolError("write_file", "[Project typecheck failed]: src/a.ts(14,19): error TS2322");
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("rewriting the whole file blindly"))).toBe(true);
+  });
+
+  it("rewrite-loop hint fires when a typecheck-tagged file keeps being rewritten", () => {
+    for (let i = 0; i < 4; i++) {
+      detector.recordFileRewrite("src/a.ts");
+      detector.recordToolError("write_file", "[Project typecheck failed]: src/a.ts(14,19): error TS2322");
+    }
+    expect(detector.hasExcessiveRewrites()).toBe(true);
+    const hints = detector.getActionableHints();
+    expect(hints.some((h) => h.includes("rewritten"))).toBe(true);
+    expect(hints.some((h) => h.includes("rewriting the whole file blindly"))).toBe(true);
+  });
+});

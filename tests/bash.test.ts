@@ -10,6 +10,7 @@ import {
 	translateSemicolonsForCmd,
 	extractEchoFileWrite,
 	detectTestResults,
+	emptyCliRunHint,
 } from "../src/tools/bash";
 import { processRegistry } from "../src/modules/processes";
 
@@ -329,5 +330,42 @@ describe("detectTestResults", () => {
     expect(r).not.toBeNull();
     expect(r!.failed).toBe(1);
     expect(r!.passed).toBe(7);
+  });
+});
+
+describe("emptyCliRunHint (R5)", () => {
+  it("hints about a missing entry point when a .ts file ran with empty output", () => {
+    const h = emptyCliRunHint("bun run src/cli.ts data.csv", "", 0);
+    expect(h).not.toBeNull();
+    expect(h!).toContain("entry point");
+  });
+
+  it("matches a bare interpreter invocation without 'run'", () => {
+    expect(emptyCliRunHint("bun src/cli.ts", "", 0)).not.toBeNull();
+    expect(emptyCliRunHint("node index.js", "", 0)).not.toBeNull();
+    expect(emptyCliRunHint("python script.py", "", 0)).not.toBeNull();
+  });
+
+  it("does not fire for non-empty output or non-zero exit", () => {
+    expect(emptyCliRunHint("bun run src/cli.ts", "done\n", 0)).toBeNull();
+    expect(emptyCliRunHint("bun run src/cli.ts", "", 1)).toBeNull();
+  });
+
+  it("does not fire for test runners or non-file commands", () => {
+    expect(emptyCliRunHint("bun test", "", 0)).toBeNull();
+    expect(emptyCliRunHint("bun run build", "", 0)).toBeNull();
+    expect(emptyCliRunHint("npm run dev", "", 0)).toBeNull();
+  });
+
+  it("does not fire when output is redirected to a file", () => {
+    expect(emptyCliRunHint("bun run src/cli.ts > out.txt", "", 0)).toBeNull();
+  });
+});
+
+describe("bash tool Windows guidance (R6)", () => {
+  it("lists PowerShell cmdlet and heredoc anti-patterns in the description", () => {
+    expect(bashTool.description).toContain("Write-Host");
+    expect(bashTool.description).toContain("cmd.exe");
+    expect(bashTool.description).toContain("heredoc");
   });
 });
