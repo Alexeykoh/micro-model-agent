@@ -59,12 +59,14 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
 - **`--exit-on-complete`** — завершиться сразу после первого финального ответа; интерактивные тулзы (`question`/`approve`) не блокируют stdin, а возвращают ошибку.
 - **`-d <dir>`** — рабочая директория агента (туда он создаёт файлы).
 - Каждый прогон создаёт сессию в `~/.mma/sessions/<id>/` (`meta.json` + `history.jsonl` + `session.jsonl`). После прогона можно смотреть:
+
   ```bash
   bun run mma session list
   bun run mma session show <id>
   ```
 
 **Правила тестового прогона:**
+
 1. Новый тест-кейс = новая подпапка `_testing/<case-name>/`.
 2. Промпт формулируй конкретно: что создать, с каким содержимым, куда.
 3. Оценивай результат по фактам (файлы на месте, содержимое корректно, exit code), а не по словам агента.
@@ -151,6 +153,7 @@ Default configuration is defined in `src/config/security.ts` and merged with use
 #### Backward Compatibility
 
 Security is **disabled by default** (`SecurityConfig.enabled: false`):
+
 - All validators (command, path, network, content scan) return `allowed: true` when `enabled` is `false`
 - The default `DEFAULT_SECURITY_CONFIG` has empty/benign defaults — blacklists exist as templates, not active rules
 - To enable security: set `security.enabled: true` and configure individual modules (bash, paths, network, contentScan)
@@ -162,6 +165,7 @@ Security is **disabled by default** (`SecurityConfig.enabled: false`):
 > **Status:** Fully implemented and tested (177 tests passing)
 
 ##### Session File Encryption (`src/modules/security/session-encryption.ts`)
+
 - Encrypts `history.jsonl` and `session.jsonl` files using AES-256-GCM
 - Configurable via `security.sessionEncryption.enabled`
 - Custom key path support (`security.sessionEncryption.keyPath`)
@@ -169,6 +173,7 @@ Security is **disabled by default** (`SecurityConfig.enabled: false`):
 - Integrated with `SessionStore` for transparent encryption/decryption
 
 ##### Audit Notifications (`src/modules/security/audit-notifier.ts`)
+
 - File-based notifications to `~/.mma/logs/audit-notifications.jsonl`
 - Webhook support for real-time notifications
 - Configurable severity levels (`low`, `medium`, `high`, `critical`)
@@ -177,6 +182,7 @@ Security is **disabled by default** (`SecurityConfig.enabled: false`):
 - Statistics and analytics via `getStats()`
 
 ##### Security Policies (`src/modules/security/security-policies.ts`)
+
 - Three preset policies:
   - **Strict**: Maximum security, minimal flexibility (recommended for production)
   - **Balanced**: Good security with reasonable flexibility (default)
@@ -186,6 +192,7 @@ Security is **disabled by default** (`SecurityConfig.enabled: false`):
 - Use case recommendations
 
 ##### CLI Security Commands
+
 ```bash
 mma security status              # Show current security configuration
 mma security policies           # List available security policies
@@ -250,12 +257,14 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 Большинство Jinja-шаблонов (llama.cpp, vLLM) требуют, чтобы `role: "system"` сообщение было **первым** в массиве `messages`. Если system-сообщение появляется после `user`, `assistant` или `tool` — API возвращает 400.
 
 **Было (сломано):**
+
 ```typescript
 contextManager.addMessage({ role: "system", content: summary });
 // → system ПОСЛЕ tool/assistant → Jinja Exception
 ```
 
 **Стало (работает):**
+
 ```typescript
 contextManager.addMessage({ role: "user", content: `<system-summary>${summary}</system-summary>` });
 // → user, не system — не нарушает Jinja
@@ -268,6 +277,7 @@ contextManager.addMessage({ role: "user", content: `<system-summary>${summary}</
 Некоторые модели (Qwen 3.5-9B через llama.cpp) **не стримят JSON tool_calls** через `delta.tool_calls`. Streaming возвращает только `reasoning_content`, а финальный ответ содержит tool_calls только в non-streaming режиме.
 
 **Логика в `openai-compat.ts`:**
+
 1. Пробуем streaming (`doStream` — SSE через `delta.*`)
 2. Если streaming не вернул ни `text`, ни `tool_call` — вызываем fallback `doNonStreaming`
 3. Fallback всегда отправляет `stream: false` явно
@@ -279,11 +289,13 @@ contextManager.addMessage({ role: "user", content: `<system-summary>${summary}</
 В `doNonStreaming` тело запроса должно содержать `stream: false`. Без этого поля некоторые бэкенды (llama.cpp, особенно с кастомными шаблонами) могут парсить запрос иначе и вернуть 400.
 
 **Было (сломано):**
+
 ```typescript
 const body = { model, messages, max_tokens };
 ```
 
 **Стало (работает):**
+
 ```typescript
 const body = { model, messages, stream: false, max_tokens };
 ```
@@ -508,11 +520,13 @@ action: async () => {
 ```
 
 **How it works:**
+
 - `withExclusiveInput()` sets `inputLocked = true` before running the callback
 - REPL line handler checks `this.agentRunning || this.inputLocked` — skips routing to agent/commands when locked
 - `finally` block guarantees `inputLocked` is cleared on errors
 
 **When to use:**
+
 - Any REPL command that takes over stdin for a multi-step interactive flow
 - Whenever a new `readline.Interface` on `process.stdin` would conflict with the REPL's own readline
 - Interactive tools should accept the REPL's existing readline instead of creating their own (see `runSetup(externalRl?)`)
@@ -719,12 +733,14 @@ MMA automatically builds and maintains a map of the current workspace.
 Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatically: **rich** when `process.stdout.isTTY && !process.env.CI`, otherwise **plain**. Colors come from `src/ui/colors.ts` (`createColors`), enabled only on a TTY and disabled in CI / on `NO_COLOR` (overrides picocolors' win32 default-on).
 
 **Event flow:** `Agent.run()` takes `(onChunk, onMeta, onTool, onPhase)`. The renderer maps:
+
 - `text` → markdown-formatted streaming (via `FormattingStream`)
 - `meta` → raw status/output lines (reasoning, tool results, MoE status)
 - `onTool` `start`/`end` events → inline tool headers (rich, default) or `⚙ name` prefixes (plain)
 - `onPhase` `thinking`/`done` → thinking spinner (e.g. `⠋ Thinking…`) while the model loads and generates; auto-cleared on first chunk, tool card, or `done`
 
 **Rich mode extras:**
+
 - Spinner (`src/ui/spinner.ts`) on stderr during LLM wait and tool execution — single-line `\r` overwrite, cleared before any text write.
 - **Inline tool headers** (default, opencode-style): each tool call opens with a marker line — `← Editing path` (write/edit/create/move/delete), `→ Reading path` (read/list/file_info), `✱ Searching ...` (glob/grep), `$ Running command ...` (bash), `⚙ ...` (others). Tool output streams under a 2-space gutter (no box); `toolEnd` prints `✓ Nms` + a dim `divider()` + blank line to separate tool calls.
 - **Boxed tool cards** (`ui.toolStyle: "box"`): legacy `┌─ ✓ write_file ─┐` cards with args summary, wrapped body, duration.
@@ -831,6 +847,7 @@ Plans are stored in `<project>/.mma/plans/` with automatic history management:
 | `re-plan` | Iterative replanning: keep completed steps, replace remaining with new steps. |
 
 **Key behaviors:**
+
 - Creating a new plan never destroys an existing active plan — it's automatically preserved as draft or archive
 - `re-plan` keeps all done/skipped steps and appends new pending steps with sequential ids
 - Legacy `.mma/plan.json` is automatically migrated to `.mma/plans/active.json` on first load
@@ -886,6 +903,7 @@ Results: `pass` → show | `warn` → show with ⚠️ | `retry` → re-call LLM
 ## Migration Safety
 
 MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `version: "2.0.0"` or has v1-only fields (`apiBase`, `temperature`):
+
 1. Backs up `config.json` → `config.json.bak`
 2. Backs up entire `~/.mma/` → `~/.mma.bak/`
 3. Starts fresh with v2 defaults
@@ -893,7 +911,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 
 ## Versioning Rules (Semantic Versioning)
 
-### When to bump which part:
+### When to bump which part
 
 | Version Part | When to Bump | Examples |
 |-------------|--------------|----------|
@@ -901,10 +919,11 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 | **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook |
 | **PATCH** (0.0.Z) | Bug fixes, typo fixes, i18n additions, doc updates, performance improvements, test additions, dependency updates (non-breaking) | Fix crash in `bash` tool, add ru translation, update README, fix typo in error message |
 
-### Release Process:
+### Release Process
 
 1. **Code changes complete** → `bun test` + `tsc --noEmit` must pass
 2. **Update version** in `package.json`:
+
    ```bash
    # For patch
    npm version patch
@@ -915,12 +934,14 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
    # For major
    npm version major
    ```
+
 3. **Build**: `bun run build:prod`
 4. **Publish**: `npm publish --access public`
 5. **Git tag**: `npm version` creates tag automatically, push with `git push --follow-tags`
 6. **Update CHANGELOG** (if exists) or AGENTS.md with notable changes
 
-### Commands that require MINOR bump:
+### Commands that require MINOR bump
+
 - New CLI subcommand (`mma <new-cmd>`)
 - New REPL slash command (`/new-cmd`)
 - New tool in `tools/`
@@ -929,7 +950,8 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - New config option that changes behavior
 - New security policy/feature
 
-### Commands that require PATCH bump:
+### Commands that require PATCH bump
+
 - Bug fixes in existing commands/tools
 - i18n string additions/fixes
 - Documentation updates
@@ -937,7 +959,8 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Performance optimizations
 - Dependency updates (non-breaking)
 
-### Commands that require MAJOR bump:
+### Commands that require MAJOR bump
+
 - Removing/renaming CLI commands
 - Changing config schema (breaking)
 - Removing tools/modules
@@ -946,6 +969,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Architecture rewrites
 
 ### Current Version: 0.28.0
+
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
 - **23** = model certification module (`mma model certify`), cert checkmarks in model lists, `--model/--provider-url` env-var overrides used by the harness
@@ -956,3 +980,4 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **26** = opencode-style inline tool headers (`ui.toolStyle`, default "inline"), model commentary next to tool calls (`ui.toolComments`), diffs without background color
 - **27** = Windows hardening, hallucination fixes
 - **28** = double-Esc interrupt fix (Bun readline collapses fast Esc Esc into one keypress — ESC bytes counted instead of events), abortable in-flight LLM requests on interrupt (`LLMProvider.chat` accepts an `AbortSignal`), clipboard paste hint when the buffer has no image
+- **29** = R1–R3 regression fixes from the CSV/CLI test runs: smart output decoding on Windows (per-line UTF-8 detection with OEM/ibm866 fallback in `registry.ts` — bun/node children write UTF-8, cmd.exe writes OEM), `detectTestResults()` auto-verification in `bash` (bun test/vitest/jest/mocha/pytest markers, `[test-runner]` warning blocks marking verification steps done on failing runs, failing runs keep the output tail instead of a 15-line head preview), stuck-detector bash awareness (`recordBashOutput`: empty-output → check entry point, PowerShell cmdlets in cmd.exe, invented Bun APIs, bash heredoc hints)
