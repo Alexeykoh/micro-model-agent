@@ -1,9 +1,49 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { BrowserSession, BrowserActionTracker } from '../src/modules/browser/session'
+import { BrowserSession, BrowserActionTracker, ConsoleBuffer } from '../src/modules/browser/session'
 import { DEFAULT_BROWSER_CONFIG } from '../src/modules/browser/types'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+
+describe('ConsoleBuffer', () => {
+  it('stores entries with type and text', () => {
+    const buf = new ConsoleBuffer(10)
+    buf.add('error', 'Uncaught TypeError: x')
+    const all = buf.getAll()
+    expect(all.length).toBe(1)
+    expect(all[0].type).toBe('error')
+    expect(all[0].text).toContain('Uncaught TypeError')
+  })
+
+  it('caps the number of entries', () => {
+    const buf = new ConsoleBuffer(3)
+    for (let i = 0; i < 10; i++) buf.add('log', `msg ${i}`)
+    const all = buf.getAll()
+    expect(all.length).toBe(3)
+    expect(all[2].text).toBe('msg 9')
+  })
+
+  it('truncates long lines', () => {
+    const buf = new ConsoleBuffer(5)
+    buf.add('log', 'x'.repeat(500))
+    const all = buf.getAll()
+    expect(all[0].text.length).toBeLessThan(500)
+    expect(all[0].text.endsWith('…')).toBe(true)
+  })
+
+  it('ignores empty text', () => {
+    const buf = new ConsoleBuffer(5)
+    buf.add('log', '   ')
+    expect(buf.size).toBe(0)
+  })
+
+  it('clears on request', () => {
+    const buf = new ConsoleBuffer(5)
+    buf.add('log', 'a')
+    buf.clear()
+    expect(buf.size).toBe(0)
+  })
+})
 
 describe('BrowserActionTracker', () => {
   it('detects repeated same action on same URL', () => {

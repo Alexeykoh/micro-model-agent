@@ -20,10 +20,26 @@ export interface ElementEntry {
   visible: boolean
 }
 
+export type ConsoleType = "log" | "info" | "warning" | "error" | "debug" | "pageerror" | "network"
+
+export interface ConsoleEntry {
+  type: ConsoleType
+  text: string
+}
+
+export interface NetworkErrorEntry {
+  method: string
+  url: string
+  error: string
+}
+
 export interface PageSnapshot {
   url: string
   title: string
   elements: ElementEntry[]
+  content: string
+  console: ConsoleEntry[]
+  networkErrors: NetworkErrorEntry[]
   truncated: boolean
 }
 
@@ -37,6 +53,8 @@ export interface BrowserState {
 export interface BrowserConfig {
   headless: boolean
   maxElements: number
+  maxContentChars: number
+  maxConsoleEntries: number
   screenshotMaxWidth: number
   cookieDir: string
   viewportWidth: number
@@ -53,6 +71,8 @@ export interface ActionResult {
 export const DEFAULT_BROWSER_CONFIG: BrowserConfig = {
   headless: true,
   maxElements: 30,
+  maxContentChars: 2500,
+  maxConsoleEntries: 20,
   screenshotMaxWidth: 1280,
   cookieDir: '',
   viewportWidth: 1280,

@@ -1,5 +1,6 @@
 import type { ElementEntry, PageSnapshot } from './types'
 import { t } from '../../i18n/index'
+import { DEFAULT_BROWSER_CONFIG } from './types'
 
 function inferRole(tag: string, type?: string): string {
   const t = tag.toLowerCase()
@@ -87,7 +88,19 @@ export function extractInteractiveElements(html: string, maxElements = 30): Elem
   return elements
 }
 
-export function formatSnapshot(snapshot: PageSnapshot): string {
+export function truncateText(text: string, maxChars: number): string {
+  if (maxChars <= 0) return ''
+  if (text.length <= maxChars) return text
+  const cut = text.slice(0, maxChars)
+  const lastNewline = cut.lastIndexOf('\n')
+  const safe = lastNewline > maxChars * 0.6 ? cut.slice(0, lastNewline) : cut
+  return `${safe}\n${t('browser.truncated')}`
+}
+
+export function formatSnapshot(
+  snapshot: PageSnapshot,
+  maxContentChars = DEFAULT_BROWSER_CONFIG.maxContentChars,
+): string {
   const lines: string[] = []
   lines.push(`Page: "${snapshot.title}"`)
   lines.push(`URL: ${snapshot.url}`)
@@ -95,20 +108,43 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
 
   if (snapshot.elements.length === 0 && !snapshot.truncated) {
     lines.push(t('browser.no_elements'))
-    return lines.join('\n')
+  } else {
+    for (const el of snapshot.elements) {
+      let line = `[${el.index}] ${el.role}`
+      if (el.name) line += ` "${el.name}"`
+      if (el.href) line += ` → ${el.href}`
+      if (el.value) line += ` = "${el.value}"`
+      lines.push(line)
+    }
+
+    if (snapshot.truncated) {
+      lines.push('')
+      lines.push(t('browser.more_elements'))
+    }
   }
 
-  for (const el of snapshot.elements) {
-    let line = `[${el.index}] ${el.role}`
-    if (el.name) line += ` "${el.name}"`
-    if (el.href) line += ` → ${el.href}`
-    if (el.value) line += ` = "${el.value}"`
-    lines.push(line)
-  }
-
-  if (snapshot.truncated) {
+  if (snapshot.content) {
     lines.push('')
-    lines.push(t('browser.more_elements'))
+    lines.push(t('browser.content_header'))
+    for (const line of truncateText(snapshot.content, maxContentChars).split('\n')) {
+      lines.push(`- ${line}`)
+    }
+  }
+
+  if (snapshot.console.length > 0) {
+    lines.push('')
+    lines.push(t('browser.console_header'))
+    for (const entry of snapshot.console) {
+      lines.push(`[${entry.type}] ${entry.text}`)
+    }
+  }
+
+  if (snapshot.networkErrors.length > 0) {
+    lines.push('')
+    lines.push(t('browser.network_errors_header'))
+    for (const err of snapshot.networkErrors) {
+      lines.push(`${err.method} ${err.url} → ${err.error}`)
+    }
   }
 
   return lines.join('\n')

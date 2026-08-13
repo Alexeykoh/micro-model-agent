@@ -13,6 +13,8 @@ function getSession(ctx: ToolContext): BrowserSession {
       ...DEFAULT_BROWSER_CONFIG,
       headless: ctx.config.browser?.headless ?? true,
       maxElements: ctx.config.browser?.maxElements ?? 30,
+      maxContentChars: ctx.config.browser?.maxContentChars ?? 2500,
+      maxConsoleEntries: ctx.config.browser?.maxConsoleEntries ?? 20,
       navigationTimeout: ctx.config.browser?.navigationTimeout ?? 15000,
       viewportWidth: ctx.config.browser?.viewportWidth ?? 1280,
       viewportHeight: ctx.config.browser?.viewportHeight ?? 720,
@@ -40,7 +42,8 @@ export function createBrowserTool(): ToolDefinition {
     tags: ['browser', 'vision'],
     description: [
       'Control a headless browser. Navigate pages, click elements, type text, scroll, take screenshots.',
-      'Returns a numbered list of interactive elements — use element numbers as targets for click/type.',
+      'Each snapshot returns: a numbered list of interactive elements, the visible page text (Content section), browser console messages, and network errors.',
+      'Use the Content section to understand what the page says; use element numbers as targets for click/type.',
       'Actions: open (url), click (target), type (target, text), scroll (direction), back, forward, screenshot, snapshot, close, wait (ms).',
     ].join(' '),
     parameters: {

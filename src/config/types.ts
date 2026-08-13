@@ -65,6 +65,8 @@ export interface BrowserToolConfig {
   enabled: boolean;
   headless: boolean;
   maxElements: number;
+  maxContentChars: number;
+  maxConsoleEntries: number;
   viewportWidth: number;
   viewportHeight: number;
   navigationTimeout: number;

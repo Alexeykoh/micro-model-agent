@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildClickScript, buildTypeScript, buildScrollScript } from '../src/modules/browser/actions'
+import { buildClickScript, buildTypeScript, buildScrollScript, buildTextExtractionScript } from '../src/modules/browser/actions'
 
 describe('buildClickScript', () => {
   it('generates script that clicks element by index', () => {
@@ -37,5 +37,20 @@ describe('buildScrollScript', () => {
     const script = buildScrollScript('up')
     expect(script).toContain('scrollBy')
     expect(script).toContain('-600')
+  })
+})
+
+describe('buildTextExtractionScript', () => {
+  it('targets content tags and filters hidden elements', () => {
+    const script = buildTextExtractionScript()
+    expect(script).toContain('h1')
+    expect(script).toContain('createTreeWalker')
+    expect(script).toContain('display')
+    expect(script).toContain('visibility')
+  })
+
+  it('deduplicates repeated text', () => {
+    const script = buildTextExtractionScript()
+    expect(script).toContain('seen')
   })
 })

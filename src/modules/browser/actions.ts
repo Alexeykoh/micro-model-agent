@@ -48,3 +48,34 @@ export function buildIndexInjectionScript(): string {
     });
   `
 }
+
+export function buildTextExtractionScript(): string {
+  return `
+    const contentTags = new Set(['h1','h2','h3','h4','h5','h6','p','li','article','main','section','blockquote','pre','td','th','dt','dd','figcaption']);
+    const out = [];
+    const seen = new Set();
+    const isHidden = (el) => {
+      const st = window.getComputedStyle(el);
+      return st.display === 'none' || st.visibility === 'hidden';
+    };
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (node) => {
+        const tag = node.tagName ? node.tagName.toLowerCase() : '';
+        if (!contentTags.has(tag)) return NodeFilter.FILTER_SKIP;
+        if (isHidden(node)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    let node;
+    while ((node = walker.nextNode())) {
+      const tag = node.tagName.toLowerCase();
+      const text = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+      if (!text) continue;
+      if (seen.has(text)) continue;
+      seen.add(text);
+      const line = text.length > 200 ? text.slice(0, 200) + '…' : text;
+      out.push('[' + tag + '] ' + line);
+    }
+    return out.join('\\n');
+  `
+}

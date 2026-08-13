@@ -4,16 +4,57 @@ import {
   type BrowserContext,
   type Page,
 } from "playwright";
-import type { BrowserConfig, BrowserState, ActionResult } from "./types";
+import type {
+  BrowserConfig,
+  BrowserState,
+  ActionResult,
+  ConsoleEntry,
+  ConsoleType,
+  NetworkErrorEntry,
+} from "./types";
 import { extractInteractiveElements, formatSnapshot } from "./snapshot";
 import {
   buildClickScript,
   buildTypeScript,
   buildScrollScript,
   buildIndexInjectionScript,
+  buildTextExtractionScript,
 } from "./actions";
 import { CookieStore, type StoredCookie } from "./cookie-store";
 import { t } from "../../i18n/index";
+
+const CONSOLE_MAX_LINE = 200;
+
+export class ConsoleBuffer {
+  private entries: ConsoleEntry[] = [];
+  private maxEntries: number;
+
+  constructor(maxEntries = 20) {
+    this.maxEntries = maxEntries;
+  }
+
+  add(type: ConsoleType, text: string): void {
+    const clean = String(text).replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    const line = clean.length > CONSOLE_MAX_LINE ? clean.slice(0, CONSOLE_MAX_LINE) + "…" : clean;
+    this.entries.push({ type, text: line });
+    if (this.entries.length > this.maxEntries) {
+      this.entries.splice(0, this.entries.length - this.maxEntries);
+    }
+  }
+
+  clear(): void {
+    this.entries = [];
+  }
+
+  getAll(): ConsoleEntry[] {
+    return [...this.entries];
+  }
+
+  get size(): number {
+    return this.entries.length;
+  }
+}
 
 export class BrowserActionTracker {
   private history: Array<{
@@ -72,10 +113,13 @@ export class BrowserSession {
     elementCount: 0,
   };
   private actionTracker = new BrowserActionTracker(3);
+  private consoleBuffer: ConsoleBuffer;
+  private networkErrors: NetworkErrorEntry[] = [];
 
   constructor(config: BrowserConfig) {
     this.config = config;
     this.cookieStore = new CookieStore(config.cookieDir);
+    this.consoleBuffer = new ConsoleBuffer(config.maxConsoleEntries);
   }
 
   getState(): BrowserState {
@@ -179,6 +223,21 @@ export class BrowserSession {
 
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(this.config.navigationTimeout);
+
+    this.page.on("console", (msg) => {
+      this.consoleBuffer.add(msg.type() as ConsoleType, msg.text());
+    });
+    this.page.on("pageerror", (err) => {
+      this.consoleBuffer.add("pageerror", `Page error: ${err.message}`);
+    });
+    this.page.on("requestfailed", (req) => {
+      const failure = req.failure();
+      this.networkErrors.push({
+        method: req.method(),
+        url: req.url(),
+        error: failure?.errorText || "unknown",
+      });
+    });
   }
 
   private async saveCookies(): Promise<void> {
@@ -195,6 +254,13 @@ export class BrowserSession {
     const url = this.page.url();
     const title = await this.page.title();
 
+    let content = "";
+    try {
+      content = await this.page.evaluate(buildTextExtractionScript());
+    } catch {
+      content = "";
+    }
+
     const allElements = extractInteractiveElements(
       html,
       this.config.maxElements + 5,
@@ -209,7 +275,15 @@ export class BrowserSession {
       elementCount: elements.length,
     };
 
-    return formatSnapshot({ url, title, elements, truncated });
+    return formatSnapshot({
+      url,
+      title,
+      elements,
+      content,
+      console: this.consoleBuffer.getAll(),
+      networkErrors: this.networkErrors.slice(-5),
+      truncated,
+    });
   }
 
   private async open(url: string): Promise<ActionResult> {
@@ -231,6 +305,8 @@ export class BrowserSession {
       return { success: false, output: t("browser.create_page_failed") };
 
     this.actionTracker.reset();
+    this.consoleBuffer.clear();
+    this.networkErrors = [];
 
     try {
       await this.page.goto(url, {
