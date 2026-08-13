@@ -527,6 +527,11 @@
   "ctx.compactions": "compactions: {count}",
   "ctx.quality": "quality: {percent}%",
   "ctx.delta_pos": "ctx +{tokens}",
-  "ctx.delta_neg": "ctx -{tokens} ↓",
-  "ctx.delta_zero": "ctx ±0"
+  "ctx.delta_neg": "ctx -{tokens}  ",
+  "ctx.delta_zero": "ctx +0",
+  "updater.check_error": "[updater] update check failed: {error}",
+  "updater.available": "[updater] Update available: {current} → {latest}. Run `npm install -g micro-models-agent` to upgrade.",
+  "updater.installing": "[updater] Installing {latest} globally (current: {current})…",
+  "updater.installed": "[updater] Installed {latest}. Restart MMA to use it (was {current}).",
+  "updater.install_failed": "[updater] Failed to install {latest}: {error}. Update manually with `npm install -g micro-models-agent`."
 }

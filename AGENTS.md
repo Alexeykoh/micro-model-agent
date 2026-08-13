@@ -414,7 +414,9 @@ src/
 │   ├── processes/      # Background & foreground process management
 │   │   ├── runner.ts   # Kill-by-call-id registry (executor timeout/abort)
 │   │   ├── registry.ts # Process registry: pid tracking, output buffer, waitForExit, kill/killAll/remove
-│   ├── updater/        # Background npm registry version check
+│   ├── updater/        # Self-update: async npm check + auto-install
+│   │   ├── checker.ts  # Updater.check() (registry fetch) + install() (npm install -g)
+│   │   └── module.ts   # UpdaterModule — fire-and-forget background loop, autoInstall
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
 │       ├── types.ts    # BrowserConfig, BrowserState, ElementEntry, ActionResult
@@ -810,6 +812,19 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 - Windows: processes are killed with `taskkill /pid <pid> /T /F`; POSIX: process-group kill (`detached` spawn).
 - `Agent.shutdown()` kills all remaining background processes (no orphans).
 
+## Auto-Update
+
+Self-update is a fire-and-forget background check — it never blocks startup.
+
+- **Check:** `Updater.check()` fetches `https://registry.npmjs.org/micro-models-agent` (5s timeout); the current version comes from `package.json` (`readVersion()` in `main.ts`).
+- **Install:** when a newer version exists and `autoInstall: true`, runs `npm install -g micro-models-agent@<latest>` in the background (`Updater.install()`, injectable runner for tests). The running process keeps working on the old version; the update applies on next launch.
+- **Config** (`updater` in `~/.mma/config.json`):
+  - `enabled` (default `true`) — master switch
+  - `checkOnStart` (default `true`) — check at startup
+  - `autoInstall` (default `true`) — auto-run `npm install -g`; `false` → only notify
+  - `intervalMs` (default `0`) — `0` = single check per launch; `>0` = permanent background re-check loop
+- **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`). Fired from `main.ts` via `startAutoUpdate()`; all errors are swallowed (best-effort). Notifications go through i18n keys `updater.*`.
+
 ## Execution Guarantees
 
 ### Plan Enforcement
@@ -989,7 +1004,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.29.0
+### Current Version: 0.30.0
 
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
@@ -1008,3 +1023,4 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **30** = R4: Final Audit Gate actually runs `bun test` when the plan contains a verification step and test files exist (`auditor.ts` `runTests` via processRegistry, 90s cap; inconclusive runs don't block; failing test names land in the injected warning via `exec.audit_fail_tests`). Catches final answers claiming "all tests pass" while the suite fails (task-12 regression: 8/3 → 7/3 → 14/0)
 - **29.0.0** = RLM-inspired features (spec `docs/specs/2026-08-12-rlm-inspired-design.md`): `ArtifactStore` (`src/modules/artifacts/store.ts`), subagent `result_mode: "file"` pass-by-reference results, `chunk_query` tool + `runChunkQuery()` chunked parallel queries, `SubagentConfig` (resultMode/maxSummaryChars/artifactsDir/stableSystemPrompt/maxParallelChunkQueries), `ChatOptions.maxTokens` + `ChatOptions.reasoningEffort` (`reasoning_effort` in OpenAI-compat body), per-tool `timeoutMs` override, stable subagent system prompt. Fix: bun test hang from leaked `mma-idle-*.js` processes — double `taskkill /T` with 150ms settle gap in `killTree` (wmic/PowerShell process enumeration was too slow under parallel load)
 - **31** = session reliability fixes (from `ses_msrv83di_0hx6id` post-mortem): (1) context quality — compaction penalty capped at 0.5 floor so cumulative compactions can never pin quality below the 40% trigger (was: 56 forced compactions in 28 min); (2) forced-compaction cooldown `FORCED_COMPACTION_COOLDOWN=3` in the agent loop; (3) `extractFacts` skips `<system-summary>` messages so summaries can't nest inside themselves; (4) final audit gate returns `success:false` + `error.audit_failed` instead of "finishing anyway"; (5) LSP failures surfaced via `[LSP check failed]` + logger instead of silent `catch {}`/`return []`; (6) `plan update` refuses out-of-order `done` (`plan.order_blocked`) and re-marking a done step (`plan.step_already_done`); (7) bash hard-stops a forbidden Windows command after 3 consecutive failures (`resetBashFailureTracking` test hook)
+- **32** = auto-update (`updater` module): async non-blocking npm version check on startup (`Updater.check()`, 5s timeout, registry fetch), auto-install `npm install -g micro-models-agent` when newer (`Updater.install()`), config `updater.{enabled,checkOnStart,autoInstall,intervalMs}` (defaults: enabled, autoInstall). Fired from `main.ts` via `startAutoUpdate()` (fire-and-forget, never blocks startup; best-effort, errors swallowed). i18n keys `updater.*`. Default `intervalMs: 0` = single check per launch; set >0 for a permanent background re-check loop.

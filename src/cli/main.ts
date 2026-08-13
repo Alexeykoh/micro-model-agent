@@ -7,9 +7,46 @@ import { runSetup } from "./setup";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
-import { existsSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync } from "fs";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
+import { UpdaterModule } from "../modules/updater/index";
+
+function readVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "..", "package.json"),
+    join(here, "..", "package.json"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      try {
+        const raw = JSON.parse(readFileSync(p, "utf8"));
+        if (raw.version) return raw.version;
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return "0.0.0";
+}
+
+/** Fire-and-forget self-update in the background (never blocks startup). */
+function startAutoUpdate(config: {
+  updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
+}): void {
+  try {
+    const module = new UpdaterModule(
+      config.updater,
+      readVersion(),
+      "micro-models-agent",
+    );
+    module.start();
+  } catch {
+    // Auto-update is best-effort; never let it crash startup.
+  }
+}
 
 async function main(): Promise<void> {
   const program = createProgram();
@@ -36,6 +73,8 @@ async function main(): Promise<void> {
       noAgentsMd,
       exitOnComplete,
     );
+
+    startAutoUpdate(config);
 
     if (jsonMode) {
       const result = await agent.run(prompt);
@@ -161,6 +200,7 @@ async function main(): Promise<void> {
       baseDir,
       logger,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    startAutoUpdate(config);
     const repl = new Repl(
       agent,
       config,

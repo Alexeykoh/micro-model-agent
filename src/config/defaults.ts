@@ -106,4 +106,10 @@ export const DEFAULTS: AppConfig = {
     maxParallelChunkQueries: 4,
   },
   lsp: DEFAULT_LSP_CONFIG,
+  updater: {
+    enabled: true,
+    checkOnStart: true,
+    autoInstall: true,
+    intervalMs: 0,
+  },
 };

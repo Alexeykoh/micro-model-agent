@@ -41,4 +41,25 @@ describe('Updater', () => {
     expect(result.updateAvailable).toBe(false)
     expect(result.error).toBeDefined()
   })
+
+  it('should install the latest version globally via injected runner', async () => {
+    const runner = vi.fn().mockResolvedValue({})
+    const updater = new Updater('0.3.0', 'micro-models-agent', runner as any)
+    const result = await updater.install('0.4.0')
+    expect(result.success).toBe(true)
+    expect(result.installed).toBe('0.4.0')
+    expect(runner).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'micro-models-agent@0.4.0'],
+      expect.objectContaining({ timeout: 120000 }),
+    )
+  })
+
+  it('should report install failure without throwing', async () => {
+    const runner = vi.fn().mockResolvedValue({ error: 'EACCES permission denied' })
+    const updater = new Updater('0.3.0', 'micro-models-agent', runner as any)
+    const result = await updater.install('0.4.0')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('EACCES')
+  })
 })

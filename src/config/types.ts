@@ -186,6 +186,16 @@ export interface AuditNotifierConfig {
 
 import type { LspConfig, LspServerConfig } from "../modules/lsp/types";
 
+export interface UpdaterConfig {
+  enabled: boolean;
+  /** Check for updates asynchronously at startup (non-blocking). */
+  checkOnStart: boolean;
+  /** Automatically run `npm install -g` when a newer version is found. */
+  autoInstall: boolean;
+  /** Ms between background update checks. 0 = single check at startup. */
+  intervalMs: number;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -212,4 +222,5 @@ export interface AppConfig {
   skills: SkillsConfig;
   subagent: SubagentConfig;
   lsp?: LspConfig;
+  updater: UpdaterConfig;
 }
