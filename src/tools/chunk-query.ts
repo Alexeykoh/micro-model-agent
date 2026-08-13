@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 import { isPathInScope } from "./scope-check";
@@ -69,7 +70,7 @@ export const chunkQueryTool: ToolDefinition = {
         return { success: false, output: `[SCOPE] ${check.reason || "Path not allowed"}` };
       }
       try {
-        content = readFileSync(inputPath, "utf8");
+        content = readFileSync(resolve(ctx.baseDir, inputPath), "utf8");
       } catch (e: any) {
         return { success: false, output: `Cannot read ${inputPath}: ${e.message}` };
       }
