@@ -133,6 +133,23 @@ export interface SkillsConfig {
   budget: number;
 }
 
+export interface SubagentConfig {
+  /**
+   * "text" (default, backward compatible): sub-agent result text is returned
+   * into the parent context. "file": the result is persisted to an artifact
+   * file and the parent receives a path + bounded summary.
+   */
+  resultMode: "text" | "file";
+  /** Max chars of the summary returned into context when resultMode is "file". */
+  maxSummaryChars: number;
+  /** Directory relative to the workspace root for artifact files. */
+  artifactsDir: string;
+  /** Keep the sub-agent system prompt byte-identical across calls (KV-cache friendly). */
+  stableSystemPrompt: boolean;
+  /** Default cap on parallel chunk queries in runChunkQuery. */
+  maxParallelChunkQueries: number;
+}
+
 export interface SessionIsolationConfig {
   enabled: boolean;
   isolatePlugins: boolean;
@@ -193,5 +210,6 @@ export interface AppConfig {
   security?: SecurityConfig;
   sessionIsolation?: SessionIsolationConfig;
   skills: SkillsConfig;
+  subagent: SubagentConfig;
   lsp?: LspConfig;
 }

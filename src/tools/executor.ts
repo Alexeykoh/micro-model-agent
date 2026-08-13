@@ -90,6 +90,7 @@ export class ToolExecutor {
 				// Interactive tools wait for user input — no timeout.
 				result = await tool.handler(this.ctx, call.arguments);
 			} else {
+				const timeoutMs = tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS;
 				const timeoutPromise = new Promise<ToolResult>((_, reject) => {
 					setTimeout(() => {
 						// Kill any long-running child process registered for this call.
@@ -98,11 +99,11 @@ export class ToolExecutor {
 							new Error(
 								t("tool.timeout", {
 									name: call.name,
-									seconds: TOOL_EXECUTION_TIMEOUT_MS / 1000,
+									seconds: Math.round(timeoutMs / 1000),
 								}),
 							),
 						);
-					}, TOOL_EXECUTION_TIMEOUT_MS);
+					}, timeoutMs);
 				});
 				const racePromises: Promise<ToolResult>[] = [
 					tool.handler(this.ctx, call.arguments),

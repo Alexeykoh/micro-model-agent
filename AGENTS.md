@@ -890,6 +890,27 @@ ERROR   → retry or escalate
 
 If `orchestrator.model` configured: larger model handles planning, conflict resolution, audit. Worker (9B) executes steps. If not set — everything runs on one model.
 
+## RLM-Inspired Features (pass-by-reference + chunked queries)
+
+> **Spec:** `docs/specs/2026-08-12-rlm-inspired-design.md` — ports Recursive Language Models (arXiv:2512.24601) mechanics: sub-agent results by reference, and programmatic chunked processing of oversized inputs.
+
+**Status:** implemented (all 9 tasks).
+
+### Pass-by-reference sub-agent results
+
+- `ArtifactStore` (`src/modules/artifacts/store.ts`): persists sub-agent results to `.mma/artifacts/<session>/`. `sanitizeName()` neutralizes traversal (`../../etc/passwd` → `etc_passwd`), `read()` returns `null` outside the root, `summary()` truncates with a marker.
+- `subagent` tool accepts `result_mode: "file"` (+ `artifact_name`): the child's full answer is saved to an artifact and the parent receives a bounded path + summary instead of raw text — kills context-rot/transmission errors for a 9B model.
+- Config: `subagent.resultMode` (`"text"` default, backward compatible), `maxSummaryChars`, `artifactsDir`, `stableSystemPrompt`, `maxParallelChunkQueries` (`src/config/types.ts` `SubagentConfig`).
+- MoE executor (`moe-executor.ts`): when `resultMode: "file"`, subtask args get `result_mode`/`artifact_name = subtask.id`, and the Router's `SubtaskResult.result` carries the full artifact content (bounded summary only in the parent's context).
+- Stable system prompt: `SUBAGENT_SYSTEM_PROMPT_TEMPLATE` (`src/tools/subagent.ts`) is byte-identical across calls (KV-cache friendly); variable context goes into the user message, not the system prompt. Few-shot workflow block (write large outputs to files, verify, delegate) is included.
+
+### Chunked parallel queries (`chunk_query`)
+
+- `runChunkQuery()` + `splitTextIntoChunks()` (`src/modules/context/chunk-query.ts`): RLM-style `llm_query` semantics — plain LLM calls (no tool loop) per newline-aware chunk with a bounded-concurrency pool and an optional synthesis pass.
+- `chunk_query` tool (`src/tools/chunk-query.ts`): scope-checked `input_path` or inline `text`, params `chunk_chars`, `max_parallel`, `synthesize`, `max_chunk_tokens` (default 1024 — must fit reasoning + answer), `max_synthesis_tokens` (2048).
+- `timeoutMs` on `ToolDefinition` overrides the 60s executor timeout per tool (chunk_query uses 300s — multiple LLM calls on slow providers).
+- `LLMProvider.chat(messages, tools?, signal?, options?)` gained `ChatOptions.maxTokens` to cap generation per call.
+
 ## Hallucination Detection Pipeline
 
 ```
@@ -968,7 +989,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.28.0
+### Current Version: 0.29.0
 
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
@@ -985,3 +1006,4 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **31** = R5/R6: empty-CLI entry-point hint (`emptyCliRunHint` — file run exits 0 with no output → tell the model to check main(process.argv)/console.log; guards: test runners, redirects, non-file commands), bash tool description lists Windows anti-patterns (Write-Host, Get-Content, Select-String, Out-File, heredoc `<<`), typecheck/syntax errors in a *successful* write/edit output now feed the stuck detector (rewrite-loop hint fires on blind rewrites instead of 20+ silent iterations)
 - **29** = R1–R3 regression fixes from the CSV/CLI test runs: smart output decoding on Windows (per-line UTF-8 detection with OEM/ibm866 fallback in `registry.ts` — bun/node children write UTF-8, cmd.exe writes OEM), `detectTestResults()` auto-verification in `bash` (bun test/vitest/jest/mocha/pytest markers, `[test-runner]` warning blocks marking verification steps done on failing runs, failing runs keep the output tail instead of a 15-line head preview), stuck-detector bash awareness (`recordBashOutput`: empty-output → check entry point, PowerShell cmdlets in cmd.exe, invented Bun APIs, bash heredoc hints)
 - **30** = R4: Final Audit Gate actually runs `bun test` when the plan contains a verification step and test files exist (`auditor.ts` `runTests` via processRegistry, 90s cap; inconclusive runs don't block; failing test names land in the injected warning via `exec.audit_fail_tests`). Catches final answers claiming "all tests pass" while the suite fails (task-12 regression: 8/3 → 7/3 → 14/0)
+- **29.0.0** = RLM-inspired features (spec `docs/specs/2026-08-12-rlm-inspired-design.md`): `ArtifactStore` (`src/modules/artifacts/store.ts`), subagent `result_mode: "file"` pass-by-reference results, `chunk_query` tool + `runChunkQuery()` chunked parallel queries, `SubagentConfig` (resultMode/maxSummaryChars/artifactsDir/stableSystemPrompt/maxParallelChunkQueries), `ChatOptions.maxTokens` + `ChatOptions.reasoningEffort` (`reasoning_effort` in OpenAI-compat body), per-tool `timeoutMs` override, stable subagent system prompt. Fix: bun test hang from leaked `mma-idle-*.js` processes — double `taskkill /T` with 150ms settle gap in `killTree` (wmic/PowerShell process enumeration was too slow under parallel load)

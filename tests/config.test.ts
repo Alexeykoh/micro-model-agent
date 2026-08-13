@@ -35,6 +35,16 @@ describe("config defaults", () => {
   });
 });
 
+describe("subagent defaults", () => {
+  it("keeps backward-compatible defaults", () => {
+    expect(DEFAULTS.subagent.resultMode).toBe("text");
+    expect(DEFAULTS.subagent.maxSummaryChars).toBe(2000);
+    expect(DEFAULTS.subagent.artifactsDir).toBe(".mma/artifacts");
+    expect(DEFAULTS.subagent.stableSystemPrompt).toBe(true);
+    expect(DEFAULTS.subagent.maxParallelChunkQueries).toBe(4);
+  });
+});
+
 describe("loadConfig", () => {
   const tmpDirs: string[] = [];
 

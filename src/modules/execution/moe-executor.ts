@@ -7,6 +7,7 @@ import type { LLMProvider } from "../../llm/provider";
 import type { Logger } from "../../logger/app-logger";
 import { StuckDetector } from "./stuck-detector";
 import { t } from "../../i18n/index";
+import { ArtifactStore } from "../artifacts/store";
 
 const TRANSIENT_ERROR_PATTERNS = [
   "timeout",
@@ -144,6 +145,10 @@ async function executeSubtask(
         read_only_files: readOnlyFiles,
         tool_tags: expertConfig.tool_tags,
       };
+      if (deps.config.subagent?.resultMode === "file") {
+        subagentArgs.result_mode = "file";
+        subagentArgs.artifact_name = subtask.id;
+      }
 
       const result = await subagentTool.handler(
         {
@@ -152,11 +157,33 @@ async function executeSubtask(
           logger: deps.logger,
           llmProvider: deps.llmProvider,
           toolExecutor: deps.toolExecutor,
+          sessionId: "moe",
         },
         subagentArgs,
       );
 
       if (result.success) {
+        if (deps.config.subagent?.resultMode === "file") {
+          const pathMatch = result.output.match(/saved to artifact: (.+)/);
+          const abs = pathMatch ? pathMatch[1].trim() : "";
+          if (abs) {
+            const store = new ArtifactStore({
+              baseDir: deps.baseDir,
+              sessionId: "moe",
+            });
+            const full = store.read(abs.split(/[\\/]/).pop() || ""); // file name only, scoped to root
+            deps.logger.debug(
+              `MoE subtask "${subtask.id}" attached artifact ${abs} (${full?.length ?? 0} chars) to Router`,
+            );
+            return {
+              subtaskId: subtask.id,
+              success: true,
+              summary: `Artifact: ${abs}`,
+              result: full ?? result.output,
+              durationMs: Date.now() - startTime,
+            };
+          }
+        }
         return {
           subtaskId: subtask.id,
           success: true,

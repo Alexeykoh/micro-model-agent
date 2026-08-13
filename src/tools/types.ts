@@ -5,6 +5,12 @@ export interface ToolDefinition {
 	tags?: string[];
 	/** Interactive tools wait for user input and are exempt from the execution timeout. */
 	interactive?: boolean;
+	/**
+	 * Per-tool execution timeout override in ms. Defaults to the executor's
+	 * TOOL_EXECUTION_TIMEOUT_MS (60s). Used by tools that make multiple LLM
+	 * calls (e.g. chunk_query) and need a longer budget on slow providers.
+	 */
+	timeoutMs?: number;
 	handler: (
 		ctx: ToolContext,
 		args: Record<string, unknown>,

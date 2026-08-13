@@ -50,6 +50,18 @@ export interface Chunk {
 	};
 }
 
+export interface ChatOptions {
+	/** Cap on generated tokens for this call (overrides provider default). */
+	maxTokens?: number;
+	/**
+	 * Reasoning effort for models that support it (OpenAI-compat `reasoning_effort`).
+	 * "none" disables long "thinking" chains so the budget goes to the answer —
+	 * essential for chunk queries on reasoning models (qwen3.5), where thinking
+	 * alone can consume all of maxTokens and leave an empty text answer.
+	 */
+	reasoningEffort?: "none" | "low" | "medium" | "high";
+}
+
 export interface LLMProvider {
 	readonly model: string;
 	readonly contextWindow: number;
@@ -58,6 +70,7 @@ export interface LLMProvider {
 		messages: Message[],
 		tools?: ToolDefinition[],
 		signal?: AbortSignal,
+		options?: ChatOptions,
 	): AsyncIterable<Chunk>;
 
 	countTokens(text: string): number;

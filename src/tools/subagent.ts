@@ -7,6 +7,24 @@ import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { ArtifactStore } from "../modules/artifacts/store";
+
+/** Fixed system prompt (KV-cache friendly when stableSystemPrompt is on). */
+export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
+
+Workflow rules:
+- Prefer small, focused steps. Verify your own work (typecheck/tests) before finishing.
+- For large outputs, write the result to a file with write_file instead of reproducing it in your answer.
+- If the task is big and decomposable, delegate parts to the subagent tool instead of doing everything in one context.
+- When you finish, return a concise final answer; do not repeat file contents verbatim if you already wrote them to disk.`;
+
+function buildSubagentSystemPrompt(
+  context: string,
+  stable: boolean,
+): string {
+  if (stable) return SUBAGENT_SYSTEM_PROMPT_TEMPLATE;
+  return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
+}
 
 export const subagentTool: ToolDefinition = {
   name: "subagent",
@@ -50,6 +68,16 @@ export const subagentTool: ToolDefinition = {
         type: "array",
         items: { type: "string" },
         description: "Tool tags to expose to the sub-agent",
+      },
+      result_mode: {
+        type: "string",
+        enum: ["text", "file"],
+        description:
+          '"file": persist the full result to an artifact and return a path + summary (pass-by-reference). "text" (default): return the full text into context.',
+      },
+      artifact_name: {
+        type: "string",
+        description: "Artifact file name (sanitized). Default: subagent-<timestamp>.",
       },
     },
     required: ["task"],
@@ -134,10 +162,13 @@ export const subagentTool: ToolDefinition = {
       );
 
       const systemPrompt: PromptBlock = {
-        content: `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`,
+        content: buildSubagentSystemPrompt(
+          context,
+          ctx.config.subagent?.stableSystemPrompt !== false,
+        ),
         priority: "critical",
         essential: true,
-        estimatedTokens: 100,
+        estimatedTokens: 150,
       };
 
       const subDeps = {
@@ -160,15 +191,50 @@ export const subagentTool: ToolDefinition = {
       let scopeRestored = false;
       try {
         const result = await subAgent.run(fullTask);
-        return result.success
-          ? {
-              success: true,
-              output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
-            }
-          : {
-              success: false,
-              output: `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`,
-            };
+        if (!result.success) {
+          return {
+            success: false,
+            output: `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`,
+          };
+        }
+
+        const resultMode =
+          (args.result_mode as string) ||
+          ctx.config.subagent?.resultMode ||
+          "text";
+
+        if (resultMode === "file") {
+          const store = new ArtifactStore({
+            baseDir: ctx.baseDir,
+            sessionId: ctx.sessionId || "default",
+            artifactsDir: ctx.config.subagent?.artifactsDir,
+          });
+          const abs = store.save(
+            (args.artifact_name as string) || `subagent-${Date.now()}`,
+            result.text,
+            "md",
+          );
+          const summary = store.summary(
+            result.text,
+            ctx.config.subagent?.maxSummaryChars ?? 2000,
+          );
+          ctx.logger.debug(
+            `subagent result persisted to artifact ${abs} (${result.text.length} chars, ${result.iterationCount} iterations)`,
+          );
+          return {
+            success: true,
+            output: t("tool.subagent_artifact", {
+              path: abs,
+              iterations: String(result.iterationCount),
+              summary,
+            }),
+          };
+        }
+
+        return {
+          success: true,
+          output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
+        };
       } finally {
         if (!scopeRestored) {
           ctx.toolExecutor.setScope(

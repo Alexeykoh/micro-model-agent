@@ -98,5 +98,12 @@ export const DEFAULTS: AppConfig = {
   skills: {
     budget: 0.15,
   },
+  subagent: {
+    resultMode: "text",
+    maxSummaryChars: 2000,
+    artifactsDir: ".mma/artifacts",
+    stableSystemPrompt: true,
+    maxParallelChunkQueries: 4,
+  },
   lsp: DEFAULT_LSP_CONFIG,
 };

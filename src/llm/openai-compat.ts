@@ -54,6 +54,7 @@ export class OpenAICompatProvider implements LLMProvider {
     messages: Message[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
+    options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
     // Check rate limit before making request
     if (!this.rateLimiter.canMakeRequest()) {
@@ -65,7 +66,7 @@ export class OpenAICompatProvider implements LLMProvider {
     // Record this request
     this.rateLimiter.recordRequest();
 
-    const streamResult = this.doStream(messages, tools, signal);
+    const streamResult = this.doStream(messages, tools, signal, options);
 
     let hasToolCall = false;
     let hasText = false;
@@ -81,7 +82,7 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (!hasToolCall && !hasText) {
-      const fallback = await this.doNonStreaming(messages, tools, signal);
+      const fallback = await this.doNonStreaming(messages, tools, signal, options);
       for (const chunk of fallback) {
         yield chunk;
       }
@@ -92,13 +93,17 @@ export class OpenAICompatProvider implements LLMProvider {
     messages: Message[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
+    options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages,
       stream: true,
-      max_tokens: this.config.maxCompletionTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
     };
+    if (options?.reasoningEffort) {
+      body.reasoning_effort = options.reasoningEffort;
+    }
     if (tools && tools.length > 0) {
       body.tools = tools.map((t) => ({
         type: "function",
@@ -259,13 +264,17 @@ export class OpenAICompatProvider implements LLMProvider {
     messages: Message[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
+    options?: import("./provider").ChatOptions,
   ): Promise<Chunk[]> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages,
       stream: false,
-      max_tokens: this.config.maxCompletionTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
     };
+    if (options?.reasoningEffort) {
+      body.reasoning_effort = options.reasoningEffort;
+    }
     if (tools && tools.length > 0) {
       body.tools = tools.map((t) => ({
         type: "function",
