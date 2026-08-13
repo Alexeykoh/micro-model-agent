@@ -36,6 +36,21 @@ export function setBashGraceMs(ms: number): void {
 }
 
 /**
+ * Consecutive failures per first command word (resets on success). A model
+ * that keeps calling a forbidden Unix command in cmd.exe (head/cat/grep/...)
+ * gets a hint the first couple of times; after HARD_BLOCK_THRESHOLD consecutive
+ * failures the tool hard-stops with a STOP directive instead of repeating the
+ * same hint forever (observed: `head` called 5×, `Select-String` 3× in one run).
+ */
+const FAILING_FIRST_WORDS = new Map<string, number>();
+const HARD_BLOCK_THRESHOLD = 3;
+
+/** Test hook: clear the consecutive-failure tracking state. */
+export function resetBashFailureTracking(): void {
+	FAILING_FIRST_WORDS.clear();
+}
+
+/**
  * Detect a file write via `echo/printf ... > file` — common model habit that
  * breaks in cmd.exe: single quotes are not grouping quotes, `>` only applies
  * to the LAST line of a multi-line command, and double quotes inside the text
@@ -461,16 +476,27 @@ export const bashTool: ToolDefinition = {
 					output = `(exit code ${code})`;
 				}
 
-				// On Windows, hint about Unix commands that don't work
-				if (platform() === "win32" && code !== 0) {
+				// On Windows, hint about Unix commands that don't work, and
+				// hard-stop a command that keeps failing the same way.
+				if (platform() === "win32") {
 					const firstWord = command
 						.trim()
 						.split(/\s+/)[0]
 						?.split(/[\\/]/)
 						.pop();
-					const hint = firstWord ? UNIX_TO_WIN_HINTS[firstWord] : undefined;
-					if (hint) {
-						output = `${output}\n\nHint: "${firstWord}" may not work on Windows. ${hint}`;
+					if (firstWord && firstWord in UNIX_TO_WIN_HINTS) {
+						if (code === 0) {
+							FAILING_FIRST_WORDS.delete(firstWord);
+						} else {
+							const failures =
+								(FAILING_FIRST_WORDS.get(firstWord) || 0) + 1;
+							FAILING_FIRST_WORDS.set(firstWord, failures);
+							if (failures >= HARD_BLOCK_THRESHOLD) {
+								output = `STOP using "${firstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[firstWord]}`;
+							} else {
+								output = `${output}\n\nHint: "${firstWord}" may not work on Windows. ${UNIX_TO_WIN_HINTS[firstWord]}`;
+							}
+						}
 					}
 				}
 

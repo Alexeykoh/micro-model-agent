@@ -42,6 +42,40 @@ describe("ContextManager", () => {
     expect(history[1].content).toContain("<system-summary>");
   });
 
+  it("should not embed previous system-summary text into new error facts", () => {
+    // Round 1: put an error message deep enough that it lands in oldTurns at
+    // compaction, so summary1 has an "[Errors: ...]" section.
+    const cm = new ContextManager(1000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    for (let i = 0; i < 5; i++) {
+      cm.addMessage({ role: "user", content: `task ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.addMessage({ role: "tool", name: "bash", content: "Error: build failed", success: false });
+    for (let i = 0; i < 7; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `more resp ${i}` });
+    }
+    cm.compact();
+
+    // Round 2: now summary1 (with its "[Errors: Error: build failed]" text) is
+    // old enough to be consumed by extractFacts again. It must NOT be captured
+    // as a nested error fact.
+    for (let i = 0; i < 8; i++) {
+      cm.addMessage({ role: "user", content: `even more ${i}` });
+      cm.addMessage({ role: "assistant", content: `even more resp ${i}` });
+    }
+    cm.addMessage({ role: "tool", name: "bash", content: "Error: tests failed", success: false });
+    cm.compact();
+
+    const history = cm.getActiveHistory();
+    const summary = history.find((m) => typeof m.content === "string" && m.content.includes("[Compressed:"));
+    expect(summary).toBeDefined();
+    const text = typeof summary!.content === "string" ? summary!.content : "";
+    const occurrences = text.split("<system-summary>").length - 1;
+    expect(occurrences).toBeLessThanOrEqual(1);
+  });
+
   it("should not compact before threshold", () => {
     const cm = new ContextManager(100000);
     for (let i = 0; i < 3; i++) {
@@ -106,6 +140,36 @@ describe("getQuality", () => {
     const q = cm.getQuality();
     expect(q).toBeGreaterThanOrEqual(0);
     expect(q).toBeLessThanOrEqual(100);
+  });
+
+  it("should not permanently zero out quality after many compactions", () => {
+    // Regression: compactionLoss = max(0, 1 - compactionCount*0.15) becomes 0
+    // forever after ~7 compactions. In a heavy session (tokenLoad and
+    // errorDensity both low) that permanently pins quality below the 40%
+    // forced-compaction trigger → a compaction fires on EVERY iteration.
+    const cm = new ContextManager(1000);
+    for (let c = 0; c < 20; c++) {
+      for (let i = 0; i < 7; i++) {
+        cm.addMessage({ role: "user", content: "u".repeat(200) });
+        cm.addMessage({ role: "assistant", content: "a".repeat(200) });
+      }
+      cm.compact();
+    }
+    expect(cm.getCompactionCount()).toBeGreaterThanOrEqual(7);
+    expect(cm.getQuality()).toBeGreaterThanOrEqual(40);
+  });
+
+  it("should keep quality at least 40 with fresh context and high compaction count", () => {
+    const cm = new ContextManager(1000);
+    for (let c = 0; c < 10; c++) {
+      for (let i = 0; i < 7; i++) {
+        cm.addMessage({ role: "user", content: "u".repeat(300) });
+        cm.addMessage({ role: "assistant", content: "a".repeat(300) });
+      }
+      cm.compact();
+    }
+    expect(cm.getCompactionCount()).toBeGreaterThanOrEqual(7);
+    expect(cm.getQuality()).toBeGreaterThanOrEqual(40);
   });
 });
 

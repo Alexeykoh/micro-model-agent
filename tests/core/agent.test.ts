@@ -867,6 +867,83 @@ describe("Agent", () => {
 		expect(result.success).toBe(true);
 	});
 
+	it("does not force a compaction on every single iteration when quality is low", async () => {
+		let compactCalls = 0;
+		const deps = createMockDeps({
+			config: { ...createMockDeps().config, maxToolIterations: 20 },
+			llmProvider: {
+				model: "test-model",
+				contextWindow: 4096,
+				chat: vi.fn().mockImplementation(() =>
+					(async function* () {
+						yield {
+							type: "tool_call" as const,
+							toolCall: { id: "call_1", name: "read_file", arguments: "{}" },
+						};
+						yield { type: "done" as const, finishReason: "tool_calls" as const };
+					})(),
+				),
+				countTokens: vi.fn().mockReturnValue(10),
+			},
+			contextManager: {
+				addMessage: vi.fn(),
+				getMessageCount: vi.fn().mockReturnValue(10),
+				needsCompaction: vi.fn().mockReturnValue(false),
+				compact: vi.fn(() => { compactCalls++; }),
+				getActiveHistory: vi.fn().mockReturnValue([{ role: "user", content: "hello" }]),
+				getEstimatedTokens: vi.fn().mockReturnValue(100),
+				getBudget: vi.fn().mockReturnValue({
+					systemPrompt: 1024,
+					responseReserve: 512,
+					history: 2560,
+				}),
+				updateSystemPrompt: vi.fn(),
+				getCompactionCount: vi.fn().mockReturnValue(5),
+				getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
+				getQuality: vi.fn().mockReturnValue(30),
+				noteIteration: vi.fn(),
+				setToolTokens: vi.fn(),
+			} as any,
+		});
+		const agent = new Agent(deps as any);
+		const result = await agent.run("hello");
+		// A cooldown of >= 3 iterations means at most ~7 forced compactions in
+		// 20 iterations, NOT one per iteration (which was the death spiral).
+		expect(compactCalls).toBeLessThanOrEqual(7);
+		expect(result.iterationCount).toBe(20);
+	});
+
+	it("returns success:false when the final audit is still failing after retries", async () => {
+		const failingAudit = async () => ({
+			passed: false,
+			missingFiles: ["src/missing.ts"],
+			createdFiles: [],
+			modifiedFiles: [],
+			summary: "Task incomplete: 0/1 steps done, 1 files missing",
+			typeCheckError: null,
+			massEditWarning: null,
+			pendingSteps: ["Create src/missing.ts"],
+		});
+		const deps = createMockDeps({
+			finalAudit: failingAudit,
+			llmProvider: {
+				model: "test-model",
+				contextWindow: 4096,
+				chat: vi.fn().mockImplementation(() =>
+					(async function* () {
+						yield { type: "text" as const, content: "Hello from mock LLM" };
+						yield { type: "done" as const, finishReason: "stop" as const };
+					})(),
+				),
+				countTokens: vi.fn().mockReturnValue(10),
+			},
+		});
+		const agent = new Agent(deps as any);
+		const result = await agent.run("hello");
+		expect(result.success).toBe(false);
+		expect(result.error).toBeTruthy();
+	});
+
 	it("finishes after audit retry limit instead of looping forever", async () => {
 		let auditCalls = 0;
 		const failingAudit = async () => {
@@ -901,7 +978,7 @@ describe("Agent", () => {
 		const result = await agent.run("hello");
 
 		expect(auditCalls).toBe(3);
-		expect(result.success).toBe(true);
+		expect(result.success).toBe(false);
 		expect(deps.llmProvider.chat).toHaveBeenCalledTimes(3);
 	});
 });

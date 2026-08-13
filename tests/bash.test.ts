@@ -11,6 +11,7 @@ import {
 	extractEchoFileWrite,
 	detectTestResults,
 	emptyCliRunHint,
+	resetBashFailureTracking,
 } from "../src/tools/bash";
 import { processRegistry } from "../src/modules/processes";
 
@@ -60,6 +61,29 @@ describe("bash", () => {
 		const ctx = makeCtx();
 		const result = await bashTool.handler(ctx, { command: "exit 1" });
 		expect(result.success).toBe(false);
+	});
+
+	it("hard-blocks a command after repeated consecutive failures (win32 only)", async () => {
+		const { platform } = await import("os");
+		if (platform() !== "win32") return; // head works on POSIX
+
+		resetBashFailureTracking();
+		const ctx = makeCtx();
+		const filePath = join(tmpProject, "samples.txt");
+		writeFileSync(filePath, "a\nb\nc\n", "utf-8");
+
+		const r1 = await bashTool.handler(ctx, { command: "head -30 samples.txt" });
+		expect(r1.success).toBe(false);
+		expect(r1.output).toContain("Hint");
+
+		const r2 = await bashTool.handler(ctx, { command: "head -10 samples.txt" });
+		expect(r2.success).toBe(false);
+		expect(r2.output).toContain("Hint");
+
+		const r3 = await bashTool.handler(ctx, { command: "head -5 samples.txt" });
+		expect(r3.success).toBe(false);
+		expect(r3.output).toContain("STOP");
+		resetBashFailureTracking();
 	});
 
 	it("should start long-running commands in background and return a process id", async () => {

@@ -74,8 +74,11 @@ export class LspClient {
       });
 
       return await diagPromise;
-    } catch {
-      return [];
+    } catch (e) {
+      // Re-throw so the LspModule can surface the failure. Returning [] here
+      // silently hid every LSP failure (dead server, missing binary, timeout)
+      // for entire sessions.
+      throw e instanceof Error ? e : new Error(String(e));
     } finally {
       await this.shutdown();
     }

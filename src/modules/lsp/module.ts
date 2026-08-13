@@ -56,7 +56,16 @@ export class LspModule implements AgentModule {
             const items = formatDiagnostics(warnings, fullPath)
             result.output += `\n\n[LSP warnings]:\n${items}`
           }
-        } catch {}
+        } catch (e) {
+          // Surface failures instead of silently returning [] — a dead LSP
+          // previously produced ZERO diagnostics across whole sessions and the
+          // model only found type errors reactively via `bun run build`.
+          const msg = e instanceof Error ? e.message : String(e)
+          try {
+            _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`)
+          } catch {}
+          result.output += `\n\n[LSP check failed]: ${msg}`
+        }
       },
     }
   }

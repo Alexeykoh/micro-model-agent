@@ -102,6 +102,54 @@ describe("ExecutionModule tools", () => {
       expect(result.success).toBe(false);
       expect(result.output).toContain("No active plan");
     });
+
+    it("refuses to mark a later step done before earlier steps", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "T",
+        steps: [
+          "First step with enough chars here",
+          "Second step with enough chars here",
+          "Third step with enough chars here",
+        ],
+      });
+
+      const result = await planTool.handler(ctx, {
+        action: "update",
+        step: 3,
+        status: "done",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("step 1");
+    });
+
+    it("warns when marking an already-done step done again", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "T",
+        steps: [
+          "First step with enough chars here",
+          "Second step with enough chars here",
+        ],
+      });
+      await planTool.handler(ctx, { action: "update", step: 1, status: "done" });
+      const second = await planTool.handler(ctx, {
+        action: "update",
+        step: 1,
+        status: "done",
+      });
+      expect(second.success).toBe(false);
+      expect(second.output).toContain("already");
+    });
   });
 
   describe("todo tool", () => {

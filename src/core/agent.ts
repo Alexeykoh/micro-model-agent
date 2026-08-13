@@ -28,6 +28,11 @@ import { StepVerifier } from "../modules/execution/verifier";
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
 const QUALITY_TRIGGER_THRESHOLD = 40;
+/** Minimum iterations between quality-triggered forced compactions. Without
+ * this, a low-quality context re-triggers compaction on EVERY iteration
+ * (observed: 56 compactions in ~28 min) and the compaction itself can't
+ * restore quality, so the agent burns the whole budget compacting. */
+const FORCED_COMPACTION_COOLDOWN = 3;
 
 /** True when the text looks like a raw JSON tool payload (garbage to display). */
 function isToolCallJson(text: string): boolean {
@@ -307,6 +312,7 @@ export class Agent {
 		this.abortController = new AbortController();
 		let iteration = 0;
 		let lastText = "";
+		let lastForcedCompactionIteration = -FORCED_COMPACTION_COOLDOWN;
 		let hallucinationRetries = 0;
 		let lastToolSignature = "";
 		let apiPromptTokens = 0;
@@ -320,6 +326,8 @@ export class Agent {
 		let emptyResponseRetries = 0;
 		const MAX_EMPTY_RESPONSE_RETRIES = 2;
 		let emptyResponseExhausted = false;
+		let auditFailed = false;
+		let lastAuditSummary = "";
 		let repeatedToolCount = 0;
 		const MAX_REPEATED_TOOL_CALLS = 2;
 
@@ -367,8 +375,11 @@ export class Agent {
 			const quality = contextManager.getQuality();
 			if (
 				quality < QUALITY_TRIGGER_THRESHOLD &&
-				contextManager.getCompactionCount() > 0
+				contextManager.getCompactionCount() > 0 &&
+				iteration - lastForcedCompactionIteration >=
+					FORCED_COMPACTION_COOLDOWN
 			) {
+				lastForcedCompactionIteration = iteration;
 				contextManager.compact();
 				logger.warn(`Low context quality (${quality}%) — forced compaction`);
 				slog.logCompaction(
@@ -859,13 +870,15 @@ export class Agent {
 						});
 						slog.logAudit(audit.summary, iteration);
 						auditRetries++;
+						lastAuditSummary = audit.summary;
 						if (
 							auditRetries >= MAX_AUDIT_RETRIES ||
 							iteration >= config.maxToolIterations - 1
 						) {
 							logger.warn(
-								`Final audit still incomplete after ${auditRetries} retries — finishing anyway`,
+								`Final audit still incomplete after ${auditRetries} retries — reporting failure`,
 							);
+							auditFailed = true;
 							break;
 						}
 						continue;
@@ -901,9 +914,13 @@ export class Agent {
 		}
 
 		return {
-			success: emptyResponseExhausted ? false : true,
+			success: emptyResponseExhausted || auditFailed ? false : true,
 			text: lastText,
-			error: emptyResponseExhausted ? t("error.empty_response") : undefined,
+			error: emptyResponseExhausted
+				? t("error.empty_response")
+				: auditFailed
+					? t("error.audit_failed", { summary: lastAuditSummary })
+					: undefined,
 			iterationCount: iteration,
 			contextUsed: tokensUsed,
 			contextLimit: budget.history,

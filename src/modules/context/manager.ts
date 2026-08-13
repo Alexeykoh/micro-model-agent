@@ -148,7 +148,17 @@ export class ContextManager {
     const usedTokens = this.getEstimatedTokens();
     const tokenLoad = Math.max(0, 1 - usedTokens / this.budget.history);
 
-    const compactionLoss = Math.max(0, 1 - this.compactionCount * 0.15);
+    // Recoverable penalty: each compaction loses some information, but the
+    // penalty is CAPPED so cumulative compactions can never permanently pin
+    // quality below the forced-compaction trigger (40%). Before this cap, a
+    // session with ~7+ compactions clamped the term to 0 forever; combined
+    // with heavy token load + error density, quality stuck below 40 and a
+    // compaction fired on EVERY iteration (observed: 56 compactions in 28 min).
+    const COMPACTION_PENALTY_FLOOR = 0.5;
+    const compactionLoss = Math.max(
+      COMPACTION_PENALTY_FLOOR,
+      1 - this.compactionCount * 0.15,
+    );
 
     const msgCount = this.messages.length || 1;
     const errorDensity = Math.max(
@@ -353,6 +363,16 @@ export class ContextManager {
 
     for (const msg of turns) {
       const content = getMessageText(msg.content);
+
+      // Never feed a previous <system-summary> block into new facts — that is
+      // the source of recursive summary nesting (summary inside summary).
+      if (
+        msg.role === "user" &&
+        (content.startsWith("<system-summary>") ||
+          content.includes("[Compressed:"))
+      ) {
+        continue;
+      }
 
       if (msg.role === "tool") {
         for (const pattern of filePatterns) {

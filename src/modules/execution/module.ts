@@ -287,27 +287,68 @@ export class ExecutionModule implements AgentModule {
 							display,
 						};
 					}
-					if (action === "update" && args.step && this.tracker) {
-						this.tracker.updateStepStatus(
-							Number(args.step),
-							(args.status as any) || "done",
-						);
-						if (args.note)
-							this.tracker.addNote(Number(args.step), String(args.note));
-						this.tracker.syncCurrentStep();
-						this.store.saveActive(this.tracker.getPlan());
-						const progress = this.tracker.getProgressString();
-						const display = this.tracker.toPromptBlock();
-						_ctx.sessionLog?.plan(
-							"step-update",
-							`${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })} | ${progress} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
-						);
+				if (action === "update" && args.step && this.tracker) {
+					const stepId = Number(args.step);
+					const target = this.tracker.getStep(stepId);
+					if (!target) {
+						return { success: false, output: t("plan.step_not_found") };
+					}
+					const status = String(args.status || "done");
+
+					// Idempotency: re-marking a done step as done is a no-op that
+					// usually means the model is spinning (observed: step marked done
+					// 4× in a row without any new work). Flag it so it stops.
+					if (status === "done" && target.status === "done") {
 						return {
-							success: true,
-							output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}`,
-							display,
+							success: false,
+							output: t("plan.step_already_done", {
+								step: String(stepId),
+							}),
 						};
 					}
+
+					// Order enforcement: only the CURRENT step may be marked done.
+					// Prevents jumping ahead (step 5 marked done before steps 1-4,
+					// observed in the post-mortem session) and the follow-on audit
+					// failures ("5/5 steps done, 5 files missing").
+					if (status === "done") {
+						const blockers = this.tracker
+							.getPlan()
+							.steps.filter(
+								(s) =>
+									s.id < stepId &&
+									s.status !== "done" &&
+									s.status !== "skipped",
+							);
+						if (blockers.length > 0) {
+							return {
+								success: false,
+								output: t("plan.order_blocked", {
+									step: String(stepId),
+									first: String(blockers[0].id),
+									desc: blockers[0].description,
+								}),
+							};
+						}
+					}
+
+					this.tracker.updateStepStatus(stepId, status as any);
+					if (args.note)
+						this.tracker.addNote(Number(args.step), String(args.note));
+					this.tracker.syncCurrentStep();
+					this.store.saveActive(this.tracker.getPlan());
+					const progress = this.tracker.getProgressString();
+					const display = this.tracker.toPromptBlock();
+					_ctx.sessionLog?.plan(
+						"step-update",
+						`${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })} | ${progress} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
+					);
+					return {
+						success: true,
+						output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}`,
+						display,
+					};
+				}
 					if (
 						action === "update" &&
 						Array.isArray(args.steps) &&
