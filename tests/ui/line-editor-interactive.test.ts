@@ -60,6 +60,35 @@ describe("LineEditor interactive", () => {
     expect(output.data).toContain("\x1b[2Kf");
   });
 
+  it("redraws from the frame top when typing on a lower row (no duplicates)", async () => {
+    const { editor, input, output } = makeEditor();
+    editor.prompt();
+    input.pushData("1");
+    input.pushData("\x1b[13;2u"); // newline
+    input.pushData("2");
+    await tick();
+    // Typing on row 1 must first move the cursor up to the frame's first row
+    // and rewrite BOTH rows, so the previous "> 1" is cleared, not duplicated.
+    expect(
+      output.data.endsWith(
+        "\x1b[1A\r\x1b[2K> 1\r\n\x1b[2K2\x1b[J\r\x1b[1C",
+      ),
+    ).toBe(true);
+  });
+
+  it("commits the submitted buffer without erasing it", async () => {
+    const { editor, input, output } = makeEditor();
+    editor.prompt();
+    input.pushData("a");
+    input.pushData("\x1b[13;2u");
+    input.pushData("b");
+    input.pushData("\r"); // submit "a\nb"
+    await tick();
+    // After submit the frame is committed: the cursor moves to the next line
+    // and the editor must NOT redraw an empty buffer over the submitted text.
+    expect(output.data.endsWith("\x1b[1C\r\n")).toBe(true);
+  });
+
   it("host hook can swallow keys", async () => {
     const { editor, input, lines } = makeEditor();
     editor.onKeyInput = () => true;

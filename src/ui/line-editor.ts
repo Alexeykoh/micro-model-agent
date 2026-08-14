@@ -60,6 +60,11 @@ export class LineEditor implements LineInput {
 	private questionCb: ((answer: string) => void) | null = null;
 	private rawMode = false;
 	private listeners: EditorListeners = {};
+	/** Visual row (within the drawn frame) where the cursor was placed by the
+	 *  last render — used to move back to the frame's first row before
+	 *  redrawing, so a redraw starting on a middle/bottom row never leaves
+	 *  stale lines above (duplicated input text on newline). */
+	private prevCursorRow = 0;
 
 	constructor(opts: LineEditorOptions) {
 		this.input = opts.input;
@@ -123,6 +128,7 @@ export class LineEditor implements LineInput {
 		this.col = 0;
 		this.historyIndex = -1;
 		this.stash = null;
+		this.prevCursorRow = 0;
 		if (this.input.isTTY) this.render();
 	}
 
@@ -132,6 +138,7 @@ export class LineEditor implements LineInput {
 		this.lines = [""];
 		this.row = 0;
 		this.col = 0;
+		this.prevCursorRow = 0;
 		if (this.input.isTTY) this.render();
 	}
 
@@ -339,10 +346,12 @@ export class LineEditor implements LineInput {
 			const cb = this.questionCb;
 			this.questionCb = null;
 			const answer = this.lines.join("\n").trim();
+			this.commitFrame();
+			this.output.write("\r\n");
 			this.lines = [""];
 			this.row = 0;
 			this.col = 0;
-			this.render();
+			this.prevCursorRow = 0;
 			cb(answer);
 			return;
 		}
@@ -355,17 +364,34 @@ export class LineEditor implements LineInput {
 		}
 		this.historyIndex = -1;
 		this.stash = null;
+		this.commitFrame();
+		this.output.write("\r\n");
 		this.lines = [""];
 		this.row = 0;
 		this.col = 0;
-		this.render();
+		this.prevCursorRow = 0;
 		this.emitLine(text);
+	}
+
+	/** Move the cursor to the end of the buffer's last visual row so the
+	 *  submitted text stays on screen (commit), without erasing the frame. */
+	private commitFrame(): void {
+		const layout = this.layout();
+		const idx = layoutIndexFor(layout, this.row, this.col);
+		const rowsDown = layout.length - 1 - idx;
+		const lastLen = charLen(stripAnsi(layout[layout.length - 1].text));
+		const out: string[] = [];
+		if (rowsDown > 0) out.push(`\x1b[${rowsDown}B`);
+		out.push("\r");
+		if (lastLen > 0) out.push(`\x1b[${lastLen}C`);
+		this.output.write(out.join(""));
 	}
 
 	private ctrlC(): void {
 		this.lines = [""];
 		this.row = 0;
 		this.col = 0;
+		this.prevCursorRow = 0;
 		this.render();
 		process.emit("SIGINT");
 	}
@@ -632,6 +658,7 @@ export class LineEditor implements LineInput {
 
 	private clearScreen(): void {
 		this.output.write("\x1b[2J\x1b[H");
+		this.prevCursorRow = 0;
 		this.render();
 	}
 
@@ -654,7 +681,14 @@ export class LineEditor implements LineInput {
 		const rowsAfter = layout.length - idx - 1;
 		const ccol = (idx === 0 ? promptWidth : 0) + vcol;
 
-		const out: string[] = ["\r"];
+		const out: string[] = [];
+		// Move back up to the frame's first row before redrawing. Without this,
+		// a redraw that starts on a middle/bottom row (e.g. typing on line 2 of
+		// a multi-line buffer) writes the whole frame one row too low and leaves
+		// the previous frame's top line stale on screen — the user sees every
+		// line duplicated.
+		if (this.prevCursorRow > 0) out.push(`\x1b[${this.prevCursorRow}A`);
+		out.push("\r");
 		for (let i = 0; i < layout.length; i++) {
 			out.push("\x1b[2K");
 			if (i === 0) out.push(this.promptStr);
@@ -665,6 +699,7 @@ export class LineEditor implements LineInput {
 		if (rowsAfter > 0) out.push(`\x1b[${rowsAfter}A`);
 		out.push("\r");
 		if (ccol > 0) out.push(`\x1b[${ccol}C`);
+		this.prevCursorRow = idx;
 		this.output.write(out.join(""));
 	}
 
