@@ -49,7 +49,7 @@ describe('Updater', () => {
     expect(result.success).toBe(true)
     expect(result.installed).toBe('0.4.0')
     expect(runner).toHaveBeenCalledWith(
-      'npm',
+      expect.stringMatching(/^npm(\.cmd)?$/),
       ['install', '-g', 'micro-models-agent@0.4.0'],
       expect.objectContaining({ timeout: 120000 }),
     )

@@ -1,3 +1,5 @@
+import { resolveSpawnCommand } from '../lsp/command'
+
 export interface UpdateCheckResult {
   updateAvailable: boolean
   current: string
@@ -75,7 +77,8 @@ export class Updater {
    */
   async install(latest: string): Promise<InstallResult> {
     try {
-      const res = await this.runner('npm', ['install', '-g', `${this.packageName}@${latest}`], {
+      const command = resolveSpawnCommand('npm')
+      const res = await this.runner(command, ['install', '-g', `${this.packageName}@${latest}`], {
         timeout: 120000,
         windowsHide: true,
       })
