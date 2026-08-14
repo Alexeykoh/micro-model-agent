@@ -4,6 +4,7 @@ import { spawn, execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { resolve, extname, join } from "path";
 import { platform } from "os";
+import { findProjectRoot } from "../../lsp/project-root";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
 
@@ -77,7 +78,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 		}
 
 		await this.runProjectLint(ctx, result);
-		await this.runProjectTypeCheck(ctx, result);
+		await this.runProjectTypeCheck(fullPath, ctx.baseDir, result);
 	}
 
 	private async checkSyntax(
@@ -168,10 +169,19 @@ export class LintOnWritePlugin implements AgentPlugin {
 	}
 
 	private async runProjectTypeCheck(
-		ctx: ToolContext,
+		filePath: string,
+		baseDir: string,
 		result: ToolResult,
 	): Promise<void> {
-		const tsconfigPath = join(ctx.baseDir, "tsconfig.json");
+		// Resolve the project root from the EDITED FILE, not the agent baseDir.
+		// In a nested layout (`baseDir/proj/tsconfig.json`) the old baseDir-based
+		// lookup silently skipped the typecheck on every write — the whole
+		// session then ran with zero type feedback (observed in ses_mst2r0r5).
+		const projectRoot = findProjectRoot(filePath, baseDir, [
+			"tsconfig.json",
+			"package.json",
+		]);
+		const tsconfigPath = join(projectRoot, "tsconfig.json");
 		if (!existsSync(tsconfigPath)) {
 			return;
 		}
@@ -189,7 +199,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 		}
 
 		this._checkTimestamp = now;
-		this._checkPromise = this.runTscCheck(ctx.baseDir);
+		this._checkPromise = this.runTscCheck(projectRoot);
 		const error = await this._checkPromise;
 		if (error) {
 			result.output += `\n\n[Project typecheck failed]: ${error}`;

@@ -24,4 +24,18 @@ describe("bootstrap", () => {
 		expect(info).toContain("Bun is available");
 		expect(info).toContain("bun test");
 	});
+
+	it("instructs runtime verification for behavior bugs (ses_mst2r0r5)", () => {
+		// The agent fixed a rendering bug without ever running the app or the
+		// browser. The prompt must tell it to verify runtime behavior against
+		// actual output before marking a plan step done.
+		const info = buildSystemInfo(
+			{ model: "test-model", autoPlan: true } as any,
+			"/tmp",
+			"win32 shell=cmd",
+		);
+		expect(info).toContain("reproduce");
+		expect(info).toContain("runtime behavior");
+		expect(info).toContain("plan update");
+	});
 });

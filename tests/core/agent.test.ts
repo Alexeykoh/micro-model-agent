@@ -3,6 +3,7 @@ import { mkdtempSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Agent } from "../../src/core/agent";
+import { MemoryStore } from "../../src/modules/memory/store";
 import type { AppConfig } from "../../src/config/types";
 
 function createMockDeps(overrides?: Record<string, unknown>) {
@@ -1152,12 +1153,13 @@ describe("Agent", () => {
 			toolExecutor: mockExecutor as any,
 			sessionManager: sessionManagerMock as any,
 			baseDir: tmpBase,
+			memoryStore: new MemoryStore(join(tmpBase, "memory")),
 			config: { ...createMockDeps().config, maxToolIterations: 6 },
 		});
 		const agent = new Agent(deps as any);
 		await agent.run("retry failing tool");
 
-		const errorsMd = join(tmpBase, ".mma", "memory", "errors.md");
+		const errorsMd = join(tmpBase, "memory", "errors.md");
 		expect(existsSync(errorsMd)).toBe(true);
 		const content = readFileSync(errorsMd, "utf-8");
 		expect(content).toContain("test_tool");

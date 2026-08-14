@@ -133,15 +133,56 @@ export class IndexerModule implements AgentModule {
       ? `\n${t('indexer.and_more', { count: result.files.length - 100 })}`
       : ''
 
+    const duplicates = this.findDuplicateBasenames(result)
+
     return [
       `${t('indexer.map_header')} (${this.baseDir})`,
       summary,
       ...(stackLine ? [stackLine] : []),
       `${t('indexer.top_directories')}: ${topDirs}`,
+      ...(duplicates.length > 0
+        ? [t('indexer.duplicates', { names: duplicates.join(', ') })]
+        : []),
       `${t('indexer.files')}:` + (fileLines.length > 0 ? '' : ' ' + t('indexer.empty')),
       ...fileLines,
       more,
     ].join('\n')
+  }
+
+  /**
+   * Find files that share a basename across different extensions in the same
+   * directory (e.g. `ProductCard.js` + `ProductCard.tsx`). This is a purely
+   * structural fact about the file tree — a stale transpiled twin may shadow
+   * the real source at build time. Flagging it is not task classification, so
+   * it does not violate the no-keyword-matching rule; the model decides what
+   * to do with the information.
+   */
+  private findDuplicateBasenames(result: IndexResult): string[] {
+    const byDir: Record<string, Map<string, string[]>> = {}
+    for (const f of result.files) {
+      const path = f.path.replace(/\\/g, '/')
+      const idx = path.lastIndexOf('/')
+      const dir = idx >= 0 ? path.slice(0, idx) : ''
+      const name = path.slice(idx + 1)
+      const dot = name.lastIndexOf('.')
+      if (dot <= 0) continue
+      const base = name.slice(0, dot)
+      const ext = name.slice(dot + 1)
+      if (!byDir[dir]) byDir[dir] = new Map()
+      const list = byDir[dir].get(base) ?? []
+      list.push(ext)
+      byDir[dir].set(base, list)
+    }
+    const dups: string[] = []
+    for (const dir of Object.keys(byDir).sort()) {
+      for (const [base, exts] of byDir[dir]) {
+        if (exts.length < 2) continue
+        const uniqueExts = [...new Set(exts)].sort()
+        const dirPrefix = dir ? `${dir}/` : ''
+        dups.push(`${dirPrefix}${base}.{${uniqueExts.join(',')}}`)
+      }
+    }
+    return dups
   }
 
   private getDirectoryCounts(result: IndexResult): Record<string, number> {

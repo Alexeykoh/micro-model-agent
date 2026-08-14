@@ -25,6 +25,7 @@ import { LspModule } from "../modules/lsp/index";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
 import { MemoryModule } from "../modules/memory/module";
+import { MemoryStore } from "../modules/memory/store";
 import { setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
@@ -73,6 +74,14 @@ export function buildSystemInfo(
 			`Plan rule (MANDATORY): any task creating files, installing packages, or requiring multiple actions MUST create a plan with the "plan" tool BEFORE starting. Each step = a concrete deliverable.`,
 		);
 	}
+
+	// When a bug is described in terms of runtime behavior (what happens when
+	// the app runs), the fix is only provable by REPRODUCING it — running the
+	// app/build/browser and comparing against actual output. The model decides
+	// when this applies (no keyword classification).
+	lines.push(
+		`Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done".`,
+	);
 
 	const hasMCP =
 		config.mcpServers &&
@@ -300,7 +309,8 @@ export async function bootstrap(
 	await mcpModule.initialize();
 	moduleRegistry.register(mcpModule);
 
-	const memoryModule = new MemoryModule(join(dir, "memory"));
+	const memoryStore = new MemoryStore(join(dir, "memory"));
+	const memoryModule = new MemoryModule(memoryStore);
 	moduleRegistry.register(memoryModule);
 
 	if (config.browser.enabled) {
@@ -427,6 +437,7 @@ export async function bootstrap(
 		},
 		finalAudit: () => execModule.runFinalAudit(),
 		sessionManager,
+		memoryStore,
 		exitOnComplete,
 	};
 

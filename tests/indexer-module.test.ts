@@ -126,4 +126,21 @@ describe('IndexerModule', () => {
     await new Promise((r) => setTimeout(r, 50))
     plugin.onSessionEnd?.({})
   })
+
+  it('flags files sharing a basename across extensions in the map block', async () => {
+    // ses_mst2r0r5: ProductCard.js (stale transpiled) and ProductCard.tsx
+    // (real source) both exist; Vite resolves .js first. The map must surface
+    // the duplication so the model questions which file is served.
+    mkdirSync(join(tmpDir, 'components'), { recursive: true })
+    writeFileSync(join(tmpDir, 'components/ProductCard.js'), 'export const a = 1')
+    writeFileSync(join(tmpDir, 'components/ProductCard.tsx'), 'export const b = 1')
+    writeFileSync(join(tmpDir, 'components/Header.tsx'), 'export const h = 1')
+
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, '.mma') })
+    await mod.buildIndex()
+
+    const block = mod.getSystemPromptBlock()
+    expect(block!.content).toContain('ProductCard.{js,tsx}')
+    expect(block!.content).not.toContain('Header.{')
+  })
 })

@@ -15,7 +15,6 @@ import type {
 	AgentResult,
 } from "./types";
 import type { SessionManager } from "../modules/session/manager";
-import { join } from "path";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { PromptBuilder } from "./prompt-builder";
@@ -94,6 +93,7 @@ export interface AgentDeps {
 		summary: string;
 	} | null>;
 	sessionManager?: SessionManager;
+	memoryStore?: MemoryStore;
 	exitOnComplete?: boolean;
 }
 
@@ -740,21 +740,17 @@ export class Agent {
 							!memoryRuleRecorded.has(key)
 						) {
 							memoryRuleRecorded.add(key);
-							if (sessionManager) {
-								const activeSession = sessionManager.getActiveMeta();
-								if (activeSession) {
-									const memDir = join(baseDir, ".mma", "memory");
-									const memStore = new MemoryStore(memDir);
-									memStore.appendRule(
-										"errors",
-										`Tool ${key} failed ${prev.count}x (${prev.error})`,
-										`Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
-										"Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
-									);
-									logger.warn(
-										`Recorded repeated ${key} failures to memory (${prev.count}x)`,
-									);
-								}
+							const memStore = this.deps.memoryStore;
+							if (memStore) {
+								memStore.appendRule(
+									"errors",
+									`Tool ${key} failed ${prev.count}x (${prev.error})`,
+									`Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
+									"Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
+								);
+								logger.warn(
+									`Recorded repeated ${key} failures to memory (${prev.count}x)`,
+								);
 							}
 						}
 					}
@@ -777,18 +773,14 @@ export class Agent {
 						content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
 					});
 
-					if (sessionManager) {
-						const activeSession = sessionManager.getActiveMeta();
-						if (activeSession) {
-							const memDir = join(baseDir, ".mma", "memory");
-							const memStore = new MemoryStore(memDir);
-							memStore.appendRule(
-								"errors",
-								`${consecutiveToolFailures} consecutive tool failures`,
-								"Multiple tools failing suggests environment or configuration issue",
-								"Check dependencies, verify file paths, try write_file directly instead of shell commands",
-							);
-						}
+					const memStore = this.deps.memoryStore;
+					if (memStore) {
+						memStore.appendRule(
+							"errors",
+							`${consecutiveToolFailures} consecutive tool failures`,
+							"Multiple tools failing suggests environment or configuration issue",
+							"Check dependencies, verify file paths, try write_file directly instead of shell commands",
+						);
 					}
 				}
 				contextManager.addMessage({

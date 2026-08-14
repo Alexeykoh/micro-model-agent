@@ -241,7 +241,10 @@ class ProcessRegistry {
         entry.status = "killed";
       }
       entry.spawnError = err.message;
-      append(Buffer.from(`[process error] ${err.message}`));
+      // Write directly to the log, not through `append`: a failed spawn often
+      // never emits `close`, so the buffered line would never be flushed and
+      // the log would be empty (observed: "records a spawn error" test).
+      pushLine(`[process error] ${err.message}`);
       resolveExit();
     });
 

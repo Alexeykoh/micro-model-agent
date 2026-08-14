@@ -1,10 +1,11 @@
 import { existsSync } from 'fs'
-import { resolve, extname } from 'path'
+import { resolve, extname, dirname, join } from 'path'
 import { spawn } from 'child_process'
 import { t } from '../../i18n/index'
 import type { MoEPlan } from './types'
 import type { AppConfig } from '../../config/types'
 import { validateExpertConfig } from '../../config/experts'
+import { findProjectRoot } from '../lsp/project-root'
 
 export interface VerificationItem {
   passed: boolean
@@ -56,6 +57,31 @@ export class StepVerifier {
     }
     try {
       await this.runAsync('npx tsc --noEmit', this.baseDir, 60_000)
+      return { passed: true, message: 'TypeScript type check passed' }
+    } catch (e: any) {
+      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message
+      return { passed: false, message: `TypeScript type check failed: ${stderr.slice(0, 500)}` }
+    }
+  }
+
+  /**
+   * Type-check a specific file, resolving the project root from the FILE's
+   * location (not the agent baseDir). For nested layouts (`baseDir/proj/` with
+   * its own tsconfig.json) the old baseDir-based check silently skipped every
+   * type error (observed in ses_mst2r0r5: zero type feedback for the whole
+   * session). Markers mirror the TypeScript LSP server config.
+   */
+  async runTypeCheckForFile(filePath: string): Promise<VerificationItem> {
+    const projectRoot = findProjectRoot(filePath, this.baseDir, [
+      'tsconfig.json',
+      'package.json',
+    ])
+    const tsconfigPath = join(projectRoot, 'tsconfig.json')
+    if (!existsSync(tsconfigPath)) {
+      return { passed: true, message: 'No tsconfig.json found — skipping type check' }
+    }
+    try {
+      await this.runAsync('npx tsc --noEmit --skipLibCheck', projectRoot, 60_000)
       return { passed: true, message: 'TypeScript type check passed' }
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message
