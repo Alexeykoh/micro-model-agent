@@ -382,7 +382,10 @@ export class Repl implements ReplContext {
 			this.logger?.logREPL("user", input);
 
 			if (this.rl instanceof LineEditor) this.rl.reset();
-			process.stdout.write("\n" + pc.green(t("repl.agent")));
+			// Overwrite the empty prompt that reset() just drew with a divider,
+			// then label the agent's reply — separates the user's message from
+			// the agent's answer.
+			process.stdout.write("\r" + divider() + "\n" + pc.green(t("repl.agent")));
 
 			const renderer = new Renderer({
 				spinner: this.config.ui?.spinner ?? true,
@@ -419,6 +422,9 @@ export class Repl implements ReplContext {
 				console.error(pc.red(`${t("error.prefix")}${result.error}`));
 			}
 			this.showContextBar(result);
+			// Close the agent's turn: a divider before the next prompt keeps
+			// consecutive user/agent messages visually separated.
+			process.stdout.write("\n" + divider() + "\n");
 		} finally {
 			this.agentRunning = false;
 		}
