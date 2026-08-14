@@ -5,6 +5,7 @@ import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { LspClient } from './client'
 import { getServerForFile, DEFAULT_LSP_CONFIG } from './config'
+import { findProjectRoot } from './project-root'
 import type { LspConfig } from './types'
 import type { LspDiagnostic } from './types'
 
@@ -43,8 +44,14 @@ export class LspModule implements AgentModule {
         const serverConfig = getServerForFile(fullPath, self.config)
         if (!serverConfig) return
 
+        const projectRoot = findProjectRoot(
+          fullPath,
+          _ctx.baseDir,
+          serverConfig.workspaceMarkers ?? [],
+        )
+
         try {
-          const diagnostics = await self.client.checkFile(fullPath, _ctx.baseDir, serverConfig)
+          const diagnostics = await self.client.checkFile(fullPath, _ctx.baseDir, serverConfig, projectRoot)
           const errors = diagnostics.filter((d) => d.severity === 1)
           const warnings = diagnostics.filter((d) => d.severity === 2)
 

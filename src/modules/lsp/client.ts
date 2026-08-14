@@ -35,13 +35,14 @@ export class LspClient {
     filePath: string,
     baseDir: string,
     config: LspServerConfig,
+    projectRoot: string = baseDir,
   ): Promise<LspDiagnostic[]> {
     const timeout = config.timeout ?? DEFAULT_TIMEOUT;
 
     try {
-      await this.startServer(config, baseDir);
+      await this.startServer(config, projectRoot);
 
-      const rootUri = this.pathToUri(resolve(baseDir));
+      const rootUri = this.pathToUri(projectRoot);
       const initResult = await this.sendRequest(
         "initialize",
         {
@@ -93,7 +94,7 @@ export class LspClient {
 
   private async startServer(
     config: LspServerConfig,
-    baseDir: string,
+    projectRoot: string,
   ): Promise<void> {
     if (config.autoInstall === false) {
       try {
@@ -111,7 +112,7 @@ export class LspClient {
       const spawnOpts: SpawnOptions = {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...config.env },
-        cwd: baseDir,
+        cwd: projectRoot,
       };
       if (isWin) {
         // A bare `.cmd`/`.bat` shim cannot be spawned directly under Node —
