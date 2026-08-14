@@ -8,6 +8,7 @@ export const fileInfoTool: ToolDefinition = {
   name: 'file_info',
   description: 'Get metadata about a file or directory (size, creation date, modification date).',
   tags: ['file'],
+  boundedOutput: true,
   parameters: {
     type: 'object',
     properties: {

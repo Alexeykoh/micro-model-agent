@@ -21,6 +21,7 @@ export const readFileTool: ToolDefinition = {
 	name: "read_file",
 	description: `Read a file from the filesystem. Reads up to ${DEFAULT_LIMIT} lines at a time by default; use offset to page through large files.`,
 	tags: ["file", "code"],
+	boundedOutput: true,
 	parameters: {
 		type: "object",
 		properties: {

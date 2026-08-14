@@ -11,6 +11,13 @@ export interface ToolDefinition {
 	 * calls (e.g. chunk_query) and need a longer budget on slow providers.
 	 */
 	timeoutMs?: number;
+	/**
+	 * The tool bounds its own output size (line limits, entry caps, tail caps).
+	 * Budget-based truncation in the agent loop must never apply to such tools —
+	 * near-full context was cutting read_file results to ~2K chars, making the
+	 * model believe files were truncated and re-read them forever.
+	 */
+	boundedOutput?: boolean;
 	handler: (
 		ctx: ToolContext,
 		args: Record<string, unknown>,

@@ -25,9 +25,10 @@ import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
 import { StepVerifier } from "../modules/execution/verifier";
 
-const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
-const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
-const QUALITY_TRIGGER_THRESHOLD = 40;
+	const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
+	const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
+	const QUALITY_TRIGGER_THRESHOLD = 40;
+
 /** Minimum iterations between quality-triggered forced compactions. Without
  * this, a low-quality context re-triggers compaction on EVERY iteration
  * (observed: 56 compactions in ~28 min) and the compaction itself can't
@@ -46,6 +47,29 @@ function isToolCallJson(text: string): boolean {
 		}
 	}
 	return false;
+}
+
+/**
+ * Max chars a tool result may occupy, given remaining budget and whether
+ * the tool bounds its own output. Tools that declare `boundedOutput` (e.g.
+ * read_file with its line limit) are never truncated by the budget — a
+ * near-full context used to cut them to ~2K chars, making the model believe
+ * files were truncated and re-read them forever.
+ */
+export function toolOutputCharLimit(
+	remainingBudget: number,
+	historyBudget: number,
+	bounded: boolean,
+): number {
+	if (bounded) return Number.MAX_SAFE_INTEGER;
+	const maxCharsByRatio = Math.floor(
+		historyBudget * TOOL_RESULT_MAX_TOKENS_RATIO * 2,
+	);
+	return Math.min(
+		remainingBudget,
+		maxCharsByRatio,
+		TOOL_RESULT_ABSOLUTE_MAX_CHARS,
+	);
 }
 
 export interface AgentDeps {
@@ -175,18 +199,14 @@ export class Agent {
 		output: string,
 		budget: { history: number },
 		currentTokens: number,
+		bounded: boolean,
 	): string {
-		const remainingBudget = budget.history - currentTokens;
-		const maxCharsByBudget = Math.floor(remainingBudget * 0.5 * 2);
-		const maxCharsByRatio = Math.floor(
-			budget.history * TOOL_RESULT_MAX_TOKENS_RATIO * 2,
+		const remainingBudget = Math.max(0, budget.history - currentTokens);
+		const maxChars = toolOutputCharLimit(
+			remainingBudget,
+			budget.history,
+			bounded,
 		);
-		const maxChars = Math.min(
-			maxCharsByBudget,
-			maxCharsByRatio,
-			TOOL_RESULT_ABSOLUTE_MAX_CHARS,
-		);
-
 		if (output.length <= maxChars) return output;
 
 		const truncated = output.slice(0, maxChars);
@@ -357,6 +377,11 @@ export class Agent {
 		// Account for tool definitions in context budget (they're sent via body.tools, not messages)
 		const allToolsForBudget = toolExecutor.getToolDefinitions(
 			this.deps.toolTags,
+		);
+		const boundedToolNames = new Set(
+			allToolsForBudget
+				.filter((t) => t.boundedOutput)
+				.map((t) => t.name),
 		);
 		const toolTokenEstimate = allToolsForBudget.reduce(
 			(sum, t) =>
@@ -666,6 +691,7 @@ export class Agent {
 						result.output,
 						budget,
 						currentTokens,
+						boundedToolNames.has(call.name),
 					);
 					contextManager.addMessage({
 						role: "tool",

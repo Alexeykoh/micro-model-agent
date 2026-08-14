@@ -33,12 +33,13 @@ export class ToolRegistry {
     })
   }
 
-  getAllForLLM(tags?: string[]): Array<Pick<ToolDefinition, 'name' | 'description' | 'parameters'>> {
+  getAllForLLM(tags?: string[]): Array<Pick<ToolDefinition, 'name' | 'description' | 'parameters' | 'boundedOutput'>> {
     const tools = tags ? this.getByTags(tags) : this.getAll()
     return tools.map(t => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,
+      boundedOutput: t.boundedOutput,
     }))
   }
 }

@@ -164,6 +164,7 @@ export class ToolExecutor {
 		name: string;
 		description: string;
 		parameters: Record<string, unknown>;
+		boundedOutput?: boolean;
 	}> {
 		return this.registry.getAllForLLM(tags);
 	}
