@@ -31,6 +31,7 @@ const mockCtx = (): ToolContext => ({
       maxElements: 30,
       maxContentChars: 2500,
       maxConsoleEntries: 20,
+      maxConsoleLineChars: 400,
       viewportWidth: 1280,
       viewportHeight: 720,
       navigationTimeout: 15000,

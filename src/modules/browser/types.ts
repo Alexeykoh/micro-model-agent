@@ -55,6 +55,7 @@ export interface BrowserConfig {
   maxElements: number
   maxContentChars: number
   maxConsoleEntries: number
+  maxConsoleLineChars: number
   screenshotMaxWidth: number
   cookieDir: string
   viewportWidth: number
@@ -72,7 +73,8 @@ export const DEFAULT_BROWSER_CONFIG: BrowserConfig = {
   headless: true,
   maxElements: 30,
   maxContentChars: 2500,
-  maxConsoleEntries: 20,
+  maxConsoleEntries: 40,
+  maxConsoleLineChars: 400,
   screenshotMaxWidth: 1280,
   cookieDir: '',
   viewportWidth: 1280,

@@ -420,7 +420,10 @@ src/
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
 │       ├── types.ts    # BrowserConfig, BrowserState, ElementEntry, ActionResult
-│       ├── session.ts  # BrowserSession — Playwright lifecycle + action dispatch
+│       ├── driver.ts   # BrowserDriver interface + PlaywrightDriver + createBrowserDriver() (direct/Bun-bridge selection)
+│       ├── bridge-client.ts # BridgeDriver — RPC over stdio to node bridge-server.mjs
+│       ├── bridge-server.mjs # Node-side Playwright wrapper (plain .mjs, no bundling)
+│       ├── session.ts  # BrowserSession — driver lifecycle + action dispatch
 │       ├── snapshot.ts # Page → numbered accessibility tree (interactive elements)
 │       ├── actions.ts  # Script builders for click, type, scroll
 │       ├── cookie-store.ts # Cookie/session persistence to disk
@@ -671,12 +674,33 @@ Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying l
     "enabled": true,
     "headless": true,
     "maxElements": 30,
+    "maxContentChars": 2500,
+    "maxConsoleEntries": 40,
+    "maxConsoleLineChars": 400,
     "viewportWidth": 1280,
     "viewportHeight": 720,
     "navigationTimeout": 15000
   }
 }
 ```
+
+### Browser Driver + Node Bridge
+
+> **Status:** implemented (v0.32.0). `BrowserSession` talks to a `BrowserDriver` (`src/modules/browser/driver.ts`) instead of Playwright directly. There are two drivers:
+
+- **`PlaywrightDriver`** — direct in-process Playwright (`chromium.launch()`). Used under Node.
+- **`BridgeDriver`** (`bridge-client.ts` + `bridge-server.mjs`) — Playwright runs in a child `node` process; RPC is JSON-lines over stdio (`spawn('node', [bridge-server.mjs])`).
+
+`createBrowserDriver()` picks the driver at runtime:
+
+- **Under Bun → BridgeDriver always.** Playwright's pipe/websocket transport hangs under Bun on some platforms (launch never returns). The bridge runs under Node, where Playwright works reliably (~85ms launch).
+- **Under Node → try `PlaywrightDriver` (8s direct-launch timeout), on failure dispose and fall back to `BridgeDriver`.**
+
+Bridge protocol: commands `ping | launch | goto | evaluate | content | title | url | waitLoad | screenshot | cookies | setCookies | back | forward | close`. Responses are `{id, ok, data|error, console, network}` — each reply carries any console/network events drained since the previous command (`goto` clears the buffers before navigating). The bridge caps console at 500 entries and network at 100; long console lines are truncated to `maxConsoleLineChars` (default 400) with `…`. Event capture is identical to the direct driver: `page.on('console')`, `page.on('pageerror')` → `ConsoleEntry`, `page.on('requestfailed')` → `NetworkErrorEntry`.
+
+**Build/deploy note:** `bridge-server.mjs` is plain JS and must be shipped next to the bundled `dist/` — `scripts/copy-assets.ts` copies `src/modules/browser/bridge-server.mjs` → `dist/modules/browser/`. `bridge-client.ts` resolves its path via `import.meta.url`, so it works in both `src/` and `dist/` layouts. `playwright` stays `external` in the bundle (loaded via `createRequire` inside the bridge).
+
+- The snapshot includes a **Network errors** section (last 15 failed requests: `METHOD url → errorText`) and the console buffer (capped at `maxConsoleEntries`, default 40).
 
 ## Image Handling
 
@@ -1004,7 +1028,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.30.0
+### Current Version: 0.32.0
 
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
@@ -1024,3 +1048,4 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **29.0.0** = RLM-inspired features (spec `docs/specs/2026-08-12-rlm-inspired-design.md`): `ArtifactStore` (`src/modules/artifacts/store.ts`), subagent `result_mode: "file"` pass-by-reference results, `chunk_query` tool + `runChunkQuery()` chunked parallel queries, `SubagentConfig` (resultMode/maxSummaryChars/artifactsDir/stableSystemPrompt/maxParallelChunkQueries), `ChatOptions.maxTokens` + `ChatOptions.reasoningEffort` (`reasoning_effort` in OpenAI-compat body), per-tool `timeoutMs` override, stable subagent system prompt. Fix: bun test hang from leaked `mma-idle-*.js` processes — double `taskkill /T` with 150ms settle gap in `killTree` (wmic/PowerShell process enumeration was too slow under parallel load)
 - **31** = session reliability fixes (from `ses_msrv83di_0hx6id` post-mortem): (1) context quality — compaction penalty capped at 0.5 floor so cumulative compactions can never pin quality below the 40% trigger (was: 56 forced compactions in 28 min); (2) forced-compaction cooldown `FORCED_COMPACTION_COOLDOWN=3` in the agent loop; (3) `extractFacts` skips `<system-summary>` messages so summaries can't nest inside themselves; (4) final audit gate returns `success:false` + `error.audit_failed` instead of "finishing anyway"; (5) LSP failures surfaced via `[LSP check failed]` + logger instead of silent `catch {}`/`return []`; (6) `plan update` refuses out-of-order `done` (`plan.order_blocked`) and re-marking a done step (`plan.step_already_done`); (7) bash hard-stops a forbidden Windows command after 3 consecutive failures (`resetBashFailureTracking` test hook)
 - **32** = auto-update (`updater` module): async non-blocking npm version check on startup (`Updater.check()`, 5s timeout, registry fetch), auto-install `npm install -g micro-models-agent` when newer (`Updater.install()`), config `updater.{enabled,checkOnStart,autoInstall,intervalMs}` (defaults: enabled, autoInstall). Fired from `main.ts` via `startAutoUpdate()` (fire-and-forget, never blocks startup; best-effort, errors swallowed). i18n keys `updater.*`. Default `intervalMs: 0` = single check per launch; set >0 for a permanent background re-check loop.
+- **32** = browser driver abstraction (`src/modules/browser/driver.ts`): `BrowserDriver` interface + `PlaywrightDriver` (direct, Node) + `BridgeDriver` (`bridge-client.ts` spawns `node bridge-server.mjs`, JSON-lines RPC over stdio). `createBrowserDriver()` → bridge **always under Bun** (Playwright pipe/ws transport hangs — `chromium.launch()` never returns; fixed by running Playwright in a child Node process, ~85ms launch), direct-with-8s-timeout→bridge-fallback under Node. New config `browser.maxConsoleLineChars` (default 400), `maxConsoleEntries` default 20→40; snapshot network errors now last 15 (was 5). `scripts/copy-assets.ts` ships `bridge-server.mjs` → `dist/modules/browser/`.

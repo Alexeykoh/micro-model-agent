@@ -1,17 +1,6 @@
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from "playwright";
-import type {
-  BrowserConfig,
-  BrowserState,
-  ActionResult,
-  ConsoleEntry,
-  ConsoleType,
-  NetworkErrorEntry,
-} from "./types";
+import type { BrowserConfig, BrowserState, ActionResult } from "./types";
+import type { BrowserDriver } from "./driver";
+import { createBrowserDriver } from "./driver";
 import { extractInteractiveElements, formatSnapshot } from "./snapshot";
 import {
   buildClickScript,
@@ -22,8 +11,9 @@ import {
 } from "./actions";
 import { CookieStore, type StoredCookie } from "./cookie-store";
 import { t } from "../../i18n/index";
+import type { ConsoleEntry, ConsoleType } from "./types";
 
-const CONSOLE_MAX_LINE = 200;
+const CONSOLE_MAX_LINE = 400;
 
 export class ConsoleBuffer {
   private entries: ConsoleEntry[] = [];
@@ -101,9 +91,7 @@ export class BrowserActionTracker {
 }
 
 export class BrowserSession {
-  private browser: Browser | null = null;
-  private context: BrowserContext | null = null;
-  private page: Page | null = null;
+  private driver: BrowserDriver | null = null;
   private config: BrowserConfig;
   private cookieStore: CookieStore;
   private state: BrowserState = {
@@ -113,13 +101,10 @@ export class BrowserSession {
     elementCount: 0,
   };
   private actionTracker = new BrowserActionTracker(3);
-  private consoleBuffer: ConsoleBuffer;
-  private networkErrors: NetworkErrorEntry[] = [];
 
   constructor(config: BrowserConfig) {
     this.config = config;
     this.cookieStore = new CookieStore(config.cookieDir);
-    this.consoleBuffer = new ConsoleBuffer(config.maxConsoleEntries);
   }
 
   getState(): BrowserState {
@@ -177,7 +162,7 @@ export class BrowserSession {
         const warning = this.actionTracker.record(
           action,
           args,
-          this.page?.url() || "",
+          this.driver?.url() || "",
         );
         if (warning && result.success) {
           result.output = result.output + "\n\n⚠️ " + warning;
@@ -193,70 +178,41 @@ export class BrowserSession {
     }
   }
 
-  private async ensurePage(): Promise<ActionResult | null> {
-    if (!this.page) {
+  private async ensureDriver(): Promise<ActionResult | null> {
+    if (!this.driver) {
       return { success: false, output: t("browser.no_page") };
     }
     return null;
   }
 
   private async launch(): Promise<void> {
-    if (this.browser) return;
+    if (this.driver) return;
 
-    this.browser = await chromium.launch({ headless: this.config.headless });
-    this.context = await this.browser.newContext({
-      viewport: {
-        width: this.config.viewportWidth,
-        height: this.config.viewportHeight,
-      },
-    });
+    this.driver = await createBrowserDriver(this.config);
 
     const savedCookies = await this.cookieStore.load();
     if (savedCookies.length > 0) {
-      await this.context.addCookies(
-        savedCookies.map((c) => ({
-          ...c,
-          sameSite: c.sameSite as any,
-        })),
-      );
+      await this.driver.addCookies(savedCookies);
     }
-
-    this.page = await this.context.newPage();
-    this.page.setDefaultTimeout(this.config.navigationTimeout);
-
-    this.page.on("console", (msg) => {
-      this.consoleBuffer.add(msg.type() as ConsoleType, msg.text());
-    });
-    this.page.on("pageerror", (err) => {
-      this.consoleBuffer.add("pageerror", `Page error: ${err.message}`);
-    });
-    this.page.on("requestfailed", (req) => {
-      const failure = req.failure();
-      this.networkErrors.push({
-        method: req.method(),
-        url: req.url(),
-        error: failure?.errorText || "unknown",
-      });
-    });
   }
 
   private async saveCookies(): Promise<void> {
-    if (!this.context) return;
-    const cookies = await this.context.cookies();
+    if (!this.driver) return;
+    const cookies = await this.driver.cookies();
     await this.cookieStore.save(cookies as StoredCookie[]);
   }
 
   private async takeSnapshot(): Promise<string> {
-    if (!this.page) return "No page open.";
+    if (!this.driver) return "No page open.";
 
-    await this.page.evaluate(buildIndexInjectionScript());
-    const html = await this.page.content();
-    const url = this.page.url();
-    const title = await this.page.title();
+    await this.driver.evaluate(buildIndexInjectionScript());
+    const html = await this.driver.content();
+    const url = this.driver.url();
+    const title = await this.driver.title();
 
     let content = "";
     try {
-      content = await this.page.evaluate(buildTextExtractionScript());
+      content = String(await this.driver.evaluate(buildTextExtractionScript()));
     } catch {
       content = "";
     }
@@ -280,8 +236,8 @@ export class BrowserSession {
       title,
       elements,
       content,
-      console: this.consoleBuffer.getAll(),
-      networkErrors: this.networkErrors.slice(-5),
+      console: this.driver.getConsole(),
+      networkErrors: this.driver.getNetworkErrors(),
       truncated,
     });
   }
@@ -301,18 +257,14 @@ export class BrowserSession {
     }
 
     await this.launch();
-    if (!this.page)
+    if (!this.driver)
       return { success: false, output: t("browser.create_page_failed") };
 
     this.actionTracker.reset();
-    this.consoleBuffer.clear();
-    this.networkErrors = [];
+    this.driver.resetEventLog();
 
     try {
-      await this.page.goto(url, {
-        waitUntil: "domcontentloaded",
-        timeout: this.config.navigationTimeout,
-      });
+      await this.driver.goto(url, this.config.navigationTimeout);
     } catch (err: any) {
       return {
         success: false,
@@ -326,20 +278,17 @@ export class BrowserSession {
   }
 
   private async click(target: number): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
     if (!target || target < 1) {
       return { success: false, output: t("browser.invalid_target") };
     }
 
     try {
-      const script = buildClickScript(target);
-      await this.page.evaluate(script);
-      await this.page
-        .waitForLoadState("domcontentloaded", { timeout: 5000 })
-        .catch(() => {});
+      await this.driver.evaluate(buildClickScript(target));
+      await this.driver.waitForLoad(5000);
       await new Promise((r) => setTimeout(r, 500));
       const snapshot = await this.takeSnapshot();
       await this.saveCookies();
@@ -353,9 +302,9 @@ export class BrowserSession {
   }
 
   private async type(target: number, text: string): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
     if (!target || target < 1) {
       return { success: false, output: t("browser.invalid_target_short") };
@@ -365,8 +314,7 @@ export class BrowserSession {
     }
 
     try {
-      const script = buildTypeScript(target, text);
-      await this.page.evaluate(script);
+      await this.driver.evaluate(buildTypeScript(target, text));
       const snapshot = await this.takeSnapshot();
       return { success: true, output: snapshot };
     } catch (err: any) {
@@ -378,9 +326,9 @@ export class BrowserSession {
   }
 
   private async scroll(direction: string): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
     const dir = direction as "up" | "down" | "top" | "bottom";
     if (!["up", "down", "top", "bottom"].includes(dir)) {
@@ -388,7 +336,7 @@ export class BrowserSession {
     }
 
     try {
-      await this.page.evaluate(buildScrollScript(dir));
+      await this.driver.evaluate(buildScrollScript(dir));
       await new Promise((r) => setTimeout(r, 300));
       const snapshot = await this.takeSnapshot();
       return { success: true, output: snapshot };
@@ -401,56 +349,46 @@ export class BrowserSession {
   }
 
   private async back(): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
-    await this.page
-      .goBack({
-        waitUntil: "domcontentloaded",
-        timeout: this.config.navigationTimeout,
-      })
-      .catch(() => {});
+    await this.driver.goBack(this.config.navigationTimeout);
     await new Promise((r) => setTimeout(r, 300));
     const snapshot = await this.takeSnapshot();
     return { success: true, output: snapshot };
   }
 
   private async forward(): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
-    await this.page
-      .goForward({
-        waitUntil: "domcontentloaded",
-        timeout: this.config.navigationTimeout,
-      })
-      .catch(() => {});
+    await this.driver.goForward(this.config.navigationTimeout);
     await new Promise((r) => setTimeout(r, 300));
     const snapshot = await this.takeSnapshot();
     return { success: true, output: snapshot };
   }
 
   private async screenshot(): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
-    if (!this.page) return { success: false, output: "No page" };
+    if (!this.driver) return { success: false, output: "No page" };
 
-    const buffer = await this.page.screenshot({ type: "png", fullPage: false });
+    const buffer = await this.driver.screenshot();
     const snapshot = await this.takeSnapshot();
     return { success: true, output: snapshot, screenshot: buffer };
   }
 
   private async snapshot(): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
     const snap = await this.takeSnapshot();
     return { success: true, output: snap };
   }
 
   private async wait(ms: number): Promise<ActionResult> {
-    const err = await this.ensurePage();
+    const err = await this.ensureDriver();
     if (err) return err;
     await new Promise((r) => setTimeout(r, Math.min(ms, 10000)));
     const snapshot = await this.takeSnapshot();
@@ -459,17 +397,9 @@ export class BrowserSession {
 
   async close(): Promise<ActionResult> {
     await this.saveCookies();
-    if (this.page) {
-      await this.page.close().catch(() => {});
-      this.page = null;
-    }
-    if (this.context) {
-      await this.context.close().catch(() => {});
-      this.context = null;
-    }
-    if (this.browser) {
-      await this.browser.close().catch(() => {});
-      this.browser = null;
+    if (this.driver) {
+      await this.driver.close();
+      this.driver = null;
     }
     this.state = { isOpen: false, url: null, title: null, elementCount: 0 };
     return { success: true, output: t("browser.closed") };

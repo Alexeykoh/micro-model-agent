@@ -67,6 +67,7 @@ export interface BrowserToolConfig {
   maxElements: number;
   maxContentChars: number;
   maxConsoleEntries: number;
+  maxConsoleLineChars: number;
   viewportWidth: number;
   viewportHeight: number;
   navigationTimeout: number;
