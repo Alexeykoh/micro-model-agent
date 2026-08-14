@@ -44,7 +44,7 @@ const RESOLVE_MAX_DEPTH = 8;
  * the exact basename or a path suffix (so both "App.tsx" and
  * "src/App.tsx" find "bicycle-shop/src/App.tsx").
  */
-function findExistingFile(baseDir: string, filePath: string): string | null {
+export function findExistingFile(baseDir: string, filePath: string): string | null {
 	const direct = resolve(baseDir, filePath);
 	if (existsSync(direct)) return direct;
 
@@ -241,6 +241,11 @@ export class Auditor {
 
 		const testsFailing = testRun !== null && testRun.failed > 0;
 		const passed = missingFiles.length === 0 && !testsFailing;
+		// A "Task complete ✓" summary for an unfinished plan is a lie the model
+		// reads as a green light (observed: audit gate injected "[✓] Task
+		// complete: 1/3 steps done" while the plan had 2 pending steps). The
+		// summary must only claim completion when every step is actually done.
+		const stepsPending = doneSteps < totalSteps;
 
 		let summary: string;
 		if (missingFiles.length > 0) {
@@ -256,6 +261,11 @@ export class Auditor {
 				failed: String(testRun!.failed),
 				passed: String(testRun!.passedCount),
 				detail: testRun!.detail,
+			});
+		} else if (stepsPending) {
+			summary = t("exec.audit_pending", {
+				done: doneSteps,
+				total: totalSteps,
 			});
 		} else {
 			summary = t("exec.audit_pass", {

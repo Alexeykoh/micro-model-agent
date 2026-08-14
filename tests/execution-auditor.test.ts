@@ -121,6 +121,47 @@ describe("Auditor", () => {
 		expect(result.summary).toMatch(/complete/i);
 	});
 
+	it("summary must NOT claim completion while steps are pending", async () => {
+		// Regression (ses_msstxxff): the gate injected "[✓] Task complete:
+		// 1/3 steps done" into context while two steps were still pending,
+		// which the model read as a green light to stop working. When all
+		// files exist but not every step is done, the summary must say the
+		// task is incomplete.
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src/index.ts"), "");
+		writeFileSync(join(tmpDir, "src/utils.ts"), "");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/index.ts", "Create src/utils.ts"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+		// step 2 left pending on purpose
+
+		const result = await auditor.audit(plan);
+		expect(result.summary).not.toMatch(/Task complete/);
+		expect(result.summary).not.toContain("[✓]");
+		expect(result.summary).toContain("1/2");
+	});
+
+	it("summary claims completion only when every step is done", async () => {
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src/index.ts"), "");
+		writeFileSync(join(tmpDir, "src/utils.ts"), "");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/index.ts", "Create src/utils.ts"],
+			tmpDir,
+		);
+		plan.steps.forEach((s) => (s.status = "done"));
+
+		const result = await auditor.audit(plan);
+		expect(result.summary).toMatch(/complete/i);
+		expect(result.summary).toContain("2/2");
+	});
+
 	it("should resolve bare filenames in nested project subdirectories", async () => {
 		// Plan step mentions "App.tsx" but the file lives at
 		// bicycle-shop/src/App.tsx relative to the agent baseDir — the auditor

@@ -1,11 +1,17 @@
-import { spawn, execSync, type ChildProcess } from "child_process";
+import {
+  spawn,
+  execSync,
+  type ChildProcess,
+  type SpawnOptions,
+} from "child_process";
 import { resolve } from "path";
+import { platform } from "os";
 import type {
   LspDiagnostic,
   LspServerConfig,
   PublishDiagnosticsParams,
 } from "./types";
-import { resolveSpawnCommand } from "./command";
+import { resolveSpawnCommand, buildWinCommandLine } from "./command";
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -99,14 +105,24 @@ export class LspClient {
 
     return new Promise((resolve, reject) => {
       const args = config.args ?? [];
-      // On Windows, `npx` must be resolved to `npx.cmd` for spawn to find it
-      // (observed: `spawn npx ENOENT` on every write/edit, silently killing
-      // LSP diagnostics for entire sessions).
-      const proc = spawn(resolveSpawnCommand(config.command), args, {
+      const isWin = platform() === "win32";
+      let spawnCommand = resolveSpawnCommand(config.command);
+      let spawnArgs = args;
+      const spawnOpts: SpawnOptions = {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...config.env },
         cwd: baseDir,
-      });
+      };
+      if (isWin) {
+        // A bare `.cmd`/`.bat` shim cannot be spawned directly under Node —
+        // `spawn npx EINVAL` on every write/edit (observed across a whole
+        // session, silently killing LSP diagnostics). Run the resolved command
+        // line through cmd.exe instead.
+        spawnCommand = buildWinCommandLine(spawnCommand, args);
+        spawnArgs = [];
+        spawnOpts.shell = true;
+      }
+      const proc = spawn(spawnCommand, spawnArgs, spawnOpts);
 
       proc.on("error", reject);
 

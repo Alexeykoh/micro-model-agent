@@ -39,3 +39,27 @@ export function resolveSpawnCommand(
   }
   return command;
 }
+
+/**
+ * Join a resolved command and its args into a single cmd.exe command line.
+ *
+ * Under Node on Windows, `spawn` of a `.cmd`/`.bat` shim WITHOUT a shell throws
+ * `spawn EINVAL` (CreateProcess cannot run batch files directly). Resolving
+ * `npx` → `npx.cmd` fixes the old `ENOENT` but not the `EINVAL` — the spawn
+ * still has no shell. The reliable fix is to run the whole command line through
+ * `cmd.exe /d /s /c` (i.e. `spawn(line, { shell: true })`). This helper builds
+ * that line, quoting any argument that contains cmd.exe metacharacters so the
+ * package names and flags in LSP configs (`typescript-language-server --stdio`,
+ * `pyright --stdio`) survive the round-trip.
+ *
+ * Non-Windows platforms never call this (they spawn the resolved command +
+ * args directly, no shell).
+ */
+export function buildWinCommandLine(command: string, args: string[]): string {
+  const quote = (part: string): string => {
+    if (part === "") return '""';
+    if (!/[\s"&|^<>()%!]/.test(part)) return part;
+    return `"${part.replace(/"/g, '\\"')}"`;
+  };
+  return [command, ...args].map(quote).join(" ");
+}

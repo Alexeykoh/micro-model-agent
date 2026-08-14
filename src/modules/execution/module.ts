@@ -7,12 +7,16 @@ import { PlanCreator } from "./planner";
 import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
 import { StuckDetector } from "./stuck-detector";
-import { Auditor } from "./auditor";
+import { Auditor, findExistingFile } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
 import { detectTestResults } from "../../tools/bash";
 import type { Plan } from "./planner";
+import {
+	extractFileLikeTokens,
+	stripUrls,
+} from "../hallucination/js-identifiers";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
@@ -354,6 +358,25 @@ export class ExecutionModule implements AgentModule {
 									step: String(stepId),
 									first: String(blockers[0].id),
 									desc: blockers[0].description,
+								}),
+							};
+						}
+					}
+
+					// Deliverable gate: marking a step done must mean its named
+					// files actually exist. Without this the model could mark a
+					// step done right after deleting its source file (observed in
+					// ses_msstxxff: `del bicycles.ts` → `plan update step=2
+					// status=done` while the file was gone) and the final audit
+					// then passed because every step was self-certified done.
+					if (status === "done") {
+						const missing = this.missingStepDeliverables(target);
+						if (missing.length > 0) {
+							return {
+								success: false,
+								output: t("plan.deliverables_missing", {
+									step: String(stepId),
+									files: missing.join(", "),
 								}),
 							};
 						}
@@ -1007,6 +1030,20 @@ export class ExecutionModule implements AgentModule {
 				content: `<system-summary>${nextMsg}</system-summary>`,
 			});
 		}
+	}
+
+	/**
+	 * File tokens named in a step description that do not resolve to a real
+	 * file. Uses the same shared token extractor (allow-list of real file
+	 * extensions, URLs stripped) and the auditor's subtree resolver, so
+	 * "bicycles.ts" finds "bicycle-shop/src/data/bicycles.ts" and a hostname in
+	 * the description is never reported as a missing deliverable. Steps with no
+	 * file tokens (pure commands, verification runs) cannot be verified.
+	 */
+	private missingStepDeliverables(step: { description: string }): string[] {
+		const tokens = extractFileLikeTokens(stripUrls(step.description));
+		if (tokens.length === 0) return [];
+		return tokens.filter((p) => !findExistingFile(this.baseDir, p));
 	}
 
 	/**
