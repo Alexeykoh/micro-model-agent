@@ -86,6 +86,19 @@ describe("bash", () => {
 		resetBashFailureTracking();
 	});
 
+	it("hints on the ORIGINAL first word even when it was translated (cat→type)", async () => {
+		const { platform } = await import("os");
+		if (platform() !== "win32") return; // cat works on POSIX
+
+		resetBashFailureTracking();
+		const ctx = makeCtx();
+		// `cat` is translated to `type` by adaptCommandForWindows; the hint/block
+		// must still key on `cat` (ses_mssx0k11: model ran cat 4× with no hint).
+		const r = await bashTool.handler(ctx, { command: "cat does-not-exist.txt" });
+		expect(r.output).toContain("cat");
+		expect(r.output).toContain("read_file");
+	});
+
 	it("should start long-running commands in background and return a process id", async () => {
 		const ctx = makeCtx({ sessionId: "bash-ses" });
 		const result = await bashTool.handler(ctx, {

@@ -477,24 +477,34 @@ export const bashTool: ToolDefinition = {
 				}
 
 				// On Windows, hint about Unix commands that don't work, and
-				// hard-stop a command that keeps failing the same way.
+				// hard-stop a command that keeps failing the same way. The
+				// hint keys on the ORIGINAL command word (before
+				// adaptCommandForWindows translated cat→type): the translation
+				// is only for execution, but the model wrote `cat`, and that is
+				// what UNIX_TO_WIN_HINTS knows about. Keying on the translated
+				// word left `cat` invisible to the hint/block (observed: model
+				// ran cat 4+ times in one session with no guidance).
 				if (platform() === "win32") {
-					const firstWord = command
+					const originalFirstWord = originalCommand
 						.trim()
 						.split(/\s+/)[0]
 						?.split(/[\\/]/)
 						.pop();
-					if (firstWord && firstWord in UNIX_TO_WIN_HINTS) {
+					if (
+						originalFirstWord &&
+						originalFirstWord in UNIX_TO_WIN_HINTS
+					) {
 						if (code === 0) {
-							FAILING_FIRST_WORDS.delete(firstWord);
+							FAILING_FIRST_WORDS.delete(originalFirstWord);
 						} else {
 							const failures =
-								(FAILING_FIRST_WORDS.get(firstWord) || 0) + 1;
-							FAILING_FIRST_WORDS.set(firstWord, failures);
+								(FAILING_FIRST_WORDS.get(originalFirstWord) || 0) +
+								1;
+							FAILING_FIRST_WORDS.set(originalFirstWord, failures);
 							if (failures >= HARD_BLOCK_THRESHOLD) {
-								output = `STOP using "${firstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[firstWord]}`;
+								output = `STOP using "${originalFirstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
 							} else {
-								output = `${output}\n\nHint: "${firstWord}" may not work on Windows. ${UNIX_TO_WIN_HINTS[firstWord]}`;
+								output = `${output}\n\nHint: "${originalFirstWord}" may not work on Windows. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
 							}
 						}
 					}
