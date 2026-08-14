@@ -1,11 +1,18 @@
 export type StepStatus =
   "pending" | "in_progress" | "done" | "failed" | "skipped";
 
+export interface Subtask {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
 export interface PlanStep {
   id: number;
   description: string;
   status: StepStatus;
   note?: string;
+  subtasks?: Subtask[];
 }
 
 export interface Plan {
@@ -99,20 +106,23 @@ export class PlanCreator {
       `Created: ${date} | Progress: ${plan.steps.filter((s) => s.status === "done").length}/${plan.steps.length} done, current: step ${currentStepIndex + 1}`,
       ``,
     ];
-    for (const step of plan.steps) {
-      const icon =
-        step.status === "done"
-          ? "[x]"
-          : step.status === "in_progress"
-            ? "[*]"
-            : step.status === "failed"
-              ? "[!]"
-              : step.status === "skipped"
-                ? "[-]"
-                : "[ ]";
-      const note = step.note ? ` — ${step.note}` : "";
-      lines.push(`${icon} ${step.id}. ${step.description}${note}`);
-    }
-    return lines.join("\n");
+		for (const step of plan.steps) {
+			const icon =
+				step.status === "done"
+					? "[x]"
+					: step.status === "in_progress"
+						? "[*]"
+						: step.status === "failed"
+							? "[!]"
+							: step.status === "skipped"
+								? "[-]"
+								: "[ ]";
+			const note = step.note ? ` — ${step.note}` : "";
+			lines.push(`${icon} ${step.id}. ${step.description}${note}`);
+			for (const sub of step.subtasks ?? []) {
+				lines.push(`    ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);
+			}
+		}
+		return lines.join("\n");
   }
 }

@@ -91,6 +91,8 @@ export class ContextManager {
   private fileFacts: string[] = [];
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
+  /** Latest real user instruction (skips <system-summary> blocks). */
+  private lastUserTask = "";
   private static readonly MAX_FACTS = 20;
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
@@ -144,6 +146,20 @@ export class ContextManager {
     this.iterationsSinceCompaction++;
   }
 
+  /**
+   * Start a fresh user turn. The 15-iteration compaction interval must not
+   * leak across user messages — otherwise a turn that ends at iteration 14
+   * forces a compaction on the very first iteration of the next user message
+   * (observed: compaction fired on iteration 8 of a new turn, deleting the
+   * user's freshly-sent task alongside 40+ old turns). Facts are kept.
+   */
+  resetUserTurn(): void {
+    this.iterationsSinceCompaction = 0;
+    // A new user message begins a new task — drop the previous turn's task so
+    // the fresh instruction becomes the one preserved at compaction.
+    this.lastUserTask = "";
+  }
+
   getQuality(): number {
     const usedTokens = this.getEstimatedTokens();
     const tokenLoad = Math.max(0, 1 - usedTokens / this.budget.history);
@@ -180,6 +196,22 @@ export class ContextManager {
   }
 
   addMessage(msg: Message): void {
+    // Track the task the agent is working on so it survives compaction. The
+    // user's real instruction is the FIRST non-system-summary user message of
+    // the turn; everything after it (tool results, retry nudges) are injected
+    // `user` envelopes that must not overwrite it (observed: after compaction
+    // the model had forgotten "удали /bicycles, почини стили" and re-read
+    // files aimlessly for 40+ iterations).
+    if (msg.role === "user" && !this.lastUserTask) {
+      const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+      if (
+        text.trim() &&
+        !text.startsWith("<system-summary>") &&
+        !text.includes("[Compressed:")
+      ) {
+        this.lastUserTask = text.trim();
+      }
+    }
     // Auto-attach pending images to the next user message
     if (msg.role === "user" && this.pendingImageParts.length > 0) {
       const textPart: TextPart = {
@@ -305,6 +337,13 @@ export class ContextManager {
     const parts: string[] = [];
     parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
 
+    // Carry the user's actual instruction forward — the model must never lose
+    // the task it is working on just because 40 turns got compacted away.
+    if (this.lastUserTask) {
+      const task = this.lastUserTask.slice(0, 400);
+      parts.push(`[Task: ${task}]`);
+    }
+
     if (this.fileFacts.length > 0) {
       parts.push(`[Files: ${this.fileFacts.slice(-15).join("; ")}]`);
     }
@@ -351,10 +390,17 @@ export class ContextManager {
   }
 
   private extractFacts(turns: Message[]): void {
+    // Absolute Windows paths ("E:\proj\src\a.ts") need an optional drive prefix;
+    // without it the colon breaks the match and the fact is silently dropped.
+    const DRIVE = "(?:[a-zA-Z]:[\\\\/])?";
     const filePatterns = [
-      /(?:Created|Updated|Written|Deleted|Moved) ([\w./\\-]+\.[a-z]+)/gi,
-      /Файл (?:создан|обновлён|записан|удалён|перемещён):? ([\w./\\-]+\.[a-z]+)/gi,
-      /file (?:created|updated|written|deleted|moved):? ([\w./\\-]+\.[a-z]+)/gi,
+      new RegExp(`(?:Created|Updated|Written|Deleted|Moved) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      // edit_file returns "Replaced in <path>" — the most common write signal
+      // in agent sessions. Without this pattern, every edit_file fact is lost
+      // at compaction and the model re-reads the same files after each one.
+      new RegExp(`Replaced in ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`Файл (?:создан|обновлён|записан|удалён|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`file (?:created|updated|written|deleted|moved):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
 
     const newFiles: string[] = [];
@@ -453,6 +499,7 @@ export class ContextManager {
     this.iterationsSinceCompaction = 0;
     this.compactionCount = 0;
     this.peakTokens = 0;
+    this.lastUserTask = "";
   }
 
   getEstimatedTokens(): number {

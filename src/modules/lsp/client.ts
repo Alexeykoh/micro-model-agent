@@ -5,6 +5,7 @@ import type {
   LspServerConfig,
   PublishDiagnosticsParams,
 } from "./types";
+import { resolveSpawnCommand } from "./command";
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -98,7 +99,10 @@ export class LspClient {
 
     return new Promise((resolve, reject) => {
       const args = config.args ?? [];
-      const proc = spawn(config.command, args, {
+      // On Windows, `npx` must be resolved to `npx.cmd` for spawn to find it
+      // (observed: `spawn npx ENOENT` on every write/edit, silently killing
+      // LSP diagnostics for entire sessions).
+      const proc = spawn(resolveSpawnCommand(config.command), args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...config.env },
         cwd: baseDir,

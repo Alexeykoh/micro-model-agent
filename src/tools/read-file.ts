@@ -6,9 +6,16 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
-import { MAX_PREVIEW_LINES } from "./preview";
 
-const DEFAULT_LIMIT = MAX_PREVIEW_LINES;
+/**
+ * Default lines per read_file call. Deliberately much larger than
+ * MAX_PREVIEW_LINES (15): a 15-line default forces the model to issue 10-17
+ * calls per file, which floods the context and drives compaction every 15
+ * iterations (observed: 96 read_file calls, App.tsx read 23x, then 11
+ * compactions in ~20 min that deleted the user's task mid-turn). 300 lines
+ * covers typical component files in one call while still capping output.
+ */
+const DEFAULT_LIMIT = 300;
 
 export const readFileTool: ToolDefinition = {
 	name: "read_file",

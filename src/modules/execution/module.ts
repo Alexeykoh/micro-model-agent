@@ -277,6 +277,26 @@ export class ExecutionModule implements AgentModule {
 						};
 					}
 					if (action === "show") {
+						const planId = args.id ? String(args.id) : "";
+						if (planId && planId !== this.tracker?.getPlan()?.id) {
+							// Show a specific plan (active, draft, or archived) instead
+							// of ignoring the id and always printing the active one
+							// (observed: the model asked for an archived plan three
+							// times and got the active plan back every time).
+							const found = this.store.find(planId);
+							if (!found) {
+								return {
+									success: false,
+									output: t("plan.not_found", { id: planId }),
+								};
+							}
+							const display = PlanCreator.toPromptBlock(found.plan, 0);
+							return {
+								success: true,
+								output: `${t("plan.show_header")}\n${display}`,
+								display,
+							};
+						}
 						if (!this.tracker) {
 							return { success: false, output: t("plan.no_active") };
 						}
@@ -417,39 +437,80 @@ export class ExecutionModule implements AgentModule {
 					}
 					if (action === "add" && Array.isArray(args.items)) {
 						const items = args.items.map(String);
-						currentStep.note = currentStep.note
-							? `${currentStep.note}; ${items.join(", ")}`
-							: items.join(", ");
+						const existing = currentStep.subtasks ?? [];
+						let nextId =
+							existing.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+						for (const item of items) {
+							existing.push({ id: nextId++, text: item, done: false });
+						}
+						currentStep.subtasks = existing;
+						this.store.saveActive(this.tracker.getPlan());
+						const display = this.tracker.toPromptBlock();
 						return {
 							success: true,
 							output: t("todo.added", {
 								count: String(items.length),
 								items: items.join(", "),
 							}),
-						};
-					}
-					if (action === "done") {
-						if (!currentStep) {
-							return { success: false, output: t("plan.step_not_found") };
-						}
-						this.tracker.updateStepStatus(currentStep.id, "done");
-						this.tracker.syncCurrentStep();
-						this.store.saveActive(this.tracker.getPlan());
-						const display = this.tracker.toPromptBlock();
-						return {
-							success: true,
-							output: t("plan.step_status", {
-								step: String(currentStep.id),
-								status: "done",
-							}),
 							display,
 						};
 					}
+					if (action === "done") {
+						const items = Array.isArray(args.items)
+							? args.items.map(String)
+							: [];
+						if (items.length === 0) {
+							return {
+								success: false,
+								output: t("todo.no_items"),
+							};
+						}
+						const subs = currentStep.subtasks ?? [];
+						let marked = 0;
+						for (const item of items) {
+							const sub = subs.find(
+								(s) =>
+									!s.done &&
+									s.text.toLowerCase() === item.toLowerCase(),
+							);
+							if (sub) {
+								sub.done = true;
+								marked++;
+							}
+						}
+						if (marked === 0) {
+							return {
+								success: false,
+								output: t("todo.subtask_not_found", {
+									items: items.join(", "),
+								}),
+							};
+						}
+						currentStep.subtasks = subs;
+						this.store.saveActive(this.tracker.getPlan());
+						const doneCount = subs.filter((s) => s.done).length;
+						const display = this.tracker.toPromptBlock();
+						// Marking a sub-task done must NOT auto-complete the plan
+						// step — the step is only done when the model confirms the
+						// whole step via plan update (observed: 3 × "todo done"
+						// returned "Step 3: done" and marked the step done early).
+						let output = t("todo.marked_done", {
+							count: String(marked),
+						});
+						output += ` (${doneCount}/${subs.length})`;
+						if (doneCount === subs.length) {
+							output += `\nAll sub-tasks done — call plan update step=${currentStep.id} status=done to complete this step.`;
+						}
+						return { success: true, output, display };
+					}
 					if (action === "list") {
-						const note = currentStep.note || "(no sub-tasks)";
+						const subs = currentStep.subtasks ?? [];
+						const lines = subs.length
+							? subs.map((s) => `${s.done ? "[x]" : "[ ]"} ${s.text}`)
+							: ["(no sub-tasks)"];
 						return {
 							success: true,
-							output: `Step ${currentStep.id}: ${currentStep.description}\nSub-tasks: ${note}`,
+							output: `Step ${currentStep.id}: ${currentStep.description}\n${lines.join("\n")}`,
 						};
 					}
 					return {
@@ -502,9 +563,13 @@ export class ExecutionModule implements AgentModule {
 					}
 				}
 				if (this.tracker?.isComplete()) {
-					// All steps done/skipped — stop counting "no progress" against the
-					// last step and silence stuck warnings for a finished plan.
-					this.stuckDetector.reset();
+					// All steps done/skipped — stop counting "no progress" against
+					// the last step and silence step-stuck warnings for a finished
+					// plan, BUT keep the tool-call history so a read-without-write
+					// loop is still caught (observed: plan complete + false-positive
+					// audit → the model re-read files for 50+ iterations with zero
+					// writes and no recovery hint).
+					this.stuckDetector.resetStepProgress();
 					this.consecutivePlanWarnings = 0;
 					this.lastStepId = -1;
 					this.stuckNotified = false;
@@ -558,7 +623,8 @@ export class ExecutionModule implements AgentModule {
 				}
 				if (
 					this.stuckDetector.isStuck() ||
-					this.stuckDetector.hasRepetitiveToolCalls()
+					this.stuckDetector.hasRepetitiveToolCalls() ||
+					this.stuckDetector.hasReadOnlyLoop()
 				) {
 					const currentIter =
 						typeof ctx.iteration === "number" ? ctx.iteration : 0;

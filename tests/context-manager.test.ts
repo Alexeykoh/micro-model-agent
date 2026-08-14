@@ -90,6 +90,162 @@ describe("ContextManager", () => {
   });
 });
 
+describe("ContextManager compaction interval reset between user turns", () => {
+  it("should not trigger interval compaction right after reset", () => {
+    const cm = new ContextManager(100000);
+    for (let i = 0; i < 14; i++) {
+      cm.addMessage({ role: "user", content: `task ${i}` });
+      cm.noteIteration();
+    }
+    // 14 iterations — still below COMPACTION_INTERVAL (15)
+    expect(cm.needsCompaction()).toBe(false);
+
+    cm.noteIteration(); // iteration 15
+    expect(cm.needsCompaction()).toBe(true);
+  });
+
+  it("should not inherit the previous turn's compaction interval", () => {
+    // Turn 1 leaves 14 iterations since the last compaction.
+    const cm = new ContextManager(100000);
+    for (let i = 0; i < 14; i++) cm.noteIteration();
+
+    // Turn 2 starts — the agent calls resetUserTurn() so the 14 iterations
+    // from turn 1 must NOT count toward the new turn's 15-iteration interval.
+    cm.resetUserTurn();
+    expect(cm.needsCompaction()).toBe(false);
+
+    for (let i = 0; i < 14; i++) cm.noteIteration();
+    expect(cm.needsCompaction()).toBe(false);
+  });
+
+  it("should keep file facts across turns while resetting the interval", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written bicycle-shop/src/App.tsx",
+      success: true,
+    });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    expect(cm.getActiveHistory().some((m) => {
+      const text = typeof m.content === "string" ? m.content : "";
+      return text.includes("bicycle-shop/src/App.tsx");
+    })).toBe(true);
+
+    cm.resetUserTurn();
+    expect(cm.needsCompaction()).toBe(false);
+  });
+});
+
+describe("ContextManager fact extraction", () => {
+  it("preserves the latest real user task in the compaction summary", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "user",
+      content: "удали /bicycles, почини стили на /bicycle/2",
+    });
+    // Interleave enough turns so the user task lands in oldTurns at compaction.
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `tool result ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("удали /bicycles, почини стили на /bicycle/2");
+  });
+
+  it("does not treat system-summary blocks as the user task", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({ role: "user", content: "REAL TASK: fix the bug" });
+    cm.addMessage({
+      role: "user",
+      content: "<system-summary>[Retry context: empty response]</system-summary>",
+    });
+    cm.addMessage({ role: "user", content: "some tool output" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("REAL TASK: fix the bug");
+    expect(summary).not.toContain("Retry context");
+  });
+
+  it("resetUserTurn clears the task so a new user message wins", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "user", content: "OLD TASK: fix router" });
+    cm.resetUserTurn();
+    cm.addMessage({ role: "user", content: "NEW TASK: remove /bicycles" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `tool ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("NEW TASK: remove /bicycles");
+    expect(summary).not.toContain("OLD TASK");
+  });
+
+  it("should extract 'Replaced in <path>' (edit_file output) as a file fact", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "edit_file",
+      content: "Replaced in bicycle-shop/src/App.tsx",
+      success: true,
+    });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("bicycle-shop/src/App.tsx");
+  });
+
+  it("should extract 'Written <path>' (write_file output) as a file fact", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written E:\\projects\\mma_tests\\bicycle-shop\\src\\DeliveryPage.tsx",
+      success: true,
+    });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("DeliveryPage.tsx");
+  });
+});
+
 describe("getQuality", () => {
   it("should return ~100 for empty context", () => {
     const cm = new ContextManager(32768);

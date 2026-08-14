@@ -267,6 +267,13 @@ export class Agent {
 			}
 		}
 
+		// A new user message starts a fresh compaction interval — iterations
+		// from the previous turn must not trigger a compaction on iteration 1
+		// of this one (observed: turn 2 compacted at iteration 8, deleting the
+		// just-sent task along with 40+ old turns).
+		if (typeof contextManager.resetUserTurn === "function") {
+			contextManager.resetUserTurn();
+		}
 		contextManager.addMessage({ role: "user", content: input });
 		slog.logUser(input);
 
@@ -326,6 +333,13 @@ export class Agent {
 		const MAX_HALLUCINATION_RETRIES = 3;
 		let consecutiveToolFailures = 0;
 		const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
+		// Per-tool failure counts and which tools already produced a memory rule.
+		const toolFailureCounts = new Map<
+			string,
+			{ count: number; error: string }
+		>();
+		const memoryRuleRecorded = new Set<string>();
+		const MIN_REPEATED_TOOL_FAILURES = 3;
 		let auditRetries = 0;
 		const MAX_AUDIT_RETRIES = 3;
 		let emptyResponseRetries = 0;
@@ -682,6 +696,41 @@ export class Agent {
 					if (contextManager.needsCompaction()) {
 						contextManager.compact();
 						logger.debug("Context compacted after tool result");
+					}
+					// Track per-tool failure counts (NOT just consecutive) so a tool
+					// that keeps failing while other tools succeed between attempts
+					// is still learned from (observed: LSP spawn npx ENOENT failed
+					// 8x in one session, never consecutively, so it never reached
+					// memory via the 5-consecutive-failures path).
+					if (!result.success) {
+						const key = call.name;
+						const prev =
+							toolFailureCounts.get(key) ?? { count: 0, error: "" };
+						prev.count++;
+						prev.error = String(result.output ?? "").slice(0, 200);
+						toolFailureCounts.set(key, prev);
+						if (
+							prev.count >= MIN_REPEATED_TOOL_FAILURES &&
+							!memoryRuleRecorded.has(key)
+						) {
+							memoryRuleRecorded.add(key);
+							if (sessionManager) {
+								const activeSession = sessionManager.getActiveMeta();
+								if (activeSession) {
+									const memDir = join(baseDir, ".mma", "memory");
+									const memStore = new MemoryStore(memDir);
+									memStore.appendRule(
+										"errors",
+										`Tool ${key} failed ${prev.count}x (${prev.error})`,
+										`Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
+										"Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
+									);
+									logger.warn(
+										`Recorded repeated ${key} failures to memory (${prev.count}x)`,
+									);
+								}
+							}
+						}
 					}
 				}
 				if (anyToolFailed) {

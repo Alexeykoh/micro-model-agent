@@ -121,6 +121,60 @@ describe("Auditor", () => {
 		expect(result.summary).toMatch(/complete/i);
 	});
 
+	it("should resolve bare filenames in nested project subdirectories", async () => {
+		// Plan step mentions "App.tsx" but the file lives at
+		// bicycle-shop/src/App.tsx relative to the agent baseDir — the auditor
+		// must search the subtree so a completed task is not flagged as
+		// "1 files missing" forever (observed in session ses_mssl5izw).
+		mkdirSync(join(tmpDir, "bicycle-shop", "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "bicycle-shop", "src", "App.tsx"), "");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Verify App.tsx has <Routes> wrapper around <Route> elements"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.passed).toBe(true);
+	});
+
+	it("should resolve a partially-prefixed path inside the subtree", async () => {
+		// Step description uses "src/App.tsx" while the file is at
+		// bicycle-shop/src/App.tsx — suffix matching resolves it.
+		mkdirSync(join(tmpDir, "bicycle-shop", "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "bicycle-shop", "src", "App.tsx"), "");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Add <Routes> wrapper in src/App.tsx"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.passed).toBe(true);
+	});
+
+	it("should not resolve a bare filename when it exists nowhere in the tree", async () => {
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src/index.ts"), "");
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create missing.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toContain("missing.ts");
+		expect(result.passed).toBe(false);
+	});
+
 	it("should warn on mass edit (>10 files)", async () => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		const files = Array.from({ length: 15 }, (_, i) => `src/file${i}.ts`);

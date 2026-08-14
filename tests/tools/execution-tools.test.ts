@@ -1,11 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { ExecutionModule } from "../../src/modules/execution/module";
 
 describe("ExecutionModule tools", () => {
   let execModule: ExecutionModule;
+  let tmpBase: string;
 
   beforeEach(() => {
-    execModule = new ExecutionModule("/tmp/test", 8);
+    tmpBase = mkdtempSync(join(tmpdir(), "mma-exectools-"));
+    execModule = new ExecutionModule(tmpBase, 8);
+  });
+
+  afterEach(() => {
+    if (existsSync(tmpBase)) rmSync(tmpBase, { recursive: true, force: true });
   });
 
   describe("plan tool", () => {
@@ -151,6 +160,49 @@ describe("ExecutionModule tools", () => {
       expect(second.output).toContain("already");
       expect(second.output).toContain("1/2");
     });
+
+    it("shows an archived plan by id (does not ignore the id argument)", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "Old Plan",
+        steps: ["First step with enough chars here"],
+      });
+      const oldPlan = execModule.getTracker()!.getPlan();
+      const oldId = oldPlan.id;
+      await planTool.handler(ctx, { action: "abort" });
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "New Plan",
+        steps: ["Another step with enough chars here"],
+      });
+
+      const result = await planTool.handler(ctx, {
+        action: "show",
+        id: oldId,
+      });
+      expect(result.success).toBe(true);
+      expect(result.output).toContain(oldId);
+      expect(result.output).toContain("Old Plan");
+      expect(result.output).not.toContain("New Plan");
+    });
+
+    it("reports plan not found when showing a nonexistent id", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      const result = await planTool.handler(ctx, {
+        action: "show",
+        id: "plan_nope",
+      });
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("not found");
+    });
   });
 
   describe("todo tool", () => {
@@ -185,6 +237,84 @@ describe("ExecutionModule tools", () => {
 
       expect(result.success).toBe(true);
       expect(result.output).toContain("2");
+
+      const step = execModule.getTracker()!.getCurrentStep()!;
+      expect(step.subtasks).toHaveLength(2);
+      expect(step.subtasks![0]).toMatchObject({ text: "Sub-task 1", done: false });
+      expect(step.status).toBe("pending");
+    });
+
+    it("marks individual subtasks done without completing the whole step", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const todoTool = tools.find((t) => t.name === "todo")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "Test",
+        steps: ["This step has enough chars now"],
+      });
+      await todoTool.handler(ctx, {
+        action: "add",
+        items: ["Check A", "Check B", "Check C"],
+      });
+
+      // Mark only one subtask done — the STEP must NOT become done.
+      const result = await todoTool.handler(ctx, {
+        action: "done",
+        items: ["Check A"],
+      });
+
+      expect(result.success).toBe(true);
+      const step = execModule.getTracker()!.getCurrentStep()!;
+      expect(step.subtasks!.filter((s) => s.done)).toHaveLength(1);
+      expect(step.status).toBe("pending");
+      expect(execModule.getTracker()!.isComplete()).toBe(false);
+    });
+
+    it("reports subtasks not found when done on unknown text", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const todoTool = tools.find((t) => t.name === "todo")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "Test",
+        steps: ["This step has enough chars now"],
+      });
+
+      const result = await todoTool.handler(ctx, {
+        action: "done",
+        items: ["never added"],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.output).toMatch(/not found|No matching/i);
+    });
+
+    it("lists subtasks with completion status", async () => {
+      const tools = execModule.getToolDefinitions();
+      const planTool = tools.find((t) => t.name === "plan")!;
+      const todoTool = tools.find((t) => t.name === "todo")!;
+      const ctx = { logger: { warn: () => {} } } as any;
+
+      await planTool.handler(ctx, {
+        action: "create",
+        title: "Test",
+        steps: ["This step has enough chars now"],
+      });
+      await todoTool.handler(ctx, {
+        action: "add",
+        items: ["Task 1"],
+      });
+      await todoTool.handler(ctx, { action: "done", items: ["Task 1"] });
+
+      const result = await todoTool.handler(ctx, { action: "list" });
+      expect(result.success).toBe(true);
+      expect(result.output).toContain("Task 1");
+      expect(result.output).toMatch(/\[x\]|\[✔\]|\[✓\]/);
     });
 
     it("fails without active plan", async () => {

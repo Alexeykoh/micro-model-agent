@@ -79,10 +79,23 @@ describe("read_file", () => {
 		});
 		expect(result.success).toBe(true);
 		expect(result.output).toContain("line 1");
-		expect(result.output).toContain("line 15");
-		expect(result.output).not.toContain("line 16");
-		expect(result.output).toContain("offset=16");
+		expect(result.output).toContain("line 300");
+		expect(result.output).not.toContain("line 301");
+		expect(result.output).toContain("offset=301");
 		expect(result.output).toContain("1000 lines");
+	});
+
+	it("should read a whole small file in a single default call (no offset hint)", async () => {
+		const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join(
+			"\n",
+		);
+		writeFileSync(join(tmpDir, "test.txt"), lines);
+		const result = await readFileTool.handler(ctx, {
+			path: join(tmpDir, "test.txt"),
+		});
+		expect(result.success).toBe(true);
+		expect(result.output).toContain("line 50");
+		expect(result.output).not.toContain("offset=");
 	});
 
 	it("should not truncate when explicit limit covers the file", async () => {

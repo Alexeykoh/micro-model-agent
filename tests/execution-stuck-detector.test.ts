@@ -343,3 +343,50 @@ describe("StuckDetector typecheck awareness (R5.2)", () => {
     expect(hints.some((h) => h.includes("rewriting the whole file blindly"))).toBe(true);
   });
 });
+
+describe("StuckDetector read-without-write loop detection", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3);
+  });
+
+  it("does not flag a short burst of reads", () => {
+    for (let i = 0; i < 5; i++) {
+      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
+    }
+    expect(detector.hasReadOnlyLoop()).toBe(false);
+  });
+
+  it("flags a long run of read-only tool calls", () => {
+    for (let i = 0; i < 12; i++) {
+      detector.recordToolCall("read_file", { path: `src/file${i}.ts` });
+    }
+    expect(detector.hasReadOnlyLoop()).toBe(true);
+  });
+
+  it("resets the read-only streak when a write tool is called", () => {
+    for (let i = 0; i < 10; i++) {
+      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
+    }
+    expect(detector.hasReadOnlyLoop()).toBe(true);
+    detector.recordToolCall("write_file", { path: "src/out.ts" });
+    expect(detector.hasReadOnlyLoop()).toBe(false);
+  });
+
+  it("treats plan/todo bookkeeping as read-only (does not count as progress)", () => {
+    for (let i = 0; i < 12; i++) {
+      detector.recordToolCall("plan", { action: "show" });
+    }
+    expect(detector.hasReadOnlyLoop()).toBe(true);
+  });
+
+  it("clears the read-only streak on step change", () => {
+    for (let i = 0; i < 12; i++) {
+      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
+    }
+    expect(detector.hasReadOnlyLoop()).toBe(true);
+    detector.setCurrentStep(2, "next step");
+    expect(detector.hasReadOnlyLoop()).toBe(false);
+  });
+});

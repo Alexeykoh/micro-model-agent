@@ -44,6 +44,38 @@ export function classifyError(output: string): ErrorClassification {
 	return "systematic";
 }
 
+/**
+ * Tools that only observe state and never change it. A long run of only these
+ * with no write/exec in between means the model is reading/exploring without
+ * producing anything — a read-only loop that the stuck detector must surface
+ * (observed: 50+ read_file iterations with zero writes after a false-positive
+ * audit rejected a completed task).
+ */
+const READ_ONLY_TOOLS = new Set([
+	"read_file",
+	"glob",
+	"grep",
+	"list_dir",
+	"file_info",
+	"browser",
+	"web_search",
+	"web_fetch",
+	"web_browse",
+	"search_history",
+	"recall",
+	"project_map",
+	"chunk_query",
+	"process_list",
+	"process_log",
+	"plan",
+	"todo",
+	"verify",
+	"load_skill",
+]);
+
+/** Consecutive read-only tool calls that constitute a loop. */
+const READ_ONLY_LOOP_THRESHOLD = 10;
+
 export class StuckDetector {
 	private threshold: number;
 	private errorThreshold: number;
@@ -64,6 +96,7 @@ export class StuckDetector {
 	private lastBashCommand = "";
 	private lastBashOutput = "";
 	private emptyBashRunCount = 0;
+	private readOnlyStreak = 0;
 
 	constructor(threshold = 6, errorThreshold = 3) {
 		this.threshold = threshold;
@@ -84,6 +117,22 @@ export class StuckDetector {
 		if (this.recentToolCalls.length > this.maxRecentCalls) {
 			this.recentToolCalls.shift();
 		}
+		// Track the consecutive read-only streak. A write/exec tool resets it;
+		// plan/todo bookkeeping counts as read-only (it is not real progress).
+		if (READ_ONLY_TOOLS.has(name)) {
+			this.readOnlyStreak++;
+		} else {
+			this.readOnlyStreak = 0;
+		}
+	}
+
+	/**
+	 * True after a long run of read-only tool calls with no write in between.
+	 * The model is exploring/looping without producing anything — inject a
+	 * recovery hint so it stops re-reading and actually edits files.
+	 */
+	hasReadOnlyLoop(): boolean {
+		return this.readOnlyStreak >= READ_ONLY_LOOP_THRESHOLD;
 	}
 
 	recordToolError(toolName: string, output?: string): void {
@@ -242,6 +291,11 @@ export class StuckDetector {
 		if (this.hasConsecutiveFailures()) {
 			hints.push(
 				"Multiple different tools are failing. Check if the environment is set up correctly.",
+			);
+		}
+		if (this.hasReadOnlyLoop()) {
+			hints.push(
+				"You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps.",
 			);
 		}
 		return hints;
@@ -455,6 +509,11 @@ export class StuckDetector {
 		if (errorTool) {
 			return t("exec.tool_errors", { tool: errorTool[0], count: errorTool[1] });
 		}
+		if (this.hasReadOnlyLoop()) {
+			return t("exec.read_only_loop", {
+				count: String(this.readOnlyStreak),
+			});
+		}
 		return "";
 	}
 
@@ -485,6 +544,11 @@ export class StuckDetector {
 		if (this.hasRepetitiveToolCalls()) {
 			return this.getRepetitiveToolMessage();
 		}
+		if (this.hasReadOnlyLoop()) {
+			return t("exec.read_only_loop_recovery", {
+				count: String(this.readOnlyStreak),
+			});
+		}
 		return "";
 	}
 
@@ -496,6 +560,27 @@ export class StuckDetector {
 		this.lastFailedTool = "";
 		this.lastErrorOutput = "";
 		this.recentToolCalls = [];
+		this.fileRewriteCount.clear();
+		this.escalationCount = 0;
+		this.lastBashCommand = "";
+		this.lastBashOutput = "";
+		this.emptyBashRunCount = 0;
+		this.readOnlyStreak = 0;
+	}
+
+	/**
+	 * Reset only step-progress state, keeping the tool-call history and the
+	 * read-only streak. Used when the plan is complete but the loop continues
+	 * (e.g. the audit gate rejected a finished task): step-stuck warnings are
+	 * silenced, but a read-without-write loop is still detected.
+	 */
+	resetStepProgress(): void {
+		this.currentStepId = null;
+		this.iterationsOnCurrentStep = 0;
+		this.toolErrors.clear();
+		this.consecutiveFailures = 0;
+		this.lastFailedTool = "";
+		this.lastErrorOutput = "";
 		this.fileRewriteCount.clear();
 		this.escalationCount = 0;
 		this.lastBashCommand = "";
@@ -520,6 +605,7 @@ export class StuckDetector {
 		this.lastBashCommand = "";
 		this.lastBashOutput = "";
 		this.emptyBashRunCount = 0;
+		this.readOnlyStreak = 0;
 		// Preserve escalationCount — prevents agent from "gaming" stuck detection
 		// by marking a step done and moving to the next one
 	}

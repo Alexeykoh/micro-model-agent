@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "fs";
 import type { Dirent } from "fs";
-import { resolve, join } from "path";
+import { resolve, join, basename } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
@@ -25,6 +25,60 @@ const SKIP_DIRS = new Set([
 const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
 const TEST_STEP_RE =
 	/\b(test(ing|s)?|тест(ы|ирование|ировать)?|провер\w*\s+тест|запустить\s+тест)\b|bun test|npm test|vitest|pytest|go test|jest|mocha/i;
+
+/** Subtree walk depth cap for file resolution. */
+const RESOLVE_MAX_DEPTH = 8;
+
+/**
+ * Resolve a plan-step file token to an existing file.
+ *
+ * A step description frequently names a file by its bare basename
+ * ("App.tsx") or a partially-prefixed path ("src/App.tsx") while the real
+ * file lives in a nested project directory relative to the agent baseDir
+ * (e.g. `bicycle-shop/src/App.tsx`). Naively resolving against baseDir
+ * reports the file as missing — observed in session ses_mssl5izw where the
+ * final audit gate rejected a fully-completed task with "1 files missing"
+ * forever, sending the model into a read/retry loop.
+ *
+ * Strategy: exact resolve first, then a bounded subtree walk matching either
+ * the exact basename or a path suffix (so both "App.tsx" and
+ * "src/App.tsx" find "bicycle-shop/src/App.tsx").
+ */
+function findExistingFile(baseDir: string, filePath: string): string | null {
+	const direct = resolve(baseDir, filePath);
+	if (existsSync(direct)) return direct;
+
+	const name = basename(filePath).toLowerCase();
+	const suffix = filePath.replace(/\\/g, "/").toLowerCase();
+	let found: string | null = null;
+
+	const walk = (dir: string, depth: number): void => {
+		if (found || depth > RESOLVE_MAX_DEPTH) return;
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const e of entries) {
+			if (found) return;
+			const full = join(dir, e.name);
+			if (e.isDirectory()) {
+				if (SKIP_DIRS.has(e.name)) continue;
+				walk(full, depth + 1);
+			} else if (
+				e.name.toLowerCase() === name ||
+				full.replace(/\\/g, "/").toLowerCase().endsWith("/" + suffix)
+			) {
+				found = full;
+				return;
+			}
+		}
+	};
+
+	walk(baseDir, 0);
+	return found;
+}
 
 export interface TestRunCheck {
 	/** Whether a real test run was executed at all. */
@@ -154,8 +208,8 @@ export class Auditor {
 		const existingFiles: string[] = [];
 
 		for (const filePath of uniqueFiles) {
-			const resolved = resolve(this.baseDir, filePath);
-			if (existsSync(resolved)) {
+			const resolved = findExistingFile(this.baseDir, filePath);
+			if (resolved) {
 				existingFiles.push(filePath);
 			} else {
 				missingFiles.push(filePath);

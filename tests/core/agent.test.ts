@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import { mkdtempSync, existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { Agent } from "../../src/core/agent";
 import type { AppConfig } from "../../src/config/types";
 
@@ -85,6 +88,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
 		logToolOutput: vi.fn(),
 		initSessionLog: vi.fn(),
 		closeSessionLog: vi.fn(),
+		setSessionDir: vi.fn(),
 	};
 
 	const config: AppConfig = {
@@ -1098,5 +1102,66 @@ describe("Agent", () => {
 		expect(auditCalls).toBe(3);
 		expect(result.success).toBe(false);
 		expect(result.error).not.toMatch(/blocked/i);
+	});
+
+	it("records a memory rule when the same tool fails repeatedly (non-consecutively)", async () => {
+		// Regression: LSP spawn npx ENOENT failed 8x in one session but NEVER
+		// consecutively (read_file/other tools succeeded in between), so the
+		// 5-consecutive-failures memory write never fired and the systemic
+		// failure was never learned. A per-tool counter must catch it.
+		const tmpBase = mkdtempSync(join(tmpdir(), "mma-memrule-"));
+		const sessionManagerMock = {
+			getActiveMeta: vi.fn().mockReturnValue({ id: "ses_test" }),
+			getSessionDirectory: vi.fn().mockReturnValue(tmpBase),
+			create: vi.fn(),
+			getActive: vi.fn().mockReturnValue("ses_test"),
+			appendLog: vi.fn(),
+			appendMessage: vi.fn(),
+			saveAssistantMessage: vi.fn(),
+			getActiveHistory: vi.fn().mockReturnValue([]),
+		};
+
+		// Every LLM call returns a tool_call for test_tool; the executor always
+		// fails it. 4 calls → the tool has failed 4 times (>= 3) → memory rule.
+		const mockProvider = {
+			model: "test-model",
+			contextWindow: 4096,
+			chat: vi.fn().mockImplementation(() =>
+				(async function* () {
+					yield {
+						type: "tool_call" as const,
+						toolCall: { id: "call-1", name: "test_tool", arguments: "{}" },
+					};
+					yield { type: "done" as const, finishReason: "tool_calls" as const };
+				})(),
+			),
+			countTokens: vi.fn().mockReturnValue(10),
+		};
+
+		const mockExecutor = {
+			execute: vi.fn().mockResolvedValue({
+				success: false,
+				output: "spawn npx ENOENT",
+				toolCallId: "call-1",
+			}),
+			getToolDefinitions: vi.fn().mockReturnValue([]),
+		};
+
+		const deps = createMockDeps({
+			llmProvider: mockProvider as any,
+			toolExecutor: mockExecutor as any,
+			sessionManager: sessionManagerMock as any,
+			baseDir: tmpBase,
+			config: { ...createMockDeps().config, maxToolIterations: 6 },
+		});
+		const agent = new Agent(deps as any);
+		await agent.run("retry failing tool");
+
+		const errorsMd = join(tmpBase, ".mma", "memory", "errors.md");
+		expect(existsSync(errorsMd)).toBe(true);
+		const content = readFileSync(errorsMd, "utf-8");
+		expect(content).toContain("test_tool");
+		expect(content).toContain("spawn npx ENOENT");
+		expect(content).toContain("Repeated");
 	});
 });
