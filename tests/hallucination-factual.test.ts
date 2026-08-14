@@ -56,6 +56,14 @@ describe("FactualCheck", () => {
 		expect(result.status).toBe("pass");
 	});
 
+	it("does not flag country-TLD domain names like Gismeteo.by as files", () => {
+		const check = new FactualCheck(dir);
+		const result = check.validate(
+			"For weather, try Gismeteo.by or weather.com.",
+		);
+		expect(result.status).toBe("pass");
+	});
+
 	it("passes for existing relative paths", () => {
 		const check = new FactualCheck(dir);
 		const result = check.validate("See src/index.ts and src/utils/helper.ts");

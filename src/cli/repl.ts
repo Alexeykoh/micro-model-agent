@@ -122,7 +122,7 @@ export class Repl implements ReplContext {
 			? new LineEditor({
 					input: process.stdin,
 					output: process.stdout,
-					prompt: pc.cyan("> "),
+					prompt: pc.cyan(t("repl.you")),
 					history: this.history,
 					historySize: this.maxHistory,
 					completer: (line: string) => {
@@ -134,7 +134,7 @@ export class Repl implements ReplContext {
 			: readline.createInterface({
 					input: process.stdin,
 					output: process.stdout,
-					prompt: pc.cyan("> "),
+					prompt: pc.cyan(t("repl.you")),
 					history: this.history,
 					historySize: this.maxHistory,
 					tabSize: 2,
@@ -228,11 +228,11 @@ export class Repl implements ReplContext {
 						}
 					}
 					if (this.running) {
-						this.rl.setPrompt(pc.cyan("> "));
+						this.rl.setPrompt(pc.cyan(t("repl.you")));
 						this.rl.prompt();
 					}
 				} else {
-					this.rl.setPrompt(pc.cyan("... "));
+					this.rl.setPrompt(pc.cyan(t("repl.you") + "… "));
 					this.rl.prompt();
 				}
 				return;
@@ -241,7 +241,7 @@ export class Repl implements ReplContext {
 			if (this.isMultiLineInput(trimmed)) {
 				inMultiLine = true;
 				multiLineBuffer = trimmed;
-				this.rl.setPrompt(pc.cyan("... "));
+				this.rl.setPrompt(pc.cyan(t("repl.you") + "… "));
 				this.rl.prompt();
 				return;
 			}

@@ -9,6 +9,11 @@
  * extractors cannot drift apart again (observed: auditor treated a URL
  * hostname `whom-pointing-jewel-maine.trycloudflare.com` in a plan step as a
  * missing file while the factual check correctly ignored it).
+ *
+ * Bare `word.ext` tokens are gated on an allow-list of real file extensions
+ * (`FILE_EXTENSIONS`) instead of a deny-list of TLDs — a domain in any present
+ * or future TLD (`Gismeteo.by`, `weather.com`, `example.xyz`) can never be
+ * mistaken for a file, and no TLD list needs maintaining.
  */
 
 const JS_GLOBALS = new Set([
@@ -79,28 +84,122 @@ export function isJsMemberAccess(candidate: string): boolean {
 	return m !== null && JS_GLOBALS.has(m[1]);
 }
 
-/** Top-level domains that are never file extensions. */
-const NON_FILE_EXTENSIONS = new Set([
-	"com",
-	"org",
-	"net",
-	"gov",
-	"edu",
-	"io",
-	"dev",
-	"app",
-	"co",
-	"ai",
-	"ru",
-	"de",
-	"fr",
-	"uk",
-	"us",
-	"es",
-	"it",
-	"jp",
-	"cn",
-	"br",
+/**
+ * File extensions that make a bare `word.ext` token a plausible file path.
+ *
+ * An allow-list, deliberately: enumerating everything that is NOT a file (TLDs,
+ * brand names, …) is a brittle heuristic that can never be complete. Instead a
+ * bare `word.ext` is only treated as a file when its extension is a known one —
+ * so `Gismeteo.by`, `weather.com`, or any future TLD is never flagged, while a
+ * genuine `config.json` / `helper.ts` still is.
+ */
+const FILE_EXTENSIONS = new Set([
+	// source / code
+	"ts",
+	"tsx",
+	"js",
+	"jsx",
+	"mjs",
+	"cjs",
+	"py",
+	"pyc",
+	"rb",
+	"go",
+	"rs",
+	"java",
+	"jar",
+	"kt",
+	"kts",
+	"c",
+	"h",
+	"cc",
+	"cpp",
+	"cxx",
+	"hpp",
+	"hh",
+	"cs",
+	"php",
+	"swift",
+	"m",
+	"mm",
+	"lua",
+	"pl",
+	"sh",
+	"bash",
+	"zsh",
+	"fish",
+	"bat",
+	"cmd",
+	"ps1",
+	"vue",
+	"svelte",
+	"dart",
+	// config / data / docs
+	"json",
+	"jsonc",
+	"json5",
+	"yaml",
+	"yml",
+	"toml",
+	"ini",
+	"cfg",
+	"conf",
+	"env",
+	"xml",
+	"html",
+	"htm",
+	"md",
+	"markdown",
+	"rst",
+	"txt",
+	"log",
+	"csv",
+	"tsv",
+	"lock",
+	"sql",
+	"sqlite",
+	"db",
+	"wasm",
+	"map",
+	"css",
+	"scss",
+	"sass",
+	"less",
+	// assets / binary
+	"svg",
+	"png",
+	"jpg",
+	"jpeg",
+	"gif",
+	"webp",
+	"bmp",
+	"ico",
+	"avif",
+	"tiff",
+	"pdf",
+	"doc",
+	"docx",
+	"xls",
+	"xlsx",
+	"ppt",
+	"pptx",
+	"odt",
+	"ods",
+	"zip",
+	"gz",
+	"tar",
+	"tgz",
+	"bz2",
+	"xz",
+	"7z",
+	"rar",
+	"bin",
+	"exe",
+	"dll",
+	"so",
+	"o",
+	"a",
+	"dylib",
 ]);
 
 /** Well-known runtime/library names that end in .js/.ts but are NOT files. */
@@ -117,28 +216,34 @@ const TECH_NAMES = new Set([
 	"jquery.js",
 ]);
 
-const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{2,6}\b/gi;
+const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
- * True when `candidate` is a plausible file path token: has a directory part
- * OR is a simple `word.ext` bare name, is not JS member access, is not a
- * technology name (node.js), and does not end in a TLD (com/org/ru/...).
+ * True when `candidate` is a plausible file path token: a path with a
+ * directory separator is accepted as-is (a `src/x.ts`-looking token is a file),
+ * while a bare `word.ext` is only a file when its extension is a known file
+ * extension (so domains like `Gismeteo.by` / `weather.com` are never files).
+ * JS member access (`process.env`) and technology names (`node.js`) are never
+ * files.
  */
 export function isFilePathLike(s: string): boolean {
 	const lower = s.toLowerCase();
 	if (TECH_NAMES.has(lower)) return false;
-	if (!s.includes("/") && !s.includes("\\") && !/^\w+\.[a-z]{2,4}$/i.test(s))
-		return false;
 	if (isJsMemberAccess(s)) return false;
 	const ext = s.split(".").pop()?.toLowerCase() || "";
-	return !NON_FILE_EXTENSIONS.has(ext);
+	if (!s.includes("/") && !s.includes("\\")) {
+		if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
+		return FILE_EXTENSIONS.has(ext);
+	}
+	return true;
 }
 
 /**
- * Extract deduplicated file-like tokens from free text. Multi-label hostnames
- * (`whom-pointing-jewel-maine.trycloudflare.com`) and TLD ends are rejected by
- * `isFilePathLike`; URLs are stripped first so `https://host/repo.git` never
- * survives as a "file".
+ * Extract deduplicated file-like tokens from free text. Bare `word.ext` tokens
+ * are filtered through `isFilePathLike` (allow-list of real file extensions, so
+ * hostnames/TLDs like `whom-pointing-jewel-maine.trycloudflare.com` or
+ * `Gismeteo.by` never survive); URLs are stripped first so
+ * `https://host/repo.git` never survives as a "file".
  */
 export function extractFileLikeTokens(text: string): string[] {
 	const matches = text.match(FILE_TOKEN_RE) || [];

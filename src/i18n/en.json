@@ -342,6 +342,7 @@
   "repl.skill_unknown_sub": "Unknown skill subcommand: {subcmd}",
   "repl.skill_usage": "Usage: /skill [list|loaded|load|unload|search]",
   "repl.agent": "Agent: ",
+  "repl.you": "You: ",
   "repl.interrupt": "Interrupted (Esc)",
   "repl.title": "MMA REPL v{version}",
   "repl.model": "Model:",

@@ -44,6 +44,7 @@ export function createBrowserTool(): ToolDefinition {
     description: [
       'Control a headless browser. Navigate pages, click elements, type text, scroll, take screenshots.',
       'Runs a real browser with JavaScript enabled — use it for JS-rendered sites (weather, dashboards, SPAs) where web_fetch/web_browse return empty content.',
+      'Do NOT use it for search queries: search engines (Google, Yandex, Bing) block headless browsers with CAPTCHA/429/redirect pages — use the web_search tool for searching.',
       'Each snapshot returns: a numbered list of interactive elements, the visible page text (Content section), browser console messages, and network errors.',
       'Use the Content section to understand what the page says; use element numbers as targets for click/type.',
       'Actions: open (url), click (target), type (target, text), scroll (direction), back, forward, screenshot, snapshot, close, wait (ms).',
