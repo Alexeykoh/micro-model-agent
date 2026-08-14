@@ -1041,7 +1041,9 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.33.0
+### Current Version: 0.33.1
+
+- **33.1** = REPL line editor redraw fix (no more duplicated multi-line input — `render()` moves back to the frame's first row via `prevCursorRow` before redrawing; `submit()`/`reset()`/`question()` commit the frame instead of erasing it); tool descriptions clarify `web_fetch`/`web_browse` are plain JS-less HTTP fetch (JS-rendered SPAs return empty content — use the `browser` tool).
 
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
