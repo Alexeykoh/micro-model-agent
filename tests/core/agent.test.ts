@@ -984,4 +984,119 @@ describe("Agent", () => {
 		expect(result.success).toBe(false);
 		expect(deps.llmProvider.chat).toHaveBeenCalledTimes(3);
 	});
+
+	it("compares repetition against the actual latest model text, not a stale accepted answer", async () => {
+		const prevTexts: string[] = [];
+		let validateCalls = 0;
+		const texts = ["alpha", "beta", "gamma", "delta", "epsilon"];
+		const deps = createMockDeps({
+			finalAudit: async () => ({
+				passed: false,
+				missingFiles: ["src/missing.ts"],
+				createdFiles: [],
+				modifiedFiles: [],
+				summary: "Task incomplete",
+				typeCheckError: null,
+				massEditWarning: null,
+				pendingSteps: ["Create src/missing.ts"],
+			}),
+			hallucinationDetector: {
+				validate: vi.fn(() => {
+					validateCalls++;
+					if (validateCalls === 1) return { status: "pass" as const };
+					return {
+						status: "retry" as const,
+						kind: "short" as const,
+						reason: "Response too short or empty",
+					};
+				}),
+				getConfidenceCheck: vi.fn(() => ({
+					setPreviousResponse: vi.fn((t: string) => prevTexts.push(t)),
+				})),
+				getConsistencyCheck: vi.fn(() => ({
+					trackDecision: vi.fn(),
+					trackCreatedFile: vi.fn(),
+					trackDeletedFile: vi.fn(),
+				})),
+			},
+			llmProvider: {
+				model: "test-model",
+				contextWindow: 4096,
+				chat: vi.fn().mockImplementation(() => {
+					const text = texts.shift();
+					return (async function* () {
+						if (text) yield { type: "text" as const, content: text };
+						yield { type: "done" as const, finishReason: "stop" as const };
+					})();
+				}),
+				countTokens: vi.fn().mockReturnValue(10),
+			},
+		});
+		const agent = new Agent(deps as any);
+		await agent.run("hello");
+		// iter 3 compared "gamma" against the actual previous output "beta",
+		// not the stale accepted answer "alpha" from the first pass.
+		expect(prevTexts[2]).toBe("beta");
+		expect(prevTexts[3]).toBe("gamma");
+	});
+
+	it("does not count an audit-triggered repetitive re-answer against the hallucination budget", async () => {
+		let auditCalls = 0;
+		const failingAudit = async () => {
+			auditCalls++;
+			return {
+				passed: false,
+				missingFiles: ["src/missing.ts"],
+				createdFiles: [],
+				modifiedFiles: [],
+				summary: "Task incomplete",
+				typeCheckError: null,
+				massEditWarning: null,
+				pendingSteps: ["Create src/missing.ts"],
+			};
+		};
+		let validateCalls = 0;
+		const texts = ["alpha", "beta", "gamma", "delta", "epsilon"];
+		const deps = createMockDeps({
+			finalAudit: failingAudit,
+			hallucinationDetector: {
+				validate: vi.fn(() => {
+					validateCalls++;
+					if (validateCalls === 1) return { status: "pass" as const };
+					return {
+						status: "retry" as const,
+						kind: "repetition" as const,
+						reason: "Response too repetitive (75% overlap)",
+					};
+				}),
+				getConfidenceCheck: vi.fn(() => ({
+					setPreviousResponse: vi.fn(),
+				})),
+				getConsistencyCheck: vi.fn(() => ({
+					trackDecision: vi.fn(),
+					trackCreatedFile: vi.fn(),
+					trackDeletedFile: vi.fn(),
+				})),
+			},
+			llmProvider: {
+				model: "test-model",
+				contextWindow: 4096,
+				chat: vi.fn().mockImplementation(() => {
+					const text = texts.shift();
+					return (async function* () {
+						if (text) yield { type: "text" as const, content: text };
+						yield { type: "done" as const, finishReason: "stop" as const };
+					})();
+				}),
+				countTokens: vi.fn().mockReturnValue(10),
+			},
+		});
+		const agent = new Agent(deps as any);
+		const result = await agent.run("hello");
+		// The model reached the audit-retry cap (3) and reported an audit
+		// failure — it was NOT cut off early with a response_blocked error.
+		expect(auditCalls).toBe(3);
+		expect(result.success).toBe(false);
+		expect(result.error).not.toMatch(/blocked/i);
+	});
 });

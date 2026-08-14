@@ -1,5 +1,6 @@
 import * as readline from "readline";
 import { pc } from "../ui/colors";
+import { LineEditor, type LineInput } from "../ui/line-editor";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -82,8 +83,9 @@ export class Repl implements ReplContext {
 	public readonly baseDir: string;
 	private noAgentsMd: boolean;
 	private pendingClipboardImage: string | null = null;
+	private exitOnClose = false;
 
-	public rl: readline.Interface;
+	public rl: LineInput;
 	public agent: Agent;
 	public config: AppConfig;
 	public sessionManager?: SessionManager;
@@ -101,9 +103,11 @@ export class Repl implements ReplContext {
 		baseDir?: string,
 		noAgentsMd?: boolean,
 		logger?: Logger,
+		exitOnClose?: boolean,
 	) {
 		this.agent = agent;
 		this.config = config;
+		this.exitOnClose = exitOnClose === true;
 		this.sessionManager = sessionManager;
 		this.skillsModule = skillsModule;
 		this.pluginManager = pluginManager;
@@ -114,19 +118,32 @@ export class Repl implements ReplContext {
 		this.historyPath = join(homedir(), ".mma", "repl-history");
 		this.loadHistory();
 
-		this.rl = readline.createInterface({
-			input: process.stdin,
-			output: process.stdout,
-			prompt: pc.cyan("> "),
-			history: this.history,
-			historySize: this.maxHistory,
-			tabSize: 2,
-			completer: (line: string) => {
-				const [matches, partial] = this.completer.complete(line);
-				if (matches.length > 0) return [matches, partial];
-				return [[], line];
-			},
-		});
+		this.rl = process.stdin.isTTY
+			? new LineEditor({
+					input: process.stdin,
+					output: process.stdout,
+					prompt: pc.cyan("> "),
+					history: this.history,
+					historySize: this.maxHistory,
+					completer: (line: string) => {
+						const [matches, partial] = this.completer.complete(line);
+						if (matches.length > 0) return [matches, partial];
+						return [[], line];
+					},
+				})
+			: readline.createInterface({
+					input: process.stdin,
+					output: process.stdout,
+					prompt: pc.cyan("> "),
+					history: this.history,
+					historySize: this.maxHistory,
+					tabSize: 2,
+					completer: (line: string) => {
+						const [matches, partial] = this.completer.complete(line);
+						if (matches.length > 0) return [matches, partial];
+						return [[], line];
+					},
+				});
 
 		registerAllCommands(this);
 		this.setupCompleter();
@@ -247,56 +264,22 @@ export class Repl implements ReplContext {
 
 		this.rl.on("close", () => {
 			this.running = false;
+			this.saveHistory();
+			this.agent.shutdown();
+			if (this.exitOnClose) process.exit(0);
 		});
 
-		if (process.stdin.isTTY) {
-			readline.emitKeypressEvents(process.stdin);
-			process.stdin.on("keypress", async (str, key) => {
-				if (key.name === "escape") {
-					// Bun/Node's readline collapses a fast double-Esc into a single
-					// keypress whose `sequence` contains two ESC bytes ("\x1b\x1b").
-					// Counting bytes (not events) catches both the collapsed case and
-					// the case where two separate escape keypresses land in the window.
-					const escBytes = key.sequence
-						? (key.sequence.match(/\x1b/g) || []).length
-						: 1;
-					const now = Date.now();
-					const withinWindow = now - this.lastEscTime < this.doubleEscDelay;
-					this.lastEscTime = now;
-					if (escBytes >= 2 || withinWindow) {
-						this.lastEscTime = 0;
-						if (this.agentRunning) {
-							process.stdout.write(pc.yellow(`\n${t("repl.interrupt")}\n`));
-							this.agent.shutdown();
-						}
-					}
-					return;
-				}
-				if (key.ctrl && key.name === "v" && !this.agentRunning) {
-					try {
-						const { readClipboardImage, bufferToDataUrl } = await import(
-							"../llm/image-utils"
-						);
-						const clipBuf = await readClipboardImage();
-						if (clipBuf) {
-							const { dataUrl } = await bufferToDataUrl(clipBuf);
-							this.pendingClipboardImage = dataUrl;
-							const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-							console.log(
-								pc.green(
-									`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`,
-								),
-							);
-							this.rl.prompt();
-						} else {
-							console.log(pc.yellow(`\n${t("image.clipboard_empty")}`));
-							this.rl.prompt();
-						}
-					} catch {
-						// clipboard read failed — ignore, let terminal paste text normally
-					}
-				}
+		if (this.exitOnClose && !process.stdin.isTTY) {
+			process.stdin.on("end", () => {
+				this.running = false;
+				this.saveHistory();
+				this.agent.shutdown();
+				process.exit(0);
 			});
+		}
+
+		if (this.rl instanceof LineEditor) {
+			this.rl.onKeyInput = (str, key) => this.handleSpecialKey(str, key);
 		}
 
 		let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -314,6 +297,61 @@ export class Repl implements ReplContext {
 				process.exit(0);
 			}
 		});
+	}
+
+	private handleSpecialKey(str: string, key: any): boolean {
+		if (key.name === "escape") {
+			// Bun's keypress decoder collapses a fast double-Esc into a single
+			// keypress whose `sequence` contains two ESC bytes ("\x1b\x1b").
+			// Counting bytes (not events) catches both the collapsed case and
+			// the case where two separate escape keypresses land in the window.
+			const escBytes = key.sequence
+				? (key.sequence.match(/\x1b/g) || []).length
+				: 1;
+			const now = Date.now();
+			const withinWindow = now - this.lastEscTime < this.doubleEscDelay;
+			this.lastEscTime = now;
+			if (escBytes >= 2 || withinWindow) {
+				this.lastEscTime = 0;
+				if (this.agentRunning) {
+					process.stdout.write(pc.yellow(`\n${t("repl.interrupt")}\n`));
+					this.agent.shutdown();
+				}
+			}
+			return true;
+		}
+		if (key.ctrl && key.name === "v" && !this.agentRunning) {
+			this.pasteClipboardImage();
+			return true;
+		}
+		return false;
+	}
+
+	private async pasteClipboardImage(): Promise<void> {
+		try {
+			const { readClipboardImage, bufferToDataUrl } = await import(
+				"../llm/image-utils"
+			);
+			const clipBuf = await readClipboardImage();
+			if (clipBuf) {
+				const { dataUrl } = await bufferToDataUrl(clipBuf);
+				this.pendingClipboardImage = dataUrl;
+				const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
+				console.log(
+					pc.green(
+						`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`,
+					),
+				);
+				if (this.rl instanceof LineEditor) this.rl.reset();
+				this.rl.prompt();
+			} else {
+				console.log(pc.yellow(`\n${t("image.clipboard_empty")}`));
+				if (this.rl instanceof LineEditor) this.rl.reset();
+				this.rl.prompt();
+			}
+		} catch {
+			// clipboard read failed — ignore, let terminal paste text normally
+		}
 	}
 
 	private isMultiLineInput(line: string): boolean {
@@ -343,6 +381,7 @@ export class Repl implements ReplContext {
 
 			this.logger?.logREPL("user", input);
 
+			if (this.rl instanceof LineEditor) this.rl.reset();
 			process.stdout.write("\n" + pc.green(t("repl.agent")));
 
 			const renderer = new Renderer({

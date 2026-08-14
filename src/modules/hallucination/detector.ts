@@ -7,6 +7,10 @@ import type { LLMProvider } from "../../llm/provider";
 export interface HallucinationCheckResult {
   status: "pass" | "warn" | "retry" | "block";
   reason?: string;
+  /** What kind of signal triggered the verdict (used to distinguish a
+   *  repetition-retry from a short/empty one — the audit gate can legitimately
+   *  force a repetitive re-answer and should not burn a retry on it). */
+  kind?: "short" | "repetition" | "diversity";
 }
 
 export class HallucinationDetector {

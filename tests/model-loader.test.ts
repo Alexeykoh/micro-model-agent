@@ -26,7 +26,7 @@ describe('ModelLoader', () => {
       ok: true,
       json: () => Promise.resolve({
         models: [{
-          key: 'qwen3.5-9b',
+          key: 'qwen/qwen3.5-9b',
           loaded_instances: [{
             config: { context_length: 32768 }
           }]
@@ -37,7 +37,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234', mockLogger as any)
     const result = await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 32768,
       autoLoad: true,
     })
@@ -56,7 +56,7 @@ describe('ModelLoader', () => {
         ok: true,
         json: () => Promise.resolve({
           type: 'llm',
-          instance_id: 'qwen3.5-9b',
+          instance_id: 'qwen/qwen3.5-9b',
           load_time_seconds: 5.2,
           status: 'loaded',
         }),
@@ -65,7 +65,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234', mockLogger as any)
     const result = await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 32768,
       flashAttention: true,
       autoLoad: true,
@@ -83,7 +83,7 @@ describe('ModelLoader', () => {
         ok: true,
         json: () => Promise.resolve({
           models: [{
-            key: 'qwen3.5-9b',
+            key: 'qwen/qwen3.5-9b',
             loaded_instances: [{
               config: { context_length: 8192 }
             }]
@@ -94,7 +94,7 @@ describe('ModelLoader', () => {
         ok: true,
         json: () => Promise.resolve({
           type: 'llm',
-          instance_id: 'qwen3.5-9b',
+          instance_id: 'qwen/qwen3.5-9b',
           load_time_seconds: 3.1,
           status: 'loaded',
         }),
@@ -103,7 +103,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234', mockLogger as any)
     const result = await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 32768,
       autoLoad: true,
     })
@@ -118,7 +118,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234', mockLogger as any)
     const result = await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 32768,
       autoLoad: true,
     })
@@ -169,7 +169,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234/v1', mockLogger as any)
     await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 32768,
       autoLoad: true,
     })
@@ -196,7 +196,7 @@ describe('ModelLoader', () => {
 
     const loader = new ModelLoader('http://localhost:1234', mockLogger as any)
     await loader.ensureModelLoaded({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextLength: 65536,
       flashAttention: true,
       evalBatchSize: 512,
@@ -207,7 +207,7 @@ describe('ModelLoader', () => {
     const loadCall = mockFetch.mock.calls[1]
     const body = JSON.parse(loadCall[1]?.body as string)
 
-    expect(body.model).toBe('qwen3.5-9b')
+    expect(body.model).toBe('qwen/qwen3.5-9b')
     expect(body.context_length).toBe(65536)
     expect(body.flash_attention).toBe(true)
     expect(body.eval_batch_size).toBe(512)

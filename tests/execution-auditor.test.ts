@@ -56,6 +56,36 @@ describe("Auditor", () => {
 		expect(result.missingFiles.length).toBeGreaterThan(0);
 	});
 
+	it("should not treat URL hostnames in step descriptions as missing files", async () => {
+		const plan = PlanCreator.createPlan(
+			"test",
+			[
+				"Remove existing origin with git remote remove origin",
+				"Add new origin with address https://whom-pointing-jewel-maine.trycloudflare.com/gitea/",
+				"Verify result with git remote -v",
+			],
+			tmpDir,
+		);
+		plan.steps.forEach((s) => (s.status = "done"));
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.passed).toBe(true);
+	});
+
+	it("should not treat URLs with repo paths as missing files", async () => {
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Push to https://github.com/example/repo.git via git push origin main"],
+			tmpDir,
+		);
+		plan.steps.forEach((s) => (s.status = "done"));
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.passed).toBe(true);
+	});
+
 	it("should not treat JS member access (process.env) as a missing file", async () => {
 		mkdirSync(join(tmpDir, "src"), { recursive: true });
 		writeFileSync(join(tmpDir, "src", "check-env.ts"), "");

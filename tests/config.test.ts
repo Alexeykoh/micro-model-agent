@@ -11,7 +11,7 @@ describe("config defaults", () => {
   });
 
   it("should have all required fields", () => {
-    expect(DEFAULTS.model).toBe("qwen3.5-9b");
+    expect(DEFAULTS.model).toBe("qwen/qwen3.5-9b");
     expect(DEFAULTS.provider.type).toBe("openai-compat");
     expect(DEFAULTS.provider.baseUrl).toBe("http://localhost:1234/v1");
     expect(DEFAULTS.provider.apiKey).toBe("not-needed");
@@ -69,7 +69,7 @@ describe("loadConfig", () => {
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
-    expect(cfg.model).toBe("qwen3.5-9b");
+    expect(cfg.model).toBe("qwen/qwen3.5-9b");
   });
 
   it("should merge global config", () => {
@@ -176,7 +176,7 @@ describe("loadConfig", () => {
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
-    expect(cfg.model).toBe("qwen3.5-9b");
+    expect(cfg.model).toBe("qwen/qwen3.5-9b");
     expect(cfg.version).toBe("2.0.0");
     expect(existsSync(join(tmpDir, "config.json.bak"))).toBe(true);
   });

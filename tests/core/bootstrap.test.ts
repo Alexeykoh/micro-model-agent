@@ -12,7 +12,7 @@ describe("bootstrap", () => {
 	it("uses defaults when no config found", async () => {
 		const result = await bootstrap("/nonexistent/mma-config");
 		expect(result.agent).toBeDefined();
-		expect(result.config.model).toBe("qwen3.5-9b");
+		expect(result.config.model).toBe("qwen/qwen3.5-9b");
 	});
 
 	it("advertises Bun as the runtime for TypeScript scripts", () => {

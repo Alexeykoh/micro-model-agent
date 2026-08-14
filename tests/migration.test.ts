@@ -23,7 +23,7 @@ describe('MigrationDetector', () => {
   })
 
   it('should not migrate v2 config', () => {
-    writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({ version: '2.0.0', model: 'qwen3.5-9b' }))
+    writeFileSync(join(tmpDir, 'config.json'), JSON.stringify({ version: '2.0.0', model: 'qwen/qwen3.5-9b' }))
     const detector = new MigrationDetector(tmpDir)
     expect(detector.needsMigration()).toBe(false)
   })
@@ -65,10 +65,10 @@ describe('BackupManager', () => {
   it('should create fresh v2 config after backup', () => {
     const backup = new BackupManager(tmpDir)
     backup.backupConfig()
-    backup.writeFreshConfig({ version: '2.0.0', model: 'qwen3.5-9b' } as any)
+    backup.writeFreshConfig({ version: '2.0.0', model: 'qwen/qwen3.5-9b' } as any)
     const config = JSON.parse(readFileSync(join(tmpDir, 'config.json'), 'utf-8'))
     expect(config.version).toBe('2.0.0')
-    expect(config.model).toBe('qwen3.5-9b')
+    expect(config.model).toBe('qwen/qwen3.5-9b')
   })
 
   it('should backup entire .mma directory when needed', () => {

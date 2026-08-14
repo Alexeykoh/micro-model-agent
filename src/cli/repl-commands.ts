@@ -8,7 +8,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
-import type * as readline from "readline";
+import type { LineInput } from "../ui/line-editor";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
@@ -47,7 +47,7 @@ export interface SlashCommand {
 export interface ReplContext {
 	readonly config: AppConfig;
 	readonly agent: Agent;
-	readonly rl: readline.Interface;
+	readonly rl: LineInput;
 	readonly sessionManager?: SessionManager;
 	readonly skillsModule?: SkillsModule;
 	readonly pluginManager?: PluginManager;

@@ -295,15 +295,22 @@ export class ExecutionModule implements AgentModule {
 					}
 					const status = String(args.status || "done");
 
-					// Idempotency: re-marking a done step as done is a no-op that
-					// usually means the model is spinning (observed: step marked done
-					// 4× in a row without any new work). Flag it so it stops.
+					// Idempotency: re-marking a done step as done usually means the
+					// plan was already auto-advanced (all step files exist) and the
+					// model is confirming its own work. Return SUCCESS so the loop
+					// isn't confused — a small model misreads success:false as a
+					// failed action and retries/spins. Genuine spinning (repeated
+					// identical calls without new work) is still caught by the
+					// stuck-detector's consecutive-identical-call check.
 					if (status === "done" && target.status === "done") {
+						const progress = this.tracker.getProgressString();
+						const display = this.tracker.toPromptBlock();
 						return {
-							success: false,
-							output: t("plan.step_already_done", {
+							success: true,
+							output: `${t("plan.step_already_done", {
 								step: String(stepId),
-							}),
+							})}\n${progress}`,
+							display,
 						};
 					}
 

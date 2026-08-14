@@ -24,7 +24,7 @@ import { join } from 'path'
 import { rmSync, mkdtempSync } from 'fs'
 
 const BASE_URL = process.env.MMA_PROVIDER_BASEURL || 'http://localhost:1234/v1'
-const MODEL = process.env.MMA_MODEL || 'qwen3.5-9b'
+const MODEL = process.env.MMA_MODEL || 'qwen/qwen3.5-9b'
 const API_KEY = process.env.MMA_PROVIDER_APIKEY || 'not-needed'
 const shouldSkip = process.env.MMA_SKIP_INTEGRATION === '1'
 

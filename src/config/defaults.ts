@@ -4,7 +4,7 @@ import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
 export const DEFAULTS: AppConfig = {
   version: "2.0.0",
-  model: "qwen3.5-9b",
+  model: "qwen/qwen3.5-9b",
   provider: {
     type: "openai-compat",
     baseUrl: "http://localhost:1234/v1",
@@ -19,18 +19,18 @@ export const DEFAULTS: AppConfig = {
   },
   experts: {
     code: {
-      model: "qwen3.5-9b",
+      model: "qwen/qwen3.5-9b",
       tool_tags: ["file", "code", "shell"],
       max_attempts: 3,
     },
-    research: { model: "qwen3.5-9b", tool_tags: ["research"], max_attempts: 3 },
+    research: { model: "qwen/qwen3.5-9b", tool_tags: ["research"], max_attempts: 3 },
     browser: {
-      model: "qwen3.5-9b",
+      model: "qwen/qwen3.5-9b",
       tool_tags: ["browser", "vision"],
       max_attempts: 3,
     },
     vision: {
-      model: "qwen3.5-9b",
+      model: "qwen/qwen3.5-9b",
       tool_tags: ["browser", "vision", "file"],
       max_attempts: 2,
     },

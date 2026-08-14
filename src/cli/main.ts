@@ -1,8 +1,8 @@
 ﻿import { createProgram } from "./commands";
 import { bootstrap } from "../core/bootstrap";
 import { Repl } from "./repl";
-import { formatMarkdown } from "../ui/md-formatter";
 import { Renderer } from "../ui/renderer";
+import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
@@ -124,18 +124,9 @@ async function main(): Promise<void> {
       },
     );
     renderer.flush();
-    if (result.success) {
-      if (!result.text) {
-        console.log(pc.yellow(t("cli.no_output")));
-      }
-    } else {
-      console.error(`${t("error.prefix")}${result.error}`);
-      if (result.text) {
-        console.log(formatMarkdown(result.text));
-      }
-      process.exit(1);
-    }
+    const exitCode = printRunResult(result, () => renderer.flush());
     agent.shutdown();
+    process.exit(exitCode);
   } else {
     const configPath = join(homedir(), ".mma", "config.json");
     if (!existsSync(configPath)) {
@@ -211,6 +202,7 @@ async function main(): Promise<void> {
       baseDir,
       noAgentsMd,
       logger,
+      true,
     );
     repl.start();
   }

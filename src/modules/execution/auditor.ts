@@ -3,7 +3,7 @@ import type { Dirent } from "fs";
 import { resolve, join } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
-import { isJsMemberAccess } from "../hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
 
@@ -143,13 +143,12 @@ export class Auditor {
 		const allStepText = plan.steps
 			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
 			.join(" ");
-		const fileMatches = allStepText.match(/\b[\w./-]+\.[a-z]+/gi) || [];
-		// process.env / console.log in step descriptions are JS member access,
-		// not files — drop them before existence checks (false "missing file"
-		// warnings).
-		const uniqueFiles = [
-			...new Set(fileMatches.filter((f) => !isJsMemberAccess(f))),
-		];
+		// File tokens are extracted with the SAME shared filter as the
+		// hallucination factual check (js-identifiers.ts). URLs are stripped
+		// first so a hostname / https://host/repo.git in a step description
+		// can never be reported as a missing file (observed: a git-remote
+		// plan flagged `whom-pointing-jewel-maine.trycloudflare.com`).
+		const uniqueFiles = extractFileLikeTokens(stripUrls(allStepText));
 
 		const missingFiles: string[] = [];
 		const existingFiles: string[] = [];

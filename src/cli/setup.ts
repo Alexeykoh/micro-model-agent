@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import type { LineInput } from "../ui/line-editor";
 import { pc } from "../ui/colors";
 import { t, setLocale } from "../i18n/index";
 import { Spinner } from "../ui/spinner";
@@ -41,7 +42,7 @@ function menuList(items: Array<{ label: string; url?: string }>): void {
 }
 
 function ask(
-  rl: readline.Interface,
+  rl: LineInput,
   question: string,
   defaultValue?: string,
 ): Promise<string> {
@@ -149,7 +150,7 @@ async function testChat(
 }
 
 export async function runSetup(
-  externalRl?: readline.Interface,
+  externalRl?: LineInput,
 ): Promise<SetupAnswers> {
   console.log(t("setup.title"));
 
@@ -237,7 +238,7 @@ export async function runSetup(
     );
     model = models[idx];
   } else {
-    model = await ask(rl, t("setup.model_name"), "qwen3.5-9b");
+    model = await ask(rl, t("setup.model_name"), "qwen/qwen3.5-9b");
   }
 
   const connected = await withSpinner(

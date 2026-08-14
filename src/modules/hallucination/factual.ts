@@ -2,7 +2,11 @@ import { existsSync, readdirSync, type Dirent } from "fs";
 import { resolve, isAbsolute, join } from "path";
 import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
-import { isJsMemberAccess } from "./js-identifiers";
+import {
+	isFilePathLike,
+	extractFileLikeTokens,
+	stripUrls,
+} from "./js-identifiers";
 
 /** Generated/cached dirs to skip when scanning for bare file names. */
 const IGNORED_DIRS = new Set([
@@ -14,61 +18,6 @@ const IGNORED_DIRS = new Set([
 	".mma",
 	"_testing",
 ]);
-
-const NON_FILE_EXTENSIONS = new Set([
-	"com",
-	"org",
-	"net",
-	"gov",
-	"edu",
-	"io",
-	"dev",
-	"app",
-	"co",
-	"ai",
-	"ru",
-	"de",
-	"fr",
-	"uk",
-	"us",
-	"es",
-	"it",
-	"jp",
-	"cn",
-	"br",
-]);
-
-/** Well-known runtime/library names that end in .js/.ts but are NOT files. */
-const TECH_NAMES = new Set([
-	"node.js",
-	"react.js",
-	"vue.js",
-	"next.js",
-	"angular.js",
-	"express.js",
-	"deno.js",
-	"qwik.js",
-	"svelte.js",
-	"jquery.js",
-]);
-
-/**
- * JS/TS global identifiers whose member access (`process.env`, `console.log`)
- * looks like a file path to the regex but is code, not a file.
- */
-
-function looksLikeFilePath(s: string): boolean {
-	const lower = s.toLowerCase();
-	// "Node.js" etc. are technologies, not files — never flag them.
-	if (TECH_NAMES.has(lower)) return false;
-	if (!s.includes("/") && !s.includes("\\") && !s.match(/^\w+\.[a-z]{2,4}$/i))
-		return false;
-	// process.env / console.log / Math.max — member access on JS globals,
-	// not file paths. Only applies to bare `word.word` (no slashes).
-	if (isJsMemberAccess(s)) return false;
-	const ext = s.split(".").pop()?.toLowerCase() || "";
-	return !NON_FILE_EXTENSIONS.has(ext);
-}
 
 export class FactualCheck {
 	private baseDir: string;
@@ -193,13 +142,6 @@ export class FactualCheck {
 	}
 
 	private extractFilePaths(text: string): string[] {
-		// Capture absolute Windows paths (with drive letter) and relative paths.
-		// The old pattern started at a word boundary, so "E:\project\src\a.ts"
-		// only matched "project\src\a.ts" — resolve() then glued that onto
-		// baseDir producing a bogus path and a false "unknown file" warning
-		// even for files that actually exist on disk.
-		const pattern = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{2,6}\b/gi;
-		const matches = text.match(pattern) || [];
-		return [...new Set(matches)].filter(looksLikeFilePath);
+		return extractFileLikeTokens(stripUrls(text));
 	}
 }

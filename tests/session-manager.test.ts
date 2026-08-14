@@ -15,7 +15,7 @@ describe('SessionManager', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'mma-session-mgr-'))
     store = new SessionStore(tmpDir)
     store.init()
-    manager = new SessionManager(store, { model: 'qwen3.5-9b', contextWindow: 32768, projectDir: '/test' })
+    manager = new SessionManager(store, { model: 'qwen/qwen3.5-9b', contextWindow: 32768, projectDir: '/test' })
   })
 
   afterEach(() => {
@@ -26,7 +26,7 @@ describe('SessionManager', () => {
     const meta = manager.create('My Session')
     expect(meta.id).toBeTruthy()
     expect(meta.name).toBe('My Session')
-    expect(meta.model).toBe('qwen3.5-9b')
+    expect(meta.model).toBe('qwen/qwen3.5-9b')
     expect(meta.contextWindow).toBe(32768)
     expect(meta.messageCount).toBe(0)
   })

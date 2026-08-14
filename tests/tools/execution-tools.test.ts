@@ -128,7 +128,7 @@ describe("ExecutionModule tools", () => {
       expect(result.output).toContain("step 1");
     });
 
-    it("warns when marking an already-done step done again", async () => {
+    it("marks an already-done step done again idempotently (success, not an error)", async () => {
       const tools = execModule.getToolDefinitions();
       const planTool = tools.find((t) => t.name === "plan")!;
       const ctx = { logger: { warn: () => {} } } as any;
@@ -147,8 +147,9 @@ describe("ExecutionModule tools", () => {
         step: 1,
         status: "done",
       });
-      expect(second.success).toBe(false);
+      expect(second.success).toBe(true);
       expect(second.output).toContain("already");
+      expect(second.output).toContain("1/2");
     });
   });
 

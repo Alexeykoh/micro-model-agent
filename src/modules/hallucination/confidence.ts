@@ -13,7 +13,11 @@ export class ConfidenceCheck {
 
   validate(response: string): HallucinationCheckResult {
     if (!response || response.length < MIN_CHARS) {
-      return { status: "retry", reason: t("hall.short_response") };
+      return {
+        status: "retry",
+        kind: "short",
+        reason: t("hall.short_response"),
+      };
     }
 
     // Language-agnostic: very short response with no structured content
@@ -22,6 +26,7 @@ export class ConfidenceCheck {
     if (wordCount < MIN_WORDS && !hasStructure) {
       return {
         status: "warn",
+        kind: "short",
         reason: t("hall.short_response"),
       };
     }
@@ -32,6 +37,7 @@ export class ConfidenceCheck {
       if (overlap > 0.5) {
         return {
           status: "retry",
+          kind: "repetition",
           reason: t("hall.repetitive", { pct: Math.round(overlap * 100) }),
         };
       }
@@ -48,6 +54,7 @@ export class ConfidenceCheck {
       if (diversity < 0.25) {
         return {
           status: "warn",
+          kind: "diversity",
           reason: t("hall.repetitive", {
             pct: Math.round((1 - diversity) * 100),
           }),

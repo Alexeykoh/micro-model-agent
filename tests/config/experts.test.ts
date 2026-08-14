@@ -47,7 +47,7 @@ describe('getExpertConfig', () => {
   it('returns expert config for known tag', () => {
     const expert = getExpertConfig(DEFAULTS, 'code')
     expect(expert).toBeDefined()
-    expect(expert!.model).toBe('qwen3.5-9b')
+    expect(expert!.model).toBe('qwen/qwen3.5-9b')
   })
 
   it('returns undefined for unknown tag', () => {

@@ -4,10 +4,10 @@ import { OpenAICompatProvider } from '../src/llm/openai-compat'
 describe('OpenAICompatProvider', () => {
   it('should construct with config', () => {
     const provider = new OpenAICompatProvider({
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       baseUrl: 'http://localhost:1234/v1',
     })
-    expect(provider.model).toBe('qwen3.5-9b')
+    expect(provider.model).toBe('qwen/qwen3.5-9b')
     expect(provider.contextWindow).toBe(32768)
   })
 

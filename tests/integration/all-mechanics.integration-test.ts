@@ -22,7 +22,7 @@ import { platform } from "os";
 // ── helpers ────────────────────────────────────────────────────────────────
 
 const BASE_URL = process.env.MMA_PROVIDER_BASEURL || "http://localhost:1234/v1";
-const MODEL = process.env.MMA_MODEL || "qwen3.5-9b";
+const MODEL = process.env.MMA_MODEL || "qwen/qwen3.5-9b";
 const API_KEY = process.env.MMA_PROVIDER_APIKEY || "not-needed";
 const CONTEXT_WINDOW = process.env.MMA_CONTEXT_WINDOW || "32768";
 const shouldSkip = process.env.MMA_SKIP_INTEGRATION === "1";

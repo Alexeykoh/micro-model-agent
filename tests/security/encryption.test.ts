@@ -85,7 +85,7 @@ describe('Encryption', () => {
   describe('encryptSensitiveFields / decryptSensitiveFields', () => {
     it('should encrypt sensitive fields', () => {
       const config = {
-        model: 'qwen3.5-9b',
+        model: 'qwen/qwen3.5-9b',
         api_key: 'secret-key-123',
         baseUrl: 'http://localhost:1234',
         token: 'secret-token-456',
@@ -94,13 +94,13 @@ describe('Encryption', () => {
       const encrypted = encryptSensitiveFields(config, testKey);
       expect(encrypted.api_key).not.toBe('secret-key-123');
       expect(encrypted.token).not.toBe('secret-token-456');
-      expect(encrypted.model).toBe('qwen3.5-9b');
+      expect(encrypted.model).toBe('qwen/qwen3.5-9b');
       expect(encrypted.baseUrl).toBe('http://localhost:1234');
     });
 
     it('should decrypt sensitive fields', () => {
       const config = {
-        model: 'qwen3.5-9b',
+        model: 'qwen/qwen3.5-9b',
         api_key: 'secret-key-123',
         baseUrl: 'http://localhost:1234',
         token: 'secret-token-456',
@@ -110,7 +110,7 @@ describe('Encryption', () => {
       const decrypted = decryptSensitiveFields(encrypted, testKey);
       expect(decrypted.api_key).toBe('secret-key-123');
       expect(decrypted.token).toBe('secret-token-456');
-      expect(decrypted.model).toBe('qwen3.5-9b');
+      expect(decrypted.model).toBe('qwen/qwen3.5-9b');
       expect(decrypted.baseUrl).toBe('http://localhost:1234');
     });
 
@@ -120,7 +120,7 @@ describe('Encryption', () => {
           type: 'openai-compat',
           apiKey: 'secret-api-key',
         },
-        model: 'qwen3.5-9b',
+        model: 'qwen/qwen3.5-9b',
       };
       
       const encrypted = encryptSensitiveFields(config, testKey);
@@ -154,7 +154,7 @@ describe('Encryption', () => {
     it('should encrypt and decrypt config', () => {
       const encryptor = new ConfigEncryptor();
       const config = {
-        model: 'qwen3.5-9b',
+        model: 'qwen/qwen3.5-9b',
         api_key: 'secret-key',
         provider: {
           apiKey: 'provider-key',
@@ -164,7 +164,7 @@ describe('Encryption', () => {
       const encrypted = encryptor.encrypt(config);
       const decrypted = encryptor.decrypt(encrypted);
       
-      expect(decrypted.model).toBe('qwen3.5-9b');
+      expect(decrypted.model).toBe('qwen/qwen3.5-9b');
       expect(decrypted.api_key).toBe('secret-key');
       expect((decrypted.provider as any).apiKey).toBe('provider-key');
     });

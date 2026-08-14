@@ -59,15 +59,15 @@ describe("FileLogWriter", () => {
     writer.setLogDir(dir);
     writer.initSessionLog("ses_llm");
 
-    writer.logLLMRequest("qwen3.5-9b", 3, "погода в минске", "agent");
-    writer.logLLMResponse("qwen3.5-9b", 120, 750, undefined, "agent");
-    writer.logLLMResponse("qwen3.5-9b", 0, 50, "timeout", "agent");
+    writer.logLLMRequest("qwen/qwen3.5-9b", 3, "погода в минске", "agent");
+    writer.logLLMResponse("qwen/qwen3.5-9b", 120, 750, undefined, "agent");
+    writer.logLLMResponse("qwen/qwen3.5-9b", 0, 50, "timeout", "agent");
     writer.closeSessionLog();
 
     const content = readFileSync(join(dir, "ses_llm.log"), "utf-8");
     expect(content).toContain("[LLM/agent]");
-    expect(content).toContain("→ qwen3.5-9b | 3 messages");
-    expect(content).toContain("← qwen3.5-9b | 120 chars | 750ms");
+    expect(content).toContain("→ qwen/qwen3.5-9b | 3 messages");
+    expect(content).toContain("← qwen/qwen3.5-9b | 120 chars | 750ms");
     expect(content).toContain("ERROR: timeout");
   });
 

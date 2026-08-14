@@ -30,7 +30,7 @@ describe('SessionStore', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messageCount: 0,
-      model: 'qwen3.5-9b',
+      model: 'qwen/qwen3.5-9b',
       contextWindow: 32768,
       projectDir: '/some/project',
     }

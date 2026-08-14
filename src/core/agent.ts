@@ -312,6 +312,11 @@ export class Agent {
 		this.abortController = new AbortController();
 		let iteration = 0;
 		let lastText = "";
+		// The actual most-recent model output (tool commentary, retried answers
+		// included). Repetition is compared against THIS, not the last *accepted*
+		// text — a frozen accepted answer made consecutive retries compare
+		// against a stale baseline and flag every re-answer as repetitive.
+		let lastModelText = "";
 		let lastForcedCompactionIteration = -FORCED_COMPACTION_COOLDOWN;
 		let hallucinationRetries = 0;
 		let lastToolSignature = "";
@@ -328,6 +333,10 @@ export class Agent {
 		let emptyResponseExhausted = false;
 		let auditFailed = false;
 		let lastAuditSummary = "";
+		// Set when the audit gate rejects a final answer and re-prompts: the next
+		// non-tool response is then a re-answer of an already-completed task, so
+		// a repetition verdict is expected and must not burn a hallucination retry.
+		let suppressRepetitionRetry = false;
 		let repeatedToolCount = 0;
 		const MAX_REPEATED_TOOL_CALLS = 2;
 
@@ -740,10 +749,19 @@ export class Agent {
 					}
 				}
 
+				// A tool call means the model kept working instead of just
+				// re-answering — the audit-re-answer leniency no longer applies.
+				suppressRepetitionRetry = false;
 				continue;
 			}
 
-			hallucinationDetector.getConfidenceCheck().setPreviousResponse(lastText);
+			hallucinationDetector.getConfidenceCheck().setPreviousResponse(
+				lastModelText,
+			);
+			// Update AFTER setPreviousResponse so the comparison uses the
+			// previous iteration's output, not this one (which would otherwise
+			// always overlap with itself).
+			if (textContent) lastModelText = textContent;
 			const hallucinationResult =
 				await hallucinationDetector.validate(textContent);
 			if (hallucinationResult.status === "block") {
@@ -777,38 +795,64 @@ export class Agent {
 					lastText = textContent;
 					break;
 				}
-				// NOTE: with exitOnComplete and an EMPTY text we deliberately do NOT
-				// break — the model produced no usable answer yet (same case as the
-				// empty-response guard below). Falling through to the retry path
-				// keeps us from finishing with text: "".
-				if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
+				if (
+					suppressRepetitionRetry &&
+					hallucinationResult.kind === "repetition"
+				) {
+					// The audit gate rejected the previous final answer and
+					// re-prompted the model. Its re-answer restating the completed
+					// task is naturally "repetitive" — that is expected, not
+					// degeneration. Downgrade to a warning and let the response
+					// flow through to the final audit gate again (which is itself
+					// bounded by MAX_AUDIT_RETRIES).
+					suppressRepetitionRetry = false;
 					logger.warn(
-						`Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
+						`Audit-triggered re-answer repetition — not counted as hallucination retry`,
 					);
-					return {
-						success: false,
-						text: lastText,
-						error: t("error.response_blocked", {
-							reason: t("hall.max_retries_exhausted"),
-						}),
-						iterationCount: iteration,
-					};
-				}
-				hallucinationRetries++;
-				logger.warn(
-					`Hallucination retry (${hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${hallucinationResult.reason}`,
-				);
-				if (textContent) {
+					const warnLine = `${t("hall.uncertainty_prefix").trim()} ${
+						hallucinationResult.reason ?? ""
+					}`;
+					if (onMeta) {
+						onMeta(`\n${pc.yellow(warnLine)}\n`);
+					} else if (onChunk) {
+						onChunk(`\n${warnLine}\n`);
+					}
+					// fall through to the acceptance path below (assistant message,
+					// lastText, final audit gate).
+				} else {
+					// NOTE: with exitOnComplete and an EMPTY text we deliberately
+					// do NOT break — the model produced no usable answer yet (same
+					// case as the empty-response guard below). Falling through to
+					// the retry path keeps us from finishing with text: "".
+					if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
+						logger.warn(
+							`Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
+						);
+						return {
+							success: false,
+							text: lastText,
+							error: t("error.response_blocked", {
+								reason: t("hall.max_retries_exhausted"),
+							}),
+							iterationCount: iteration,
+						};
+					}
+					hallucinationRetries++;
+					logger.warn(
+						`Hallucination retry (${hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${hallucinationResult.reason}`,
+					);
+					if (textContent) {
+						contextManager.addMessage({
+							role: "assistant",
+							content: textContent,
+						});
+					}
 					contextManager.addMessage({
-						role: "assistant",
-						content: textContent,
+						role: "user",
+						content: `<system-summary>[Retry context: ${hallucinationResult.reason}. Original task: "${input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]</system-summary>`,
 					});
+					continue;
 				}
-				contextManager.addMessage({
-					role: "user",
-					content: `<system-summary>[Retry context: ${hallucinationResult.reason}. Original task: "${input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]</system-summary>`,
-				});
-				continue;
 			}
 
 			if (textContent) {
@@ -871,17 +915,21 @@ export class Agent {
 						slog.logAudit(audit.summary, iteration);
 						auditRetries++;
 						lastAuditSummary = audit.summary;
-						if (
-							auditRetries >= MAX_AUDIT_RETRIES ||
-							iteration >= config.maxToolIterations - 1
-						) {
-							logger.warn(
-								`Final audit still incomplete after ${auditRetries} retries — reporting failure`,
-							);
-							auditFailed = true;
-							break;
-						}
-						continue;
+					if (
+						auditRetries >= MAX_AUDIT_RETRIES ||
+						iteration >= config.maxToolIterations - 1
+					) {
+						logger.warn(
+							`Final audit still incomplete after ${auditRetries} retries — reporting failure`,
+						);
+						auditFailed = true;
+						break;
+					}
+					// The next non-tool response is a forced re-answer of an
+					// already-completed task — allow one repetition without
+					// burning the hallucination budget (see retry branch).
+					suppressRepetitionRetry = true;
+					continue;
 					}
 				}
 				break;

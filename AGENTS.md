@@ -444,6 +444,8 @@ src/
 │   ├── spinner.ts      # Zero-dep ANSI spinner (stderr, single-line overwrite)
 │   ├── renderer.ts     # Rich/plain Renderer + boxed tool cards + summarizeArgs
 │   ├── diff.ts         # LCS-based diffs for file edits
+│   ├── line-math.ts    # Pure line-layout math (wrapLine, buildLayout, charLen, stripAnsi)
+│   ├── line-editor.ts  # Custom TTY line editor (LineInput): kitty CSI u / Shift+Enter newline, Ctrl+J, bracketed paste, visual nav, history
 │   └── output.ts       # writeOutput/writeError/writeSuccess/writeWarning
 ├── logger/             # Structured logger with levels + child loggers
 └── migration/          # MMA v1→v2 detection, backup, safe startup
@@ -545,7 +547,7 @@ REPL commands are defined in `src/cli/repl-commands.ts` (separate from the REPL 
 export interface ReplContext {
   readonly config: AppConfig;
   readonly agent: Agent;
-  readonly rl: readline.Interface;
+  readonly rl: LineInput; // TTY → LineEditor, non-TTY → readline.createInterface
   readonly sessionManager?: SessionManager;
   readonly skillsModule?: SkillsModule;
   readonly pluginManager?: PluginManager;
@@ -558,6 +560,17 @@ export interface ReplContext {
 ```
 
 **To add a new slash command:** define its action in `repl-commands.ts` — no changes to `repl.ts` needed.
+
+### REPL Line Editor
+
+> **Status:** custom `LineEditor` restored (v0.33.0). Node's `readline` hangs under Bun on EOF and provides no wrapping/navigation, so the REPL uses a hand-rolled editor on TTY.
+
+- `src/ui/line-editor.ts` — `LineEditor` implements `LineInput` (setPrompt/prompt/write/question/close/on) + `onKeyInput` host hook. TTY: raw mode + `emitKeypressEvents`; non-TTY: `data`-based line reading.
+- `src/ui/line-math.ts` — pure layout math (wrap-by-width, `\n` hard breaks, CJK double-width, visual col↔char mapping), unit-tested separately from the editor.
+- **Keys:** Enter/CR = submit; bare LF (`enter`) = insert `\n` (this is Ctrl+J); kitty `Shift+Enter` (`\x1b[13;2u`) and `Esc+Enter` also insert newline; bracketed paste (`\x1b[200~/201~`) inserts multi-line text; `Esc Esc` interrupt; up/down history; left/right/Home/End visual navigation over wrapped lines; Tab completion.
+- **Rule:** after a CR submit the following LF (`enter`) from CRLF is swallowed — no double submit.
+- **Why:** popular harnesses (opencode → OpenTUI + kitty keyboard protocol; Gemini CLI → ink; Claude Code/Codex/aider → custom keypress editors) never use `readline` for interactive input; full-screen TUIs stay out per rule #9.
+- **Exit flow:** `Repl(…, exitOnClose: true)` (from `main.ts`) makes the close handler / stdin `end` exit the process so piped `echo "exit" | mma` terminates; tests construct `Repl` without it so `stop()` doesn't kill the runner.
 
 ## Session Management
 
@@ -1028,7 +1041,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.32.0
+### Current Version: 0.33.0
 
 - **0** = pre-1.0 (initial development)
 - **22** = security `enabled` flag, security disabled by default, init/first-run apply wizard security answers, system prompt & recovery messages cleanup
@@ -1049,3 +1062,4 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **31** = session reliability fixes (from `ses_msrv83di_0hx6id` post-mortem): (1) context quality — compaction penalty capped at 0.5 floor so cumulative compactions can never pin quality below the 40% trigger (was: 56 forced compactions in 28 min); (2) forced-compaction cooldown `FORCED_COMPACTION_COOLDOWN=3` in the agent loop; (3) `extractFacts` skips `<system-summary>` messages so summaries can't nest inside themselves; (4) final audit gate returns `success:false` + `error.audit_failed` instead of "finishing anyway"; (5) LSP failures surfaced via `[LSP check failed]` + logger instead of silent `catch {}`/`return []`; (6) `plan update` refuses out-of-order `done` (`plan.order_blocked`) and re-marking a done step (`plan.step_already_done`); (7) bash hard-stops a forbidden Windows command after 3 consecutive failures (`resetBashFailureTracking` test hook)
 - **32** = auto-update (`updater` module): async non-blocking npm version check on startup (`Updater.check()`, 5s timeout, registry fetch), auto-install `npm install -g micro-models-agent` when newer (`Updater.install()`), config `updater.{enabled,checkOnStart,autoInstall,intervalMs}` (defaults: enabled, autoInstall). Fired from `main.ts` via `startAutoUpdate()` (fire-and-forget, never blocks startup; best-effort, errors swallowed). i18n keys `updater.*`. Default `intervalMs: 0` = single check per launch; set >0 for a permanent background re-check loop.
 - **32** = browser driver abstraction (`src/modules/browser/driver.ts`): `BrowserDriver` interface + `PlaywrightDriver` (direct, Node) + `BridgeDriver` (`bridge-client.ts` spawns `node bridge-server.mjs`, JSON-lines RPC over stdio). `createBrowserDriver()` → bridge **always under Bun** (Playwright pipe/ws transport hangs — `chromium.launch()` never returns; fixed by running Playwright in a child Node process, ~85ms launch), direct-with-8s-timeout→bridge-fallback under Node. New config `browser.maxConsoleLineChars` (default 400), `maxConsoleEntries` default 20→40; snapshot network errors now last 15 (was 5). `scripts/copy-assets.ts` ships `bridge-server.mjs` → `dist/modules/browser/`.
+- **33** = REPL line editor restored (custom `LineEditor` — see REPL Line Editor section; `line-math.ts` + `line-editor.ts`, kitty CSI u / Shift+Enter / Ctrl+J / bracketed paste / visual navigation / history; non-TTY falls back to `readline.createInterface`; `Repl` `exitOnClose` flag so piped `echo "exit" | mma` terminates, while tests construct `Repl` without it). Session post-mortem fixes (from `ses_mssi3x5f`): auditor URL false-positive — plan steps containing `https://host/repo.git` were flagged as missing files (observed `whom-pointing-jewel-maine.trycloudflare.com`); fixed with shared `stripUrls()` / `isFilePathLike()` (rejects TLD ends) / `extractFileLikeTokens()` in `js-identifiers.ts`, used by BOTH `auditor.ts` and the hallucination factual check so they can't drift; `suppressRepetitionRetry` in `agent.ts` — when the final audit gate rejects an answer and re-prompts, the model's naturally repetitive re-answer is downgraded to a warning and flows back to the audit gate (bounded by `MAX_AUDIT_RETRIES`) instead of burning the hallucination budget (was: audit loop → "too repetitive" retries → `response_blocked` on a completed task).
