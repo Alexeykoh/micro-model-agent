@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.3] - 2026-08-14
+
+### Fixed
+- **LSP dead for nested projects**: the workspace root is now resolved from the edited file's nearest project, using per-language markers declared in the LSP server config (`workspaceMarkers`). `typescript-language-server` could never find `typescript` when the project lived inside the agent baseDir, so every write/edit returned `[LSP check failed]: Could not find a valid TypeScript installation`.
+- **Phantom "1 files missing" loop**: the final audit now requires files only from steps marked `done` and treats `skipped` as a terminal complete state. A skipped step's prose could previously poison the audit forever (a step referencing "type.ts" for the existing "types.ts" kept a finished task rejected).
+- **Windows bash hints/block**: the win32 hint and hard-stop now key on the *original* command word. The `cat→type` translation previously hid `cat`/`ls`/`grep` failures from `UNIX_TO_WIN_HINTS`, so the model repeated them with no guidance.
+- **read_file blindness at near-full context**: tools that declare `boundedOutput` (`read_file`, `list_dir`, `file_info`, `process_log`) are never budget-truncated. A `read_file` output was being cut to ~2K chars when the context was near-full, making the model re-read the same file 8+ times.
+
 ## [0.27.0] - 2026-08-07
 
 ### Added
