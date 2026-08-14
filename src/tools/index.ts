@@ -27,6 +27,7 @@ import { chunkQueryTool } from "./chunk-query";
 import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { webBrowseTool } from "./web-browse";
+import { downloadFileTool } from "./download-file";
 // questionTool and approveTool removed — interactive menus are too disruptive for small models.
 // The model should ask questions as plain text in its response instead.
 // import { questionTool } from './question'
@@ -71,6 +72,7 @@ export {
   webSearchTool,
   webFetchTool,
   webBrowseTool,
+  downloadFileTool,
   createLoadSkillTool,
   pipelineRunTool,
   mcpCallTool,
@@ -105,6 +107,7 @@ export function registerAllTools(
     webSearchTool,
     webFetchTool,
     webBrowseTool,
+    downloadFileTool,
     pipelineRunTool,
     mcpCallTool,
     searchHistoryTool,
