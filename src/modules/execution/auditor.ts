@@ -194,7 +194,12 @@ export class Auditor {
 	}
 
 	async audit(plan: Plan): Promise<AuditResult> {
+		// Only steps the model claims completed may require their named files to
+		// exist. Skipped/pending steps must never contribute "missing files"
+		// (observed: a skipped step's prose mention of "type.ts" kept the audit
+		// gate rejecting a finished task with "1 files missing" forever).
 		const allStepText = plan.steps
+			.filter((s) => s.status === "done")
 			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
 			.join(" ");
 		// File tokens are extracted with the SAME shared filter as the
@@ -230,6 +235,14 @@ export class Auditor {
 		}
 
 		const doneSteps = plan.steps.filter((s) => s.status === "done").length;
+		// done + skipped are both deliberate terminal states: `done` claims the
+		// work, `skipped` documents a decision that the step is not needed (the
+		// deliverable gate's documented escape hatch). Neither is a lie the
+		// audit must catch — a plan with a legitimately skipped step must be
+		// able to pass (observed: skipped step 1 kept the task rejected forever).
+		const terminalSteps = plan.steps.filter(
+			(s) => s.status === "done" || s.status === "skipped",
+		).length;
 		const totalSteps = plan.steps.length;
 
 		let massEditWarning: string | null = null;
@@ -245,7 +258,7 @@ export class Auditor {
 		// reads as a green light (observed: audit gate injected "[✓] Task
 		// complete: 1/3 steps done" while the plan had 2 pending steps). The
 		// summary must only claim completion when every step is actually done.
-		const stepsPending = doneSteps < totalSteps;
+		const stepsPending = terminalSteps < totalSteps;
 
 		let summary: string;
 		if (missingFiles.length > 0) {

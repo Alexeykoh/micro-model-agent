@@ -143,4 +143,27 @@ describe("plan update deliverable gate", () => {
 		expect(res.output).not.toContain("deliverables");
 		expect(execModule.getTracker()!.getStep(2)!.status).not.toBe("done");
 	});
+
+	it("keeps blocking done when the named file does not exist (strict gate)", async () => {
+		// The deliverable gate must NOT become fuzzy (no plural/singular or
+		// substring matching). A step naming a non-existent file stays blocked;
+		// the documented escape hatch is status=skipped.
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Create src/type.ts with the Bicycle type"],
+		});
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		// Real file has a different name — gate must still refuse.
+		writeFileSync(join(tmpDir, "src", "types.ts"), "export interface Bicycle {}\n");
+		const res = await tool.handler(ctx, {
+			action: "update",
+			step: 1,
+			status: "done",
+		});
+		expect(res.success).toBe(false);
+		expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+	});
 });

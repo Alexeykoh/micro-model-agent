@@ -247,6 +247,57 @@ describe("Auditor", () => {
 		const result = await auditor.audit(plan);
 		expect(result.massEditWarning).toBeNull();
 	});
+
+	it("does not flag files from skipped steps as missing", async () => {
+		// ses_mssx0k11: step 1 (prose ref "type.ts", real file types.ts) was
+		// skipped; the auditor kept scanning its text and reported "1 files
+		// missing" forever even after the model finished the other steps.
+		const plan = PlanCreator.createPlan(
+			"test",
+			[
+				"Проверить тип данных Bicycle и поле image в type.ts",
+				"Create src/real.ts with content",
+			],
+			tmpDir,
+		);
+		plan.steps[0].status = "skipped";
+		plan.steps[1].status = "done";
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "real.ts"), "export const x = 1;\n");
+
+		const result = await auditor.audit(plan);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.passed).toBe(true);
+	});
+
+	it("treats a skipped step as a terminal complete state (plan with skip passes)", async () => {
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Check nothing", "Create src/a.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].status = "skipped";
+		plan.steps[1].status = "done";
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(true);
+		expect(result.summary).not.toContain("not marked done");
+	});
+
+	it("still fails when a done step's named file is missing", async () => {
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/missing.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(false);
+		expect(result.missingFiles.length).toBeGreaterThan(0);
+	});
 });
 
 describe("Auditor test-run verification (R4)", () => {
