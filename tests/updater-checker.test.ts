@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { platform } from 'os'
 import { Updater } from '../src/modules/updater/checker'
 
 describe('Updater', () => {
@@ -48,11 +49,16 @@ describe('Updater', () => {
     const result = await updater.install('0.4.0')
     expect(result.success).toBe(true)
     expect(result.installed).toBe('0.4.0')
-    expect(runner).toHaveBeenCalledWith(
-      expect.stringMatching(/^npm(\.cmd)?$/),
-      ['install', '-g', 'micro-models-agent@0.4.0'],
-      expect.objectContaining({ timeout: 120000 }),
-    )
+    const [command, args] = runner.mock.calls[0] as [string, string[]]
+    if (platform() === 'win32') {
+      expect(command).toBe('cmd.exe')
+      expect(args[0]).toBe('/c')
+      expect(args[1]).toMatch(/^npm\.cmd$/)
+      expect(args.slice(2)).toEqual(['install', '-g', 'micro-models-agent@0.4.0'])
+    } else {
+      expect(command).toBe('npm')
+      expect(args).toEqual(['install', '-g', 'micro-models-agent@0.4.0'])
+    }
   })
 
   it('should report install failure without throwing', async () => {

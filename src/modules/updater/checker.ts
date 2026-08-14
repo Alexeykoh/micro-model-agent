@@ -1,3 +1,4 @@
+import { platform } from 'os'
 import { resolveSpawnCommand } from '../lsp/command'
 
 export interface UpdateCheckResult {
@@ -77,8 +78,8 @@ export class Updater {
    */
   async install(latest: string): Promise<InstallResult> {
     try {
-      const command = resolveSpawnCommand('npm')
-      const res = await this.runner(command, ['install', '-g', `${this.packageName}@${latest}`], {
+      const { command, args } = this.buildInstallCommand(latest)
+      const res = await this.runner(command, args, {
         timeout: 120000,
         windowsHide: true,
       })
@@ -88,5 +89,15 @@ export class Updater {
       const msg = e?.message ?? String(e)
       return { success: false, error: msg.split('\n')[0] }
     }
+  }
+
+  private buildInstallCommand(latest: string): { command: string; args: string[] } {
+    const npmArgs = ['install', '-g', `${this.packageName}@${latest}`]
+    const command = resolveSpawnCommand('npm')
+    if (platform() === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+      // Node cannot spawn .cmd/.bat shims directly (spawn EINVAL) — route via cmd.exe.
+      return { command: 'cmd.exe', args: ['/c', command, ...npmArgs] }
+    }
+    return { command, args: npmArgs }
   }
 }
