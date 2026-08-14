@@ -401,7 +401,7 @@ export async function bootstrap(
 
 	const promptBlocks: PromptBlock[] = [
 		systemInfoPrompt,
-		...moduleRegistry.collectPromptBlocks(),
+		...moduleRegistry.collectPromptBlocks(["indexer"]),
 		...agentsMdBlocks,
 	];
 
@@ -421,6 +421,8 @@ export async function bootstrap(
 			if (planBlock) blocks.push(planBlock);
 			const skillsBlock = skillsModule.getSystemPromptBlock();
 			if (skillsBlock) blocks.push(skillsBlock);
+			const mapBlock = indexerModule.getSystemPromptBlock();
+			if (mapBlock) blocks.push(mapBlock);
 			return blocks;
 		},
 		finalAudit: () => execModule.runFinalAudit(),

@@ -4,6 +4,7 @@ import type { PromptBlock } from '../../core/types'
 import type { ToolDefinition, ToolContext, ToolResult } from '../../tools/types'
 import { Indexer } from './walker'
 import { IndexCache } from './cache'
+import { buildProjectProfileLine } from './project-profile'
 import type { IndexResult, IndexedFile } from './walker'
 import { t } from '../../i18n/index'
 
@@ -114,6 +115,7 @@ export class IndexerModule implements AgentModule {
 
   private formatMap(result: IndexResult): string {
     const summary = this.indexer.summarize(result)
+    const stackLine = buildProjectProfileLine(this.baseDir)
     const dirCounts = this.getDirectoryCounts(result)
     const topDirs = Object.entries(dirCounts)
       .sort((a, b) => b[1] - a[1])
@@ -134,6 +136,7 @@ export class IndexerModule implements AgentModule {
     return [
       `${t('indexer.map_header')} (${this.baseDir})`,
       summary,
+      ...(stackLine ? [stackLine] : []),
       `${t('indexer.top_directories')}: ${topDirs}`,
       `${t('indexer.files')}:` + (fileLines.length > 0 ? '' : ' ' + t('indexer.empty')),
       ...fileLines,
@@ -181,7 +184,9 @@ export class IndexerModule implements AgentModule {
         if (action === 'refresh') {
           const result = await this.refresh()
           const summary = result ? this.indexer.summarize(result) : t('indexer.empty')
-          return this.makeResult(t('indexer.refreshed', { summary }))
+          const stackLine = result ? buildProjectProfileLine(this.baseDir) : null
+          const output = summary && stackLine ? `${summary}\n${stackLine}` : summary
+          return this.makeResult(t('indexer.refreshed', { summary: output }))
         }
 
         if (action === 'find') {
@@ -206,7 +211,9 @@ export class IndexerModule implements AgentModule {
           return this.makeResult(t('indexer.not_indexed'))
         }
         const summary = this.indexer.summarize(this.index)
-        return this.makeResult(t('indexer.summary', { summary }))
+        const stackLine = buildProjectProfileLine(this.baseDir)
+        const output = summary && stackLine ? `${summary}\n${stackLine}` : summary
+        return this.makeResult(t('indexer.summary', { summary: output }))
       },
     }
   }

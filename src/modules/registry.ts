@@ -17,9 +17,10 @@ export class ModuleRegistry {
     return Array.from(this.modules.keys()).sort()
   }
 
-  collectPromptBlocks(): PromptBlock[] {
+  collectPromptBlocks(exclude: string[] = []): PromptBlock[] {
     const blocks: PromptBlock[] = []
-    for (const mod of this.modules.values()) {
+    for (const [name, mod] of this.modules) {
+      if (exclude.includes(name)) continue
       if (mod.getSystemPromptBlock) {
         const block = mod.getSystemPromptBlock()
         if (block) blocks.push(block)

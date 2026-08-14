@@ -48,6 +48,36 @@ describe('IndexerModule', () => {
     expect(result!.files).toHaveLength(1)
   })
 
+  it('includes a stack line in the map block when a manifest exists', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({
+        name: 'shop',
+        scripts: { dev: 'vite' },
+        dependencies: { react: '^18.0.0', 'react-dom': '^18.0.0' },
+        devDependencies: { vite: '^6.0.0' },
+      }),
+    )
+    mkdirSync(join(tmpDir, 'src'), { recursive: true })
+    writeFileSync(join(tmpDir, 'src/App.tsx'), 'export const App = () => null')
+
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, '.mma') })
+    await mod.buildIndex()
+
+    const block = mod.getSystemPromptBlock()
+    expect(block!.content).toContain('[Stack: node shop')
+    expect(block!.content).toContain('react')
+  })
+
+  it('omits the stack line when no manifest exists', async () => {
+    writeFileSync(join(tmpDir, 'a.ts'), 'export const a = 1')
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, '.mma') })
+    await mod.buildIndex()
+
+    const block = mod.getSystemPromptBlock()
+    expect(block!.content).not.toContain('[Stack:')
+  })
+
   it('project_map tool returns summary', async () => {
     writeFileSync(join(tmpDir, 'lib.ts'), 'export function foo() {}')
     const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, '.mma') })
