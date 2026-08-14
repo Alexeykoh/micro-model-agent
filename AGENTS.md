@@ -1041,8 +1041,9 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.33.1
+### Current Version: 0.33.2
 
+- **33.2** = REPL conversation layout: user/agent messages separated by divider lines (`divider()`), user prompt labeled `You:`/`Вы:` via i18n `repl.you` (agent replies already had `Agent:`). File-token heuristic inverted: `js-identifiers.ts` `isFilePathLike()` now gates bare `word.ext` tokens on an **allow-list of real file extensions** (`FILE_EXTENSIONS`) instead of a TLD deny-list — any domain (`Gismeteo.by`, `weather.com`, future TLDs) is never a file without maintaining a list; paths with a separator still accepted. Tool guidance: `browser` must not open search engines (blocked with CAPTCHA/429) — use `web_search`; `web_search` description points that out.
 - **33.1** = REPL line editor redraw fix (no more duplicated multi-line input — `render()` moves back to the frame's first row via `prevCursorRow` before redrawing; `submit()`/`reset()`/`question()` commit the frame instead of erasing it); tool descriptions clarify `web_fetch`/`web_browse` are plain JS-less HTTP fetch (JS-rendered SPAs return empty content — use the `browser` tool).
 
 - **0** = pre-1.0 (initial development)
