@@ -456,6 +456,7 @@
   "exec.audit_pass": "[✓] Задача выполнена: {done}/{total} шагов, {files} файлов проверено",
   "exec.audit_pending": "[✗] Задача не выполнена: {done}/{total} шагов — оставшиеся шаги не отмечены выполненными",
   "exec.audit_fail": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов отсутствует",
+  "exec.audit_leftovers": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов из delete-шагов всё ещё существуют",
   "exec.audit_fail_tests": "[✗] Задача не выполнена: {done}/{total} шагов, тесты ПАДАЮТ: {failed} failed / {passed} passed — {detail}",
   "exec.audit_fail_typecheck": "[✗] Задача не выполнена: {done}/{total} шагов, {missing} файлов отсутствует, ошибка typecheck: {typeError}",
   "exec.audit_incomplete": "[⚠ Финальная проверка не пройдена: {summary}. Задача НЕ завершена — продолжайте работу. Оставшиеся шаги: {steps}]",

@@ -95,11 +95,15 @@ export interface TestRunCheck {
 export interface AuditResult {
 	passed: boolean;
 	missingFiles: string[];
+	/** Delete-kind steps (done) whose named files still exist. */
+	leftoverFiles: string[];
 	createdFiles: string[];
 	modifiedFiles: string[];
 	summary: string;
 	massEditWarning: string | null;
 	testRun: TestRunCheck | null;
+	/** First `error TS…` line from a real `tsc --noEmit` run, or null. */
+	typecheckError: string | null;
 }
 
 /** Recursive, depth-limited walk that stops early on the first test file. */
@@ -186,6 +190,26 @@ async function runTests(baseDir: string): Promise<TestRunCheck> {
 	};
 }
 
+/** First `error TS…` line in a tsc output, or null when none/inconclusive. */
+export function parseTypecheckErrors(output: string): string | null {
+	const line = output.split("\n").find((l) => /error TS\d+/.test(l));
+	return line ? line.trim().slice(0, 300) : null;
+}
+
+async function runTypecheck(baseDir: string): Promise<string | null> {
+	const entry = processRegistry.start(
+		"npx --no-install tsc --noEmit --skipLibCheck",
+		baseDir,
+	);
+	const exited = await processRegistry.waitForExit(entry.id, 90_000);
+	const output = entry.log.join("\n");
+	processRegistry.remove(entry.id);
+	// Timeout / non-zero exit with no `error TS` lines = inconclusive (missing
+	// typescript, wrong working dir) — never block completion on those.
+	if (!exited) return null;
+	return parseTypecheckErrors(output);
+}
+
 export class Auditor {
 	private baseDir: string;
 
@@ -198,8 +222,16 @@ export class Auditor {
 		// exist. Skipped/pending steps must never contribute "missing files"
 		// (observed: a skipped step's prose mention of "type.ts" kept the audit
 		// gate rejecting a finished task with "1 files missing" forever).
-		const allStepText = plan.steps
-			.filter((s) => s.status === "done")
+		const doneCreate = plan.steps.filter(
+			(s) => s.status === "done" && s.kind !== "delete",
+		);
+		const doneDelete = plan.steps.filter(
+			(s) => s.status === "done" && s.kind === "delete",
+		);
+		const createText = doneCreate
+			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
+			.join(" ");
+		const deleteText = doneDelete
 			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
 			.join(" ");
 		// File tokens are extracted with the SAME shared filter as the
@@ -207,17 +239,24 @@ export class Auditor {
 		// first so a hostname / https://host/repo.git in a step description
 		// can never be reported as a missing file (observed: a git-remote
 		// plan flagged `whom-pointing-jewel-maine.trycloudflare.com`).
-		const uniqueFiles = extractFileLikeTokens(stripUrls(allStepText));
+		const createFiles = extractFileLikeTokens(stripUrls(createText));
+		const deleteFiles = extractFileLikeTokens(stripUrls(deleteText));
 
 		const missingFiles: string[] = [];
 		const existingFiles: string[] = [];
+		const leftoverFiles: string[] = [];
 
-		for (const filePath of uniqueFiles) {
-			const resolved = findExistingFile(this.baseDir, filePath);
-			if (resolved) {
+		for (const filePath of createFiles) {
+			if (findExistingFile(this.baseDir, filePath)) {
 				existingFiles.push(filePath);
 			} else {
 				missingFiles.push(filePath);
+			}
+		}
+		// A done delete-kind step requires its named files to be GONE.
+		for (const filePath of deleteFiles) {
+			if (findExistingFile(this.baseDir, filePath)) {
+				leftoverFiles.push(filePath);
 			}
 		}
 
@@ -234,6 +273,19 @@ export class Auditor {
 			}
 		}
 
+		// Real typecheck: the audit must catch "the build is broken" even when
+		// every file exists (observed: deleting .js files left the .tsx sources
+		// with 11 tsc errors and the agent still declared success). Runs only
+		// when a tsconfig.json exists; inconclusive results never block.
+		let typecheckError: string | null = null;
+		if (existsSync(join(this.baseDir, "tsconfig.json"))) {
+			try {
+				typecheckError = await runTypecheck(this.baseDir);
+			} catch {
+				typecheckError = null;
+			}
+		}
+
 		const doneSteps = plan.steps.filter((s) => s.status === "done").length;
 		// done + skipped are both deliberate terminal states: `done` claims the
 		// work, `skipped` documents a decision that the step is not needed (the
@@ -246,14 +298,20 @@ export class Auditor {
 		const totalSteps = plan.steps.length;
 
 		let massEditWarning: string | null = null;
-		if (uniqueFiles.length > MASS_EDIT_THRESHOLD) {
+		const uniqueFiles = createFiles.length + deleteFiles.length;
+		if (uniqueFiles > MASS_EDIT_THRESHOLD) {
 			massEditWarning = t("exec.mass_edit_warning", {
-				count: String(uniqueFiles.length),
+				count: String(uniqueFiles),
 			});
 		}
 
 		const testsFailing = testRun !== null && testRun.failed > 0;
-		const passed = missingFiles.length === 0 && !testsFailing;
+		const typecheckFailing = typecheckError !== null;
+		const passed =
+			missingFiles.length === 0 &&
+			leftoverFiles.length === 0 &&
+			!testsFailing &&
+			!typecheckFailing;
 		// A "Task complete ✓" summary for an unfinished plan is a lie the model
 		// reads as a green light (observed: audit gate injected "[✓] Task
 		// complete: 1/3 steps done" while the plan had 2 pending steps). The
@@ -267,6 +325,12 @@ export class Auditor {
 				total: totalSteps,
 				files: missingFiles.length,
 			});
+		} else if (leftoverFiles.length > 0) {
+			summary = t("exec.audit_leftovers", {
+				done: doneSteps,
+				total: totalSteps,
+				files: leftoverFiles.length,
+			});
 		} else if (testsFailing) {
 			summary = t("exec.audit_fail_tests", {
 				done: doneSteps,
@@ -274,6 +338,13 @@ export class Auditor {
 				failed: String(testRun!.failed),
 				passed: String(testRun!.passedCount),
 				detail: testRun!.detail,
+			});
+		} else if (typecheckFailing) {
+			summary = t("exec.audit_fail_typecheck", {
+				done: doneSteps,
+				total: totalSteps,
+				missing: String(missingFiles.length),
+				typeError: typecheckError!,
 			});
 		} else if (stepsPending) {
 			summary = t("exec.audit_pending", {
@@ -291,11 +362,13 @@ export class Auditor {
 		return {
 			passed,
 			missingFiles,
+			leftoverFiles,
 			createdFiles: existingFiles,
 			modifiedFiles: [],
 			summary,
 			massEditWarning,
 			testRun,
+			typecheckError,
 		};
 	}
 }

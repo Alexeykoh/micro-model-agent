@@ -458,6 +458,7 @@
   "exec.audit_pass": "[\u2713] Task complete: {done}/{total} steps done, {files} files verified",
   "exec.audit_pending": "[\u2717] Task incomplete: {done}/{total} steps done — remaining steps are not marked done",
   "exec.audit_fail": "[\u2717] Task incomplete: {done}/{total} steps done, {files} files missing",
+  "exec.audit_leftovers": "[\u2717] Task incomplete: {done}/{total} steps done, {files} files from delete-steps still exist",
   "exec.audit_fail_tests": "[\u2717] Task incomplete: {done}/{total} steps done, tests FAILING: {failed} failed / {passed} passed — {detail}",
   "exec.audit_fail_typecheck": "[\u2717] Task incomplete: {done}/{total} steps done, {missing} files missing, typecheck error: {typeError}",
   "exec.audit_incomplete": "[\u26a0 Final audit incomplete: {summary}. Task is NOT finished \u2014 continue working. Remaining steps: {steps}]",
