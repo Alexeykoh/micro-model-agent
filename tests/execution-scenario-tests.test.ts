@@ -267,6 +267,45 @@ describe("Scenario: Progressive plan enforcement", () => {
 			expect(plugin.onBeforeTool!(ctx, onTrackCall)).toBe(true);
 		}
 	});
+
+	it("does not warn when the step mentions only a URL/domain (no real files)", () => {
+		// P1: the raw `\b[\w./\\-]+\.[a-z]+` regex treated a hostname like
+		// "example.com" as a step file, so a step "fetch weather.com data" got a
+		// phantom step path and ANY unrelated write was flagged off-path.
+		// extractFileLikeTokens rejects domains/URLs → stepPaths is empty →
+		// checkPlanAlignment is inert. Only real-file steps are enforced.
+		execModule.setPlan(mkPlan("Test", ["fetch weather.com data for report"]));
+		const plugin = execModule.getPlugin();
+		const ctx = mockCtx();
+
+		// A write to a real file must not be blocked by a phantom domain token
+		const write = mockToolCall({
+			name: "write_file",
+			arguments: { path: "src/report.md" },
+		});
+		for (let i = 0; i < 5; i++) {
+			expect(plugin.onBeforeTool!(ctx, write)).toBe(true);
+		}
+	});
+
+	it("does not warn when the step lists extensions only (tsx/.ts)", () => {
+		// P1: "Проверить что остались только .tsx/.ts файлы" produced phantom
+		// step path "tsx/.ts" under the raw regex. The shared extractor rejects
+		// extension-only segments, so the step has no file tokens at all.
+		execModule.setPlan(
+			mkPlan("Test", ["keep only .tsx/.ts files in src"]),
+		);
+		const plugin = execModule.getPlugin();
+		const ctx = mockCtx();
+
+		const write = mockToolCall({
+			name: "write_file",
+			arguments: { path: "src/App.tsx" },
+		});
+		for (let i = 0; i < 5; i++) {
+			expect(plugin.onBeforeTool!(ctx, write)).toBe(true);
+		}
+	});
 });
 
 describe("Scenario: Step Gate verification", () => {

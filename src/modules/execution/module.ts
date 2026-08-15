@@ -223,13 +223,13 @@ export class ExecutionModule implements AgentModule {
 		];
 		if (allowedAlways.includes(call.name)) return null;
 
-		const stepPaths = (
-			step.description.match(/\b[\w./\\-]+\.[a-z]+/gi) || []
-		).map((p) => p.toLowerCase());
+		const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map(
+			(p) => p.toLowerCase(),
+		);
 		if (stepPaths.length === 0) return null;
 
-		const argStr = JSON.stringify(call.arguments).toLowerCase();
-		const callPaths = (argStr.match(/\b[\w./\\-]+\.[a-z]+/gi) || []).map((p) =>
+		const argStr = JSON.stringify(call.arguments);
+		const callPaths = extractFileLikeTokens(stripUrls(argStr)).map((p) =>
 			p.toLowerCase(),
 		);
 
@@ -242,11 +242,9 @@ export class ExecutionModule implements AgentModule {
 		const finishedPaths = new Set<string>();
 		for (const s of plan.steps) {
 			if (s.status === "done" || s.status === "skipped") {
-				const ps =
-					s.description
-						.match(/\b[\w./\\-]+\.[a-z]+/gi)
-						?.map((p) => p.toLowerCase()) ?? [];
-				ps.forEach((p) => finishedPaths.add(p));
+				extractFileLikeTokens(stripUrls(s.description))
+					.map((p) => p.toLowerCase())
+					.forEach((p) => finishedPaths.add(p));
 			}
 		}
 

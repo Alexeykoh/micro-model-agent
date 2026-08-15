@@ -265,6 +265,65 @@ describe("StuckDetector", () => {
   });
 });
 
+describe("StuckDetector hint/recovery dedup (P3)", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3);
+  });
+
+  it("does not repeat the repetitive-tool hint when recovery already reports it", () => {
+    for (let i = 0; i < 4; i++) {
+      detector.recordToolCall("bash", { cmd: "dir", workdir: "." });
+    }
+    expect(detector.hasRepetitiveToolCalls()).toBe(true);
+    // Recovery's primary reason is "repetitive"
+    expect(detector.getRecoveryMessage()).toContain("bash");
+    const hints = detector.getHints();
+    expect(
+      hints.some((h) => h.includes("calling the same tool repeatedly")),
+    ).toBe(false);
+  });
+
+  it("does not repeat the consecutive-failures hint when recovery covers it", () => {
+    detector.recordToolError("bash");
+    detector.recordToolError("git");
+    detector.recordToolError("bash");
+    expect(detector.hasConsecutiveFailures()).toBe(true);
+    expect(detector.getRecoveryMessage()).toBeTruthy();
+    const hints = detector.getHints();
+    expect(
+      hints.some((h) => h.includes("Multiple different tools are failing")),
+    ).toBe(false);
+  });
+
+  it("keeps the read-only bullet when stuck is the primary reason", () => {
+    detector.setCurrentStep(1, "fix src/a.ts");
+    for (let i = 0; i < 12; i++) {
+      detector.recordIteration(1);
+      detector.recordToolCall("read_file", { path: `src/file${i}.ts` });
+    }
+    expect(detector.isStuck()).toBe(true);
+    expect(detector.hasReadOnlyLoop()).toBe(true);
+    const hints = detector.getHints();
+    expect(
+      hints.some((h) => h.includes("read-only tool calls")),
+    ).toBe(true);
+  });
+
+  it("keeps step-keyword hints even when recovery covers the state", () => {
+    detector.setCurrentStep(1, "install dependencies");
+    for (let i = 0; i < 4; i++) {
+      detector.recordToolCall("bash", { cmd: "npm", workdir: "." });
+    }
+    expect(detector.hasRepetitiveToolCalls()).toBe(true);
+    const hints = detector.getHints();
+    expect(
+      hints.some((h) => h.includes("lock file exists")),
+    ).toBe(true);
+  });
+});
+
 describe("StuckDetector bash awareness (R3)", () => {
   let detector: StuckDetector;
 

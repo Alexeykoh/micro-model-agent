@@ -283,17 +283,24 @@ export class StuckDetector {
 		if (desc.includes("deploy") || desc.includes("publish")) {
 			hints.push("Verify credentials and network access before deploying.");
 		}
-		if (this.hasRepetitiveToolCalls()) {
+
+		// State-based bullets. The recovery message (getRecoveryMessage) already
+		// reports the PRIMARY reason (priority: stuck > tool-errors > consecutive
+		// > repetitive > read-only). Repeating that same state here as a hint
+		// would duplicate the guidance in the same cooldown block. Only add the
+		// bullet when the recovery message is NOT already covering that state.
+		const primary = this.getPrimaryReason();
+		if (this.hasRepetitiveToolCalls() && primary !== "repetitive") {
 			hints.push(
 				"You are calling the same tool repeatedly with the same arguments. Try a different approach.",
 			);
 		}
-		if (this.hasConsecutiveFailures()) {
+		if (this.hasConsecutiveFailures() && primary !== "consecutive") {
 			hints.push(
 				"Multiple different tools are failing. Check if the environment is set up correctly.",
 			);
 		}
-		if (this.hasReadOnlyLoop()) {
+		if (this.hasReadOnlyLoop() && primary !== "read-only") {
 			hints.push(
 				"You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps.",
 			);
@@ -518,7 +525,8 @@ export class StuckDetector {
 	}
 
 	getRecoveryMessage(): string {
-		if (this.isStuck()) {
+		const reason = this.getPrimaryReason();
+		if (reason === "stuck") {
 			return t("exec.stuck_recovery", {
 				iterations: this.iterationsOnCurrentStep,
 				stepId: String(this.currentStepId ?? "?"),
@@ -526,30 +534,55 @@ export class StuckDetector {
 			});
 		}
 		// Per-tool error recovery (more specific — e.g., "bash failed 3 times")
-		const errorTool = Array.from(this.toolErrors.entries()).find(
-			([_, c]) => c >= this.errorThreshold,
-		);
-		if (errorTool) {
+		if (reason === "tool-errors") {
+			const errorTool = Array.from(this.toolErrors.entries()).find(
+				([_, c]) => c >= this.errorThreshold,
+			)!;
 			return t("exec.tool_errors_recovery", {
 				tool: errorTool[0],
 				count: errorTool[1],
 			});
 		}
 		// Consecutive failures from different tools (generic — e.g., "5 consecutive failures")
-		if (this.hasConsecutiveFailures()) {
+		if (reason === "consecutive") {
 			return t("exec.consecutive_failures_recovery", {
 				count: this.consecutiveFailures,
 			});
 		}
-		if (this.hasRepetitiveToolCalls()) {
+		if (reason === "repetitive") {
 			return this.getRepetitiveToolMessage();
 		}
-		if (this.hasReadOnlyLoop()) {
+		if (reason === "read-only") {
 			return t("exec.read_only_loop_recovery", {
 				count: String(this.readOnlyStreak),
 			});
 		}
 		return "";
+	}
+
+	/**
+	 * Single source of truth for the recovery reason priority. Used by BOTH
+	 * getRecoveryMessage() and getHints() so the two cannot drift apart: the
+	 * state bullet that getRecoveryMessage already reports is NOT repeated as a
+	 * hint (priority: stuck > tool-errors > consecutive > repetitive >
+	 * read-only).
+	 */
+	private getPrimaryReason():
+		| "stuck"
+		| "tool-errors"
+		| "consecutive"
+		| "repetitive"
+		| "read-only"
+		| null {
+		if (this.isStuck()) return "stuck";
+		const errorTool = Array.from(this.toolErrors.entries()).find(
+			([_, c]) => c >= this.errorThreshold,
+		);
+		if (errorTool) return "tool-errors";
+		if (this.hasConsecutiveFailures()) return "consecutive";
+		if (this.hasRepetitiveToolCalls()) return "repetitive";
+		if (this.hasReadOnlyLoop()) return "read-only";
+		return null;
 	}
 
 	reset(): void {
