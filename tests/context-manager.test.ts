@@ -203,6 +203,31 @@ describe("ContextManager fact extraction", () => {
     expect(summary).not.toContain("OLD TASK");
   });
 
+  it("keeps the original task when the user pastes an error/log block", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({ role: "user", content: "удали JS-дубликаты, оставь только .tsx" });
+    cm.resetUserTurn();
+    const paste = `[plugin:vite:esbuild] Transform failed with 1 error:
+E:/projects/mma_tests/bicycle-shop/src/ProductPage.tsx:270:7: ERROR: Multiple exports with the same name "default"
+
+268| export default ProductPage;var _c;$RefreshReg$(_c, "ProductPage");
+271| if (import.meta.hot && !inWebWorker) {`;
+    cm.addMessage({ role: "user", content: paste });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: удали JS-дубликаты, оставь только .tsx]");
+    expect(summary).toContain("[User feedback:");
+    expect(summary).not.toContain("[Task: [plugin:vite:esbuild]");
+  });
+
   it("should extract 'Replaced in <path>' (edit_file output) as a file fact", () => {
     const cm = new ContextManager(100000);
     cm.addMessage({ role: "system", content: "SYS" });

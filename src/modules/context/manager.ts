@@ -50,6 +50,13 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 3) + "...";
 }
 
+function looksLikeErrorPaste(text: string): boolean {
+  if (text.length > 200) return true;
+  return /(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(
+    text,
+  );
+}
+
 export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
   const failures: Map<string, TriedAndFailed> = new Map();
 
@@ -94,6 +101,10 @@ export class ContextManager {
   private errorFacts: string[] = [];
   /** Latest real user instruction (skips <system-summary> blocks). */
   private lastUserTask = "";
+  /** First real user instruction of the session — survives resetUserTurn(). */
+  private sessionMission = "";
+  /** Latest user message that looks like a pasted error/log (never a task). */
+  private lastUserFeedback = "";
   private static readonly MAX_FACTS = 20;
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
@@ -156,9 +167,12 @@ export class ContextManager {
    */
   resetUserTurn(): void {
     this.iterationsSinceCompaction = 0;
-    // A new user message begins a new task — drop the previous turn's task so
-    // the fresh instruction becomes the one preserved at compaction.
+    // A new user message begins a new turn — drop the previous turn's task
+    // so the fresh instruction becomes the one preserved at compaction. The
+    // session mission survives: an error/log paste in the new turn must not
+    // erase the original goal.
     this.lastUserTask = "";
+    this.lastUserFeedback = "";
   }
 
   getQuality(): number {
@@ -203,14 +217,23 @@ export class ContextManager {
     // `user` envelopes that must not overwrite it (observed: after compaction
     // the model had forgotten "удали /bicycles, почини стили" and re-read
     // files aimlessly for 40+ iterations).
-    if (msg.role === "user" && !this.lastUserTask) {
-      const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+    if (msg.role === "user") {
+      const text =
+        typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
       if (
         text.trim() &&
         !text.startsWith("<system-summary>") &&
         !text.includes("[Compressed:")
       ) {
-        this.lastUserTask = text.trim();
+        if (looksLikeErrorPaste(text)) {
+          this.lastUserFeedback = text.trim().slice(0, 400);
+        } else if (!this.lastUserTask && !this.lastUserFeedback) {
+          // No new task inside a turn that already captured an error/log paste:
+          // the paste's follow-up messages are tool-result continuations, not a
+          // fresh instruction, so the session mission must win at compaction.
+          this.lastUserTask = text.trim();
+          if (!this.sessionMission) this.sessionMission = text.trim();
+        }
       }
     }
     // Auto-attach pending images to the next user message
@@ -339,10 +362,13 @@ export class ContextManager {
     parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
 
     // Carry the user's actual instruction forward — the model must never lose
-    // the task it is working on just because 40 turns got compacted away.
-    if (this.lastUserTask) {
-      const task = this.lastUserTask.slice(0, 400);
-      parts.push(`[Task: ${task}]`);
+    // the task it is working on just because 40 turns got compacted away. The
+    // per-turn task falls back to the session mission (first real instruction)
+    // so a pasted error/log in the current turn cannot erase the goal.
+    const task = (this.lastUserTask || this.sessionMission).slice(0, 400);
+    if (task) parts.push(`[Task: ${task}]`);
+    if (this.lastUserFeedback && !task.startsWith(this.lastUserFeedback)) {
+      parts.push(`[User feedback: ${this.lastUserFeedback}]`);
     }
 
     const deletedSet = new Set(this.deletedFacts);
@@ -536,6 +562,8 @@ export class ContextManager {
     this.compactionCount = 0;
     this.peakTokens = 0;
     this.lastUserTask = "";
+    this.lastUserFeedback = "";
+    this.sessionMission = "";
   }
 
   getEstimatedTokens(): number {
