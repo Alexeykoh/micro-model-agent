@@ -228,6 +228,45 @@ E:/projects/mma_tests/bicycle-shop/src/ProductPage.tsx:270:7: ERROR: Multiple ex
     expect(summary).not.toContain("[Task: [plugin:vite:esbuild]");
   });
 
+  it("keeps a long legitimate task as the task (no error markers)", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    const longTask =
+      "Переработай страницу каталога: добавь фильтры по категории и цене, " +
+      "сортировку по популярности и новинкам, пагинацию по 12 товаров, " +
+      "адаптивную сетку карточек и полную типизацию props и state.";
+    cm.addMessage({ role: "user", content: longTask });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: Переработай страницу каталога");
+  });
+
+  it("classifies a short error-marked paste as feedback", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({ role: "user", content: "почини страницу" });
+    cm.resetUserTurn();
+    cm.addMessage({ role: "user", content: "Error: Cannot find module './Header'" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: почини страницу]");
+    expect(summary).toContain("[User feedback: Error: Cannot find module './Header']");
+  });
+
   it("should extract 'Replaced in <path>' (edit_file output) as a file fact", () => {
     const cm = new ContextManager(100000);
     cm.addMessage({ role: "system", content: "SYS" });

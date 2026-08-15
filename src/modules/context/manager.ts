@@ -51,10 +51,16 @@ function truncate(s: string, max: number): string {
 }
 
 function looksLikeErrorPaste(text: string): boolean {
-  if (text.length > 200) return true;
-  return /(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(
-    text,
-  );
+  // Error markers.
+  if (/(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(text)) {
+    return true;
+  }
+  // Structural signals of pasted compiler/runtime output: source frames
+  // ("270|  }_s(...)"), path:line:col references, and stack-trace lines.
+  if (/(?:^|\n)\s*\d+\s*\|/.test(text)) return true;
+  if (/[\w./\\-]+\.[a-z]{1,6}:\d+:\d+/.test(text)) return true;
+  if (/(?:^|\n)\s*at\s+\S+/.test(text)) return true;
+  return false;
 }
 
 export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
@@ -225,7 +231,7 @@ export class ContextManager {
         !text.startsWith("<system-summary>") &&
         !text.includes("[Compressed:")
       ) {
-        if (looksLikeErrorPaste(text)) {
+        if (looksLikeErrorPaste(text) && (this.lastUserTask || this.sessionMission)) {
           this.lastUserFeedback = text.trim().slice(0, 400);
         } else if (!this.lastUserTask && !this.lastUserFeedback) {
           // No new task inside a turn that already captured an error/log paste:
