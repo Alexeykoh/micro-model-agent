@@ -17,4 +17,11 @@ describe("forbiddenWindowsCommand", () => {
 		expect(forbiddenWindowsCommand("npm run build")).toBeNull();
 		expect(forbiddenWindowsCommand("del src\\a.js")).toBeNull();
 	});
+
+	it("is case-insensitive and rejects only the first word", () => {
+		expect(forbiddenWindowsCommand("GREP -n foo")).toBe("grep");
+		expect(forbiddenWindowsCommand("npm run grep")).toBeNull();
+		expect(forbiddenWindowsCommand("myls src")).toBeNull();
+		expect(forbiddenWindowsCommand("echo grep me")).toBeNull();
+	});
 });

@@ -21,6 +21,7 @@ import {
 } from "../hallucination/js-identifiers";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
+import { platform } from "os";
 
 const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
@@ -818,15 +819,17 @@ export class ExecutionModule implements AgentModule {
 					// Hard stop for forbidden Windows commands: after the second
 					// failure of the same forbidden command (grep/sed/ls/find/…),
 					// inject a STOP message so the session stops burning bash calls
-					// on commands cmd.exe does not have.
-					if (call.name === "bash") {
+					// on commands cmd.exe does not have. Mirrors the bash tool's own
+					// win32-gated hard-stop (src/tools/bash.ts) — on macOS/Linux
+					// these commands exist and fail for legit reasons.
+					if (call.name === "bash" && platform() === "win32") {
 						const cmd = String(call.arguments?.command ?? "");
 						const forbidden = forbiddenWindowsCommand(cmd);
 						if (forbidden) {
 							const n =
 								(this.forbiddenBashFailures.get(forbidden) || 0) + 1;
 							this.forbiddenBashFailures.set(forbidden, n);
-							if (n >= 2) {
+							if (n === 2) {
 								this.pendingMessages.push({
 									role: "user",
 									content: `<system-summary>${t("exec.forbidden_cmd", { cmd: forbidden })}</system-summary>`,

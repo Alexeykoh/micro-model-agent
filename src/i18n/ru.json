@@ -464,7 +464,7 @@
   "exec.escalation": "\n\n⚠️ Агент застрял на шаге {stepId} ({description}). Эскалация к пользователю — пожалуйста, подскажите как действовать.",
   "exec.hints": "\n[Подсказки]\n{hints}",
   "exec.file_rewrite_warning": "⚠️ Файл {file} был перезаписан {count} раз. Попробуйте другой подход — текущая стратегия исправлений не работает.",
-  "exec.forbidden_cmd": "ПРЕКРАТИ использовать \"{cmd}\" через bash — это не команда Windows cmd.exe, и она уже неоднократно падала в этой сессии. Используй предназначенный тул: grep → тул grep, ls/dir → list_dir, find → glob, rm → delete_file, sed → edit_file. Больше не вызывай bash для этого.",
+  "exec.forbidden_cmd": "ПРЕКРАТИ использовать \"{cmd}\" через bash — это не команда Windows cmd.exe, и она уже неоднократно падала в этой сессии. Используй предназначенный тул: grep → тул grep, ls/dir → list_dir, find → glob, rm → delete_file, sed → edit_file, touch → write_file, which → `where`, cp/mv → move_file, diff → read_file. Больше не вызывай bash для этого.",
   "hall.max_retries_exhausted": "Модель вернула пустой или недостаточный ответ после нескольких попыток",
   "hall.short_response": "Слишком короткий или пустой ответ",
   "hall.repetitive": "Слишком повторяющийся ответ ({pct}% совпадение)",
