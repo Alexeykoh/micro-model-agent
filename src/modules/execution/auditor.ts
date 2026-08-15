@@ -204,8 +204,8 @@ async function runTypecheck(baseDir: string): Promise<string | null> {
 	const exited = await processRegistry.waitForExit(entry.id, 90_000);
 	const output = entry.log.join("\n");
 	processRegistry.remove(entry.id);
-	// Timeout / non-zero exit with no `error TS` lines = inconclusive (missing
-	// typescript, wrong working dir) — never block completion on those.
+	// A timeout, or output with no `error TS` lines (missing typescript / wrong
+	// working dir) is inconclusive — never block completion on those.
 	if (!exited) return null;
 	return parseTypecheckErrors(output);
 }
@@ -276,9 +276,15 @@ export class Auditor {
 		// Real typecheck: the audit must catch "the build is broken" even when
 		// every file exists (observed: deleting .js files left the .tsx sources
 		// with 11 tsc errors and the agent still declared success). Runs only
-		// when a tsconfig.json exists; inconclusive results never block.
+		// when a tsconfig.json exists AND the file checks already passed —
+		// an audit that is doomed by missing/leftover files must not pay a 90s
+		// tsc spawn. Inconclusive results never block.
 		let typecheckError: string | null = null;
-		if (existsSync(join(this.baseDir, "tsconfig.json"))) {
+		if (
+			missingFiles.length === 0 &&
+			leftoverFiles.length === 0 &&
+			existsSync(join(this.baseDir, "tsconfig.json"))
+		) {
 			try {
 				typecheckError = await runTypecheck(this.baseDir);
 			} catch {
@@ -297,11 +303,11 @@ export class Auditor {
 		).length;
 		const totalSteps = plan.steps.length;
 
+		const auditedFiles = [...new Set([...createFiles, ...deleteFiles])];
 		let massEditWarning: string | null = null;
-		const uniqueFiles = createFiles.length + deleteFiles.length;
-		if (uniqueFiles > MASS_EDIT_THRESHOLD) {
+		if (auditedFiles.length > MASS_EDIT_THRESHOLD) {
 			massEditWarning = t("exec.mass_edit_warning", {
-				count: String(uniqueFiles),
+				count: String(auditedFiles.length),
 			});
 		}
 
