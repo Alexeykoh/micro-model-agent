@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { writeFileSync, rmSync, mkdtempSync } from "fs";
+import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -11,6 +11,7 @@ import {
 	extractEchoFileWrite,
 	detectTestResults,
 	emptyCliRunHint,
+	npmExecHint,
 	resetBashFailureTracking,
 } from "../src/tools/bash";
 import { processRegistry } from "../src/modules/processes";
@@ -151,6 +152,60 @@ describe("bash", () => {
 		});
 		expect(result.success).toBe(false);
 		expect(result.output).toContain("[process error]");
+	});
+
+	it("appends the npm exec hint when npx hits a package with no bin", async () => {
+		// An earlier test leaves the grace window at 200ms; npm needs ~1s to
+		// install, so restore the default or the command gets auto-promoted to
+		// the background and reports success even on failure.
+		setBashGraceMs(5000);
+
+		// Skip when npm is not available — the pure npmExecHint tests above
+		// cover the logic regardless of environment.
+		const npmCheck = await bashTool.handler(makeCtx(), {
+			command: "npm --version",
+		});
+		if (!npmCheck.success) return;
+
+		const base = mkdtempSync(join(tmpdir(), "mma-npmexec-"));
+		const pkg = join(base, "pkg");
+		const app = join(base, "app");
+		mkdirSync(pkg, { recursive: true });
+		mkdirSync(app, { recursive: true });
+		writeFileSync(
+			join(pkg, "package.json"),
+			JSON.stringify({ name: "no-bin-pkg", version: "1.0.0" }),
+			"utf-8",
+		);
+		writeFileSync(join(pkg, "index.js"), "module.exports = 1;\n", "utf-8");
+		writeFileSync(
+			join(app, "package.json"),
+			JSON.stringify({ name: "app", version: "1.0.0" }),
+			"utf-8",
+		);
+
+		try {
+			const install = await bashTool.handler(makeCtx({ baseDir: app }), {
+				command: `npm install ${pkg} --no-save`,
+			});
+			expect(install.success).toBe(true);
+
+			// no-bin-pkg is installed but declares no bin → npx must fail with
+			// "could not determine executable to run", and the tool appends the hint.
+			const npxRun = await bashTool.handler(makeCtx({ baseDir: app }), {
+				command: "npx no-bin-pkg",
+			});
+			expect(npxRun.success).toBe(false);
+			expect(npxRun.output).toContain("could not determine executable to run");
+			expect(npxRun.output).toContain("Hint:");
+			expect(npxRun.output).toContain("bunx <pkg>");
+		} finally {
+			try {
+				rmSync(base, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
+		}
 	});
 });
 
@@ -396,6 +451,32 @@ describe("emptyCliRunHint (R5)", () => {
 
   it("does not fire when output is redirected to a file", () => {
     expect(emptyCliRunHint("bun run src/cli.ts > out.txt", "", 0)).toBeNull();
+  });
+});
+
+describe("npmExecHint (Task E)", () => {
+  it("appends the hint when output contains 'could not determine executable to run'", () => {
+    const out = "npm error could not determine executable to run\nnpm error log path...";
+    const r = npmExecHint(out);
+    expect(r).toContain("could not determine executable to run");
+    expect(r).toContain('Hint: "could not determine executable to run"');
+    expect(r).toContain("bunx <pkg>");
+    expect(r.startsWith(out)).toBe(true);
+  });
+
+  it("is case-insensitive", () => {
+    const r = npmExecHint("npm error Could not Determine Executable to Run");
+    expect(r).toContain("Hint:");
+  });
+
+  it("returns the output unchanged for unrelated errors", () => {
+    const out = "sh: foo: command not found";
+    expect(npmExecHint(out)).toBe(out);
+  });
+
+  it("returns the output unchanged for successful runs", () => {
+    const out = "hello world";
+    expect(npmExecHint(out)).toBe(out);
   });
 });
 

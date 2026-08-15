@@ -334,6 +334,22 @@ export function emptyCliRunHint(
 	return "the command exited 0 but printed NOTHING to stdout. If this should run a CLI program, the file probably has no entry point: read it with read_file and check the code actually calls its main function with command-line arguments (e.g. main(process.argv[2])) and prints results with console.log.";
 }
 
+/**
+ * Detect npm/npx/bunx failing with "could not determine executable to run"
+ * — the package declares no `bin` (or `npm run <script>` named a missing
+ * script). Append a concrete hint instead of letting the model re-try blindly
+ * (observed in two agent sessions: the model burned many iterations re-running
+ * the same failing `npx`/`bunx`/`npm run` command).
+ */
+const NPM_EXEC_RE = /could not determine executable to run/i;
+
+export function npmExecHint(output: string): string {
+	if (NPM_EXEC_RE.test(output)) {
+		return `${output}\n\nHint: ${t("exec.npm_exec_hint")}`;
+	}
+	return output;
+}
+
 export const bashTool: ToolDefinition = {
 	name: "bash",
 	description:
@@ -475,6 +491,11 @@ export const bashTool: ToolDefinition = {
 				if (!output && code !== 0) {
 					output = `(exit code ${code})`;
 				}
+
+				// npm/npx/bunx: "could not determine executable to run" — the
+				// package has no `bin` entry (or the script does not exist).
+				// This is cross-platform, so it runs before the win32 hint block.
+				output = npmExecHint(output);
 
 				// On Windows, hint about Unix commands that don't work, and
 				// hard-stop a command that keeps failing the same way. The
