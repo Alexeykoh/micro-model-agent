@@ -129,9 +129,7 @@ export class LspClient {
       this.process = proc;
 
       setTimeout(() => {
-        if (!this.initialized && this.process) {
-          reject(new Error("LSP server start timeout"));
-        }
+        if (!this.initialized && this.process) reject(new Error("LSP server start timeout"));
       }, config.timeout ?? 10000);
     });
   }
@@ -262,6 +260,8 @@ export class LspClient {
         this.process = null;
       }
       this.initialized = false;
+      this.buffer = "";
+      this.contentLength = -1;
       if (this.diagnosticsTimer) {
         clearTimeout(this.diagnosticsTimer);
         this.diagnosticsTimer = null;
@@ -271,10 +271,9 @@ export class LspClient {
 
   private pathToUri(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
-    if (/^[a-zA-Z]:/.test(normalized)) {
-      return `file:///${normalized}`;
-    }
-    return `file://${normalized}`;
+    return /^[a-zA-Z]:/.test(normalized)
+      ? `file:///${normalized}`
+      : `file://${normalized}`;
   }
 
   private languageFromPath(filePath: string): string {

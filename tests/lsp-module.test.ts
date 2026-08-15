@@ -181,7 +181,9 @@ describe("LspModule", () => {
       baseDir,
       logger: { warn: () => {} },
     } as any;
+    const checkedPaths: string[] = [];
     (module as any).client.checkFile = async (filePath: string) => {
+      checkedPaths.push(filePath);
       if (filePath.endsWith(".css")) throw new Error("css server not found");
       return [];
     };
@@ -200,7 +202,16 @@ describe("LspModule", () => {
     );
     expect(module.isLspDisabled()).toBe(true);
 
-    // A TS check still runs — the ts server was never disabled.
+    // A 4th CSS write after disable: silenced, output untouched.
+    const cssAgain = { success: true, output: "css written ok" };
+    await plugin.onAfterTool!(
+      ctx,
+      { name: "write_file", arguments: { path: "src/a.css" } },
+      cssAgain,
+    );
+    expect(cssAgain.output).toBe("css written ok");
+
+    // A TS check still runs — checkFile really received the .ts path.
     const tsResult = { success: true, output: "ts written ok" };
     await plugin.onAfterTool!(
       ctx,
@@ -211,5 +222,6 @@ describe("LspModule", () => {
       false,
     );
     expect(tsResult.output).toBe("ts written ok");
+    expect(checkedPaths.some((p) => p.endsWith("a.ts"))).toBe(true);
   });
 });
