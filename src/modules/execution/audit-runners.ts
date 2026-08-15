@@ -1,6 +1,6 @@
-import { readdirSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import type { Dirent } from "fs";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
 import type { Plan } from "./planner";
 import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
@@ -122,6 +122,41 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
 export function parseTypecheckErrors(output: string): string | null {
 	const line = output.split("\n").find((l) => /error TS\d+/.test(l));
 	return line ? line.trim().slice(0, 300) : null;
+}
+
+/**
+ * Locate the nearest project root that owns a tsconfig.json.
+ *
+ * The agent frequently creates the project in a nested subfolder of its
+ * baseDir (e.g. `bicycle-shop/`), so the tsconfig lives at
+ * `baseDir/bicycle-shop/` and the old `existsSync(baseDir/tsconfig.json)`
+ * gate silently skipped the final typecheck — the audit passed even with
+ * dozens of tsc errors (observed in both analyzed sessions). This walks each
+ * candidate (baseDir plus the resolved step files) upward to the nearest
+ * tsconfig.json, preferring the shallowest hit so the baseDir project wins
+ * over a stray tsconfig further up. Returns null when no tsconfig exists in
+ * any reachable subtree. `existingFiles` must contain resolved absolute paths
+ * (relative tokens would resolve against the process cwd, not baseDir).
+ */
+export function findTypecheckRoot(
+	baseDir: string,
+	existingFiles: string[] = [],
+): string | null {
+	const candidates: string[] = [baseDir, ...existingFiles];
+	let best: { depth: number; root: string } | null = null;
+	for (const start of candidates) {
+		let dir = resolve(start);
+		for (let depth = 0; depth <= 10; depth++) {
+			if (existsSync(join(dir, "tsconfig.json"))) {
+				if (!best || depth < best.depth) best = { depth, root: dir };
+				break;
+			}
+			const parent = dirname(dir);
+			if (parent === dir) break;
+			dir = parent;
+		}
+	}
+	return best?.root ?? null;
 }
 
 export async function runTypecheck(baseDir: string): Promise<string | null> {

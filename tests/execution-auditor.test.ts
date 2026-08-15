@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Auditor, parseTypecheckErrors } from "../src/modules/execution/auditor";
 import { PlanCreator } from "../src/modules/execution/planner";
+import * as auditRunners from "../src/modules/execution/audit-runners";
 
 describe("Auditor", () => {
 	let tmpDir: string;
@@ -16,6 +17,7 @@ describe("Auditor", () => {
 
 	afterEach(() => {
 		if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
+		vi.restoreAllMocks();
 	});
 
 	it("should pass when all step files exist", async () => {
@@ -332,6 +334,76 @@ describe("Auditor", () => {
 		const result = await auditor.audit(plan);
 		expect(result.passed).toBe(true);
 		expect(result.typecheckError).toBeNull();
+	});
+
+	it("runs the final typecheck against a nested project's tsconfig", async () => {
+		// The agent creates the project in a nested subfolder (observed:
+		// bicycle-shop/), so tsconfig.json lives at baseDir/bicycle-shop/ and
+		// baseDir itself has none. The old audit gated on
+		// existsSync(baseDir/tsconfig.json), silently skipped the check and
+		// declared success with 38 tsc errors. findTypecheckRoot must resolve
+		// the nested root from the resolved step files.
+		mkdirSync(join(tmpDir, "bicycle-shop", "src"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "bicycle-shop", "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { skipLibCheck: true } }),
+		);
+		writeFileSync(
+			join(tmpDir, "bicycle-shop", "src", "broken.ts"),
+			'const x: number = "str";\n',
+		);
+
+		const spy = vi
+			.spyOn(auditRunners, "runTypecheck")
+			.mockImplementation(async (dir) =>
+				existsSync(join(dir, "tsconfig.json"))
+					? "error TS2322: Type 'string' is not assignable to type 'number'."
+					: null,
+			);
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/broken.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].kind = "create";
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(spy).toHaveBeenCalledWith(join(tmpDir, "bicycle-shop"));
+		expect(result.typecheckError).toContain("error TS2322");
+		expect(result.passed).toBe(false);
+	});
+
+	it("does not run a typecheck when the nested project has no tsconfig", async () => {
+		// Regression: a broken file in a nested project WITHOUT a tsconfig
+		// anywhere is inconclusive — the audit must not run (or block on) a
+		// typecheck.
+		mkdirSync(join(tmpDir, "bicycle-shop", "src"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "bicycle-shop", "src", "broken.ts"),
+			'const x: number = "str";\n',
+		);
+
+		const spy = vi
+			.spyOn(auditRunners, "runTypecheck")
+			.mockImplementation(async (dir) =>
+				existsSync(join(dir, "tsconfig.json"))
+					? "error TS2322: Type 'string' is not assignable to type 'number'."
+					: null,
+			);
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Create src/broken.ts with content"],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(spy).not.toHaveBeenCalled();
+		expect(result.typecheckError).toBeNull();
+		expect(result.passed).toBe(true);
 	});
 });
 
