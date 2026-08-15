@@ -175,6 +175,7 @@
   "plan.deliverables_missing": "Cannot mark step {step} done: the files it names do not exist yet: {files}. Create these files first (or mark the step status=skipped if they are not actually needed).",
   "plan.kinds_mismatch": "kinds array length must match steps",
   "plan.kinds_invalid": "Invalid step kind(s): {kinds}. Use \"create\" or \"delete\".",
+  "plan.kinds_not_array": "kinds must be an array of \"create\" or \"delete\"",
   "plan.deliverables_remain": "Cannot mark step {step} done: the files it names still exist: {files}. This step is kind=delete — delete these files first (or set status=skipped if they should stay).",
   "plan.show_header": "Plan status:",
   "plan.show_empty": "(plan has no steps)",

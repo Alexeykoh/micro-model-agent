@@ -173,6 +173,7 @@
   "plan.deliverables_missing": "Нельзя отметить шаг {step} выполненным: указанные в нём файлы ещё не существуют: {files}. Сначала создайте эти файлы (или отметьте шаг status=skipped, если они на самом деле не нужны).",
   "plan.kinds_mismatch": "Длина kinds должна совпадать с числом шагов",
   "plan.kinds_invalid": "Недопустимый kind шага: {kinds}. Используй \"create\" или \"delete\".",
+  "plan.kinds_not_array": "kinds должен быть массивом значений \"create\" или \"delete\"",
   "plan.deliverables_remain": "Нельзя пометить шаг {step} как выполненный: указанные файлы всё ещё существуют: {files}. Шаг имеет kind=delete — сначала удали их (или поставь status=skipped, если они должны остаться).",
   "plan.show_header": "Статус плана:",
   "plan.show_empty": "(в плане нет шагов)",

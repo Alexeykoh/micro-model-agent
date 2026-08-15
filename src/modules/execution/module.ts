@@ -261,29 +261,16 @@ export class ExecutionModule implements AgentModule {
 						if (steps.length === 0) {
 							return { success: false, output: t("plan.no_steps") };
 						}
-						const kindsRaw = Array.isArray(args.kinds)
-							? args.kinds.map(String)
-							: [];
-						if (kindsRaw.length > 0 && kindsRaw.length !== steps.length) {
-							return { success: false, output: t("plan.kinds_mismatch") };
-						}
-						const invalidKinds = kindsRaw.filter(
-							(k) => k !== "create" && k !== "delete",
-						);
-						if (invalidKinds.length > 0) {
-							return {
-								success: false,
-								output: t("plan.kinds_invalid", {
-									kinds: invalidKinds.join(", "),
-								}),
-							};
+						const parsed = this.parseKinds(args, steps);
+						if (parsed.error) {
+							return { success: false, output: parsed.error };
 						}
 						this.preserveActive();
 						const plan = PlanCreator.createPlan(
 							title,
 							steps,
 							this.baseDir,
-							kindsRaw as StepKind[],
+							parsed.kinds ?? [],
 						);
 						this.setPlan(plan);
 						const display = PlanCreator.toPromptBlock(plan, 0);
@@ -447,7 +434,16 @@ export class ExecutionModule implements AgentModule {
 					) {
 						const title = String(args.title || this.tracker.getPlan().title);
 						const steps = args.steps.map(String);
-						const plan = PlanCreator.createPlan(title, steps, this.baseDir);
+						const parsed = this.parseKinds(args, steps);
+						if (parsed.error) {
+							return { success: false, output: parsed.error };
+						}
+						const plan = PlanCreator.createPlan(
+							title,
+							steps,
+							this.baseDir,
+							parsed.kinds ?? [],
+						);
 						this.setPlan(plan);
 						const display = PlanCreator.toPromptBlock(plan, 0);
 						const output = t("plan.updated", {
@@ -1101,6 +1097,36 @@ export class ExecutionModule implements AgentModule {
 		const tokens = extractFileLikeTokens(stripUrls(step.description));
 		if (tokens.length === 0) return [];
 		return tokens.filter((p) => findExistingFile(this.baseDir, p));
+	}
+
+	/**
+	 * Validate the optional per-step `kinds` argument for plan create and
+	 * update-with-steps. Returns length-aligned kinds or an i18n error string.
+	 * Absent kinds → null (caller falls back to all-create semantics). Used by
+	 * BOTH branches so a rebuild via update can never silently drop kinds.
+	 */
+	private parseKinds(
+		args: Record<string, unknown>,
+		steps: string[],
+	): { kinds: StepKind[] | null; error: string | null } {
+		if (args.kinds === undefined) return { kinds: null, error: null };
+		if (!Array.isArray(args.kinds)) {
+			return { kinds: null, error: t("plan.kinds_not_array") };
+		}
+		const kindsRaw = args.kinds.map(String);
+		if (kindsRaw.length !== steps.length) {
+			return { kinds: null, error: t("plan.kinds_mismatch") };
+		}
+		const invalid = kindsRaw.filter((k) => k !== "create" && k !== "delete");
+		if (invalid.length > 0) {
+			return {
+				kinds: null,
+				error: t("plan.kinds_invalid", {
+					kinds: invalid.join(", "),
+				}),
+			};
+		}
+		return { kinds: kindsRaw as StepKind[], error: null };
 	}
 
 	/**
