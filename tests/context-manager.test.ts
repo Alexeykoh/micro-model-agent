@@ -248,6 +248,9 @@ describe("ContextManager fact extraction", () => {
   it("removes deleted files from the files fact list and reports them as deleted", () => {
     const cm = new ContextManager(100000);
     cm.addMessage({ role: "system", content: "SYS" });
+    // write src/a.js + write src/b.js + delete src/a.js + write src/a.js again:
+    // the re-created file must leave [Deleted:] and return to [Files:], while
+    // the untouched src/b.js survives in [Files:].
     cm.addMessage({
       role: "tool",
       name: "write_file",
@@ -256,8 +259,20 @@ describe("ContextManager fact extraction", () => {
     });
     cm.addMessage({
       role: "tool",
+      name: "write_file",
+      content: "Written src/b.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
       name: "delete_file",
       content: "Deleted src/a.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written src/a.js",
       success: true,
     });
     for (let i = 0; i < 12; i++) {
@@ -269,9 +284,12 @@ describe("ContextManager fact extraction", () => {
       .getActiveHistory()
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
-    expect(summary).toContain("[Deleted: src/a.js]");
+    const deletedBlock = summary.match(/\[Deleted: ([^\]]*)\]/)?.[1] ?? "";
+    expect(deletedBlock).not.toContain("src/a.js");
     const filesBlock = summary.match(/\[Files: ([^\]]*)\]/)?.[1] ?? "";
-    expect(filesBlock).not.toContain("src/a.js");
+    expect(filesBlock).toContain("src/a.js");
+    expect(filesBlock).toContain("src/b.js");
+    expect(summary).not.toContain("[Deleted: src/a.js]");
   });
 });
 

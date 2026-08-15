@@ -406,13 +406,17 @@ export class ContextManager {
     ];
     const deletedPatterns = [
       new RegExp(`Deleted ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`Файл удалён:? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`(?:Удалён|Файл удалён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
 
     const newFiles: string[] = [];
     const newDeleted: string[] = [];
     const newDecisions: string[] = [];
     const newErrors: string[] = [];
+    // Track the LAST tool event per path so a delete followed by a re-create
+    // (or vice versa) in the same window resolves to its final state instead of
+    // being both filtered out of [Files:] and reported as [Deleted:].
+    const lastEvent = new Map<string, "file" | "deleted">();
 
     for (const msg of turns) {
       const content = getMessageText(msg.content);
@@ -431,11 +435,13 @@ export class ContextManager {
         for (const pattern of createdPatterns) {
           for (const match of content.matchAll(pattern)) {
             newFiles.push(match[1]);
+            lastEvent.set(match[1], "file");
           }
         }
         for (const pattern of deletedPatterns) {
           for (const match of content.matchAll(pattern)) {
             newDeleted.push(match[1]);
+            lastEvent.set(match[1], "deleted");
           }
         }
 
@@ -478,15 +484,26 @@ export class ContextManager {
     // Deduplicate and cap facts to prevent unbounded growth. Files that were
     // DELETED leave the "known files" list — a deleted file must not keep
     // being reported as existing (observed: deleted .js files listed in
-    // every [Files: ...] block for the whole session).
+    // every [Files: ...] block for the whole session). A path that is deleted
+    // then RE-CREATED (delete_file A → write_file A) is un-deleted: the last
+    // event in the window wins, so it returns to [Files:] and leaves [Deleted:].
     const dedup = (arr: string[]): string[] => [...new Set(arr)];
-    const deletedSet = new Set(newDeleted);
-    this.fileFacts = dedup(
-      [...this.fileFacts, ...newFiles].filter((p) => !deletedSet.has(p)),
-    ).slice(-ContextManager.MAX_FACTS);
-    this.deletedFacts = dedup([...this.deletedFacts, ...newDeleted]).slice(
-      -ContextManager.MAX_FACTS,
+    const finalFiles = dedup(
+      newFiles.filter((p) => lastEvent.get(p) === "file"),
     );
+    const finalDeleted = dedup(
+      newDeleted.filter((p) => lastEvent.get(p) === "deleted"),
+    );
+    this.fileFacts = dedup(
+      [...this.fileFacts, ...finalFiles].filter(
+        (p) => !finalDeleted.includes(p),
+      ),
+    ).slice(-ContextManager.MAX_FACTS);
+    this.deletedFacts = dedup(
+      [...this.deletedFacts, ...finalDeleted].filter(
+        (p) => !finalFiles.includes(p),
+      ),
+    ).slice(-ContextManager.MAX_FACTS);
     this.decisionFacts = dedup([...this.decisionFacts, ...newDecisions]).slice(
       -ContextManager.MAX_FACTS,
     );
