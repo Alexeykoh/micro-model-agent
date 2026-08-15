@@ -2,7 +2,6 @@ import type { AgentPlugin } from "../types";
 import type { ToolCall } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { StuckDetector } from "./stuck-detector";
-import { PlanStore } from "./plan-store";
 import type { PlanTracker } from "./tracker";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
@@ -30,9 +29,7 @@ export interface ExecutionPluginState {
 }
 
 export interface ExecutionPluginDeps {
-	store: PlanStore;
 	stuckDetector: StuckDetector;
-	baseDir: string;
 	trackerRef: { readonly current: PlanTracker | null };
 	pendingMessages: Array<{ role: "user"; content: string }>;
 	forbiddenBashFailures: Map<string, number>;

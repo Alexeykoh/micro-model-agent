@@ -182,9 +182,7 @@ export class ExecutionModule implements AgentModule {
 
 	getPlugin(): AgentPlugin {
 		return createExecutionPlugin({
-			store: this.store,
 			stuckDetector: this.stuckDetector,
-			baseDir: this.baseDir,
 			trackerRef: this.trackerRef,
 			pendingMessages: this.pendingMessages,
 			forbiddenBashFailures: this.forbiddenBashFailures,
