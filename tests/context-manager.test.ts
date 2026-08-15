@@ -244,6 +244,35 @@ describe("ContextManager fact extraction", () => {
       .join("\n");
     expect(summary).toContain("DeliveryPage.tsx");
   });
+
+  it("removes deleted files from the files fact list and reports them as deleted", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written src/a.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "delete_file",
+      content: "Deleted src/a.js",
+      success: true,
+    });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Deleted: src/a.js]");
+    const filesBlock = summary.match(/\[Files: ([^\]]*)\]/)?.[1] ?? "";
+    expect(filesBlock).not.toContain("src/a.js");
+  });
 });
 
 describe("getQuality", () => {

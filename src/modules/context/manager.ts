@@ -89,6 +89,7 @@ export class ContextManager {
   private budget: ContextBudget;
   private compactionThreshold: number;
   private fileFacts: string[] = [];
+  private deletedFacts: string[] = [];
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
   /** Latest real user instruction (skips <system-summary> blocks). */
@@ -344,8 +345,13 @@ export class ContextManager {
       parts.push(`[Task: ${task}]`);
     }
 
-    if (this.fileFacts.length > 0) {
-      parts.push(`[Files: ${this.fileFacts.slice(-15).join("; ")}]`);
+    const deletedSet = new Set(this.deletedFacts);
+    const liveFiles = this.fileFacts.filter((p) => !deletedSet.has(p));
+    if (liveFiles.length > 0) {
+      parts.push(`[Files: ${liveFiles.slice(-15).join("; ")}]`);
+    }
+    if (this.deletedFacts.length > 0) {
+      parts.push(`[Deleted: ${this.deletedFacts.slice(-10).join("; ")}]`);
     }
     if (this.decisionFacts.length > 0) {
       parts.push(`[Decisions: ${this.decisionFacts.slice(-5).join("; ")}]`);
@@ -393,17 +399,18 @@ export class ContextManager {
     // Absolute Windows paths ("E:\proj\src\a.ts") need an optional drive prefix;
     // without it the colon breaks the match and the fact is silently dropped.
     const DRIVE = "(?:[a-zA-Z]:[\\\\/])?";
-    const filePatterns = [
-      new RegExp(`(?:Created|Updated|Written|Deleted|Moved) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      // edit_file returns "Replaced in <path>" — the most common write signal
-      // in agent sessions. Without this pattern, every edit_file fact is lost
-      // at compaction and the model re-reads the same files after each one.
-      new RegExp(`Replaced in ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`Файл (?:создан|обновлён|записан|удалён|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`file (?:created|updated|written|deleted|moved):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+    const createdPatterns = [
+      new RegExp(`(?:Created|Updated|Written|Moved|Replaced in) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`Файл (?:создан|обновлён|записан|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`file (?:created|updated|written|moved):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+    ];
+    const deletedPatterns = [
+      new RegExp(`Deleted ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(`Файл удалён:? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
 
     const newFiles: string[] = [];
+    const newDeleted: string[] = [];
     const newDecisions: string[] = [];
     const newErrors: string[] = [];
 
@@ -421,9 +428,14 @@ export class ContextManager {
       }
 
       if (msg.role === "tool") {
-        for (const pattern of filePatterns) {
+        for (const pattern of createdPatterns) {
           for (const match of content.matchAll(pattern)) {
             newFiles.push(match[1]);
+          }
+        }
+        for (const pattern of deletedPatterns) {
+          for (const match of content.matchAll(pattern)) {
+            newDeleted.push(match[1]);
           }
         }
 
@@ -463,9 +475,16 @@ export class ContextManager {
       }
     }
 
-    // Deduplicate and cap facts to prevent unbounded growth
+    // Deduplicate and cap facts to prevent unbounded growth. Files that were
+    // DELETED leave the "known files" list — a deleted file must not keep
+    // being reported as existing (observed: deleted .js files listed in
+    // every [Files: ...] block for the whole session).
     const dedup = (arr: string[]): string[] => [...new Set(arr)];
-    this.fileFacts = dedup([...this.fileFacts, ...newFiles]).slice(
+    const deletedSet = new Set(newDeleted);
+    this.fileFacts = dedup(
+      [...this.fileFacts, ...newFiles].filter((p) => !deletedSet.has(p)),
+    ).slice(-ContextManager.MAX_FACTS);
+    this.deletedFacts = dedup([...this.deletedFacts, ...newDeleted]).slice(
       -ContextManager.MAX_FACTS,
     );
     this.decisionFacts = dedup([...this.decisionFacts, ...newDecisions]).slice(
