@@ -223,7 +223,11 @@ export class Agent {
 		onPhase?: (phase: AgentPhase) => void,
 	): void {
 		this.deps.pluginManager.runOnPhase?.(
-			{ iteration, logger: this.deps.logger },
+			{
+				iteration,
+				logger: this.deps.logger,
+				contextManager: this.deps.contextManager,
+			},
 			phase,
 		);
 		onPhase?.(phase);
@@ -269,6 +273,7 @@ export class Agent {
 			pluginManager.runOnSessionStart({
 				logger,
 				sessionManager: sessionManager?.getActiveMeta(),
+				contextManager,
 			});
 
 			if (config.session?.baselineCheck !== false) {
@@ -487,7 +492,7 @@ export class Agent {
 						reasoningContent += chunk.content;
 						if (config.showReasoning) {
 							const metaOut = pluginManager.runOnMeta(
-								{ iteration, logger },
+								{ iteration, logger, contextManager },
 								chunk.content,
 							);
 							if (metaOut) {
@@ -529,7 +534,7 @@ export class Agent {
 				);
 				logger.error(`LLM call failed: ${err.message}`);
 				slog.logError(err.message);
-				pluginManager.runOnError({ iteration, logger }, err);
+				pluginManager.runOnError({ iteration, logger, contextManager }, err);
 				return {
 					success: false,
 					text: lastText,
@@ -568,7 +573,7 @@ export class Agent {
 				(!sawToolCall || (toolComments && !isToolCallJson(textContent)));
 			if (showText) {
 				for (const chunk of textChunks) {
-					const textOut = pluginManager.runOnText({ iteration, logger }, chunk);
+					const textOut = pluginManager.runOnText({ iteration, logger, contextManager }, chunk);
 					onChunk?.(textOut);
 				}
 			}
@@ -581,7 +586,7 @@ export class Agent {
 			} else if (reasoningContent) {
 				llmResponse = { type: "reasoning", content: reasoningContent };
 			}
-			pluginManager.runOnAfterThink({ iteration, logger }, llmResponse);
+			pluginManager.runOnAfterThink({ iteration, logger, contextManager }, llmResponse);
 
 			if (this.deps.exitOnComplete && sawToolCall) {
 				const signature = toolCalls
@@ -639,7 +644,7 @@ export class Agent {
 						args: call.arguments,
 					});
 					pluginManager.runOnToolStart(
-						{ iteration, logger },
+						{ iteration, logger, contextManager },
 						{ id: call.id, name: call.name, arguments: call.arguments },
 					);
 					onTool?.({ type: "start", tool: call.name, args: call.arguments });
@@ -667,7 +672,7 @@ export class Agent {
 					}
 
 					pluginManager.runOnToolEnd(
-						{ iteration, logger },
+						{ iteration, logger, contextManager },
 						{ id: call.id, name: call.name, arguments: call.arguments },
 						result,
 						duration,
@@ -676,7 +681,7 @@ export class Agent {
 						onMeta?.("\n" + result.display + "\n");
 					} else {
 						const metaOut = pluginManager.runOnMeta(
-							{ iteration, logger },
+							{ iteration, logger, contextManager },
 							result.output,
 						);
 						onMeta?.("\n" + pc.dim(metaOut) + "\n");
@@ -1110,6 +1115,7 @@ export class Agent {
 		pluginManager.runOnSessionEnd({
 			logger,
 			sessionManager: sessionManager?.getActiveMeta(),
+			contextManager,
 		});
 	}
 }

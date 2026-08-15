@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.0] - 2026-08-15
+
+### Added
+- **`trace-server` example plugin** (`examples/plugins/trace-server.ts`): single-file, zero-dependency live agent-loop trace in the browser over SSE — phases, LLM calls, `tool_start`/`tool_end` with full args and results (paired client-side by `toolCallId`), errors, coalesced text/meta (350ms debounce), plus **context tracking**: a live context bar (tokens/budget, quality %, compaction count, iterations since compaction, message count) fed by `context` events, and `compaction` events rendered as CTX log entries (tokens/quality before and after). Binds localhost only; credential-shaped payload values are scrubbed.
+- **`contextManager` exposed to all plugin hooks** (`src/core/agent.ts`): the plugin hook context now carries `contextManager` in `runOnPhase`, `runOnSessionStart`, `runOnError`, `runOnAfterThink`, `runOnToolStart`, `runOnToolEnd`, `runOnText`, `runOnMeta`, `runOnSessionEnd` (previously only in `runOnBeforeThink`). Enables plugins to observe live context state (budget, quality, compaction count).
+
+### Changed
+- The trace-server example plugin dedupes double-loading (global + project copies): a shared server lives on `Symbol.for("mma.trace-server")`, `startServer()` dedupes concurrent starts with an in-flight promise, and identical context snapshots are broadcast once.
+
 ## [0.35.3] - 2026-08-14
 
 ### Fixed
