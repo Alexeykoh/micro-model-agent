@@ -4,27 +4,18 @@ import { resolve, join, basename } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
-import { detectTestResults } from "../../tools/bash";
-import { processRegistry } from "../processes";
+import {
+	SKIP_DIRS,
+	findTestFile,
+	hasTestStep,
+	runTests,
+	runTypecheck,
+} from "./audit-runners";
+import type { TestRunCheck } from "./audit-runners";
+
+export { parseTypecheckErrors } from "./audit-runners";
 
 const MASS_EDIT_THRESHOLD = 10;
-
-/** Directories never searched for test files. */
-const SKIP_DIRS = new Set([
-	"node_modules",
-	".git",
-	".mma",
-	"dist",
-	"build",
-	"coverage",
-	".next",
-	".nuxt",
-	"vendor",
-]);
-
-const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
-const TEST_STEP_RE =
-	/\b(test(ing|s)?|тест(ы|ирование|ировать)?|провер\w*\s+тест|запустить\s+тест)\b|bun test|npm test|vitest|pytest|go test|jest|mocha/i;
 
 /** Subtree walk depth cap for file resolution. */
 const RESOLVE_MAX_DEPTH = 8;
@@ -80,110 +71,18 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
 	return found;
 }
 
-export interface TestRunCheck {
-	/** Whether a real test run was executed at all. */
-	checked: boolean;
-	/** All detected tests passed. */
-	passed: boolean;
-	failed: number;
-	passedCount: number;
-	/** Short list of failing test names (up to 5), or the runner summary. */
-	detail: string;
-	command: string;
-}
-
 export interface AuditResult {
 	passed: boolean;
 	missingFiles: string[];
+	/** Delete-kind steps (done) whose named files still exist. */
+	leftoverFiles: string[];
 	createdFiles: string[];
 	modifiedFiles: string[];
 	summary: string;
 	massEditWarning: string | null;
 	testRun: TestRunCheck | null;
-}
-
-/** Recursive, depth-limited walk that stops early on the first test file. */
-function findTestFile(dir: string, depth = 0): string | null {
-	if (depth > 5) return null;
-	let entries: Dirent[];
-	try {
-		entries = readdirSync(dir, { withFileTypes: true });
-	} catch {
-		return null;
-	}
-	for (const e of entries) {
-		const full = join(dir, e.name);
-		if (e.isDirectory()) {
-			if (SKIP_DIRS.has(e.name)) continue;
-			const found = findTestFile(full, depth + 1);
-			if (found) return found;
-		} else if (TEST_EXT_RE.test(e.name)) {
-			return full;
-		}
-	}
-	return null;
-}
-
-/** The plan's step descriptions mention running/checking tests. */
-function hasTestStep(plan: Plan): boolean {
-	return plan.steps.some((s) => TEST_STEP_RE.test(s.description));
-}
-
-/** Extract failing test names from a runner's output (bun/vitest style). */
-function extractFailingNames(output: string, limit = 5): string[] {
-	const names: string[] = [];
-	for (const m of output.matchAll(/\(fail\)\s*([^\n]+)/g)) {
-		const name = m[1].trim();
-		if (name && !names.includes(name)) names.push(name);
-		if (names.length >= limit) break;
-	}
-	return names;
-}
-
-async function runTests(baseDir: string): Promise<TestRunCheck> {
-	const entry = processRegistry.start("bun test", baseDir);
-	const exited = await processRegistry.waitForExit(entry.id, 90_000);
-	const output = entry.log.join("\n");
-	processRegistry.remove(entry.id);
-
-	if (!exited) {
-		// Timed out — we cannot claim success or failure from an unfinished run.
-		return {
-			checked: true,
-			passed: true, // don't block completion on an inconclusive run
-			failed: 0,
-			passedCount: 0,
-			detail: "test run timed out after 90s — result unknown",
-			command: "bun test",
-		};
-	}
-
-	const run = detectTestResults(output);
-	if (!run) {
-		// No recognizable runner summary. If the process exited non-zero we
-		// cannot tell whether tests failed or the runner is missing, so treat
-		// as checked-but-inconclusive (do not block).
-		return {
-			checked: true,
-			passed: entry.exitCode === 0,
-			failed: entry.exitCode === 0 ? 0 : -1,
-			passedCount: 0,
-			detail: output.slice(0, 200).trim(),
-			command: "bun test",
-		};
-	}
-
-	const names = extractFailingNames(output);
-	return {
-		checked: true,
-		passed: run.failed === 0,
-		failed: run.failed,
-		passedCount: run.passed,
-		detail: names.length
-			? names.join("; ")
-			: run.summary || `${run.failed} failed / ${run.passed} passed`,
-		command: "bun test",
-	};
+	/** First `error TS…` line from a real `tsc --noEmit` run, or null. */
+	typecheckError: string | null;
 }
 
 export class Auditor {
@@ -198,8 +97,16 @@ export class Auditor {
 		// exist. Skipped/pending steps must never contribute "missing files"
 		// (observed: a skipped step's prose mention of "type.ts" kept the audit
 		// gate rejecting a finished task with "1 files missing" forever).
-		const allStepText = plan.steps
-			.filter((s) => s.status === "done")
+		const doneCreate = plan.steps.filter(
+			(s) => s.status === "done" && s.kind !== "delete",
+		);
+		const doneDelete = plan.steps.filter(
+			(s) => s.status === "done" && s.kind === "delete",
+		);
+		const createText = doneCreate
+			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
+			.join(" ");
+		const deleteText = doneDelete
 			.map((s) => s.description.replace(/\([^)]*\)/g, " "))
 			.join(" ");
 		// File tokens are extracted with the SAME shared filter as the
@@ -207,17 +114,24 @@ export class Auditor {
 		// first so a hostname / https://host/repo.git in a step description
 		// can never be reported as a missing file (observed: a git-remote
 		// plan flagged `whom-pointing-jewel-maine.trycloudflare.com`).
-		const uniqueFiles = extractFileLikeTokens(stripUrls(allStepText));
+		const createFiles = extractFileLikeTokens(stripUrls(createText));
+		const deleteFiles = extractFileLikeTokens(stripUrls(deleteText));
 
 		const missingFiles: string[] = [];
 		const existingFiles: string[] = [];
+		const leftoverFiles: string[] = [];
 
-		for (const filePath of uniqueFiles) {
-			const resolved = findExistingFile(this.baseDir, filePath);
-			if (resolved) {
+		for (const filePath of createFiles) {
+			if (findExistingFile(this.baseDir, filePath)) {
 				existingFiles.push(filePath);
 			} else {
 				missingFiles.push(filePath);
+			}
+		}
+		// A done delete-kind step requires its named files to be GONE.
+		for (const filePath of deleteFiles) {
+			if (findExistingFile(this.baseDir, filePath)) {
+				leftoverFiles.push(filePath);
 			}
 		}
 
@@ -234,6 +148,25 @@ export class Auditor {
 			}
 		}
 
+		// Real typecheck: the audit must catch "the build is broken" even when
+		// every file exists (observed: deleting .js files left the .tsx sources
+		// with 11 tsc errors and the agent still declared success). Runs only
+		// when a tsconfig.json exists AND the file checks already passed —
+		// an audit that is doomed by missing/leftover files must not pay a 90s
+		// tsc spawn. Inconclusive results never block.
+		let typecheckError: string | null = null;
+		if (
+			missingFiles.length === 0 &&
+			leftoverFiles.length === 0 &&
+			existsSync(join(this.baseDir, "tsconfig.json"))
+		) {
+			try {
+				typecheckError = await runTypecheck(this.baseDir);
+			} catch {
+				typecheckError = null;
+			}
+		}
+
 		const doneSteps = plan.steps.filter((s) => s.status === "done").length;
 		// done + skipped are both deliberate terminal states: `done` claims the
 		// work, `skipped` documents a decision that the step is not needed (the
@@ -245,15 +178,21 @@ export class Auditor {
 		).length;
 		const totalSteps = plan.steps.length;
 
+		const auditedFiles = [...new Set([...createFiles, ...deleteFiles])];
 		let massEditWarning: string | null = null;
-		if (uniqueFiles.length > MASS_EDIT_THRESHOLD) {
+		if (auditedFiles.length > MASS_EDIT_THRESHOLD) {
 			massEditWarning = t("exec.mass_edit_warning", {
-				count: String(uniqueFiles.length),
+				count: String(auditedFiles.length),
 			});
 		}
 
 		const testsFailing = testRun !== null && testRun.failed > 0;
-		const passed = missingFiles.length === 0 && !testsFailing;
+		const typecheckFailing = typecheckError !== null;
+		const passed =
+			missingFiles.length === 0 &&
+			leftoverFiles.length === 0 &&
+			!testsFailing &&
+			!typecheckFailing;
 		// A "Task complete ✓" summary for an unfinished plan is a lie the model
 		// reads as a green light (observed: audit gate injected "[✓] Task
 		// complete: 1/3 steps done" while the plan had 2 pending steps). The
@@ -267,6 +206,12 @@ export class Auditor {
 				total: totalSteps,
 				files: missingFiles.length,
 			});
+		} else if (leftoverFiles.length > 0) {
+			summary = t("exec.audit_leftovers", {
+				done: doneSteps,
+				total: totalSteps,
+				files: leftoverFiles.length,
+			});
 		} else if (testsFailing) {
 			summary = t("exec.audit_fail_tests", {
 				done: doneSteps,
@@ -274,6 +219,13 @@ export class Auditor {
 				failed: String(testRun!.failed),
 				passed: String(testRun!.passedCount),
 				detail: testRun!.detail,
+			});
+		} else if (typecheckFailing) {
+			summary = t("exec.audit_fail_typecheck", {
+				done: doneSteps,
+				total: totalSteps,
+				missing: String(missingFiles.length),
+				typeError: typecheckError!,
 			});
 		} else if (stepsPending) {
 			summary = t("exec.audit_pending", {
@@ -291,11 +243,13 @@ export class Auditor {
 		return {
 			passed,
 			missingFiles,
+			leftoverFiles,
 			createdFiles: existingFiles,
 			modifiedFiles: [],
 			summary,
 			massEditWarning,
 			testRun,
+			typecheckError,
 		};
 	}
 }

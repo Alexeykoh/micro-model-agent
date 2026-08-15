@@ -203,6 +203,70 @@ describe("ContextManager fact extraction", () => {
     expect(summary).not.toContain("OLD TASK");
   });
 
+  it("keeps the original task when the user pastes an error/log block", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({ role: "user", content: "удали JS-дубликаты, оставь только .tsx" });
+    cm.resetUserTurn();
+    const paste = `[plugin:vite:esbuild] Transform failed with 1 error:
+E:/projects/mma_tests/bicycle-shop/src/ProductPage.tsx:270:7: ERROR: Multiple exports with the same name "default"
+
+268| export default ProductPage;var _c;$RefreshReg$(_c, "ProductPage");
+271| if (import.meta.hot && !inWebWorker) {`;
+    cm.addMessage({ role: "user", content: paste });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: удали JS-дубликаты, оставь только .tsx]");
+    expect(summary).toContain("[User feedback:");
+    expect(summary).not.toContain("[Task: [plugin:vite:esbuild]");
+  });
+
+  it("keeps a long legitimate task as the task (no error markers)", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    const longTask =
+      "Переработай страницу каталога: добавь фильтры по категории и цене, " +
+      "сортировку по популярности и новинкам, пагинацию по 12 товаров, " +
+      "адаптивную сетку карточек и полную типизацию props и state.";
+    cm.addMessage({ role: "user", content: longTask });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: Переработай страницу каталога");
+  });
+
+  it("classifies a short error-marked paste as feedback", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({ role: "user", content: "почини страницу" });
+    cm.resetUserTurn();
+    cm.addMessage({ role: "user", content: "Error: Cannot find module './Header'" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(summary).toContain("[Task: почини страницу]");
+    expect(summary).toContain("[User feedback: Error: Cannot find module './Header']");
+  });
+
   it("should extract 'Replaced in <path>' (edit_file output) as a file fact", () => {
     const cm = new ContextManager(100000);
     cm.addMessage({ role: "system", content: "SYS" });
@@ -243,6 +307,53 @@ describe("ContextManager fact extraction", () => {
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
     expect(summary).toContain("DeliveryPage.tsx");
+  });
+
+  it("removes deleted files from the files fact list and reports them as deleted", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    // write src/a.js + write src/b.js + delete src/a.js + write src/a.js again:
+    // the re-created file must leave [Deleted:] and return to [Files:], while
+    // the untouched src/b.js survives in [Files:].
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written src/a.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written src/b.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "delete_file",
+      content: "Deleted src/a.js",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "write_file",
+      content: "Written src/a.js",
+      success: true,
+    });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    const deletedBlock = summary.match(/\[Deleted: ([^\]]*)\]/)?.[1] ?? "";
+    expect(deletedBlock).not.toContain("src/a.js");
+    const filesBlock = summary.match(/\[Files: ([^\]]*)\]/)?.[1] ?? "";
+    expect(filesBlock).toContain("src/a.js");
+    expect(filesBlock).toContain("src/b.js");
+    expect(summary).not.toContain("[Deleted: src/a.js]");
   });
 });
 

@@ -6,6 +6,6 @@ export { StuckDetector } from "./stuck-detector";
 export { Auditor } from "./auditor";
 export { PlanPersister } from "./plan-persister";
 export { PlanStore } from "./plan-store";
-export type { Plan, PlanStep, StepStatus } from "./planner";
+export type { Plan, PlanStep, StepKind, StepStatus } from "./planner";
 export type { PlanFile } from "./plan-persister";
 export type { PlanStatus, PlanMeta } from "./plan-store";

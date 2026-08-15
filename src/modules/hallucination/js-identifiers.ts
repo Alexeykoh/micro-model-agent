@@ -219,12 +219,12 @@ const TECH_NAMES = new Set([
 const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
- * True when `candidate` is a plausible file path token: a path with a
- * directory separator is accepted as-is (a `src/x.ts`-looking token is a file),
- * while a bare `word.ext` is only a file when its extension is a known file
- * extension (so domains like `Gismeteo.by` / `weather.com` are never files).
- * JS member access (`process.env`) and technology names (`node.js`) are never
- * files.
+ * True when `candidate` is a plausible file path token: for a path with a
+ * directory separator the last segment must carry a non-empty stem before the
+ * extension (extension-only segments like `tsx/.ts` are rejected), while a bare
+ * `word.ext` is only a file when its extension is a known file extension (so
+ * domains like `Gismeteo.by` / `weather.com` are never files). JS member access
+ * (`process.env`) and technology names (`node.js`) are never files.
  */
 export function isFilePathLike(s: string): boolean {
 	const lower = s.toLowerCase();
@@ -235,6 +235,15 @@ export function isFilePathLike(s: string): boolean {
 		if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
 		return FILE_EXTENSIONS.has(ext);
 	}
+	// Tokens with a directory separator: require the LAST segment to carry a
+	// real file name (a non-empty stem before the extension). Otherwise an
+	// extension-only segment like "tsx/.ts" (from ".tsx/.ts" in a step
+	// description) or a dotfile ("src/.env") is misread as a file and the plan
+	// deliverable gate demands "create tsx/.ts" (observed in ses_mstda6uo:
+	// step "Проверить что остались только .tsx/.ts файлы").
+	const last = s.split(/[\\/]/).pop() ?? "";
+	const lastDot = last.lastIndexOf(".");
+	if (lastDot <= 0) return false;
 	return true;
 }
 

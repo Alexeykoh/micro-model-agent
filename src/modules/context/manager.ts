@@ -1,5 +1,6 @@
 import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
+import { FactExtractor } from "./fact-extractor";
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
@@ -50,6 +51,19 @@ function truncate(s: string, max: number): string {
   return s.slice(0, max - 3) + "...";
 }
 
+function looksLikeErrorPaste(text: string): boolean {
+  // Error markers.
+  if (/(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(text)) {
+    return true;
+  }
+  // Structural signals of pasted compiler/runtime output: source frames
+  // ("270|  }_s(...)"), path:line:col references, and stack-trace lines.
+  if (/(?:^|\n)\s*\d+\s*\|/.test(text)) return true;
+  if (/[\w./\\-]+\.[a-z]{1,6}:\d+:\d+/.test(text)) return true;
+  if (/(?:^|\n)\s*at\s+\S+/.test(text)) return true;
+  return false;
+}
+
 export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
   const failures: Map<string, TriedAndFailed> = new Map();
 
@@ -88,12 +102,13 @@ export class ContextManager {
   private peakTokens = 0;
   private budget: ContextBudget;
   private compactionThreshold: number;
-  private fileFacts: string[] = [];
-  private decisionFacts: string[] = [];
-  private errorFacts: string[] = [];
+  private facts = new FactExtractor();
   /** Latest real user instruction (skips <system-summary> blocks). */
   private lastUserTask = "";
-  private static readonly MAX_FACTS = 20;
+  /** First real user instruction of the session — survives resetUserTurn(). */
+  private sessionMission = "";
+  /** Latest user message that looks like a pasted error/log (never a task). */
+  private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
@@ -155,9 +170,12 @@ export class ContextManager {
    */
   resetUserTurn(): void {
     this.iterationsSinceCompaction = 0;
-    // A new user message begins a new task — drop the previous turn's task so
-    // the fresh instruction becomes the one preserved at compaction.
+    // A new user message begins a new turn — drop the previous turn's task
+    // so the fresh instruction becomes the one preserved at compaction. The
+    // session mission survives: an error/log paste in the new turn must not
+    // erase the original goal.
     this.lastUserTask = "";
+    this.lastUserFeedback = "";
   }
 
   getQuality(): number {
@@ -179,7 +197,7 @@ export class ContextManager {
     const msgCount = this.messages.length || 1;
     const errorDensity = Math.max(
       0,
-      1 - Math.min(1, this.errorFacts.length / msgCount),
+      1 - Math.min(1, this.facts.errorCount / msgCount),
     );
 
     const freshness = Math.max(
@@ -202,14 +220,23 @@ export class ContextManager {
     // `user` envelopes that must not overwrite it (observed: after compaction
     // the model had forgotten "удали /bicycles, почини стили" and re-read
     // files aimlessly for 40+ iterations).
-    if (msg.role === "user" && !this.lastUserTask) {
-      const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+    if (msg.role === "user") {
+      const text =
+        typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
       if (
         text.trim() &&
         !text.startsWith("<system-summary>") &&
         !text.includes("[Compressed:")
       ) {
-        this.lastUserTask = text.trim();
+        if (looksLikeErrorPaste(text) && (this.lastUserTask || this.sessionMission)) {
+          this.lastUserFeedback = text.trim().slice(0, 400);
+        } else if (!this.lastUserTask && !this.lastUserFeedback) {
+          // No new task inside a turn that already captured an error/log paste:
+          // the paste's follow-up messages are tool-result continuations, not a
+          // fresh instruction, so the session mission must win at compaction.
+          this.lastUserTask = text.trim();
+          if (!this.sessionMission) this.sessionMission = text.trim();
+        }
       }
     }
     // Auto-attach pending images to the next user message
@@ -332,27 +359,29 @@ export class ContextManager {
     const oldTurns = this.messages.slice(0, cutoff);
     const recentTurns = this.messages.slice(cutoff);
 
-    this.extractFacts(oldTurns);
+    this.facts.extract(oldTurns);
 
     const parts: string[] = [];
     parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
 
     // Carry the user's actual instruction forward — the model must never lose
-    // the task it is working on just because 40 turns got compacted away.
-    if (this.lastUserTask) {
-      const task = this.lastUserTask.slice(0, 400);
-      parts.push(`[Task: ${task}]`);
+    // the task it is working on just because 40 turns got compacted away. The
+    // per-turn task falls back to the session mission (first real instruction)
+    // so a pasted error/log in the current turn cannot erase the goal.
+    const task = (this.lastUserTask || this.sessionMission).slice(0, 400);
+    if (task) parts.push(`[Task: ${task}]`);
+    if (this.lastUserFeedback && !task.startsWith(this.lastUserFeedback)) {
+      parts.push(`[User feedback: ${this.lastUserFeedback}]`);
     }
 
-    if (this.fileFacts.length > 0) {
-      parts.push(`[Files: ${this.fileFacts.slice(-15).join("; ")}]`);
-    }
-    if (this.decisionFacts.length > 0) {
-      parts.push(`[Decisions: ${this.decisionFacts.slice(-5).join("; ")}]`);
-    }
-    if (this.errorFacts.length > 0) {
-      parts.push(`[Errors: ${this.errorFacts.slice(-3).join("; ")}]`);
-    }
+    const filesLine = this.facts.filesLine();
+    if (filesLine) parts.push(filesLine);
+    const deletedLine = this.facts.deletedLine();
+    if (deletedLine) parts.push(deletedLine);
+    const decisionsLine = this.facts.decisionsLine();
+    if (decisionsLine) parts.push(decisionsLine);
+    const errorsLine = this.facts.errorsLine();
+    if (errorsLine) parts.push(errorsLine);
 
     const triedAndFailed = extractTriedAndFailed(oldTurns);
     if (triedAndFailed.length > 0) {
@@ -389,93 +418,6 @@ export class ContextManager {
     }
   }
 
-  private extractFacts(turns: Message[]): void {
-    // Absolute Windows paths ("E:\proj\src\a.ts") need an optional drive prefix;
-    // without it the colon breaks the match and the fact is silently dropped.
-    const DRIVE = "(?:[a-zA-Z]:[\\\\/])?";
-    const filePatterns = [
-      new RegExp(`(?:Created|Updated|Written|Deleted|Moved) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      // edit_file returns "Replaced in <path>" — the most common write signal
-      // in agent sessions. Without this pattern, every edit_file fact is lost
-      // at compaction and the model re-reads the same files after each one.
-      new RegExp(`Replaced in ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`Файл (?:создан|обновлён|записан|удалён|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`file (?:created|updated|written|deleted|moved):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-    ];
-
-    const newFiles: string[] = [];
-    const newDecisions: string[] = [];
-    const newErrors: string[] = [];
-
-    for (const msg of turns) {
-      const content = getMessageText(msg.content);
-
-      // Never feed a previous <system-summary> block into new facts — that is
-      // the source of recursive summary nesting (summary inside summary).
-      if (
-        msg.role === "user" &&
-        (content.startsWith("<system-summary>") ||
-          content.includes("[Compressed:"))
-      ) {
-        continue;
-      }
-
-      if (msg.role === "tool") {
-        for (const pattern of filePatterns) {
-          for (const match of content.matchAll(pattern)) {
-            newFiles.push(match[1]);
-          }
-        }
-
-        if (content.includes("Plan:") && content.includes("[")) {
-          const planLine = content
-            .split("\n")
-            .find((line) => line.includes("Plan:"));
-          if (planLine) newDecisions.push(planLine.trim());
-        }
-      }
-
-      if (msg.role === "assistant") {
-        if (content.includes("decided:") || content.includes("decision:")) {
-          const line = content
-            .split("\n")
-            .find((l) => l.includes("decided:") || l.includes("decision:"));
-          if (line) newDecisions.push(line.trim().slice(0, 200));
-        }
-      }
-
-      if (
-        content.includes("Error:") ||
-        content.includes("failed") ||
-        content.includes("Ошибка:") ||
-        content.includes("не удалось")
-      ) {
-        const line = content
-          .split("\n")
-          .find(
-            (l) =>
-              l.includes("Error:") ||
-              l.includes("failed") ||
-              l.includes("Ошибка:") ||
-              l.includes("не удалось"),
-          );
-        if (line) newErrors.push(line.trim().slice(0, 250));
-      }
-    }
-
-    // Deduplicate and cap facts to prevent unbounded growth
-    const dedup = (arr: string[]): string[] => [...new Set(arr)];
-    this.fileFacts = dedup([...this.fileFacts, ...newFiles]).slice(
-      -ContextManager.MAX_FACTS,
-    );
-    this.decisionFacts = dedup([...this.decisionFacts, ...newDecisions]).slice(
-      -ContextManager.MAX_FACTS,
-    );
-    this.errorFacts = dedup([...this.errorFacts, ...newErrors]).slice(
-      -ContextManager.MAX_FACTS,
-    );
-  }
-
   /**
    * Replace the system prompt in place (keeps it first) or prepend a new one.
    * Used to refresh dynamic prompt blocks (e.g. the plan checklist) mid-run.
@@ -493,6 +435,11 @@ export class ContextManager {
     return [...this.messages];
   }
 
+  /**
+   * Reset everything that belongs to the current conversation turn.
+   * Fact lists (FactExtractor) intentionally survive clear() — they are
+   * session-scoped compaction state, not per-turn.
+   */
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;
@@ -500,6 +447,8 @@ export class ContextManager {
     this.compactionCount = 0;
     this.peakTokens = 0;
     this.lastUserTask = "";
+    this.lastUserFeedback = "";
+    this.sessionMission = "";
   }
 
   getEstimatedTokens(): number {

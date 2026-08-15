@@ -7,10 +7,15 @@ export interface Subtask {
   done: boolean;
 }
 
+export type StepKind = "create" | "delete";
+
 export interface PlanStep {
   id: number;
   description: string;
   status: StepStatus;
+  /** Model-declared intent. "delete" inverts the deliverable gate: named
+   *  files must be GONE, not present. Default "create". */
+  kind?: StepKind;
   note?: string;
   subtasks?: Subtask[];
 }
@@ -61,6 +66,7 @@ export class PlanCreator {
     title: string,
     stepDescriptions: string[],
     baseDir: string,
+    kinds?: StepKind[],
   ): Plan {
     const stepCount = stepDescriptions.length;
     return {
@@ -70,6 +76,7 @@ export class PlanCreator {
         id: i + 1,
         description: desc,
         status: "pending" as StepStatus,
+        kind: kinds?.[i] ?? "create",
       })),
       createdAt: new Date().toISOString(),
       baseDir,
@@ -87,6 +94,7 @@ export class PlanCreator {
       id: kept.length + i + 1,
       description: desc,
       status: "pending" as StepStatus,
+      kind: "create",
     }));
     return {
       id: plan.id,

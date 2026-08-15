@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { Auditor } from "../src/modules/execution/auditor";
+import { Auditor, parseTypecheckErrors } from "../src/modules/execution/auditor";
 import { PlanCreator } from "../src/modules/execution/planner";
 
 describe("Auditor", () => {
@@ -297,6 +297,50 @@ describe("Auditor", () => {
 		const result = await auditor.audit(plan);
 		expect(result.passed).toBe(false);
 		expect(result.missingFiles.length).toBeGreaterThan(0);
+	});
+
+	it("passes a done delete-kind step when its files are gone", async () => {
+		const plan = PlanCreator.createPlan(
+			"test",
+			["Remove src/old.js and src/stale.ts"],
+			tmpDir,
+		);
+		plan.steps[0].kind = "delete";
+		plan.steps[0].status = "done";
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(true);
+		expect(result.missingFiles).toEqual([]);
+		expect(result.leftoverFiles).toEqual([]);
+	});
+
+	it("fails a done delete-kind step when a named file still exists", async () => {
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "old.js"), "x");
+		const plan = PlanCreator.createPlan("test", ["Remove src/old.js"], tmpDir);
+		plan.steps[0].kind = "delete";
+		plan.steps[0].status = "done";
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(false);
+		expect(result.leftoverFiles).toEqual(["src/old.js"]);
+	});
+
+	it("does not run a typecheck when there is no tsconfig.json", async () => {
+		const plan = PlanCreator.createPlan("test", ["Create src/index.ts"], tmpDir);
+		plan.steps[0].status = "done";
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "index.ts"), "export const a = 1;\n");
+		const result = await auditor.audit(plan);
+		expect(result.passed).toBe(true);
+		expect(result.typecheckError).toBeNull();
+	});
+});
+
+describe("parseTypecheckErrors", () => {
+	it("extracts the first tsc error from output", () => {
+		const out =
+			"src/a.ts(1,1): error TS6133: 'x' is declared but its value is never read.\nsrc/b.ts(2,2): error TS2322: type mismatch";
+		expect(parseTypecheckErrors(out)).toContain("error TS6133");
+		expect(parseTypecheckErrors("Build finished successfully")).toBeNull();
 	});
 });
 
