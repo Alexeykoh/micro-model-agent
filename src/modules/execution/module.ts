@@ -13,7 +13,7 @@ import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import { detectTestResults } from "../../tools/bash";
-import type { Plan } from "./planner";
+import type { Plan, PlanStep, StepKind } from "./planner";
 import {
 	extractFileLikeTokens,
 	stripUrls,
@@ -139,7 +139,7 @@ export class ExecutionModule implements AgentModule {
 			{
 				name: "plan",
 				description:
-					'Create, update, show, abort, list, switch, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive current plan and clear active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)',
+					'Create, update, show, abort, list, switch, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive current plan and clear active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- For steps that REMOVE files, pass kinds: ["delete"] aligned with steps (the done-gate verifies those files are gone instead of demanding they exist).',
 				parameters: {
 					type: "object",
 					properties: {
@@ -157,6 +157,12 @@ export class ExecutionModule implements AgentModule {
 						},
 						title: { type: "string" },
 						steps: { type: "array", items: { type: "string" } },
+						kinds: {
+							type: "array",
+							items: { type: "string", enum: ["create", "delete"] },
+							description:
+								'Optional per-step intent, aligned 1:1 with steps. Pass "delete" for steps whose purpose is REMOVING files — the done-gate then requires those files to be GONE (not present). Defaults to "create".',
+						},
 						step: { type: "number" },
 						status: { type: "string", enum: ["done", "failed", "skipped"] },
 						note: { type: "string" },
@@ -255,8 +261,30 @@ export class ExecutionModule implements AgentModule {
 						if (steps.length === 0) {
 							return { success: false, output: t("plan.no_steps") };
 						}
+						const kindsRaw = Array.isArray(args.kinds)
+							? args.kinds.map(String)
+							: [];
+						if (kindsRaw.length > 0 && kindsRaw.length !== steps.length) {
+							return { success: false, output: t("plan.kinds_mismatch") };
+						}
+						const invalidKinds = kindsRaw.filter(
+							(k) => k !== "create" && k !== "delete",
+						);
+						if (invalidKinds.length > 0) {
+							return {
+								success: false,
+								output: t("plan.kinds_invalid", {
+									kinds: invalidKinds.join(", "),
+								}),
+							};
+						}
 						this.preserveActive();
-						const plan = PlanCreator.createPlan(title, steps, this.baseDir);
+						const plan = PlanCreator.createPlan(
+							title,
+							steps,
+							this.baseDir,
+							kindsRaw as StepKind[],
+						);
 						this.setPlan(plan);
 						const display = PlanCreator.toPromptBlock(plan, 0);
 						let output = t("plan.created", {
@@ -364,22 +392,33 @@ export class ExecutionModule implements AgentModule {
 						}
 					}
 
-					// Deliverable gate: marking a step done must mean its named
-					// files actually exist. Without this the model could mark a
-					// step done right after deleting its source file (observed in
-					// ses_msstxxff: `del bicycles.ts` → `plan update step=2
-					// status=done` while the file was gone) and the final audit
-					// then passed because every step was self-certified done.
+					// Deliverable gate: marking a step done must match its declared
+					// intent. "create" (default) → named files must exist; "delete"
+					// → named files must be GONE. Intent is model-declared (kind),
+					// never keyword-inferred (rule #10).
 					if (status === "done") {
-						const missing = this.missingStepDeliverables(target);
-						if (missing.length > 0) {
-							return {
-								success: false,
-								output: t("plan.deliverables_missing", {
-									step: String(stepId),
-									files: missing.join(", "),
-								}),
-							};
+						if (target.kind === "delete") {
+							const leftovers = this.stillExistingDeliverables(target);
+							if (leftovers.length > 0) {
+								return {
+									success: false,
+									output: t("plan.deliverables_remain", {
+										step: String(stepId),
+										files: leftovers.join(", "),
+									}),
+								};
+							}
+						} else {
+							const missing = this.missingStepDeliverables(target);
+							if (missing.length > 0) {
+								return {
+									success: false,
+									output: t("plan.deliverables_missing", {
+										step: String(stepId),
+										files: missing.join(", "),
+									}),
+								};
+							}
 						}
 					}
 
@@ -982,28 +1021,34 @@ export class ExecutionModule implements AgentModule {
 		const allExist = stepPaths.every((p) =>
 			existsSync(resolve(this.baseDir, p)),
 		);
-
-		if (!allExist) return;
+		const allGone = stepPaths.every((p) =>
+			!existsSync(resolve(this.baseDir, p)),
+		);
+		const satisfied =
+			step.kind === "delete" ? allGone && !allExist : allExist;
+		if (!satisfied) return;
 
 		// Step gate: verify files have content (not empty)
-		const emptyFiles: string[] = [];
-		for (const p of stepPaths) {
-			try {
-				const content = readFileSync(resolve(this.baseDir, p), "utf-8");
-				if (content.trim().length < 10) {
-					emptyFiles.push(p);
+		if (step.kind !== "delete") {
+			const emptyFiles: string[] = [];
+			for (const p of stepPaths) {
+				try {
+					const content = readFileSync(resolve(this.baseDir, p), "utf-8");
+					if (content.trim().length < 10) {
+						emptyFiles.push(p);
+					}
+				} catch {
+					// If we can't read it, rely on existsSync result
 				}
-			} catch {
-				// If we can't read it, rely on existsSync result
 			}
-		}
 
-		if (emptyFiles.length > 0 && contextManager) {
-			contextManager.addMessage({
-				role: "user",
-				content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
-			});
-			return;
+			if (emptyFiles.length > 0 && contextManager) {
+				contextManager.addMessage({
+					role: "user",
+					content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
+				});
+				return;
+			}
 		}
 
 		// All checks passed — advance
@@ -1045,6 +1090,17 @@ export class ExecutionModule implements AgentModule {
 		const tokens = extractFileLikeTokens(stripUrls(step.description));
 		if (tokens.length === 0) return [];
 		return tokens.filter((p) => !findExistingFile(this.baseDir, p));
+	}
+
+	/**
+	 * File tokens named in a step description that still resolve to a real
+	 * file. The inverse of missingStepDeliverables — used by the gate for
+	 * delete-kind steps ("done" means the files are gone).
+	 */
+	private stillExistingDeliverables(step: { description: string }): string[] {
+		const tokens = extractFileLikeTokens(stripUrls(step.description));
+		if (tokens.length === 0) return [];
+		return tokens.filter((p) => findExistingFile(this.baseDir, p));
 	}
 
 	/**

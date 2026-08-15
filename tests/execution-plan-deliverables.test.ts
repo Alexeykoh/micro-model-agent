@@ -166,4 +166,69 @@ describe("plan update deliverable gate", () => {
 		expect(res.success).toBe(false);
 		expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
 	});
+
+	it("allows marking a delete-kind step done once its files are gone", async () => {
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Remove src/AboutPage.js"],
+			kinds: ["delete"],
+		});
+		expect(execModule.getTracker()!.getStep(1)!.kind).toBe("delete");
+
+		// File still exists → blocked.
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "AboutPage.js"), "x");
+		const blocked = await tool.handler(ctx, {
+			action: "update",
+			step: 1,
+			status: "done",
+		});
+		expect(blocked.success).toBe(false);
+		expect(blocked.output).toContain("AboutPage.js");
+		expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+
+		// File gone → done accepted.
+		rmSync(join(tmpDir, "src", "AboutPage.js"));
+		const ok = await tool.handler(ctx, {
+			action: "update",
+			step: 1,
+			status: "done",
+		});
+		expect(ok.success).toBe(true);
+		expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
+	});
+
+	it("rejects an invalid kinds value", async () => {
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		const res = await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Remove src/a.js"],
+			kinds: ["explode"],
+		});
+		expect(res.success).toBe(false);
+	});
+
+	it("still blocks done when a create-kind file was just deleted (regression ses_msstxxff)", async () => {
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Replace emoji in bicycles.ts"],
+		});
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "bicycles.ts"), "export const x = 1;\n");
+		rmSync(join(tmpDir, "src", "bicycles.ts"));
+		const res = await tool.handler(ctx, {
+			action: "update",
+			step: 1,
+			status: "done",
+		});
+		expect(res.success).toBe(false);
+	});
 });
