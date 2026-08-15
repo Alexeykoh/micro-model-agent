@@ -36,8 +36,8 @@ describe("isFilePathLike", () => {
     expect(isFilePathLike("tsx/.ts")).toBe(false);
     expect(isFilePathLike("src/.env")).toBe(false);
     expect(isFilePathLike(".gitignore")).toBe(false);
-    expect(isFilePathLike("dist/app.js.map")).toBe(true);
-    expect(isFilePathLike("docs/Report.final")).toBe(true);
+    expect(isFilePathLike("dist\\app.js.map")).toBe(true);
+    expect(isFilePathLike("src/App.TSX")).toBe(true);
   });
 });
 
