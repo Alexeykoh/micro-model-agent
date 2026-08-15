@@ -7,6 +7,7 @@ import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifier
 import {
 	SKIP_DIRS,
 	findTestFile,
+	findTypecheckRoot,
 	hasTestStep,
 	runTests,
 	runTypecheck,
@@ -122,8 +123,12 @@ export class Auditor {
 		const leftoverFiles: string[] = [];
 
 		for (const filePath of createFiles) {
-			if (findExistingFile(this.baseDir, filePath)) {
-				existingFiles.push(filePath);
+			const resolved = findExistingFile(this.baseDir, filePath);
+			if (resolved) {
+				// Keep the resolved absolute path: findTypecheckRoot walks up
+				// from it to the nearest tsconfig, and a relative token would
+				// resolve against the process cwd instead of baseDir.
+				existingFiles.push(resolved);
 			} else {
 				missingFiles.push(filePath);
 			}
@@ -151,19 +156,19 @@ export class Auditor {
 		// Real typecheck: the audit must catch "the build is broken" even when
 		// every file exists (observed: deleting .js files left the .tsx sources
 		// with 11 tsc errors and the agent still declared success). Runs only
-		// when a tsconfig.json exists AND the file checks already passed —
-		// an audit that is doomed by missing/leftover files must not pay a 90s
-		// tsc spawn. Inconclusive results never block.
+		// when a tsconfig.json is reachable from baseDir or the resolved step
+		// files AND the file checks already passed — an audit that is doomed by
+		// missing/leftover files must not pay a 90s tsc spawn. Inconclusive
+		// results never block.
 		let typecheckError: string | null = null;
-		if (
-			missingFiles.length === 0 &&
-			leftoverFiles.length === 0 &&
-			existsSync(join(this.baseDir, "tsconfig.json"))
-		) {
-			try {
-				typecheckError = await runTypecheck(this.baseDir);
-			} catch {
-				typecheckError = null;
+		if (missingFiles.length === 0 && leftoverFiles.length === 0) {
+			const root = findTypecheckRoot(this.baseDir, existingFiles);
+			if (root) {
+				try {
+					typecheckError = await runTypecheck(root);
+				} catch {
+					typecheckError = null;
+				}
 			}
 		}
 
@@ -186,7 +191,7 @@ export class Auditor {
 			});
 		}
 
-		const testsFailing = testRun !== null && testRun.failed > 0;
+		const testsFailing = testRun !== null && !testRun.passed;
 		const typecheckFailing = typecheckError !== null;
 		const passed =
 			missingFiles.length === 0 &&

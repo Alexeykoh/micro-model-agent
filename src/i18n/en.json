@@ -467,6 +467,7 @@
   "exec.hints": "\n[Hints]\n{hints}",
   "exec.file_rewrite_warning": "\u26a0\ufe0f File {file} has been rewritten {count} times. Consider a different approach \u2014 the current fix strategy is not working.",
   "exec.forbidden_cmd": "STOP using \"{cmd}\" via the bash tool \u2014 it is not a native Windows cmd.exe command and has failed repeatedly this session. Use the dedicated tool instead: grep \u2192 the grep tool, ls/dir \u2192 list_dir, find \u2192 glob, rm \u2192 delete_file, sed \u2192 edit_file, touch \u2192 write_file, which \u2192 `where`, cp/mv \u2192 move_file, diff \u2192 read_file. Do NOT call bash for this purpose again.",
+  "exec.npm_exec_hint": "\"could not determine executable to run\" \u2014 no \"bin\" for that package/script. Use \"npm run <script>\" (script must exist in package.json) or \"bunx <pkg>\" for a package that declares a bin.",
   "hall.max_retries_exhausted": "Model returned empty or insufficient responses after multiple retries",
   "hall.short_response": "Response too short or empty",
   "hall.repetitive": "Response too repetitive ({pct}% overlap)",

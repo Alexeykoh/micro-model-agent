@@ -167,4 +167,61 @@ describe("LspModule", () => {
     );
     expect(module.isLspDisabled()).toBe(false);
   });
+
+  it("disables only the failing server, keeping other servers active", async () => {
+    const baseDir = join(tmp, "proj4");
+    const srcDir = join(baseDir, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "a.css"), "body { color: red; }", "utf-8");
+    writeFileSync(join(srcDir, "a.ts"), "export const a = 1;", "utf-8");
+
+    const module = new LspModule({ enabled: true } as any);
+    const plugin = module.getPlugin();
+    const ctx = {
+      baseDir,
+      logger: { warn: () => {} },
+    } as any;
+    const checkedPaths: string[] = [];
+    (module as any).client.checkFile = async (filePath: string) => {
+      checkedPaths.push(filePath);
+      if (filePath.endsWith(".css")) throw new Error("css server not found");
+      return [];
+    };
+
+    // Three consecutive CSS failures disable only the css server.
+    for (let i = 0; i < 3; i++) {
+      const r = { success: true, output: "css written ok" };
+      await plugin.onAfterTool!(
+        ctx,
+        { name: "write_file", arguments: { path: "src/a.css" } },
+        r,
+      );
+    }
+    expect(module.isServerDisabled("npx:vscode-css-languageserver --stdio")).toBe(
+      true,
+    );
+    expect(module.isLspDisabled()).toBe(true);
+
+    // A 4th CSS write after disable: silenced, output untouched.
+    const cssAgain = { success: true, output: "css written ok" };
+    await plugin.onAfterTool!(
+      ctx,
+      { name: "write_file", arguments: { path: "src/a.css" } },
+      cssAgain,
+    );
+    expect(cssAgain.output).toBe("css written ok");
+
+    // A TS check still runs — checkFile really received the .ts path.
+    const tsResult = { success: true, output: "ts written ok" };
+    await plugin.onAfterTool!(
+      ctx,
+      { name: "write_file", arguments: { path: "src/a.ts" } },
+      tsResult,
+    );
+    expect(module.isServerDisabled("npx:typescript-language-server --stdio")).toBe(
+      false,
+    );
+    expect(tsResult.output).toBe("ts written ok");
+    expect(checkedPaths.some((p) => p.endsWith("a.ts"))).toBe(true);
+  });
 });

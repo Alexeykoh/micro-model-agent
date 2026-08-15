@@ -61,7 +61,7 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
     css: {
       command: 'npx',
       args: ['vscode-css-languageserver', '--stdio'],
-      timeout: 10000,
+      timeout: 20000,
       autoInstall: true,
       workspaceMarkers: ['package.json'],
     },

@@ -26,6 +26,7 @@ export class BridgeDriver implements BrowserDriver {
   private proc: ChildProcessWithoutNullStreams | null = null
   private rl: ReadlineInterface | null = null
   private pending = new Map<number, (resp: BridgeResponse) => void>()
+  private lastStderr: string[] = []
   private nextId = 1
   private lastUrl = ''
   private console = new ConsoleBuffer(500)
@@ -36,8 +37,12 @@ export class BridgeDriver implements BrowserDriver {
     this.maxConsoleLineChars = opts.maxConsoleLineChars ?? 400
   }
 
-  private async send(cmd: string, params: Record<string, unknown> = {}): Promise<BridgeResponse> {
-    if (!this.proc || !this.rl) throw new Error('Bridge is not running')
+  private async send(cmd: string, params: Record<string, unknown> = {}, retried = false): Promise<BridgeResponse> {
+    if (!this.proc || !this.rl) {
+      if (retried || cmd === 'close') throw new Error('Bridge is not running')
+      this.spawnBridge()
+      return this.send(cmd, params, true)
+    }
     const id = this.nextId++
     const response = await new Promise<BridgeResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -83,7 +88,10 @@ export class BridgeDriver implements BrowserDriver {
     const script = bridgeScriptPath()
     const proc = spawn('node', [script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.proc = proc
-    proc.stderr.on('data', () => {})
+    this.lastStderr = []
+    proc.stderr.on('data', (chunk: Buffer) => {
+      this.lastStderr = [...this.lastStderr.slice(-4), chunk.toString()]
+    })
     const rl = createInterface({ input: proc.stdout })
     this.rl = rl
     rl.on('line', (line) => {
@@ -99,14 +107,30 @@ export class BridgeDriver implements BrowserDriver {
         resolver(resp)
       }
     })
-    proc.on('exit', () => {
-      for (const [, resolver] of this.pending) {
-        resolver({ id: -1, ok: false, error: 'Bridge process exited' })
-      }
-      this.pending.clear()
+    proc.on('error', (err) => {
+      if (this.proc !== proc) return // stale child — a newer bridge is alive
+      this.failPending(`Bridge process failed to start: ${err.message}`)
       this.proc = null
       this.rl = null
     })
+    proc.on('exit', (code) => {
+      if (this.proc !== proc) return // stale child — a newer bridge is alive
+      const stderrTail = this.lastStderr.join('').trim()
+      this.failPending(
+        stderrTail
+          ? `Bridge process exited (code ${code}): ${stderrTail.slice(0, 300)}`
+          : `Bridge process exited (code ${code})`,
+      )
+      this.proc = null
+      this.rl = null
+    })
+  }
+
+  private failPending(error: string): void {
+    for (const [, resolver] of this.pending) {
+      resolver({ id: -1, ok: false, error })
+    }
+    this.pending.clear()
   }
 
   async goto(url: string, timeoutMs: number): Promise<void> {

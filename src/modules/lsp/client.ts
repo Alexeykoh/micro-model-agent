@@ -1,16 +1,7 @@
-import {
-  spawn,
-  execSync,
-  type ChildProcess,
-  type SpawnOptions,
-} from "child_process";
+import { spawn, execSync, type ChildProcess, type SpawnOptions } from "child_process";
 import { resolve } from "path";
 import { platform } from "os";
-import type {
-  LspDiagnostic,
-  LspServerConfig,
-  PublishDiagnosticsParams,
-} from "./types";
+import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
 
 interface PendingRequest {
@@ -43,16 +34,21 @@ export class LspClient {
       await this.startServer(config, projectRoot);
 
       const rootUri = this.pathToUri(projectRoot);
-      const initResult = await this.sendRequest(
-        "initialize",
-        {
-          processId: process.pid,
-          rootUri,
-          workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-          capabilities: { textDocument: { publishDiagnostics: {} } },
-        },
-        timeout,
-      );
+      const initParams = {
+        processId: process.pid,
+        rootUri,
+        workspaceFolders: [{ uri: rootUri, name: "workspace" }],
+        capabilities: { textDocument: { publishDiagnostics: {} } },
+      };
+      try {
+        await this.sendRequest("initialize", initParams, timeout);
+      } catch (e) {
+        // npx auto-install can blow past the initialize timeout on first run — retry once.
+        if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
+        await this.shutdown();
+        await this.startServer(config, projectRoot);
+        await this.sendRequest("initialize", initParams, timeout);
+      }
       this.initialized = true;
 
       this.sendNotification("initialized", {});
@@ -65,10 +61,8 @@ export class LspClient {
         this.diagnosticsResolve = resolve;
         this.diagnostics = [];
         this.diagnosticsTimer = setTimeout(() => {
-          if (this.diagnosticsResolve) {
-            this.diagnosticsResolve([]);
-            this.diagnosticsResolve = null;
-          }
+          this.diagnosticsResolve?.([]);
+          this.diagnosticsResolve = null;
         }, timeout);
       });
 
@@ -83,9 +77,7 @@ export class LspClient {
 
       return await diagPromise;
     } catch (e) {
-      // Re-throw so the LspModule can surface the failure. Returning [] here
-      // silently hid every LSP failure (dead server, missing binary, timeout)
-      // for entire sessions.
+      // Re-throw so the LspModule can surface failures instead of hiding them.
       throw e instanceof Error ? e : new Error(String(e));
     } finally {
       await this.shutdown();
@@ -115,10 +107,7 @@ export class LspClient {
         cwd: projectRoot,
       };
       if (isWin) {
-        // A bare `.cmd`/`.bat` shim cannot be spawned directly under Node —
-        // `spawn npx EINVAL` on every write/edit (observed across a whole
-        // session, silently killing LSP diagnostics). Run the resolved command
-        // line through cmd.exe instead.
+        // A `.cmd` shim can't be spawned directly under Node (`spawn npx EINVAL`) — run via cmd.exe.
         spawnCommand = buildWinCommandLine(spawnCommand, args);
         spawnArgs = [];
         spawnOpts.shell = true;
@@ -140,9 +129,7 @@ export class LspClient {
       this.process = proc;
 
       setTimeout(() => {
-        if (!this.initialized && this.process) {
-          reject(new Error("LSP server start timeout"));
-        }
+        if (!this.initialized && this.process) reject(new Error("LSP server start timeout"));
       }, config.timeout ?? 10000);
     });
   }
@@ -198,10 +185,8 @@ export class LspClient {
           clearTimeout(this.diagnosticsTimer);
           this.diagnosticsTimer = null;
         }
-        if (this.diagnosticsResolve) {
-          this.diagnosticsResolve(this.diagnostics);
-          this.diagnosticsResolve = null;
-        }
+        this.diagnosticsResolve?.(this.diagnostics);
+        this.diagnosticsResolve = null;
       }
       return;
     }
@@ -275,6 +260,8 @@ export class LspClient {
         this.process = null;
       }
       this.initialized = false;
+      this.buffer = "";
+      this.contentLength = -1;
       if (this.diagnosticsTimer) {
         clearTimeout(this.diagnosticsTimer);
         this.diagnosticsTimer = null;
@@ -284,10 +271,9 @@ export class LspClient {
 
   private pathToUri(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
-    if (/^[a-zA-Z]:/.test(normalized)) {
-      return `file:///${normalized}`;
-    }
-    return `file://${normalized}`;
+    return /^[a-zA-Z]:/.test(normalized)
+      ? `file:///${normalized}`
+      : `file://${normalized}`;
   }
 
   private languageFromPath(filePath: string): string {
