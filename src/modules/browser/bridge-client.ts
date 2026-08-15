@@ -108,11 +108,13 @@ export class BridgeDriver implements BrowserDriver {
       }
     })
     proc.on('error', (err) => {
+      if (this.proc !== proc) return // stale child — a newer bridge is alive
       this.failPending(`Bridge process failed to start: ${err.message}`)
       this.proc = null
       this.rl = null
     })
     proc.on('exit', (code) => {
+      if (this.proc !== proc) return // stale child — a newer bridge is alive
       const stderrTail = this.lastStderr.join('').trim()
       this.failPending(
         stderrTail
