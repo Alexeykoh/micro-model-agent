@@ -11,6 +11,7 @@ import { Auditor, findExistingFile } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
+import type { ContentPart } from "../../llm/provider";
 import { detectTestResults } from "../../tools/bash";
 import type { Plan } from "./planner";
 import {
@@ -1054,7 +1055,20 @@ export class ExecutionModule implements AgentModule {
 		const manager = ctx?.contextManager;
 		if (!manager) return "";
 		const history = manager.getActiveHistory();
-		const firstUser = history.find((m: { role: string }) => m.role === "user");
+		// The first user message may be an injected <system-summary> (compaction
+		// block) — it is NOT the task. Coverage must compare the plan against the
+		// model's real instruction (observed: a compaction summary's stale file
+		// list produced a bogus "plan is missing files" warning).
+		const firstUser = history.find(
+			(m: { role: string; content: string | ContentPart[] }) => {
+				if (m.role !== "user") return false;
+				const text = getMessageText(m.content);
+				return (
+					!text.startsWith("<system-summary>") &&
+					!text.includes("[Compressed:")
+				);
+			},
+		);
 		if (!firstUser) return "";
 		return getMessageText(firstUser.content).trim();
 	}
