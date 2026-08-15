@@ -996,7 +996,12 @@ export class ExecutionModule implements AgentModule {
 		const step = this.tracker?.getCurrentStep();
 		if (!step) return;
 		const stepText = step.description.toLowerCase();
-		const stepPaths = step.description.match(/\b[\w./\\-]+\.[a-z]+/gi) || [];
+		// Shared file-token filter (allow-list of real extensions, extension-only
+		// segments rejected). A step like "Удалить .js, оставить .tsx/.ts" must
+		// NOT produce the phantom token "tsx/.ts" — that never exists, making
+		// allGone trivially true and auto-advancing a delete step while the real
+		// files to delete still exist (the raw regex path did exactly that).
+		const stepPaths = extractFileLikeTokens(stripUrls(step.description)) || [];
 
 		// Step gate: verify dependencies when mentioned — check BEFORE file paths
 		const isDepsStep =
