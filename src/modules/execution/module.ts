@@ -13,6 +13,7 @@ import { checkPlanCoverage } from "./plan-coverage";
 import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import { detectTestResults } from "../../tools/bash";
+import { forbiddenWindowsCommand } from "./windows-commands";
 import type { Plan, PlanStep, StepKind } from "./planner";
 import {
 	extractFileLikeTokens,
@@ -51,6 +52,11 @@ export class ExecutionModule implements AgentModule {
 	 * buries the warnings the model should react to).
 	 */
 	private pendingMessages: Array<{ role: "user"; content: string }> = [];
+	// Per-command failure counters for forbidden Windows commands (grep/sed/ls/
+	// find/… invoked through the bash tool). A hard stop after the second
+	// failure is evidence-based (actual command failures), not task
+	// classification (rule #10).
+	private forbiddenBashFailures = new Map<string, number>();
 
 	constructor(baseDir: string, stuckThreshold = 6) {
 		this.baseDir = baseDir;
@@ -809,6 +815,25 @@ export class ExecutionModule implements AgentModule {
 					);
 				}
 				if (!result.success) {
+					// Hard stop for forbidden Windows commands: after the second
+					// failure of the same forbidden command (grep/sed/ls/find/…),
+					// inject a STOP message so the session stops burning bash calls
+					// on commands cmd.exe does not have.
+					if (call.name === "bash") {
+						const cmd = String(call.arguments?.command ?? "");
+						const forbidden = forbiddenWindowsCommand(cmd);
+						if (forbidden) {
+							const n =
+								(this.forbiddenBashFailures.get(forbidden) || 0) + 1;
+							this.forbiddenBashFailures.set(forbidden, n);
+							if (n >= 2) {
+								this.pendingMessages.push({
+									role: "user",
+									content: `<system-summary>${t("exec.forbidden_cmd", { cmd: forbidden })}</system-summary>`,
+								});
+							}
+						}
+					}
 					this.stuckDetector.recordToolError(call.name, result.output);
 
 					// Immediately queue an actionable hint on failure (don't wait for
