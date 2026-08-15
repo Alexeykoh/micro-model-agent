@@ -191,7 +191,7 @@ export class Auditor {
 			});
 		}
 
-		const testsFailing = testRun !== null && testRun.failed > 0;
+		const testsFailing = testRun !== null && !testRun.passed;
 		const typecheckFailing = typecheckError !== null;
 		const passed =
 			missingFiles.length === 0 &&

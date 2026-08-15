@@ -92,13 +92,14 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
 
 	const run = detectTestResults(output);
 	if (!run) {
-		// No recognizable runner summary. If the process exited non-zero we
-		// cannot tell whether tests failed or the runner is missing, so treat
-		// as checked-but-inconclusive (do not block).
+		// No recognizable runner summary. A non-zero exit means the test run
+		// (or its runner) failed — the audit must not pass on it; report a
+		// single "at least one failed" since we cannot count them. Exit 0
+		// with unrecognized output stays checked-but-inconclusive.
 		return {
 			checked: true,
 			passed: entry.exitCode === 0,
-			failed: entry.exitCode === 0 ? 0 : -1,
+			failed: entry.exitCode === 0 ? 0 : 1,
 			passedCount: 0,
 			detail: output.slice(0, 200).trim(),
 			command: "bun test",

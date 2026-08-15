@@ -427,6 +427,7 @@ describe("Auditor test-run verification (R4)", () => {
 
 	afterEach(() => {
 		if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
+		vi.restoreAllMocks();
 	});
 
 	it("fails the audit when a test step exists and tests actually fail", async () => {
@@ -502,5 +503,49 @@ describe("bad", () => { it("fails", () => { expect(1).toBe(2); }); });\n`,
 		const result = await auditor.audit(plan);
 		expect(result.passed).toBe(true);
 		expect(result.testRun).toBeNull();
+	});
+
+	it("counts an unrecognized non-zero test run (failed: -1) as failing", async () => {
+		// Regression (Task B): runTests returns failed: -1 when the runner
+		// output is unrecognized and the exit code non-zero. The audit gate's
+		// old `failed > 0` check read -1 as "no failures" and passed a plan
+		// whose tests actually failed. The `passed` field must drive the
+		// decision, not the sentinel failed count.
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(
+			join(tmpDir, "src/util.ts"),
+			"export const add = (a: number, b: number) => a + b;\n",
+		);
+		mkdirSync(join(tmpDir, "test"), { recursive: true });
+		writeFileSync(join(tmpDir, "test", "util.test.ts"), "");
+
+		const spy = vi
+			.spyOn(auditRunners, "runTests")
+			.mockResolvedValue({
+				checked: true,
+				passed: false,
+				failed: -1,
+				passedCount: 0,
+				detail: "unknown",
+				command: "bun test",
+			});
+
+		const plan = PlanCreator.createPlan(
+			"test",
+			[
+				"Create src/util.ts with add function",
+				"Run tests with bun test",
+			],
+			tmpDir,
+		);
+		plan.steps[0].status = "done";
+		plan.steps[1].status = "done";
+
+		const result = await auditor.audit(plan);
+		expect(spy).toHaveBeenCalled();
+		expect(result.testRun).not.toBeNull();
+		expect(result.testRun!.passed).toBe(false);
+		expect(result.passed).toBe(false);
+		expect(result.summary).toContain("FAILING");
 	});
 });
