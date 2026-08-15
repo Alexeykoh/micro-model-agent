@@ -29,6 +29,37 @@ interface ToolCallAcc {
   arguments: string;
 }
 
+function buildRequestBody(opts: {
+  model: string;
+  messages: unknown[];
+  tools?: ToolDefinition[];
+  stream: boolean;
+  maxTokens?: number;
+  reasoningEffort?: string;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    messages: opts.messages,
+    stream: opts.stream,
+  };
+  if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+  if (opts.reasoningEffort) {
+    body.reasoning_effort = opts.reasoningEffort;
+  }
+  if (opts.tools && opts.tools.length > 0) {
+    body.tools = opts.tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+    body.tool_choice = "auto";
+  }
+  return body;
+}
+
 export class OpenAICompatProvider implements LLMProvider {
   readonly model: string;
   readonly contextWindow: number;
@@ -95,26 +126,14 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
-    const body: Record<string, unknown> = {
+    const body = buildRequestBody({
       model: this.model,
       messages,
+      tools,
       stream: true,
-      max_tokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
-    };
-    if (options?.reasoningEffort) {
-      body.reasoning_effort = options.reasoningEffort;
-    }
-    if (tools && tools.length > 0) {
-      body.tools = tools.map((t) => ({
-        type: "function",
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-        },
-      }));
-      body.tool_choice = "auto";
-    }
+      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
+      reasoningEffort: options?.reasoningEffort,
+    });
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -266,26 +285,14 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): Promise<Chunk[]> {
-    const body: Record<string, unknown> = {
+    const body = buildRequestBody({
       model: this.model,
       messages,
+      tools,
       stream: false,
-      max_tokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
-    };
-    if (options?.reasoningEffort) {
-      body.reasoning_effort = options.reasoningEffort;
-    }
-    if (tools && tools.length > 0) {
-      body.tools = tools.map((t) => ({
-        type: "function",
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-        },
-      }));
-      body.tool_choice = "auto";
-    }
+      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
+      reasoningEffort: options?.reasoningEffort,
+    });
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
