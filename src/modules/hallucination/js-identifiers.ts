@@ -235,6 +235,15 @@ export function isFilePathLike(s: string): boolean {
 		if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
 		return FILE_EXTENSIONS.has(ext);
 	}
+	// Tokens with a directory separator: require the LAST segment to carry a
+	// real file name (a non-empty stem before the extension). Otherwise an
+	// extension-only segment like "tsx/.ts" (from ".tsx/.ts" in a step
+	// description) or a dotfile ("src/.env") is misread as a file and the plan
+	// deliverable gate demands "create tsx/.ts" (observed in ses_mstda6uo:
+	// step "Проверить что остались только .tsx/.ts файлы").
+	const last = s.split(/[\\/]/).pop() ?? "";
+	const lastDot = last.lastIndexOf(".");
+	if (lastDot <= 0) return false;
 	return true;
 }
 

@@ -31,6 +31,14 @@ describe("isFilePathLike", () => {
     expect(isFilePathLike("node.js")).toBe(false);
     expect(isFilePathLike("react.js")).toBe(false);
   });
+
+  it("rejects extension-only path segments (empty stem)", () => {
+    expect(isFilePathLike("tsx/.ts")).toBe(false);
+    expect(isFilePathLike("src/.env")).toBe(false);
+    expect(isFilePathLike(".gitignore")).toBe(false);
+    expect(isFilePathLike("dist/app.js.map")).toBe(true);
+    expect(isFilePathLike("docs/Report.final")).toBe(true);
+  });
 });
 
 describe("extractFileLikeTokens", () => {
@@ -46,6 +54,12 @@ describe("extractFileLikeTokens", () => {
         stripUrls("Clone https://github.com/example/repo.git then edit src/main.ts"),
       ),
     ).toEqual(["src/main.ts"]);
+  });
+
+  it("extracts no tokens from an extension-list phrase", () => {
+    expect(
+      extractFileLikeTokens("Проверить что остались только .tsx/.ts файлы"),
+    ).toEqual([]);
   });
 });
 
