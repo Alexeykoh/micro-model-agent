@@ -435,6 +435,11 @@ export class ContextManager {
     return [...this.messages];
   }
 
+  /**
+   * Reset everything that belongs to the current conversation turn.
+   * Fact lists (FactExtractor) intentionally survive clear() — they are
+   * session-scoped compaction state, not per-turn.
+   */
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;

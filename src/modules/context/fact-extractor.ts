@@ -154,17 +154,9 @@ export class FactExtractor {
     if (this.decisionFacts.length === 0) return null;
     return `[Decisions: ${this.decisionFacts.slice(-5).join("; ")}]`;
   }
-
   /** `[Errors: e]` line, or null. */
   errorsLine(): string | null {
     if (this.errorFacts.length === 0) return null;
     return `[Errors: ${this.errorFacts.slice(-3).join("; ")}]`;
-  }
-
-  reset(): void {
-    this.fileFacts = [];
-    this.deletedFacts = [];
-    this.decisionFacts = [];
-    this.errorFacts = [];
   }
 }
