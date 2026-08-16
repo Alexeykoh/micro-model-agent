@@ -10,6 +10,63 @@ describe('PluginManager', () => {
     expect(pm.getAllPlugins()).toHaveLength(1)
   })
 
+  it('should deduplicate by name — higher version wins', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'dup', version: '1.0.0' })
+    const res = pm.register({ name: 'dup', version: '2.0.0' })
+    expect(res.status).toBe('registered')
+    const plugins = pm.getAllPlugins()
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0].version).toBe('2.0.0')
+  })
+
+  it('should keep the existing plugin when the incoming version is lower', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'dup', version: '2.0.0' })
+    const res = pm.register({ name: 'dup', version: '1.0.0' })
+    expect(res.status).toBe('skipped_older')
+    const plugins = pm.getAllPlugins()
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0].version).toBe('2.0.0')
+  })
+
+  it('should deduplicate unversioned plugins as 0.0.0', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'dup', version: '1.0.0' })
+    pm.register({ name: 'dup' })
+    const plugins = pm.getAllPlugins()
+    expect(plugins).toHaveLength(1)
+    expect(plugins[0].version).toBe('1.0.0')
+  })
+
+  it('should return duplicate status for identical name+version', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'dup', version: '1.0.0' })
+    const res = pm.register({ name: 'dup', version: '1.0.0' })
+    expect(res.status).toBe('skipped_older')
+    expect(pm.getAllPlugins()).toHaveLength(1)
+  })
+
+  it('should record source and expose it via getPluginInfos', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'global-p', version: '1.0.0' }, 'global')
+    pm.register({ name: 'project-p' }, 'project')
+    pm.register({ name: 'builtin-p' }, 'builtin')
+    const infos = pm.getPluginInfos()
+    expect(infos).toHaveLength(3)
+    const byName = Object.fromEntries(infos.map((i) => [i.plugin.name, i.source]))
+    expect(byName['global-p']).toBe('global')
+    expect(byName['project-p']).toBe('project')
+    expect(byName['builtin-p']).toBe('builtin')
+  })
+
+  it('should look up a plugin by name via getPlugin', () => {
+    const pm = new PluginManager()
+    pm.register({ name: 'target', version: '3.0.0' })
+    expect(pm.getPlugin('target')?.version).toBe('3.0.0')
+    expect(pm.getPlugin('missing')).toBeNull()
+  })
+
   it('should run onBeforeTool hooks and short-circuit on false', async () => {
     const pm = new PluginManager()
     pm.register({

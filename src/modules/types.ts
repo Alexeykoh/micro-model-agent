@@ -12,6 +12,12 @@ export interface AgentPlugin {
 	name: string;
 	priority?: number;
 	isBuiltin?: boolean;
+	/** Semver version of the plugin. Used for dedup (higher wins) and `mma plugins list`. */
+	version?: string;
+	/** Minimum MMA version (semver) required to run this plugin. Loader skips incompatible ones. */
+	minMmaVersion?: string;
+	/** Where the plugin came from: "builtin" | "global" | "project". Set by loader/registration. */
+	source?: "builtin" | "global" | "project";
 	/** Add a prompt block to the system prompt (runs once at build time). */
 	onBuildPrompt?(): string | null;
 	/**

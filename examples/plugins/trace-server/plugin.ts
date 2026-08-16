@@ -8,8 +8,9 @@
  *   context.ts  context snapshots + conversation-history text rendering
  *   plans.ts    on-disk plan reading + broadcasting + 2s poll
  *   server.ts   HTTP + SSE server
- *   page.html   the frontend (served verbatim from disk — escape sequences
- *               inside its <script> stay literal, so no template mangling)
+ *   page.html   frontend markup (served verbatim from disk)
+ *   styles.css  frontend theme
+ *   app.js      frontend SSE + rendering logic
  *
  * The plugin starts a local HTTP server when the agent session starts and
  * streams every loop event to the browser over SSE: phases (thinking
@@ -59,22 +60,35 @@ interface LLMResponseLike {
   calls?: ToolCallLike[];
 }
 
-// ---- frontend page ----
+// ---- frontend assets ----
 //
 // Read at load time, verbatim. `import.meta.url` resolves against the plugin
 // folder whether it runs from source (examples/) or an installed copy
 // (~/.mma/plugins/trace-server/ or <project>/.mma/plugins/trace-server/).
 const here = dirname(fileURLToPath(import.meta.url));
-const PAGE_CANDIDATES = [
-  join(here, "page.html"),
-  join(here, "trace-server", "page.html"),
-  join(here, "dist", "examples", "plugins", "trace-server", "page.html"),
+const ASSET_DIR_CANDIDATES = [
+  here,
+  join(here, "trace-server"),
+  join(here, "dist", "examples", "plugins", "trace-server"),
 ];
-const PAGE_PATH = PAGE_CANDIDATES.find((p) => existsSync(p));
-const HTML = PAGE_PATH ? readFileSync(PAGE_PATH, "utf8") : "trace-server: page.html not found";
+const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "page.html")));
+
+function readAsset(name: string, fallback: string): string {
+  if (!ASSET_DIR) return fallback;
+  const p = join(ASSET_DIR, name);
+  return existsSync(p) ? readFileSync(p, "utf8") : fallback;
+}
+
+const ASSETS = {
+  html: readAsset("page.html", "trace-server: page.html not found"),
+  css: readAsset("styles.css", "/* trace-server: styles.css not found */"),
+  js: readAsset("app.js", "// trace-server: app.js not found"),
+};
 
 export const plugin = {
   name: "trace-server",
+  version: "0.1.0",
+  minMmaVersion: "0.36.0",
   priority: 100,
 
   onSessionStart(ctx: PluginContext): void {
@@ -86,7 +100,7 @@ export const plugin = {
     state.projectDir = (ctx.sessionManager as { projectDir?: string } | null)?.projectDir || null;
     state.lastPlansKey = "";
     state.planHistory = [];
-    startServer(HTML)
+    startServer(ASSETS)
       .then((url) => {
         broadcast({ type: "system", ts: Date.now(), message: `Trace server ready: ${url}` });
         // Push the session snapshot to already-open pages too (not only on

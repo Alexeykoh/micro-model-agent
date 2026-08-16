@@ -47,6 +47,7 @@ function getWinDecoder(): TextDecoder {
 export class LintOnWritePlugin implements AgentPlugin {
 	name = "lint-on-write";
 	priority = 10;
+	isBuiltin = true;
 	private _checkPromise: Promise<string | null> | null = null;
 	private _checkTimestamp = 0;
 

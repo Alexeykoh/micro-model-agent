@@ -7,6 +7,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
+import { createPluginCommand } from "./plugin-commands";
 import { fileURLToPath } from "url";
 
 function readVersion(): string {
@@ -333,6 +334,9 @@ export function createProgram(): Command {
 
 	// Add security commands
 	createSecurityCommand(program);
+
+	// Add plugin commands
+	createPluginCommand(program);
 
 	program
 		.argument("[prompt...]", "Prompt to execute")

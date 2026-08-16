@@ -95,4 +95,41 @@ describe("PluginLoader", () => {
     loader.loadFromDir(tmpDir, pm);
     expect(pm.getAllPlugins().map((p) => p.name)).toEqual(["def-plug"]);
   });
+
+  it("skips plugins whose minMmaVersion is higher than the current MMA version", () => {
+    writeFileSync(join(tmpDir, "too-new.ts"), pluginFile("too-new", `, version: "1.0.0", minMmaVersion: "9.9.9"`));
+    writeFileSync(join(tmpDir, "ok.ts"), pluginFile("ok", `, version: "1.0.0", minMmaVersion: "0.1.0"`));
+    const warned: string[] = [];
+    loader.loadFromDir(tmpDir, pm, { warn: (m) => warned.push(m) }, { mmaVersion: "0.38.0" });
+    expect(pm.getAllPlugins().map((p) => p.name)).toEqual(["ok"]);
+    expect(warned.some((m) => m.includes("too-new"))).toBe(true);
+  });
+
+  it("skips plugins with minMmaVersion even without an mmaVersion option", () => {
+    writeFileSync(join(tmpDir, "req.ts"), pluginFile("req", `, version: "1.0.0", minMmaVersion: "0.30.0"`));
+    loader.loadFromDir(tmpDir, pm);
+    expect(pm.getAllPlugins().map((p) => p.name)).toEqual(["req"]);
+  });
+
+  it("passes the source through to registered plugins", () => {
+    writeFileSync(join(tmpDir, "src.ts"), pluginFile("src-plug", `, version: "1.0.0"`));
+    loader.loadFromDir(tmpDir, pm, undefined, { source: "global", mmaVersion: "0.38.0" });
+    const infos = pm.getPluginInfos();
+    expect(infos).toHaveLength(1);
+    expect(infos[0].source).toBe("global");
+  });
+
+  it("deduplicates across dirs — higher version wins", () => {
+    const other = mkdtempSync(join(tmpdir(), "mma-plugins2-"));
+    try {
+      writeFileSync(join(tmpDir, "a.ts"), pluginFile("dup", `, version: "1.0.0"`));
+      writeFileSync(join(other, "b.ts"), pluginFile("dup", `, version: "2.0.0"`));
+      loader.loadFromDir(tmpDir, pm);
+      loader.loadFromDir(other, pm);
+      expect(pm.getAllPlugins()).toHaveLength(1);
+      expect(pm.getAllPlugins()[0].version).toBe("2.0.0");
+    } finally {
+      rmSync(other, { recursive: true });
+    }
+  });
 });

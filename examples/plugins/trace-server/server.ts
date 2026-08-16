@@ -12,7 +12,13 @@ import { state, flush, HOST, MAX_CLIENTS } from "./state";
 import { readPlans } from "./plans";
 import { stopPlanPolling } from "./plans";
 
-export function handleRequest(req: IncomingMessage, res: ServerResponse, html: string): void {
+export interface TraceAssets {
+  html: string;
+  css: string;
+  js: string;
+}
+
+export function handleRequest(req: IncomingMessage, res: ServerResponse, assets: TraceAssets): void {
   const reqUrl = new URL(req.url || "/", `http://${HOST}`);
   if (reqUrl.pathname === "/events") {
     if (state.clients.size >= MAX_CLIENTS) {
@@ -71,20 +77,30 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse, html: s
   }
   if (reqUrl.pathname === "/" || reqUrl.pathname === "/index.html") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(html);
+    res.end(assets.html);
+    return;
+  }
+  if (reqUrl.pathname === "/styles.css") {
+    res.writeHead(200, { "Content-Type": "text/css; charset=utf-8" });
+    res.end(assets.css);
+    return;
+  }
+  if (reqUrl.pathname === "/app.js") {
+    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+    res.end(assets.js);
     return;
   }
   res.writeHead(404, { "Content-Type": "text/plain" });
   res.end("Not found");
 }
 
-export function startServer(html: string): Promise<string> {
+export function startServer(assets: TraceAssets): Promise<string> {
   if (state.server) return Promise.resolve(state.traceUrl);
   if (state.starting) return state.starting;
   const desired = Number(process.env.MMA_TRACE_PORT) || 0;
   state.starting = new Promise<string>((resolve, reject) => {
     const attempt = (port: number, left: number) => {
-      const srv = createServer((req, res) => handleRequest(req, res, html));
+      const srv = createServer((req, res) => handleRequest(req, res, assets));
       srv.on("error", (err: NodeJS.ErrnoException) => {
         if (port !== 0 && left > 0 && err.code === "EADDRINUSE") attempt(port + 1, left - 1);
         else {

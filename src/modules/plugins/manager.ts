@@ -1,17 +1,59 @@
 import type { AgentPlugin } from '../types'
 import type { ToolCall, ToolResult } from '../../tools/types'
 import type { AgentPhase, LLMResponse } from '../../core/types'
+import { semverGt } from '../updater/checker'
+
+export type RegisterResult =
+  | { status: 'registered' }
+  | { status: 'skipped_older'; existing: AgentPlugin }
+  | { status: 'duplicate' }
+
+export interface PluginInfo {
+  plugin: AgentPlugin
+  source?: 'builtin' | 'global' | 'project'
+}
 
 export class PluginManager {
   private plugins: AgentPlugin[] = []
 
-  register(plugin: AgentPlugin): void {
+  /**
+   * Register a plugin. Plugins with the same `name` are deduplicated — the
+   * higher `version` wins (unversioned plugins count as "0.0.0"). The loser is
+   * discarded; `skipped_older` lets the caller warn about the dropped copy.
+   */
+  register(plugin: AgentPlugin, source?: 'builtin' | 'global' | 'project'): RegisterResult {
+    if (source) plugin.source = source
+    const existing = this.plugins.find((p) => p.name === plugin.name)
+    if (existing) {
+      if (semverGt(plugin.version || '0.0.0', existing.version || '0.0.0')) {
+        this.plugins = this.plugins.filter((p) => p.name !== plugin.name)
+        this.plugins.push(plugin)
+        this.sort()
+        return { status: 'registered' }
+      }
+      return { status: 'skipped_older', existing }
+    }
     this.plugins.push(plugin)
+    this.sort()
+    return { status: 'registered' }
+  }
+
+  private sort(): void {
     this.plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0))
   }
 
   getAllPlugins(): AgentPlugin[] {
     return [...this.plugins]
+  }
+
+  /** Detailed plugin list (name, version, source) for REPL / CLI display. */
+  getPluginInfos(): PluginInfo[] {
+    return [...this.plugins].map((plugin) => ({ plugin, source: plugin.source }))
+  }
+
+  /** Find a registered plugin by name, or null. */
+  getPlugin(name: string): AgentPlugin | null {
+    return this.plugins.find((p) => p.name === name) ?? null
   }
 
   runOnBuildPrompt(): (string | null)[] {

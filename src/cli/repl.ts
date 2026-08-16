@@ -595,14 +595,22 @@ export class Repl implements ReplContext {
 		}
 
 		if (this.pluginManager) {
-			const plugins = this.pluginManager
-				.getAllPlugins()
-				.filter((p) => !p.isBuiltin);
-			if (plugins.length > 0) {
-				const pluginNames = plugins.map((p) => p.name).join(", ");
+			const infos = this.pluginManager
+				.getPluginInfos()
+				.filter(({ plugin }) => !plugin.isBuiltin);
+			if (infos.length > 0) {
+				const pluginNames = infos
+					.map(({ plugin, source }) => {
+						const version = plugin.version
+							? `${pc.dim(plugin.version)}`
+							: "";
+						const origin = source ? pc.dim(` [${source}]`) : "";
+						return `${plugin.name}${version}${origin}`;
+					})
+					.join(", ");
 				row(
 					t("repl.plugins_label"),
-					`${pc.white(String(plugins.length))} active  ${pc.dim(`(${pluginNames})`)}`,
+					`${pc.white(String(infos.length))} active  ${pc.dim(`(${pluginNames})`)}`,
 				);
 			}
 		}

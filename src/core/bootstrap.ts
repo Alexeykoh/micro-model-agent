@@ -35,6 +35,7 @@ import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
+import { readMmaVersion } from "./version";
 
 export function buildSystemInfo(
 	config: AppConfig,
@@ -373,8 +374,15 @@ export async function bootstrap(
 	const pluginLoader = new PluginLoader();
 	const globalPluginsDir = join(homedir(), ".mma", "plugins");
 	const projectPluginsDir = join(baseDir, ".mma", "plugins");
-	pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger);
-	pluginLoader.loadFromDir(projectPluginsDir, pluginManager, logger);
+	const mmaVersion = readMmaVersion();
+	pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger, {
+		source: "global",
+		mmaVersion,
+	});
+	pluginLoader.loadFromDir(projectPluginsDir, pluginManager, logger, {
+		source: "project",
+		mmaVersion,
+	});
 
 	contextManager.onCompact = (summary) => {
 		const meta = sessionManager.getActiveMeta();
