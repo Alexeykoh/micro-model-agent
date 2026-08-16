@@ -35,16 +35,23 @@ function readVersion(): string {
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
   updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
-}): void {
+}): UpdaterModule | undefined {
   try {
     const module = new UpdaterModule(
       config.updater,
       readVersion(),
       "micro-models-agent",
+      {
+        info: (m) => process.stderr.write(pc.dim(m) + "\n"),
+        warn: (m) => process.stderr.write(pc.yellow(m) + "\n"),
+        error: (m) => process.stderr.write(pc.red(m) + "\n"),
+      },
     );
     module.start();
+    return module;
   } catch {
     // Auto-update is best-effort; never let it crash startup.
+    return undefined;
   }
 }
 
@@ -74,7 +81,7 @@ async function main(): Promise<void> {
       exitOnComplete,
     );
 
-    startAutoUpdate(config);
+    const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
     if (jsonMode) {
       const result = await agent.run(prompt);
@@ -97,6 +104,7 @@ async function main(): Promise<void> {
         ),
       );
       process.stdout.write("\n");
+      await updater?.waitForIdle();
       process.exit(result.success ? 0 : 1);
     }
 
@@ -126,6 +134,7 @@ async function main(): Promise<void> {
     renderer.flush();
     const exitCode = printRunResult(result, () => renderer.flush());
     agent.shutdown();
+    await updater?.waitForIdle();
     process.exit(exitCode);
   } else {
     const configPath = join(homedir(), ".mma", "config.json");

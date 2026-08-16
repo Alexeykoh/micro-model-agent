@@ -1,6 +1,23 @@
 import { describe, it, expect, vi } from 'vitest'
 import { platform } from 'os'
-import { Updater } from '../src/modules/updater/checker'
+import { Updater, semverGt } from '../src/modules/updater/checker'
+
+describe('semverGt', () => {
+  it('compares major/minor/patch numerically', () => {
+    expect(semverGt('0.36.2', '0.36.1')).toBe(true)
+    expect(semverGt('0.36.1', '0.36.1')).toBe(false)
+    expect(semverGt('0.36.1', '0.36.2')).toBe(false)
+    expect(semverGt('1.0.0', '0.99.99')).toBe(true)
+    expect(semverGt('0.4.0', '0.3.0')).toBe(true)
+    expect(semverGt('0.3.0', '0.4.0')).toBe(false)
+  })
+
+  it('tolerates v-prefix and partial parts', () => {
+    expect(semverGt('v0.36.2', '0.36.1')).toBe(true)
+    expect(semverGt('0.10', '0.9.1')).toBe(true)
+    expect(semverGt('0.36.2', '0.36')).toBe(true)
+  })
+})
 
 describe('Updater', () => {
   it('should report current version', () => {
@@ -29,6 +46,18 @@ describe('Updater', () => {
     global.fetch = mockFetch as any
 
     const updater = new Updater('0.3.0', 'micro-models-agent')
+    const result = await updater.check()
+    expect(result.updateAvailable).toBe(false)
+  })
+
+  it('should NOT report a downgrade when current is newer than latest', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ 'dist-tags': { latest: '0.3.0' } }),
+    })
+    global.fetch = mockFetch as any
+
+    const updater = new Updater('0.36.2', 'micro-models-agent')
     const result = await updater.check()
     expect(result.updateAvailable).toBe(false)
   })

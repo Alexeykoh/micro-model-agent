@@ -75,4 +75,24 @@ describe('UpdaterModule', () => {
     mod.stop()
     expect(mod.isStarted()).toBe(false)
   })
+
+  it('waitForIdle resolves after the single-shot check settles', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ 'dist-tags': { latest: '0.3.0' } }),
+    })
+    global.fetch = mockFetch as any
+
+    const mod = new UpdaterModule(makeConfig(), '0.3.0', 'micro-models-agent')
+    mod.setInstallEnabled(false)
+    mod.start()
+    await mod.waitForIdle(2000)
+    expect(mod.isStarted()).toBe(false)
+  })
+
+  it('waitForIdle returns immediately when never started', async () => {
+    const mod = new UpdaterModule(makeConfig(), '0.3.0', 'micro-models-agent')
+    await mod.waitForIdle(500)
+    expect(mod.isStarted()).toBe(false)
+  })
 })

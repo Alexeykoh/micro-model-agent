@@ -23,6 +23,8 @@ export class UpdaterModule {
   private logger: UpdaterLogger;
   private started = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Promise of the current run-loop pass (resolves when it settles). */
+  private idlePromise: Promise<void> | null = null;
   /** Test hook: disable real npm installs. */
   private installEnabled = true;
 
@@ -63,7 +65,7 @@ export class UpdaterModule {
   start(): void {
     if (this.started || !this.config.enabled) return;
     this.started = true;
-    void this.runLoop();
+    this.idlePromise = this.runLoop();
   }
 
   stop(): void {
@@ -72,6 +74,17 @@ export class UpdaterModule {
       clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  /**
+   * Wait for the current check/install cycle to settle, bounded by timeoutMs.
+   * Used by one-shot CLI runs so a background `npm install -g` isn't killed by
+   * process.exit() before it completes. No-op when the module never started.
+   */
+  async waitForIdle(timeoutMs = 130000): Promise<void> {
+    const idle = this.idlePromise;
+    if (!idle) return;
+    await Promise.race([idle, new Promise((r) => setTimeout(r, timeoutMs))]);
   }
 
   private async runLoop(): Promise<void> {

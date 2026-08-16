@@ -20,6 +20,18 @@ export type InstallRunner = (
   options: { timeout: number; windowsHide: boolean },
 ) => Promise<{ error?: string }>
 
+/** Numeric semver comparison (x.y.z, prerelease ignored). */
+export function semverGt(a: string, b: string): boolean {
+  const pa = a.replace(/^v/, '').split(/[.-]/).map((p) => Number.parseInt(p, 10) || 0)
+  const pb = b.replace(/^v/, '').split(/[.-]/).map((p) => Number.parseInt(p, 10) || 0)
+  for (let i = 0; i < 3; i++) {
+    const na = pa[i] ?? 0
+    const nb = pb[i] ?? 0
+    if (na !== nb) return na > nb
+  }
+  return false
+}
+
 const defaultRunner: InstallRunner = async (command, args, options) => {
   const { execFile } = await import('child_process')
   return new Promise((resolve) => {
@@ -64,7 +76,7 @@ export class Updater {
         return { updateAvailable: false, current: this.currentVersion, error: 'No latest tag' }
       }
 
-      const updateAvailable = latest !== this.currentVersion
+      const updateAvailable = semverGt(latest, this.currentVersion)
       return { updateAvailable, current: this.currentVersion, latest }
 
     } catch (e: any) {
