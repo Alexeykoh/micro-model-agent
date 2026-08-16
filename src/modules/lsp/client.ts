@@ -281,8 +281,12 @@ export class LspClient {
     const map: Record<string, string> = {
       ts: "typescript",
       tsx: "typescriptreact",
+      mts: "typescript",
+      cts: "typescript",
       js: "javascript",
       jsx: "javascriptreact",
+      mjs: "javascript",
+      cjs: "javascript",
       py: "python",
       go: "go",
       rs: "rust",

@@ -71,8 +71,12 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
 const LANGUAGE_MAP: Record<string, string> = {
   ts: 'typescript',
   tsx: 'typescript',
+  mts: 'typescript',
+  cts: 'typescript',
   js: 'javascript',
   jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
   py: 'python',
   rs: 'rust',
   go: 'go',

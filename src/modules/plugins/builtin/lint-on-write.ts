@@ -87,7 +87,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 		ext: string,
 		baseDir: string,
 	): Promise<string | null> {
-		if (ext === ".ts" || ext === ".tsx") {
+		if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
 			// Syntax-only check via bun's parser (~200ms) instead of `npx tsc`
 			// (~3-5s per write). Full type errors are still surfaced by the
 			// debounced project typecheck below when a tsconfig exists.
@@ -127,7 +127,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 			}
 		}
 
-		if (ext === ".js" || ext === ".jsx") {
+		if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
 			try {
 				await runAsync(`node --check "${filePath}"`, baseDir, 5000);
 				return null;
