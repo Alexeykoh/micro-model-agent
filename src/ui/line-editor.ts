@@ -56,6 +56,13 @@ export class LineEditor implements LineInput {
 	private stash: { lines: string[]; row: number; col: number } | null = null;
 	private isDone = false;
 	private isPaste = false;
+	/** Pasted characters accumulated between `paste-start` and `paste-end`.
+	 *  Inserted as a single batch on `paste-end` — one render instead of one
+	 *  per keypress, so a paste appears as a paste, not as fast typing. */
+	private pasteBuffer = "";
+	/** Whether the last paste keypress was a bare CR — used to collapse a
+	 *  CRLF pair into a single newline (Windows clipboard text). */
+	private pasteLastWasCR = false;
 	private lastWasCR = false;
 	private questionCb: ((answer: string) => void) | null = null;
 	private rawMode = false;
@@ -197,20 +204,35 @@ export class LineEditor implements LineInput {
 
 		if (name === "paste-start" || seq === "\x1b[200~") {
 			this.isPaste = true;
+			this.pasteBuffer = "";
+			this.pasteLastWasCR = false;
 			return;
 		}
 		if (name === "paste-end" || seq === "\x1b[201~") {
 			this.isPaste = false;
-			this.render();
+			if (this.pasteBuffer) {
+				this.insertPaste(this.pasteBuffer);
+			} else {
+				this.render();
+			}
+			this.pasteBuffer = "";
+			this.pasteLastWasCR = false;
 			return;
 		}
 		if (this.isPaste) {
-			if (name === "return" || seq === "\r" || seq === "\n") {
-				this.insertText("\n");
+			if (name === "return" || seq === "\r") {
+				this.pasteBuffer += "\n";
+				this.pasteLastWasCR = true;
+			} else if (name === "enter" || seq === "\n") {
+				if (this.pasteLastWasCR) {
+					this.pasteLastWasCR = false;
+				} else {
+					this.pasteBuffer += "\n";
+				}
 			} else if (str) {
-				this.insertText(str);
+				this.pasteLastWasCR = false;
+				this.pasteBuffer += str;
 			}
-			this.render();
 			return;
 		}
 
@@ -421,6 +443,27 @@ export class LineEditor implements LineInput {
 		chars.splice(this.col, 0, ...t);
 		this.setCurrentChars(chars);
 		this.col += t.length;
+		this.render();
+	}
+
+	/** Bulk-insert pasted text at the cursor. Splits on newlines so the buffer
+	 *  keeps one string per line (instead of embedding literal `\n` chars),
+	 *  and renders once — a paste must look like a paste, not like typing. */
+	private insertPaste(text: string): void {
+		const segments = text.split("\n");
+		if (segments.length === 1) {
+			this.insertText(segments[0]);
+			return;
+		}
+		const chars = this.currentChars();
+		const head = chars.slice(0, this.col).join("");
+		const tail = chars.slice(this.col).join("");
+		const lines: string[] = [head + segments[0]];
+		for (let i = 1; i < segments.length - 1; i++) lines.push(segments[i]);
+		lines.push(segments[segments.length - 1] + tail);
+		this.lines.splice(this.row, 1, ...lines);
+		this.row += segments.length - 1;
+		this.col = charLen(segments[segments.length - 1]);
 		this.render();
 	}
 

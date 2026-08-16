@@ -210,6 +210,37 @@ describe("LineEditor", () => {
     expect(lines).toEqual(["line1\nline2"]);
   });
 
+  it("collapses CRLF line endings when pasting (Windows clipboard)", async () => {
+    const { input, lines } = makeEditor();
+    input.pushData("\x1b[200~");
+    input.pushData("line1\r\nline2\r\nline3");
+    input.pushData("\x1b[201~");
+    input.pushData("\r");
+    await tick();
+    expect(lines).toEqual(["line1\nline2\nline3"]);
+  });
+
+  it("turns a lone trailing CR into a single trailing newline, not doubled", async () => {
+    const { input, lines } = makeEditor();
+    input.pushData("\x1b[200~");
+    input.pushData("line1\r");
+    input.pushData("\x1b[201~");
+    input.pushData("\r");
+    await tick();
+    expect(lines).toEqual(["line1\n"]);
+  });
+
+  it("renders the whole paste once instead of per character", async () => {
+    const { input, output } = makeEditor();
+    input.pushData("\x1b[200~");
+    input.pushData("hello\nworld");
+    input.pushData("\x1b[201~");
+    await tick();
+    // One render for the pasted block: one clear-line per layout row (2 rows).
+    const clears = (output.data.match(/\x1b\[2K/g) || []).length;
+    expect(clears).toBe(2);
+  });
+
   it("navigates history with up/down", async () => {
     const { editor, input, lines } = makeEditor({ history: ["prev"] });
     input.pushData("\x1b[A"); // up
