@@ -337,6 +337,8 @@
   "repl.reasoning_usage": "Использование: /reasoning",
   "repl.status": "Показать статус агента",
   "repl.status_usage": "Использование: /status",
+  "repl.plugins": "Список загруженных плагинов",
+  "repl.plugins_usage": "Использование: /plugins [--all]",
   "repl.sessions": "Список всех сессий (* активная)",
   "repl.sessions_usage": "Использование: /sessions",
   "repl.new": "Создать новую сессию",

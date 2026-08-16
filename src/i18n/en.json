@@ -343,6 +343,8 @@
   "repl.reasoning_usage": "Usage: /reasoning",
   "repl.status": "Show agent status",
   "repl.status_usage": "Usage: /status",
+  "repl.plugins": "List loaded plugins",
+  "repl.plugins_usage": "Usage: /plugins [--all]",
   "repl.sessions": "List all sessions (* active)",
   "repl.sessions_usage": "Usage: /sessions",
   "repl.new": "Create a new session",

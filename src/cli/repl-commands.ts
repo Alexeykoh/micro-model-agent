@@ -82,6 +82,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
 	rename: "session",
 	delete: "session",
 	skill: "skill",
+	plugins: "agent",
 };
 
 export function registerAllCommands(ctx: ReplContext): void {
@@ -466,6 +467,52 @@ function registerMmaCommands(ctx: ReplContext): void {
 			console.log(
 				`${t("repl.provider")}    ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
 			);
+		},
+	});
+	ctx.registerCommand({
+		name: "plugins",
+		description: t("repl.plugins"),
+		usage: t("repl.plugins_usage"),
+		action: (args: string[]) => {
+			if (!ctx.pluginManager) {
+				console.log(t("cli.plugins.none"));
+				return;
+			}
+			const showAll = args.includes("--all");
+			const infos = ctx.pluginManager.getPluginInfos();
+			const filtered = showAll
+				? infos
+				: infos.filter(({ plugin }) => !plugin.isBuiltin);
+			if (filtered.length === 0) {
+				console.log(t("cli.plugins.none"));
+				return;
+			}
+			const mmaVersion = version;
+			console.log(
+				t("cli.plugins.header", {
+					count: String(filtered.length),
+					mma: mmaVersion,
+				}),
+			);
+			for (const { plugin, source } of filtered) {
+				const v = plugin.version || "-";
+				const origin = source || "builtin";
+				const mark = plugin.isBuiltin
+					? t("cli.plugins.builtin_mark")
+					: " ";
+				console.log(`  ${mark} ${plugin.name}  v${v}  [${origin}]`);
+			}
+			if (!showAll) {
+				const builtinCount = infos.filter(({ plugin }) => plugin.isBuiltin)
+					.length;
+				if (builtinCount > 0) {
+					console.log(
+						pc.dim(
+							`  (${builtinCount} builtin hidden — /plugins --all to show)`,
+						),
+					);
+				}
+			}
 		},
 	});
 }
