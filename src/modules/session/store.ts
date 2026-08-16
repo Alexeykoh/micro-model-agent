@@ -26,7 +26,9 @@ export interface SessionLogEntry {
     | "compaction"
     | "tool_defs"
     | "audit"
-    | "plan";
+    | "plan"
+    | "context"
+    | "llm_usage";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -44,6 +46,40 @@ export interface SessionLogEntry {
   contextLimit?: number;
   toolCount?: number;
   toolNames?: string[];
+  // context event fields (snapshot / per-iteration stats)
+  window?: number;
+  systemBudget?: number;
+  reserveBudget?: number;
+  historyBudget?: number;
+  systemTokens?: number;
+  toolTokens?: number;
+  quality?: number;
+  messageCount?: number;
+  compactionCount?: number;
+  iterationsSinceCompaction?: number;
+  blocks?: Array<{
+    label: string;
+    priority: string;
+    tokens: number;
+    included: boolean;
+  }>;
+  // compaction detail fields
+  reason?: string;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  qualityBefore?: number;
+  qualityAfter?: number;
+  messagesBefore?: number;
+  messagesAfter?: number;
+  removedTurns?: number;
+  keptTurns?: number;
+  summary?: string;
+  // llm_usage fields
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  source?: string;
+  durationMs?: number;
 }
 
 export class SessionStore {

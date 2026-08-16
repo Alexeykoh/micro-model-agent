@@ -28,6 +28,33 @@ export interface ContextBudget {
 const COMPACTION_INTERVAL = 15;
 const KEEP_LAST_N = 6;
 
+export interface CompactResult {
+  /** Turns removed by the compaction (oldTurns). */
+  removedTurns: number;
+  /** Turns kept verbatim (recent, minus stale <system-summary>). */
+  keptTurns: number;
+  tokensBefore: number;
+  tokensAfter: number;
+  qualityBefore: number;
+  qualityAfter: number;
+  messagesBefore: number;
+  messagesAfter: number;
+  /** The inner [Compressed: ...] block (without the <system-summary> wrapper). */
+  summary: string;
+}
+
+export interface ContextSnapshot {
+  window: number;
+  budget: ContextBudget;
+  /** Estimated tokens currently in history (messages + tool defs). */
+  tokens: number;
+  toolTokens: number;
+  messageCount: number;
+  quality: number;
+  compactionCount: number;
+  iterationsSinceCompaction: number;
+}
+
 export interface TriedAndFailed {
   tool: string;
   args: string;
@@ -348,11 +375,18 @@ export class ContextManager {
     return totalTokens > this.budget.history * this.compactionThreshold;
   }
 
-  compact(): void {
+  compact(): CompactResult | null {
+    // Capture the pre-compaction state BEFORE any counters reset or rise —
+    // qualityBefore must reflect the context the model actually saw.
+    const tokensBefore = this.getEstimatedTokens();
+    const qualityBefore = this.getQuality();
+    const messagesBefore = this.messages.length;
+
     // Reset the counter even when nothing to compact — otherwise
     // needsCompaction() returns true forever after 15 iterations with few messages.
     this.iterationsSinceCompaction = 0;
-    if (this.messages.length <= KEEP_LAST_N * 2) return;
+    if (this.messages.length <= KEEP_LAST_N * 2) return null;
+
     this.compactionCount++;
 
     const cutoff = this.messages.length - KEEP_LAST_N * 2;
@@ -416,6 +450,35 @@ export class ContextManager {
     if (this.onCompact) {
       this.onCompact(summary);
     }
+
+    return {
+      removedTurns: oldTurns.length,
+      keptTurns: freshRecent.length,
+      tokensBefore,
+      tokensAfter: this.getEstimatedTokens(),
+      qualityBefore,
+      qualityAfter: this.getQuality(),
+      messagesBefore,
+      messagesAfter: this.messages.length,
+      summary: this.compactedBlock ?? "",
+    };
+  }
+
+  /**
+   * Snapshot of the current context state — used to log the initial context
+   * structure at session start and per-iteration context stats.
+   */
+  getSnapshot(): ContextSnapshot {
+    return {
+      window: this.contextWindow,
+      budget: { ...this.budget },
+      tokens: this.getEstimatedTokens(),
+      toolTokens: this.toolTokens,
+      messageCount: this.messages.length,
+      quality: this.getQuality(),
+      compactionCount: this.compactionCount,
+      iterationsSinceCompaction: this.iterationsSinceCompaction,
+    };
   }
 
   /**

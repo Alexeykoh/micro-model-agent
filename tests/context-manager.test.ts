@@ -440,6 +440,68 @@ describe("getQuality", () => {
   });
 });
 
+describe("ContextManager compaction result", () => {
+  it("returns null when there is nothing to compact", () => {
+    const cm = new ContextManager(1000);
+    cm.addMessage({ role: "user", content: "hello" });
+    cm.addMessage({ role: "assistant", content: "hi" });
+    expect(cm.compact()).toBeNull();
+    expect(cm.getCompactionCount()).toBe(0);
+  });
+
+  it("returns before/after token, quality and turn counts", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYSTEM" });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `message ${i} `.repeat(40) });
+      cm.addMessage({ role: "assistant", content: `response ${i} `.repeat(40) });
+    }
+    cm.noteIteration();
+    const tokensBefore = cm.getEstimatedTokens();
+    const qualityBefore = cm.getQuality();
+    const result = cm.compact();
+    expect(result).not.toBeNull();
+    expect(result!.removedTurns).toBeGreaterThan(0);
+    expect(result!.keptTurns).toBeGreaterThan(0);
+    expect(result!.tokensBefore).toBe(tokensBefore);
+    expect(result!.qualityBefore).toBe(qualityBefore);
+    expect(result!.tokensAfter).toBeLessThan(result!.tokensBefore);
+    expect(result!.summary).toContain("[Compressed:");
+    expect(result!.summary).toContain("[Task:");
+  });
+
+  it("returns keptTurns for the recent turns that survive verbatim", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYSTEM" });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `message ${i}` });
+      cm.addMessage({ role: "assistant", content: `response ${i}` });
+    }
+    const result = cm.compact();
+    // 21 messages (system + 10 user + 10 assistant); cutoff = 21-12 = 9
+    // removed (system + 8), last 12 kept verbatim
+    expect(result!.removedTurns).toBe(9);
+    expect(result!.keptTurns).toBe(12);
+  });
+});
+
+describe("ContextManager snapshot", () => {
+  it("reports budget, tokens, quality and compaction state", () => {
+    const cm = new ContextManager(32768);
+    cm.addMessage({ role: "user", content: "hello" });
+    cm.setToolTokens(100);
+    const snap = cm.getSnapshot();
+    expect(snap.window).toBe(32768);
+    expect(snap.budget.history).toBe(20643);
+    expect(snap.tokens).toBeGreaterThan(0);
+    expect(snap.toolTokens).toBe(100);
+    expect(snap.messageCount).toBe(1);
+    expect(snap.quality).toBeGreaterThanOrEqual(0);
+    expect(snap.compactionCount).toBe(0);
+    expect(snap.iterationsSinceCompaction).toBe(0);
+  });
+});
+
 describe("extractTriedAndFailed", () => {
   it("should extract repeated failures from tool messages", () => {
     const messages: Message[] = [

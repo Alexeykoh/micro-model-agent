@@ -119,7 +119,16 @@ export class Agent {
 		}
 	}
 
-	private buildSystemPrompt(): { prompt: string; excluded: string[] } {
+	private buildSystemPrompt(): {
+		prompt: string;
+		excluded: string[];
+		blocks: Array<{
+			label: string;
+			priority: string;
+			tokens: number;
+			included: boolean;
+		}>;
+	} {
 		const systemBudget = Math.floor(
 			this.deps.config.contextWindow *
 				this.deps.config.contextBudget.systemPrompt,
@@ -147,7 +156,58 @@ export class Agent {
 		if (pluginBlocks.length > 0) {
 			builder.addBlocks(pluginBlocks);
 		}
-		return builder.build();
+		const result = builder.build();
+		return {
+			prompt: result.prompt,
+			excluded: result.excluded,
+			blocks: result.blocks,
+		};
+	}
+
+	/**
+	 * Log the current context state to the session log. Called every iteration
+	 * so the session.jsonl shows a full timeline of how the context grows,
+	 * compacts, and what it consists of. The `start` snapshot additionally
+	 * carries the system-prompt block breakdown (which blocks, priorities,
+	 * token estimates, what was excluded by the budget).
+	 */
+	private logContextStat(
+		kind: "start" | "iteration",
+		iteration: number,
+		slog: SessionLogger,
+		blocks?: Array<{
+			label: string;
+			priority: string;
+			tokens: number;
+			included: boolean;
+		}>,
+	): void {
+		const cm = this.deps.contextManager;
+		if (typeof cm.getSnapshot !== "function") return;
+		const snap = cm.getSnapshot();
+		const history = cm.getActiveHistory();
+		const systemMsg = history.find((m) => m.role === "system");
+		slog.logContext({
+			kind,
+			iteration,
+			window: snap.window,
+			systemBudget: snap.budget.systemPrompt,
+			reserveBudget: snap.budget.responseReserve,
+			historyBudget: snap.budget.history,
+			systemTokens:
+				kind === "start" &&
+				systemMsg &&
+				typeof systemMsg.content === "string"
+					? this.deps.llmProvider.countTokens(systemMsg.content)
+					: undefined,
+			toolTokens: snap.toolTokens,
+			tokens: snap.tokens,
+			quality: snap.quality,
+			messageCount: snap.messageCount,
+			compactionCount: snap.compactionCount,
+			iterationsSinceCompaction: snap.iterationsSinceCompaction,
+			blocks,
+		});
 	}
 
 	getSystemPromptInfo(): {
@@ -415,12 +475,11 @@ export class Agent {
 			});
 
 			if (contextManager.needsCompaction()) {
-				contextManager.compact();
-				logger.debug("Context compacted");
-				slog.logCompaction(
-					`regular compaction, iteration ${iteration}`,
-					iteration,
-				);
+				const result = contextManager.compact();
+				if (result) {
+					logger.debug("Context compacted");
+					slog.logCompaction({ reason: "interval", iteration, ...result });
+				}
 			}
 
 			const currentTokens = contextManager.getEstimatedTokens();
@@ -433,26 +492,28 @@ export class Agent {
 					FORCED_COMPACTION_COOLDOWN
 			) {
 				lastForcedCompactionIteration = iteration;
-				contextManager.compact();
+				const result = contextManager.compact();
 				logger.warn(`Low context quality (${quality}%) — forced compaction`);
-				slog.logCompaction(
-					`quality-triggered compaction (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%), iteration ${iteration}`,
-					iteration,
-					currentTokens,
-					budget.history,
-				);
+				if (result) {
+					slog.logCompaction({
+						reason: `quality-triggered (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%)`,
+						iteration,
+						...result,
+					});
+				}
 			}
 			if (currentTokens > budget.history) {
-				contextManager.compact();
+				const result = contextManager.compact();
 				logger.warn(
 					`Context overflow (${currentTokens} > ${budget.history}), forced compaction`,
 				);
-				slog.logCompaction(
-					`forced compaction (${currentTokens} > ${budget.history}), iteration ${iteration}`,
-					iteration,
-					currentTokens,
-					budget.history,
-				);
+				if (result) {
+					slog.logCompaction({
+						reason: `overflow (${currentTokens} > ${budget.history})`,
+						iteration,
+						...result,
+					});
+				}
 			}
 
 			this.refreshSystemPrompt();
@@ -464,6 +525,13 @@ export class Agent {
 				iteration,
 			);
 
+			if (iteration === 1) {
+				const { blocks } = this.buildSystemPrompt();
+				this.logContextStat("start", iteration, slog, blocks);
+			} else {
+				this.logContextStat("iteration", iteration, slog);
+			}
+
 			let textContent = "";
 			let reasoningContent = "";
 			const toolCalls: ToolCall[] = [];
@@ -473,6 +541,8 @@ export class Agent {
 
 			this.emitPhase(iteration, "thinking", onPhase);
 			const llmStart = Date.now();
+			const promptBefore = apiPromptTokens;
+			const completionBefore = apiCompletionTokens;
 			logger.logLLMRequest(config.model, history.length, input, "agent");
 			try {
 				for await (const chunk of llmProvider.chat(
@@ -557,6 +627,29 @@ export class Agent {
 				undefined,
 				"agent",
 			);
+
+			// Log per-call token usage. llama.cpp streaming often omits `usage`,
+			// so fall back to local estimates (context tokens + chars/4) and
+			// mark the source — the log must distinguish real API numbers from
+			// heuristics.
+			{
+				const usagePrompt = apiPromptTokens - promptBefore;
+				const usageCompletion = apiCompletionTokens - completionBefore;
+				const source: "api" | "estimate" =
+					usagePrompt > 0 || usageCompletion > 0 ? "api" : "estimate";
+				const prompt = source === "api" ? usagePrompt : contextManager.getEstimatedTokens();
+				const completion =
+					source === "api"
+						? usageCompletion
+						: Math.ceil((textContent || reasoningContent).length / 4);
+				slog.logLlmUsage(iteration, {
+					promptTokens: prompt,
+					completionTokens: completion,
+					totalTokens: prompt + completion,
+					source,
+					durationMs: Date.now() - llmStart,
+				});
+			}
 
 			if (this.shutdownRequested) {
 				break;
@@ -725,8 +818,15 @@ export class Agent {
 						slog.logToolResult(call, result, duration, iteration);
 					}
 					if (contextManager.needsCompaction()) {
-						contextManager.compact();
-						logger.debug("Context compacted after tool result");
+						const result = contextManager.compact();
+						if (result) {
+							logger.debug("Context compacted after tool result");
+							slog.logCompaction({
+								reason: "after_tool",
+								iteration,
+								...result,
+							});
+						}
 					}
 					// Track per-tool failure counts (NOT just consecutive) so a tool
 					// that keeps failing while other tools succeed between attempts
