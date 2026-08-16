@@ -1,515 +1,4 @@
-/**
- * trace-server — live agent-loop trace in the browser.
- *
- * Single-file plugin, zero dependencies. Starts a local HTTP server when the
- * agent session starts and streams every loop event to the browser over SSE:
- * phases (thinking spinner), LLM calls (with task, timing, tool-call list),
- * tool start/end with full args/results and a compact arg summary, errors
- * (with stack), and streamed text/reasoning. No files are read — live only.
- *
- * Install:
- *   Windows:  copy to %USERPROFILE%\.mma\plugins\
- *   POSIX:    copy to ~/.mma/plugins/
- *   Project:  <project>/.mma/plugins/
- * Restart `mma`, open the URL printed at session start ("live trace → …").
- *
- * Config (env):
- *   MMA_TRACE_PORT         fixed port (default 0 = random free port)
- *   MMA_TRACE_HOST         bind address (default 127.0.0.1 — localhost only)
- *   MMA_TRACE_MAX_CLIENTS  SSE client cap (default 5)
- *   MMA_TRACE_OPEN         "0" disables auto-opening the browser at start
- *
- * Transport: SSE over node:http — works under both Bun and the Node dist.
- */
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
-import { exec } from "node:child_process";
-
-// ---- minimal structural types (duck-typed against AgentPlugin) ----
-
-interface ToolCallLike {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-interface ToolResultLike {
-  success: boolean;
-  output: string;
-  display?: string;
-  diff?: string;
-}
-interface SessionMetaLike {
-  id?: string;
-  name?: string;
-  model?: string;
-  messageCount?: number;
-  contextWindow?: number;
-  projectDir?: string;
-}
-interface LLMResponseLike {
-  type?: string;
-  content?: string;
-  calls?: ToolCallLike[];
-}
-interface PluginContext {
-  iteration?: number;
-  lastUserMessage?: string;
-  logger?: {
-    info(...a: unknown[]): void;
-    warn(...a: unknown[]): void;
-    debug(...a: unknown[]): void;
-  };
-  sessionManager?: SessionMetaLike;
-  contextManager?: ContextManagerLike;
-}
-
-interface ContextBudgetLike {
-  systemPrompt: number;
-  responseReserve: number;
-  history: number;
-}
-
-/** Duck-typed against src/modules/context/manager.ts ContextManager. */
-interface ContextManagerLike {
-  getBudget(): ContextBudgetLike;
-  getEstimatedTokens(): number;
-  getQuality(): number;
-  getCompactionCount(): number;
-  getIterationsSinceCompaction(): number;
-  getMessageCount(): number;
-}
-
-// ---- server state (shared across module instances) ----
-//
-// The plugin can be loaded twice in one process (global + project dirs), which
-// would start two servers. All mutable state lives in a process-global object
-// keyed by a symbol, so any number of loaded instances share one server and
-// one client set.
-
-interface TraceState {
-  server: Server | null;
-  clients: Set<ServerResponse>;
-  traceUrl: string;
-  sessionMeta: SessionMetaLike | null;
-  pending: { type: "text" | "meta"; text: string; iteration?: number } | null;
-  flushTimer: ReturnType<typeof setTimeout> | null;
-  llmStartTs: number | null;
-  /** Last seen compaction count — used to detect new compactions. */
-  lastCompactionCount: number;
-  /** Context snapshot emitted before the previous event, for delta display. */
-  lastContext: ContextSnapshot | null;
-  /** In-flight startServer() promise — dedupes concurrent starts (the plugin
-   * loads twice: global + project dirs; both onSessionStart hooks fire in the
-   * same synchronous tick, before the first listen() callback sets `server`). */
-  starting: Promise<string> | null;
-}
-
-interface ContextSnapshot {
-  tokens: number;
-  budget: ContextBudgetLike;
-  quality: number;
-  compactionCount: number;
-  iterationsSinceCompaction: number;
-  messageCount: number;
-}
-
-const HOST = process.env.MMA_TRACE_HOST || "127.0.0.1";
-const MAX_CLIENTS = Math.max(1, Number(process.env.MMA_TRACE_MAX_CLIENTS) || 5);
-
-const G = globalThis as unknown as Record<symbol, TraceState>;
-const KEY = Symbol.for("mma.trace-server");
-const state: TraceState =
-  G[KEY] ||
-  (G[KEY] = {
-    server: null,
-    clients: new Set<ServerResponse>(),
-    traceUrl: "",
-    sessionMeta: null,
-    pending: null,
-    flushTimer: null,
-    llmStartTs: null,
-    lastCompactionCount: 0,
-    lastContext: null,
-    starting: null,
-  });
-
-// ---- helpers ----
-
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max) + `\n… [truncated ${text.length - max} chars]`;
-}
-
-function safeJson(args: Record<string, unknown>): string {
-  try {
-    return clip(JSON.stringify(args, null, 2), 200_000);
-  } catch {
-    return clip(String(args), 200_000);
-  }
-}
-
-/** One-line summary of the most salient args for quick scanning. */
-function summarizeArgs(args: Record<string, unknown>): string {
-  const parts: string[] = [];
-  for (const [k, v] of Object.entries(args)) {
-    if (parts.length >= 4) {
-      parts.push("…");
-      break;
-    }
-    if (v === null || v === undefined) parts.push(`${k}: null`);
-    else if (typeof v === "string") {
-      parts.push(
-        v.length <= 40 ? `${k}: ${JSON.stringify(v)}` : `${k}: ${JSON.stringify(v.slice(0, 40))}…(${v.length})`,
-      );
-    } else if (typeof v === "number" || typeof v === "boolean") parts.push(`${k}: ${v}`);
-    else if (Array.isArray(v)) parts.push(`${k}: [${v.length}]`);
-    else parts.push(`${k}: {…}`);
-  }
-  return parts.join(" · ");
-}
-
-// Safety net: mask credential-shaped values. Content stays otherwise intact.
-const SECRET_FIELD = /(["']?(?:api[_-]?key|apikey|token|password|passwd|secret|authorization)["']?\s*[:=]\s*)(["']?)([^"',}\s]{8,})/gi;
-function scrub(text: string): string {
-  let out = text;
-  out = out.replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***");
-  out = out.replace(/Bearer\s+[A-Za-z0-9._~+/=-]{16,}/gi, "Bearer ***");
-  out = out.replace(SECRET_FIELD, "$1$2***");
-  return out;
-}
-
-function broadcast(evt: Record<string, unknown>): void {
-  const frame = `event: ${evt.type}\ndata: ${JSON.stringify(evt)}\n\n`;
-  for (const client of state.clients) {
-    try {
-      client.write(frame);
-    } catch {
-      state.clients.delete(client);
-    }
-  }
-}
-
-function pushChunk(type: "text" | "meta", chunk: string, iteration?: number): void {
-  if (!chunk) return;
-  if (state.pending && state.pending.type !== type) flush();
-  state.pending = state.pending && state.pending.type === type
-    ? { type, text: state.pending.text + chunk, iteration: iteration ?? state.pending.iteration }
-    : { type, text: chunk, iteration };
-  if (state.flushTimer) clearTimeout(state.flushTimer);
-  state.flushTimer = setTimeout(flush, 350);
-}
-
-function flush(): void {
-  if (state.flushTimer) {
-    clearTimeout(state.flushTimer);
-    state.flushTimer = null;
-  }
-  if (state.pending) {
-    const p = state.pending;
-    state.pending = null;
-    broadcast({ type: p.type, ts: Date.now(), iteration: p.iteration, text: p.text });
-  }
-}
-
-function snapshotContext(ctx: PluginContext): ContextSnapshot | null {
-  const cm = ctx.contextManager;
-  if (!cm) return null;
-  try {
-    return {
-      tokens: cm.getEstimatedTokens(),
-      budget: cm.getBudget(),
-      quality: cm.getQuality(),
-      compactionCount: cm.getCompactionCount(),
-      iterationsSinceCompaction: cm.getIterationsSinceCompaction(),
-      messageCount: cm.getMessageCount(),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Emit a context snapshot + a compaction event when the count increased. */
-function emitContext(ctx: PluginContext): void {
-  const snap = snapshotContext(ctx);
-  if (!snap) return;
-  if (snap.compactionCount > state.lastCompactionCount && state.lastContext) {
-    const before = state.lastContext;
-    broadcast({
-      type: "compaction",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      compactionCount: snap.compactionCount,
-      tokensBefore: before.tokens,
-      tokensAfter: snap.tokens,
-      qualityBefore: before.quality,
-      qualityAfter: snap.quality,
-      budgetHistory: snap.budget.history,
-    });
-  }
-  state.lastCompactionCount = snap.compactionCount;
-  // Dedupe: both global + project plugin instances call emitContext on the
-  // same tick with an identical snapshot — skip the second broadcast.
-  if (
-    state.lastContext &&
-    state.lastContext.tokens === snap.tokens &&
-    state.lastContext.quality === snap.quality &&
-    state.lastContext.compactionCount === snap.compactionCount &&
-    state.lastContext.messageCount === snap.messageCount
-  ) {
-    state.lastContext = snap;
-    return;
-  }
-  state.lastContext = snap;
-  broadcast({
-    type: "context",
-    ts: Date.now(),
-    iteration: ctx.iteration,
-    tokens: snap.tokens,
-    budget: snap.budget,
-    quality: snap.quality,
-    compactionCount: snap.compactionCount,
-    iterationsSinceCompaction: snap.iterationsSinceCompaction,
-    messageCount: snap.messageCount,
-  });
-}
-
-// ---- http ----
-
-function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  const reqUrl = new URL(req.url || "/", `http://${HOST}`);
-  if (reqUrl.pathname === "/events") {
-    if (state.clients.size >= MAX_CLIENTS) {
-      res.writeHead(503, { "Content-Type": "text/plain" });
-      res.end("Too many trace clients");
-      return;
-    }
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-    res.write("retry: 1200\n\n");
-    res.write(
-      `event: session\ndata: ${JSON.stringify({ session: state.sessionMeta, url: state.traceUrl, connectedAt: Date.now() })}\n\n`,
-    );
-    state.clients.add(res);
-    const hb = setInterval(() => {
-      try {
-        res.write(`: hb ${Date.now()}\n\n`);
-      } catch {
-        clearInterval(hb);
-      }
-    }, 15_000);
-    req.on("close", () => {
-      clearInterval(hb);
-      state.clients.delete(res);
-    });
-    return;
-  }
-  if (reqUrl.pathname === "/" || reqUrl.pathname === "/index.html") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(HTML);
-    return;
-  }
-  res.writeHead(404, { "Content-Type": "text/plain" });
-  res.end("Not found");
-}
-
-function startServer(): Promise<string> {
-  if (state.server) return Promise.resolve(state.traceUrl);
-  if (state.starting) return state.starting;
-  const desired = Number(process.env.MMA_TRACE_PORT) || 0;
-  state.starting = new Promise<string>((resolve, reject) => {
-    const attempt = (port: number, left: number) => {
-      const srv = createServer(handleRequest);
-      srv.on("error", (err: NodeJS.ErrnoException) => {
-        if (port !== 0 && left > 0 && err.code === "EADDRINUSE") attempt(port + 1, left - 1);
-        else {
-          state.starting = null;
-          reject(err);
-        }
-      });
-      srv.listen(port, HOST, () => {
-        state.server = srv;
-        const addr = srv.address();
-        const p = typeof addr === "object" && addr ? addr.port : port;
-        state.traceUrl = `http://${HOST}:${p}`;
-        state.starting = null;
-        resolve(state.traceUrl);
-      });
-    };
-    attempt(desired, 10);
-  });
-  return state.starting;
-}
-
-function stopServer(): void {
-  flush();
-  if (state.flushTimer) {
-    clearTimeout(state.flushTimer);
-    state.flushTimer = null;
-  }
-  for (const client of state.clients) {
-    try {
-      client.end();
-    } catch {
-      /* ignore */
-    }
-  }
-  state.clients.clear();
-  if (state.server) {
-    try {
-      state.server.close();
-    } catch {
-      /* ignore */
-    }
-    state.server = null;
-  }
-  state.starting = null;
-  state.sessionMeta = null;
-}
-
-function tryOpenBrowser(url: string): void {
-  if (process.env.MMA_TRACE_OPEN === "0") return;
-  try {
-    const platform = process.platform;
-    const cmd =
-      platform === "win32"
-        ? `start "" "${url}"`
-        : platform === "darwin"
-          ? `open "${url}"`
-          : `xdg-open "${url}"`;
-    const child = exec(cmd, { windowsHide: true });
-    child.unref?.();
-  } catch {
-    /* best-effort */
-  }
-}
-
-// ---- plugin ----
-
-export const plugin = {
-  name: "trace-server",
-  priority: 100,
-
-  onSessionStart(ctx: PluginContext): void {
-    state.sessionMeta = ctx.sessionManager || null;
-    state.lastCompactionCount = 0;
-    state.lastContext = null;
-    startServer()
-      .then((url) => {
-        broadcast({ type: "system", ts: Date.now(), message: `Trace server ready: ${url}` });
-        // Push the session snapshot to already-open pages too (not only on
-        // SSE connect), so the header updates when a session (re)starts.
-        broadcast({
-          type: "session",
-          ts: Date.now(),
-          session: state.sessionMeta,
-          url: state.traceUrl,
-          connectedAt: Date.now(),
-        });
-        emitContext(ctx);
-        ctx.logger?.info(`[trace-server] live trace → ${url}`);
-        tryOpenBrowser(url);
-      })
-      .catch((err: Error) => {
-        ctx.logger?.warn(`[trace-server] failed to start: ${err?.message || String(err)}`);
-      });
-  },
-
-  onSessionEnd(): void {
-    broadcast({ type: "system", ts: Date.now(), message: "Session ended — server closing" });
-    stopServer();
-  },
-
-  onPhase(ctx: PluginContext, phase: string): void {
-    flush();
-    broadcast({ type: "phase", ts: Date.now(), iteration: ctx.iteration, phase });
-  },
-
-  onBeforeThink(ctx: PluginContext): void {
-    flush();
-    emitContext(ctx);
-    state.llmStartTs = Date.now();
-    broadcast({
-      type: "llm_start",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      task: ctx.lastUserMessage ? scrub(clip(ctx.lastUserMessage, 300)) : null,
-    });
-  },
-
-  onAfterThink(ctx: PluginContext, response: LLMResponseLike | null): void {
-    flush();
-    emitContext(ctx);
-    const durationMs = state.llmStartTs !== null ? Date.now() - state.llmStartTs : undefined;
-    state.llmStartTs = null;
-    broadcast({
-      type: "llm_end",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      kind: response?.type || null,
-      callCount: response?.calls?.length || 0,
-      callNames: response?.calls?.map((c) => c.name) || [],
-      durationMs,
-    });
-  },
-
-  onToolStart(ctx: PluginContext, call: ToolCallLike): void {
-    flush();
-    broadcast({
-      type: "tool_start",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      toolCallId: call.id,
-      name: call.name,
-      args: scrub(safeJson(call.arguments)),
-      summary: scrub(summarizeArgs(call.arguments)),
-    });
-  },
-
-  onToolEnd(
-    ctx: PluginContext,
-    call: ToolCallLike,
-    result: ToolResultLike,
-    durationMs: number,
-  ): void {
-    flush();
-    emitContext(ctx);
-    broadcast({
-      type: "tool_end",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      toolCallId: call.id,
-      name: call.name,
-      success: result.success,
-      durationMs,
-      output: scrub(clip(result.output || "", 100_000)),
-    });
-  },
-
-  onError(ctx: PluginContext, err: Error): void {
-    flush();
-    broadcast({
-      type: "error",
-      ts: Date.now(),
-      iteration: ctx.iteration,
-      message: scrub(err?.message || String(err)),
-      stack: err?.stack ? scrub(clip(err.stack, 5000)) : undefined,
-    });
-  },
-
-  onText(ctx: PluginContext, chunk: string): void {
-    pushChunk("text", chunk, ctx.iteration);
-  },
-
-  onMeta(ctx: PluginContext, chunk: string): void {
-    pushChunk("meta", chunk, ctx.iteration);
-  },
-};
-
-// ---- frontend (single self-contained page, no build step) ----
-
-const HTML = `<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -616,11 +105,74 @@ const HTML = `<!doctype html>
   .btn:hover { color: var(--text); border-color: #2c3646; }
   .btn.active { color: var(--yellow); border-color: var(--yellow); }
   #count { color: var(--dim); font-size: 11px; white-space: nowrap; }
-  #log { flex: 1; overflow-y: auto; padding: 6px 10px 20px; }
+  #log { flex: 1; overflow-y: auto; padding: 6px 10px 20px; min-width: 0; }
+  .split { flex: 1; display: flex; min-height: 0; }
+  #side {
+    width: 46%; min-width: 320px; max-width: 60%;
+    border-left: 1px solid var(--border);
+    background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  #side .side-scroll { flex: 1; overflow-y: auto; }
+  .side-sec {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  .side-sec h3 {
+    margin: 0 0 6px; font-size: 11px; letter-spacing: 1px;
+    color: var(--accent); text-transform: uppercase;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .side-sec h3 .mini {
+    color: var(--dim); font-weight: 400; letter-spacing: 0;
+    font-size: 11px; text-transform: none;
+  }
+  #ctxText {
+    margin: 0; padding: 8px;
+    background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+    max-height: 38vh; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+    font: inherit; font-size: 11px; line-height: 1.5; color: #aeb7c2;
+  }
+  #ctxDelta {
+    font-size: 11px; color: var(--dim); padding: 4px 0 8px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  #ctxDelta .add { color: var(--green); }
+  #ctxDelta .del { color: var(--red); }
+  #ctxHistory { max-height: 22vh; overflow-y: auto; }
+  .ctxhist-row {
+    padding: 3px 6px; border-left: 2px solid var(--border);
+    margin: 4px 0; font-size: 11px;
+  }
+  .ctxhist-row.comp { border-left-color: var(--yellow); }
+  .ctxhist-row .hdr { color: var(--dim); }
+  .ctxhist-row .hdr b { color: var(--text); font-weight: 600; }
+  .ctxhist-row .prev { color: var(--dim); }
+  .ctxhist-row .prev .strike { color: var(--red); text-decoration: line-through; }
+  #plansActive { margin-bottom: 10px; }
+  .plan-block {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px; margin: 4px 0;
+    white-space: pre-wrap; word-break: break-word;
+    font-size: 11px; line-height: 1.5; color: #c6cdd8;
+  }
+  .plan-block .phead {
+    font-weight: 600; color: var(--accent); margin-bottom: 4px;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .plan-block .phead .pmeta { color: var(--dim); font-weight: 400; font-size: 10px; }
+  #plansAll { max-height: 20vh; overflow-y: auto; }
+  #plansHist { max-height: 20vh; overflow-y: auto; }
+  .phist-row { padding: 3px 6px; font-size: 11px; color: var(--dim); }
+  .phist-row b { color: var(--purple); font-weight: 600; }
+  .phist-row .t { color: #4b5563; font-size: 10px; }
   .entry {
     padding: 4px 8px; border-left: 2px solid transparent;
     animation: appear .12s ease-out;
   }
+  .empty { color: var(--dim); padding: 30px; text-align: center; }
+  .paused-note {
   @keyframes appear { from { opacity: 0; transform: translateY(-3px); } }
   .entry:hover { background: rgba(255,255,255,.02); border-left-color: var(--border); }
   .head { display: flex; align-items: baseline; gap: 8px; }
@@ -734,7 +286,28 @@ const HTML = `<!doctype html>
   </div>
   <div class="ctx-info" id="ctxInfo">ctx —</div>
 </div>
-<div id="log"><div class="empty">Waiting for events…</div></div>
+<div class="split">
+  <div id="log"><div class="empty">Waiting for events…</div></div>
+  <div id="side">
+    <div class="side-scroll">
+      <section class="side-sec">
+        <h3>Context <span class="mini" id="ctxStats"></span></h3>
+        <pre id="ctxText">(waiting for context…)</pre>
+        <div id="ctxDelta"></div>
+        <h3>Context changes</h3>
+        <div id="ctxHistory"></div>
+      </section>
+      <section class="side-sec">
+        <h3>Active plan</h3>
+        <div id="plansActive"></div>
+        <h3>All plans</h3>
+        <div id="plansAll"></div>
+        <h3>Plan history</h3>
+        <div id="plansHist"></div>
+      </section>
+    </div>
+  </div>
+</div>
 <div class="paused-note" id="pausedNote"></div>
 <script>
 (function () {
@@ -775,6 +348,15 @@ const HTML = `<!doctype html>
   var deferred = [];
   var startTs = Date.now();
   var thinkStart = null;
+  var ctxTextEl = document.getElementById('ctxText');
+  var ctxDeltaEl = document.getElementById('ctxDelta');
+  var ctxHistoryEl = document.getElementById('ctxHistory');
+  var ctxStatsEl = document.getElementById('ctxStats');
+  var plansActiveEl = document.getElementById('plansActive');
+  var plansAllEl = document.getElementById('plansAll');
+  var plansHistEl = document.getElementById('plansHist');
+  var lastCtxLines = []; // per-line map from previous context_text for diffing
+  var ctxHistCount = 0;
 
   function fmtMs(ms) {
     if (ms === undefined || ms === null) return '';
@@ -1020,6 +602,158 @@ const HTML = `<!doctype html>
     compaction: compRow
   };
 
+  function fmtK(n) {
+    if (n === undefined || n === null) return '?';
+    return n >= 10000 ? (n / 1000).toFixed(0) + 'K' : n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
+  }
+
+  // ---- right panel: context text + diff + history ----
+
+  function renderContext(e) {
+    ctxStatsEl.textContent =
+      fmtK(e.tokens) + ' tok · q ' + e.quality + '% · ' + e.messageCount + ' msgs';
+    var lines = e.text.split('\n');
+    ctxTextEl.textContent = e.text;
+    ctxTextEl.scrollTop = ctxTextEl.scrollHeight;
+
+    // diff against the previous snapshot (line-count based, cheap)
+    var added = [];
+    var removed = [];
+    var prevCount = {};
+    var curCount = {};
+    lastCtxLines.forEach(function (l) { prevCount[l] = (prevCount[l] || 0) + 1; });
+    lines.forEach(function (l) { curCount[l] = (curCount[l] || 0) + 1; });
+    Object.keys(curCount).forEach(function (l) {
+      var p = prevCount[l] || 0;
+      for (var i = p; i < curCount[l]; i++) added.push(l);
+    });
+    Object.keys(prevCount).forEach(function (l) {
+      var c = curCount[l] || 0;
+      for (var i = c; i < prevCount[l]; i++) removed.push(l);
+    });
+    if (added.length > 0 || removed.length > 0) {
+      ctxDeltaEl.innerHTML = '';
+      removed.slice(-30).forEach(function (l) { ctxDeltaEl.appendChild(el('div', 'del', '− ' + l)); });
+      added.slice(-30).forEach(function (l) { ctxDeltaEl.appendChild(el('div', 'add', '+ ' + l)); });
+    } else {
+      ctxDeltaEl.innerHTML = '';
+    }
+    lastCtxLines = lines;
+  }
+
+  function addCtxHistory(e) {
+    var isComp = e.type === 'compaction';
+    var row = el('div', 'ctxhist-row' + (isComp ? ' comp' : ''));
+    var hdr = el('div', 'hdr');
+    hdr.appendChild(el('span', '', now()));
+    hdr.appendChild(document.createTextNode(' · '));
+    hdr.appendChild(el('b', '', isComp ? 'compaction #' + e.compactionCount : 'iter ' + (e.iteration ?? '') + ' → ' + fmtK(e.tokens) + ' tok'));
+    hdr.appendChild(document.createTextNode(' · q ' + e.quality + '% · ' + e.messageCount + ' msgs'));
+    row.appendChild(hdr);
+    if (isComp) {
+      var prev = el('div', 'prev');
+      prev.appendChild(document.createTextNode('removed ' + fmtK(e.tokensBefore) + ' → ' + fmtK(e.tokensAfter) + ' tok (was q ' + e.qualityBefore + '%)'));
+      row.appendChild(prev);
+    }
+    ctxHistoryEl.insertBefore(row, ctxHistoryEl.firstChild);
+    ctxHistCount++;
+    while (ctxHistoryEl.children.length > 60) ctxHistoryEl.removeChild(ctxHistoryEl.lastChild);
+  }
+
+  function planRowHtml(p, label) {
+    var steps = (p.steps || []).map(function (s) {
+      var icon = s.status === 'done' ? '✓' : s.status === 'failed' ? '✗' : s.status === 'skipped' ? '−' : '○';
+      var subs = (s.subtasks || []).map(function (st) { return '    ' + (st.done ? '✓' : '○') + ' ' + st.text; }).join('\n');
+      return icon + ' ' + s.description + (s.kind === 'delete' ? ' [delete]' : '') + (subs ? '\n' + subs : '');
+    }).join('\n');
+    var done = (p.steps || []).filter(function (s) { return s.status === 'done'; }).length;
+    return { steps: steps, done: done, total: (p.steps || []).length, title: p.title || 'Untitled plan' };
+  }
+
+  function renderPlans(e) {
+    // active
+    plansActiveEl.innerHTML = '';
+    if (e.active) {
+      var a = planRowHtml(e.active);
+      var blk = el('div', 'plan-block');
+      var head = el('div', 'phead');
+      head.appendChild(el('span', '', a.title));
+      head.appendChild(el('span', 'pmeta', 'active · ' + a.done + '/' + a.total));
+      blk.appendChild(head);
+      blk.appendChild(el('div', '', a.steps || '(no steps)'));
+      plansActiveEl.appendChild(blk);
+    } else {
+      plansActiveEl.appendChild(el('div', 'plan-block', '(no active plan)'));
+    }
+    // all plans (drafts + archived)
+    plansAllEl.innerHTML = '';
+    var others = (e.drafts || []).map(function (p) { return { p: p, tag: 'draft' }; })
+      .concat((e.archived || []).map(function (p) { return { p: p, tag: 'archive' }; }));
+    if (others.length === 0) {
+      plansAllEl.appendChild(el('div', 'plan-block', '(none)'));
+    } else {
+      others.forEach(function (o) {
+        var r = planRowHtml(o.p);
+        var blk2 = el('div', 'plan-block');
+        var h2 = el('div', 'phead');
+        h2.appendChild(el('span', '', r.title));
+        h2.appendChild(el('span', 'pmeta', o.tag + ' · ' + r.done + '/' + r.total));
+        blk2.appendChild(h2);
+        blk2.appendChild(el('div', '', r.steps || '(no steps)'));
+        plansAllEl.appendChild(blk2);
+      });
+    }
+    // history feed
+    plansHistEl.innerHTML = '';
+    (e.history || []).forEach(function (h) {
+      var row = el('div', 'phist-row');
+      row.appendChild(el('span', 't', new Date(h.ts).toLocaleTimeString()));
+      row.appendChild(document.createTextNode('  '));
+      row.appendChild(el('b', '', h.kind));
+      row.appendChild(document.createTextNode(' · ' + h.detail));
+      plansHistEl.appendChild(row);
+    });
+  }
+
+  function handle(evt) {
+    if (evt.type === 'session') {
+      startTs = evt.connectedAt || Date.now();
+      var s = evt.session;
+      var sess = document.getElementById('session');
+      if (s && (s.name || s.model || s.id)) {
+        var parts = [];
+        if (s.name) parts.push(s.name);
+        if (s.model) parts.push(s.model);
+        if (s.id) parts.push(s.id);
+        sess.innerHTML = 'session: <b>' + escapeHtml(parts.join(' · ')) + '</b>';
+      }
+      return;
+    }
+    if (evt.type === 'context') {
+      updateCtxBar(evt);
+      return;
+    }
+    if (evt.type === 'context_text') {
+      renderContext(evt);
+      addCtxHistory(evt);
+      return;
+    }
+    if (evt.type === 'compaction') {
+      addCtxHistory(evt);
+    }
+    if (evt.type === 'plans') {
+      renderPlans(evt);
+      return;
+    }
+    if (RENDER[evt.type]) {
+      var row = RENDER[evt.type](evt);
+      if (evt.type === 'tool_start' && evt.toolCallId) {
+        openTools[evt.toolCallId] = row;
+      }
+      append(row);
+    }
+  }
+
   function setThinking(on) {
     document.getElementById('think').classList.toggle('on', on);
   }
@@ -1063,33 +797,6 @@ const HTML = `<!doctype html>
     total++;
     countEl.textContent = total + ' events';
     if (stick) scrollBottom();
-  }
-
-  function handle(evt) {
-    if (evt.type === 'session') {
-      startTs = evt.connectedAt || Date.now();
-      var s = evt.session;
-      var sess = document.getElementById('session');
-      if (s && (s.name || s.model || s.id)) {
-        var parts = [];
-        if (s.name) parts.push(s.name);
-        if (s.model) parts.push(s.model);
-        if (s.id) parts.push(s.id);
-        sess.innerHTML = 'session: <b>' + escapeHtml(parts.join(' · ')) + '</b>';
-      }
-      return;
-    }
-    if (evt.type === 'context') {
-      updateCtxBar(evt);
-      return;
-    }
-    if (RENDER[evt.type]) {
-      var row = RENDER[evt.type](evt);
-      if (evt.type === 'tool_start' && evt.toolCallId) {
-        openTools[evt.toolCallId] = row;
-      }
-      append(row);
-    }
   }
 
   function escapeHtml(s) {
@@ -1137,11 +844,13 @@ const HTML = `<!doctype html>
     es.addEventListener('text', function (e) { handle(JSON.parse(e.data)); });
     es.addEventListener('meta', function (e) { handle(JSON.parse(e.data)); });
     es.addEventListener('context', function (e) { handle(JSON.parse(e.data)); });
+    es.addEventListener('context_text', function (e) { handle(JSON.parse(e.data)); });
     es.addEventListener('compaction', function (e) { handle(JSON.parse(e.data)); });
+    es.addEventListener('plans', function (e) { handle(JSON.parse(e.data)); });
   }
 
   connect();
 })();
 </script>
 </body>
-</html>`;
+</html>

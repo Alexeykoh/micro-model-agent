@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Folder plugins** (`src/modules/plugins/loader.ts`): `loadFromDir` now treats a subdirectory of the plugin dir as a plugin when it contains an entry file (`plugin.ts` → `plugin.js` → `index.ts` → `index.js`). The entry imports the folder's other modules via normal relative imports; folders without an entry are skipped. Flat `*.ts`/`*.js` files keep working unchanged. Tests in `tests/plugin-loader.test.ts`.
+- **`trace-server` example split into a folder plugin** (`examples/plugins/trace-server/`): `plugin.ts` (entry) + `state.ts` (shared state + SSE primitives) + `util.ts` + `context.ts` (snapshots + conversation-text) + `plans.ts` (on-disk plan reading + poll) + `server.ts` (HTTP/SSE) + `page.html` (frontend, served **verbatim from disk** — never template-processed).
+
+### Fixed
+- **trace-server page script parse error** (`examples/plugins/trace-server/`): embedding the page in a template literal interpreted `\n` inside the page's JS strings as real newlines, so `e.text.split('\n')` became a broken string literal and the whole `<script>` failed to parse — the trace page connected but rendered nothing. The page is now read from disk verbatim, keeping escape sequences literal.
+
 ## [0.36.0] - 2026-08-15
 
 ### Added
