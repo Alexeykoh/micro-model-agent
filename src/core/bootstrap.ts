@@ -67,6 +67,7 @@ export function buildSystemInfo(
 		`Bash: use "workdir" param instead of "cd dir && cmd". One command per call. Long-running processes: pass "background: true" (id immediately), otherwise auto-backgrounded after a few seconds — check with process_log.`,
 		`DEVELOPMENT RULES (strict): 1) install deps BEFORE writing source (npm/pip/cargo, verify lockfile exists; never import uninstalled packages); 2) framework/toolkit init BEFORE app code; 3) follow plan sequentially, after each step verify deliverables exist with real content, then "plan update step=N status=done"; 4) verify work on disk + command output — don't assume success; 5) no premature work (no files/imports for future steps); 6) stuck after 2+ failures: STOP, try a different approach, write files directly, ask the user.`,
 		`PLAN QUALITY: each step = CONCRETE deliverables (exact file paths with extensions, exact packages, exact commands). Vague steps ("Setup the project") forbidden. Cover init → deps → framework → code → verification. 5-8 steps.`,
+		`For "check/fix errors" tasks, each verification step must name the exact command that proves the errors are gone — "bun run build", "bun test", or the "lsp_check" tool — and the step is done only after that check reports clean.`,
 	);
 
 	if (config.autoPlan) {
@@ -385,6 +386,12 @@ export async function bootstrap(
 			timestamp: new Date().toISOString(),
 		});
 	};
+
+	// Carry the active plan (id, progress, current step) into the compaction
+	// summary so a 9B model doesn't re-create the plan from scratch right after
+	// compaction (observed: ses_msvuao0h — plan_e07pb2 (1/6) discarded for a
+	// fresh plan_xzq9xe the same iteration the old plan was still visible).
+	contextManager.setPlanSummaryProvider(() => execModule.getPlanSummary());
 
 	const agentsMdBlocks: PromptBlock[] = [];
 	const skipAgentsMd = noAgentsMd === true;

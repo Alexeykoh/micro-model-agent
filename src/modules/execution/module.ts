@@ -165,6 +165,20 @@ export class ExecutionModule implements AgentModule {
 		};
 	}
 
+	/**
+	 * Short "current plan" line for the compaction summary. Null when no plan
+	 * is active. For 9B models the explicit instruction "continue it, do NOT
+	 * create a new plan" matters — after compaction the plan block is visible
+	 * but the model re-creates the plan anyway (observed: ses_msvuao0h).
+	 */
+	getPlanSummary(): string | null {
+		if (!this.tracker) return null;
+		const plan = this.tracker.getPlan();
+		const done = plan.steps.filter((s) => s.status === "done").length;
+		const current = this.tracker.getCurrentStepIndex() + 1;
+		return `[${plan.id}] "${plan.title}" ${done}/${plan.steps.length} done, current: step ${current} — continue it (plan show / re-plan), do NOT create a new plan`;
+	}
+
 	getToolDefinitions(): ToolDefinition[] {
 		return createPlanToolDefinitions({
 			store: this.store,

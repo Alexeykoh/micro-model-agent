@@ -365,3 +365,75 @@ describe("plan update deliverable gate", () => {
 		expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
 	});
 });
+
+describe("plan create guard", () => {
+	let tmpDir: string;
+	let execModule: ExecutionModule;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-guard-"));
+		execModule = new ExecutionModule(tmpDir, 8);
+	});
+
+	afterEach(() => {
+		if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	it("blocks create when the active plan has progress (resume, don't restart)", async () => {
+		// Regression (ses_msvuao0h): right after compaction the model called
+		// `plan create` again, silently discarding the 1/6 plan into drafts.
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Create src/a.ts"],
+		});
+		mkdirSync(join(tmpDir, "src"), { recursive: true });
+		writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+		const done = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+		expect(done.success).toBe(true);
+
+		const firstPlanId = execModule.getTracker()!.getPlan().id;
+		const res = await tool.handler(ctx, {
+			action: "create",
+			title: "T2",
+			steps: ["Create src/b.ts"],
+		});
+		expect(res.success).toBe(false);
+		expect(res.output).toContain(firstPlanId);
+		expect(res.output).toContain("current: step");
+		// The in-progress plan must remain active — nothing was replaced.
+		expect(execModule.getTracker()!.getPlan().id).toBe(firstPlanId);
+	});
+
+	it("allows create over a fresh active plan with no progress, noting it", async () => {
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Create src/a.ts"],
+		});
+		const res = await tool.handler(ctx, {
+			action: "create",
+			title: "T2",
+			steps: ["Create src/b.ts"],
+		});
+		expect(res.success).toBe(true);
+		expect(res.output).toContain("preserved as a draft");
+	});
+
+	it("notes that a provided plan id is ignored (ids are auto-generated)", async () => {
+		const tool = planTool(execModule);
+		const ctx: any = {};
+		const res = await tool.handler(ctx, {
+			action: "create",
+			title: "T",
+			steps: ["Create src/a.ts"],
+			id: "plan_my_custom_id",
+		});
+		expect(res.success).toBe(true);
+		expect(res.output).toContain("auto-generated");
+	});
+});

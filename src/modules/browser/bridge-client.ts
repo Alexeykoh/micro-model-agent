@@ -6,6 +6,7 @@ import type { BrowserDriver } from './driver'
 import type { ConsoleEntry, NetworkErrorEntry } from './types'
 import { ConsoleBuffer } from './session'
 import type { StoredCookie } from './cookie-store'
+import { pickExistingPath } from './bridge-path'
 
 const BRIDGE_REQUEST_TIMEOUT_MS = 30000
 
@@ -19,7 +20,19 @@ interface BridgeResponse {
 }
 
 function bridgeScriptPath(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), 'bridge-server.mjs')
+  // Resolve the bridge script for BOTH layouts (rule #12 — read from disk):
+  //   src/modules/browser/bridge-server.mjs          (bun run src/…)
+  //   dist/modules/browser/bridge-server.mjs         (bundle at dist/main.js +
+  //                                                   assets copied by copy-assets.ts)
+  // The single-candidate version looked next to the bundle (dist/bridge-server.mjs),
+  // which copy-assets.ts never produces — so the browser tool died with ENOENT
+  // in the released npm package (observed: v0.37.0).
+  const dir = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    join(dir, 'bridge-server.mjs'),
+    join(dir, 'modules', 'browser', 'bridge-server.mjs'),
+  ]
+  return pickExistingPath(candidates)
 }
 
 export class BridgeDriver implements BrowserDriver {

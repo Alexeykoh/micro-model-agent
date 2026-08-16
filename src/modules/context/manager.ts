@@ -140,6 +140,14 @@ export class ContextManager {
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
   onCompact: ((summary: Message) => void) | null = null;
+  /**
+   * Optional short line appended to the compaction summary so the model knows
+   * an active plan exists with progress. Wired from bootstrap to the execution
+   * module — without it, a 9B model re-creates a plan from scratch right after
+   * compaction (observed: ses_msvuao0h — plan_e07pb2 (1/6) was discarded for a
+   * fresh plan_xzq9xe the same iteration the old plan was still visible).
+   */
+  private planSummaryProvider: (() => string | null) | null = null;
 
   constructor(
     contextWindow: number,
@@ -150,6 +158,14 @@ export class ContextManager {
     this.compactionThreshold = contextBudget?.compactionThreshold ?? 0.75;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
     this.tokenCounter = tokenCounter ?? null;
+  }
+
+  /**
+   * Provide a short "current plan" line for the compaction summary, or null
+   * when no plan is active. Injected once at bootstrap (not per-turn state).
+   */
+  setPlanSummaryProvider(fn: (() => string | null) | null): void {
+    this.planSummaryProvider = fn;
   }
 
   private calculateBudget(
@@ -408,10 +424,17 @@ export class ContextManager {
       parts.push(`[User feedback: ${this.lastUserFeedback}]`);
     }
 
+    // Orient the model after compaction: an active plan must not be re-created
+    // from scratch (see planSummaryProvider doc).
+    const planLine = this.planSummaryProvider?.();
+    if (planLine) parts.push(`[Plan: ${planLine}]`);
+
     const filesLine = this.facts.filesLine();
     if (filesLine) parts.push(filesLine);
     const deletedLine = this.facts.deletedLine();
     if (deletedLine) parts.push(deletedLine);
+    const readLine = this.facts.readLine();
+    if (readLine) parts.push(readLine);
     const decisionsLine = this.facts.decisionsLine();
     if (decisionsLine) parts.push(decisionsLine);
     const errorsLine = this.facts.errorsLine();

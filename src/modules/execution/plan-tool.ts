@@ -160,6 +160,41 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
 					if (parsed.error) {
 						return { success: false, output: parsed.error };
 					}
+
+					// Never silently discard an in-progress plan (observed:
+					// ses_msvuao0h — right after compaction the model called
+					// `plan create` again, dumping the 1/6 plan into drafts and
+					// starting from scratch). An active plan WITH progress blocks
+					// creation until the model consciously aborts it. A fresh plan
+					// (all steps pending) is safe to replace — the model may have
+					// just changed its mind about the approach.
+					const existing = deps.trackerRef.current;
+					if (existing) {
+						const activePlan = existing.getPlan();
+						const progressed = activePlan.steps.some(
+							(s) =>
+								s.status === "done" ||
+								s.status === "failed" ||
+								s.status === "skipped",
+						);
+						if (progressed) {
+							const done = activePlan.steps.filter(
+								(s) => s.status === "done",
+							).length;
+							return {
+								success: false,
+								output: t("plan.active_in_progress", {
+									id: activePlan.id,
+									done: String(done),
+									total: String(activePlan.steps.length),
+									current: String(
+										existing.getCurrentStepIndex() + 1,
+									),
+								}),
+							};
+						}
+					}
+
 					deps.preserveActive();
 					const plan = PlanCreator.createPlan(
 						title,
@@ -173,6 +208,16 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
 						title,
 						steps: String(steps.length),
 					});
+					// The model sometimes passes an id expecting the plan to be
+					// created under it (observed: id "plan_error_check_e07pb2" was
+					// ignored, a new id appeared). Be explicit so it doesn't look
+					// for a plan by the wrong id afterwards.
+					if (args.id) {
+						output += `\n${t("plan.id_ignored")}`;
+					}
+					if (existing) {
+						output += `\n${t("plan.existing_fresh")}`;
+					}
 					let displayOut = display;
 					const taskText = deps.getTaskText(_ctx);
 					if (taskText) {

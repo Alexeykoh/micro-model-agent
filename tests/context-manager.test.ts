@@ -629,3 +629,107 @@ describe("extractTriedAndFailed", () => {
     expect(result[0].error.length).toBeLessThanOrEqual(100);
   });
 });
+
+describe("ContextManager compaction: plan state + read facts", () => {
+  function summaryOf(cm: ContextManager): string {
+    return cm
+      .getActiveHistory()
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+  }
+
+  it("includes an active-plan line from the injected provider", () => {
+    const cm = new ContextManager(100000);
+    cm.setPlanSummaryProvider(() => '[plan_abc] "T" 1/3 done, current: step 2');
+    cm.addMessage({ role: "system", content: "SYS" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    expect(summaryOf(cm)).toContain(
+      '[Plan: [plan_abc] "T" 1/3 done, current: step 2',
+    );
+  });
+
+  it("omits the plan line when the provider returns null", () => {
+    const cm = new ContextManager(100000);
+    cm.setPlanSummaryProvider(() => null);
+    cm.addMessage({ role: "system", content: "SYS" });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    expect(summaryOf(cm)).not.toContain("[Plan:");
+  });
+
+  it("extracts read_file headers as [Read:] facts so the model knows what was inspected", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "read_file",
+      content:
+        "── src/App.tsx (.tsx, 300 lines, lines 1-300)\nexport function App() {}",
+      success: true,
+    });
+    cm.addMessage({
+      role: "tool",
+      name: "read_file",
+      content: "── src/main.tsx (.tsx, 15 lines, lines 1-15)",
+      success: true,
+    });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    const summary = summaryOf(cm);
+    expect(summary).toContain("[Read: src/App.tsx; src/main.tsx]");
+    // Read facts must NOT leak into [Files:] (created/updated semantics).
+    const filesBlock = summary.match(/\[Files: ([^\]]*)\]/)?.[1] ?? "";
+    expect(filesBlock).not.toContain("App.tsx");
+  });
+
+  it("never extracts error facts from the system prompt (memory errors.md is history, not live)", () => {
+    // Regression (ses_msvuao0h): the memory module embeds errors.md in the
+    // system prompt, and the old un-gated error scan pulled a stale
+    // "edit_file failed 3x" (2026-08-15) into every [Errors:] as if it were
+    // the live session's failure.
+    const cm = new ContextManager(100000);
+    cm.addMessage({
+      role: "system",
+      content:
+        "SYS Memory: 2026-08-15 Tool edit_file failed 3x: Error: TS2769",
+    });
+    for (let i = 0; i < 12; i++) {
+      cm.addMessage({ role: "user", content: `t ${i}` });
+      cm.addMessage({ role: "assistant", content: `r ${i}` });
+    }
+    cm.compact();
+    const summary = summaryOf(cm);
+    // The system prompt itself survives compaction verbatim (it is always kept
+    // first) — the point is that the stale error is NOT folded into the
+    // summary's fact block as a live failure.
+    expect(summary).not.toContain("[Errors:");
+    expect(summary).not.toContain("[Errors: Error: TS2769]");
+  });
+
+  it("still extracts error facts from tool messages", () => {
+    const cm = new ContextManager(100000);
+    cm.addMessage({ role: "system", content: "SYS" });
+    cm.addMessage({
+      role: "tool",
+      name: "bash",
+      content: "Error: build failed",
+      success: false,
+    });
+    for (let i = 0; i < 10; i++) {
+      cm.addMessage({ role: "user", content: `more ${i}` });
+      cm.addMessage({ role: "assistant", content: `resp ${i}` });
+    }
+    cm.compact();
+    expect(summaryOf(cm)).toContain("[Errors: Error: build failed]");
+  });
+});

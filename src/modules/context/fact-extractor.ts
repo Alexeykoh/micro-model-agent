@@ -11,6 +11,7 @@ export class FactExtractor {
   private deletedFacts: string[] = [];
   private decisionFacts: string[] = [];
   private errorFacts: string[] = [];
+  private readFacts: string[] = [];
   private static readonly MAX_FACTS = 20;
 
   get errorCount(): number {
@@ -31,11 +32,18 @@ export class FactExtractor {
       new RegExp(`Deleted ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
       new RegExp(`(?:Удалён|Файл удалён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
+    // read_file output header — locale-independent prefix `── path (ext, …`
+    // (en: "lines", ru: "строк"). The path is already prefixed with the same
+    // box-drawing marker in both locales, so the pattern needs no localization.
+    const readPatterns = [
+      new RegExp(`── (${DRIVE}[\\w./\\\\-]+\\.[a-z]+) \\(`, "gi"),
+    ];
 
     const newFiles: string[] = [];
     const newDeleted: string[] = [];
     const newDecisions: string[] = [];
     const newErrors: string[] = [];
+    const newReads: string[] = [];
     // Track the LAST tool event per path so a delete followed by a re-create
     // (or vice versa) in the same window resolves to its final state instead of
     // being both filtered out of [Files:] and reported as [Deleted:].
@@ -43,6 +51,14 @@ export class FactExtractor {
 
     for (const msg of turns) {
       const content = getMessageText(msg.content);
+
+      // The system prompt is never a fact source — the memory module embeds
+      // errors.md (with historical "Tool X failed Nx" entries from PAST days)
+      // there, and extracting that text as current [Errors:] misleads the model
+      // into thinking IT is failing (observed: ses_msvuao0h — a stale
+      // "edit_file failed 3x" from 2026-08-15 landed in every compaction
+      // summary as if it were the live session's failure).
+      if (msg.role === "system") continue;
 
       // Never feed a previous <system-summary> block into new facts — that is
       // the source of recursive summary nesting (summary inside summary).
@@ -67,6 +83,11 @@ export class FactExtractor {
             lastEvent.set(match[1], "deleted");
           }
         }
+        for (const pattern of readPatterns) {
+          for (const match of content.matchAll(pattern)) {
+            newReads.push(match[1]);
+          }
+        }
 
         if (content.includes("Plan:") && content.includes("[")) {
           const planLine = content
@@ -85,22 +106,24 @@ export class FactExtractor {
         }
       }
 
-      if (
-        content.includes("Error:") ||
-        content.includes("failed") ||
-        content.includes("Ошибка:") ||
-        content.includes("не удалось")
-      ) {
-        const line = content
-          .split("\n")
-          .find(
-            (l) =>
-              l.includes("Error:") ||
-              l.includes("failed") ||
-              l.includes("Ошибка:") ||
-              l.includes("не удалось"),
-          );
-        if (line) newErrors.push(line.trim().slice(0, 250));
+      if (msg.role === "tool" || msg.role === "assistant") {
+        if (
+          content.includes("Error:") ||
+          content.includes("failed") ||
+          content.includes("Ошибка:") ||
+          content.includes("не удалось")
+        ) {
+          const line = content
+            .split("\n")
+            .find(
+              (l) =>
+                l.includes("Error:") ||
+                l.includes("failed") ||
+                l.includes("Ошибка:") ||
+                l.includes("не удалось"),
+            );
+          if (line) newErrors.push(line.trim().slice(0, 250));
+        }
       }
     }
 
@@ -133,6 +156,9 @@ export class FactExtractor {
     this.errorFacts = dedup([...this.errorFacts, ...newErrors]).slice(
       -FactExtractor.MAX_FACTS,
     );
+    this.readFacts = dedup([...this.readFacts, ...newReads]).slice(
+      -FactExtractor.MAX_FACTS,
+    );
   }
 
   /** `[Files: a; b]` line for a compaction summary, or null. */
@@ -158,5 +184,16 @@ export class FactExtractor {
   errorsLine(): string | null {
     if (this.errorFacts.length === 0) return null;
     return `[Errors: ${this.errorFacts.slice(-3).join("; ")}]`;
+  }
+  /**
+   * `[Read: p1; p2]` line — files already inspected via read_file. Lets the
+   * model re-orient after compaction without rescanning the whole project: it
+   * knows which files were already read and only re-reads what changed
+   * (observed: post-compaction the model re-read the same files it had already
+   * inspected, because "already read" never survived compaction).
+   */
+  readLine(): string | null {
+    if (this.readFacts.length === 0) return null;
+    return `[Read: ${this.readFacts.slice(-12).join("; ")}]`;
   }
 }
