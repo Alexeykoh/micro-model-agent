@@ -2,7 +2,7 @@ import type { AgentModule } from "../types";
 import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { relative, resolve } from "path";
 import { LspClient } from "./client";
 import { getServerForFile, DEFAULT_LSP_CONFIG } from "./config";
 import { findProjectRoot } from "./project-root";
@@ -180,6 +180,7 @@ export class LspModule implements AgentModule {
     const errors: Array<{ file: string; diag: LspDiagnostic }> = [];
     const warnings: Array<{ file: string; diag: LspDiagnostic }> = [];
     const notes: string[] = [];
+    const checkedFiles: string[] = [];
     let checked = 0;
 
     for (const file of files) {
@@ -192,6 +193,7 @@ export class LspModule implements AgentModule {
         const diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
         this.failuresByServer.set(key, 0);
         checked++;
+        checkedFiles.push(relative(ctx.baseDir, file).replace(/\\/g, "/"));
         for (const d of diags) {
           if (d.severity === 1) errors.push({ file, diag: d });
           else if (d.severity === 2) warnings.push({ file, diag: d });
@@ -213,6 +215,10 @@ export class LspModule implements AgentModule {
     }
 
     const lines: string[] = [];
+    if (checked > 0) {
+      lines.push(t("lsp.checked_files", { count: String(checked) }));
+      lines.push(...checkedFiles.map((f) => `  ${f}`));
+    }
     if (errors.length > 0) {
       lines.push(`[LSP errors] (${errors.length}):`);
       lines.push(formatCheckDiagnostics(errors, ctx.baseDir));

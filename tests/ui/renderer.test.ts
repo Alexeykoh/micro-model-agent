@@ -144,6 +144,40 @@ describe("Renderer", () => {
     expect(out).toContain("← step 2: run the build");
   });
 
+  it("starts a busy spinner for lsp_check in inline mode", () => {
+    const out = makeOut();
+    const renderer = new Renderer({
+      rich: true,
+      spinner: true,
+      toolStyle: "inline",
+      out: out.stream,
+      err: out.stream,
+      width: 60,
+    });
+    renderer.toolStart("lsp_check", { path: "src" });
+    renderer.toolEnd("lsp_check", 10, false);
+    renderer.flush();
+    const textOut = out.text();
+    expect(textOut).toContain("⠋");
+    expect(textOut).toContain("Checking code");
+  });
+
+  it("does not start a busy spinner for other tools", () => {
+    const out = makeOut();
+    const renderer = new Renderer({
+      rich: true,
+      spinner: true,
+      toolStyle: "inline",
+      out: out.stream,
+      err: out.stream,
+      width: 60,
+    });
+    renderer.toolStart("bash", { command: "ls" });
+    renderer.toolEnd("bash", 1, false);
+    renderer.flush();
+    expect(out.text()).not.toContain("⠋");
+  });
+
   it("appends a step context suffix in plain mode", () => {
     const { renderer, text } = makeRenderer({ rich: false });
     renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");

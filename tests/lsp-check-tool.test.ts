@@ -88,6 +88,18 @@ describe("lsp_check tool", () => {
     expect(checked.some((f) => f.includes("node_modules"))).toBe(false);
   });
 
+  it("lists the checked files in the output", async () => {
+    writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
+    writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 1;", "utf-8");
+    const module = new LspModule({ enabled: true });
+    (module as any).client.checkFile = async () => [];
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("Checked 2 file(s):");
+    expect(res.output).toContain("src/a.ts");
+    expect(res.output).toContain("src/b.ts");
+  });
+
   it("fails for a missing path", async () => {
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async () => [];

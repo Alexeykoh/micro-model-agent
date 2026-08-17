@@ -17,6 +17,9 @@ export interface RendererOptions {
 
 const GUTTER = "  ";
 
+/** Tools that show a busy spinner while running (inline mode). */
+const BUSY_TOOLS = new Set(["lsp_check"]);
+
 /** opencode-like leading marker per tool category. */
 export function toolMarker(tool: string): string {
   switch (tool) {
@@ -160,6 +163,9 @@ export class Renderer {
       this.out.write(
         `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
       );
+      if (BUSY_TOOLS.has(tool)) {
+        this.spinner.start(t("ui.tool_running", { tool: friendlyTool(tool) }));
+      }
       return;
     }
     this.spinner.start(
