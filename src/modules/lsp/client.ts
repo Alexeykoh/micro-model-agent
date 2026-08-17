@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { platform } from "os";
 import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
+import { killTree } from "../processes/registry";
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -264,8 +265,11 @@ export class LspClient {
     } catch {
     } finally {
       if (this.process) {
+        // The direct child on win32 is the cmd.exe wrapper; killing it alone
+        // orphans the npx → node → tsserver tree (observed as leaked node
+        // processes after every check). Tree-kill so the whole chain dies.
         try {
-          this.process.kill();
+          killTree(this.process);
         } catch {}
         this.process = null;
       }

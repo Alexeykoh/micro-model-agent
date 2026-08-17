@@ -112,7 +112,7 @@ function taskkillPid(pid: number): void {
  * This is much cheaper than enumerating processes (wmic/PowerShell), which
  * slows every kill down to seconds under parallel load.
  */
-function killTree(child: ChildProcess): void {
+export function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (!pid) return;
   if (platform() === "win32") {

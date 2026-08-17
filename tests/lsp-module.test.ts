@@ -199,7 +199,7 @@ describe("LspModule", () => {
     }
     expect(
       module.isServerDisabled(
-        "npx:--yes --package vscode-langservers-extracted vscode-css-language-server --stdio",
+        "npx:--yes --package vscode-langservers-extracted --package typescript@5 vscode-css-language-server --stdio",
       ),
     ).toBe(true);
     expect(module.isLspDisabled()).toBe(true);
@@ -220,7 +220,11 @@ describe("LspModule", () => {
       { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
       tsResult,
     );
-    expect(module.isServerDisabled("npx:typescript-language-server --stdio")).toBe(false);
+    expect(
+      module.isServerDisabled(
+        "npx:--yes --package typescript-language-server --package typescript@5 typescript-language-server --stdio",
+      ),
+    ).toBe(false);
     expect(tsResult.output).toBe("ts written ok");
     expect(checkedPaths.some((p) => p.endsWith("a.ts"))).toBe(true);
   });

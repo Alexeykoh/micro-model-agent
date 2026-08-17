@@ -27,13 +27,16 @@ export interface LspProbeSummary {
 
 export interface LspProbeDeps {
   client?: LspClient;
-  /** Per-server probe timeout in ms. */
+  /** Override the per-server probe timeout cap in ms. */
   timeoutMs?: number;
+  /** Overall probe deadline in ms (bounds the banner for broken servers). */
+  deadlineMs?: number;
   /** Injectable file collector (tests). */
   collectFiles?: (baseDir: string, config: LspConfig) => Promise<string[]>;
 }
 
-const DEFAULT_PROBE_TIMEOUT_MS = 20_000;
+const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
+const DEFAULT_PROBE_DEADLINE_MS = 60_000;
 
 /**
  * Check which LSP servers apply to the project (via the same bounded file
@@ -48,7 +51,8 @@ export async function probeLspServers(
   if (!config.enabled) return { ok: [], failed: [], noneApplicable: true };
 
   const client = deps.client ?? new LspClient();
-  const timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+  const timeoutCap = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+  const deadlineMs = deps.deadlineMs ?? DEFAULT_PROBE_DEADLINE_MS;
   const collect = deps.collectFiles ?? collectCheckFiles;
 
   const files = await collect(baseDir, config);
@@ -65,27 +69,40 @@ export async function probeLspServers(
 
   if (servers.length === 0) return { ok: [], failed: [], noneApplicable: true };
 
-  const results = await Promise.all(
-    servers.map(async ({ language, config: server }) => {
-      const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
-      const started = Date.now();
-      try {
-        await client.probe(server, projectRoot, timeoutMs);
-        return { language, ok: true, durationMs: Date.now() - started };
-      } catch (e) {
-        return {
-          language,
-          ok: false,
-          error: e instanceof Error ? e.message : String(e),
-          durationMs: Date.now() - started,
-        };
-      }
-    }),
-  );
+  // Sequential probing: npx auto-install downloads into a shared cache, so
+  // probing several servers in parallel makes them fight over the cache lock —
+  // observed as `LSP request timeout: initialize` for half the servers on a
+  // cold cache. One at a time, each server gets its own config timeout (capped
+  // so a hung server can't stall the REPL banner for minutes).
+  const ok: LspProbeResult[] = [];
+  const failed: LspProbeResult[] = [];
+  const deadline = Date.now() + deadlineMs;
 
-  return {
-    ok: results.filter((r) => r.ok),
-    failed: results.filter((r) => !r.ok),
-    noneApplicable: false,
-  };
+  for (const { language, config: server } of servers) {
+    if (Date.now() >= deadline) {
+      failed.push({
+        language,
+        ok: false,
+        error: "timeout",
+        durationMs: 0,
+      });
+      continue;
+    }
+    const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
+    const serverTimeout = Math.min(server.timeout ?? timeoutCap, timeoutCap);
+    const started = Date.now();
+    try {
+      await client.probe(server, projectRoot, serverTimeout);
+      ok.push({ language, ok: true, durationMs: Date.now() - started });
+    } catch (e) {
+      failed.push({
+        language,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+        durationMs: Date.now() - started,
+      });
+    }
+  }
+
+  return { ok, failed, noneApplicable: false };
 }
