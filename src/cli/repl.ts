@@ -14,6 +14,7 @@ import {
 } from "./completer";
 import { Renderer } from "../ui/renderer";
 import { box, divider } from "../ui/box";
+import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
 import type { Agent } from "../core/agent";
@@ -619,11 +620,6 @@ export class Repl implements ReplContext {
       );
     }
 
-    const lspSummary = await this.probeLspBanner();
-    if (lspSummary) {
-      row(t("repl.lsp_label"), lspSummary);
-    }
-
     const cwd = process.cwd();
     row(t("repl.work_dir"), pc.dim(cwd));
 
@@ -655,14 +651,56 @@ export class Repl implements ReplContext {
     }
 
     const headerWidth = Math.max(50, Math.min(96, process.stdout.columns || 96));
-    for (const line of box(info, {
+    // LSP status is probed in the background — it must never block the banner.
+    const isTty = process.stdout.isTTY === true;
+    const lspEnabled = isTty && (this.config.lsp ?? DEFAULT_LSP_CONFIG).enabled !== false;
+    if (lspEnabled) {
+      row(t("repl.lsp_label"), pc.dim("…"));
+    }
+
+    const boxLines = box(info, {
       title: t("repl.title", { version }),
       width: headerWidth,
-    })) {
+    });
+    for (const line of boxLines) {
       console.log(line);
     }
     console.log();
     this.rl.prompt();
+
+    if (lspEnabled) {
+      this.probeLspBanner()
+        .then((lspSummary) => {
+          if (lspSummary) this.updateLspRow(boxLines.length, headerWidth, lspSummary);
+        })
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * Replace the LSP banner row (rendered as "…") in place once the probe
+   * finishes. The LSP row is the last data row of the box, so it sits exactly
+   * two terminal rows above the prompt line — that offset is stable no matter
+   * how earlier rows wrap. Skipped (placeholder stays) when a rewrite would
+   * corrupt the screen: the agent is already running, the terminal is not a
+   * TTY, a box line wrapped, or the summary is too wide for a single row.
+   */
+  private updateLspRow(boxLineCount: number, headerWidth: number, summary: string): void {
+    if (this.agentRunning || !process.stdout.isTTY) return;
+    if ((process.stdout.columns ?? 96) < headerWidth) return;
+    const inner = headerWidth - 4;
+    // Match box()'s wrapText normalization (leading space stripped, runs of
+    // whitespace collapsed) so the rewritten row is byte-identical to what
+    // box() would render for the same text.
+    const rowText = `${pc.yellow(t("repl.lsp_label"))} ${summary.replace(/\s+/g, " ").trim()}`;
+    if (stringWidth(rowText) > inner) return;
+    const padded = rowText + " ".repeat(Math.max(0, inner - stringWidth(rowText)));
+    const line = pc.dim("│") + " " + padded + " " + pc.dim("│");
+    // From the prompt row (boxLineCount) up 2 to the LSP row (last data row,
+    // directly above the bottom border), clear it, write the new row, and
+    // return the cursor to the prompt row. The editor re-positions itself on
+    // the next keystroke, so any typed input is preserved.
+    process.stdout.write(`\x1b[2A\r\x1b[2K${line}\x1b[2B\r`);
   }
 
   /**

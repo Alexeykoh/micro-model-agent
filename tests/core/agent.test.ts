@@ -155,6 +155,36 @@ describe("Agent", () => {
     expect(result.success).toBe(true);
   });
 
+  it("awaits lazyPromptBlocks once and includes the block in the first system prompt", async () => {
+    const lazyBlock = {
+      content: "STARTUP-BASELINE: pre-existing errors",
+      priority: "high" as const,
+      essential: false,
+      estimatedTokens: 5,
+    };
+    const lazyFn = vi.fn().mockResolvedValue([lazyBlock]);
+    const deps = createMockDeps({ lazyPromptBlocks: lazyFn });
+    const agent = new Agent(deps as any);
+
+    await agent.run("hello");
+    await agent.run("again");
+
+    expect(lazyFn).toHaveBeenCalledTimes(1);
+    const addMessage = deps.contextManager.addMessage as any;
+    const systemCall = addMessage.mock.calls.find((c: any[]) => c[0].role === "system");
+    expect(systemCall[0].content).toContain("STARTUP-BASELINE");
+  });
+
+  it("handles lazyPromptBlocks resolving to an empty array", async () => {
+    const lazyFn = vi.fn().mockResolvedValue([]);
+    const deps = createMockDeps({ lazyPromptBlocks: lazyFn });
+    const agent = new Agent(deps as any);
+
+    await agent.run("hello");
+
+    expect(lazyFn).toHaveBeenCalledTimes(1);
+  });
+
   it("estimates token metrics locally when the backend omits usage", async () => {
     const mockProvider = {
       model: "test-model",

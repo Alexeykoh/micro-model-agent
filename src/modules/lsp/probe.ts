@@ -31,12 +31,21 @@ export interface LspProbeDeps {
   timeoutMs?: number;
   /** Overall probe deadline in ms (bounds the banner for broken servers). */
   deadlineMs?: number;
+  /**
+   * How many servers to probe concurrently. Sequential (1) is safest on a cold
+   * npx cache (see below); a higher value keeps the REPL banner fast once the
+   * cache is warm. Each server in a wave uses its own LspClient (the client is
+   * stateful, so concurrent probes on a shared instance would corrupt each
+   * other's request/response state).
+   */
+  maxParallel?: number;
   /** Injectable file collector (tests). */
   collectFiles?: (baseDir: string, config: LspConfig) => Promise<string[]>;
 }
 
 const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
 const DEFAULT_PROBE_DEADLINE_MS = 60_000;
+const DEFAULT_MAX_PARALLEL = 3;
 
 /**
  * Check which LSP servers apply to the project (via the same bounded file
@@ -50,9 +59,9 @@ export async function probeLspServers(
 ): Promise<LspProbeSummary> {
   if (!config.enabled) return { ok: [], failed: [], noneApplicable: true };
 
-  const client = deps.client ?? new LspClient();
   const timeoutCap = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   const deadlineMs = deps.deadlineMs ?? DEFAULT_PROBE_DEADLINE_MS;
+  const maxParallel = deps.maxParallel ?? DEFAULT_MAX_PARALLEL;
   const collect = deps.collectFiles ?? collectCheckFiles;
 
   const files = await collect(baseDir, config);
@@ -69,30 +78,26 @@ export async function probeLspServers(
 
   if (servers.length === 0) return { ok: [], failed: [], noneApplicable: true };
 
-  // Sequential probing: npx auto-install downloads into a shared cache, so
-  // probing several servers in parallel makes them fight over the cache lock —
-  // observed as `LSP request timeout: initialize` for half the servers on a
-  // cold cache. One at a time, each server gets its own config timeout (capped
-  // so a hung server can't stall the REPL banner for minutes).
+  // Probe in bounded waves. Probing everything in parallel on a cold npx cache
+  // makes the servers fight over the shared cache lock — observed as `LSP
+  // request timeout: initialize` for half the servers. Fully sequential probing
+  // avoids that but doubles the REPL banner wait (each server ~2s). A wave of
+  // `maxParallel` keeps the banner fast on a warm cache while capping cold-cache
+  // contention; each server in a wave gets its own LspClient (the client is
+  // stateful — process, request ids, response buffer — so concurrent probes on
+  // a shared instance would cross-talk). When a client is injected (tests), it
+  // is reused for every server.
   const ok: LspProbeResult[] = [];
   const failed: LspProbeResult[] = [];
   const deadline = Date.now() + deadlineMs;
 
-  for (const { language, config: server } of servers) {
-    if (Date.now() >= deadline) {
-      failed.push({
-        language,
-        ok: false,
-        error: "timeout",
-        durationMs: 0,
-      });
-      continue;
-    }
+  const probeOne = async (language: string, server: LspServerConfig): Promise<void> => {
     const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
     const serverTimeout = Math.min(server.timeout ?? timeoutCap, timeoutCap);
     const started = Date.now();
+    const probeClient = deps.client ?? new LspClient();
     try {
-      await client.probe(server, projectRoot, serverTimeout);
+      await probeClient.probe(server, projectRoot, serverTimeout);
       ok.push({ language, ok: true, durationMs: Date.now() - started });
     } catch (e) {
       failed.push({
@@ -102,6 +107,17 @@ export async function probeLspServers(
         durationMs: Date.now() - started,
       });
     }
+  };
+
+  for (let i = 0; i < servers.length; i += maxParallel) {
+    if (Date.now() >= deadline) {
+      for (const { language } of servers.slice(i)) {
+        failed.push({ language, ok: false, error: "timeout", durationMs: 0 });
+      }
+      break;
+    }
+    const wave = servers.slice(i, i + maxParallel);
+    await Promise.all(wave.map(({ language, config: server }) => probeOne(language, server)));
   }
 
   return { ok, failed, noneApplicable: false };

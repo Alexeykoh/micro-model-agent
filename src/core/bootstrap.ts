@@ -334,12 +334,16 @@ export async function bootstrap(
   }
 
   // Startup health check: scan project for existing errors so the model
-  // knows the baseline before it starts working. Skip for one-shot runs
-  // and test environments.
+  // knows the baseline before it starts working. Skip for one-shot runs and
+  // test environments. Started in the background (never awaited) so the REPL
+  // banner is not blocked by `npx tsc` on the whole project; the Agent awaits
+  // it before the first LLM call via `lazyPromptBlocks` (already resolved by
+  // the time the user types in the interactive REPL).
   let startupCheckBlock: PromptBlock | null = null;
-  if (!exitOnComplete && process.env.NODE_ENV !== "test") {
-    startupCheckBlock = await runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir);
-  }
+  const startupCheckPromise =
+    !exitOnComplete && process.env.NODE_ENV !== "test"
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir)
+      : Promise.resolve(null);
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
   for (const tool of moduleTools) {
@@ -437,7 +441,6 @@ export async function bootstrap(
     ...moduleRegistry.collectPromptBlocks(["indexer"]),
     ...agentsMdBlocks,
   ];
-  if (startupCheckBlock) promptBlocks.push(startupCheckBlock);
 
   const agentDeps: AgentDeps = {
     config,
@@ -470,6 +473,11 @@ export async function bootstrap(
       return blocks;
     },
     finalAudit: () => execModule.runFinalAudit(),
+    lazyPromptBlocks: async () => {
+      if (startupCheckBlock) return [startupCheckBlock];
+      startupCheckBlock = (await startupCheckPromise) ?? null;
+      return startupCheckBlock ? [startupCheckBlock] : [];
+    },
     sessionManager,
     memoryStore,
     exitOnComplete,

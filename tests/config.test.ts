@@ -177,4 +177,114 @@ describe("loadConfig", () => {
     expect(cfg.version).toBe("2.0.0");
     expect(existsSync(join(tmpDir, "config.json.bak"))).toBe(true);
   });
+
+  it("normalizes stale pre-0.41.1 LSP server args to the fixed defaults", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        lsp: {
+          enabled: true,
+          servers: {
+            typescript: {
+              command: "npx",
+              args: ["typescript-language-server", "--stdio"],
+              timeout: 20000,
+              workspaceMarkers: ["package.json", "tsconfig.json"],
+            },
+            css: {
+              command: "npx",
+              args: ["vscode-css-languageserver", "--stdio"],
+              timeout: 10000,
+              workspaceMarkers: ["package.json"],
+            },
+          },
+        },
+      }),
+    );
+
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    const ts = cfg.lsp!.servers.typescript;
+    const css = cfg.lsp!.servers.css;
+    expect(ts.args).toEqual([
+      "--yes",
+      "--package",
+      "typescript-language-server",
+      "--package",
+      "typescript@5",
+      "typescript-language-server",
+      "--stdio",
+    ]);
+    expect(ts.timeout).toBe(30000);
+    expect(css.args).toEqual([
+      "--yes",
+      "--package",
+      "vscode-langservers-extracted",
+      "--package",
+      "typescript@5",
+      "vscode-css-language-server",
+      "--stdio",
+    ]);
+    expect(css.timeout).toBe(60000);
+  });
+
+  it("keeps custom LSP server args that differ from the legacy form", () => {
+    const tmpDir = makeTempDir();
+    const customArgs = ["--experimental", "my-ts-server", "--stdio"];
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        lsp: {
+          enabled: true,
+          servers: {
+            typescript: {
+              command: "npx",
+              args: customArgs,
+              timeout: 20000,
+              workspaceMarkers: ["package.json", "tsconfig.json"],
+            },
+          },
+        },
+      }),
+    );
+
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    expect(cfg.lsp!.servers.typescript.args).toEqual(customArgs);
+  });
+
+  it("keeps non-npx LSP commands untouched", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        lsp: {
+          enabled: true,
+          servers: {
+            typescript: {
+              command: "typescript-language-server",
+              args: ["--stdio"],
+              timeout: 20000,
+              workspaceMarkers: ["package.json", "tsconfig.json"],
+            },
+          },
+        },
+      }),
+    );
+
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    expect(cfg.lsp!.servers.typescript.args).toEqual(["--stdio"]);
+    expect(cfg.lsp!.servers.typescript.command).toBe("typescript-language-server");
+  });
 });

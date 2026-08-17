@@ -2,6 +2,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from "
 import { join, dirname } from "path";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
 import type { AppConfig } from "./types";
 import { MigrationDetector } from "../migration/detect";
@@ -82,6 +83,46 @@ function regexReviver(_key: string, value: unknown): unknown {
     }
   }
   return value;
+}
+
+/**
+ * Legacy npx `args` for LSP servers that predate the fixed invocation
+ * (`--yes --package <server> --package typescript@5 …`). These exact arrays
+ * are unsafe: without `--yes`/`--package` the servers fail to bootstrap
+ * (`Could not find a valid TypeScript installation`) or the package name is
+ * wrong, so the server hangs until the initialize timeout. When a stored
+ * server's `args` matches one of these (or is missing) it is replaced with the
+ * current default args — user-customized arrays that differ are left alone.
+ */
+const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }> = {
+  typescript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
+  javascript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
+  json: { args: ["vscode-json-languageserver", "--stdio"], timeout: 30000 },
+  html: { args: ["vscode-html-languageserver", "--stdio"], timeout: 60000 },
+  css: { args: ["vscode-css-languageserver", "--stdio"], timeout: 60000 },
+};
+
+/**
+ * Replace stale pre-0.41.1 LSP server invocations (npx bootstrap args) with
+ * the current defaults, so an old `~/.mma/config.json` that overrides the
+ * fixed server args can't silently re-break every LSP server. In-memory only —
+ * mirrors the `restoreDangerousPatterns` precedent; the file keeps the old
+ * args and is normalized again on every load.
+ */
+function normalizeLspServerArgs(config: AppConfig): void {
+  const servers = config.lsp?.servers;
+  if (!servers) return;
+  for (const [lang, legacy] of Object.entries(LEGACY_LSP_SERVER_ARGS)) {
+    const server = servers[lang];
+    const def = DEFAULT_LSP_CONFIG.servers[lang];
+    if (!server || server.command !== "npx" || !def) continue;
+    const storedArgs = Array.isArray(server.args) ? server.args : null;
+    const isLegacy = storedArgs === null || JSON.stringify(storedArgs) === JSON.stringify(legacy.args);
+    if (isLegacy) {
+      server.args = def.args;
+      server.timeout = def.timeout;
+    }
+  }
 }
 
 function loadJSON(path: string): Record<string, unknown> | null {
@@ -173,6 +214,9 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
       DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns,
     );
   }
+
+  // Replace stale pre-0.41.1 LSP server args with the current defaults.
+  normalizeLspServerArgs(config);
 
   config = applyEnvVars(config);
 

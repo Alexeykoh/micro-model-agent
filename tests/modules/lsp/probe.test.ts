@@ -95,4 +95,55 @@ describe("probeLspServers", () => {
     expect(summary.ok).toHaveLength(1);
     expect(summary.ok[0].language).toBe("css");
   });
+
+  it("probes in waves bounded by maxParallel", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "export const a = 1;");
+    writeFileSync(join(tmpDir, "b.css"), "body {}");
+    writeFileSync(join(tmpDir, "package.json"), "{}");
+    const threeServerConfig: LspConfig = {
+      ...CONFIG,
+      servers: {
+        ...CONFIG.servers,
+        json: {
+          command: "json-server",
+          args: ["--stdio"],
+          workspaceMarkers: ["package.json"],
+        },
+      },
+    };
+    const active = new Set<string>();
+    let peak = 0;
+    const probed: string[] = [];
+    const summary = await probeLspServers(threeServerConfig, tmpDir, {
+      maxParallel: 2,
+      client: {
+        probe: async (server: { args?: string[] }) => {
+          active.add(server.args?.[0] ?? "");
+          peak = Math.max(peak, active.size);
+          await new Promise((r) => setTimeout(r, 30));
+          active.delete(server.args?.[0] ?? "");
+          probed.push(server.args?.[0] ?? "");
+        },
+      } as any,
+    });
+    expect(probed).toHaveLength(3);
+    expect(probed.every((p) => p === "--stdio")).toBe(true);
+    expect(summary.ok).toHaveLength(3);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(summary.noneApplicable).toBe(false);
+  });
+
+  it("marks servers that miss the deadline as failed", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "export const a = 1;");
+    writeFileSync(join(tmpDir, "b.css"), "body {}");
+    writeFileSync(join(tmpDir, "package.json"), "{}");
+    const summary = await probeLspServers(CONFIG, tmpDir, {
+      deadlineMs: 0,
+      maxParallel: 1,
+      client: { probe: async () => {} } as any,
+    });
+    expect(summary.failed).toHaveLength(2);
+    expect(summary.failed.every((r) => r.error === "timeout")).toBe(true);
+    expect(summary.ok).toHaveLength(0);
+  });
 });

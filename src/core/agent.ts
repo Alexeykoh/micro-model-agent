@@ -72,6 +72,13 @@ export interface AgentDeps {
   toolTags?: string[];
   promptBlocks: PromptBlock[];
   getDynamicPromptBlocks?: () => PromptBlock[];
+  /**
+   * Prompt blocks computed asynchronously (e.g. the startup LSP/tsc health
+   * check). The promise starts at bootstrap so it never blocks the banner;
+   * `run()` awaits it before the first system prompt so the model still gets
+   * the baseline before the first LLM call. Only the first `run()` waits.
+   */
+  lazyPromptBlocks?: () => Promise<PromptBlock[]>;
   finalAudit?: () => Promise<{
     passed: boolean;
     done: number;
@@ -299,6 +306,10 @@ export class Agent {
       !this.systemPromptAdded &&
       !contextManager.getActiveHistory().some((m) => m.role === "system")
     ) {
+      const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
+      if (lazy.length > 0) {
+        this.deps.promptBlocks.push(...lazy);
+      }
       const { prompt: systemPrompt, excluded } = this.buildSystemPrompt();
       contextManager.addMessage({ role: "system", content: systemPrompt });
       this.systemPromptAdded = true;
