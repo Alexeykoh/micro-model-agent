@@ -31,26 +31,7 @@ export class LspClient {
     const timeout = config.timeout ?? DEFAULT_TIMEOUT;
 
     try {
-      await this.startServer(config, projectRoot);
-
-      const rootUri = this.pathToUri(projectRoot);
-      const initParams = {
-        processId: process.pid,
-        rootUri,
-        workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-        capabilities: { textDocument: { publishDiagnostics: {} } },
-      };
-      try {
-        await this.sendRequest("initialize", initParams, timeout);
-      } catch (e) {
-        // npx auto-install can blow past the initialize timeout on first run — retry once.
-        if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
-        await this.shutdown();
-        await this.startServer(config, projectRoot);
-        await this.sendRequest("initialize", initParams, timeout);
-      }
-      this.initialized = true;
-
+      await this.initialize(config, projectRoot, timeout);
       this.sendNotification("initialized", {});
 
       const uri = this.pathToUri(resolve(filePath));
@@ -82,6 +63,46 @@ export class LspClient {
     } finally {
       await this.shutdown();
     }
+  }
+
+  /**
+   * Lightweight "does the server actually start" probe: spawn + initialize +
+   * shutdown. Used by the REPL banner to surface a dead server (npx
+   * auto-install failure, wrong package name, missing binary) up front instead
+   * of the first write_file timing out.
+   */
+  async probe(config: LspServerConfig, projectRoot: string, timeout: number): Promise<void> {
+    try {
+      await this.initialize(config, projectRoot, timeout);
+    } finally {
+      await this.shutdown();
+    }
+  }
+
+  private async initialize(
+    config: LspServerConfig,
+    projectRoot: string,
+    timeout: number,
+  ): Promise<void> {
+    await this.startServer(config, projectRoot);
+
+    const rootUri = this.pathToUri(projectRoot);
+    const initParams = {
+      processId: process.pid,
+      rootUri,
+      workspaceFolders: [{ uri: rootUri, name: "workspace" }],
+      capabilities: { textDocument: { publishDiagnostics: {} } },
+    };
+    try {
+      await this.sendRequest("initialize", initParams, timeout);
+    } catch (e) {
+      // npx auto-install can blow past the initialize timeout on first run — retry once.
+      if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
+      await this.shutdown();
+      await this.startServer(config, projectRoot);
+      await this.sendRequest("initialize", initParams, timeout);
+    }
+    this.initialized = true;
   }
 
   private async startServer(config: LspServerConfig, projectRoot: string): Promise<void> {

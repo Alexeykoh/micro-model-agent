@@ -399,7 +399,8 @@ src/
 │   ├── lsp/            # LSP diagnostics (typescript/css), on-demand + write/edit plugin
 │   │   ├── module.ts   # AgentModule — lsp_check tool + onAfterTool plugin (per-server disable, cap 40)
 │   │   ├── check-tool.ts # lsp_check helpers: collectCheckFiles (dir walk, cap 15) + formatCheckDiagnostics
-│   │   ├── client.ts   # LSP over stdio (spawn, initialize, didOpen, shutdown)
+│   │   ├── probe.ts    # probeLspServers — REPL banner: which servers apply to the project + do they start
+│   │   ├── client.ts   # LSP over stdio (spawn, initialize, didOpen, shutdown) + probe()
 │   │   ├── command.ts  # resolveSpawnCommand + buildWinCommandLine (win32 shell)
 │   │   ├── config.ts   # Per-language server config (command/args/workspaceMarkers)
 │   │   └── project-root.ts # findProjectRoot via workspace markers
@@ -494,13 +495,13 @@ The model sends a `question` tool call with one or more questions:
 
 **Parameters:**
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `question` | yes | Complete question text |
-| `header` | no | Short label (max 30 chars) shown above the question |
-| `options` | no | Array of `{label, description}` choices; omit for free-text |
-| `multiple` | no | Allow selecting more than one option |
-| `custom` | no | Allow typing a custom answer (default: true when options present) |
+| Field      | Required | Description                                                       |
+| ---------- | -------- | ----------------------------------------------------------------- |
+| `question` | yes      | Complete question text                                            |
+| `header`   | no       | Short label (max 30 chars) shown above the question               |
+| `options`  | no       | Array of `{label, description}` choices; omit for free-text       |
+| `multiple` | no       | Allow selecting more than one option                              |
+| `custom`   | no       | Allow typing a custom answer (default: true when options present) |
 
 ### UX
 
@@ -536,7 +537,7 @@ action: async () => {
     // Interactive readline — no REPL handler interference
     const answers = await runSetup(repl.rl);
   });
-}
+};
 ```
 
 **How it works:**
@@ -591,21 +592,21 @@ Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`,
 
 ### REPL slash commands
 
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/sessions` | `/ls` | List all sessions (* active) |
-| `/new <name>` | `/create` | Create a new session |
-| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
-| `/rename <name>` | | Rename current session |
-| `/delete <id>` | `/rm` | Delete a session |
+| Command              | Aliases           | Description                  |
+| -------------------- | ----------------- | ---------------------------- |
+| `/sessions`          | `/ls`             | List all sessions (* active) |
+| `/new <name>`        | `/create`         | Create a new session         |
+| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session          |
+| `/rename <name>`     |                   | Rename current session       |
+| `/delete <id>`       | `/rm`             | Delete a session             |
 
 ### REPL Keybindings
 
-| Key | Context | Action |
-|-----|---------|--------|
-| `Esc` `Esc` | Agent/tool running | Interrupt current operation, return to prompt |
-| `Ctrl+C` | Any | Graceful shutdown (forces exit after 2s if agent running) |
-| `Ctrl+V` | Idle (in prompt) | Paste image from clipboard |
+| Key         | Context            | Action                                                    |
+| ----------- | ------------------ | --------------------------------------------------------- |
+| `Esc` `Esc` | Agent/tool running | Interrupt current operation, return to prompt             |
+| `Ctrl+C`    | Any                | Graceful shutdown (forces exit after 2s if agent running) |
+| `Ctrl+V`    | Idle (in prompt)   | Paste image from clipboard                                |
 
 ### CLI subcommands
 
@@ -660,18 +661,18 @@ Playwright-based headless browser for web navigation, form filling, and page int
 
 ### Actions
 
-| Action | Parameters | Description |
-|--------|-----------|-------------|
-| `open` | `url` | Navigate to URL, returns element snapshot |
-| `click` | `target` (number) | Click element by snapshot index |
-| `type` | `target`, `text` | Type text into element |
-| `scroll` | `direction` (up/down/top/bottom) | Scroll page |
-| `back` | — | Go back in history |
-| `forward` | — | Go forward in history |
-| `screenshot` | — | Capture page screenshot (vision models only) |
-| `snapshot` | — | Re-read current page elements |
-| `wait` | `ms` | Wait for page changes |
-| `close` | — | Close browser session |
+| Action       | Parameters                       | Description                                  |
+| ------------ | -------------------------------- | -------------------------------------------- |
+| `open`       | `url`                            | Navigate to URL, returns element snapshot    |
+| `click`      | `target` (number)                | Click element by snapshot index              |
+| `type`       | `target`, `text`                 | Type text into element                       |
+| `scroll`     | `direction` (up/down/top/bottom) | Scroll page                                  |
+| `back`       | —                                | Go back in history                           |
+| `forward`    | —                                | Go forward in history                        |
+| `screenshot` | —                                | Capture page screenshot (vision models only) |
+| `snapshot`   | —                                | Re-read current page elements                |
+| `wait`       | `ms`                             | Wait for page changes                        |
+| `close`      | —                                | Close browser session                        |
 
 ### Accessibility Tree Snapshot
 
@@ -682,7 +683,7 @@ Page: "Example Domain"
 URL: https://example.com
 
 [1] link "More information..." → http://www.iana.org/domains/example
-[2] textbox "Search" 
+[2] textbox "Search"
 [3] button "Submit"
 ```
 
@@ -781,11 +782,11 @@ MMA automatically builds and maintains a map of the current workspace.
 - Re-scans on file changes via a file watcher and exposes the result as a system prompt block.
 - `project_map` tool lets the model query the current map:
 
-| Action | Parameters | Description |
-|--------|-----------|-------------|
-| `summary` | — | Languages, file counts, top directories, key exports |
-| `refresh` | — | Force a full re-index |
-| `find` | `query` | Search files by path or exported symbol name |
+| Action    | Parameters | Description                                          |
+| --------- | ---------- | ---------------------------------------------------- |
+| `summary` | —          | Languages, file counts, top directories, key exports |
+| `refresh` | —          | Force a full re-index                                |
+| `find`    | `query`    | Search files by path or exported symbol name         |
 
 - Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`).
 
@@ -821,19 +822,19 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 
 **Хуки:**
 
-| Хук | Момент | Особенность |
-|-----|--------|-------------|
-| `onBuildPrompt` | сборка системного промпта (1 раз) | строка добавляется блоком `low`-приоритета |
-| `onBeforeThink` | перед каждым LLM-вызовом | |
-| `onAfterThink(ctx, response)` | после ответа LLM | `response` = `LLMResponse` или `null` |
-| `onBeforeTool` | перед тулом | `false` = заблокировать (короткозамыкает) |
-| `onAfterTool` | после тула | может мутировать `result.output` |
-| `onToolCall` | LLM вернул тул-вызов | `ctx.toolName`, `ctx.args` |
-| `onToolStart` / `onToolEnd` | тул-карточка открыта/закрыта | `onToolEnd` даёт `result` + `durationMs` |
-| `onPhase` | спиннер: `thinking` / `done` | |
-| `onText` / `onMeta` | чанк стриминга | вернуть строку — заменить на экране, `undefined` — пропустить |
-| `onError` | ошибка LLM | |
-| `onSessionStart` / `onSessionEnd` | жизненный цикл сессии | |
+| Хук                               | Момент                            | Особенность                                                   |
+| --------------------------------- | --------------------------------- | ------------------------------------------------------------- |
+| `onBuildPrompt`                   | сборка системного промпта (1 раз) | строка добавляется блоком `low`-приоритета                    |
+| `onBeforeThink`                   | перед каждым LLM-вызовом          |                                                               |
+| `onAfterThink(ctx, response)`     | после ответа LLM                  | `response` = `LLMResponse` или `null`                         |
+| `onBeforeTool`                    | перед тулом                       | `false` = заблокировать (короткозамыкает)                     |
+| `onAfterTool`                     | после тула                        | может мутировать `result.output`                              |
+| `onToolCall`                      | LLM вернул тул-вызов              | `ctx.toolName`, `ctx.args`                                    |
+| `onToolStart` / `onToolEnd`       | тул-карточка открыта/закрыта      | `onToolEnd` даёт `result` + `durationMs`                      |
+| `onPhase`                         | спиннер: `thinking` / `done`      |                                                               |
+| `onText` / `onMeta`               | чанк стриминга                    | вернуть строку — заменить на экране, `undefined` — пропустить |
+| `onError`                         | ошибка LLM                        |                                                               |
+| `onSessionStart` / `onSessionEnd` | жизненный цикл сессии             |                                                               |
 
 **UI-хуки** (`onPhase`, `onToolStart`/`onToolEnd`, `onText`/`onMeta`) дают плагинам видимость и контроль над тем, что видит пользователь: спиннер, тул-карточки, стриминг. `onText`/`onMeta` влияют только на отображение, `result.text` не меняется.
 
@@ -874,10 +875,10 @@ The context events need the `contextManager` in the plugin hook contexts — `ag
 ## Context Budget (dynamic, from model.contextWindow)
 
 | contextWindow | System (10%) | Reserve (15%) | History (75%) |
-|---------------|-------------|---------------|---------------|
-| 32K           | 3K          | 5K            | 24K           |
-| 64K           | 6K          | 10K           | 48K           |
-| 128K          | 13K         | 19K           | 96K           |
+| ------------- | ------------ | ------------- | ------------- |
+| 32K           | 3K           | 5K            | 24K           |
+| 64K           | 6K           | 10K           | 48K           |
+| 128K          | 13K          | 19K           | 96K           |
 
 Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
 
@@ -895,10 +896,10 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 
 ### Management tools
 
-| Tool | Purpose |
-|------|---------|
-| `process_list` | List background processes: id, PID, command, status, last output line |
-| `process_log` | Show buffered output of a background process (`id`, optional `tail`) |
+| Tool           | Purpose                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `process_list` | List background processes: id, PID, command, status, last output line                                               |
+| `process_log`  | Show buffered output of a background process (`id`, optional `tail`)                                                |
 | `process_kill` | Kill a background process tree (`id`) — works even though `kill`/`pkill` are blocked by the bash security blacklist |
 
 - PIDs are tracked in `src/modules/processes/registry.ts` (per-session, capped at 20 entries, 2000 log lines each). Windows output is decoded from the OEM code page (CP866) so Cyrillic is not garbled. Output buffers are capped.
@@ -944,15 +945,15 @@ Plans are stored in `<project>/.mma/plans/` with automatic history management:
 
 **Plan tool actions:**
 
-| Action | Description |
-|--------|-------------|
-| `create` | Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive. |
-| `update` | Mark step status (done/failed/skipped). |
-| `show` | Print current plan checklist. |
-| `abort` | Archive current plan and clear active slot. |
-| `list` | Show all plans (active, drafts, archived) with progress. |
-| `switch` | Make a different plan active by plan id. |
-| `re-plan` | Iterative replanning: keep completed steps, replace remaining with new steps. |
+| Action    | Description                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `create`  | Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive. |
+| `update`  | Mark step status (done/failed/skipped).                                                           |
+| `show`    | Print current plan checklist.                                                                     |
+| `abort`   | Archive current plan and clear active slot.                                                       |
+| `list`    | Show all plans (active, drafts, archived) with progress.                                          |
+| `switch`  | Make a different plan active by plan id.                                                          |
+| `re-plan` | Iterative replanning: keep completed steps, replace remaining with new steps.                     |
 
 **Key behaviors:**
 
@@ -1022,8 +1023,8 @@ If `orchestrator.model` configured: larger model handles planning, conflict reso
 ## Hallucination Detection Pipeline
 
 ```
-LLM response → ConfidenceCheck (short/repetitive) 
-             → FactualCheck (paths vs known set) 
+LLM response → ConfidenceCheck (short/repetitive)
+             → FactualCheck (paths vs known set)
              → ConsistencyCheck (decision reversal)
 ```
 
@@ -1042,10 +1043,10 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 
 ### When to bump which part
 
-| Version Part | When to Bump | Examples |
-|-------------|--------------|----------|
-| **MAJOR** (X.0.0) | Breaking changes: API changes, config schema changes, removed commands/tools, architecture rewrites | v1.0.0 → v2.0.0 (MMA v1→v2 rewrite), config version field change |
-| **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook |
+| Version Part      | When to Bump                                                                                                                    | Examples                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **MAJOR** (X.0.0) | Breaking changes: API changes, config schema changes, removed commands/tools, architecture rewrites                             | v1.0.0 → v2.0.0 (MMA v1→v2 rewrite), config version field change                       |
+| **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands                                      | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook       |
 | **PATCH** (0.0.Z) | Bug fixes, typo fixes, i18n additions, doc updates, performance improvements, test additions, dependency updates (non-breaking) | Fix crash in `bash` tool, add ru translation, update README, fix typo in error message |
 
 ### Release Process
@@ -1056,10 +1057,10 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
    ```bash
    # For patch
    npm version patch
-   
-   # For minor  
+
+   # For minor
    npm version minor
-   
+
    # For major
    npm version major
    ```
@@ -1099,6 +1100,8 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 
 ### Current Version: 0.40.0
 
+- **48** = LSP server banner + broken package fix (from `ses_msx58xuw_hym7vv` — "проверь, есть ли ошибки в проекте" on a Vite/React TS project): (1) **REPL banner shows LSP status** — `Repl.start()` is now async and probes the LSP servers applicable to the project (`probeLspServers()` in `src/modules/lsp/probe.ts`, reusing `collectCheckFiles` + `findProjectRoot`), rendering `LSP: ✓ typescript (2.9s)  ✗ css — не стартовал` so a dead server is visible before the first write. `LspClient` gained `probe()` (spawn + initialize + shutdown) with `initialize()` extracted from `checkFile` (kept the `initialized` notification). New i18n: `repl.lsp_label` / `repl.lsp_timeout` / `repl.lsp_failed` / `repl.lsp_unknown` (en+ru). `main.ts` awaits `repl.start()`. (2) **fixed broken LSP package names** — `vscode-html-languageserver` (404 Not Found) and `vscode-css-languageserver` (unpublished 2021) never existed; both `html`, `css`, and `json` now use `npx --yes --package vscode-langservers-extracted vscode-{html,css,json}-language-server --stdio` with longer timeouts (html/css 60s, json 30s) — this was the root cause of the session's `LSP request timeout: initialize` (21.7s on an `index.html` edit) and the 90s `lsp_check` tool timeout on a directory (html/css server hung on npx). Test server key updated in `lsp-module.test.ts`. New tests: `tests/modules/lsp/probe.test.ts` (5 cases — disabled, none-applicable, language-filtered probing, failure reporting, custom collector). Verified: `bun test` green (lsp-module 5, probe 5, startup-check 5, repl 6), `tsc --noEmit` clean. Version: **0.40.1** (PATCH — bugfix + banner status line, no new command/tool).
+
 - **47** = tool-set narrowing + on-demand enable (from the pi-vs-MMA executiveness analysis): the main agent loop now exposes only a small default tool set instead of all ~28. **Config `tools`** (`src/config/types.ts` `ToolsConfig`): `defaultTags` (default `["file","code"]`) + `enableOnDemand` (default `true`). **`alwaysOn` flag** on `ToolDefinition` (`src/tools/types.ts`) — tools that survive any tag filter; `getAllForLLM()`/`getByTags()`/`filterToolsByTags()` all keep them (structural tools `plan`/`todo`/`verify`/`project_map`/`lsp_check` are `alwaysOn`, so plan enforcement survives narrowing). **`enable_tools` tool** (`src/tools/enable-tools.ts`, `alwaysOn`) — pushes tags into the shared mutable `activeToolTags` array; the agent loop recomputes the LLM tool set **every iteration** (`agent.ts`) so enabled tools appear next turn. **Hidden-tools prompt block** (`src/tools/hidden-tools-block.ts`, wired via `getDynamicPromptBlocks` in `bootstrap.ts`) — lists tag-grouped hidden tools so the model knows they exist; instructs to call `enable_tools` or route via `subagent tool_tags`. Default set: 28→17 tools, ~3500→~2100 schema tokens (−40%); hidden: web_* (research), browser, attach_image, process_*, remember/recall, search_history. `enableOnDemand: false` restores legacy all-tools behavior. Subagent guard now uses `getByTags` (alwaysOn tools otherwise masked unknown-tag detection). New i18n: `tools.*` (en+ru). Tests: `tests/tools-tags.test.ts` (hidden block, enable_tools, filterToolsByTags), registry alwaysOn cases, config defaultTags validation. Verified: `bun test` green (only pre-existing `bootstrap` env fail), `tsc --noEmit` clean, `build:prod` ok. Version: **0.40.0** (MINOR — new config section + new tool + alwaysOn flag).
 
 - **46** = plugin versioning + registration (user request: «может стоит обновить регистрацию плагинов и добавить версионность?»; scope = minimal + `mma plugins list` + compatibility check): (1) **`AgentPlugin` gains optional `version` (semver) and `minMmaVersion`** (`src/modules/types.ts`); (2) **dedup by name** in `PluginManager.register(plugin, source?)` (`src/modules/plugins/manager.ts`) — the higher `version` wins (unversioned = "0.0.0"), loser dropped, caller notified via `RegisterResult` (`registered` / `skipped_older` / `duplicate`); `getPluginInfos(): PluginInfo[]` (plugin + source) while `getAllPlugins()` stays backward-compatible; (3) **compatibility gate** in `PluginLoader` (`src/modules/plugins/loader.ts`) — plugin is skipped with a `plugin.incompatible` warning when `minMmaVersion` > current MMA version; bootstrap passes `mmaVersion` (new `readMmaVersion()` in `src/core/version.ts`, rule #12) + `source` (`global`/`project`) per dir; (4) **CLI `mma plugins list`** (`src/cli/plugin-commands.ts`) — external plugins only by default (matches REPL `/status`), `--all` includes builtins; REPL `/status` shows version + `[source]` per non-builtin plugin (`repl.ts`); (5) `lint-on-write` + `notify` now `isBuiltin = true` so they don't clutter the external list; (6) trace-server declares `version: "0.1.0"` + `minMmaVersion: "0.36.0"` (needs `contextManager` in hook contexts, added in 0.36.0); frontend split into `page.html` + `styles.css` + `app.js` (AGENTS.md Plugins section updated, both plugin copies re-synced). New i18n: `plugin.incompatible`, `plugin.dedup_older`, `cli.plugins.*`, `repl.plugins` (en+ru). Tests: dedup-by-version / unversioned / duplicate / source / getPlugin in `plugin-manager.test.ts` + minMmaVersion skip / source passthrough / cross-dir dedup in `plugin-loader.test.ts`. Verified: `bun test` green, `tsc --noEmit` clean, `mma plugins list` shows `trace-server v0.1.0 [global]` and skips a synthetic `minMmaVersion: 99.0.0` plugin with `plugin.incompatible`. REPL `/plugins` shows external plugins by default, `--all` shows builtins. Version: **0.39.1** (PATCH).
@@ -1109,7 +1112,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 
 - **43** = REPL paste fix (user report: clipboard text was "typed", not pasted): the line editor handled bracketed paste per-character — Bun's readline delivers each pasted char as a separate keypress, and the old code called `insertText()` + a full `render()` per char, so a paste appeared as fast typing with flicker, and Windows CRLF clipboard text became double newlines. Now `LineEditor` (`src/ui/line-editor.ts`) accumulates paste chars in a `pasteBuffer` between `\x1b[200~`/`\x1b[201~` and inserts them as a single batch on `paste-end` (one render per paste, not per char); `\r\n` collapses to one `\n` (`pasteLastWasCR`) and a lone trailing `\r` yields a single trailing newline; new `insertPaste()` splits the batch into real buffer lines instead of embedding literal `\n` in one string. Tests: 4 new cases in `tests/ui/line-editor.test.ts` (batch single-render, CRLF collapse, trailing CR, multi-line). Version: **0.36.3** (PATCH).
 
-- **42** = auto-update fixes (user report: «автообновление не работает»): (1) **silent updater logger** — `startAutoUpdate()` in `main.ts` created `UpdaterModule` without a logger, so the module's fallback (`info: () => {}`) swallowed ALL updater messages (`installing`/`installed`/`available`/`check_error`); it now passes a real stderr logger (`pc.dim`/`pc.yellow`/`pc.red`) so the user actually sees the check/install progress. (2) **one-shot `process.exit()` killed the background `npm install -g`** — the updater fired as fire-and-forget, but one-shot mode (`bun run mma "<prompt>"` / `--json`) called `process.exit()` right after the agent run, terminating the in-flight install mid-write (proven with a child-process test); `main.ts` now keeps the `UpdaterModule` reference and `await updater.waitForIdle()` before `process.exit()` in one-shot mode (skipped under `--exit-on-complete` so the certification/agent-test harness stays fast and network-free). New `UpdaterModule.waitForIdle(timeoutMs = 130000)` — races the current run-loop pass promise against the timeout, no-op when never started. (3) **semver-aware update check** — `check()` used string inequality (`latest !== current`), so a local version newer than npm's `latest` was offered as a *downgrade*; new `semverGt()` (numeric x.y.z, `v`-prefix and partial parts tolerated) gates `updateAvailable`. Tests: `waitForIdle` settles after single-shot check, returns immediately when not started; `semverGt` numeric/v-prefix/partial cases + no-downgrade check. Version: **0.36.2** (PATCH).
+- **42** = auto-update fixes (user report: «автообновление не работает»): (1) **silent updater logger** — `startAutoUpdate()` in `main.ts` created `UpdaterModule` without a logger, so the module's fallback (`info: () => {}`) swallowed ALL updater messages (`installing`/`installed`/`available`/`check_error`); it now passes a real stderr logger (`pc.dim`/`pc.yellow`/`pc.red`) so the user actually sees the check/install progress. (2) **one-shot `process.exit()` killed the background `npm install -g`** — the updater fired as fire-and-forget, but one-shot mode (`bun run mma "<prompt>"` / `--json`) called `process.exit()` right after the agent run, terminating the in-flight install mid-write (proven with a child-process test); `main.ts` now keeps the `UpdaterModule` reference and `await updater.waitForIdle()` before `process.exit()` in one-shot mode (skipped under `--exit-on-complete` so the certification/agent-test harness stays fast and network-free). New `UpdaterModule.waitForIdle(timeoutMs = 130000)` — races the current run-loop pass promise against the timeout, no-op when never started. (3) **semver-aware update check** — `check()` used string inequality (`latest !== current`), so a local version newer than npm's `latest` was offered as a _downgrade_; new `semverGt()` (numeric x.y.z, `v`-prefix and partial parts tolerated) gates `updateAvailable`. Tests: `waitForIdle` settles after single-shot check, returns immediately when not started; `semverGt` numeric/v-prefix/partial cases + no-downgrade check. Version: **0.36.2** (PATCH).
 
 - **41** = post-mortem fixes from two bike-shop sessions (`ses_msudj2kx_ke4wml` qwen3.5-9b + `ses_msuexz1b_lffcxt` gemma-4-12b-qat, both Vite+React+TS; per `docs/superpowers/plans/2026-08-15-agent-fix-plan.md`): (1) **final audit typecheck finds nested project root** — `Auditor.audit()` only ran `tsc` when `baseDir/tsconfig.json` existed, so an agent working in a subfolder (`bicycle-shop/`) got NO typecheck and the audit passed with 38 tsc errors; new `findTypecheckRoot(baseDir, existingFiles)` (audit-runners.ts) walks baseDir + resolved step files upward to the nearest tsconfig, and the audit now passes resolved absolute paths in `existingFiles`; (2) **unrecognized non-zero test run blocks the audit** — `runTests()` returned `failed: -1` on unrecognized runner output, and `testsFailing = failed > 0` treated it as passing; now `failed: 1` and the gate keys on `!testRun.passed` (timeouts stay non-blocking); (3) **browser bridge diagnostics + one-shot restart** — `spawnBridge()` had no `proc.on("error")` (unhandled spawn failures crashed), discarded stderr, and `send()` threw "Bridge is not running" after an unexpected exit; now error/exit handlers reject pending with the spawn message + stderr tail (300 chars), a stale-child guard (`if (this.proc !== proc) return`) prevents a respawned bridge from being nulled by a dead child's delayed exit, and `send()` respawns once with a `retried` flag; (4) **LSP per-server disable + initialize retry + CSS timeout** — a CSS `LSP request timeout: initialize` (10s npx first-run) disabled LSP GLOBALLY for the session (killing TS checks too); disable is now per-server (`failuresByServer`/`disabledServers` keyed by `command:args`), `initialize` retries once on timeout with a full `shutdown()`+`startServer()` reset, `shutdown()` clears the stale parse buffer, and CSS timeout is 20s; (5) **npm exec hint** — `npm error could not determine executable to run` (bunx/npx on a no-bin package, missing `npm run` script) now gets a concrete `exec.npm_exec_hint` hint in bash output. New i18n: `exec.npm_exec_hint` (en+ru). New tests: nested-project + no-tsconfig audit cases, `failed:-1` blocking case, bridge spawn-error/exit-restart/stale-child tests (8), LSP per-server isolation + buffer reset, `npmExecHint` unit + real-npm e2e. Version: **0.36.1** (PATCH — bugfixes + i18n keys).
 - **40** = trace-server example plugin context tracking + plugin-hook `contextManager` exposure (`examples/plugins/trace-server.ts`): live context bar (tokens/budget, quality %, compaction count, iterations since compaction, message count) fed by new `context` SSE events, plus `compaction` events rendered as CTX log entries (tokens before/after, quality before/after) — detected by compaction-count growth between hook calls. The plugin hook contexts in `agent.ts` now carry `contextManager` (was only in `onBeforeThink`); passed to `runOnPhase`, `runOnSessionStart`, `runOnError`, `runOnAfterThink`, `runOnToolStart`, `runOnToolEnd`, `runOnText`, `runOnMeta`, `runOnSessionEnd`. Dedup: both the global and project copies of the plugin load in one process, so the shared server lives on `Symbol.for("mma.trace-server")` (`globalThis`), `startServer()` dedupes concurrent starts with an in-flight promise (`state.starting`), and identical context snapshots are broadcast once. Smoke test `_testing/trace-server-smoke.ts` extended with context/compaction checks (mock `contextManager` with a rising compaction count). Version: **0.36.0** (MINOR — new plugin example + new hook-context field).
@@ -1120,7 +1123,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **36** = control-loop fixes from `ses_msstxxff_th8art` post-mortem: (1) **LSP `spawn EINVAL` on Windows under Node** — the v0.33.3 `resolveSpawnCommand()` fix (ENOENT → `npx.cmd`) was insufficient: Node still throws `spawn EINVAL` spawning a `.cmd` shim without a shell, so LSP was dead for the whole session (`[LSP check failed]: spawn EINVAL` on every write/edit → the model wrote broken TS blind). `client.ts` now, on win32, builds a quoted command line via `buildWinCommandLine()` (`src/modules/lsp/command.ts`) and passes `shell: true` so the server runs through `cmd.exe /d /s /c`. (2) **plan self-certification** — `plan update step=N status=done` now verifies the step's named files actually exist (`missingStepDeliverables()` via the shared `extractFileLikeTokens` + auditor's `findExistingFile` subtree resolver) and refuses `done` with `plan.deliverables_missing` when they don't. Fixes the session's `del bicycles.ts` → `plan update step=2 done` flow that let a 1/3-done task pass the final audit. (3) **auditor summary contradicted the verdict** — when files existed but steps were pending, `audit()` emitted `exec.audit_pass` ("[✓] Task complete: 1/3 steps done"), a green light the model read as "stop working"; it now emits `exec.audit_pending` unless every step is done. New i18n: `plan.deliverables_missing`, `exec.audit_pending` (en+ru). Tests: `tests/execution-plan-deliverables.test.ts` (new), `execution-auditor.test.ts` + `lsp-command.test.ts` extended (incl. a real `.cmd`-shim spawn on win32).
 - **35** = `download_file` tool (`src/tools/download-file.ts`): download a binary file (image/archive/font/…) from a URL straight to disk — `web_fetch`/`web_browse` return text only, and the 9B model's curl workaround (`curl -sL … > file`) failed 6+ times on Windows with wrong relative paths (`curl: (23) client returned ERROR on write`). The tool: resolves the path via `safeResolvePath` + `isPathWritable` (baseDir containment + subagent scope), validates the URL via network-validator, enforces a 100 MB cap (`content-length` header and post-read `arrayBuffer` size), creates intermediate directories, and returns **metadata only** (url, absolute path, size, content-type) so binary bytes never hit the 32K context. Tags `["file","research"]`, i18n `tool.friendly.download_file` / `tool.downloaded` / `tool.download_too_large`. Note: Unsplash/Pexels/Pixabay pages are behind anti-bot (Anubis/Cloudflare 403) — the tool downloads bytes from reachable direct CDN URLs, it does not bypass CAPTCHAs. New tool → **MINOR bump (0.35.0)** on release.
 - **34** = indexer project profile (`src/modules/indexer/project-profile.ts`): the project map now includes a one-line stack-neutral `[Stack: …]` summary read from the workspace manifest (package.json / pyproject.toml / Cargo.toml / go.mod / requirements.txt) — name, top deps, dev deps, scripts (capped 5/3/3, best-effort parsing, no per-language behavior). Fixes the 9B model guessing "Next.js" for a Vite/React shop before reading `package.json`. Also: the indexer map block is no longer frozen at bootstrap — it moved to `getDynamicPromptBlocks` (`registry.collectPromptBlocks(exclude)`, `bootstrap.ts`), so the map refreshes inside a session instead of a snapshot string from startup.
-- **33.3** = session post-mortem fixes (from `ses_mssl5izw_fqu78w` — a "simple" React fix that took 20 min and failed): (1) **auditor nested-file resolution** — plan steps naming files by bare basename ("App.tsx") or partial path ("src/App.tsx") were flagged as missing when the real file lives in a subdirectory (`bicycle-shop/src/App.tsx`) → the final audit gate rejected a completed task forever ("1 files missing") and sent the model into a read/retry loop; `auditor.ts` now resolves via bounded subtree walk (basename + path-suffix match, depth 8, skips node_modules/.git/.mma/dist). (2) **`plan show` honors `id`** — was ignoring `args.id` and always printing the active plan, so the model asking for an archived plan got the wrong one three times in a row. (3) **compaction interval reset per user turn** — `iterationsSinceCompaction` leaked across user messages, forcing a compaction on iteration 8 of the next turn that deleted the freshly-sent task; new `ContextManager.resetUserTurn()` called at the top of `Agent.run()`. (4) **`extractFacts` now captures `edit_file` "Replaced in <path>"** (the most common write signal) plus Windows drive-letter paths — previously every edit_file fact was dropped at compaction, so the model re-read the same files after every compaction. (5) **stuck detector read-only loop** — a run of 10+ consecutive read-only tool calls (read_file/glob/grep/browser/plan) with no write is now flagged with a recovery hint; `resetStepProgress()` (instead of full `reset()`) keeps the tool-call history when a plan is complete, so the "plan complete + audit rejected → 50 read-only iterations" loop is finally caught. (6) **read_file default limit 15 → 300 lines** — the 15-line default forced 10-17 calls per file (96 read_file calls / 11 compactions in ~20 min in the session); 300 covers typical component files in one call. (7) **LSP `spawn` on Windows** — `spawn("npx", …)` fails with ENOENT because Windows ships `npx.cmd`; new `resolveSpawnCommand()` in `modules/lsp/command.ts` resolves the `.cmd`/`.exe` shim on PATH so LSP diagnostics actually run on win32 (they were dead for the whole session, silently killing type feedback). (8) **`todo` tool real subtask tracking** — `todo add` now appends to a structured `step.subtasks[]` (rendered as checkboxes in the plan prompt block) instead of a `note` string, and `todo done` marks the *individual sub-task* done rather than auto-completing the whole plan step (observed: 3 × "todo done" returned "Step 3: done" and finished the plan early); new i18n `todo.no_items` / `todo.subtask_not_found`. (9) **memory learns repeated per-tool failures** — a memory rule is now written when a *single tool* fails ≥3× (per-tool counter), not only when 5 *consecutive* failures occur — so a systemic failure like LSP `spawn npx ENOENT` (8× in one session, never consecutively) finally reaches `errors.md`. (10) **compaction preserves the user's task** — `ContextManager` now tracks the turn's first real user instruction (skipping `<system-summary>`/retry envelopes) and emits it as `[Task: …]` in the compacted summary, so after compaction the model no longer forgets what it was asked to do (observed: post-compaction the model re-read files for 40+ iterations because the task "удали /bicycles, почини стили" was compacted away); `resetUserTurn()` clears the stored task so each new user message becomes the preserved one.
+- **33.3** = session post-mortem fixes (from `ses_mssl5izw_fqu78w` — a "simple" React fix that took 20 min and failed): (1) **auditor nested-file resolution** — plan steps naming files by bare basename ("App.tsx") or partial path ("src/App.tsx") were flagged as missing when the real file lives in a subdirectory (`bicycle-shop/src/App.tsx`) → the final audit gate rejected a completed task forever ("1 files missing") and sent the model into a read/retry loop; `auditor.ts` now resolves via bounded subtree walk (basename + path-suffix match, depth 8, skips node_modules/.git/.mma/dist). (2) **`plan show` honors `id`** — was ignoring `args.id` and always printing the active plan, so the model asking for an archived plan got the wrong one three times in a row. (3) **compaction interval reset per user turn** — `iterationsSinceCompaction` leaked across user messages, forcing a compaction on iteration 8 of the next turn that deleted the freshly-sent task; new `ContextManager.resetUserTurn()` called at the top of `Agent.run()`. (4) **`extractFacts` now captures `edit_file` "Replaced in <path>"** (the most common write signal) plus Windows drive-letter paths — previously every edit_file fact was dropped at compaction, so the model re-read the same files after every compaction. (5) **stuck detector read-only loop** — a run of 10+ consecutive read-only tool calls (read_file/glob/grep/browser/plan) with no write is now flagged with a recovery hint; `resetStepProgress()` (instead of full `reset()`) keeps the tool-call history when a plan is complete, so the "plan complete + audit rejected → 50 read-only iterations" loop is finally caught. (6) **read_file default limit 15 → 300 lines** — the 15-line default forced 10-17 calls per file (96 read_file calls / 11 compactions in ~20 min in the session); 300 covers typical component files in one call. (7) **LSP `spawn` on Windows** — `spawn("npx", …)` fails with ENOENT because Windows ships `npx.cmd`; new `resolveSpawnCommand()` in `modules/lsp/command.ts` resolves the `.cmd`/`.exe` shim on PATH so LSP diagnostics actually run on win32 (they were dead for the whole session, silently killing type feedback). (8) **`todo` tool real subtask tracking** — `todo add` now appends to a structured `step.subtasks[]` (rendered as checkboxes in the plan prompt block) instead of a `note` string, and `todo done` marks the _individual sub-task_ done rather than auto-completing the whole plan step (observed: 3 × "todo done" returned "Step 3: done" and finished the plan early); new i18n `todo.no_items` / `todo.subtask_not_found`. (9) **memory learns repeated per-tool failures** — a memory rule is now written when a _single tool_ fails ≥3× (per-tool counter), not only when 5 _consecutive_ failures occur — so a systemic failure like LSP `spawn npx ENOENT` (8× in one session, never consecutively) finally reaches `errors.md`. (10) **compaction preserves the user's task** — `ContextManager` now tracks the turn's first real user instruction (skipping `<system-summary>`/retry envelopes) and emits it as `[Task: …]` in the compacted summary, so after compaction the model no longer forgets what it was asked to do (observed: post-compaction the model re-read files for 40+ iterations because the task "удали /bicycles, почини стили" was compacted away); `resetUserTurn()` clears the stored task so each new user message becomes the preserved one.
 - **33.2** = REPL conversation layout: user/agent messages separated by divider lines (`divider()`), user prompt labeled `You:`/`Вы:` via i18n `repl.you` (agent replies already had `Agent:`). File-token heuristic inverted: `js-identifiers.ts` `isFilePathLike()` now gates bare `word.ext` tokens on an **allow-list of real file extensions** (`FILE_EXTENSIONS`) instead of a TLD deny-list — any domain (`Gismeteo.by`, `weather.com`, future TLDs) is never a file without maintaining a list; paths with a separator still accepted. Tool guidance: `browser` must not open search engines (blocked with CAPTCHA/429) — use `web_search`; `web_search` description points that out.
 - **33.1** = REPL line editor redraw fix (no more duplicated multi-line input — `render()` moves back to the frame's first row via `prevCursorRow` before redrawing; `submit()`/`reset()`/`question()` commit the frame instead of erasing it); tool descriptions clarify `web_fetch`/`web_browse` are plain JS-less HTTP fetch (JS-rendered SPAs return empty content — use the `browser` tool).
 
@@ -1136,7 +1139,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - **28** = double-Esc interrupt fix (Bun readline collapses fast Esc Esc into one keypress — ESC bytes counted instead of events), abortable in-flight LLM requests on interrupt (`LLMProvider.chat` accepts an `AbortSignal`), clipboard paste hint when the buffer has no image
 - **29** = R1–R3: smart UTF-8/OEM line decoding for process output (fixes Cyrillic mojibake on Windows), auto-detection of test-runner results (`detectTestResults`) with `[test-runner]` injections (fail → “do NOT mark done”, pass → “may mark done”), tail output (up to 400 lines) instead of head preview when tests fail, concrete stuck hints (empty CLI output → missing entry point, PowerShell cmdlets in cmd.exe, invented Bun APIs, heredoc in cmd), behavior-based background detection hardening, Windows command hints
 - **30** = R4: final audit gate runs real `bun test` (90s timeout, non-blocking on timeout/unrecognized run) via process registry, `extractFailingNames()` in summary, `findTestFile()` (depth 5, skips node_modules/.git/.mma/dist), audit failure injects `<system-summary>` warning and the agent keeps working; i18n key `exec.audit_fail_tests`
-- **31** = R5/R6: empty-CLI entry-point hint (`emptyCliRunHint` — file run exits 0 with no output → tell the model to check main(process.argv)/console.log; guards: test runners, redirects, non-file commands), bash tool description lists Windows anti-patterns (Write-Host, Get-Content, Select-String, Out-File, heredoc `<<`), typecheck/syntax errors in a *successful* write/edit output now feed the stuck detector (rewrite-loop hint fires on blind rewrites instead of 20+ silent iterations)
+- **31** = R5/R6: empty-CLI entry-point hint (`emptyCliRunHint` — file run exits 0 with no output → tell the model to check main(process.argv)/console.log; guards: test runners, redirects, non-file commands), bash tool description lists Windows anti-patterns (Write-Host, Get-Content, Select-String, Out-File, heredoc `<<`), typecheck/syntax errors in a _successful_ write/edit output now feed the stuck detector (rewrite-loop hint fires on blind rewrites instead of 20+ silent iterations)
 - **29** = R1–R3 regression fixes from the CSV/CLI test runs: smart output decoding on Windows (per-line UTF-8 detection with OEM/ibm866 fallback in `registry.ts` — bun/node children write UTF-8, cmd.exe writes OEM), `detectTestResults()` auto-verification in `bash` (bun test/vitest/jest/mocha/pytest markers, `[test-runner]` warning blocks marking verification steps done on failing runs, failing runs keep the output tail instead of a 15-line head preview), stuck-detector bash awareness (`recordBashOutput`: empty-output → check entry point, PowerShell cmdlets in cmd.exe, invented Bun APIs, bash heredoc hints)
 - **30** = R4: Final Audit Gate actually runs `bun test` when the plan contains a verification step and test files exist (`auditor.ts` `runTests` via processRegistry, 90s cap; inconclusive runs don't block; failing test names land in the injected warning via `exec.audit_fail_tests`). Catches final answers claiming "all tests pass" while the suite fails (task-12 regression: 8/3 → 7/3 → 14/0)
 - **29.0.0** = RLM-inspired features (spec `docs/specs/2026-08-12-rlm-inspired-design.md`): `ArtifactStore` (`src/modules/artifacts/store.ts`), subagent `result_mode: "file"` pass-by-reference results, `chunk_query` tool + `runChunkQuery()` chunked parallel queries, `SubagentConfig` (resultMode/maxSummaryChars/artifactsDir/stableSystemPrompt/maxParallelChunkQueries), `ChatOptions.maxTokens` + `ChatOptions.reasoningEffort` (`reasoning_effort` in OpenAI-compat body), per-tool `timeoutMs` override, stable subagent system prompt. Fix: bun test hang from leaked `mma-idle-*.js` processes — double `taskkill /T` with 150ms settle gap in `killTree` (wmic/PowerShell process enumeration was too slow under parallel load)

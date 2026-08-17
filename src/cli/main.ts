@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       logger,
       true,
     );
-    repl.start();
+    await repl.start();
   }
 }
 

@@ -23,6 +23,8 @@ import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
+import { probeLspServers } from "../modules/lsp/probe";
+import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -525,7 +527,7 @@ export class Repl implements ReplContext {
     }
   }
 
-  start(): void {
+  async start(): Promise<void> {
     this.running = true;
 
     const info: string[] = [];
@@ -589,6 +591,11 @@ export class Repl implements ReplContext {
       );
     }
 
+    const lspSummary = await this.probeLspBanner();
+    if (lspSummary) {
+      row(t("repl.lsp_label"), lspSummary);
+    }
+
     const cwd = process.cwd();
     row(t("repl.work_dir"), pc.dim(cwd));
 
@@ -628,6 +635,30 @@ export class Repl implements ReplContext {
     }
     console.log();
     this.rl.prompt();
+  }
+
+  /**
+   * Probe the LSP servers applicable to the current project and format a
+   * one-line banner summary, e.g. "✓ typescript (1.2s)" or "✗ css — timeout".
+   * Returns null when LSP is disabled or no server applies.
+   */
+  private async probeLspBanner(): Promise<string | null> {
+    const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
+    try {
+      const summary = await probeLspServers(config, this.baseDir);
+      if (summary.noneApplicable) return null;
+      const parts: string[] = [];
+      for (const r of summary.ok) {
+        parts.push(pc.green(`✓ ${r.language}${pc.dim(` (${(r.durationMs / 1000).toFixed(1)}s)`)}`));
+      }
+      for (const r of summary.failed) {
+        const reason = r.error?.includes("timeout") ? t("repl.lsp_timeout") : t("repl.lsp_failed");
+        parts.push(pc.red(`✗ ${r.language}${pc.dim(` — ${reason}`)}`));
+      }
+      return parts.join("  ");
+    } catch {
+      return pc.yellow(t("repl.lsp_unknown"));
+    }
   }
 
   public stop(): void {

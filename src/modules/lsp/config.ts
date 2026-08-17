@@ -46,22 +46,40 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
     },
     json: {
       command: "npx",
-      args: ["vscode-json-languageserver", "--stdio"],
-      timeout: 10000,
+      args: [
+        "--yes",
+        "--package",
+        "vscode-langservers-extracted",
+        "vscode-json-language-server",
+        "--stdio",
+      ],
+      timeout: 30000,
       autoInstall: true,
       workspaceMarkers: ["package.json"],
     },
     html: {
       command: "npx",
-      args: ["vscode-html-languageserver", "--stdio"],
-      timeout: 10000,
+      args: [
+        "--yes",
+        "--package",
+        "vscode-langservers-extracted",
+        "vscode-html-language-server",
+        "--stdio",
+      ],
+      timeout: 60000,
       autoInstall: true,
       workspaceMarkers: ["package.json"],
     },
     css: {
       command: "npx",
-      args: ["vscode-css-languageserver", "--stdio"],
-      timeout: 20000,
+      args: [
+        "--yes",
+        "--package",
+        "vscode-langservers-extracted",
+        "vscode-css-language-server",
+        "--stdio",
+      ],
+      timeout: 60000,
       autoInstall: true,
       workspaceMarkers: ["package.json"],
     },
@@ -86,10 +104,15 @@ const LANGUAGE_MAP: Record<string, string> = {
   scss: "css",
 };
 
-export function getServerForFile(filePath: string, config: LspConfig): LspServerConfig | null {
+/** Language id for a file extension (via LANGUAGE_MAP), or null when unsupported. */
+export function getLanguageForFile(filePath: string): string | null {
   const ext = filePath.split(".").pop()?.toLowerCase();
   if (!ext) return null;
-  const lang = LANGUAGE_MAP[ext];
+  return LANGUAGE_MAP[ext] ?? null;
+}
+
+export function getServerForFile(filePath: string, config: LspConfig): LspServerConfig | null {
+  const lang = getLanguageForFile(filePath);
   if (!lang) return null;
   return config.servers[lang] ?? null;
 }

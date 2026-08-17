@@ -34,7 +34,7 @@ describe("LspModule", () => {
     };
     await plugin.onAfterTool!(
       { baseDir, logger: { warn: () => {} } } as any,
-      { name: "write_file", arguments: { path: "src/a.ts" } },
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
       result,
     );
     expect(receivedProjectRoot).toBe(baseDir);
@@ -56,7 +56,11 @@ describe("LspModule", () => {
     (module as any).client.checkFile = async () => {
       throw new Error("npx typescript-language-server not found");
     };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, result);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      result,
+    );
     expect(result.output).toContain("[LSP check failed]");
   });
 
@@ -79,20 +83,32 @@ describe("LspModule", () => {
     // First two failures: keep the per-write note (existing behavior).
     for (let i = 0; i < 2; i++) {
       const r = { success: true, output: "file written ok" };
-      await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, r);
+      await plugin.onAfterTool!(
+        ctx,
+        { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+        r,
+      );
       expect(r.output).toContain("[LSP check failed]");
     }
 
     // Third consecutive failure: one clear "unavailable" signal + disable.
     const third = { success: true, output: "file written ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, third);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      third,
+    );
     expect(third.output).toContain("LSP disabled");
     expect(third.output).toContain("LSP");
     expect(third.output).toContain("unavailable");
 
     // Fourth and later: no per-write noise, no repeated signal.
     const fourth = { success: true, output: "file written ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, fourth);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      fourth,
+    );
     expect(fourth.output).toBe("file written ok");
     expect(module.isLspDisabled()).toBe(true);
   });
@@ -118,21 +134,37 @@ describe("LspModule", () => {
 
     // fail once
     const r1 = { success: true, output: "ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, r1);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      r1,
+    );
     expect(r1.output).toContain("[LSP check failed]");
 
     // succeed — resets the consecutive-failure counter
     shouldFail = false;
     const r2 = { success: true, output: "ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, r2);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      r2,
+    );
     expect(module.isLspDisabled()).toBe(false);
 
     // fail twice more — still under the threshold because of the reset
     shouldFail = true;
     const r3 = { success: true, output: "ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, r3);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      r3,
+    );
     const r4 = { success: true, output: "ok" };
-    await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.ts" } }, r4);
+    await plugin.onAfterTool!(
+      ctx,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
+      r4,
+    );
     expect(module.isLspDisabled()).toBe(false);
   });
 
@@ -159,16 +191,24 @@ describe("LspModule", () => {
     // Three consecutive CSS failures disable only the css server.
     for (let i = 0; i < 3; i++) {
       const r = { success: true, output: "css written ok" };
-      await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "src/a.css" } }, r);
+      await plugin.onAfterTool!(
+        ctx,
+        { id: "call-1", name: "write_file", arguments: { path: "src/a.css" } },
+        r,
+      );
     }
-    expect(module.isServerDisabled("npx:vscode-css-languageserver --stdio")).toBe(true);
+    expect(
+      module.isServerDisabled(
+        "npx:--yes --package vscode-langservers-extracted vscode-css-language-server --stdio",
+      ),
+    ).toBe(true);
     expect(module.isLspDisabled()).toBe(true);
 
     // A 4th CSS write after disable: silenced, output untouched.
     const cssAgain = { success: true, output: "css written ok" };
     await plugin.onAfterTool!(
       ctx,
-      { name: "write_file", arguments: { path: "src/a.css" } },
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.css" } },
       cssAgain,
     );
     expect(cssAgain.output).toBe("css written ok");
@@ -177,7 +217,7 @@ describe("LspModule", () => {
     const tsResult = { success: true, output: "ts written ok" };
     await plugin.onAfterTool!(
       ctx,
-      { name: "write_file", arguments: { path: "src/a.ts" } },
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.ts" } },
       tsResult,
     );
     expect(module.isServerDisabled("npx:typescript-language-server --stdio")).toBe(false);
