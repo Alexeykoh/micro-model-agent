@@ -18,6 +18,8 @@ import { MAX_PREVIEW_LINES } from "./preview";
 export const BASH_GRACE_MS = 5000;
 /** Short window for explicit `background: true` — surfaces immediate spawn failures (bad cwd, missing shell). */
 const SPAWN_SETTLE_MS = 100;
+/** Number of already-emitted lines shown in the background start message. */
+const BG_OUTPUT_PREVIEW_LINES = 15;
 
 let bashGraceMs = BASH_GRACE_MS;
 /** Test hook: override the auto-background grace window. */
@@ -540,16 +542,19 @@ export const bashTool: ToolDefinition = {
 
       // Still running — promote to a background process.
       const explicit = args.background === true;
-      const output = `${t("proc.started", {
+      const preview = entry.log
+        .filter((l) => l.trim() !== "")
+        .slice(0, BG_OUTPUT_PREVIEW_LINES)
+        .join("\n");
+      let output = `${t("proc.started", {
         id: entry.id,
         pid: entry.pid,
         command,
-      })}${explicit ? "" : `\n${t("proc.promoted_hint", { ms: settleMs })}`}\n${t(
-        "proc.manage_hint",
-        {
-          id: entry.id,
-        },
-      )}`;
+      })}${explicit ? "" : `\n${t("proc.promoted_hint", { ms: settleMs })}`}`;
+      if (preview) {
+        output += `\n\n${t("proc.output_preview", { lines: preview })}`;
+      }
+      output += `\n${t("proc.manage_hint", { id: entry.id })}`;
 
       if (securityConfig?.logCommands) {
         logBashCommand(

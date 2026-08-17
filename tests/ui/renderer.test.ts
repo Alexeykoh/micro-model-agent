@@ -134,4 +134,39 @@ describe("Renderer", () => {
     expect(out).toContain("✓");
     expect(out).toContain("ls");
   });
+
+  it("appends a step context suffix to the inline header", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");
+    renderer.toolEnd("bash", 10, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("← step 2: run the build");
+  });
+
+  it("appends a step context suffix in plain mode", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");
+    renderer.flush();
+    expect(text()).toContain("step 2: run the build");
+  });
+
+  it("renders a plan checklist block verbatim", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.planBlock(["[plan_x] Check", "  [x] 1. done", "  [ ] 2. todo"]);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("[plan_x] Check");
+    expect(out).toContain("[ ] 2. todo");
+  });
+
+  it("closes an open card before rendering the plan block", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "bun run build" });
+    renderer.planBlock(["[plan_x] Check"]);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("[plan_x] Check");
+  });
 });

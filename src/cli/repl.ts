@@ -25,6 +25,8 @@ import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
+import type { Plan } from "../modules/execution/planner";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -81,6 +83,8 @@ export class Repl implements ReplContext {
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
   private exitOnClose = false;
+  private activePlan: Plan | null = null;
+  private lastPlanSig = "";
 
   public rl: LineInput;
   public agent: Agent;
@@ -372,15 +376,23 @@ export class Repl implements ReplContext {
         spinner: this.config.ui?.spinner ?? true,
         toolStyle: this.config.ui?.toolStyle ?? "inline",
       });
+      this.refreshActivePlan(renderer);
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
         (m) => renderer.meta(m),
         (ev) => {
           if (ev.type === "start") {
-            renderer.toolStart(ev.tool, ev.args);
+            renderer.toolStart(
+              ev.tool,
+              ev.args,
+              stepContextForTool(this.activePlan, ev.tool, ev.args),
+            );
           } else {
             renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
+            if (ev.tool === "plan" || ev.tool === "todo") {
+              this.refreshActivePlan(renderer);
+            }
           }
         },
         (phase) => {
@@ -408,6 +420,22 @@ export class Repl implements ReplContext {
       process.stdout.write("\n" + divider() + "\n");
     } finally {
       this.agentRunning = false;
+    }
+  }
+
+  /** Re-read the active plan from disk; print a live checklist when it changed. */
+  private refreshActivePlan(renderer: Renderer): void {
+    const plan = readActivePlan(this.baseDir);
+    const sig = plan ? JSON.stringify(plan.steps.map((s) => `${s.id}:${s.status}`)) : "";
+    if (!plan) {
+      this.activePlan = null;
+      this.lastPlanSig = "";
+      return;
+    }
+    this.activePlan = plan;
+    if (sig !== this.lastPlanSig) {
+      this.lastPlanSig = sig;
+      renderer.planBlock(formatPlanChecklist(plan));
     }
   }
 

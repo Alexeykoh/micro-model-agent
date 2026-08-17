@@ -143,13 +143,14 @@ export class Renderer {
     this.spinner.stop();
   }
 
-  toolStart(tool: string, args: Record<string, unknown>): void {
+  toolStart(tool: string, args: Record<string, unknown>, stepContext?: string | null): void {
     this.endCard();
     this.spinner.stop();
     const summary = summarizeArgs(args);
+    const step = stepContext ? ` ${pc.cyan(`← ${stepContext}`)}` : "";
     if (!this.rich) {
       this.out.write(
-        `\n${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+        `\n${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
       );
       return;
     }
@@ -157,13 +158,22 @@ export class Renderer {
     if (this.toolStyle === "inline") {
       const marker = toolMarker(tool);
       this.out.write(
-        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
       );
       return;
     }
     this.spinner.start(
-      `${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}`,
+      `${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}`,
     );
+  }
+
+  /** Live plan checklist — prints the plan block as-is (already colored). */
+  planBlock(lines: string[]): void {
+    this.endCard();
+    this.spinner.stop();
+    for (const line of lines) {
+      this.out.write(`${line}\n`);
+    }
   }
 
   toolEnd(_tool: string, duration: number, error?: boolean, ctxDelta?: number): void {

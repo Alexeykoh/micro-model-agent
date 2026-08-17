@@ -160,6 +160,8 @@ describe("bash", () => {
     // the background and reports success even on failure.
     setBashGraceMs(5000);
 
+    // npm install + npx under parallel test load can exceed vitest's default
+    // 5s timeout — give the real npm a generous window.
     // Skip when npm is not available — the pure npmExecHint tests above
     // cover the logic regardless of environment.
     const npmCheck = await bashTool.handler(makeCtx(), {
@@ -206,7 +208,7 @@ describe("bash", () => {
         /* ignore */
       }
     }
-  });
+  }, 30_000);
 });
 
 describe("extractEchoFileWrite", () => {
