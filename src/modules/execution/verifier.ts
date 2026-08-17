@@ -170,7 +170,7 @@ export class StepVerifier {
   private async validateSyntax(filePath: string): Promise<boolean> {
     const ext = extname(filePath)
 
-    if (ext === '.ts' || ext === '.tsx') {
+    if (ext === '.ts' || ext === '.tsx' || ext === '.cts' || ext === '.mts') {
       try {
         await this.runAsync(`npx tsc --noEmit --skipLibCheck ${filePath}`, this.baseDir, 10000)
         return true
@@ -186,7 +186,7 @@ export class StepVerifier {
       }
     }
 
-    if (ext === '.js' || ext === '.jsx') {
+    if (ext === '.js' || ext === '.jsx' || ext === '.cjs' || ext === '.mjs') {
       try {
         await this.runAsync(`node --check ${filePath}`, this.baseDir, 5000)
         return true

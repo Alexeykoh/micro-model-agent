@@ -21,7 +21,8 @@ import {
 import { UserProfile } from "../modules/user-profile/profile";
 import { SkillsLoader, SkillsModule } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
-import { LspModule } from "../modules/lsp/index";
+import { LspModule, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
+import { runStartupHealthCheck } from "../modules/lsp/startup-check";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
 import { MemoryModule } from "../modules/memory/module";
@@ -67,6 +68,7 @@ export function buildSystemInfo(
 	lines.push(
 		`Bash: use "workdir" param instead of "cd dir && cmd". One command per call. Long-running processes: pass "background: true" (id immediately), otherwise auto-backgrounded after a few seconds — check with process_log.`,
 		`DEVELOPMENT RULES (strict): 1) install deps BEFORE writing source (npm/pip/cargo, verify lockfile exists; never import uninstalled packages); 2) framework/toolkit init BEFORE app code; 3) follow plan sequentially, after each step verify deliverables exist with real content, then "plan update step=N status=done"; 4) verify work on disk + command output — don't assume success; 5) no premature work (no files/imports for future steps); 6) stuck after 2+ failures: STOP, try a different approach, write files directly, ask the user.`,
+		`VERIFY EVERY WRITE: after write_file or edit_file, if the tool result contains NO [LSP errors], [LSP warnings], [Syntax check failed], or [Project typecheck failed] feedback, call the "lsp_check" tool on the file you just wrote BEFORE marking the step done. Never assume a written file is valid — prove it.`,
 		`PLAN QUALITY: each step = CONCRETE deliverables (exact file paths with extensions, exact packages, exact commands). Vague steps ("Setup the project") forbidden. Cover init → deps → framework → code → verification. 5-8 steps.`,
 		`For "check/fix errors" tasks, each verification step must name the exact command that proves the errors are gone — "bun run build", "bun test", or the "lsp_check" tool — and the step is done only after that check reports clean.`,
 	);
@@ -80,9 +82,13 @@ export function buildSystemInfo(
 	// When a bug is described in terms of runtime behavior (what happens when
 	// the app runs), the fix is only provable by REPRODUCING it — running the
 	// app/build/browser and comparing against actual output. The model decides
-	// when this applies (no keyword classification).
+	// when this applies (no keyword classification). Stale dev servers started
+	// before a config/deps change keep the OLD pipeline in memory and still
+	// throw the original error (observed: old vite on 5173-5176 kept failing
+	// postcss after the fix was on disk, while a fresh server on 5177 was
+	// clean) — the fix is only real when the USER's running server is clean.
 	lines.push(
-		`Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done".`,
+		`Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done". Check existing servers first with process_list/process_log: a stale dev server started BEFORE your change still runs the old pipeline and keeps failing even after the files on disk are fixed. Restart or kill it (process_kill) and verify the exact endpoint/port the user reported — a fresh server on a new port does NOT prove the user's error is gone.`,
 	);
 
 	const hasMCP =
@@ -333,6 +339,17 @@ export async function bootstrap(
 		pluginManager.register(lspPlugin);
 	}
 
+	// Startup health check: scan project for existing errors so the model
+	// knows the baseline before it starts working. Skip for one-shot runs
+	// and test environments.
+	let startupCheckBlock: PromptBlock | null = null;
+	if (!exitOnComplete && process.env.NODE_ENV !== 'test') {
+		startupCheckBlock = await runStartupHealthCheck(
+			config.lsp ?? DEFAULT_LSP_CONFIG,
+			baseDir,
+		);
+	}
+
 	const moduleTools = moduleRegistry.collectToolDefinitions();
 	for (const tool of moduleTools) {
 		toolRegistry.register(tool);
@@ -429,6 +446,7 @@ export async function bootstrap(
 		...moduleRegistry.collectPromptBlocks(["indexer"]),
 		...agentsMdBlocks,
 	];
+	if (startupCheckBlock) promptBlocks.push(startupCheckBlock);
 
 	const agentDeps: AgentDeps = {
 		config,
