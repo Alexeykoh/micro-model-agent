@@ -8,9 +8,7 @@ describe("PlanCreator", () => {
 
   it("should detect multi-step by word count with action words", () => {
     expect(
-      PlanCreator.isMultiStep(
-        "implement OAuth authentication with JWT tokens and refresh flow",
-      ),
+      PlanCreator.isMultiStep("implement OAuth authentication with JWT tokens and refresh flow"),
     ).toBe(true);
   });
 
@@ -64,11 +62,7 @@ describe("PlanCreator.replan", () => {
   });
 
   it("should keep skipped steps", () => {
-    const plan = PlanCreator.createPlan(
-      "test",
-      ["step A", "step B", "step C"],
-      "/test/dir",
-    );
+    const plan = PlanCreator.createPlan("test", ["step A", "step B", "step C"], "/test/dir");
     plan.steps[0].status = "done";
     plan.steps[1].status = "skipped";
 
@@ -81,44 +75,28 @@ describe("PlanCreator.replan", () => {
   });
 
   it("should use custom title when provided", () => {
-    const plan = PlanCreator.createPlan(
-      "original",
-      ["step A", "step B"],
-      "/test/dir",
-    );
+    const plan = PlanCreator.createPlan("original", ["step A", "step B"], "/test/dir");
     plan.steps[0].status = "done";
     const replanned = PlanCreator.replan(plan, ["step C"], "New Direction");
     expect(replanned.title).toContain("New Direction");
   });
 
   it("should preserve original title when no custom title", () => {
-    const plan = PlanCreator.createPlan(
-      "original",
-      ["step A", "step B"],
-      "/test/dir",
-    );
+    const plan = PlanCreator.createPlan("original", ["step A", "step B"], "/test/dir");
     plan.steps[0].status = "done";
     const replanned = PlanCreator.replan(plan, ["step C"]);
     expect(replanned.title).toContain("original");
   });
 
   it("should preserve baseDir and id", () => {
-    const plan = PlanCreator.createPlan(
-      "test",
-      ["step A"],
-      "/test/dir",
-    );
+    const plan = PlanCreator.createPlan("test", ["step A"], "/test/dir");
     const replanned = PlanCreator.replan(plan, ["step B"]);
     expect(replanned.baseDir).toBe("/test/dir");
     expect(replanned.id).toBe(plan.id);
   });
 
   it("should handle replan when all steps are done", () => {
-    const plan = PlanCreator.createPlan(
-      "test",
-      ["step A"],
-      "/test/dir",
-    );
+    const plan = PlanCreator.createPlan("test", ["step A"], "/test/dir");
     plan.steps[0].status = "done";
     const replanned = PlanCreator.replan(plan, ["step B", "step C"]);
     expect(replanned.steps).toHaveLength(3);

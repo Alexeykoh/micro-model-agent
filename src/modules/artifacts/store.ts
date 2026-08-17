@@ -20,9 +20,7 @@ export class ArtifactStore {
   static sanitizeName(name: string): string {
     // Strip traversal prefixes so "../../etc/passwd" becomes "etc_passwd",
     // never ".._.._etc_passwd".
-    const stripped = name
-      .replace(/^(\.\.?[\\/])+/g, "")
-      .replace(/^\.{1,2}$/, "");
+    const stripped = name.replace(/^(\.\.?[\\/])+/g, "").replace(/^\.{1,2}$/, "");
     const cleaned = stripped
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .replace(/_{2,}/g, "_")

@@ -59,10 +59,7 @@ describe("ExecutionModule tools", () => {
       await planTool.handler(ctx, {
         action: "create",
         title: "Test",
-        steps: [
-          "First step with enough chars here",
-          "Second step with enough chars",
-        ],
+        steps: ["First step with enough chars here", "Second step with enough chars"],
       });
 
       const result = await planTool.handler(ctx, {
@@ -145,10 +142,7 @@ describe("ExecutionModule tools", () => {
       await planTool.handler(ctx, {
         action: "create",
         title: "T",
-        steps: [
-          "First step with enough chars here",
-          "Second step with enough chars here",
-        ],
+        steps: ["First step with enough chars here", "Second step with enough chars here"],
       });
       await planTool.handler(ctx, { action: "update", step: 1, status: "done" });
       const second = await planTool.handler(ctx, {

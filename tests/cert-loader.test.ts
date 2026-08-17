@@ -2,11 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import {
-  loadScenarios,
-  filterByTags,
-  validateScenario,
-} from "../src/modules/certification/loader";
+import { loadScenarios, filterByTags, validateScenario } from "../src/modules/certification/loader";
 
 function tempYamlDir(contents: string): string {
   const dir = join(tmpdir(), `cert-l-${Math.random().toString(36).slice(2)}`);

@@ -14,28 +14,28 @@
  * blacklist), NOT task classification (rule #10).
  */
 const FORBIDDEN_COMMANDS = new Set([
-	"grep",
-	"sed",
-	"ls",
-	"find",
-	"rm",
-	"touch",
-	"which",
-	"diff",
-	"cp",
-	"mv",
+  "grep",
+  "sed",
+  "ls",
+  "find",
+  "rm",
+  "touch",
+  "which",
+  "diff",
+  "cp",
+  "mv",
 ]);
 
 function firstWord(command: string): string {
-	const segs = command.trim().split(/[\s;|&]+/);
-	return (segs[0] || "").replace(/[^\w-]/g, "").toLowerCase();
+  const segs = command.trim().split(/[\s;|&]+/);
+  return (segs[0] || "").replace(/[^\w-]/g, "").toLowerCase();
 }
 
 /** The forbidden command name if `command` starts with one (handles `cd x && …`). */
 export function forbiddenWindowsCommand(command: string): string | null {
-	const m = command.match(/^\s*cd\s+\S+\s*&&\s*(\S+)/);
-	if (m) return forbiddenWindowsCommand(m[1]);
-	const word = firstWord(command);
-	if (word && FORBIDDEN_COMMANDS.has(word)) return word;
-	return null;
+  const m = command.match(/^\s*cd\s+\S+\s*&&\s*(\S+)/);
+  if (m) return forbiddenWindowsCommand(m[1]);
+  const word = firstWord(command);
+  if (word && FORBIDDEN_COMMANDS.has(word)) return word;
+  return null;
 }

@@ -1,7 +1,7 @@
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { homedir } from 'os';
-import type { AuditLogEntry } from './audit-log';
+import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { homedir } from "os";
+import type { AuditLogEntry } from "./audit-log";
 
 // Use global fetch (available in Bun)
 declare const fetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -47,22 +47,22 @@ export interface AuditNotifierConfig {
 /**
  * Audit event severity levels
  */
-export type AuditSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AuditSeverity = "low" | "medium" | "high" | "critical";
 
 /**
  * Audit event types
  */
-export type AuditEventType = 
-  | 'tool_call'
-  | 'tool_result'
-  | 'bash_command'
-  | 'file_operation'
-  | 'network_request'
-  | 'security_block'
-  | 'authentication'
-  | 'configuration_change'
-  | 'session_start'
-  | 'session_end';
+export type AuditEventType =
+  | "tool_call"
+  | "tool_result"
+  | "bash_command"
+  | "file_operation"
+  | "network_request"
+  | "security_block"
+  | "authentication"
+  | "configuration_change"
+  | "session_start"
+  | "session_end";
 
 /**
  * Audit notification entry
@@ -92,16 +92,16 @@ const SEVERITY_WEIGHTS: Record<AuditSeverity, number> = {
  */
 export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
   enabled: false,
-  filePath: join(homedir(), '.mma', 'logs', 'audit-notifications.jsonl'),
+  filePath: join(homedir(), ".mma", "logs", "audit-notifications.jsonl"),
   webhookTimeout: 5000,
-  minSeverity: 'medium',
+  minSeverity: "medium",
   eventTypes: [
-    'security_block',
-    'bash_command',
-    'file_operation',
-    'network_request',
-    'authentication',
-    'configuration_change',
+    "security_block",
+    "bash_command",
+    "file_operation",
+    "network_request",
+    "authentication",
+    "configuration_change",
   ],
   maxRetries: 3,
 };
@@ -170,7 +170,7 @@ export class AuditNotifier {
    * Check if a severity level should be notified
    */
   shouldNotifySeverity(severity: AuditSeverity): boolean {
-    const minSeverity = this.config.minSeverity ?? 'medium';
+    const minSeverity = this.config.minSeverity ?? "medium";
     const minWeight = SEVERITY_WEIGHTS[minSeverity];
     const eventWeight = SEVERITY_WEIGHTS[severity];
     return eventWeight >= minWeight;
@@ -181,13 +181,13 @@ export class AuditNotifier {
    */
   async notify(entry: AuditLogEntry): Promise<AuditNotification | null> {
     if (!this.config.enabled) return null;
-    
+
     const eventType = this.mapEventType(entry.action);
     if (!eventType || !this.shouldNotify(eventType)) return null;
-    
+
     const severity = this.determineSeverity(entry);
     if (!this.shouldNotifySeverity(severity)) return null;
-    
+
     const notification: AuditNotification = {
       timestamp: new Date().toISOString(),
       eventType,
@@ -199,12 +199,12 @@ export class AuditNotifier {
 
     // Write to file
     this.writeToFile(notification);
-    
+
     // Send to webhook if configured
     if (this.config.webhookUrl) {
       await this.sendToWebhook(notification);
     }
-    
+
     return notification;
   }
 
@@ -213,12 +213,12 @@ export class AuditNotifier {
    */
   private mapEventType(action: string): AuditEventType | null {
     const typeMap: Record<string, AuditEventType> = {
-      'tool_call': 'tool_call',
-      'bash_command': 'bash_command',
-      'file_write': 'file_operation',
-      'file_delete': 'file_operation',
-      'network_request': 'network_request',
-      'security_block': 'security_block',
+      tool_call: "tool_call",
+      bash_command: "bash_command",
+      file_write: "file_operation",
+      file_delete: "file_operation",
+      network_request: "network_request",
+      security_block: "security_block",
     };
     return typeMap[action] || null;
   }
@@ -229,17 +229,17 @@ export class AuditNotifier {
   private determineSeverity(entry: AuditLogEntry): AuditSeverity {
     // Default severity based on action type
     const typeSeverity: Record<string, AuditSeverity> = {
-      'security_block': 'high',
-      'bash_command': 'high',
-      'file_delete': 'medium',
-      'file_write': 'medium',
-      'network_request': 'medium',
-      'tool_call': 'low',
-      'session_start': 'low',
-      'session_end': 'low',
+      security_block: "high",
+      bash_command: "high",
+      file_delete: "medium",
+      file_write: "medium",
+      network_request: "medium",
+      tool_call: "low",
+      session_start: "low",
+      session_end: "low",
     };
-    
-    return typeSeverity[entry.action] || 'low';
+
+    return typeSeverity[entry.action] || "low";
   }
 
   /**
@@ -247,12 +247,12 @@ export class AuditNotifier {
    */
   private writeToFile(notification: AuditNotification): void {
     if (!this.config.filePath) return;
-    
+
     try {
       const line = JSON.stringify(notification);
-      appendFileSync(this.config.filePath, line + '\n', 'utf8');
+      appendFileSync(this.config.filePath, line + "\n", "utf8");
     } catch (error) {
-      console.error('[AuditNotifier] Failed to write to file:', error);
+      console.error("[AuditNotifier] Failed to write to file:", error);
     }
   }
 
@@ -261,25 +261,25 @@ export class AuditNotifier {
    */
   private async sendToWebhook(notification: AuditNotification): Promise<void> {
     if (!this.config.webhookUrl) return;
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.webhookTimeout);
-      
+
       const response = await fetch(this.config.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(notification),
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
         throw new Error(`Webhook returned ${response.status}`);
       }
     } catch (error) {
-      console.error('[AuditNotifier] Webhook failed, adding to retry queue:', error);
+      console.error("[AuditNotifier] Webhook failed, adding to retry queue:", error);
       this.addToRetryQueue(notification);
     }
   }
@@ -299,18 +299,18 @@ export class AuditNotifier {
    */
   private async processRetryQueue(): Promise<void> {
     if (this.retryQueue.length === 0 || this.isProcessing) return;
-    
+
     this.isProcessing = true;
-    
+
     while (this.retryQueue.length > 0) {
       const item = this.retryQueue[0];
-      
-       if (item.retries >= (this.config.maxRetries ?? 3)) {
-        console.error('[AuditNotifier] Max retries exceeded for notification:', item.entry);
+
+      if (item.retries >= (this.config.maxRetries ?? 3)) {
+        console.error("[AuditNotifier] Max retries exceeded for notification:", item.entry);
         this.retryQueue.shift();
         continue;
       }
-      
+
       try {
         await this.sendToWebhook(item.entry);
         this.retryQueue.shift();
@@ -318,10 +318,10 @@ export class AuditNotifier {
         item.retries++;
         // Exponential backoff
         const delay = Math.pow(2, item.retries) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
-    
+
     this.isProcessing = false;
   }
 
@@ -332,11 +332,11 @@ export class AuditNotifier {
     if (!this.config.filePath || !existsSync(this.config.filePath)) {
       return [];
     }
-    
+
     try {
-      const content = readFileSync(this.config.filePath, 'utf8');
-      const lines = content.split('\n').filter(Boolean);
-      return lines.slice(-limit).map(line => JSON.parse(line) as AuditNotification);
+      const content = readFileSync(this.config.filePath, "utf8");
+      const lines = content.split("\n").filter(Boolean);
+      return lines.slice(-limit).map((line) => JSON.parse(line) as AuditNotification);
     } catch {
       return [];
     }
@@ -347,7 +347,7 @@ export class AuditNotifier {
    */
   clearNotifications(): void {
     if (this.config.filePath) {
-      writeFileSync(this.config.filePath, '', 'utf8');
+      writeFileSync(this.config.filePath, "", "utf8");
     }
     this.retryQueue = [];
   }
@@ -355,7 +355,11 @@ export class AuditNotifier {
   /**
    * Get notification statistics
    */
-  getStats(): { total: number; bySeverity: Record<AuditSeverity, number>; byType: Record<AuditEventType, number> } {
+  getStats(): {
+    total: number;
+    bySeverity: Record<AuditSeverity, number>;
+    byType: Record<AuditEventType, number>;
+  } {
     const notifications = this.readNotifications();
     const bySeverity: Record<AuditSeverity, number> = { low: 0, medium: 0, high: 0, critical: 0 };
     const byType: Record<AuditEventType, number> = {
@@ -370,12 +374,12 @@ export class AuditNotifier {
       session_start: 0,
       session_end: 0,
     };
-    
+
     for (const n of notifications) {
       bySeverity[n.severity] = (bySeverity[n.severity] || 0) + 1;
       byType[n.eventType] = (byType[n.eventType] || 0) + 1;
     }
-    
+
     return {
       total: notifications.length,
       bySeverity,
@@ -397,4 +401,4 @@ export function createAuditNotifier(config?: Partial<AuditNotifierConfig>): Audi
 }
 
 // Import readFileSync for readNotifications
-import { readFileSync } from 'fs';
+import { readFileSync } from "fs";

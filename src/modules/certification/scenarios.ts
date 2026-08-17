@@ -6,8 +6,7 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     title: "Create single file",
     tags: ["core"],
     mode: "run",
-    prompt:
-      'Create a file hello.ts with content: export const msg = "Hello, MMA!";',
+    prompt: 'Create a file hello.ts with content: export const msg = "Hello, MMA!";',
     checks: [
       { type: "fileExists", path: "hello.ts" },
       { type: "fileContent", path: "hello.ts", contains: "Hello, MMA!" },
@@ -31,8 +30,7 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     title: "Move/rename file",
     tags: ["core"],
     mode: "run",
-    prompt:
-      'Create file old-name.txt with content "test". Rename it to new-name.txt.',
+    prompt: 'Create file old-name.txt with content "test". Rename it to new-name.txt.',
     checks: [
       { type: "fileNotExists", path: "old-name.txt" },
       { type: "fileExists", path: "new-name.txt" },

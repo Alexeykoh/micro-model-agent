@@ -16,9 +16,7 @@ import { t } from "../i18n/index";
  * Create security subcommand
  */
 export function createSecurityCommand(program: Command): void {
-  const securityCmd = program
-    .command("security")
-    .description(t("cli.security.description"));
+  const securityCmd = program.command("security").description(t("cli.security.description"));
 
   // security status - show current security configuration
   securityCmd
@@ -34,17 +32,31 @@ export function createSecurityCommand(program: Command): void {
       const rateLimits = security.rateLimits || {};
       const sessionEncryption = security.sessionEncryption || {};
       const auditNotifier = security.auditNotifier || {};
-      
+
       console.log(t("cli.security.current_policy"));
-      console.log(`  ${t("cli.security.bash_enabled")}: ${bash.blacklist?.length > 0 ? t("cli.yes") : t("cli.no")}`);
-      console.log(`  ${t("cli.security.path_validation")}: ${paths.denied?.length > 0 ? t("cli.yes") : t("cli.no")}`);
-      console.log(`  ${t("cli.security.network_validation")}: ${network.deniedDomains?.length > 0 || network.allowedDomains?.length > 0 ? t("cli.yes") : t("cli.no")}`);
-      console.log(`  ${t("cli.security.content_scanning")}: ${contentScan.enabled ? t("cli.yes") : t("cli.no")}`);
+      console.log(
+        `  ${t("cli.security.bash_enabled")}: ${bash.blacklist?.length > 0 ? t("cli.yes") : t("cli.no")}`,
+      );
+      console.log(
+        `  ${t("cli.security.path_validation")}: ${paths.denied?.length > 0 ? t("cli.yes") : t("cli.no")}`,
+      );
+      console.log(
+        `  ${t("cli.security.network_validation")}: ${network.deniedDomains?.length > 0 || network.allowedDomains?.length > 0 ? t("cli.yes") : t("cli.no")}`,
+      );
+      console.log(
+        `  ${t("cli.security.content_scanning")}: ${contentScan.enabled ? t("cli.yes") : t("cli.no")}`,
+      );
       console.log(`  ${t("cli.security.max_recursion")}: ${security.maxRecursionDepth ?? 3}`);
       console.log(`  ${t("cli.security.max_file_ops")}: ${security.maxFileOperations ?? 100}`);
-      console.log(`  ${t("cli.security.rate_limit")}: ${rateLimits.maxRequestsPerMinute ?? 60}/min`);
-      console.log(`  ${t("cli.security.session_encryption")}: ${sessionEncryption.enabled ? t("cli.yes") : t("cli.no")}`);
-      console.log(`  ${t("cli.security.audit_notifier")}: ${auditNotifier.enabled ? t("cli.yes") : t("cli.no")}`);
+      console.log(
+        `  ${t("cli.security.rate_limit")}: ${rateLimits.maxRequestsPerMinute ?? 60}/min`,
+      );
+      console.log(
+        `  ${t("cli.security.session_encryption")}: ${sessionEncryption.enabled ? t("cli.yes") : t("cli.no")}`,
+      );
+      console.log(
+        `  ${t("cli.security.audit_notifier")}: ${auditNotifier.enabled ? t("cli.yes") : t("cli.no")}`,
+      );
     });
 
   // security policies - manage security policies
@@ -54,14 +66,16 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       console.log(t("cli.security.available_policies"));
       console.log("");
-      
+
       for (const [preset, policy] of Object.entries(SECURITY_POLICIES)) {
-        if (preset === 'custom') continue;
-        
+        if (preset === "custom") continue;
+
         const marker = " ";
         console.log(` ${marker}${preset.padEnd(12)}  ${policy.name}`);
         console.log(`             ${policy.description}`);
-        console.log(`             ${t("cli.security.recommended_for")}: ${policy.recommendedFor.join(", ")}`);
+        console.log(
+          `             ${t("cli.security.recommended_for")}: ${policy.recommendedFor.join(", ")}`,
+        );
         console.log("");
       }
     });
@@ -74,20 +88,20 @@ export function createSecurityCommand(program: Command): void {
     .action(async (preset: string) => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
-      
-      const validPresets: SecurityPolicyPreset[] = ['strict', 'balanced', 'permissive'];
+
+      const validPresets: SecurityPolicyPreset[] = ["strict", "balanced", "permissive"];
       if (!validPresets.includes(preset as SecurityPolicyPreset)) {
         console.log(t("cli.security.invalid_preset", { presets: validPresets.join(", ") }));
         return;
       }
-      
+
       const policy = getSecurityPolicy(preset as SecurityPolicyPreset);
       const newSecurityConfig = applySecurityPolicy(preset as SecurityPolicyPreset);
-      
+
       // Merge with existing config
       (appConfig as any).security = newSecurityConfig;
       saveConfig(appConfig, configPath);
-      
+
       console.log(t("cli.security.policy_applied", { name: policy.name }));
       console.log(t("cli.security.policy_description", { description: policy.description }));
     });
@@ -99,14 +113,14 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
-      
+
       (appConfig as any).security = (appConfig as any).security || {};
       (appConfig as any).security.sessionEncryption = {
         enabled: true,
         encryptHistory: true,
         encryptSessionLog: true,
       };
-      
+
       saveConfig(appConfig, configPath);
       console.log(t("cli.security.encryption_enabled"));
     });
@@ -118,14 +132,14 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
-      
+
       (appConfig as any).security = (appConfig as any).security || {};
       (appConfig as any).security.sessionEncryption = {
         enabled: false,
         encryptHistory: false,
         encryptSessionLog: false,
       };
-      
+
       saveConfig(appConfig, configPath);
       console.log(t("cli.security.encryption_disabled"));
     });
@@ -137,16 +151,16 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
-      
+
       (appConfig as any).security = (appConfig as any).security || {};
       (appConfig as any).security.auditNotifier = {
         enabled: true,
-        minSeverity: 'medium',
-        eventTypes: ['security_block', 'bash_command', 'file_operation', 'network_request'],
+        minSeverity: "medium",
+        eventTypes: ["security_block", "bash_command", "file_operation", "network_request"],
         maxRetries: 3,
         webhookTimeout: 5000,
       };
-      
+
       saveConfig(appConfig, configPath);
       console.log(t("cli.security.audit_enabled"));
     });
@@ -158,14 +172,14 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
-      
+
       (appConfig as any).security = (appConfig as any).security || {};
       (appConfig as any).security.auditNotifier = {
         enabled: false,
         maxRetries: 3,
         webhookTimeout: 5000,
       };
-      
+
       saveConfig(appConfig, configPath);
       console.log(t("cli.security.audit_disabled"));
     });
@@ -176,7 +190,7 @@ export function createSecurityCommand(program: Command): void {
     .description(t("cli.security.audit_stats"))
     .action(async () => {
       const stats = globalAuditNotifier.getStats();
-      
+
       console.log(t("cli.security.audit_stats_title"));
       console.log(`  ${t("cli.security.total_notifications")}: ${stats.total}`);
       console.log("");

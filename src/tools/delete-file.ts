@@ -45,19 +45,9 @@ export const deleteFileTool: ToolDefinition = {
     }
 
     // Check path permissions
-    const scopeCheck = isPathWritable(
-      ctx.baseDir,
-      resolved,
-      ctx.scope,
-      ctx.config.security?.paths,
-    );
+    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "file_delete",
-        scopeCheck.reason || "Path not allowed",
-        path,
-      );
+      logSecurityBlock(ctx.sessionId, "file_delete", scopeCheck.reason || "Path not allowed", path);
       return {
         success: false,
         output: t("file.path_not_allowed", {

@@ -28,7 +28,12 @@ describe("MoEExecutor with result_mode=file", () => {
       writeFileSync(artifactPath, "FULL_ARTIFACT_CONTENT_42", "utf8");
 
       const registry = {
-        get: (name: string) => (name === "subagent" ? fakeSubagent(`Sub-agent completed. Full result saved to artifact: ${artifactPath}\nIterations: 1\nSummary:\nsnip`) : undefined),
+        get: (name: string) =>
+          name === "subagent"
+            ? fakeSubagent(
+                `Sub-agent completed. Full result saved to artifact: ${artifactPath}\nIterations: 1\nSummary:\nsnip`,
+              )
+            : undefined,
         getAll: () => [fakeSubagent("")],
       } as unknown as ToolRegistry;
 
@@ -78,7 +83,8 @@ describe("MoEExecutor with result_mode=file", () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-moe-"));
     try {
       const registry = {
-        get: (name: string) => (name === "subagent" ? fakeSubagent("plain text result") : undefined),
+        get: (name: string) =>
+          name === "subagent" ? fakeSubagent("plain text result") : undefined,
         getAll: () => [fakeSubagent("plain text result")],
       } as unknown as ToolRegistry;
 

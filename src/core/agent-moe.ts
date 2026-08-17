@@ -4,10 +4,7 @@ import type { ToolExecutor } from "../tools/executor";
 import type { Logger } from "../logger/app-logger";
 import type { ToolEvent, AgentPhase, AgentResult } from "./types";
 import { OrchestratorClient } from "../llm/orchestrator";
-import {
-  validatePlan,
-  applyAutoFixes,
-} from "../modules/execution/plan-validator";
+import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
 
@@ -46,9 +43,7 @@ export async function runWithMoE(
   );
 
   if (!orchestrator.isEnabled()) {
-    logger.debug(
-      "MoE enabled but no orchestrator model configured — falling back to single-agent",
-    );
+    logger.debug("MoE enabled but no orchestrator model configured — falling back to single-agent");
     return fallback();
   }
 
@@ -58,16 +53,12 @@ export async function runWithMoE(
   onPhase?.("done");
 
   if ("error" in planResult) {
-    logger.warn(
-      `MoE plan failed: ${planResult.error} — falling back to single-agent`,
-    );
+    logger.warn(`MoE plan failed: ${planResult.error} — falling back to single-agent`);
     return fallback();
   }
 
   const { plan } = planResult;
-  onMeta?.(
-    `📋 Plan created: "${plan.title}" (${plan.subtasks.length} subtasks)\n`,
-  );
+  onMeta?.(`📋 Plan created: "${plan.title}" (${plan.subtasks.length} subtasks)\n`);
 
   const validation = validatePlan(plan, config);
   if (!validation.valid) {
@@ -77,9 +68,7 @@ export async function runWithMoE(
       logger.warn(
         `MoE plan validation failed: ${retry.errors.join("; ")} — falling back to single-agent`,
       );
-      onMeta?.(
-        `⚠️ Plan validation failed. Falling back to single-agent mode.\n`,
-      );
+      onMeta?.(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
       return fallback();
     }
     Object.assign(plan, applied);
@@ -103,20 +92,8 @@ export async function runWithMoE(
   );
 
   const verifier = new StepVerifier(baseDir);
-  const knownTags = [
-    "file",
-    "code",
-    "shell",
-    "research",
-    "browser",
-    "vision",
-    "core",
-  ];
-  const verification = await verifier.verifyMoEManifest(
-    plan,
-    config,
-    knownTags,
-  );
+  const knownTags = ["file", "code", "shell", "research", "browser", "vision", "core"];
+  const verification = await verifier.verifyMoEManifest(plan, config, knownTags);
 
   onPhase?.("thinking");
   let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
@@ -147,17 +124,13 @@ export async function runWithMoE(
   const outputLines: string[] = [`## MoE Execution Results\n`];
   for (const r of planResults.results) {
     const icon = r.success ? "✅" : "❌";
-    outputLines.push(
-      `${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`,
-    );
+    outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`);
   }
   outputLines.push("");
   if (verifyResult.type === "final") {
     outputLines.push(`**Result:** ${verifyResult.finalAnswer || "Complete"}`);
   } else {
-    outputLines.push(
-      `**Re-plan requested:** ${verifyResult.explanation || ""}`,
-    );
+    outputLines.push(`**Re-plan requested:** ${verifyResult.explanation || ""}`);
   }
 
   const failedCount = planResults.results.filter((r) => !r.success).length;

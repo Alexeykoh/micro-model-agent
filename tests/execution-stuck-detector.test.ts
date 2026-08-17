@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  StuckDetector,
-  classifyError,
-} from "../src/modules/execution/stuck-detector";
+import { StuckDetector, classifyError } from "../src/modules/execution/stuck-detector";
 
 describe("StuckDetector", () => {
   let detector: StuckDetector;
@@ -89,9 +86,7 @@ describe("StuckDetector", () => {
   });
 
   it("should classify file not found as systematic", () => {
-    expect(classifyError("ENOENT: no such file or directory")).toBe(
-      "systematic",
-    );
+    expect(classifyError("ENOENT: no such file or directory")).toBe("systematic");
   });
 
   it("should escalate after threshold", () => {
@@ -141,10 +136,7 @@ describe("StuckDetector", () => {
 
   it("should suggest actionable hints for TypeScript syntax errors", () => {
     const d = new StuckDetector(8, 3);
-    d.recordToolError(
-      "bash",
-      "src/index.ts(10,12): error TS1005: ',' expected.",
-    );
+    d.recordToolError("bash", "src/index.ts(10,12): error TS1005: ',' expected.");
     const hints = d.getActionableHints();
     expect(hints.some((h) => h.includes("syntax error"))).toBe(true);
   });
@@ -161,20 +153,14 @@ describe("StuckDetector", () => {
 
   it("should suggest actionable hints for TypeScript type errors", () => {
     const d = new StuckDetector(8, 3);
-    d.recordToolError(
-      "bash",
-      "src/index.ts(16,17): error TS2769: No overload matches this call.",
-    );
+    d.recordToolError("bash", "src/index.ts(16,17): error TS2769: No overload matches this call.");
     const hints = d.getActionableHints();
     expect(hints.some((h) => h.includes("type mismatch"))).toBe(true);
   });
 
   it("should suggest actionable hints for command not found", () => {
     const d = new StuckDetector(8, 3);
-    d.recordToolError(
-      "bash",
-      "'ts-node' is not recognized as an internal or external command",
-    );
+    d.recordToolError("bash", "'ts-node' is not recognized as an internal or external command");
     const hints = d.getActionableHints();
     expect(hints.some((h) => h.includes("not found"))).toBe(true);
   });
@@ -280,9 +266,7 @@ describe("StuckDetector hint/recovery dedup (P3)", () => {
     // Recovery's primary reason is "repetitive"
     expect(detector.getRecoveryMessage()).toContain("bash");
     const hints = detector.getHints();
-    expect(
-      hints.some((h) => h.includes("calling the same tool repeatedly")),
-    ).toBe(false);
+    expect(hints.some((h) => h.includes("calling the same tool repeatedly"))).toBe(false);
   });
 
   it("does not repeat the consecutive-failures hint when recovery covers it", () => {
@@ -292,9 +276,7 @@ describe("StuckDetector hint/recovery dedup (P3)", () => {
     expect(detector.hasConsecutiveFailures()).toBe(true);
     expect(detector.getRecoveryMessage()).toBeTruthy();
     const hints = detector.getHints();
-    expect(
-      hints.some((h) => h.includes("Multiple different tools are failing")),
-    ).toBe(false);
+    expect(hints.some((h) => h.includes("Multiple different tools are failing"))).toBe(false);
   });
 
   it("keeps the read-only bullet when stuck is the primary reason", () => {
@@ -306,9 +288,7 @@ describe("StuckDetector hint/recovery dedup (P3)", () => {
     expect(detector.isStuck()).toBe(true);
     expect(detector.hasReadOnlyLoop()).toBe(true);
     const hints = detector.getHints();
-    expect(
-      hints.some((h) => h.includes("read-only tool calls")),
-    ).toBe(true);
+    expect(hints.some((h) => h.includes("read-only tool calls"))).toBe(true);
   });
 
   it("keeps step-keyword hints even when recovery covers the state", () => {
@@ -318,9 +298,7 @@ describe("StuckDetector hint/recovery dedup (P3)", () => {
     }
     expect(detector.hasRepetitiveToolCalls()).toBe(true);
     const hints = detector.getHints();
-    expect(
-      hints.some((h) => h.includes("lock file exists")),
-    ).toBe(true);
+    expect(hints.some((h) => h.includes("lock file exists"))).toBe(true);
   });
 });
 
@@ -386,7 +364,10 @@ describe("StuckDetector typecheck awareness (R5.2)", () => {
   });
 
   it("hints to read the file instead of rewriting blindly on typecheck errors", () => {
-    detector.recordToolError("write_file", "[Project typecheck failed]: src/a.ts(14,19): error TS2322");
+    detector.recordToolError(
+      "write_file",
+      "[Project typecheck failed]: src/a.ts(14,19): error TS2322",
+    );
     const hints = detector.getActionableHints();
     expect(hints.some((h) => h.includes("rewriting the whole file blindly"))).toBe(true);
   });
@@ -394,7 +375,10 @@ describe("StuckDetector typecheck awareness (R5.2)", () => {
   it("rewrite-loop hint fires when a typecheck-tagged file keeps being rewritten", () => {
     for (let i = 0; i < 4; i++) {
       detector.recordFileRewrite("src/a.ts");
-      detector.recordToolError("write_file", "[Project typecheck failed]: src/a.ts(14,19): error TS2322");
+      detector.recordToolError(
+        "write_file",
+        "[Project typecheck failed]: src/a.ts(14,19): error TS2322",
+      );
     }
     expect(detector.hasExcessiveRewrites()).toBe(true);
     const hints = detector.getActionableHints();

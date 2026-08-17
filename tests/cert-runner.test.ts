@@ -101,9 +101,7 @@ describe("cert runner", () => {
         timedOut: false,
       }),
     });
-    expect(existsSync(join(sandboxBase, "run-s1-1", "sub", "fx.txt"))).toBe(
-      true,
-    );
+    expect(existsSync(join(sandboxBase, "run-s1-1", "sub", "fx.txt"))).toBe(true);
   });
 
   it("returns error status when fixture is missing", async () => {

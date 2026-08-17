@@ -52,9 +52,7 @@ export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
     const ready: MoESubtask[] = [];
     for (const id of remaining) {
       const sub = subtaskMap.get(id)!;
-      const depsSatisfied = (sub.depends_on || []).every(
-        (d) => !remaining.has(d),
-      );
+      const depsSatisfied = (sub.depends_on || []).every((d) => !remaining.has(d));
       if (depsSatisfied) {
         ready.push(sub);
       }
@@ -79,10 +77,7 @@ async function executeSubtask(
   _sharedContext: MoEPlan["shared_context"],
 ): Promise<SubtaskResult> {
   const startTime = Date.now();
-  const expertConfig: ExpertConfig | undefined = getExpertConfig(
-    deps.config,
-    subtask.expert_tag,
-  );
+  const expertConfig: ExpertConfig | undefined = getExpertConfig(deps.config, subtask.expert_tag);
 
   if (!expertConfig) {
     return {
@@ -202,14 +197,10 @@ async function executeSubtask(
         const hints = stuckDetector.getActionableHints();
         const recovery = stuckDetector.getRecoveryMessage();
         if (hints.length > 0) {
-          deps.logger.debug(
-            `Hint for subtask "${subtask.id}" retry: ${hints.join("; ")}`,
-          );
+          deps.logger.debug(`Hint for subtask "${subtask.id}" retry: ${hints.join("; ")}`);
         }
         if (recovery) {
-          deps.logger.debug(
-            `Recovery for subtask "${subtask.id}": ${recovery}`,
-          );
+          deps.logger.debug(`Recovery for subtask "${subtask.id}": ${recovery}`);
         }
       }
 
@@ -359,9 +350,7 @@ export class MoEExecutor {
 
     const failed = results.filter((r) => !r.success);
     if (failed.length > 0) {
-      errors.push(
-        ...failed.map((f) => `[${f.subtaskId}] ${f.error || f.summary}`),
-      );
+      errors.push(...failed.map((f) => `[${f.subtaskId}] ${f.error || f.summary}`));
     }
 
     return { success: failed.length === 0, results, errors, warnings };

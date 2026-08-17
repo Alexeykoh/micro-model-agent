@@ -1,13 +1,7 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import {
-  isUrlAllowed,
-  sanitizeUrl,
-} from "../modules/security/network-validator";
-import {
-  logNetworkRequest,
-  logSecurityBlock,
-} from "../modules/security/audit-log";
+import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 
 export const webSearchTool: ToolDefinition = {
@@ -71,12 +65,7 @@ export const webSearchTool: ToolDefinition = {
       }
 
       // Log successful network request
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        true,
-        `Results: ${results.length}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Results: ${results.length}`);
 
       if (results.length === 0) {
         return { success: true, output: t("tool.no_results", { query }) };
@@ -93,12 +82,7 @@ export const webSearchTool: ToolDefinition = {
         }),
       };
     } catch (err: any) {
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        false,
-        `Error: ${err.message}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
       return {
         success: false,
         output: t("error.search_failed", { message: err.message }),

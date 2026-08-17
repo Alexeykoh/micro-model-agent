@@ -2,9 +2,7 @@ import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import type { SkillsModule } from "../modules/skills/module";
 
-export function createLoadSkillTool(
-  skillsModule: SkillsModule,
-): ToolDefinition {
+export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
     name: "load_skill",
     tags: ["core"],
@@ -15,8 +13,7 @@ export function createLoadSkillTool(
       properties: {
         name: {
           type: "string",
-          description:
-            "Exact skill name to load (see [Available Skills] for names)",
+          description: "Exact skill name to load (see [Available Skills] for names)",
         },
       },
       required: ["name"],
@@ -40,9 +37,7 @@ export function createLoadSkillTool(
       }
 
       const budget = skillsModule.getBudget();
-      const tokens = result.skill
-        ? Math.ceil(result.skill.content.length / 4)
-        : 0;
+      const tokens = result.skill ? Math.ceil(result.skill.content.length / 4) : 0;
       return {
         success: true,
         output: t("tool.skill_budget", {

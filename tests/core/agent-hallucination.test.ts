@@ -114,9 +114,7 @@ describe("Agent hallucination reactions", () => {
 
     const agent = new Agent(mockDeps);
     const metas: string[] = [];
-    const result = await agent.run("test", undefined, (meta) =>
-      metas.push(meta),
-    );
+    const result = await agent.run("test", undefined, (meta) => metas.push(meta));
 
     expect(result.success).toBe(true);
     expect(metas.join("")).toContain("[⚠️ Uncertainty]");
@@ -129,8 +127,7 @@ describe("Agent hallucination reactions", () => {
       hallucinationDetector: {
         validate: (response: string) => {
           callCount++;
-          if (callCount === 1)
-            return { status: "retry" as const, reason: "Low confidence" };
+          if (callCount === 1) return { status: "retry" as const, reason: "Low confidence" };
           return { status: "pass" as const };
         },
         getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),

@@ -1,11 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-  existsSync,
-} from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { pickExistingPath } from "../src/modules/browser/bridge-path";

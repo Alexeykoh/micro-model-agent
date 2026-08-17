@@ -1,21 +1,17 @@
-import type { AgentModule } from '../types'
-import type { AgentPlugin } from '../types'
-import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from '../../tools/types'
-import { existsSync } from 'fs'
-import { resolve } from 'path'
-import { LspClient } from './client'
-import { getServerForFile, DEFAULT_LSP_CONFIG } from './config'
-import { findProjectRoot } from './project-root'
-import { isPathInScope } from '../security/path-validator'
-import { DEFAULT_SECURITY_CONFIG } from '../../config/security'
-import { safeResolvePath } from '../../tools/path-utils'
-import { t } from '../../i18n/index'
-import type { LspConfig, LspServerConfig, LspDiagnostic } from './types'
-import {
-  severityLabels,
-  collectCheckFiles,
-  formatCheckDiagnostics,
-} from './check-tool'
+import type { AgentModule } from "../types";
+import type { AgentPlugin } from "../types";
+import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
+import { existsSync } from "fs";
+import { resolve } from "path";
+import { LspClient } from "./client";
+import { getServerForFile, DEFAULT_LSP_CONFIG } from "./config";
+import { findProjectRoot } from "./project-root";
+import { isPathInScope } from "../security/path-validator";
+import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
+import { safeResolvePath } from "../../tools/path-utils";
+import { t } from "../../i18n/index";
+import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
+import { severityLabels, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
 
 /**
  * Consecutive LSP failures before a server is disabled for the session. A dead
@@ -25,98 +21,103 @@ import {
  * model never reacted). After the threshold we say so once and stop the noise
  * for that server — a CSS timeout must not take TypeScript checks down too.
  */
-const MAX_CONSECUTIVE_LSP_FAILURES = 3
+const MAX_CONSECUTIVE_LSP_FAILURES = 3;
 
 export class LspModule implements AgentModule {
-  name = 'lsp'
-  private config: LspConfig
-  private client: LspClient
-  private failuresByServer = new Map<string, number>()
-  private disabledServers = new Set<string>()
+  name = "lsp";
+  private config: LspConfig;
+  private client: LspClient;
+  private failuresByServer = new Map<string, number>();
+  private disabledServers = new Set<string>();
 
   constructor(config?: Partial<LspConfig>, client?: LspClient) {
-    this.config = { ...DEFAULT_LSP_CONFIG, ...config }
-    this.client = client ?? new LspClient()
+    this.config = { ...DEFAULT_LSP_CONFIG, ...config };
+    this.client = client ?? new LspClient();
   }
 
   /** Test hook: has the module disabled any LSP server for the session? */
   isLspDisabled(): boolean {
-    return this.disabledServers.size > 0
+    return this.disabledServers.size > 0;
   }
 
   /** Test hook: is the given server (config-derived key) disabled? */
   isServerDisabled(key: string): boolean {
-    return this.disabledServers.has(key)
+    return this.disabledServers.has(key);
   }
 
   /** Stable server identity derived from the config. */
   private serverKey(server: LspServerConfig): string {
-    return `${server.command}:${(server.args ?? []).join(' ')}`
+    return `${server.command}:${(server.args ?? []).join(" ")}`;
   }
 
   getPlugin(): AgentPlugin {
-    const self = this
+    const self = this;
     return {
-      name: 'lsp-check',
+      name: "lsp-check",
       priority: 15,
       onAfterTool: async (_ctx: ToolContext, call: ToolCall, result: ToolResult) => {
-        if (!self.config.enabled) return
-        if (call.name !== 'write_file' && call.name !== 'edit_file') return
-        if (!result.success) return
+        if (!self.config.enabled) return;
+        if (call.name !== "write_file" && call.name !== "edit_file") return;
+        if (!result.success) return;
 
-        const filePath = String(call.arguments.path ?? '')
-        if (!filePath) return
+        const filePath = String(call.arguments.path ?? "");
+        if (!filePath) return;
 
-        const fullPath = resolve(_ctx.baseDir, filePath)
-        if (!existsSync(fullPath)) return
+        const fullPath = resolve(_ctx.baseDir, filePath);
+        if (!existsSync(fullPath)) return;
 
-        const serverConfig = getServerForFile(fullPath, self.config)
-        if (!serverConfig) return
+        const serverConfig = getServerForFile(fullPath, self.config);
+        if (!serverConfig) return;
 
-        const key = self.serverKey(serverConfig)
-        if (self.disabledServers.has(key)) return
+        const key = self.serverKey(serverConfig);
+        if (self.disabledServers.has(key)) return;
 
         const projectRoot = findProjectRoot(
           fullPath,
           _ctx.baseDir,
           serverConfig.workspaceMarkers ?? [],
-        )
+        );
 
         try {
-          const diagnostics = await self.client.checkFile(fullPath, _ctx.baseDir, serverConfig, projectRoot)
-          self.failuresByServer.set(key, 0)
-          const errors = diagnostics.filter((d) => d.severity === 1)
-          const warnings = diagnostics.filter((d) => d.severity === 2)
+          const diagnostics = await self.client.checkFile(
+            fullPath,
+            _ctx.baseDir,
+            serverConfig,
+            projectRoot,
+          );
+          self.failuresByServer.set(key, 0);
+          const errors = diagnostics.filter((d) => d.severity === 1);
+          const warnings = diagnostics.filter((d) => d.severity === 2);
 
           if (errors.length > 0) {
-            const items = formatDiagnostics(errors, fullPath)
-            result.output += `\n\n[LSP errors]:\n${items}`
+            const items = formatDiagnostics(errors, fullPath);
+            result.output += `\n\n[LSP errors]:\n${items}`;
           }
           if (warnings.length > 0) {
-            const items = formatDiagnostics(warnings, fullPath)
-            result.output += `\n\n[LSP warnings]:\n${items}`
+            const items = formatDiagnostics(warnings, fullPath);
+            result.output += `\n\n[LSP warnings]:\n${items}`;
           }
         } catch (e) {
           // Surface failures instead of silently returning [] — a dead LSP
           // previously produced ZERO diagnostics across whole sessions and the
           // model only found type errors reactively via `bun run build`.
-          const msg = e instanceof Error ? e.message : String(e)
-          const failures = (self.failuresByServer.get(key) ?? 0) + 1
-          self.failuresByServer.set(key, failures)
+          const msg = e instanceof Error ? e.message : String(e);
+          const failures = (self.failuresByServer.get(key) ?? 0) + 1;
+          self.failuresByServer.set(key, failures);
           try {
-            _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`)
+            _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`);
           } catch {}
           if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
             // One loud, actionable message, then stop the per-write noise for
             // the rest of the session. The model must not learn to ignore LSP.
-            self.disabledServers.add(key)
-            result.output += `\n\n[LSP disabled: ${t('lsp.unavailable')}]`
+            self.disabledServers.add(key);
+            result.output += `\n\n[LSP disabled: ${t("lsp.unavailable")}]`;
           } else {
-            result.output += `\n\n[LSP check failed]: ${msg}`
+            result.output += `\n\n[LSP check failed]: ${msg}`;
           }
         }
       },
-    }
+    };
   }
 
   /**
@@ -128,138 +129,121 @@ export class LspModule implements AgentModule {
    * gives the model a way to ask for static diagnostics on demand.
    */
   getToolDefinitions(): ToolDefinition[] {
-    const self = this
+    const self = this;
     return [
       {
-        name: 'lsp_check',
+        name: "lsp_check",
         description:
           'Run static checks (LSP diagnostics) on a file or directory. For "check for errors" tasks: pass a file to check it, or a directory to check its source files (capped at 15). Returns [LSP errors] / [LSP warnings] for files with a configured LSP server.',
-        tags: ['code', 'check'],
+        tags: ["code", "check"],
+        alwaysOn: true,
         boundedOutput: true,
         timeoutMs: 90000,
         parameters: {
-          type: 'object',
+          type: "object",
           properties: {
             path: {
-              type: 'string',
-              description: 'File or directory to check',
+              type: "string",
+              description: "File or directory to check",
             },
           },
-          required: ['path'],
+          required: ["path"],
         },
         handler: async (ctx, args) => self.runCheck(ctx, args),
       },
-    ]
+    ];
   }
 
-  private async runCheck(
-    ctx: ToolContext,
-    args: Record<string, unknown>,
-  ): Promise<ToolResult> {
+  private async runCheck(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
     if (!this.config.enabled) {
-      return { success: false, output: t('lsp.check_disabled') }
+      return { success: false, output: t("lsp.check_disabled") };
     }
-    const path = String(args.path ?? '')
-    if (!path) return { success: false, output: t('lsp.check_no_path') }
+    const path = String(args.path ?? "");
+    if (!path) return { success: false, output: t("lsp.check_no_path") };
 
-    const resolved = safeResolvePath(ctx.baseDir, path)
-    const securityPaths =
-      ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths
-    const scopeCheck = isPathInScope(
-      ctx.baseDir,
-      resolved,
-      ctx.scope,
-      securityPaths,
-    )
+    const resolved = safeResolvePath(ctx.baseDir, path);
+    const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
+    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
     if (!scopeCheck.allowed) {
       return {
         success: false,
-        output: t('file.path_not_allowed', {
+        output: t("file.path_not_allowed", {
           path: `${path} — ${scopeCheck.reason}`,
         }),
-      }
+      };
     }
     if (!existsSync(resolved)) {
-      return { success: false, output: t('lsp.check_notfound', { path }) }
+      return { success: false, output: t("lsp.check_notfound", { path }) };
     }
 
-    const files = await collectCheckFiles(resolved, this.config)
-    const errors: Array<{ file: string; diag: LspDiagnostic }> = []
-    const warnings: Array<{ file: string; diag: LspDiagnostic }> = []
-    const notes: string[] = []
-    let checked = 0
+    const files = await collectCheckFiles(resolved, this.config);
+    const errors: Array<{ file: string; diag: LspDiagnostic }> = [];
+    const warnings: Array<{ file: string; diag: LspDiagnostic }> = [];
+    const notes: string[] = [];
+    let checked = 0;
 
     for (const file of files) {
-      const serverConfig = getServerForFile(file, this.config)
-      if (!serverConfig) continue
-      const key = this.serverKey(serverConfig)
-      if (this.disabledServers.has(key)) continue
-      const projectRoot = findProjectRoot(
-        file,
-        ctx.baseDir,
-        serverConfig.workspaceMarkers ?? [],
-      )
+      const serverConfig = getServerForFile(file, this.config);
+      if (!serverConfig) continue;
+      const key = this.serverKey(serverConfig);
+      if (this.disabledServers.has(key)) continue;
+      const projectRoot = findProjectRoot(file, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
       try {
-        const diags = await this.client.checkFile(
-          file,
-          ctx.baseDir,
-          serverConfig,
-          projectRoot,
-        )
-        this.failuresByServer.set(key, 0)
-        checked++
+        const diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
+        this.failuresByServer.set(key, 0);
+        checked++;
         for (const d of diags) {
-          if (d.severity === 1) errors.push({ file, diag: d })
-          else if (d.severity === 2) warnings.push({ file, diag: d })
+          if (d.severity === 1) errors.push({ file, diag: d });
+          else if (d.severity === 2) warnings.push({ file, diag: d });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        const failures = (this.failuresByServer.get(key) ?? 0) + 1
-        this.failuresByServer.set(key, failures)
+        const msg = e instanceof Error ? e.message : String(e);
+        const failures = (this.failuresByServer.get(key) ?? 0) + 1;
+        this.failuresByServer.set(key, failures);
         try {
-          ctx.logger?.warn(`LSP check failed for ${file}: ${msg}`)
+          ctx.logger?.warn(`LSP check failed for ${file}: ${msg}`);
         } catch {}
         if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-          this.disabledServers.add(key)
-          notes.push(`[LSP disabled: ${t('lsp.unavailable')}]`)
+          this.disabledServers.add(key);
+          notes.push(`[LSP disabled: ${t("lsp.unavailable")}]`);
         } else {
-          notes.push(`[LSP check failed for ${file}: ${msg}]`)
+          notes.push(`[LSP check failed for ${file}: ${msg}]`);
         }
       }
     }
 
-    const lines: string[] = []
+    const lines: string[] = [];
     if (errors.length > 0) {
-      lines.push(`[LSP errors] (${errors.length}):`)
-      lines.push(formatCheckDiagnostics(errors, ctx.baseDir))
+      lines.push(`[LSP errors] (${errors.length}):`);
+      lines.push(formatCheckDiagnostics(errors, ctx.baseDir));
     }
     if (warnings.length > 0) {
-      lines.push(`[LSP warnings] (${warnings.length}):`)
-      lines.push(formatCheckDiagnostics(warnings, ctx.baseDir))
+      lines.push(`[LSP warnings] (${warnings.length}):`);
+      lines.push(formatCheckDiagnostics(warnings, ctx.baseDir));
     }
     if (checked > 0 && errors.length === 0 && warnings.length === 0) {
-      lines.push(t('lsp.check_clean', { count: String(checked) }))
+      lines.push(t("lsp.check_clean", { count: String(checked) }));
     }
-    lines.push(...notes)
+    lines.push(...notes);
     if (lines.length === 0) {
       return {
         success: true,
-        output: t('lsp.check_clean', { count: String(checked) }),
-      }
+        output: t("lsp.check_clean", { count: String(checked) }),
+      };
     }
-    return { success: errors.length === 0, output: lines.join('\n') }
+    return { success: errors.length === 0, output: lines.join("\n") };
   }
 }
 
 function formatDiagnostics(diagnostics: LspDiagnostic[], filePath: string): string {
-  const filename = filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
+  const filename = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
   return diagnostics
     .slice(0, 5)
     .map((d) => {
-      const line = d.range.start.line + 1
-      const col = d.range.start.character + 1
-      const sev = severityLabels[d.severity] ?? 'unknown'
-      return `  ${filename}(${line},${col}): ${sev}: ${d.message}`
+      const line = d.range.start.line + 1;
+      const col = d.range.start.character + 1;
+      const sev = severityLabels[d.severity] ?? "unknown";
+      return `  ${filename}(${line},${col}): ${sev}: ${d.message}`;
     })
-    .join('\n')
+    .join("\n");
 }

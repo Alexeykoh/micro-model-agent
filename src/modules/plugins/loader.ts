@@ -1,20 +1,20 @@
-import { readdirSync, existsSync, statSync } from 'fs'
-import { join, basename } from 'path'
-import { PluginManager } from './manager'
-import { t } from '../../i18n/index'
-import { semverGt } from '../updater/checker'
-import type { AgentPlugin } from './types'
+import { readdirSync, existsSync, statSync } from "fs";
+import { join, basename } from "path";
+import { PluginManager } from "./manager";
+import { t } from "../../i18n/index";
+import { semverGt } from "../updater/checker";
+import type { AgentPlugin } from "./types";
 
 /**
  * Entry file candidates for folder plugins. Looked up in order:
  * `plugin.ts` > `plugin.js` > `index.ts` > `index.js`.
  */
-const FOLDER_ENTRY_NAMES = ['plugin.ts', 'plugin.js', 'index.ts', 'index.js']
+const FOLDER_ENTRY_NAMES = ["plugin.ts", "plugin.js", "index.ts", "index.js"];
 
 export interface LoadFromDirOptions {
-  source?: 'global' | 'project'
+  source?: "global" | "project";
   /** Current MMA version (semver). When set, plugins declaring a higher `minMmaVersion` are skipped. */
-  mmaVersion?: string
+  mmaVersion?: string;
 }
 
 export class PluginLoader {
@@ -24,20 +24,26 @@ export class PluginLoader {
     logger?: { warn: (msg: string) => void },
     options?: LoadFromDirOptions,
   ): void {
-    if (!existsSync(dirPath)) return
+    if (!existsSync(dirPath)) return;
 
-    const entries = readdirSync(dirPath).sort()
+    const entries = readdirSync(dirPath).sort();
     for (const entry of entries) {
-      const fullPath = join(dirPath, entry)
-      const stat = statSync(fullPath)
+      const fullPath = join(dirPath, entry);
+      const stat = statSync(fullPath);
 
       if (stat.isFile()) {
-        if (!entry.endsWith('.ts') && !entry.endsWith('.js')) continue
-        this.tryLoad(fullPath, entry, pluginManager, logger, options)
+        if (!entry.endsWith(".ts") && !entry.endsWith(".js")) continue;
+        this.tryLoad(fullPath, entry, pluginManager, logger, options);
       } else if (stat.isDirectory()) {
-        const entryFile = this.findEntryFile(fullPath)
+        const entryFile = this.findEntryFile(fullPath);
         if (entryFile) {
-          this.tryLoad(entryFile, `${entry}/${basename(entryFile)}`, pluginManager, logger, options)
+          this.tryLoad(
+            entryFile,
+            `${entry}/${basename(entryFile)}`,
+            pluginManager,
+            logger,
+            options,
+          );
         }
       }
     }
@@ -45,10 +51,10 @@ export class PluginLoader {
 
   private findEntryFile(dir: string): string | null {
     for (const name of FOLDER_ENTRY_NAMES) {
-      const candidate = join(dir, name)
-      if (existsSync(candidate)) return candidate
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
     }
-    return null
+    return null;
   }
 
   private tryLoad(
@@ -59,8 +65,8 @@ export class PluginLoader {
     options?: LoadFromDirOptions,
   ): void {
     try {
-      const mod = require(fullPath) as { default?: AgentPlugin; plugin?: AgentPlugin }
-      const plugin = mod.default || mod.plugin
+      const mod = require(fullPath) as { default?: AgentPlugin; plugin?: AgentPlugin };
+      const plugin = mod.default || mod.plugin;
       if (plugin && plugin.name) {
         if (
           plugin.minMmaVersion &&
@@ -68,28 +74,28 @@ export class PluginLoader {
           semverGt(plugin.minMmaVersion, options.mmaVersion)
         ) {
           logger?.warn(
-            t('plugin.incompatible', {
+            t("plugin.incompatible", {
               name: plugin.name,
               min: plugin.minMmaVersion,
               current: options.mmaVersion,
             }),
-          )
-          return
+          );
+          return;
         }
-        const result = pluginManager.register(plugin, options?.source)
-        if (result.status === 'registered') {
-          logger?.warn(t('plugin.loaded', { name: plugin.name }))
-        } else if (result.status === 'skipped_older') {
+        const result = pluginManager.register(plugin, options?.source);
+        if (result.status === "registered") {
+          logger?.warn(t("plugin.loaded", { name: plugin.name }));
+        } else if (result.status === "skipped_older") {
           logger?.warn(
-            t('plugin.dedup_older', {
+            t("plugin.dedup_older", {
               name: plugin.name,
-              version: plugin.version || '0.0.0',
+              version: plugin.version || "0.0.0",
             }),
-          )
+          );
         }
       }
     } catch (e: any) {
-      logger?.warn(t('plugin.skipped', { entry: label, message: e.message }))
+      logger?.warn(t("plugin.skipped", { entry: label, message: e.message }));
     }
   }
 }

@@ -187,12 +187,7 @@ export function logNetworkRequest(
 export function logSecurityBlock(
   sessionId: string | undefined,
   action:
-    | "tool_call"
-    | "file_read"
-    | "file_write"
-    | "file_delete"
-    | "bash_command"
-    | "network_request",
+    "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request",
   reason: string,
   details?: string,
 ): void {

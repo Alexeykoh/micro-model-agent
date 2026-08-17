@@ -11,16 +11,16 @@ import { pc } from "../ui/colors";
  * suggests the task succeeded.
  */
 export function printRunResult(
-	result: { success: boolean; text?: string; error?: string },
-	flush: () => void,
+  result: { success: boolean; text?: string; error?: string },
+  flush: () => void,
 ): number {
-	flush();
-	if (result.success) {
-		if (!result.text) {
-			console.log(pc.yellow(t("cli.no_output")));
-		}
-		return 0;
-	}
-	console.error(`${t("error.prefix")}${result.error}`);
-	return 1;
+  flush();
+  if (result.success) {
+    if (!result.text) {
+      console.log(pc.yellow(t("cli.no_output")));
+    }
+    return 0;
+  }
+  console.error(`${t("error.prefix")}${result.error}`);
+  return 1;
 }

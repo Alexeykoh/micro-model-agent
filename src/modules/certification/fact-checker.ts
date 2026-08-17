@@ -22,12 +22,7 @@ export function checkSandbox(
   return { pass: failures.length === 0, failures };
 }
 
-function runCheck(
-  sandboxDir: string,
-  check: CertCheck,
-  exitCode: number,
-  output: string,
-): boolean {
+function runCheck(sandboxDir: string, check: CertCheck, exitCode: number, output: string): boolean {
   switch (check.type) {
     case "exitCode":
       return exitCode === (check.code ?? 0);
@@ -87,9 +82,7 @@ function describe(check: CertCheck): string {
       return `directory missing: ${check.path}`;
     case "fileContent": {
       const what =
-        check.contains !== undefined
-          ? `contains "${check.contains}"`
-          : `equals "${check.equals}"`;
+        check.contains !== undefined ? `contains "${check.contains}"` : `equals "${check.equals}"`;
       return `${check.path} does not ${what}`;
     }
     case "fileRegex":

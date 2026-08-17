@@ -1,10 +1,7 @@
 import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
-import {
-  RateLimiter,
-  createRateLimiter,
-} from "../modules/security/rate-limiter";
+import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
 import type { RateLimitConfig } from "../config/types";
 
 export interface RetryConfig {
@@ -157,15 +154,12 @@ export class OpenAICompatProvider implements LLMProvider {
       }
     })();
 
-    const response = await this.fetchWithRetry(
-      `${this.config.baseUrl}/chat/completions`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: abortSignal,
-      },
-    );
+    const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: abortSignal,
+    });
 
     if (!response.ok) {
       clearTimeout(timeoutId);
@@ -189,9 +183,7 @@ export class OpenAICompatProvider implements LLMProvider {
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
 
-    let usage:
-      | { promptTokens: number; completionTokens: number; totalTokens: number }
-      | undefined;
+    let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
 
     try {
       while (true) {
@@ -302,15 +294,12 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     try {
-      const response = await this.fetchWithRetry(
-        `${this.config.baseUrl}/chat/completions`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body),
-          signal,
-        },
-      );
+      const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -402,10 +391,7 @@ export class OpenAICompatProvider implements LLMProvider {
     }
   }
 
-  private async fetchWithRetry(
-    url: string,
-    init: RequestInit,
-  ): Promise<Response> {
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
     const { maxRetries, baseDelay, maxDelay } = this.retryConfig;
     let lastError: Error | null = null;
 
@@ -413,9 +399,7 @@ export class OpenAICompatProvider implements LLMProvider {
       try {
         const response = await fetch(url, init);
         if (!this.isRetryable(response.status)) return response;
-        lastError = new Error(
-          `HTTP ${response.status}: ${response.statusText}`,
-        );
+        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
       } catch (err: any) {
         if (err.name === "AbortError") {
           throw err;

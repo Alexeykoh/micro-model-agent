@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-  mkdirSync,
-} from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
@@ -13,20 +7,14 @@ import type { AppConfig } from "./types";
 import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
-import {
-  ConfigEncryptor,
-  isEncryptedString,
-} from "../modules/security/encryption";
+import { ConfigEncryptor, isEncryptedString } from "../modules/security/encryption";
 
 /**
  * Restore RegExp instances in dangerousPatterns that were serialized as {}
  * (pre-0.8.0 configs) or as {__regex, source, flags} (new format).
  * Falls back to default patterns for any entry that is not a real RegExp.
  */
-function restoreDangerousPatterns(
-  patterns: unknown,
-  defaults: unknown,
-): RegExp[] {
+function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[] {
   const fallback = (Array.isArray(defaults) ? defaults : []) as RegExp[];
   if (!Array.isArray(patterns) || patterns.length === 0) {
     return fallback;
@@ -85,11 +73,7 @@ function regexReplacer(_key: string, value: unknown): unknown {
  * JSON reviver that restores RegExp objects serialized by regexReplacer.
  */
 function regexReviver(_key: string, value: unknown): unknown {
-  if (
-    value &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>).__regex === true
-  ) {
+  if (value && typeof value === "object" && (value as Record<string, unknown>).__regex === true) {
     const { source, flags } = value as { source: string; flags: string };
     try {
       return new RegExp(source, flags);
@@ -119,8 +103,7 @@ function applyEnvVars(config: AppConfig): AppConfig {
   const result = { ...config };
 
   if (env.MMA_MODEL) result.model = env.MMA_MODEL;
-  if (env.MMA_PROVIDER_TYPE)
-    result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE };
+  if (env.MMA_PROVIDER_TYPE) result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE };
   if (env.MMA_PROVIDER_BASEURL)
     result.provider = { ...result.provider, baseUrl: env.MMA_PROVIDER_BASEURL };
   if (env.MMA_PROVIDER_APIKEY)
@@ -140,8 +123,7 @@ function applyEnvVars(config: AppConfig): AppConfig {
     if (!isNaN(v)) result.stuckThreshold = v;
   }
   if (env.MMA_AUTO_PLAN) result.autoPlan = env.MMA_AUTO_PLAN === "true";
-  if (env.MMA_MOE_ENABLED)
-    result.moe = { ...result.moe, enabled: env.MMA_MOE_ENABLED === "true" };
+  if (env.MMA_MOE_ENABLED) result.moe = { ...result.moe, enabled: env.MMA_MOE_ENABLED === "true" };
 
   return result;
 }
@@ -197,9 +179,7 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   // Decrypt sensitive fields in the loaded config
   try {
     const encryptor = new ConfigEncryptor();
-    const decrypted = encryptor.decrypt(
-      config as unknown as Record<string, unknown>,
-    );
+    const decrypted = encryptor.decrypt(config as unknown as Record<string, unknown>);
     // Merge decrypted sensitive fields back into config
     for (const key of Object.keys(decrypted)) {
       (config as any)[key] = decrypted[key];
@@ -216,6 +196,14 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
 
 export function validateConfig(config: AppConfig, allToolTags: string[]): void {
   const errors = validateExpertConfig(config, allToolTags);
+  const knownTags = new Set(allToolTags);
+  for (const tag of config.tools?.defaultTags ?? []) {
+    if (!knownTags.has(tag)) {
+      errors.push(
+        `tools.defaultTags references unknown tag "${tag}". Known tags: ${Array.from(knownTags).join(", ")}`,
+      );
+    }
+  }
   if (errors.length > 0) {
     throw new Error(`Config validation failed:\n${errors.join("\n")}`);
   }
@@ -231,18 +219,10 @@ export function saveConfig(config: AppConfig, configPath: string): void {
     const encryptedConfig = encryptor.encrypt({
       ...config,
     } as unknown as Record<string, unknown>);
-    writeFileSync(
-      configPath,
-      JSON.stringify(encryptedConfig, regexReplacer, 2),
-      "utf-8",
-    );
+    writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
   } catch (e: any) {
     // If encryption fails, save without encryption
     console.warn(t("config.encryption_warning", { error: e.message }));
-    writeFileSync(
-      configPath,
-      JSON.stringify(config, regexReplacer, 2),
-      "utf-8",
-    );
+    writeFileSync(configPath, JSON.stringify(config, regexReplacer, 2), "utf-8");
   }
 }

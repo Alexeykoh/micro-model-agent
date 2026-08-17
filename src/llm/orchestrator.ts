@@ -1,17 +1,17 @@
-import { OpenAICompatProvider, type RetryConfig } from './openai-compat'
-import type { LLMProvider, Message } from './provider'
-import type { MoEPlan } from '../modules/execution/types'
-import type { OrchestratorResult, VerifyInput } from './types'
-import { jsonrepair } from 'jsonrepair'
+import { OpenAICompatProvider, type RetryConfig } from "./openai-compat";
+import type { LLMProvider, Message } from "./provider";
+import type { MoEPlan } from "../modules/execution/types";
+import type { OrchestratorResult, VerifyInput } from "./types";
+import { jsonrepair } from "jsonrepair";
 
 export interface OrchestratorConfig {
-  model?: string
+  model?: string;
   provider?: {
-    type?: string
-    baseUrl?: string
-    apiKey?: string
-  }
-  retry?: RetryConfig
+    type?: string;
+    baseUrl?: string;
+    apiKey?: string;
+  };
+  retry?: RetryConfig;
 }
 
 const PLAN_SYSTEM_PROMPT = `You are a planning assistant for an agent system with multiple expert sub-agents.
@@ -52,7 +52,7 @@ Respond with a JSON object only (no markdown fences):
     "rules": ["rule 1"],
     "refs": []
   }
-}`
+}`;
 
 const VERIFY_SYSTEM_PROMPT = `You are a verification and merge assistant for an agent system with multiple expert sub-agents.
 You receive the original plan, the results from each subtask, and any verification errors.
@@ -62,161 +62,172 @@ Respond with JSON only:
 - If successful: {"type": "final", "finalAnswer": "summary of results", "explanation": "details"}
 - If re-plan needed: {"type": "replan", "plan": {updated MoEPlan}, "explanation": "why re-plan is needed"}
 
-Max 3 re-plan cycles. After 3 cycles, return partial result.`
+Max 3 re-plan cycles. After 3 cycles, return partial result.`;
 
 export class OrchestratorClient {
-  private config: OrchestratorConfig
-  private provider: LLMProvider | null = null
-  private replanCycle = 0
+  private config: OrchestratorConfig;
+  private provider: LLMProvider | null = null;
+  private replanCycle = 0;
 
   constructor(config: OrchestratorConfig, defaultProvider?: LLMProvider) {
-    this.config = config
+    this.config = config;
     if (config.model) {
       if (config.provider) {
         this.provider = new OpenAICompatProvider({
           model: config.model,
-          baseUrl: config.provider.baseUrl || 'http://localhost:1234/v1',
+          baseUrl: config.provider.baseUrl || "http://localhost:1234/v1",
           apiKey: config.provider.apiKey,
           retry: config.retry,
-        })
+        });
       } else if (defaultProvider) {
-        this.provider = defaultProvider
+        this.provider = defaultProvider;
       } else {
         this.provider = new OpenAICompatProvider({
           model: config.model,
-          baseUrl: 'http://localhost:1234/v1',
+          baseUrl: "http://localhost:1234/v1",
           retry: config.retry,
-        })
+        });
       }
     }
   }
 
   isEnabled(): boolean {
-    return this.provider !== null
+    return this.provider !== null;
   }
 
   getReplanCycle(): number {
-    return this.replanCycle
+    return this.replanCycle;
   }
 
   private async chat(messages: Message[]): Promise<string> {
-    if (!this.provider) throw new Error('Orchestrator not enabled')
-    const chunks: any[] = []
+    if (!this.provider) throw new Error("Orchestrator not enabled");
+    const chunks: any[] = [];
     for await (const chunk of this.provider.chat(messages)) {
-      chunks.push(chunk)
+      chunks.push(chunk);
     }
     return chunks
-      .filter((c: any) => c.type === 'text')
+      .filter((c: any) => c.type === "text")
       .map((c: any) => c.content)
-      .join('')
+      .join("");
   }
 
   private parseJSON<T>(text: string): T | null {
     try {
-      return JSON.parse(text) as T
+      return JSON.parse(text) as T;
     } catch {
       try {
-        const repaired = jsonrepair(text)
-        return JSON.parse(repaired) as T
+        const repaired = jsonrepair(text);
+        return JSON.parse(repaired) as T;
       } catch {
-        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           try {
-            const repaired = jsonrepair(jsonMatch[0])
-            return JSON.parse(repaired) as T
-          } catch { /* fall through */ }
+            const repaired = jsonrepair(jsonMatch[0]);
+            return JSON.parse(repaired) as T;
+          } catch {
+            /* fall through */
+          }
         }
-        return null
+        return null;
       }
     }
   }
 
-  async plan(userPrompt: string, _context?: string): Promise<{ plan: MoEPlan; raw: string } | { error: string }> {
-    if (!this.provider) return { error: 'Orchestrator not enabled — no orchestrator model configured' }
+  async plan(
+    userPrompt: string,
+    _context?: string,
+  ): Promise<{ plan: MoEPlan; raw: string } | { error: string }> {
+    if (!this.provider)
+      return { error: "Orchestrator not enabled — no orchestrator model configured" };
 
     const messages: Message[] = [
-      { role: 'system', content: PLAN_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ]
+      { role: "system", content: PLAN_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ];
 
-    const text = await this.chat(messages)
-    const parsed = this.parseJSON<MoEPlan>(text)
+    const text = await this.chat(messages);
+    const parsed = this.parseJSON<MoEPlan>(text);
 
     if (parsed && parsed.subtasks && parsed.subtasks.length > 0) {
-      return { plan: parsed, raw: text }
+      return { plan: parsed, raw: text };
     }
 
-    return { error: `Failed to parse plan from LLM output. Raw: ${text.slice(0, 500)}` }
+    return { error: `Failed to parse plan from LLM output. Raw: ${text.slice(0, 500)}` };
   }
 
   async verifyAndMerge(input: VerifyInput): Promise<OrchestratorResult> {
-    if (!this.provider) return { type: 'final', finalAnswer: input.results.map(r => r.summary).join('\n') }
+    if (!this.provider)
+      return { type: "final", finalAnswer: input.results.map((r) => r.summary).join("\n") };
 
-    this.replanCycle++
+    this.replanCycle++;
     if (this.replanCycle > 3) {
       return {
-        type: 'final',
-        finalAnswer: input.results.map(r => `${r.subtaskId}: ${r.success ? 'OK' : 'FAIL'} — ${r.summary}`).join('\n'),
-        explanation: 'Max re-plan cycles (3) reached. Returning partial results.',
-      }
+        type: "final",
+        finalAnswer: input.results
+          .map((r) => `${r.subtaskId}: ${r.success ? "OK" : "FAIL"} — ${r.summary}`)
+          .join("\n"),
+        explanation: "Max re-plan cycles (3) reached. Returning partial results.",
+      };
     }
 
-    const context = JSON.stringify(input, null, 2)
+    const context = JSON.stringify(input, null, 2);
     const messages: Message[] = [
-      { role: 'system', content: VERIFY_SYSTEM_PROMPT },
-      { role: 'user', content: context },
-    ]
+      { role: "system", content: VERIFY_SYSTEM_PROMPT },
+      { role: "user", content: context },
+    ];
 
-    const text = await this.chat(messages)
-    const parsed = this.parseJSON<OrchestratorResult>(text)
+    const text = await this.chat(messages);
+    const parsed = this.parseJSON<OrchestratorResult>(text);
 
     if (parsed && parsed.type) {
-      return parsed
+      return parsed;
     }
 
     return {
-      type: 'final',
-      finalAnswer: input.results.map(r => r.summary).join('\n'),
-      explanation: 'Failed to parse verifier output, returning collected results.',
-    }
+      type: "final",
+      finalAnswer: input.results.map((r) => r.summary).join("\n"),
+      explanation: "Failed to parse verifier output, returning collected results.",
+    };
   }
 
   async createPlan(task: string): Promise<{ steps: string[] }> {
-    if (!this.provider) throw new Error('Orchestrator not enabled')
+    if (!this.provider) throw new Error("Orchestrator not enabled");
 
     const messages: Message[] = [
       {
-        role: 'system',
-        content: 'You are a planning assistant. Break down tasks into steps. Respond with JSON only: {"steps": ["step 1", "step 2", ...]}',
+        role: "system",
+        content:
+          'You are a planning assistant. Break down tasks into steps. Respond with JSON only: {"steps": ["step 1", "step 2", ...]}',
       },
-      { role: 'user', content: task },
-    ]
+      { role: "user", content: task },
+    ];
 
-    const text = await this.chat(messages)
+    const text = await this.chat(messages);
 
     try {
-      return JSON.parse(text)
+      return JSON.parse(text);
     } catch {
-      return { steps: [task] }
+      return { steps: [task] };
     }
   }
 
   async resolveConflict(context: string): Promise<string> {
-    if (!this.provider) throw new Error('Orchestrator not enabled')
+    if (!this.provider) throw new Error("Orchestrator not enabled");
 
     const messages: Message[] = [
       {
-        role: 'system',
-        content: 'You are a conflict resolution assistant. Analyze the situation and recommend the best path forward.',
+        role: "system",
+        content:
+          "You are a conflict resolution assistant. Analyze the situation and recommend the best path forward.",
       },
-      { role: 'user', content: context },
-    ]
+      { role: "user", content: context },
+    ];
 
-    let result = ''
+    let result = "";
     for await (const chunk of this.provider.chat(messages)) {
-      if (chunk.type === 'text' && chunk.content) result += chunk.content
+      if (chunk.type === "text" && chunk.content) result += chunk.content;
     }
 
-    return result
+    return result;
   }
 }

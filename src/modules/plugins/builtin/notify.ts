@@ -1,14 +1,14 @@
-import type { AgentPlugin } from '../../types'
-import type { ToolContext } from '../../../tools/types'
+import type { AgentPlugin } from "../../types";
+import type { ToolContext } from "../../../tools/types";
 
 export class NotifyPlugin implements AgentPlugin {
-  name = 'notify'
-  priority = 5
-  isBuiltin = true
+  name = "notify";
+  priority = 5;
+  isBuiltin = true;
 
   onSessionEnd(ctx: ToolContext): void {
-    ctx.logger.info('Session ended')
+    ctx.logger.info("Session ended");
   }
 }
 
-export const plugin = new NotifyPlugin()
+export const plugin = new NotifyPlugin();

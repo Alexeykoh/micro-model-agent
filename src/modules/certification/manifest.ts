@@ -1,11 +1,7 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import type {
-  CertManifest,
-  CertificationEntry,
-  CertMark,
-} from "./types";
+import type { CertManifest, CertificationEntry, CertMark } from "./types";
 
 export const MANIFEST_PATH = join(homedir(), ".mma", "certifications.json");
 
@@ -68,9 +64,7 @@ export function getCertMark(
   path: string = MANIFEST_PATH,
 ): CertMark {
   const m = readManifest(path);
-  const entry = m.certifications.find(
-    (e) => e.model === model && e.providerUrl === providerUrl,
-  );
+  const entry = m.certifications.find((e) => e.model === model && e.providerUrl === providerUrl);
   if (!entry) return "none";
   return isStale(entry, currentVersion) ? "stale" : "certified";
 }

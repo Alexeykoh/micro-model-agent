@@ -40,11 +40,11 @@ export class RateLimiter {
    */
   canMakeRequest(): boolean {
     this.cleanupOldRequests();
-    
+
     if (this.state.requests.length >= this.config.maxRequestsPerMinute) {
       return false;
     }
-    
+
     return true;
   }
 
@@ -101,15 +101,13 @@ export class RateLimiter {
   private cleanupOldRequests(): void {
     const now = Date.now();
     const oneMinuteAgo = now - 60_000;
-    
+
     // Only cleanup every 5 seconds to avoid performance overhead
     if (now - this.lastCleanup < 5000) {
       return;
     }
-    
-    this.state.requests = this.state.requests.filter(
-      (timestamp) => timestamp > oneMinuteAgo,
-    );
+
+    this.state.requests = this.state.requests.filter((timestamp) => timestamp > oneMinuteAgo);
     this.lastCleanup = now;
   }
 

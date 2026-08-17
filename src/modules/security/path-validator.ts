@@ -187,11 +187,7 @@ export function isPathWritable(
  * Simple glob pattern matching (supports * and **)
  * This is a simplified version that handles common cases
  */
-function matchesGlobPattern(
-  targetPath: string,
-  baseDir: string,
-  pattern: string,
-): boolean {
+function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string): boolean {
   const resolvedBaseDir = resolve(baseDir);
   const resolvedTargetPath = resolve(targetPath);
 
@@ -268,9 +264,7 @@ function matchesGlobPattern(
       .replace(/\./g, "\\.");
 
     const regex = new RegExp(`^${regexPattern}$`);
-    const relativePath = resolvedTargetPath
-      .slice(resolvedBaseDir.length + 1)
-      .replace(/\\/g, "/");
+    const relativePath = resolvedTargetPath.slice(resolvedBaseDir.length + 1).replace(/\\/g, "/");
     return regex.test(relativePath);
   }
 

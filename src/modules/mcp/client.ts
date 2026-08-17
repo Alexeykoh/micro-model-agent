@@ -48,9 +48,7 @@ export class MCPClient {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `SSE connection failed: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
     }
 
     this._connected = true;
@@ -315,10 +313,7 @@ export class MCPClient {
     this._connected = false;
   }
 
-  async callTool(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this._connected) {
       throw new Error("Not connected to MCP server");
     }
@@ -332,10 +327,7 @@ export class MCPClient {
     return this.callToolStdio(toolName, args);
   }
 
-  private async callToolHTTP(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  private async callToolHTTP(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const request = {
       jsonrpc: "2.0",
       id: Date.now(),
@@ -367,10 +359,7 @@ export class MCPClient {
     return result.result || result;
   }
 
-  private async callToolSSE(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  private async callToolSSE(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const request = {
       jsonrpc: "2.0",
       id: Date.now(),
@@ -424,10 +413,7 @@ export class MCPClient {
     });
   }
 
-  private callToolStdio(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  private callToolStdio(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.process) {
       throw new Error("Not connected to MCP server");
     }

@@ -147,11 +147,7 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(meta, null, 2);
     if (this.encryptor) {
-      writeFileSync(
-        this.metaPath(id),
-        this.encryptor.encryptFileContent(content),
-        "utf-8",
-      );
+      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), "utf-8");
     } else {
       writeFileSync(this.metaPath(id), content, "utf-8");
     }
@@ -164,9 +160,7 @@ export class SessionStore {
     if (!existsSync(path)) return null;
     try {
       const raw = readFileSync(path, "utf-8");
-      const content = this.encryptor
-        ? this.encryptor.decryptFileContent(raw)
-        : raw;
+      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
       const meta = JSON.parse(content) as SessionMeta;
       this._metaCache.set(id, meta);
       return meta;
@@ -180,11 +174,7 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(msg);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(
-        this.historyPath(id),
-        this.encryptor.encryptFileContent(line) + "\n",
-        "utf-8",
-      );
+      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", "utf-8");
     } else {
       appendFileSync(this.historyPath(id), line + "\n", "utf-8");
     }
@@ -222,9 +212,7 @@ export class SessionStore {
           .map(parseLine)
           .filter((m): m is SessionMessage => m !== null);
       }
-      return lines
-        .map(parseLine)
-        .filter((m): m is SessionMessage => m !== null);
+      return lines.map(parseLine).filter((m): m is SessionMessage => m !== null);
     } catch {
       return [];
     }
@@ -271,9 +259,7 @@ export class SessionStore {
           .map(parseLine)
           .filter((e): e is SessionLogEntry => e !== null);
       }
-      return lines
-        .map(parseLine)
-        .filter((e): e is SessionLogEntry => e !== null);
+      return lines.map(parseLine).filter((e): e is SessionLogEntry => e !== null);
     } catch {
       return [];
     }
@@ -289,10 +275,7 @@ export class SessionStore {
         if (meta) sessions.push(meta);
       }
     }
-    sessions.sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
+    sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     return sessions;
   }
 

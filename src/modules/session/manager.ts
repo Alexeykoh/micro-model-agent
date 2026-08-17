@@ -9,10 +9,7 @@ import {
   createSessionContext,
   DEFAULT_SESSION_ISOLATION,
 } from "../../modules/security/session-isolation";
-import type {
-  SecurityConfig,
-  SessionEncryptionConfig,
-} from "../../config/types";
+import type { SecurityConfig, SessionEncryptionConfig } from "../../config/types";
 
 export interface SessionManagerOptions {
   model: string;
@@ -63,14 +60,10 @@ export class SessionManager {
     this.options.encryption = config;
   }
 
-  create(
-    name?: string,
-    securityOverrides?: SessionMeta["securityOverrides"],
-  ): SessionMeta {
+  create(name?: string, securityOverrides?: SessionMeta["securityOverrides"]): SessionMeta {
     const now = new Date().toISOString();
     const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    const sessionName =
-      name || t("session.default_name", { date: now.slice(0, 10) });
+    const sessionName = name || t("session.default_name", { date: now.slice(0, 10) });
     const meta: SessionMeta = {
       id,
       name: sessionName,
@@ -216,8 +209,7 @@ export class SessionManager {
       maxRecursionDepth: overrides.maxRecursionDepth,
       rateLimits: overrides.rateLimits
         ? {
-            maxRequestsPerMinute:
-              overrides.rateLimits.maxRequestsPerMinute ?? 60,
+            maxRequestsPerMinute: overrides.rateLimits.maxRequestsPerMinute ?? 60,
             maxParallelTasks: overrides.rateLimits.maxParallelTasks ?? 5,
           }
         : undefined,

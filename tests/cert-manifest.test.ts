@@ -26,8 +26,12 @@ function entry(model: string): CertificationEntry {
 }
 
 describe("cert manifest", () => {
-  beforeEach(() => { rmSync(testPath, { force: true }); });
-  afterEach(() => { rmSync(testPath, { force: true }); });
+  beforeEach(() => {
+    rmSync(testPath, { force: true });
+  });
+  afterEach(() => {
+    rmSync(testPath, { force: true });
+  });
 
   it("readManifest returns empty default", () => {
     const m = readManifest(testPath);

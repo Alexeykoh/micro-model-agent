@@ -1,110 +1,110 @@
-import { createRequire } from 'module'
-import readline from 'readline'
+import { createRequire } from "module";
+import readline from "readline";
 
-const require = createRequire(import.meta.url)
-const { chromium } = require('playwright')
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
 
-const CONSOLE_CAP = 500
-const NETWORK_CAP = 100
-let maxLineChars = 400
+const CONSOLE_CAP = 500;
+const NETWORK_CAP = 100;
+let maxLineChars = 400;
 
-let browser = null
-let context = null
-let page = null
-let consoleBuf = []
-let networkBuf = []
-let lastUrl = ''
+let browser = null;
+let context = null;
+let page = null;
+let consoleBuf = [];
+let networkBuf = [];
+let lastUrl = "";
 
 function pushConsole(type, text) {
-  if (consoleBuf.length >= CONSOLE_CAP) return
-  const clean = String(text).replace(/\s+/g, ' ').trim()
-  if (!clean) return
-  const line = clean.length > maxLineChars ? clean.slice(0, maxLineChars) + '…' : clean
-  consoleBuf.push({ type, text: line })
+  if (consoleBuf.length >= CONSOLE_CAP) return;
+  const clean = String(text).replace(/\s+/g, " ").trim();
+  if (!clean) return;
+  const line = clean.length > maxLineChars ? clean.slice(0, maxLineChars) + "…" : clean;
+  consoleBuf.push({ type, text: line });
 }
 
 function pushNetwork(err) {
-  if (networkBuf.length >= NETWORK_CAP) return
-  networkBuf.push(err)
+  if (networkBuf.length >= NETWORK_CAP) return;
+  networkBuf.push(err);
 }
 
 function drain() {
-  const consoleEvents = consoleBuf
-  const networkEvents = networkBuf
-  consoleBuf = []
-  networkBuf = []
-  return { console: consoleEvents, network: networkEvents }
+  const consoleEvents = consoleBuf;
+  const networkEvents = networkBuf;
+  consoleBuf = [];
+  networkBuf = [];
+  return { console: consoleEvents, network: networkEvents };
 }
 
 function readInt(v, fallback) {
-  const n = Number(v)
-  return Number.isFinite(n) && n > 0 ? n : fallback
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
 async function handleLaunch(params) {
-  if (browser) return { ok: true }
-  maxLineChars = readInt(params?.maxConsoleLineChars, 400)
+  if (browser) return { ok: true };
+  maxLineChars = readInt(params?.maxConsoleLineChars, 400);
   browser = await chromium.launch({
     headless: params?.headless !== false,
     timeout: readInt(params?.timeoutMs, 30000),
-  })
+  });
   context = await browser.newContext({
     viewport: params?.viewport || { width: 1280, height: 720 },
-  })
-  page = await context.newPage()
-  page.setDefaultTimeout(readInt(params?.timeoutMs, 30000))
+  });
+  page = await context.newPage();
+  page.setDefaultTimeout(readInt(params?.timeoutMs, 30000));
 
-  page.on('console', (msg) => pushConsole(msg.type(), msg.text()))
-  page.on('pageerror', (err) => pushConsole('pageerror', `Page error: ${err.message}`))
-  page.on('requestfailed', (req) => {
-    const failure = req.failure()
-    pushNetwork({ method: req.method(), url: req.url(), error: failure?.errorText || 'unknown' })
-  })
+  page.on("console", (msg) => pushConsole(msg.type(), msg.text()));
+  page.on("pageerror", (err) => pushConsole("pageerror", `Page error: ${err.message}`));
+  page.on("requestfailed", (req) => {
+    const failure = req.failure();
+    pushNetwork({ method: req.method(), url: req.url(), error: failure?.errorText || "unknown" });
+  });
 
-  return { ok: true }
+  return { ok: true };
 }
 
 async function handleGoto(params) {
-  if (!page) return { ok: false, error: 'No page open' }
-  const url = String(params?.url || '')
-  const timeoutMs = readInt(params?.timeoutMs, 15000)
-  consoleBuf = []
-  networkBuf = []
+  if (!page) return { ok: false, error: "No page open" };
+  const url = String(params?.url || "");
+  const timeoutMs = readInt(params?.timeoutMs, 15000);
+  consoleBuf = [];
+  networkBuf = [];
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
-    lastUrl = page.url()
-    return { ok: true, data: { url: lastUrl } }
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    lastUrl = page.url();
+    return { ok: true, data: { url: lastUrl } };
   } catch (err) {
-    lastUrl = page.url()
-    return { ok: false, error: err.message, data: { url: lastUrl } }
+    lastUrl = page.url();
+    return { ok: false, error: err.message, data: { url: lastUrl } };
   }
 }
 
 async function handleEvaluate(params) {
-  if (!page) return { ok: false, error: 'No page open' }
-  const js = String(params?.js || '')
+  if (!page) return { ok: false, error: "No page open" };
+  const js = String(params?.js || "");
   try {
-    const result = await page.evaluate(js)
-    return { ok: true, data: { result } }
+    const result = await page.evaluate(js);
+    return { ok: true, data: { result } };
   } catch (err) {
-    return { ok: false, error: err.message }
+    return { ok: false, error: err.message };
   }
 }
 
 async function handleClose() {
   try {
-    if (page) await page.close()
+    if (page) await page.close();
   } catch {}
   try {
-    if (context) await context.close()
+    if (context) await context.close();
   } catch {}
   try {
-    if (browser) await browser.close()
+    if (browser) await browser.close();
   } catch {}
-  page = null
-  context = null
-  browser = null
-  return { ok: true }
+  page = null;
+  context = null;
+  browser = null;
+  return { ok: true };
 }
 
 const handlers = {
@@ -112,83 +112,91 @@ const handlers = {
   launch: handleLaunch,
   goto: handleGoto,
   evaluate: handleEvaluate,
-  content: async () => ({ ok: true, data: { html: page ? await page.content() : '' } }),
-  title: async () => ({ ok: true, data: { title: page ? await page.title() : '' } }),
+  content: async () => ({ ok: true, data: { html: page ? await page.content() : "" } }),
+  title: async () => ({ ok: true, data: { title: page ? await page.title() : "" } }),
   url: async () => ({ ok: true, data: { url: page ? page.url() : lastUrl } }),
   waitLoad: async (params) => {
-    if (!page) return { ok: false, error: 'No page open' }
+    if (!page) return { ok: false, error: "No page open" };
     try {
-      await page.waitForLoadState('domcontentloaded', { timeout: readInt(params?.timeoutMs, 15000) })
+      await page.waitForLoadState("domcontentloaded", {
+        timeout: readInt(params?.timeoutMs, 15000),
+      });
     } catch {}
-    return { ok: true }
+    return { ok: true };
   },
   screenshot: async () => {
-    if (!page) return { ok: false, error: 'No page open' }
+    if (!page) return { ok: false, error: "No page open" };
     try {
-      const buf = await page.screenshot({ type: 'png', fullPage: false })
-      return { ok: true, data: { base64: buf.toString('base64') } }
+      const buf = await page.screenshot({ type: "png", fullPage: false });
+      return { ok: true, data: { base64: buf.toString("base64") } };
     } catch (err) {
-      return { ok: false, error: err.message }
+      return { ok: false, error: err.message };
     }
   },
   cookies: async () => {
-    if (!context) return { ok: true, data: { cookies: [] } }
-    const cookies = await context.cookies()
-    return { ok: true, data: { cookies } }
+    if (!context) return { ok: true, data: { cookies: [] } };
+    const cookies = await context.cookies();
+    return { ok: true, data: { cookies } };
   },
   setCookies: async (params) => {
-    if (!context) return { ok: false, error: 'No context' }
-    const cookies = Array.isArray(params?.cookies) ? params.cookies : []
+    if (!context) return { ok: false, error: "No context" };
+    const cookies = Array.isArray(params?.cookies) ? params.cookies : [];
     if (cookies.length > 0) {
       try {
-        await context.addCookies(cookies)
+        await context.addCookies(cookies);
       } catch (err) {
-        return { ok: false, error: err.message }
+        return { ok: false, error: err.message };
       }
     }
-    return { ok: true }
+    return { ok: true };
   },
   back: async (params) => {
-    if (!page) return { ok: false, error: 'No page open' }
+    if (!page) return { ok: false, error: "No page open" };
     try {
-      await page.goBack({ waitUntil: 'domcontentloaded', timeout: readInt(params?.timeoutMs, 15000) })
+      await page.goBack({
+        waitUntil: "domcontentloaded",
+        timeout: readInt(params?.timeoutMs, 15000),
+      });
     } catch {}
-    lastUrl = page.url()
-    return { ok: true, data: { url: lastUrl } }
+    lastUrl = page.url();
+    return { ok: true, data: { url: lastUrl } };
   },
   forward: async (params) => {
-    if (!page) return { ok: false, error: 'No page open' }
+    if (!page) return { ok: false, error: "No page open" };
     try {
-      await page.goForward({ waitUntil: 'domcontentloaded', timeout: readInt(params?.timeoutMs, 15000) })
+      await page.goForward({
+        waitUntil: "domcontentloaded",
+        timeout: readInt(params?.timeoutMs, 15000),
+      });
     } catch {}
-    lastUrl = page.url()
-    return { ok: true, data: { url: lastUrl } }
+    lastUrl = page.url();
+    return { ok: true, data: { url: lastUrl } };
   },
   close: handleClose,
-}
+};
 
-const rl = readline.createInterface({ input: process.stdin })
-rl.on('line', async (line) => {
-  let req
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", async (line) => {
+  let req;
   try {
-    req = JSON.parse(line)
+    req = JSON.parse(line);
   } catch {
-    return
+    return;
   }
-  const handler = handlers[req.cmd]
-  let resp
+  const handler = handlers[req.cmd];
+  let resp;
   if (!handler) {
-    resp = { id: req.id, ok: false, error: `Unknown command: ${req.cmd}`, ...drain() }
+    resp = { id: req.id, ok: false, error: `Unknown command: ${req.cmd}`, ...drain() };
   } else {
     try {
-      const result = await handler(req.params || {})
-      resp = { id: req.id, ...result, ...drain() }
+      const result = await handler(req.params || {});
+      resp = { id: req.id, ...result, ...drain() };
     } catch (err) {
-      resp = { id: req.id, ok: false, error: err.message, ...drain() }
+      resp = { id: req.id, ok: false, error: err.message, ...drain() };
     }
   }
-  process.stdout.write(JSON.stringify(resp) + '\n')
-})
+  process.stdout.write(JSON.stringify(resp) + "\n");
+});
 
-process.on('SIGTERM', () => process.exit(0))
-process.on('SIGINT', () => process.exit(0))
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));

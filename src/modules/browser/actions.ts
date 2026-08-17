@@ -3,11 +3,11 @@ export function buildClickScript(elementIndex: number): string {
     const el = document.querySelector('[data-browser-index="${elementIndex}"]');
     if (!el) throw new Error('Element not found: ${elementIndex}');
     el.click();
-  `
+  `;
 }
 
 export function buildTypeScript(elementIndex: number, text: string): string {
-  const escaped = JSON.stringify(text)
+  const escaped = JSON.stringify(text);
   return `
     const el = document.querySelector('[data-browser-index="${elementIndex}"]');
     if (!el) throw new Error('Element not found: ${elementIndex}');
@@ -16,24 +16,24 @@ export function buildTypeScript(elementIndex: number, text: string): string {
     el.value = text;
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
-  `
+  `;
 }
 
-export function buildScrollScript(direction: 'up' | 'down' | 'top' | 'bottom'): string {
+export function buildScrollScript(direction: "up" | "down" | "top" | "bottom"): string {
   switch (direction) {
-    case 'down':
-      return `window.scrollBy({ top: 600, behavior: 'smooth' })`
-    case 'up':
-      return `window.scrollBy({ top: -600, behavior: 'smooth' })`
-    case 'top':
-      return `window.scrollTo({ top: 0, behavior: 'smooth' })`
-    case 'bottom':
-      return `window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })`
+    case "down":
+      return `window.scrollBy({ top: 600, behavior: 'smooth' })`;
+    case "up":
+      return `window.scrollBy({ top: -600, behavior: 'smooth' })`;
+    case "top":
+      return `window.scrollTo({ top: 0, behavior: 'smooth' })`;
+    case "bottom":
+      return `window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })`;
   }
 }
 
 export function buildWaitScript(timeoutMs: number): string {
-  return `await new Promise(r => setTimeout(r, ${timeoutMs}))`
+  return `await new Promise(r => setTimeout(r, ${timeoutMs}))`;
 }
 
 export function buildIndexInjectionScript(): string {
@@ -46,7 +46,7 @@ export function buildIndexInjectionScript(): string {
       if (style.display === 'none' || style.visibility === 'hidden') return;
       el.setAttribute('data-browser-index', String(idx++));
     });
-  `
+  `;
 }
 
 export function buildTextExtractionScript(): string {
@@ -77,5 +77,5 @@ export function buildTextExtractionScript(): string {
       out.push('[' + tag + '] ' + line);
     }
     return out.join('\\n');
-  `
+  `;
 }

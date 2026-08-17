@@ -2,10 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import {
-  checkPlanCoverage,
-  extractFilePaths,
-} from "../src/modules/execution/plan-coverage";
+import { checkPlanCoverage, extractFilePaths } from "../src/modules/execution/plan-coverage";
 import { ExecutionModule } from "../src/modules/execution/module";
 
 function planTool(execModule: ExecutionModule) {
@@ -40,10 +37,7 @@ describe("extractFilePaths", () => {
 describe("checkPlanCoverage", () => {
   it("returns no missing when every task path appears in a step", () => {
     const task = "2. src/index.ts — re-exports from string.ts and math.ts";
-    const steps = [
-      "create src/index.ts with re-exports",
-      "create src/string.ts and src/math.ts",
-    ];
+    const steps = ["create src/index.ts with re-exports", "create src/string.ts and src/math.ts"];
     const result = checkPlanCoverage(task, steps);
     expect(result.missing).toEqual([]);
   });

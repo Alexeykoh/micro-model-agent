@@ -58,9 +58,7 @@ export class SkillsModule implements AgentModule {
   search(query: string): SkillMeta[] {
     const q = query.toLowerCase();
     return this.availableSkills.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q),
+      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
     );
   }
 
@@ -93,9 +91,7 @@ export class SkillsModule implements AgentModule {
       lines.push("");
       lines.push("[Loaded Skills]");
       for (const skill of this.loadedSkills.values()) {
-        lines.push(
-          `--- ${skill.name} (${this.estimateTokens(skill.content)} tokens) ---`,
-        );
+        lines.push(`--- ${skill.name} (${this.estimateTokens(skill.content)} tokens) ---`);
         lines.push(skill.content);
         lines.push("");
       }

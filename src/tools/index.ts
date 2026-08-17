@@ -40,18 +40,12 @@ import { rememberTool } from "./remember";
 import { recallTool } from "./recall";
 import { createBrowserTool } from "./browser";
 import { attachImageTool } from "./attach-image";
+import { enableToolsTool } from "./enable-tools";
 import type { SkillsModule } from "../modules/skills/module";
 
 export { ToolRegistry, ToolExecutor };
 export { filterToolsByTags } from "./filter-tools";
-export type {
-  ToolDefinition,
-  ToolContext,
-  ToolResult,
-  ToolCall,
-  PluginHook,
-  PluginManager,
-};
+export type { ToolDefinition, ToolContext, ToolResult, ToolCall, PluginHook, PluginManager };
 export {
   readFileTool,
   writeFileTool,
@@ -81,11 +75,13 @@ export {
   recallTool,
   createBrowserTool,
   attachImageTool,
+  enableToolsTool,
 };
 
 export function registerAllTools(
   registry: ToolRegistry,
   skillsModule?: SkillsModule,
+  opts?: { enableOnDemand?: boolean },
 ): void {
   const tools: ToolDefinition[] = [
     readFileTool,
@@ -113,6 +109,13 @@ export function registerAllTools(
     searchHistoryTool,
     attachImageTool,
   ];
+
+  // On-demand tool activation is the default. When explicitly disabled
+  // (enableOnDemand: false), the tool is not registered at all — combined
+  // with an empty defaultTags this restores the legacy all-tools behavior.
+  if (opts?.enableOnDemand !== false) {
+    tools.push(enableToolsTool);
+  }
 
   if (skillsModule) {
     tools.push(createLoadSkillTool(skillsModule));

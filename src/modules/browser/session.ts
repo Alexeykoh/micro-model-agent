@@ -58,11 +58,7 @@ export class BrowserActionTracker {
     this.threshold = threshold;
   }
 
-  record(
-    action: string,
-    args: Record<string, unknown>,
-    url: string,
-  ): string | null {
+  record(action: string, args: Record<string, unknown>, url: string): string | null {
     this.history.push({ action, args, url });
 
     if (this.history.length < this.threshold) return null;
@@ -111,10 +107,7 @@ export class BrowserSession {
     return { ...this.state };
   }
 
-  async execute(
-    action: string,
-    args: Record<string, unknown>,
-  ): Promise<ActionResult> {
+  async execute(action: string, args: Record<string, unknown>): Promise<ActionResult> {
     try {
       let result: ActionResult;
       switch (action) {
@@ -125,10 +118,7 @@ export class BrowserSession {
           result = await this.click(Number(args.target));
           break;
         case "type":
-          result = await this.type(
-            Number(args.target),
-            String(args.text || ""),
-          );
+          result = await this.type(Number(args.target), String(args.text || ""));
           break;
         case "scroll":
           result = await this.scroll(String(args.direction || "down"));
@@ -159,11 +149,7 @@ export class BrowserSession {
       }
 
       if (action !== "open") {
-        const warning = this.actionTracker.record(
-          action,
-          args,
-          this.driver?.url() || "",
-        );
+        const warning = this.actionTracker.record(action, args, this.driver?.url() || "");
         if (warning && result.success) {
           result.output = result.output + "\n\n⚠️ " + warning;
         }
@@ -217,10 +203,7 @@ export class BrowserSession {
       content = "";
     }
 
-    const allElements = extractInteractiveElements(
-      html,
-      this.config.maxElements + 5,
-    );
+    const allElements = extractInteractiveElements(html, this.config.maxElements + 5);
     const truncated = allElements.length > this.config.maxElements;
     const elements = allElements.slice(0, this.config.maxElements);
 
@@ -245,20 +228,13 @@ export class BrowserSession {
   private async open(url: string): Promise<ActionResult> {
     if (!url) return { success: false, output: t("browser.url_required") };
 
-    if (
-      !url.startsWith("http://") &&
-      !url.startsWith("https://") &&
-      !url.startsWith("file://")
-    ) {
-      const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(
-        url,
-      );
+    if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+      const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
       url = isLocalhost ? "http://" + url : "https://" + url;
     }
 
     await this.launch();
-    if (!this.driver)
-      return { success: false, output: t("browser.create_page_failed") };
+    if (!this.driver) return { success: false, output: t("browser.create_page_failed") };
 
     this.actionTracker.reset();
     this.driver.resetEventLog();

@@ -37,16 +37,34 @@ describe("fact-checker", () => {
 
   it("fileContent contains and equals", () => {
     const dir = makeSandbox({ "m.ts": 'export const msg = "Hi";' });
-    expect(checkSandbox(dir, [{ type: "fileContent", path: "m.ts", contains: "Hi" }], 0, "").pass).toBe(true);
-    expect(checkSandbox(dir, [{ type: "fileContent", path: "m.ts", contains: "bye" }], 0, "").pass).toBe(false);
-    expect(checkSandbox(dir, [{ type: "fileContent", path: "m.ts", equals: 'export const msg = "Hi";' }], 0, "").pass).toBe(true);
-    expect(checkSandbox(dir, [{ type: "fileContent", path: "m.ts", equals: "other" }], 0, "").pass).toBe(false);
+    expect(
+      checkSandbox(dir, [{ type: "fileContent", path: "m.ts", contains: "Hi" }], 0, "").pass,
+    ).toBe(true);
+    expect(
+      checkSandbox(dir, [{ type: "fileContent", path: "m.ts", contains: "bye" }], 0, "").pass,
+    ).toBe(false);
+    expect(
+      checkSandbox(
+        dir,
+        [{ type: "fileContent", path: "m.ts", equals: 'export const msg = "Hi";' }],
+        0,
+        "",
+      ).pass,
+    ).toBe(true);
+    expect(
+      checkSandbox(dir, [{ type: "fileContent", path: "m.ts", equals: "other" }], 0, "").pass,
+    ).toBe(false);
   });
 
   it("fileRegex matches content", () => {
     const dir = makeSandbox({ "m.ts": "console.log(x)" });
-    expect(checkSandbox(dir, [{ type: "fileRegex", path: "m.ts", pattern: "console\\.log" }], 0, "").pass).toBe(true);
-    expect(checkSandbox(dir, [{ type: "fileRegex", path: "m.ts", pattern: "^zzz" }], 0, "").pass).toBe(false);
+    expect(
+      checkSandbox(dir, [{ type: "fileRegex", path: "m.ts", pattern: "console\\.log" }], 0, "")
+        .pass,
+    ).toBe(true);
+    expect(
+      checkSandbox(dir, [{ type: "fileRegex", path: "m.ts", pattern: "^zzz" }], 0, "").pass,
+    ).toBe(false);
   });
 
   it("exitCode check", () => {
@@ -57,8 +75,13 @@ describe("fact-checker", () => {
 
   it("outputContains greps combined output", () => {
     const dir = makeSandbox({});
-    expect(checkSandbox(dir, [{ type: "outputContains", text: "blocked" }], 0, "request was blocked").pass).toBe(true);
-    expect(checkSandbox(dir, [{ type: "outputContains", text: "blocked" }], 0, "all fine").pass).toBe(false);
+    expect(
+      checkSandbox(dir, [{ type: "outputContains", text: "blocked" }], 0, "request was blocked")
+        .pass,
+    ).toBe(true);
+    expect(
+      checkSandbox(dir, [{ type: "outputContains", text: "blocked" }], 0, "all fine").pass,
+    ).toBe(false);
   });
 
   it("all checks must pass (AND semantics)", () => {

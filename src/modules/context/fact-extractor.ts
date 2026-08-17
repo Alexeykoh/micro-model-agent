@@ -24,8 +24,14 @@ export class FactExtractor {
     // without it the colon breaks the match and the fact is silently dropped.
     const DRIVE = "(?:[a-zA-Z]:[\\\\/])?";
     const createdPatterns = [
-      new RegExp(`(?:Created|Updated|Written|Moved|Replaced in) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
-      new RegExp(`Файл (?:создан|обновлён|записан|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
+      new RegExp(
+        `(?:Created|Updated|Written|Moved|Replaced in) ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`,
+        "gi",
+      ),
+      new RegExp(
+        `Файл (?:создан|обновлён|записан|перемещён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`,
+        "gi",
+      ),
       new RegExp(`file (?:created|updated|written|moved):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
     const deletedPatterns = [
@@ -35,9 +41,7 @@ export class FactExtractor {
     // read_file output header — locale-independent prefix `── path (ext, …`
     // (en: "lines", ru: "строк"). The path is already prefixed with the same
     // box-drawing marker in both locales, so the pattern needs no localization.
-    const readPatterns = [
-      new RegExp(`── (${DRIVE}[\\w./\\\\-]+\\.[a-z]+) \\(`, "gi"),
-    ];
+    const readPatterns = [new RegExp(`── (${DRIVE}[\\w./\\\\-]+\\.[a-z]+) \\(`, "gi")];
 
     const newFiles: string[] = [];
     const newDeleted: string[] = [];
@@ -64,8 +68,7 @@ export class FactExtractor {
       // the source of recursive summary nesting (summary inside summary).
       if (
         msg.role === "user" &&
-        (content.startsWith("<system-summary>") ||
-          content.includes("[Compressed:"))
+        (content.startsWith("<system-summary>") || content.includes("[Compressed:"))
       ) {
         continue;
       }
@@ -90,9 +93,7 @@ export class FactExtractor {
         }
 
         if (content.includes("Plan:") && content.includes("[")) {
-          const planLine = content
-            .split("\n")
-            .find((line) => line.includes("Plan:"));
+          const planLine = content.split("\n").find((line) => line.includes("Plan:"));
           if (planLine) newDecisions.push(planLine.trim());
         }
       }
@@ -134,31 +135,19 @@ export class FactExtractor {
     // then RE-CREATED (delete_file A → write_file A) is un-deleted: the last
     // event in the window wins, so it returns to [Files:] and leaves [Deleted:].
     const dedup = (arr: string[]): string[] => [...new Set(arr)];
-    const finalFiles = dedup(
-      newFiles.filter((p) => lastEvent.get(p) === "file"),
-    );
-    const finalDeleted = dedup(
-      newDeleted.filter((p) => lastEvent.get(p) === "deleted"),
-    );
+    const finalFiles = dedup(newFiles.filter((p) => lastEvent.get(p) === "file"));
+    const finalDeleted = dedup(newDeleted.filter((p) => lastEvent.get(p) === "deleted"));
     this.fileFacts = dedup(
-      [...this.fileFacts, ...finalFiles].filter(
-        (p) => !finalDeleted.includes(p),
-      ),
+      [...this.fileFacts, ...finalFiles].filter((p) => !finalDeleted.includes(p)),
     ).slice(-FactExtractor.MAX_FACTS);
     this.deletedFacts = dedup(
-      [...this.deletedFacts, ...finalDeleted].filter(
-        (p) => !finalFiles.includes(p),
-      ),
+      [...this.deletedFacts, ...finalDeleted].filter((p) => !finalFiles.includes(p)),
     ).slice(-FactExtractor.MAX_FACTS);
     this.decisionFacts = dedup([...this.decisionFacts, ...newDecisions]).slice(
       -FactExtractor.MAX_FACTS,
     );
-    this.errorFacts = dedup([...this.errorFacts, ...newErrors]).slice(
-      -FactExtractor.MAX_FACTS,
-    );
-    this.readFacts = dedup([...this.readFacts, ...newReads]).slice(
-      -FactExtractor.MAX_FACTS,
-    );
+    this.errorFacts = dedup([...this.errorFacts, ...newErrors]).slice(-FactExtractor.MAX_FACTS);
+    this.readFacts = dedup([...this.readFacts, ...newReads]).slice(-FactExtractor.MAX_FACTS);
   }
 
   /** `[Files: a; b]` line for a compaction summary, or null. */

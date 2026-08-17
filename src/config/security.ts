@@ -1,8 +1,4 @@
-import type {
-  SecurityConfig,
-  SessionEncryptionConfig,
-  AuditNotifierConfig,
-} from "./types";
+import type { SecurityConfig, SessionEncryptionConfig, AuditNotifierConfig } from "./types";
 
 /**
  * Default security configuration for MMA.
@@ -153,12 +149,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   auditNotifier: {
     enabled: false,
     minSeverity: "medium",
-    eventTypes: [
-      "security_block",
-      "bash_command",
-      "file_operation",
-      "network_request",
-    ],
+    eventTypes: ["security_block", "bash_command", "file_operation", "network_request"],
     maxRetries: 3,
     webhookTimeout: 5000,
   },
@@ -168,9 +159,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
  * Merge user-provided security config with defaults.
  * User config takes precedence over defaults.
  */
-export function mergeSecurityConfig(
-  userConfig?: Partial<SecurityConfig>,
-): SecurityConfig {
+export function mergeSecurityConfig(userConfig?: Partial<SecurityConfig>): SecurityConfig {
   return {
     enabled: userConfig?.enabled ?? DEFAULT_SECURITY_CONFIG.enabled,
     bash: {
@@ -185,12 +174,8 @@ export function mergeSecurityConfig(
       ...DEFAULT_SECURITY_CONFIG.network,
       ...userConfig?.network,
     },
-    maxRecursionDepth:
-      userConfig?.maxRecursionDepth ??
-      DEFAULT_SECURITY_CONFIG.maxRecursionDepth,
-    maxFileOperations:
-      userConfig?.maxFileOperations ??
-      DEFAULT_SECURITY_CONFIG.maxFileOperations,
+    maxRecursionDepth: userConfig?.maxRecursionDepth ?? DEFAULT_SECURITY_CONFIG.maxRecursionDepth,
+    maxFileOperations: userConfig?.maxFileOperations ?? DEFAULT_SECURITY_CONFIG.maxFileOperations,
     rateLimits: {
       ...DEFAULT_SECURITY_CONFIG.rateLimits,
       ...userConfig?.rateLimits,

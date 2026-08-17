@@ -42,9 +42,7 @@ function writePlanFile(path: string, plan: Plan): void {
 function listDir(dir: string, baseDir: string): Plan[] {
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
-  return files
-    .map((f) => readPlanFile(join(dir, f), baseDir))
-    .filter((p): p is Plan => p !== null);
+  return files.map((f) => readPlanFile(join(dir, f), baseDir)).filter((p): p is Plan => p !== null);
 }
 
 function toMeta(plan: Plan, status: PlanStatus): PlanMeta {
@@ -102,7 +100,9 @@ export class PlanStore {
       const legacy = readPlanFile(this.legacyPath, this.baseDir);
       if (legacy) {
         this.saveActive(legacy);
-        try { rmSync(this.legacyPath, { force: true }); } catch {}
+        try {
+          rmSync(this.legacyPath, { force: true });
+        } catch {}
         return legacy;
       }
     }

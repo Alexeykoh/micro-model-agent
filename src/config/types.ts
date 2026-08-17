@@ -39,6 +39,22 @@ export interface MoeConfig {
   enabled: boolean;
 }
 
+export interface ToolsConfig {
+  /**
+   * Tool tags always exposed to the LLM in the main agent loop. Tools not
+   * matching these tags (and not `alwaysOn`) are hidden from the schema and
+   * must be enabled on demand via the `enable_tools` tool or routed to MoE
+   * experts / subagents.
+   */
+  defaultTags: string[];
+  /**
+   * Master switch for the `enable_tools` on-demand tool. When false, the tool
+   * is not registered and the tag set stays empty — the legacy behavior of
+   * exposing every registered tool is restored.
+   */
+  enableOnDemand: boolean;
+}
+
 export interface ExpertConfig {
   model: string;
   tool_tags: string[];
@@ -206,6 +222,7 @@ export interface AppConfig {
   orchestrator: OrchestratorConfig;
   moe: MoeConfig;
   experts: Record<string, ExpertConfig>;
+  tools: ToolsConfig;
   contextWindow: number;
   contextBudget: ContextBudget;
   modelLoad: ModelLoadConfig;

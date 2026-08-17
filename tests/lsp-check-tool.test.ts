@@ -34,10 +34,7 @@ describe("lsp_check tool", () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async () => [];
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src/a.ts" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(true);
     expect(res.output).toContain("No errors");
   });
@@ -54,15 +51,10 @@ describe("lsp_check tool", () => {
     };
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async () => [diag];
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src/a.ts" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(false);
     expect(res.output).toContain("[LSP errors] (1):");
-    expect(res.output).toContain(
-      "src/a.ts(2,1): error: Cannot find name 'x'",
-    );
+    expect(res.output).toContain("src/a.ts(2,1): error: Cannot find name 'x'");
   });
 
   it("checks every source file in a directory and skips unsupported extensions", async () => {
@@ -75,10 +67,7 @@ describe("lsp_check tool", () => {
       checked.push(filePath);
       return [];
     };
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(res.success).toBe(true);
     expect(checked.length).toBe(2);
     expect(res.output).toContain("No errors");
@@ -94,10 +83,7 @@ describe("lsp_check tool", () => {
       checked.push(filePath);
       return [];
     };
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "." },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "." });
     expect(res.success).toBe(true);
     expect(checked.some((f) => f.includes("node_modules"))).toBe(false);
   });
@@ -105,10 +91,7 @@ describe("lsp_check tool", () => {
   it("fails for a missing path", async () => {
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async () => [];
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src/nope.ts" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/nope.ts" });
     expect(res.success).toBe(false);
     expect(res.output).toContain("Path not found");
   });
@@ -121,20 +104,14 @@ describe("lsp_check tool", () => {
     (module as any).client.checkFile = async () => {
       throw new Error("typescript-language-server not found");
     };
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(module.isLspDisabled()).toBe(true);
     expect(res.output).toContain("LSP disabled");
   });
 
   it("returns an error when LSP is disabled in config", async () => {
     const module = new LspModule({ enabled: false });
-    const res = await lspTool(module).handler(
-      { ...baseCtx, baseDir },
-      { path: "src/a.ts" },
-    );
+    const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(false);
   });
 });

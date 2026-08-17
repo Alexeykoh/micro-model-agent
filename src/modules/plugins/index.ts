@@ -1,2 +1,2 @@
-export { PluginManager } from './manager'
-export type { AgentPlugin } from './types'
+export { PluginManager } from "./manager";
+export type { AgentPlugin } from "./types";

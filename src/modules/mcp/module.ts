@@ -18,13 +18,9 @@ function sanitizeToolName(server: string, tool: string): string {
   return `mcp__${safeServer}__${safeTool}`;
 }
 
-function convertInputSchema(
-  schema: Record<string, unknown>,
-): Record<string, unknown> {
+function convertInputSchema(schema: Record<string, unknown>): Record<string, unknown> {
   if (schema && typeof schema === "object" && "properties" in schema) {
-    const required = Array.isArray((schema as any).required)
-      ? (schema as any).required
-      : [];
+    const required = Array.isArray((schema as any).required) ? (schema as any).required : [];
     return {
       type: "object",
       properties: (schema as any).properties,
@@ -49,9 +45,7 @@ export class MCPModule implements AgentModule {
     this.initialized = true;
 
     const servers = this.config.mcpServers || {};
-    const serverEntries = Object.entries(servers).filter(
-      ([, cfg]) => cfg.enabled !== false,
-    );
+    const serverEntries = Object.entries(servers).filter(([, cfg]) => cfg.enabled !== false);
 
     if (serverEntries.length === 0) return;
 
@@ -84,8 +78,7 @@ export class MCPModule implements AgentModule {
           this.discovered.push({
             serverName,
             toolName: tool.name,
-            description:
-              tool.description || `Tool on MCP server "${serverName}"`,
+            description: tool.description || `Tool on MCP server "${serverName}"`,
             inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
           });
         }
@@ -148,10 +141,7 @@ export class MCPModule implements AgentModule {
           const result = await client.callTool(d.toolName, args);
           return {
             success: true,
-            output:
-              typeof result === "string"
-                ? result
-                : JSON.stringify(result, null, 2),
+            output: typeof result === "string" ? result : JSON.stringify(result, null, 2),
           };
         } catch (e: any) {
           return { success: false, output: `MCP call failed: ${e.message}` };

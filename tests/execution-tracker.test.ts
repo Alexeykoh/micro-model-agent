@@ -9,11 +9,7 @@ describe("PlanTracker", () => {
   beforeEach(() => {
     plan = PlanCreator.createPlan(
       "test",
-      [
-        "step one with text here",
-        "step two with more text",
-        "step three with text",
-      ],
+      ["step one with text here", "step two with more text", "step three with text"],
       "/test/dir",
     );
     tracker = new PlanTracker(plan);
@@ -21,9 +17,7 @@ describe("PlanTracker", () => {
 
   it("should start at step 0", () => {
     expect(tracker.getCurrentStepIndex()).toBe(0);
-    expect(tracker.getCurrentStep()!.description).toBe(
-      "step one with text here",
-    );
+    expect(tracker.getCurrentStep()!.description).toBe("step one with text here");
     expect(tracker.getCurrentStep()!.id).toBe(1);
   });
 

@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  mkdtempSync,
-  writeFileSync,
-  existsSync,
-  readFileSync,
-  rmdirSync,
-} from "fs";
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { moveFileTool } from "../src/tools/move-file";

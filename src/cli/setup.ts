@@ -19,10 +19,7 @@ interface SetupAnswers {
   securityPathsDeny: boolean;
 }
 
-async function withSpinner<T>(
-  message: string,
-  fn: () => Promise<T>,
-): Promise<T> {
+async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   const spinner = new Spinner();
   spinner.start(message);
   try {
@@ -35,21 +32,14 @@ async function withSpinner<T>(
 /** Render a numbered list inside a box. */
 function menuList(items: Array<{ label: string; url?: string }>): void {
   const lines = items.map(
-    (it, i) =>
-      ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
+    (it, i) => ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
   );
   for (const l of box(lines, { width: 72 })) console.log(l);
 }
 
-function ask(
-  rl: LineInput,
-  question: string,
-  defaultValue?: string,
-): Promise<string> {
+function ask(rl: LineInput, question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
-    const prompt = defaultValue
-      ? `${question} [${defaultValue}]: `
-      : `${question}: `;
+    const prompt = defaultValue ? `${question} [${defaultValue}]: ` : `${question}: `;
     rl.question(prompt, (answer: string) => {
       resolve(answer.trim() || defaultValue || "");
     });
@@ -116,11 +106,7 @@ async function fetchModels(apiBase: string, apiKey: string): Promise<string[]> {
   }
 }
 
-async function testChat(
-  apiBase: string,
-  apiKey: string,
-  model: string,
-): Promise<boolean> {
+async function testChat(apiBase: string, apiKey: string, model: string): Promise<boolean> {
   try {
     const url = `${apiBase.replace(/\/+$/, "")}/chat/completions`;
     const controller = new AbortController();
@@ -149,9 +135,7 @@ async function testChat(
   }
 }
 
-export async function runSetup(
-  externalRl?: LineInput,
-): Promise<SetupAnswers> {
+export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
   console.log(t("setup.title"));
 
   const rl =
@@ -182,9 +166,7 @@ export async function runSetup(
   let apiBase = "";
 
   if (provider === "openai-compat") {
-    const found = await withSpinner(t("setup.scanning_spinner"), async () =>
-      scanPorts(),
-    );
+    const found = await withSpinner(t("setup.scanning_spinner"), async () => scanPorts());
 
     if (found.length > 0) {
       console.log(t("setup.found_servers", { count: found.length }));
@@ -192,18 +174,10 @@ export async function runSetup(
         ...found.map((f) => ({ label: f.label, url: f.url })),
         { label: t("setup.custom_url") },
       ]);
-      const choice = await ask(
-        rl,
-        t("setup.select_server", { max: found.length + 1 }),
-        "1",
-      );
+      const choice = await ask(rl, t("setup.select_server", { max: found.length + 1 }), "1");
       const idx = (parseInt(choice) || 1) - 1;
       if (idx >= found.length) {
-        apiBase = await ask(
-          rl,
-          t("setup.api_base"),
-          "http://localhost:1234/v1",
-        );
+        apiBase = await ask(rl, t("setup.api_base"), "http://localhost:1234/v1");
       } else {
         apiBase = found[Math.max(0, Math.min(found.length - 1, idx))].url;
       }
@@ -220,9 +194,7 @@ export async function runSetup(
   const defaultKey = provider === "openai-compat" ? "not-needed" : "";
   const apiKey = await ask(rl, t("setup.api_key"), defaultKey);
 
-  const models = await withSpinner(t("setup.fetching_spinner"), () =>
-    fetchModels(apiBase, apiKey),
-  );
+  const models = await withSpinner(t("setup.fetching_spinner"), () => fetchModels(apiBase, apiKey));
   let model = "";
   if (models.length > 0) {
     console.log(t("setup.available_models"));
@@ -232,18 +204,14 @@ export async function runSetup(
       t("setup.select_model", { max: Math.min(models.length, 10) }),
       "1",
     );
-    const idx = Math.max(
-      0,
-      Math.min(models.length - 1, (parseInt(choice) || 1) - 1),
-    );
+    const idx = Math.max(0, Math.min(models.length - 1, (parseInt(choice) || 1) - 1));
     model = models[idx];
   } else {
     model = await ask(rl, t("setup.model_name"), "qwen/qwen3.5-9b");
   }
 
-  const connected = await withSpinner(
-    t("setup.testing_spinner", { model }),
-    () => testChat(apiBase, apiKey, model),
+  const connected = await withSpinner(t("setup.testing_spinner", { model }), () =>
+    testChat(apiBase, apiKey, model),
   );
   if (connected) {
     console.log(pc.green(t("setup.ok")));
@@ -252,9 +220,7 @@ export async function runSetup(
   }
 
   console.log(t("setup.agent_settings"));
-  const contextWindow = parseInt(
-    await ask(rl, t("setup.context_window"), "32768"),
-  );
+  const contextWindow = parseInt(await ask(rl, t("setup.context_window"), "32768"));
   const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "1000"));
 
   // Security settings
@@ -264,19 +230,11 @@ export async function runSetup(
   let securityBashBlock = false;
   let securityFlagsBlock = false;
   let securityPathsDeny = true;
-  if (
-    configureSecurity.toLowerCase() === "y" ||
-    configureSecurity.toLowerCase() === "yes"
-  ) {
-    securityBashBlock =
-      (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() ===
-      "y";
+  if (configureSecurity.toLowerCase() === "y" || configureSecurity.toLowerCase() === "yes") {
+    securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
     securityFlagsBlock =
-      (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() ===
-      "y";
-    securityPathsDeny =
-      (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !==
-      "n";
+      (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() === "y";
+    securityPathsDeny = (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !== "n";
   }
 
   if (ownRl) rl.close();
@@ -304,18 +262,8 @@ export async function runSetup(
     ],
     [
       [t("setup.provider_type"), provider, t("setup.model_name"), model],
-      [
-        "API Base URL",
-        apiBase,
-        t("setup.context_window"),
-        String(contextWindow),
-      ],
-      [
-        t("setup.api_key"),
-        apiKey || "not-needed",
-        t("setup.max_iters"),
-        String(maxIterations),
-      ],
+      ["API Base URL", apiBase, t("setup.context_window"), String(contextWindow)],
+      [t("setup.api_key"), apiKey || "not-needed", t("setup.max_iters"), String(maxIterations)],
       [t("setup.ui_lang"), locale, "", ""],
     ],
     { maxColumns: 4 },

@@ -1,13 +1,7 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import {
-  isUrlAllowed,
-  sanitizeUrl,
-} from "../modules/security/network-validator";
-import {
-  logNetworkRequest,
-  logSecurityBlock,
-} from "../modules/security/audit-log";
+import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
@@ -76,12 +70,7 @@ export const webFetchTool: ToolDefinition = {
       const text = await response.text();
       const cleaned = contentType.includes("html") ? stripHtml(text) : text;
 
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        true,
-        `Status: ${response.status}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
 
       const fullChars = cleaned.length;
       const fullLines = cleaned.split("\n").length;
@@ -115,12 +104,7 @@ export const webFetchTool: ToolDefinition = {
         }),
       };
     } catch (e: any) {
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        false,
-        `Error: ${e.message}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
       return {
         success: false,
         output: t("error.fetch_failed", { message: e.message }),

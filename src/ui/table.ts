@@ -69,10 +69,7 @@ export function parseAlignments(separator: string): Record<number, CellAlign> {
  * Render a markdown table block into aligned box-drawing lines.
  * `tableLines` must include the header row and (optionally) the separator row.
  */
-export function formatTable(
-  tableLines: string[],
-  opts: TableOptions = {},
-): string[] {
+export function formatTable(tableLines: string[], opts: TableOptions = {}): string[] {
   const align: Record<number, CellAlign> = opts.align ?? {};
   let dataStart = 1;
   if (tableLines.length > 1 && isSeparatorRow(tableLines[1])) {
@@ -121,7 +118,7 @@ export function formatTable(
     for (let c = 0; c < columnCount; c++) {
       const raw = row[c] ?? "";
       const cell = truncate(raw, widths[c]);
-      const a = isHeader && align[c] === undefined ? "center" : align[c] ?? "left";
+      const a = isHeader && align[c] === undefined ? "center" : (align[c] ?? "left");
       cells.push(pad(cell, widths[c], a));
     }
     const content = cells.map((c) => pc.dim("│ ") + c).join("") + pc.dim("│");

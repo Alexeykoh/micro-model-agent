@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { setLocale } from "../../src/i18n/index";
-import {
-  parseSelection,
-  formatMenu,
-  choicePrompt,
-} from "../../src/tools/user-input";
+import { parseSelection, formatMenu, choicePrompt } from "../../src/tools/user-input";
 
 describe("parseSelection", () => {
   it("parses a single valid choice", () => {

@@ -47,10 +47,9 @@ describe("parseAlignments", () => {
 
 describe("formatTable", () => {
   it("renders a bordered, aligned table", () => {
-    const out = formatTable(
-      ["| Name | Count |", "|---|---|", "| alpha | 1 |", "| beta | 22 |"],
-      { maxWidth: 120 },
-    );
+    const out = formatTable(["| Name | Count |", "|---|---|", "| alpha | 1 |", "| beta | 22 |"], {
+      maxWidth: 120,
+    });
     expect(out[0]).toContain("┌");
     expect(out[0]).toContain("┬");
     expect(out[0]).toContain("┐");

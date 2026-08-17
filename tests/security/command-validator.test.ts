@@ -92,10 +92,7 @@ describe("Command Validator", () => {
       expect(result1.allowed).toBe(true);
 
       // && (AND operator) with other commands
-      const result2 = isCommandAllowed(
-        'git add . && git commit -m "test"',
-        config,
-      );
+      const result2 = isCommandAllowed('git add . && git commit -m "test"', config);
       expect(result2.allowed).toBe(true);
 
       // Single & (background) should still be blocked

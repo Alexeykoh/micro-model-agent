@@ -130,9 +130,7 @@ export class UpdaterModule {
         );
       }
     } else {
-      this.logger.info(
-        t("updater.available", { current: result.current, latest: result.latest }),
-      );
+      this.logger.info(t("updater.available", { current: result.current, latest: result.latest }));
     }
   }
 

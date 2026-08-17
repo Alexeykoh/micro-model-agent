@@ -17,60 +17,60 @@
  */
 
 const JS_GLOBALS = new Set([
-	"process",
-	"console",
-	"math",
-	"json",
-	"global",
-	"globalthis",
-	"window",
-	"document",
-	"buffer",
-	"module",
-	"require",
-	"exports",
-	"url",
-	"promise",
-	"array",
-	"object",
-	"string",
-	"number",
-	"boolean",
-	"symbol",
-	"date",
-	"regexp",
-	"error",
-	"map",
-	"set",
-	"weakmap",
-	"weakset",
-	"proxy",
-	"reflect",
-	"intl",
-	"crypto",
-	"performance",
-	"fetch",
-	"navigator",
-	"location",
-	"settimeout",
-	"setinterval",
-	"cleartimeout",
-	"clearinterval",
-	"queuemicrotask",
-	"structuredclone",
-	"textencoder",
-	"textdecoder",
-	"atomics",
-	"sharedarraybuffer",
-	"dataview",
-	"arraybuffer",
-	"bigint",
-	"infinity",
-	"nan",
-	"undefined",
-	"bun",
-	"deno",
-	"node",
+  "process",
+  "console",
+  "math",
+  "json",
+  "global",
+  "globalthis",
+  "window",
+  "document",
+  "buffer",
+  "module",
+  "require",
+  "exports",
+  "url",
+  "promise",
+  "array",
+  "object",
+  "string",
+  "number",
+  "boolean",
+  "symbol",
+  "date",
+  "regexp",
+  "error",
+  "map",
+  "set",
+  "weakmap",
+  "weakset",
+  "proxy",
+  "reflect",
+  "intl",
+  "crypto",
+  "performance",
+  "fetch",
+  "navigator",
+  "location",
+  "settimeout",
+  "setinterval",
+  "cleartimeout",
+  "clearinterval",
+  "queuemicrotask",
+  "structuredclone",
+  "textencoder",
+  "textdecoder",
+  "atomics",
+  "sharedarraybuffer",
+  "dataview",
+  "arraybuffer",
+  "bigint",
+  "infinity",
+  "nan",
+  "undefined",
+  "bun",
+  "deno",
+  "node",
 ]);
 
 /**
@@ -79,9 +79,9 @@ const JS_GLOBALS = new Set([
  * `\b[\w./\\-]+\.[a-z]+`-style regexes) — member access, not a file path.
  */
 export function isJsMemberAccess(candidate: string): boolean {
-	const lower = candidate.toLowerCase();
-	const m = lower.match(/^([\w-]+)\./);
-	return m !== null && JS_GLOBALS.has(m[1]);
+  const lower = candidate.toLowerCase();
+  const m = lower.match(/^([\w-]+)\./);
+  return m !== null && JS_GLOBALS.has(m[1]);
 }
 
 /**
@@ -94,126 +94,126 @@ export function isJsMemberAccess(candidate: string): boolean {
  * genuine `config.json` / `helper.ts` still is.
  */
 const FILE_EXTENSIONS = new Set([
-	// source / code
-	"ts",
-	"tsx",
-	"js",
-	"jsx",
-	"mjs",
-	"cjs",
-	"py",
-	"pyc",
-	"rb",
-	"go",
-	"rs",
-	"java",
-	"jar",
-	"kt",
-	"kts",
-	"c",
-	"h",
-	"cc",
-	"cpp",
-	"cxx",
-	"hpp",
-	"hh",
-	"cs",
-	"php",
-	"swift",
-	"m",
-	"mm",
-	"lua",
-	"pl",
-	"sh",
-	"bash",
-	"zsh",
-	"fish",
-	"bat",
-	"cmd",
-	"ps1",
-	"vue",
-	"svelte",
-	"dart",
-	// config / data / docs
-	"json",
-	"jsonc",
-	"json5",
-	"yaml",
-	"yml",
-	"toml",
-	"ini",
-	"cfg",
-	"conf",
-	"env",
-	"xml",
-	"html",
-	"htm",
-	"md",
-	"markdown",
-	"rst",
-	"txt",
-	"log",
-	"csv",
-	"tsv",
-	"lock",
-	"sql",
-	"sqlite",
-	"db",
-	"wasm",
-	"map",
-	"css",
-	"scss",
-	"sass",
-	"less",
-	// assets / binary
-	"svg",
-	"png",
-	"jpg",
-	"jpeg",
-	"gif",
-	"webp",
-	"bmp",
-	"ico",
-	"avif",
-	"tiff",
-	"pdf",
-	"doc",
-	"docx",
-	"xls",
-	"xlsx",
-	"ppt",
-	"pptx",
-	"odt",
-	"ods",
-	"zip",
-	"gz",
-	"tar",
-	"tgz",
-	"bz2",
-	"xz",
-	"7z",
-	"rar",
-	"bin",
-	"exe",
-	"dll",
-	"so",
-	"o",
-	"a",
-	"dylib",
+  // source / code
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "pyc",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "jar",
+  "kt",
+  "kts",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "cxx",
+  "hpp",
+  "hh",
+  "cs",
+  "php",
+  "swift",
+  "m",
+  "mm",
+  "lua",
+  "pl",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "bat",
+  "cmd",
+  "ps1",
+  "vue",
+  "svelte",
+  "dart",
+  // config / data / docs
+  "json",
+  "jsonc",
+  "json5",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "env",
+  "xml",
+  "html",
+  "htm",
+  "md",
+  "markdown",
+  "rst",
+  "txt",
+  "log",
+  "csv",
+  "tsv",
+  "lock",
+  "sql",
+  "sqlite",
+  "db",
+  "wasm",
+  "map",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  // assets / binary
+  "svg",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "ico",
+  "avif",
+  "tiff",
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "odt",
+  "ods",
+  "zip",
+  "gz",
+  "tar",
+  "tgz",
+  "bz2",
+  "xz",
+  "7z",
+  "rar",
+  "bin",
+  "exe",
+  "dll",
+  "so",
+  "o",
+  "a",
+  "dylib",
 ]);
 
 /** Well-known runtime/library names that end in .js/.ts but are NOT files. */
 const TECH_NAMES = new Set([
-	"node.js",
-	"react.js",
-	"vue.js",
-	"next.js",
-	"angular.js",
-	"express.js",
-	"deno.js",
-	"qwik.js",
-	"svelte.js",
-	"jquery.js",
+  "node.js",
+  "react.js",
+  "vue.js",
+  "next.js",
+  "angular.js",
+  "express.js",
+  "deno.js",
+  "qwik.js",
+  "svelte.js",
+  "jquery.js",
 ]);
 
 const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
@@ -227,24 +227,24 @@ const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
  * (`process.env`) and technology names (`node.js`) are never files.
  */
 export function isFilePathLike(s: string): boolean {
-	const lower = s.toLowerCase();
-	if (TECH_NAMES.has(lower)) return false;
-	if (isJsMemberAccess(s)) return false;
-	const ext = s.split(".").pop()?.toLowerCase() || "";
-	if (!s.includes("/") && !s.includes("\\")) {
-		if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
-		return FILE_EXTENSIONS.has(ext);
-	}
-	// Tokens with a directory separator: require the LAST segment to carry a
-	// real file name (a non-empty stem before the extension). Otherwise an
-	// extension-only segment like "tsx/.ts" (from ".tsx/.ts" in a step
-	// description) or a dotfile ("src/.env") is misread as a file and the plan
-	// deliverable gate demands "create tsx/.ts" (observed in ses_mstda6uo:
-	// step "Проверить что остались только .tsx/.ts файлы").
-	const last = s.split(/[\\/]/).pop() ?? "";
-	const lastDot = last.lastIndexOf(".");
-	if (lastDot <= 0) return false;
-	return true;
+  const lower = s.toLowerCase();
+  if (TECH_NAMES.has(lower)) return false;
+  if (isJsMemberAccess(s)) return false;
+  const ext = s.split(".").pop()?.toLowerCase() || "";
+  if (!s.includes("/") && !s.includes("\\")) {
+    if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
+    return FILE_EXTENSIONS.has(ext);
+  }
+  // Tokens with a directory separator: require the LAST segment to carry a
+  // real file name (a non-empty stem before the extension). Otherwise an
+  // extension-only segment like "tsx/.ts" (from ".tsx/.ts" in a step
+  // description) or a dotfile ("src/.env") is misread as a file and the plan
+  // deliverable gate demands "create tsx/.ts" (observed in ses_mstda6uo:
+  // step "Проверить что остались только .tsx/.ts файлы").
+  const last = s.split(/[\\/]/).pop() ?? "";
+  const lastDot = last.lastIndexOf(".");
+  if (lastDot <= 0) return false;
+  return true;
 }
 
 /**
@@ -255,12 +255,12 @@ export function isFilePathLike(s: string): boolean {
  * `https://host/repo.git` never survives as a "file".
  */
 export function extractFileLikeTokens(text: string): string[] {
-	const matches = text.match(FILE_TOKEN_RE) || [];
-	return [...new Set(matches.filter(isFilePathLike))];
+  const matches = text.match(FILE_TOKEN_RE) || [];
+  return [...new Set(matches.filter(isFilePathLike))];
 }
 
 /** Remove URL tokens (scheme://… up to whitespace/quote) so they are never
  *  parsed as file paths. */
 export function stripUrls(text: string): string {
-	return text.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, " ");
+  return text.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, " ");
 }

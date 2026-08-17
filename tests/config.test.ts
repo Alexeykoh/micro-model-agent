@@ -118,10 +118,7 @@ describe("loadConfig", () => {
         },
       }),
     );
-    writeFileSync(
-      join(tmpDir, ".mmrc"),
-      JSON.stringify({ model: "project-model" }),
-    );
+    writeFileSync(join(tmpDir, ".mmrc"), JSON.stringify({ model: "project-model" }));
     const cfg = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),

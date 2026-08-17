@@ -38,9 +38,7 @@ function normalizeQuestions(args: Record<string, unknown>): QuestionSpec[] {
       if (!item || typeof item !== "object") continue;
       const q = item as Record<string, unknown>;
       if (typeof q.question !== "string" || !q.question.trim()) continue;
-      const options = Array.isArray(q.options)
-        ? q.options.filter(isOption)
-        : undefined;
+      const options = Array.isArray(q.options) ? q.options.filter(isOption) : undefined;
       // An explicitly provided options array with no valid entries is a
       // malformed call — skip the question instead of blocking on stdin.
       if (Array.isArray(q.options) && options!.length === 0) continue;

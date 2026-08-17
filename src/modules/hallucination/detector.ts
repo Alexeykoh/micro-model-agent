@@ -36,10 +36,7 @@ export class HallucinationDetector {
 
   async validate(response: string): Promise<HallucinationCheckResult> {
     const confidenceResult = this.confidence.validate(response);
-    if (
-      confidenceResult.status === "retry" ||
-      confidenceResult.status === "block"
-    ) {
+    if (confidenceResult.status === "retry" || confidenceResult.status === "block") {
       return confidenceResult;
     }
 
@@ -49,15 +46,11 @@ export class HallucinationDetector {
     }
 
     // LLM-as-judge consistency: fast path (no decisions) skips any LLM call.
-    const judgeResult = this.judge
-      ? await this.judge.validate(response, this.consistency)
-      : null;
+    const judgeResult = this.judge ? await this.judge.validate(response, this.consistency) : null;
 
     const warnings: string[] = [];
-    if (judgeResult && judgeResult.status === "warn")
-      warnings.push(judgeResult.reason || "");
-    if (confidenceResult.status === "warn")
-      warnings.push(confidenceResult.reason || "");
+    if (judgeResult && judgeResult.status === "warn") warnings.push(judgeResult.reason || "");
+    if (confidenceResult.status === "warn") warnings.push(confidenceResult.reason || "");
 
     if (warnings.length > 0) {
       return { status: "warn", reason: warnings.join("; ") };

@@ -1,8 +1,8 @@
-import { join, resolve } from 'path';
-import { homedir } from 'os';
-import { mkdirSync, existsSync } from 'fs';
-import type { SecurityConfig, AppConfig } from '../../config/types';
-import { DEFAULT_SECURITY_CONFIG } from '../../config/security';
+import { join, resolve } from "path";
+import { homedir } from "os";
+import { mkdirSync, existsSync } from "fs";
+import type { SecurityConfig, AppConfig } from "../../config/types";
+import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 
 /**
  * Session isolation configuration
@@ -72,11 +72,11 @@ export function createSessionContext(
   securityOverrides?: Partial<SecurityConfig>,
 ): SessionContext {
   const config = { ...DEFAULT_SESSION_ISOLATION, ...isolationConfig };
-  
+
   // Create session-specific temporary directory
-  const baseDir = config.baseDir || join(homedir(), '.mma', 'sessions', sessionId);
-  const tempDir = join(baseDir, 'temp');
-  
+  const baseDir = config.baseDir || join(homedir(), ".mma", "sessions", sessionId);
+  const tempDir = join(baseDir, "temp");
+
   if (config.isolateTempFiles && !existsSync(tempDir)) {
     try {
       mkdirSync(tempDir, { recursive: true, mode: 0o700 });
@@ -84,7 +84,7 @@ export function createSessionContext(
       // If we can't create the temp dir, continue without isolation
     }
   }
-  
+
   return {
     sessionId,
     tempDir,
@@ -103,11 +103,11 @@ export function getSessionSecurityConfig(
 ): SecurityConfig {
   const globalSecurity = globalConfig.security || DEFAULT_SECURITY_CONFIG;
   const sessionOverrides = sessionContext?.securityOverrides;
-  
+
   if (!sessionOverrides) {
     return globalSecurity;
   }
-  
+
   return {
     ...globalSecurity,
     ...sessionOverrides,
@@ -152,23 +152,20 @@ export function createSessionFilePath(
 /**
  * Check if a path is within the session's allowed directories
  */
-export function isPathInSessionScope(
-  sessionContext: SessionContext,
-  path: string,
-): boolean {
+export function isPathInSessionScope(sessionContext: SessionContext, path: string): boolean {
   const resolvedPath = resolve(path);
   const workingDir = resolve(sessionContext.workingDir);
   const tempDir = resolve(sessionContext.tempDir);
-  
+
   // Check if path is within working directory
-  if (resolvedPath.startsWith(workingDir + '/') || resolvedPath.startsWith(workingDir + '\\')) {
+  if (resolvedPath.startsWith(workingDir + "/") || resolvedPath.startsWith(workingDir + "\\")) {
     return true;
   }
-  
+
   // Check if path is within temp directory
-  if (resolvedPath.startsWith(tempDir + '/') || resolvedPath.startsWith(tempDir + '\\')) {
+  if (resolvedPath.startsWith(tempDir + "/") || resolvedPath.startsWith(tempDir + "\\")) {
     return true;
   }
-  
+
   return false;
 }

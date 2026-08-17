@@ -33,7 +33,8 @@ export const chunkQueryTool: ToolDefinition = {
       },
       max_parallel: {
         type: "number",
-        description: "Max parallel chunk queries (default from config.subagent.maxParallelChunkQueries).",
+        description:
+          "Max parallel chunk queries (default from config.subagent.maxParallelChunkQueries).",
       },
       max_chunk_tokens: {
         type: "number",
@@ -46,7 +47,8 @@ export const chunkQueryTool: ToolDefinition = {
       reasoning_effort: {
         type: "string",
         enum: ["none", "low", "medium", "high"],
-        description: 'Reasoning effort for chunk/synthesis calls (default "none"). "none" prevents long thinking chains from eating the token budget on reasoning models.',
+        description:
+          'Reasoning effort for chunk/synthesis calls (default "none"). "none" prevents long thinking chains from eating the token budget on reasoning models.',
       },
       synthesize: {
         type: "boolean",
@@ -83,14 +85,15 @@ export const chunkQueryTool: ToolDefinition = {
     const maxParallel =
       typeof args.max_parallel === "number"
         ? args.max_parallel
-        : ctx.config.subagent?.maxParallelChunkQueries ?? 4;
+        : (ctx.config.subagent?.maxParallelChunkQueries ?? 4);
 
     const res = await runChunkQuery(ctx.llmProvider, content, query, {
       chunkChars: typeof args.chunk_chars === "number" ? args.chunk_chars : undefined,
       maxParallel,
       synthesize: typeof args.synthesize === "boolean" ? args.synthesize : undefined,
       maxChunkTokens: typeof args.max_chunk_tokens === "number" ? args.max_chunk_tokens : undefined,
-      maxSynthesisTokens: typeof args.max_synthesis_tokens === "number" ? args.max_synthesis_tokens : undefined,
+      maxSynthesisTokens:
+        typeof args.max_synthesis_tokens === "number" ? args.max_synthesis_tokens : undefined,
       reasoningEffort: (["none", "low", "medium", "high"] as const).includes(
         args.reasoning_effort as "none" | "low" | "medium" | "high",
       )

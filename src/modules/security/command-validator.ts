@@ -25,8 +25,7 @@ const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
   logCommands: true,
 };
 
-export const DEFAULT_BASH_CONFIG =
-  DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
+export const DEFAULT_BASH_CONFIG = DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
 
 /**
  * Result of command validation
@@ -61,13 +60,7 @@ function extractBaseCommand(trimmed: string): string {
       i++;
       continue;
     }
-    if (
-      tok === "sudo" ||
-      tok === "env" ||
-      tok === "command" ||
-      tok === "exec" ||
-      tok === "nohup"
-    ) {
+    if (tok === "sudo" || tok === "env" || tok === "command" || tok === "exec" || tok === "nohup") {
       i++;
       continue;
     }
@@ -179,9 +172,7 @@ export function isCommandAllowed(
   }
 
   // Also check the raw first token in case it's a simple name
-  const rawFirst = trimmedCommand
-    .split(/\s+/)[0]
-    .replace(/\.(exe|cmd|bat)$/i, "");
+  const rawFirst = trimmedCommand.split(/\s+/)[0].replace(/\.(exe|cmd|bat)$/i, "");
   if (rawFirst !== baseCommand && config.blacklist.includes(rawFirst)) {
     return {
       allowed: false,

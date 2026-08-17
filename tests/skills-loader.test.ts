@@ -85,18 +85,14 @@ describe("SkillsModule.getSystemPromptBlock", () => {
 
   it("should be dynamic (reflects loaded/unloaded state)", () => {
     const mod = new SkillsModule(makeSkills() as any, 1000);
-    expect(mod.getSystemPromptBlock()!.content).not.toContain(
-      "[Loaded Skills]",
-    );
+    expect(mod.getSystemPromptBlock()!.content).not.toContain("[Loaded Skills]");
 
     mod.loadByName("git-expert");
     expect(mod.getSystemPromptBlock()!.content).toContain("[Loaded Skills]");
     expect(mod.getSystemPromptBlock()!.content).toContain("git skill content");
 
     mod.unload("git-expert");
-    expect(mod.getSystemPromptBlock()!.content).not.toContain(
-      "[Loaded Skills]",
-    );
+    expect(mod.getSystemPromptBlock()!.content).not.toContain("[Loaded Skills]");
   });
 });
 

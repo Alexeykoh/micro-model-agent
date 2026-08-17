@@ -62,9 +62,9 @@ describe("download_file tool", () => {
 
   it("should download a binary file and write it to disk", async () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
-    stubFetch(vi.fn().mockResolvedValue(
-      mockResponse(bytes, 200, { "content-type": "image/jpeg" }),
-    ));
+    stubFetch(
+      vi.fn().mockResolvedValue(mockResponse(bytes, 200, { "content-type": "image/jpeg" })),
+    );
 
     const ctx = makeCtx();
     const result = await downloadFileTool.handler(ctx, {
@@ -186,9 +186,13 @@ describe("download_file tool", () => {
   });
 
   it("should block downloads larger than the max size via content-length", async () => {
-    stubFetch(vi.fn().mockResolvedValue(
-      mockResponse("", 200, { "content-length": String(MAX_DOWNLOAD_BYTES + 1) }),
-    ));
+    stubFetch(
+      vi
+        .fn()
+        .mockResolvedValue(
+          mockResponse("", 200, { "content-length": String(MAX_DOWNLOAD_BYTES + 1) }),
+        ),
+    );
     const ctx = makeCtx();
     const result = await downloadFileTool.handler(ctx, {
       url: "https://example.com/huge.bin",

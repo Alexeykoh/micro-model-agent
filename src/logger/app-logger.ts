@@ -15,9 +15,7 @@ const LEVEL_COLORS: Record<LogLevel, (s: string) => string> = {
 };
 
 function isColorEnabled(): boolean {
-  return (
-    !process.env.NO_COLOR && !process.env.CI && process.stdout.isTTY === true
-  );
+  return !process.env.NO_COLOR && !process.env.CI && process.stdout.isTTY === true;
 }
 
 export class Logger {
@@ -92,13 +90,7 @@ export class Logger {
     error?: string,
     caller?: string,
   ): void {
-    this.fileLog.logLLMResponse(
-      model,
-      responseLength,
-      genTimeMs,
-      error,
-      caller,
-    );
+    this.fileLog.logLLMResponse(model, responseLength, genTimeMs, error, caller);
   }
 
   logToolCall(tool: string, preview: string, result?: string): void {
@@ -114,10 +106,7 @@ export class Logger {
   }
 
   child(prefix: string): Logger {
-    const childLogger = new Logger(
-      this.level,
-      this.prefix ? `${this.prefix}:${prefix}` : prefix,
-    );
+    const childLogger = new Logger(this.level, this.prefix ? `${this.prefix}:${prefix}` : prefix);
     if (this.logDir) childLogger.setLogDir(this.logDir);
     if (this.sessionDir) childLogger.setSessionDir(this.sessionDir);
     return childLogger;
@@ -139,11 +128,7 @@ export class Logger {
     this.log("error", msg, meta);
   }
 
-  private log(
-    level: LogLevel,
-    msg: string,
-    meta?: Record<string, unknown>,
-  ): void {
+  private log(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
     if (LEVELS[level] < LEVELS[this.level]) return;
 
     // Sanitize log message to remove sensitive data

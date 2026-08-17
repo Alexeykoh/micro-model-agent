@@ -1,33 +1,33 @@
-import { describe, expect, it } from 'bun:test'
-import { FilePathProvider } from '../../src/cli/completer'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
+import { describe, expect, it } from "bun:test";
+import { FilePathProvider } from "../../src/cli/completer";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
-describe('FilePathProvider', () => {
-  it('should complete file paths from CWD', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'mma-completer-'))
-    mkdirSync(join(tempDir, 'src'))
-    writeFileSync(join(tempDir, 'src', 'test.ts'), '')
+describe("FilePathProvider", () => {
+  it("should complete file paths from CWD", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "mma-completer-"));
+    mkdirSync(join(tempDir, "src"));
+    writeFileSync(join(tempDir, "src", "test.ts"), "");
 
-    const originalCwd = process.cwd()
-    process.chdir(tempDir)
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
 
-    const provider = new FilePathProvider()
+    const provider = new FilePathProvider();
     const ctx = {
-      line: 'read src/',
+      line: "read src/",
       cursor: 9,
-      tokens: ['read', 'src/'],
-      partial: 'src/',
+      tokens: ["read", "src/"],
+      partial: "src/",
       tokenIndex: 1,
-    }
+    };
 
-    const matches = provider.complete(ctx)
+    const matches = provider.complete(ctx);
 
-    process.chdir(originalCwd)
-    rmSync(tempDir, { recursive: true, force: true })
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
 
-    expect(matches.length).toBeGreaterThan(0)
-    expect(matches.some(m => m.includes('src'))).toBe(true)
-  })
-})
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches.some((m) => m.includes("src"))).toBe(true);
+  });
+});

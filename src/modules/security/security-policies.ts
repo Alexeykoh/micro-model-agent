@@ -1,14 +1,10 @@
 import type { SecurityConfig } from "../../config/types";
-import {
-  DEFAULT_SECURITY_CONFIG,
-  mergeSecurityConfig,
-} from "../../config/security";
+import { DEFAULT_SECURITY_CONFIG, mergeSecurityConfig } from "../../config/security";
 
 /**
  * Security policy presets
  */
-export type SecurityPolicyPreset =
-  "strict" | "balanced" | "permissive" | "custom";
+export type SecurityPolicyPreset = "strict" | "balanced" | "permissive" | "custom";
 
 /**
  * Security policy definition
@@ -42,8 +38,7 @@ export interface SecurityPolicy {
  */
 export const STRICT_POLICY: SecurityPolicy = {
   name: "Strict",
-  description:
-    "Maximum security with minimal flexibility. Blocks most dangerous operations.",
+  description: "Maximum security with minimal flexibility. Blocks most dangerous operations.",
   preset: "strict",
   recommendedFor: ["production", "sensitive-data", "multi-user", "enterprise"],
   config: {
@@ -108,18 +103,7 @@ export const STRICT_POLICY: SecurityPolicy = {
         "-R",
         "--no-clobber",
       ],
-      dangerousOperators: [
-        ">",
-        ">>",
-        "2>",
-        "2>>",
-        "|",
-        "&&",
-        "||",
-        ";",
-        "&",
-        "`",
-      ],
+      dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "&", "`"],
       logCommands: true,
     },
     paths: {
@@ -338,12 +322,7 @@ export const BALANCED_POLICY: SecurityPolicy = {
     auditNotifier: {
       enabled: false,
       minSeverity: "medium",
-      eventTypes: [
-        "security_block",
-        "bash_command",
-        "file_operation",
-        "network_request",
-      ],
+      eventTypes: ["security_block", "bash_command", "file_operation", "network_request"],
       maxRetries: 3,
     },
   },
@@ -578,8 +557,7 @@ export class SecurityPolicyManager {
     const config1 = this.getPolicy(policy1).config;
     const config2 = this.getPolicy(policy2).config;
 
-    const comparison: Record<string, { policy1: unknown; policy2: unknown }> =
-      {};
+    const comparison: Record<string, { policy1: unknown; policy2: unknown }> = {};
 
     const keys = new Set([...Object.keys(config1), ...Object.keys(config2)]);
     for (const key of keys) {
@@ -608,9 +586,7 @@ export function createSecurityPolicyManager(): SecurityPolicyManager {
 /**
  * Get a policy by name
  */
-export function getSecurityPolicy(
-  preset: SecurityPolicyPreset,
-): SecurityPolicy {
+export function getSecurityPolicy(preset: SecurityPolicyPreset): SecurityPolicy {
   return globalSecurityPolicyManager.getPolicy(preset);
 }
 

@@ -1,54 +1,54 @@
-import { describe, expect, it } from 'bun:test'
-import { Repl } from '../../src/cli/repl'
+import { describe, expect, it } from "bun:test";
+import { Repl } from "../../src/cli/repl";
 
-describe('REPL multi-line input', () => {
+describe("REPL multi-line input", () => {
   const createMockRepl = () => {
     const mockAgent = {
-      run: async () => ({ success: true, text: 'ok', iterationCount: 1 }),
+      run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
       shutdown: () => {},
-    } as any
+    } as any;
     const mockConfig = {
-      model: 'test',
-      provider: { type: 'test', baseUrl: 'test', apiKey: 'test' },
+      model: "test",
+      provider: { type: "test", baseUrl: "test", apiKey: "test" },
       contextWindow: 32768,
       contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
-      logLevel: 'info',
-      locale: 'en',
+      logLevel: "info",
+      locale: "en",
       maxToolIterations: 25,
       stuckThreshold: 8,
       autoPlan: true,
       showReasoning: false,
       session: { autoSave: false, maxSessions: 50, isolateMemory: false },
-    } as any
+    } as any;
 
-    return new Repl(mockAgent, mockConfig)
-  }
+    return new Repl(mockAgent, mockConfig);
+  };
 
-  it('should detect multi-line input with backslash continuation', () => {
-    const repl = createMockRepl()
-    const isMultiLine = (repl as any).isMultiLineInput('function test() {\\')
+  it("should detect multi-line input with backslash continuation", () => {
+    const repl = createMockRepl();
+    const isMultiLine = (repl as any).isMultiLineInput("function test() {\\");
 
-    expect(isMultiLine).toBe(true)
-  })
+    expect(isMultiLine).toBe(true);
+  });
 
-  it('should detect multi-line input with unclosed braces', () => {
-    const repl = createMockRepl()
-    const isMultiLine = (repl as any).isMultiLineInput('function test() {')
+  it("should detect multi-line input with unclosed braces", () => {
+    const repl = createMockRepl();
+    const isMultiLine = (repl as any).isMultiLineInput("function test() {");
 
-    expect(isMultiLine).toBe(true)
-  })
+    expect(isMultiLine).toBe(true);
+  });
 
-  it('should not detect single-line input as multi-line', () => {
-    const repl = createMockRepl()
-    const isMultiLine = (repl as any).isMultiLineInput('const x = 1')
+  it("should not detect single-line input as multi-line", () => {
+    const repl = createMockRepl();
+    const isMultiLine = (repl as any).isMultiLineInput("const x = 1");
 
-    expect(isMultiLine).toBe(false)
-  })
+    expect(isMultiLine).toBe(false);
+  });
 
-  it('should not detect closed braces as multi-line', () => {
-    const repl = createMockRepl()
-    const isMultiLine = (repl as any).isMultiLineInput('function test() {}')
+  it("should not detect closed braces as multi-line", () => {
+    const repl = createMockRepl();
+    const isMultiLine = (repl as any).isMultiLineInput("function test() {}");
 
-    expect(isMultiLine).toBe(false)
-  })
-})
+    expect(isMultiLine).toBe(false);
+  });
+});

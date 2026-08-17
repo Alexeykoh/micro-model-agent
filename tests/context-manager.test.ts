@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  ContextManager,
-  extractTriedAndFailed,
-} from "../src/modules/context/manager";
+import { ContextManager, extractTriedAndFailed } from "../src/modules/context/manager";
 import type { Message } from "../src/modules/context/manager";
 
 describe("ContextManager", () => {
@@ -69,7 +66,9 @@ describe("ContextManager", () => {
     cm.compact();
 
     const history = cm.getActiveHistory();
-    const summary = history.find((m) => typeof m.content === "string" && m.content.includes("[Compressed:"));
+    const summary = history.find(
+      (m) => typeof m.content === "string" && m.content.includes("[Compressed:"),
+    );
     expect(summary).toBeDefined();
     const text = typeof summary!.content === "string" ? summary!.content : "";
     const occurrences = text.split("<system-summary>").length - 1;
@@ -132,10 +131,12 @@ describe("ContextManager compaction interval reset between user turns", () => {
       cm.addMessage({ role: "assistant", content: `resp ${i}` });
     }
     cm.compact();
-    expect(cm.getActiveHistory().some((m) => {
-      const text = typeof m.content === "string" ? m.content : "";
-      return text.includes("bicycle-shop/src/App.tsx");
-    })).toBe(true);
+    expect(
+      cm.getActiveHistory().some((m) => {
+        const text = typeof m.content === "string" ? m.content : "";
+        return text.includes("bicycle-shop/src/App.tsx");
+      }),
+    ).toBe(true);
 
     cm.resetUserTurn();
     expect(cm.needsCompaction()).toBe(false);
@@ -647,9 +648,7 @@ describe("ContextManager compaction: plan state + read facts", () => {
       cm.addMessage({ role: "assistant", content: `r ${i}` });
     }
     cm.compact();
-    expect(summaryOf(cm)).toContain(
-      '[Plan: [plan_abc] "T" 1/3 done, current: step 2',
-    );
+    expect(summaryOf(cm)).toContain('[Plan: [plan_abc] "T" 1/3 done, current: step 2');
   });
 
   it("omits the plan line when the provider returns null", () => {
@@ -670,8 +669,7 @@ describe("ContextManager compaction: plan state + read facts", () => {
     cm.addMessage({
       role: "tool",
       name: "read_file",
-      content:
-        "── src/App.tsx (.tsx, 300 lines, lines 1-300)\nexport function App() {}",
+      content: "── src/App.tsx (.tsx, 300 lines, lines 1-300)\nexport function App() {}",
       success: true,
     });
     cm.addMessage({
@@ -700,8 +698,7 @@ describe("ContextManager compaction: plan state + read facts", () => {
     const cm = new ContextManager(100000);
     cm.addMessage({
       role: "system",
-      content:
-        "SYS Memory: 2026-08-15 Tool edit_file failed 3x: Error: TS2769",
+      content: "SYS Memory: 2026-08-15 Tool edit_file failed 3x: Error: TS2769",
     });
     for (let i = 0; i < 12; i++) {
       cm.addMessage({ role: "user", content: `t ${i}` });

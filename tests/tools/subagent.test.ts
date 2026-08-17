@@ -4,9 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const mockAgentRun = vi
-  .fn()
-  .mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
+const mockAgentRun = vi.fn().mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
 const mockAgent = vi.fn().mockReturnValue({ run: mockAgentRun });
 
 vi.mock("../../src/core/agent", () => ({
@@ -136,6 +134,13 @@ describe("subagentTool", () => {
             register: () => {},
             has: () => false,
             list: () => [],
+            getByTags: (tags: string[]) =>
+              (tags || []).map((tag) => ({
+                name: "write_file",
+                description: "d",
+                parameters: {},
+                tags: [tag],
+              })),
           }),
           setScope: () => {},
         } as any,
@@ -189,7 +194,13 @@ describe("subagentTool", () => {
           toolExecutor: {
             execute: () => ({}),
             getToolDefinitions: () => [],
-            getRegistry: () => ({ getAll: () => [], get: () => undefined, register: () => {}, has: () => false, list: () => [] }),
+            getRegistry: () => ({
+              getAll: () => [],
+              get: () => undefined,
+              register: () => {},
+              has: () => false,
+              list: () => [],
+            }),
             setScope: () => {},
           },
         } as any,
@@ -224,15 +235,40 @@ describe("subagentTool", () => {
         config: {
           contextWindow: 32768,
           contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
-          subagent: { resultMode: "text", maxSummaryChars: 2000, artifactsDir: ".mma/artifacts", stableSystemPrompt: true, maxParallelChunkQueries: 4 },
+          subagent: {
+            resultMode: "text",
+            maxSummaryChars: 2000,
+            artifactsDir: ".mma/artifacts",
+            stableSystemPrompt: true,
+            maxParallelChunkQueries: 4,
+          },
         },
         baseDir: "/tmp",
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
         llmProvider: {} as any,
         toolExecutor: {
           execute: () => ({}),
-          getToolDefinitions: (tags?: string[]) => (tags || []).map((tag: string) => ({ name: "write_file", description: "d", parameters: {}, tags: [tag] })),
-          getRegistry: () => ({ getAll: () => [], get: () => undefined, register: () => {}, has: () => false, list: () => [] }),
+          getToolDefinitions: (tags?: string[]) =>
+            (tags || []).map((tag: string) => ({
+              name: "write_file",
+              description: "d",
+              parameters: {},
+              tags: [tag],
+            })),
+          getRegistry: () => ({
+            getAll: () => [],
+            get: () => undefined,
+            register: () => {},
+            has: () => false,
+            list: () => [],
+            getByTags: (tags: string[]) =>
+              (tags || []).map((tag) => ({
+                name: "write_file",
+                description: "d",
+                parameters: {},
+                tags: [tag],
+              })),
+          }),
           setScope: () => {},
         },
       } as any,
@@ -253,15 +289,40 @@ describe("subagentTool", () => {
         config: {
           contextWindow: 32768,
           contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
-          subagent: { resultMode: "text", maxSummaryChars: 2000, artifactsDir: ".mma/artifacts", stableSystemPrompt: true, maxParallelChunkQueries: 4 },
+          subagent: {
+            resultMode: "text",
+            maxSummaryChars: 2000,
+            artifactsDir: ".mma/artifacts",
+            stableSystemPrompt: true,
+            maxParallelChunkQueries: 4,
+          },
         },
         baseDir: "/tmp",
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
         llmProvider: {} as any,
         toolExecutor: {
           execute: () => ({}),
-          getToolDefinitions: (tags?: string[]) => (tags || []).map((tag: string) => ({ name: "write_file", description: "d", parameters: {}, tags: [tag] })),
-          getRegistry: () => ({ getAll: () => [], get: () => undefined, register: () => {}, has: () => false, list: () => [] }),
+          getToolDefinitions: (tags?: string[]) =>
+            (tags || []).map((tag: string) => ({
+              name: "write_file",
+              description: "d",
+              parameters: {},
+              tags: [tag],
+            })),
+          getRegistry: () => ({
+            getAll: () => [],
+            get: () => undefined,
+            register: () => {},
+            has: () => false,
+            list: () => [],
+            getByTags: (tags: string[]) =>
+              (tags || []).map((tag) => ({
+                name: "write_file",
+                description: "d",
+                parameters: {},
+                tags: [tag],
+              })),
+          }),
           setScope: () => {},
         },
       } as any,

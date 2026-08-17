@@ -84,10 +84,7 @@ export class LspClient {
     }
   }
 
-  private async startServer(
-    config: LspServerConfig,
-    projectRoot: string,
-  ): Promise<void> {
+  private async startServer(config: LspServerConfig, projectRoot: string): Promise<void> {
     if (config.autoInstall === false) {
       try {
         execSync(`where ${config.command}`, { stdio: "pipe", timeout: 3000 });
@@ -197,11 +194,7 @@ export class LspClient {
         this.pending.delete(msg.id as number);
         if (msg.error) {
           pending.reject(
-            new Error(
-              String(
-                (msg.error as Record<string, unknown>).message ?? "LSP error",
-              ),
-            ),
+            new Error(String((msg.error as Record<string, unknown>).message ?? "LSP error")),
           );
         } else {
           pending.resolve(msg.result);
@@ -210,11 +203,7 @@ export class LspClient {
     }
   }
 
-  private sendRequest(
-    method: string,
-    params: unknown,
-    timeout: number,
-  ): Promise<unknown> {
+  private sendRequest(method: string, params: unknown, timeout: number): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = ++this.requestId;
       this.pending.set(id, { resolve, reject });
@@ -271,9 +260,7 @@ export class LspClient {
 
   private pathToUri(filePath: string): string {
     const normalized = filePath.replace(/\\/g, "/");
-    return /^[a-zA-Z]:/.test(normalized)
-      ? `file:///${normalized}`
-      : `file://${normalized}`;
+    return /^[a-zA-Z]:/.test(normalized) ? `file:///${normalized}` : `file://${normalized}`;
   }
 
   private languageFromPath(filePath: string): string {

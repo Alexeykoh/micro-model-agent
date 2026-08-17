@@ -1,8 +1,8 @@
-import type { LspConfig, LspServerConfig } from './types'
+import type { LspConfig, LspServerConfig } from "./types";
 
 /**
  * LSP server defaults.
- * 
+ *
  * Strategy: prefer `npx` (auto-downloads) over globally installed binaries.
  * Servers using system tools (rust-analyzer, gopls) have `autoInstall: false`
  * and are skipped silently when not found.
@@ -12,84 +12,84 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
   timeout: 15000,
   servers: {
     typescript: {
-      command: 'npx',
-      args: ['typescript-language-server', '--stdio'],
+      command: "npx",
+      args: ["typescript-language-server", "--stdio"],
       timeout: 20000,
       autoInstall: true,
-      workspaceMarkers: ['package.json', 'tsconfig.json'],
+      workspaceMarkers: ["package.json", "tsconfig.json"],
     },
     javascript: {
-      command: 'npx',
-      args: ['typescript-language-server', '--stdio'],
+      command: "npx",
+      args: ["typescript-language-server", "--stdio"],
       timeout: 15000,
       autoInstall: true,
-      workspaceMarkers: ['package.json', 'tsconfig.json'],
+      workspaceMarkers: ["package.json", "tsconfig.json"],
     },
     python: {
-      command: 'npx',
-      args: ['pyright', '--stdio'],
+      command: "npx",
+      args: ["pyright", "--stdio"],
       timeout: 15000,
       autoInstall: true,
-      workspaceMarkers: ['pyproject.toml', 'setup.py', 'requirements.txt'],
+      workspaceMarkers: ["pyproject.toml", "setup.py", "requirements.txt"],
     },
     rust: {
-      command: 'rust-analyzer',
+      command: "rust-analyzer",
       timeout: 15000,
       autoInstall: false,
-      workspaceMarkers: ['Cargo.toml'],
+      workspaceMarkers: ["Cargo.toml"],
     },
     go: {
-      command: 'gopls',
+      command: "gopls",
       timeout: 15000,
       autoInstall: false,
-      workspaceMarkers: ['go.mod'],
+      workspaceMarkers: ["go.mod"],
     },
     json: {
-      command: 'npx',
-      args: ['vscode-json-languageserver', '--stdio'],
+      command: "npx",
+      args: ["vscode-json-languageserver", "--stdio"],
       timeout: 10000,
       autoInstall: true,
-      workspaceMarkers: ['package.json'],
+      workspaceMarkers: ["package.json"],
     },
     html: {
-      command: 'npx',
-      args: ['vscode-html-languageserver', '--stdio'],
+      command: "npx",
+      args: ["vscode-html-languageserver", "--stdio"],
       timeout: 10000,
       autoInstall: true,
-      workspaceMarkers: ['package.json'],
+      workspaceMarkers: ["package.json"],
     },
     css: {
-      command: 'npx',
-      args: ['vscode-css-languageserver', '--stdio'],
+      command: "npx",
+      args: ["vscode-css-languageserver", "--stdio"],
       timeout: 20000,
       autoInstall: true,
-      workspaceMarkers: ['package.json'],
+      workspaceMarkers: ["package.json"],
     },
   },
-}
+};
 
 const LANGUAGE_MAP: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  py: 'python',
-  rs: 'rust',
-  go: 'go',
-  json: 'json',
-  html: 'html',
-  css: 'css',
-  scss: 'css',
-}
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  py: "python",
+  rs: "rust",
+  go: "go",
+  json: "json",
+  html: "html",
+  css: "css",
+  scss: "css",
+};
 
 export function getServerForFile(filePath: string, config: LspConfig): LspServerConfig | null {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  if (!ext) return null
-  const lang = LANGUAGE_MAP[ext]
-  if (!lang) return null
-  return config.servers[lang] ?? null
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  if (!ext) return null;
+  const lang = LANGUAGE_MAP[ext];
+  if (!lang) return null;
+  return config.servers[lang] ?? null;
 }

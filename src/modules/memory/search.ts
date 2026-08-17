@@ -1,52 +1,54 @@
-import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 
-const MEMORY_FILES = ['conventions', 'decisions', 'errors', 'facts']
+const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
 
 export interface SearchResult {
-  file: string
-  match: string
+  file: string;
+  match: string;
 }
 
 export class MemorySearch {
-  private memoryDir: string
+  private memoryDir: string;
 
   constructor(memoryDir: string) {
-    this.memoryDir = memoryDir
+    this.memoryDir = memoryDir;
   }
 
   query(query: string): SearchResult[] {
-    const results: SearchResult[] = []
-    const lowerQuery = query.toLowerCase()
+    const results: SearchResult[] = [];
+    const lowerQuery = query.toLowerCase();
 
     for (const name of MEMORY_FILES) {
-      const path = join(this.memoryDir, `${name}.md`)
-      if (!existsSync(path)) continue
+      const path = join(this.memoryDir, `${name}.md`);
+      if (!existsSync(path)) continue;
 
-      const content = readFileSync(path, 'utf-8')
-      const lines = content.split('\n')
+      const content = readFileSync(path, "utf-8");
+      const lines = content.split("\n");
 
       for (const line of lines) {
         if (line.toLowerCase().includes(lowerQuery)) {
-          results.push({ file: name, match: line.trim() })
+          results.push({ file: name, match: line.trim() });
         }
       }
     }
 
     // Search preferences.json
-    const prefsPath = join(this.memoryDir, 'preferences.json')
+    const prefsPath = join(this.memoryDir, "preferences.json");
     if (existsSync(prefsPath)) {
       try {
-        const prefs: Record<string, string> = JSON.parse(readFileSync(prefsPath, 'utf-8'))
+        const prefs: Record<string, string> = JSON.parse(readFileSync(prefsPath, "utf-8"));
         for (const [key, value] of Object.entries(prefs)) {
-          const searchStr = `${key}=${value}`
+          const searchStr = `${key}=${value}`;
           if (searchStr.toLowerCase().includes(lowerQuery)) {
-            results.push({ file: 'preferences', match: `${key} = ${value}` })
+            results.push({ file: "preferences", match: `${key} = ${value}` });
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
-    return results
+    return results;
   }
 }

@@ -13,9 +13,7 @@ interface DiffLine {
 function computeLCS(oldLines: string[], newLines: string[]): number[][] {
   const m = oldLines.length;
   const n = newLines.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    Array(n + 1).fill(0),
-  );
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
@@ -137,8 +135,7 @@ function buildDiff(oldLines: string[], newLines: string[]): DiffLine[] {
 
 function formatLine(line: DiffLine, maxNumWidth: number): string {
   const num = line.type === "remove" ? line.oldNum : line.newNum;
-  const numStr =
-    num !== null ? String(num).padStart(maxNumWidth) : " ".repeat(maxNumWidth);
+  const numStr = num !== null ? String(num).padStart(maxNumWidth) : " ".repeat(maxNumWidth);
 
   if (line.type === "remove") {
     return `${numStr} ${pc.red("-")} ${line.content}`;
@@ -164,19 +161,13 @@ export function generateDiff(oldContent: string, newContent: string): string {
   const newNums = diff.filter((l) => l.newNum !== null).map((l) => l.newNum!);
   const maxOldNum = oldNums.length > 0 ? Math.max(...oldNums) : 0;
   const maxNewNum = newNums.length > 0 ? Math.max(...newNums) : 0;
-  const maxNumWidth = Math.max(
-    String(maxOldNum).length,
-    String(maxNewNum).length,
-    3,
-  );
+  const maxNumWidth = Math.max(String(maxOldNum).length, String(maxNewNum).length, 3);
 
   let lines = diff.map((l) => formatLine(l, maxNumWidth));
 
   if (lines.length > MAX_DIFF_LINES) {
     const truncated = lines.slice(0, MAX_DIFF_LINES);
-    truncated.push(
-      pc.dim(`  ... (${lines.length - MAX_DIFF_LINES} more lines)`),
-    );
+    truncated.push(pc.dim(`  ... (${lines.length - MAX_DIFF_LINES} more lines)`));
     lines = truncated;
   }
 
@@ -195,9 +186,7 @@ export function generateNewFileDiff(content: string): string {
 
   if (diffLines.length > MAX_DIFF_LINES) {
     const truncated = diffLines.slice(0, MAX_DIFF_LINES);
-    truncated.push(
-      pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
-    );
+    truncated.push(pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`));
     return truncated.join("\n");
   }
 
@@ -216,9 +205,7 @@ export function generateDeleteDiff(content: string): string {
 
   if (diffLines.length > MAX_DIFF_LINES) {
     const truncated = diffLines.slice(0, MAX_DIFF_LINES);
-    truncated.push(
-      pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`),
-    );
+    truncated.push(pc.dim(`  ... (${diffLines.length - MAX_DIFF_LINES} more lines)`));
     return truncated.join("\n");
   }
 

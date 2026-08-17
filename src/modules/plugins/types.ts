@@ -1,1 +1,1 @@
-export type { AgentPlugin } from '../types'
+export type { AgentPlugin } from "../types";

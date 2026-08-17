@@ -1,7 +1,4 @@
-import {
-  isUrlAllowed,
-  sanitizeUrl,
-} from "../../src/modules/security/network-validator";
+import { isUrlAllowed, sanitizeUrl } from "../../src/modules/security/network-validator";
 import { describe, it, expect } from "vitest";
 
 describe("Network Validator", () => {

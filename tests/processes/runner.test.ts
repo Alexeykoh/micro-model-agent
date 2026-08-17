@@ -2,11 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import {
-  registerKillable,
-  unregisterKillable,
-  killByCallId,
-} from "../../src/modules/processes";
+import { registerKillable, unregisterKillable, killByCallId } from "../../src/modules/processes";
 
 const tmp = join(tmpdir(), `mma-runner-${process.pid}.js`);
 rmSync(tmp, { force: true });

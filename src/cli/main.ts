@@ -15,10 +15,7 @@ import { UpdaterModule } from "../modules/updater/index";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    join(here, "..", "..", "package.json"),
-    join(here, "..", "package.json"),
-  ];
+  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
   for (const p of candidates) {
     if (existsSync(p)) {
       try {
@@ -37,16 +34,11 @@ function startAutoUpdate(config: {
   updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
 }): UpdaterModule | undefined {
   try {
-    const module = new UpdaterModule(
-      config.updater,
-      readVersion(),
-      "micro-models-agent",
-      {
-        info: (m) => process.stderr.write(pc.dim(m) + "\n"),
-        warn: (m) => process.stderr.write(pc.yellow(m) + "\n"),
-        error: (m) => process.stderr.write(pc.red(m) + "\n"),
-      },
-    );
+    const module = new UpdaterModule(config.updater, readVersion(), "micro-models-agent", {
+      info: (m) => process.stderr.write(pc.dim(m) + "\n"),
+      warn: (m) => process.stderr.write(pc.yellow(m) + "\n"),
+      error: (m) => process.stderr.write(pc.red(m) + "\n"),
+    });
     module.start();
     return module;
   } catch {
@@ -74,12 +66,7 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config } = await bootstrap(
-      undefined,
-      projectDir,
-      noAgentsMd,
-      exitOnComplete,
-    );
+    const { agent, config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
 
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
@@ -143,9 +130,7 @@ async function main(): Promise<void> {
       const answers = await runSetup();
       const config = loadConfig({
         configDir: join(homedir(), ".mma"),
-        projectConfigPath: projectDir
-          ? join(projectDir, ".mmrc")
-          : join(process.cwd(), ".mmrc"),
+        projectConfigPath: projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc"),
       });
       config.provider.type = answers.provider;
       config.provider.baseUrl = answers.apiBase;
@@ -156,9 +141,7 @@ async function main(): Promise<void> {
       config.locale = answers.locale;
       if (config.security) {
         config.security.enabled =
-          answers.securityBashBlock ||
-          answers.securityFlagsBlock ||
-          !answers.securityPathsDeny;
+          answers.securityBashBlock || answers.securityFlagsBlock || !answers.securityPathsDeny;
         config.security.bash.enabled = config.security.enabled;
         config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
         if (answers.securityBashBlock) {

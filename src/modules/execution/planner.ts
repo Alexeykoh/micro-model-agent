@@ -1,5 +1,4 @@
-export type StepStatus =
-  "pending" | "in_progress" | "done" | "failed" | "skipped";
+export type StepStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 
 export interface Subtask {
   id: number;
@@ -55,9 +54,7 @@ export class PlanCreator {
       "develop",
     ];
     const words = task.split(/\s+/);
-    const hasActionWord = actionWords.some((w) =>
-      task.toLowerCase().includes(w),
-    );
+    const hasActionWord = actionWords.some((w) => task.toLowerCase().includes(w));
 
     return hasActionWord && words.length > 8;
   }
@@ -84,9 +81,7 @@ export class PlanCreator {
   }
 
   static replan(plan: Plan, newSteps: string[], title?: string): Plan {
-    const kept = plan.steps.filter(
-      (s) => s.status === "done" || s.status === "skipped",
-    );
+    const kept = plan.steps.filter((s) => s.status === "done" || s.status === "skipped");
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
     const totalSteps = kept.length + newSteps.length;
@@ -114,23 +109,23 @@ export class PlanCreator {
       `Created: ${date} | Progress: ${plan.steps.filter((s) => s.status === "done").length}/${plan.steps.length} done, current: step ${currentStepIndex + 1}`,
       ``,
     ];
-		for (const step of plan.steps) {
-			const icon =
-				step.status === "done"
-					? "[x]"
-					: step.status === "in_progress"
-						? "[*]"
-						: step.status === "failed"
-							? "[!]"
-							: step.status === "skipped"
-								? "[-]"
-								: "[ ]";
-			const note = step.note ? ` — ${step.note}` : "";
-			lines.push(`${icon} ${step.id}. ${step.description}${note}`);
-			for (const sub of step.subtasks ?? []) {
-				lines.push(`    ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);
-			}
-		}
-		return lines.join("\n");
+    for (const step of plan.steps) {
+      const icon =
+        step.status === "done"
+          ? "[x]"
+          : step.status === "in_progress"
+            ? "[*]"
+            : step.status === "failed"
+              ? "[!]"
+              : step.status === "skipped"
+                ? "[-]"
+                : "[ ]";
+      const note = step.note ? ` — ${step.note}` : "";
+      lines.push(`${icon} ${step.id}. ${step.description}${note}`);
+      for (const sub of step.subtasks ?? []) {
+        lines.push(`    ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);
+      }
+    }
+    return lines.join("\n");
   }
 }

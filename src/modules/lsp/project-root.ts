@@ -14,21 +14,17 @@ import { dirname, join } from "path";
  * LSP server config (`LspServerConfig.workspaceMarkers`) — this function takes
  * the markers as a parameter and performs no language detection itself.
  */
-export function findProjectRoot(
-	filePath: string,
-	baseDir: string,
-	markers: string[],
-): string {
-	if (!markers || markers.length === 0) return baseDir;
-	let dir = dirname(filePath);
-	const root = baseDir.replace(/[\\/]+$/, "");
-	while (true) {
-		if (markers.some((m) => existsSync(join(dir, m)))) {
-			return dir;
-		}
-		if (dir === root) return dir;
-		const parent = dirname(dir);
-		if (parent === dir) return root;
-		dir = parent;
-	}
+export function findProjectRoot(filePath: string, baseDir: string, markers: string[]): string {
+  if (!markers || markers.length === 0) return baseDir;
+  let dir = dirname(filePath);
+  const root = baseDir.replace(/[\\/]+$/, "");
+  while (true) {
+    if (markers.some((m) => existsSync(join(dir, m)))) {
+      return dir;
+    }
+    if (dir === root) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return root;
+    dir = parent;
+  }
 }

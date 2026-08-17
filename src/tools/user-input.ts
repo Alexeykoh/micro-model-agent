@@ -58,9 +58,7 @@ export function formatMenu(
     lines.push(`  [${i + 1}] ${opt.label} — ${opt.description}`);
   });
   if (opts.allowCustom) {
-    lines.push(
-      `  [${options.length + 1}] ${t("tool.user_input.custom_option")}`,
-    );
+    lines.push(`  [${options.length + 1}] ${t("tool.user_input.custom_option")}`);
   }
   return lines.join("\n");
 }
@@ -116,9 +114,7 @@ export async function askChoice(
       const answer = await promptLine(rl, choicePrompt(entryCount, multiple));
       const parsed = parseSelection(answer, entryCount, multiple);
       if (parsed) {
-        return parsed.map((i) =>
-          opts.allowCustom && i === customEntry ? CUSTOM_INDEX : i,
-        );
+        return parsed.map((i) => (opts.allowCustom && i === customEntry ? CUSTOM_INDEX : i));
       }
       console.log(t("tool.user_input.invalid"));
     }
@@ -132,10 +128,7 @@ export async function askChoice(
  * - No options: free-text input, returns [text] or [] when empty.
  * - With options: returns selected labels; custom entry resolves to typed text.
  */
-export async function askUser(
-  question: string,
-  opts: AskUserOptions = {},
-): Promise<string[]> {
+export async function askUser(question: string, opts: AskUserOptions = {}): Promise<string[]> {
   const header = [opts.progress, opts.header].filter(Boolean).join(" — ");
   const text = header ? `${header}\n${question}` : question;
   if (!opts.options || opts.options.length === 0) {

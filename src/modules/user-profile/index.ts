@@ -1,2 +1,2 @@
-export { UserProfile } from './profile'
-export type { ProfileInfo } from './profile'
+export { UserProfile } from "./profile";
+export type { ProfileInfo } from "./profile";

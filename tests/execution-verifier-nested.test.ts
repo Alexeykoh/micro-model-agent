@@ -26,23 +26,14 @@ import { LintOnWritePlugin } from "../src/modules/plugins/builtin/lint-on-write"
  * tests can skip rather than assert a broken environment.
  */
 function setupNestedProject(baseDir: string): { proj: string; srcFile: string } | null {
-  const repoTypescript = join(
-    __dirname,
-    "..",
-    "node_modules",
-    "typescript",
-  );
+  const repoTypescript = join(__dirname, "..", "node_modules", "typescript");
   const repoBin = join(__dirname, "..", "node_modules", ".bin");
   if (!existsSync(repoTypescript)) return null;
 
   const proj = join(baseDir, "bicycle-shop");
   mkdirSync(join(proj, "src"), { recursive: true });
   writeFileSync(join(proj, "tsconfig.json"), "{}", "utf-8");
-  writeFileSync(
-    join(proj, "package.json"),
-    JSON.stringify({ name: "bicycle-shop" }),
-    "utf-8",
-  );
+  writeFileSync(join(proj, "package.json"), JSON.stringify({ name: "bicycle-shop" }), "utf-8");
   const srcFile = join(proj, "src", "a.ts");
 
   try {

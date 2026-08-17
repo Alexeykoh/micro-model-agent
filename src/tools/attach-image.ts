@@ -2,7 +2,12 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { loadFileAsDataUrl, loadUrlAsDataUrl, readClipboardImage, bufferToDataUrl } from "../llm/image-utils";
+import {
+  loadFileAsDataUrl,
+  loadUrlAsDataUrl,
+  readClipboardImage,
+  bufferToDataUrl,
+} from "../llm/image-utils";
 import { logSecurityBlock } from "../modules/security/audit-log";
 
 export const attachImageTool: ToolDefinition = {

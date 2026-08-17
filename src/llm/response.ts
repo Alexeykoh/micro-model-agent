@@ -1,52 +1,52 @@
-import type { Chunk } from './provider'
-import type { ToolCall } from '../core/types'
+import type { Chunk } from "./provider";
+import type { ToolCall } from "../core/types";
 
 export type ParsedResponse =
-  | { type: 'text'; content: string; reasoning?: string }
-  | { type: 'tool_call'; calls: ToolCall[]; reasoning?: string }
-  | { type: 'reasoning'; content: string }
-  | { type: 'empty' }
+  | { type: "text"; content: string; reasoning?: string }
+  | { type: "tool_call"; calls: ToolCall[]; reasoning?: string }
+  | { type: "reasoning"; content: string }
+  | { type: "empty" };
 
 export function parseChunks(chunks: Chunk[]): ParsedResponse {
-  let text = ''
-  let reasoning: string | undefined
-  const toolCalls: ToolCall[] = []
-  let hasToolCalls = false
+  let text = "";
+  let reasoning: string | undefined;
+  const toolCalls: ToolCall[] = [];
+  let hasToolCalls = false;
 
   for (const chunk of chunks) {
-    if (chunk.type === 'text' && chunk.content) {
-      text += chunk.content
+    if (chunk.type === "text" && chunk.content) {
+      text += chunk.content;
     }
-    if (chunk.type === 'reasoning' && chunk.content) {
-      reasoning = (reasoning || '') + chunk.content
+    if (chunk.type === "reasoning" && chunk.content) {
+      reasoning = (reasoning || "") + chunk.content;
     }
-    if (chunk.type === 'tool_call' && chunk.toolCall) {
-      hasToolCalls = true
-      let parsedArgs: Record<string, unknown>
+    if (chunk.type === "tool_call" && chunk.toolCall) {
+      hasToolCalls = true;
+      let parsedArgs: Record<string, unknown>;
       try {
-        parsedArgs = JSON.parse(chunk.toolCall.arguments)
+        parsedArgs = JSON.parse(chunk.toolCall.arguments);
       } catch {
-        parsedArgs = {}
+        parsedArgs = {};
       }
       toolCalls.push({
         id: chunk.toolCall.id,
         name: chunk.toolCall.name,
         arguments: parsedArgs,
-      })
+      });
     }
   }
 
   if (hasToolCalls) {
-    return { type: 'tool_call', calls: toolCalls, reasoning }
+    return { type: "tool_call", calls: toolCalls, reasoning };
   }
 
   if (reasoning && !text) {
-    return { type: 'reasoning', content: reasoning }
+    return { type: "reasoning", content: reasoning };
   }
 
   if (!text && !reasoning) {
-    return { type: 'empty' }
+    return { type: "empty" };
   }
 
-  return { type: 'text', content: text || '', reasoning }
+  return { type: "text", content: text || "", reasoning };
 }

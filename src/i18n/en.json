@@ -580,5 +580,11 @@
   "updater.available": "[updater] Update available: {current} → {latest}. Run `npm install -g micro-models-agent` to upgrade.",
   "updater.installing": "[updater] Installing {latest} globally (current: {current})…",
   "updater.installed": "[updater] Installed {latest}. Restart MMA to use it (was {current}).",
-  "updater.install_failed": "[updater] Failed to install {latest}: {error}. Update manually with `npm install -g micro-models-agent`."
+  "updater.install_failed": "[updater] Failed to install {latest}: {error}. Update manually with `npm install -g micro-models-agent`.",
+  "tools.enable_no_tags": "enable_tools requires at least one tag in the \"tags\" array.",
+  "tools.enable_no_executor": "Tool executor is not available — cannot enumerate enabled tools.",
+  "tools.enable_already_active": "Tool tags already active: {tags}.",
+  "tools.enable_added": "Enabled tool tags: {tags}. Available tools now: {tools}",
+  "tools.hidden_header": "Additional tools (enable on demand via enable_tools or route to subagent tool_tags):",
+  "tool.friendly.enable_tools": "Enable tools"
 }

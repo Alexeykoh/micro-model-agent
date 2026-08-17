@@ -129,11 +129,7 @@ function fileContent(sandboxDir: string, relPath: string): string {
   return readFileSync(join(sandboxDir, relPath), "utf-8");
 }
 
-function fileContains(
-  sandboxDir: string,
-  relPath: string,
-  substr: string,
-): boolean {
+function fileContains(sandboxDir: string, relPath: string, substr: string): boolean {
   return fileContent(sandboxDir, relPath).includes(substr);
 }
 
@@ -165,10 +161,7 @@ describe.skipIf(shouldSkip)("01-cli-bootstrap", () => {
 
   it("agent creates files in the sandbox directory", async () => {
     const dir = sandbox("01-create-file");
-    const result = await runMma(
-      'Create a file named hello.txt with content "hello world"',
-      dir,
-    );
+    const result = await runMma('Create a file named hello.txt with content "hello world"', dir);
     expect(exitOk(result)).toBe(true);
     expect(fileExists(dir, "hello.txt")).toBe(true);
     expect(fileContains(dir, "hello.txt", "hello world")).toBe(true);
@@ -177,13 +170,7 @@ describe.skipIf(shouldSkip)("01-cli-bootstrap", () => {
   it("exit-on-complete flag terminates agent after response", async () => {
     const dir = sandbox("01-exit-on-complete");
     const start = Date.now();
-    const result = await runMma(
-      "Reply with: done",
-      dir,
-      {},
-      ["--exit-on-complete"],
-      60_000,
-    );
+    const result = await runMma("Reply with: done", dir, {}, ["--exit-on-complete"], 60_000);
     const elapsed = Date.now() - start;
     expect(exitOk(result)).toBe(true);
     // Should not time out — model responds quickly to single-word tasks
@@ -198,10 +185,7 @@ describe.skipIf(shouldSkip)("01-cli-bootstrap", () => {
     // JSON result is pretty-printed and mixed with logger lines on stdout;
     // extract the JSON block starting at its known shape.
     const jsonStart = result.stdout.lastIndexOf('{\n  "success"');
-    const jsonStr =
-      jsonStart >= 0
-        ? result.stdout.slice(jsonStart)
-        : result.stdout.trim();
+    const jsonStr = jsonStart >= 0 ? result.stdout.slice(jsonStart) : result.stdout.trim();
     expect(() => JSON.parse(jsonStr)).not.toThrow();
   }, 120_000);
 });
@@ -510,13 +494,7 @@ describe.skipIf(shouldSkip)("07-subagent", () => {
   it("subagent respects path scope restrictions", async () => {
     const dir = sandbox("07-subagent-scope");
     // Create a file outside subagent scope first
-    await runMma(
-      "Create file public/allowed.txt with content: accessible.",
-      dir,
-      {},
-      [],
-      90_000,
-    );
+    await runMma("Create file public/allowed.txt with content: accessible.", dir, {}, [], 90_000);
 
     const result = await runMma(
       "Use subagent with scope restricted to public/ directory. The subagent should read allowed.txt and create public/readme.txt with content from allowed.txt.",
@@ -544,10 +522,7 @@ describe.skipIf(shouldSkip)("08-session", () => {
       120_000,
     );
     // Check that session files were created in ~/.mma/sessions/
-    const mmaDir = join(
-      process.env.HOME || process.env.USERPROFILE || "",
-      ".mma",
-    );
+    const mmaDir = join(process.env.HOME || process.env.USERPROFILE || "", ".mma");
     const sessionsDir = join(mmaDir, "sessions");
     expect(existsSync(sessionsDir)).toBe(true);
   }, 120_000);
@@ -555,13 +530,7 @@ describe.skipIf(shouldSkip)("08-session", () => {
   it("agent can resume and reference previous work", async () => {
     const dir = sandbox("08-session-resume");
     // First run: create initial file
-    await runMma(
-      'Create file initial.txt with content "step 1 done"',
-      dir,
-      {},
-      [],
-      120_000,
-    );
+    await runMma('Create file initial.txt with content "step 1 done"', dir, {}, [], 120_000);
 
     // Second run: reference and extend
     const result2 = await runMma(
@@ -650,10 +619,7 @@ description: A test skill for integration testing
 
 # Test Skill
 When asked about "test task", always respond with "skill activated" and create skill-result.txt containing "success".`;
-    require("fs").writeFileSync(
-      join(dir, ".mma", "skills", "test-skill.skill.md"),
-      skillContent,
-    );
+    require("fs").writeFileSync(join(dir, ".mma", "skills", "test-skill.skill.md"), skillContent);
 
     const result = await runMma(
       'Use load_skill to load the test-skill skill, then follow its instructions for "test task".',
@@ -695,13 +661,7 @@ describe.skipIf(shouldSkip)("13-image", () => {
   it("attach_image tool loads an image file", async () => {
     const dir = sandbox("13-image-attach");
     // Copy test fixture
-    const fixtureSrc = join(
-      MMA_ROOT,
-      "docs",
-      "testing",
-      "fixtures",
-      "test.png",
-    );
+    const fixtureSrc = join(MMA_ROOT, "docs", "testing", "fixtures", "test.png");
     if (existsSync(fixtureSrc)) {
       cpSync(fixtureSrc, join(dir, "test.png"));
 
@@ -746,13 +706,7 @@ describe.skipIf(shouldSkip)("15-memory", () => {
   it("search_history finds messages from current session", async () => {
     const dir = sandbox("15-memory-search");
     // First create some files to establish history
-    await runMma(
-      "Create file alpha.txt with content alpha.",
-      dir,
-      {},
-      [],
-      90_000,
-    );
+    await runMma("Create file alpha.txt with content alpha.", dir, {}, [], 90_000);
 
     const result = await runMma(
       'Use search_history to search for "alpha" in the conversation history. Save the search results (or a summary) to memory-results.txt.',

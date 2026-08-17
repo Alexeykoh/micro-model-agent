@@ -580,5 +580,11 @@
   "updater.available": "[updater] Доступно обновление: {current} → {latest}. Выполните `npm install -g micro-models-agent` для обновления.",
   "updater.installing": "[updater] Установка {latest} глобально (текущая: {current})…",
   "updater.installed": "[updater] Установлена {latest}. Перезапустите MMA для применения (была {current}).",
-  "updater.install_failed": "[updater] Не удалось установить {latest}: {error}. Обновите вручную: `npm install -g micro-models-agent`."
+  "updater.install_failed": "[updater] Не удалось установить {latest}: {error}. Обновите вручную: `npm install -g micro-models-agent`.",
+  "tools.enable_no_tags": "enable_tools требует хотя бы один тег в массиве \"tags\".",
+  "tools.enable_no_executor": "Исполнитель тулов недоступен — невозможно перечислить включённые тулы.",
+  "tools.enable_already_active": "Теги тулов уже активны: {tags}.",
+  "tools.enable_added": "Включены теги тулов: {tags}. Теперь доступны тулы: {tools}",
+  "tools.hidden_header": "Дополнительные тулы (включите по требованию через enable_tools или маршрутизируйте через subagent tool_tags):",
+  "tool.friendly.enable_tools": "Включить тулы"
 }

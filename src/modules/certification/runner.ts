@@ -13,12 +13,7 @@ export interface SpawnResult {
 }
 
 export interface RepRunner {
-  (
-    env: NodeJS.ProcessEnv,
-    cwd: string,
-    args: string[],
-    timeoutMs: number,
-  ): Promise<SpawnResult>;
+  (env: NodeJS.ProcessEnv, cwd: string, args: string[], timeoutMs: number): Promise<SpawnResult>;
 }
 
 export interface RunScenarioOptions {
@@ -32,13 +27,7 @@ export interface RunScenarioOptions {
   defaultThreshold: number;
   timeoutMs?: number;
   runner?: RepRunner;
-  onRep?: (
-    id: string,
-    rep: number,
-    reps: number,
-    passed: boolean,
-    failures: string[],
-  ) => void;
+  onRep?: (id: string, rep: number, reps: number, passed: boolean, failures: string[]) => void;
 }
 
 export async function runScenario(
@@ -56,10 +45,7 @@ export async function runScenario(
   }
 
   const reps = scenario.reps ?? opts.defaultReps;
-  const threshold = Math.min(
-    scenario.passThreshold ?? opts.defaultThreshold,
-    reps,
-  );
+  const threshold = Math.min(scenario.passThreshold ?? opts.defaultThreshold, reps);
   const runner: RepRunner = opts.runner ?? defaultRunner;
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const entryPoint = resolveMmaEntry(opts.mmaRoot);
@@ -127,11 +113,7 @@ export async function runScenario(
   };
 }
 
-function prepareSandbox(
-  sandbox: string,
-  scenario: CertScenario,
-  mmaRoot: string,
-): void {
+function prepareSandbox(sandbox: string, scenario: CertScenario, mmaRoot: string): void {
   rmSync(sandbox, { recursive: true, force: true });
   mkdirSync(sandbox, { recursive: true });
   for (const f of scenario.fixtures ?? []) {
@@ -152,10 +134,7 @@ export function resolveMmaEntry(mmaRoot: string): string {
 }
 
 export function findMmaRoot(fromDir: string): string {
-  const candidates = [
-    resolve(fromDir, "..", "..", ".."),
-    resolve(fromDir, ".."),
-  ];
+  const candidates = [resolve(fromDir, "..", "..", ".."), resolve(fromDir, "..")];
   for (const c of candidates) {
     if (existsSync(join(c, "package.json"))) return c;
   }

@@ -11,19 +11,8 @@ export type {
   HallucinationResult,
 } from "./core/types";
 export type { AgentModule } from "./modules/types";
-export {
-  OpenAICompatProvider,
-  TokenCounter,
-  parseChunks,
-  OrchestratorClient,
-} from "./llm/index";
-export type {
-  LLMProvider,
-  Message,
-  Chunk,
-  OpenAICompatConfig,
-  ParsedResponse,
-} from "./llm/index";
+export { OpenAICompatProvider, TokenCounter, parseChunks, OrchestratorClient } from "./llm/index";
+export type { LLMProvider, Message, Chunk, OpenAICompatConfig, ParsedResponse } from "./llm/index";
 export {
   ToolRegistry,
   ToolExecutor,

@@ -38,10 +38,7 @@ export class SkillsLoader {
     }
   }
 
-  private parseSkillFile(
-    content: string,
-    sourcePath: string,
-  ): SkillMeta | null {
+  private parseSkillFile(content: string, sourcePath: string): SkillMeta | null {
     const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (!match) return null;
 
@@ -80,11 +77,7 @@ export class SkillsLoader {
     return result;
   }
 
-  loadFromAllSources(
-    builtinDir: string,
-    globalDir: string,
-    projectDir: string,
-  ): SkillMeta[] {
+  loadFromAllSources(builtinDir: string, globalDir: string, projectDir: string): SkillMeta[] {
     return [
       ...this.loadFromDir(builtinDir),
       ...this.loadFromDir(globalDir),

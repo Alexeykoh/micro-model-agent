@@ -74,13 +74,7 @@ export function box(lines: string[], opts: BoxOptions = {}): string[] {
   }
 
   for (const line of wrapped) {
-    out.push(
-      pc.dim("│") +
-        " ".repeat(pad) +
-        padTo(line, inner) +
-        " ".repeat(pad) +
-        pc.dim("│"),
-    );
+    out.push(pc.dim("│") + " ".repeat(pad) + padTo(line, inner) + " ".repeat(pad) + pc.dim("│"));
   }
 
   out.push(pc.dim(`└${"─".repeat(width - 2)}┘`));

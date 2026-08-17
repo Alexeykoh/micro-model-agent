@@ -146,108 +146,104 @@ export class SessionLogger {
     });
   }
 
-logCompaction(
-		info: {
-			reason: string;
-			iteration: number;
-			tokensBefore?: number;
-			tokensAfter?: number;
-			qualityBefore?: number;
-			qualityAfter?: number;
-			messagesBefore?: number;
-			messagesAfter?: number;
-			removedTurns?: number;
-			keptTurns?: number;
-			summary?: string;
-		},
-	): void {
-		this.session?.appendLog({
-			ts: new Date().toISOString(),
-			type: "compaction",
-			content: `${info.reason}, iteration ${info.iteration}`,
-			iteration: info.iteration,
-			reason: info.reason,
-			tokensBefore: info.tokensBefore,
-			tokensAfter: info.tokensAfter,
-			qualityBefore: info.qualityBefore,
-			qualityAfter: info.qualityAfter,
-			messagesBefore: info.messagesBefore,
-			messagesAfter: info.messagesAfter,
-			removedTurns: info.removedTurns,
-			keptTurns: info.keptTurns,
-			summary: info.summary,
-		});
-	}
+  logCompaction(info: {
+    reason: string;
+    iteration: number;
+    tokensBefore?: number;
+    tokensAfter?: number;
+    qualityBefore?: number;
+    qualityAfter?: number;
+    messagesBefore?: number;
+    messagesAfter?: number;
+    removedTurns?: number;
+    keptTurns?: number;
+    summary?: string;
+  }): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "compaction",
+      content: `${info.reason}, iteration ${info.iteration}`,
+      iteration: info.iteration,
+      reason: info.reason,
+      tokensBefore: info.tokensBefore,
+      tokensAfter: info.tokensAfter,
+      qualityBefore: info.qualityBefore,
+      qualityAfter: info.qualityAfter,
+      messagesBefore: info.messagesBefore,
+      messagesAfter: info.messagesAfter,
+      removedTurns: info.removedTurns,
+      keptTurns: info.keptTurns,
+      summary: info.summary,
+    });
+  }
 
-	logContext(
-		info: {
-			kind: "start" | "iteration";
-			iteration: number;
-			window?: number;
-			systemBudget?: number;
-			reserveBudget?: number;
-			historyBudget?: number;
-			systemTokens?: number;
-			toolTokens?: number;
-			tokens: number;
-			quality: number;
-			messageCount: number;
-			compactionCount: number;
-			iterationsSinceCompaction: number;
-			blocks?: Array<{
-				label: string;
-				priority: string;
-				tokens: number;
-				included: boolean;
-			}>;
-		},
-	): void {
-		this.session?.appendLog({
-			ts: new Date().toISOString(),
-			type: "context",
-			content:
-				info.kind === "start"
-					? "context snapshot at session start"
-					: `context at iteration ${info.iteration}`,
-			iteration: info.iteration,
-			window: info.window,
-			systemBudget: info.systemBudget,
-			reserveBudget: info.reserveBudget,
-			historyBudget: info.historyBudget,
-			systemTokens: info.systemTokens,
-			toolTokens: info.toolTokens,
-			contextTokens: info.tokens,
-			quality: info.quality,
-			messageCount: info.messageCount,
-			compactionCount: info.compactionCount,
-			iterationsSinceCompaction: info.iterationsSinceCompaction,
-			blocks: info.blocks,
-		});
-	}
+  logContext(info: {
+    kind: "start" | "iteration";
+    iteration: number;
+    window?: number;
+    systemBudget?: number;
+    reserveBudget?: number;
+    historyBudget?: number;
+    systemTokens?: number;
+    toolTokens?: number;
+    tokens: number;
+    quality: number;
+    messageCount: number;
+    compactionCount: number;
+    iterationsSinceCompaction: number;
+    blocks?: Array<{
+      label: string;
+      priority: string;
+      tokens: number;
+      included: boolean;
+    }>;
+  }): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "context",
+      content:
+        info.kind === "start"
+          ? "context snapshot at session start"
+          : `context at iteration ${info.iteration}`,
+      iteration: info.iteration,
+      window: info.window,
+      systemBudget: info.systemBudget,
+      reserveBudget: info.reserveBudget,
+      historyBudget: info.historyBudget,
+      systemTokens: info.systemTokens,
+      toolTokens: info.toolTokens,
+      contextTokens: info.tokens,
+      quality: info.quality,
+      messageCount: info.messageCount,
+      compactionCount: info.compactionCount,
+      iterationsSinceCompaction: info.iterationsSinceCompaction,
+      blocks: info.blocks,
+    });
+  }
 
-	logLlmUsage(
-		iteration: number,
-		usage: {
-			promptTokens: number;
-			completionTokens: number;
-			totalTokens: number;
-			source: "api" | "estimate";
-			durationMs: number;
-		},
-	): void {
-		this.session?.appendLog({
-			ts: new Date().toISOString(),
-			type: "llm_usage",
-			iteration,
-			promptTokens: usage.promptTokens,
-			completionTokens: usage.completionTokens,
-			totalTokens: usage.totalTokens,
-			source: usage.source,
-			durationMs: usage.durationMs,
-		});
-	}
+  logLlmUsage(
+    iteration: number,
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      source: "api" | "estimate";
+      durationMs: number;
+    },
+  ): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "llm_usage",
+      iteration,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+      source: usage.source,
+      durationMs: usage.durationMs,
+    });
+  }
 
-	logError(message: string): void {
+  logError(message: string): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "error",

@@ -61,9 +61,7 @@ export class PlanTracker {
   }
 
   isComplete(): boolean {
-    return this.plan.steps.every(
-      (s) => s.status === "done" || s.status === "skipped",
-    );
+    return this.plan.steps.every((s) => s.status === "done" || s.status === "skipped");
   }
 
   getProgressString(): string {

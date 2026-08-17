@@ -18,10 +18,7 @@ Workflow rules:
 - If the task is big and decomposable, delegate parts to the subagent tool instead of doing everything in one context.
 - When you finish, return a concise final answer; do not repeat file contents verbatim if you already wrote them to disk.`;
 
-function buildSubagentSystemPrompt(
-  context: string,
-  stable: boolean,
-): string {
+function buildSubagentSystemPrompt(context: string, stable: boolean): string {
   if (stable) return SUBAGENT_SYSTEM_PROMPT_TEMPLATE;
   return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
 }
@@ -125,16 +122,17 @@ export const subagentTool: ToolDefinition = {
     if (!ctx.llmProvider || !ctx.toolExecutor) {
       return {
         success: false,
-        output:
-          "Sub-agent cannot run: missing llmProvider or toolExecutor in context",
+        output: "Sub-agent cannot run: missing llmProvider or toolExecutor in context",
       };
     }
 
     // Defensive guard: if the caller requested specific tool tags but none of the
     // registered tools match, the sub-agent would have zero tools and would
     // hallucinate instead of acting. Warn the caller so it can correct the tags.
+    // Uses getByTags (not getAllForLLM) because alwaysOn tools always match the
+    // latter — the guard must test real tag coverage, not schema presence.
     if (toolTags && toolTags.length > 0) {
-      const matched = ctx.toolExecutor.getToolDefinitions(toolTags);
+      const matched = ctx.toolExecutor.getRegistry().getByTags(toolTags);
       if (matched.length === 0) {
         return {
           success: false,
@@ -149,17 +147,12 @@ export const subagentTool: ToolDefinition = {
         ctx.config.contextBudget,
       );
       const subPluginManager = new PluginManager();
-      const hallucinationDetector = new HallucinationDetector(
-        ctx.baseDir,
-        ctx.llmProvider,
-      );
+      const hallucinationDetector = new HallucinationDetector(ctx.baseDir, ctx.llmProvider);
 
       // Save/restore the shared executor scope so the sub-agent doesn't
       // permanently mutate the parent's scope.
       const parentScope = ctx.scope;
-      ctx.toolExecutor.setScope(
-        scope || { allowed_files: [], read_only_files: [] },
-      );
+      ctx.toolExecutor.setScope(scope || { allowed_files: [], read_only_files: [] });
 
       const systemPrompt: PromptBlock = {
         content: buildSubagentSystemPrompt(
@@ -199,9 +192,7 @@ export const subagentTool: ToolDefinition = {
         }
 
         const resultMode =
-          (args.result_mode as string) ||
-          ctx.config.subagent?.resultMode ||
-          "text";
+          (args.result_mode as string) || ctx.config.subagent?.resultMode || "text";
 
         if (resultMode === "file") {
           const store = new ArtifactStore({
@@ -214,10 +205,7 @@ export const subagentTool: ToolDefinition = {
             result.text,
             "md",
           );
-          const summary = store.summary(
-            result.text,
-            ctx.config.subagent?.maxSummaryChars ?? 2000,
-          );
+          const summary = store.summary(result.text, ctx.config.subagent?.maxSummaryChars ?? 2000);
           ctx.logger.debug(
             `subagent result persisted to artifact ${abs} (${result.text.length} chars, ${result.iterationCount} iterations)`,
           );
@@ -237,9 +225,7 @@ export const subagentTool: ToolDefinition = {
         };
       } finally {
         if (!scopeRestored) {
-          ctx.toolExecutor.setScope(
-            parentScope || { allowed_files: [], read_only_files: [] },
-          );
+          ctx.toolExecutor.setScope(parentScope || { allowed_files: [], read_only_files: [] });
         }
       }
     } catch (e: any) {

@@ -5,11 +5,7 @@ import { join } from "path";
 import { processRegistry } from "../../src/modules/processes";
 
 const tickScript = join(tmpdir(), `mma-tick-${process.pid}.js`);
-writeFileSync(
-  tickScript,
-  `setInterval(() => console.log('tick'), 50);`,
-  "utf-8",
-);
+writeFileSync(tickScript, `setInterval(() => console.log('tick'), 50);`, "utf-8");
 
 const idleScript = join(tmpdir(), `mma-idle-${process.pid}.js`);
 writeFileSync(idleScript, `setInterval(() => {}, 1000);`, "utf-8");

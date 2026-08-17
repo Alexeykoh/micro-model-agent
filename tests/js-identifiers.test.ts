@@ -43,9 +43,9 @@ describe("isFilePathLike", () => {
 
 describe("extractFileLikeTokens", () => {
   it("extracts real file tokens but not domains", () => {
-    expect(
-      extractFileLikeTokens("Use config.json; see Gismeteo.by or weather.com."),
-    ).toEqual(["config.json"]);
+    expect(extractFileLikeTokens("Use config.json; see Gismeteo.by or weather.com.")).toEqual([
+      "config.json",
+    ]);
   });
 
   it("strips URLs before extraction (as auditor/factual do)", () => {
@@ -57,9 +57,7 @@ describe("extractFileLikeTokens", () => {
   });
 
   it("extracts no tokens from an extension-list phrase", () => {
-    expect(
-      extractFileLikeTokens("Проверить что остались только .tsx/.ts файлы"),
-    ).toEqual([]);
+    expect(extractFileLikeTokens("Проверить что остались только .tsx/.ts файлы")).toEqual([]);
   });
 });
 

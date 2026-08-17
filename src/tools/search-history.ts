@@ -4,12 +4,7 @@ import { homedir } from "os";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
-function searchFile(
-  filePath: string,
-  query: string,
-  maxResults: number,
-  results: string[],
-): void {
+function searchFile(filePath: string, query: string, maxResults: number, results: string[]): void {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, "utf-8");
   for (const line of content.split("\n").filter(Boolean)) {
@@ -27,8 +22,7 @@ function searchFile(
 
 export const searchHistoryTool: ToolDefinition = {
   name: "search_history",
-  description:
-    "Search through session history for past interactions across all sessions.",
+  description: "Search through session history for past interactions across all sessions.",
   tags: ["research"],
   parameters: {
     type: "object",

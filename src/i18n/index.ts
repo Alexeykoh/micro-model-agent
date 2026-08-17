@@ -5,10 +5,7 @@ const locales: Record<string, Record<string, string>> = { en, ru };
 
 let currentLocale = "en";
 
-function flatten(
-  obj: Record<string, unknown>,
-  prefix = "",
-): Record<string, string> {
+function flatten(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
   let result: Record<string, string> = {};
   for (const [key, val] of Object.entries(obj)) {
     const fullKey = prefix ? `${prefix}.${key}` : key;
@@ -41,10 +38,7 @@ export function loadLocale(name: string, dict: Record<string, unknown>): void {
   flat[name] = flatten(dict);
 }
 
-export function t(
-  key: string,
-  params?: Record<string, string | number>,
-): string {
+export function t(key: string, params?: Record<string, string | number>): string {
   const localeDict = flat[currentLocale];
   const enDict = flat["en"];
   let template = localeDict?.[key] ?? enDict?.[key] ?? key;

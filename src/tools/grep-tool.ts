@@ -35,9 +35,7 @@ export const grepTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const pattern = String(args.pattern);
-    const searchPath = args.path
-      ? resolve(ctx.baseDir, String(args.path))
-      : ctx.baseDir;
+    const searchPath = args.path ? resolve(ctx.baseDir, String(args.path)) : ctx.baseDir;
 
     // Build rg arguments as an array to avoid shell interpretation of regex
     // metacharacters like |, (, ) — these are regex patterns, not shell operators.
@@ -60,8 +58,7 @@ export const grepTool: ToolDefinition = {
         output: truncateLines(output || t("file.no_matches")),
       };
     } catch (e: any) {
-      if (e.status === 1)
-        return { success: true, output: t("file.no_matches") };
+      if (e.status === 1) return { success: true, output: t("file.no_matches") };
       // Fall back to plain grep -r when rg is not available or fails.
       // Using execFileSync with array args avoids shell injection.
       try {
@@ -79,8 +76,7 @@ export const grepTool: ToolDefinition = {
           output: truncateLines(output || t("file.no_matches")),
         };
       } catch (e2: any) {
-        if (e2.status === 1)
-          return { success: true, output: t("file.no_matches") };
+        if (e2.status === 1) return { success: true, output: t("file.no_matches") };
         return {
           success: false,
           output: t("error.grep_failed", { message: e2.message }),

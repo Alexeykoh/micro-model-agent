@@ -28,7 +28,12 @@ describe("PluginLoader", () => {
     writeFileSync(join(tmpDir, "stats.ts"), pluginFile("stats"));
     writeFileSync(join(tmpDir, "redact.js"), pluginFile("redact"));
     loader.loadFromDir(tmpDir, pm);
-    expect(pm.getAllPlugins().map((p) => p.name).sort()).toEqual(["redact", "stats"]);
+    expect(
+      pm
+        .getAllPlugins()
+        .map((p) => p.name)
+        .sort(),
+    ).toEqual(["redact", "stats"]);
   });
 
   it("loads a folder plugin via plugin.ts", () => {
@@ -78,7 +83,12 @@ describe("PluginLoader", () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "plugin.js"), pluginFile("folder-p"));
     loader.loadFromDir(tmpDir, pm);
-    expect(pm.getAllPlugins().map((p) => p.name).sort()).toEqual(["flat", "folder-p"]);
+    expect(
+      pm
+        .getAllPlugins()
+        .map((p) => p.name)
+        .sort(),
+    ).toEqual(["flat", "folder-p"]);
   });
 
   it("logs skipped entries and continues on failure", () => {
@@ -97,8 +107,14 @@ describe("PluginLoader", () => {
   });
 
   it("skips plugins whose minMmaVersion is higher than the current MMA version", () => {
-    writeFileSync(join(tmpDir, "too-new.ts"), pluginFile("too-new", `, version: "1.0.0", minMmaVersion: "9.9.9"`));
-    writeFileSync(join(tmpDir, "ok.ts"), pluginFile("ok", `, version: "1.0.0", minMmaVersion: "0.1.0"`));
+    writeFileSync(
+      join(tmpDir, "too-new.ts"),
+      pluginFile("too-new", `, version: "1.0.0", minMmaVersion: "9.9.9"`),
+    );
+    writeFileSync(
+      join(tmpDir, "ok.ts"),
+      pluginFile("ok", `, version: "1.0.0", minMmaVersion: "0.1.0"`),
+    );
     const warned: string[] = [];
     loader.loadFromDir(tmpDir, pm, { warn: (m) => warned.push(m) }, { mmaVersion: "0.38.0" });
     expect(pm.getAllPlugins().map((p) => p.name)).toEqual(["ok"]);
@@ -106,7 +122,10 @@ describe("PluginLoader", () => {
   });
 
   it("skips plugins with minMmaVersion even without an mmaVersion option", () => {
-    writeFileSync(join(tmpDir, "req.ts"), pluginFile("req", `, version: "1.0.0", minMmaVersion: "0.30.0"`));
+    writeFileSync(
+      join(tmpDir, "req.ts"),
+      pluginFile("req", `, version: "1.0.0", minMmaVersion: "0.30.0"`),
+    );
     loader.loadFromDir(tmpDir, pm);
     expect(pm.getAllPlugins().map((p) => p.name)).toEqual(["req"]);
   });

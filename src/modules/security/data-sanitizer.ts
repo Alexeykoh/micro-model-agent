@@ -78,15 +78,7 @@ export function sanitizeCommand(command: string): string {
 export function sanitizeUrl(url: string): string {
   try {
     const urlObj = new URL(url);
-    const sensitiveKeys = [
-      "api_key",
-      "token",
-      "password",
-      "secret",
-      "access_token",
-      "auth",
-      "key",
-    ];
+    const sensitiveKeys = ["api_key", "token", "password", "secret", "access_token", "auth", "key"];
 
     const sanitizedParams = new URLSearchParams(urlObj.search);
     for (const key of sensitiveKeys) {

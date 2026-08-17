@@ -99,9 +99,7 @@ export async function runChunkQuery(
   const logger = opts.logger;
 
   if (chunks.length === 1) {
-    logger?.debug(
-      `runChunkQuery: single chunk (${text.length} chars), no chunking needed`,
-    );
+    logger?.debug(`runChunkQuery: single chunk (${text.length} chars), no chunking needed`);
   } else {
     logger?.debug(
       `runChunkQuery: ${chunks.length} chunks over ${text.length} chars (chunkChars=${chunkChars}, maxParallel=${maxParallel})`,
@@ -112,29 +110,26 @@ export async function runChunkQuery(
   let inFlight = 0;
   let maxParallelObserved = 0;
 
-  const workers = Array.from(
-    { length: Math.min(maxParallel, chunks.length) },
-    async () => {
-      while (cursor < chunks.length) {
-        const idx = cursor++;
-        inFlight++;
-        maxParallelObserved = Math.max(maxParallelObserved, inFlight);
-        try {
-          answers[idx] = await chatText(
-            provider,
-            [
-              { role: "system", content: chunkSystem },
-              { role: "user", content: `Query: ${query}\n\nText:\n${chunks[idx]}` },
-            ],
-            maxChunkTokens,
-            reasoningEffort,
-          );
-        } finally {
-          inFlight--;
-        }
+  const workers = Array.from({ length: Math.min(maxParallel, chunks.length) }, async () => {
+    while (cursor < chunks.length) {
+      const idx = cursor++;
+      inFlight++;
+      maxParallelObserved = Math.max(maxParallelObserved, inFlight);
+      try {
+        answers[idx] = await chatText(
+          provider,
+          [
+            { role: "system", content: chunkSystem },
+            { role: "user", content: `Query: ${query}\n\nText:\n${chunks[idx]}` },
+          ],
+          maxChunkTokens,
+          reasoningEffort,
+        );
+      } finally {
+        inFlight--;
       }
-    },
-  );
+    }
+  });
   await Promise.all(workers);
 
   let synthesis = "";

@@ -17,13 +17,21 @@ export const DEFAULTS: AppConfig = {
   moe: {
     enabled: false,
   },
+  tools: {
+    defaultTags: ["file", "code"],
+    enableOnDemand: true,
+  },
   experts: {
     code: {
       model: "qwen/qwen3.5-9b",
       tool_tags: ["file", "code", "shell"],
       max_attempts: 3,
     },
-    research: { model: "qwen/qwen3.5-9b", tool_tags: ["research"], max_attempts: 3 },
+    research: {
+      model: "qwen/qwen3.5-9b",
+      tool_tags: ["research"],
+      max_attempts: 3,
+    },
     browser: {
       model: "qwen/qwen3.5-9b",
       tool_tags: ["browser", "vision"],

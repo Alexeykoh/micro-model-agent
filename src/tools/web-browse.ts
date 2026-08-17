@@ -1,13 +1,7 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import {
-  isUrlAllowed,
-  sanitizeUrl,
-} from "../modules/security/network-validator";
-import {
-  logNetworkRequest,
-  logSecurityBlock,
-} from "../modules/security/audit-log";
+import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { MAX_PREVIEW_LINES } from "./preview";
 
@@ -59,12 +53,7 @@ export const webBrowseTool: ToolDefinition = {
         .replace(/\s+/g, " ")
         .trim();
 
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        true,
-        `Status: ${response.status}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
 
       const fullChars = stripped.length;
       const fullLines = stripped.split("\n").length;
@@ -98,12 +87,7 @@ export const webBrowseTool: ToolDefinition = {
         }),
       };
     } catch (err: any) {
-      logNetworkRequest(
-        ctx.sessionId,
-        sanitizeUrl(url),
-        false,
-        `Error: ${err.message}`,
-      );
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
       return {
         success: false,
         output: t("error.fetch_url_failed", {

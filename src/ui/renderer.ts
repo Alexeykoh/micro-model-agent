@@ -170,10 +170,7 @@ export class Renderer {
     this.spinner.stop();
     if (!this.rich) {
       if (ctxDelta !== undefined && ctxDelta !== 0) {
-        const deltaStr =
-          ctxDelta > 0
-            ? pc.green(`+${ctxDelta}`)
-            : pc.yellow(`${ctxDelta} ↓`);
+        const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
         this.out.write(`${pc.dim("ctx")} ${deltaStr}\n`);
       }
       return;
@@ -183,10 +180,7 @@ export class Renderer {
     const marker = error ? pc.red("✗") : pc.green("✓");
     let footer = `${marker} ${pc.dim(`${duration}ms`)}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {
-      const deltaStr =
-        ctxDelta > 0
-          ? pc.green(`+${ctxDelta}`)
-          : pc.yellow(`${ctxDelta} ↓`);
+      const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
       footer += `  ${pc.dim("ctx")} ${deltaStr}`;
     }
     if (this.toolStyle === "inline") {

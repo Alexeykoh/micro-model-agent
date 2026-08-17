@@ -123,10 +123,7 @@ describe("ToolExecutor", () => {
         interactive: true,
         handler: () =>
           new Promise((resolve) =>
-            setTimeout(
-              () => resolve({ success: true, output: "answered" }),
-              70000,
-            ),
+            setTimeout(() => resolve({ success: true, output: "answered" }), 70000),
           ),
       });
 
@@ -206,9 +203,6 @@ describe("ToolExecutor", () => {
     expect(browserAndVision[0].name).toBe("browser_tool");
 
     const fileAndShell = executor.getToolDefinitions(["file", "shell"]);
-    expect(fileAndShell.map((t) => t.name).sort()).toEqual([
-      "file_tool",
-      "shell_tool",
-    ]);
+    expect(fileAndShell.map((t) => t.name).sort()).toEqual(["file_tool", "shell_tool"]);
   });
 });

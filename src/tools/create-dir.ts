@@ -44,19 +44,9 @@ export const createDirTool: ToolDefinition = {
     }
 
     // Check path permissions
-    const scopeCheck = isPathWritable(
-      ctx.baseDir,
-      resolved,
-      ctx.scope,
-      ctx.config.security?.paths,
-    );
+    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "file_write",
-        scopeCheck.reason || "Path not allowed",
-        path,
-      );
+      logSecurityBlock(ctx.sessionId, "file_write", scopeCheck.reason || "Path not allowed", path);
       return {
         success: false,
         output: t("file.path_not_allowed", {

@@ -28,10 +28,7 @@ export async function readClipboardImage(): Promise<Buffer | null> {
     try {
       const img = (Bun as any).Image.fromClipboard();
       if (img) {
-        const buf = await img
-          .resize(800, 800, { fit: "inside" })
-          .jpeg({ quality: 60 })
-          .buffer();
+        const buf = await img.resize(800, 800, { fit: "inside" }).jpeg({ quality: 60 }).buffer();
         return Buffer.from(buf);
       }
     } catch {
@@ -49,17 +46,13 @@ async function readClipboardFallback(): Promise<Buffer | null> {
   const { readFileSync, unlinkSync } = await import("fs");
   const { join } = await import("path");
 
-  const tmpPath = join(
-    process.env.TEMP || process.env.TMP || "/tmp",
-    `mma-clip-${Date.now()}.png`,
-  );
+  const tmpPath = join(process.env.TEMP || process.env.TMP || "/tmp", `mma-clip-${Date.now()}.png`);
 
   try {
     if (platform() === "linux") {
-      execSync(
-        `xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`,
-        { timeout: 5000 },
-      );
+      execSync(`xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`, {
+        timeout: 5000,
+      });
     } else {
       return null; // macOS/Windows should use Bun.Image
     }
@@ -68,7 +61,9 @@ async function readClipboardFallback(): Promise<Buffer | null> {
     unlinkSync(tmpPath);
     return buf.length > 0 ? buf : null;
   } catch {
-    try { unlinkSync(tmpPath); } catch {}
+    try {
+      unlinkSync(tmpPath);
+    } catch {}
     return null;
   }
 }
@@ -77,9 +72,7 @@ async function readClipboardFallback(): Promise<Buffer | null> {
  * Load an image from a file path, resize via Bun.Image, return as JPEG data URL.
  * Target: ~800px wide, JPEG quality 60 — typically 5-15KB (~2-4K tokens).
  */
-export async function loadFileAsDataUrl(
-  filePath: string,
-): Promise<{ dataUrl: string }> {
+export async function loadFileAsDataUrl(filePath: string): Promise<{ dataUrl: string }> {
   const buf = readFileSync(filePath);
 
   // Use Bun.Image if available — resize + convert to JPEG
@@ -101,16 +94,15 @@ export async function loadFileAsDataUrl(
   // Fallback: raw base64 (no resize)
   const b64 = buf.toString("base64");
   const ext = filePath.split(".").pop()?.toLowerCase();
-  const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
+  const mime =
+    ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
   return { dataUrl: `data:${mime};base64,${b64}` };
 }
 
 /**
  * Load an image from a URL, resize, return as JPEG data URL.
  */
-export async function loadUrlAsDataUrl(
-  url: string,
-): Promise<{ dataUrl: string }> {
+export async function loadUrlAsDataUrl(url: string): Promise<{ dataUrl: string }> {
   const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`Failed to fetch image: ${resp.status} ${resp.statusText}`);

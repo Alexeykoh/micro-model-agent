@@ -78,9 +78,7 @@ describe("PlanPersister", () => {
     );
     persister.save(plan);
 
-    const raw = JSON.parse(
-      readFileSync(join(TEST_DIR, ".mma", "plan.json"), "utf-8"),
-    );
+    const raw = JSON.parse(readFileSync(join(TEST_DIR, ".mma", "plan.json"), "utf-8"));
     expect(raw.updatedAt).toBeDefined();
     expect(new Date(raw.updatedAt).getTime()).toBeGreaterThan(0);
   });

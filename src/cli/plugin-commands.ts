@@ -7,9 +7,7 @@ import { t } from "../i18n/index";
  * Create the `mma plugins` subcommand group.
  */
 export function createPluginCommand(program: Command): void {
-  const pluginsCmd = program
-    .command("plugins")
-    .description(t("cli.plugins.description"));
+  const pluginsCmd = program.command("plugins").description(t("cli.plugins.description"));
 
   pluginsCmd
     .command("list")
@@ -27,9 +25,7 @@ export function createPluginCommand(program: Command): void {
         return;
       }
       const mmaVersion = readMmaVersion();
-      console.log(
-        t("cli.plugins.header", { count: String(infos.length), mma: mmaVersion }),
-      );
+      console.log(t("cli.plugins.header", { count: String(infos.length), mma: mmaVersion }));
       for (const { plugin, source } of infos) {
         const version = plugin.version || "-";
         const origin = source || "builtin";

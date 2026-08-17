@@ -80,7 +80,11 @@ function truncate(s: string, max: number): string {
 
 function looksLikeErrorPaste(text: string): boolean {
   // Error markers.
-  if (/(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(text)) {
+  if (
+    /(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(
+      text,
+    )
+  ) {
     return true;
   }
   // Structural signals of pasted compiler/runtime output: source frames
@@ -99,9 +103,7 @@ export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
       const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
       const existing = failures.get(key);
       const errorText = truncate(
-        typeof msg.content === "string"
-          ? msg.content
-          : getMessageText(msg.content),
+        typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
         100,
       );
       if (existing) {
@@ -168,15 +170,10 @@ export class ContextManager {
     this.planSummaryProvider = fn;
   }
 
-  private calculateBudget(
-    window: number,
-    contextBudget?: ConfigContextBudget,
-  ): ContextBudget {
+  private calculateBudget(window: number, contextBudget?: ConfigContextBudget): ContextBudget {
     if (contextBudget) {
       const systemPrompt = Math.floor(window * contextBudget.systemPrompt);
-      const responseReserve = Math.floor(
-        window * contextBudget.responseReserve,
-      );
+      const responseReserve = Math.floor(window * contextBudget.responseReserve);
       const history = Math.max(0, window - systemPrompt - responseReserve);
       return { systemPrompt, responseReserve, history };
     }
@@ -232,27 +229,14 @@ export class ContextManager {
     // with heavy token load + error density, quality stuck below 40 and a
     // compaction fired on EVERY iteration (observed: 56 compactions in 28 min).
     const COMPACTION_PENALTY_FLOOR = 0.5;
-    const compactionLoss = Math.max(
-      COMPACTION_PENALTY_FLOOR,
-      1 - this.compactionCount * 0.15,
-    );
+    const compactionLoss = Math.max(COMPACTION_PENALTY_FLOOR, 1 - this.compactionCount * 0.15);
 
     const msgCount = this.messages.length || 1;
-    const errorDensity = Math.max(
-      0,
-      1 - Math.min(1, this.facts.errorCount / msgCount),
-    );
+    const errorDensity = Math.max(0, 1 - Math.min(1, this.facts.errorCount / msgCount));
 
-    const freshness = Math.max(
-      0,
-      1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL,
-    );
+    const freshness = Math.max(0, 1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL);
 
-    const score =
-      tokenLoad * 0.4 +
-      compactionLoss * 0.25 +
-      errorDensity * 0.2 +
-      freshness * 0.15;
+    const score = tokenLoad * 0.4 + compactionLoss * 0.25 + errorDensity * 0.2 + freshness * 0.15;
     return Math.round(Math.min(100, Math.max(0, score * 100)));
   }
 
@@ -264,13 +248,8 @@ export class ContextManager {
     // the model had forgotten "удали /bicycles, почини стили" and re-read
     // files aimlessly for 40+ iterations).
     if (msg.role === "user") {
-      const text =
-        typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
-      if (
-        text.trim() &&
-        !text.startsWith("<system-summary>") &&
-        !text.includes("[Compressed:")
-      ) {
+      const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+      if (text.trim() && !text.startsWith("<system-summary>") && !text.includes("[Compressed:")) {
         if (looksLikeErrorPaste(text) && (this.lastUserTask || this.sessionMission)) {
           this.lastUserFeedback = text.trim().slice(0, 400);
         } else if (!this.lastUserTask && !this.lastUserFeedback) {
@@ -286,10 +265,7 @@ export class ContextManager {
     if (msg.role === "user" && this.pendingImageParts.length > 0) {
       const textPart: TextPart = {
         type: "text",
-        text:
-          typeof msg.content === "string"
-            ? msg.content
-            : getMessageText(msg.content),
+        text: typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
       };
       msg = {
         ...msg,
@@ -384,10 +360,7 @@ export class ContextManager {
 
   needsCompaction(): boolean {
     if (this.iterationsSinceCompaction >= COMPACTION_INTERVAL) return true;
-    const totalTokens = this.messages.reduce(
-      (sum, m) => sum + this.estimateMessageTokens(m),
-      0,
-    );
+    const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0);
     return totalTokens > this.budget.history * this.compactionThreshold;
   }
 
@@ -445,9 +418,7 @@ export class ContextManager {
       const lines = triedAndFailed.map(
         (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,
       );
-      parts.push(
-        `[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`,
-      );
+      parts.push(`[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`);
     }
 
     this.compactedBlock = parts.join(" ");
@@ -463,11 +434,7 @@ export class ContextManager {
       const text = getMessageText(m.content);
       return !text.startsWith("<system-summary>");
     });
-    this.messages = [
-      ...(firstSystem ? [firstSystem] : []),
-      summary,
-      ...freshRecent,
-    ];
+    this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...freshRecent];
     this.iterationsSinceCompaction = 0;
 
     if (this.onCompact) {
@@ -539,8 +506,7 @@ export class ContextManager {
 
   getEstimatedTokens(): number {
     return (
-      this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0) +
-      this.toolTokens
+      this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0) + this.toolTokens
     );
   }
 

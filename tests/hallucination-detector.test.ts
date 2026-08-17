@@ -4,9 +4,7 @@ import { HallucinationDetector } from "../src/modules/hallucination/detector";
 describe("HallucinationDetector", () => {
   it("should pass on normal response", async () => {
     const detector = new HallucinationDetector();
-    const result = await detector.validate(
-      "This is a normal response about the codebase.",
-    );
+    const result = await detector.validate("This is a normal response about the codebase.");
     expect(result.status).toBe("pass");
   });
 

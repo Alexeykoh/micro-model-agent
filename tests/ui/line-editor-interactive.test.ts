@@ -69,11 +69,7 @@ describe("LineEditor interactive", () => {
     await tick();
     // Typing on row 1 must first move the cursor up to the frame's first row
     // and rewrite BOTH rows, so the previous "> 1" is cleared, not duplicated.
-    expect(
-      output.data.endsWith(
-        "\x1b[1A\r\x1b[2K> 1\r\n\x1b[2K2\x1b[J\r\x1b[1C",
-      ),
-    ).toBe(true);
+    expect(output.data.endsWith("\x1b[1A\r\x1b[2K> 1\r\n\x1b[2K2\x1b[J\r\x1b[1C")).toBe(true);
   });
 
   it("commits the submitted buffer without erasing it", async () => {

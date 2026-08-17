@@ -4,8 +4,7 @@ import type { ToolDefinition } from "./types";
 
 export const approveTool: ToolDefinition = {
   name: "approve",
-  description:
-    "Request user approval for an action. The user picks Yes or No from a menu.",
+  description: "Request user approval for an action. The user picks Yes or No from a menu.",
   tags: ["core"],
   interactive: true,
   parameters: {

@@ -41,15 +41,9 @@ export function validateScenario(s: CertScenario): string[] {
   }
   for (const c of s.checks) {
     if (!CHECK_TYPES.includes(c.type)) {
-      errors.push(
-        `[${s.id}] unknown check type: ${(c as { type: string }).type}`,
-      );
+      errors.push(`[${s.id}] unknown check type: ${(c as { type: string }).type}`);
     }
-    if (
-      c.type === "fileContent" &&
-      c.contains === undefined &&
-      c.equals === undefined
-    ) {
+    if (c.type === "fileContent" && c.contains === undefined && c.equals === undefined) {
       errors.push(`[${s.id}] fileContent needs contains or equals`);
     }
   }
@@ -62,11 +56,7 @@ export function validateScenario(s: CertScenario): string[] {
   ) {
     errors.push(`[${s.id}] passThreshold must be a positive integer`);
   }
-  if (
-    s.passThreshold !== undefined &&
-    s.reps !== undefined &&
-    s.passThreshold > s.reps
-  ) {
+  if (s.passThreshold !== undefined && s.reps !== undefined && s.passThreshold > s.reps) {
     errors.push(`[${s.id}] passThreshold > reps (must be <= reps)`);
   }
   return errors;
@@ -110,20 +100,14 @@ function normalizeScenario(data: unknown, file: string): CertScenario {
     mode: d.mode === "skip" ? "skip" : "run",
     prompt: String(d.prompt ?? ""),
     reps: typeof d.reps === "number" ? d.reps : undefined,
-    passThreshold:
-      typeof d.passThreshold === "number" ? d.passThreshold : undefined,
-    fixtures: Array.isArray(d.fixtures)
-      ? (d.fixtures as CertScenario["fixtures"])
-      : undefined,
+    passThreshold: typeof d.passThreshold === "number" ? d.passThreshold : undefined,
+    fixtures: Array.isArray(d.fixtures) ? (d.fixtures as CertScenario["fixtures"]) : undefined,
     checks: Array.isArray(d.checks) ? (d.checks as CertScenario["checks"]) : [],
     skipReason: typeof d.skipReason === "string" ? d.skipReason : undefined,
   };
 }
 
-export function filterByTags(
-  scenarios: CertScenario[],
-  tags: CertTag[],
-): CertScenario[] {
+export function filterByTags(scenarios: CertScenario[], tags: CertTag[]): CertScenario[] {
   if (!tags || tags.length === 0) {
     return scenarios.filter((s) => s.tags.includes("core"));
   }

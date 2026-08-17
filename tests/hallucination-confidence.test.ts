@@ -33,9 +33,7 @@ describe("ConfidenceCheck", () => {
 
   it("should pass on normal response", () => {
     const check = new ConfidenceCheck();
-    const result = check.validate(
-      "We should use the standard library for this task.",
-    );
+    const result = check.validate("We should use the standard library for this task.");
     expect(result.status).toBe("pass");
   });
 });

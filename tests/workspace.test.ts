@@ -2,11 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import {
-  resolveProjectPath,
-  hasProjectManifest,
-  clearWorkspaceCache,
-} from "../src/core/workspace";
+import { resolveProjectPath, hasProjectManifest, clearWorkspaceCache } from "../src/core/workspace";
 
 describe("resolveProjectPath", () => {
   let baseDir: string;

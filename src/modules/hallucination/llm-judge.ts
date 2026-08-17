@@ -40,10 +40,7 @@ export class LLMJudge {
 
     const shown = decisions.slice(-MAX_DECISIONS_SHOWN);
     const decisionLines = shown
-      .map(
-        (d, i) =>
-          `${i + 1}. [${d.location || "agent"}] "${d.decision}"`,
-      )
+      .map((d, i) => `${i + 1}. [${d.location || "agent"}] "${d.decision}"`)
       .join("\n");
 
     const system = `You are a consistency checker for an AI coding agent. The agent previously made these decisions:
@@ -66,9 +63,7 @@ Reply with ONLY valid JSON, no other text:
       const verdict = this.parseVerdict(verdictText);
 
       if (verdict.contradicts) {
-        const reason = verdict.reason?.trim()
-          ? ` — ${verdict.reason.trim()}`
-          : "";
+        const reason = verdict.reason?.trim() ? ` — ${verdict.reason.trim()}` : "";
         return {
           status: "warn",
           reason: t("hall.contradiction_llm", { reason }),
@@ -94,10 +89,7 @@ Reply with ONLY valid JSON, no other text:
     })();
 
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error("LLM judge timed out")),
-        JUDGE_TIMEOUT_MS,
-      );
+      timer = setTimeout(() => reject(new Error("LLM judge timed out")), JUDGE_TIMEOUT_MS);
     });
 
     try {
