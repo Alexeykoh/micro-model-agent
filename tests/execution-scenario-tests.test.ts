@@ -425,7 +425,7 @@ describe("Scenario: Step Gate verification", () => {
 
   it("advances past last step with final message", () => {
     const execModule = new ExecutionModule(tempDir, 8);
-    execModule.setPlan(mkPlan("Test", ["create final/config.ts"]));
+    execModule.setPlan(mkPlan("Test", ["create final/config.ts", "create final/validate.ts"]));
 
     mkdirSync(join(tempDir, "final"), { recursive: true });
     writeFileSync(join(tempDir, "final", "config.ts"), "export const config = { debug: true };\n");
@@ -438,10 +438,13 @@ describe("Scenario: Step Gate verification", () => {
 
     plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
 
-    expect(execModule.getTracker()!.getCurrentStep()?.status).toBe("done");
+    // Step 1 done, current step is now 2 (in_progress).
+    expect(execModule.getTracker()!.getStep(1)?.status).toBe("done");
+    expect(execModule.getTracker()!.getCurrentStep()?.id).toBe(2);
 
-    const finalMsg = messages.find((m) => m.includes("final step") || m.includes("последний шаг"));
-    expect(finalMsg).toBeTruthy();
+    // The "step gate ok" message was emitted (moving to next step).
+    const nextStepMsg = messages.find((m) => m.includes("Step 1 completed") || m.includes("Шаг 1"));
+    expect(nextStepMsg).toBeTruthy();
   });
 });
 

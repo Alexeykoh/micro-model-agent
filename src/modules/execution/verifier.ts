@@ -6,6 +6,8 @@ import type { MoEPlan } from "./types";
 import type { AppConfig } from "../../config/types";
 import { validateExpertConfig } from "../../config/experts";
 import { findProjectRoot } from "../lsp/project-root";
+import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { findExistingFile } from "./auditor";
 
 export interface VerificationItem {
   passed: boolean;
@@ -16,6 +18,7 @@ export interface StepVerificationResult {
   passed: boolean;
   syntaxValid: boolean;
   failed: VerificationItem[];
+  noFiles?: boolean;
 }
 
 export interface MoEVerificationResult {
@@ -149,20 +152,29 @@ export class StepVerifier {
   }
 
   async verifyStep(stepDescription: string): Promise<StepVerificationResult> {
-    const fileMatches = stepDescription.match(/\b[\w./-]+\.[a-z]+/gi) || [];
+    const fileMatches = extractFileLikeTokens(stripUrls(stepDescription));
+
+    // No named files — this step cannot be verified by file existence. Do NOT
+    // trivially pass (empty every() = true); signal noFiles so the tool guides
+    // the model to run a real check instead.
+    if (fileMatches.length === 0) {
+      return { passed: false, syntaxValid: true, failed: [], noFiles: true };
+    }
+
     const results: VerificationItem[] = [];
     let syntaxValid = true;
 
     for (const filePath of fileMatches) {
-      const result = await this.checkFileExists(filePath);
-      results.push(result);
+      const resolved = findExistingFile(this.baseDir, filePath);
+      if (!resolved) {
+        results.push({ passed: false, message: t("verify.file_not_found", { path: filePath }) });
+        continue;
+      }
+      results.push({ passed: true, message: t("verify.file_exists", { path: filePath }) });
 
-      if (result.passed) {
-        const fullPath = resolve(this.baseDir, filePath);
-        if (!(await this.validateSyntax(fullPath))) {
-          syntaxValid = false;
-          results.push({ passed: false, message: t("verify.syntax_error", { path: filePath }) });
-        }
+      if (!(await this.validateSyntax(resolved))) {
+        syntaxValid = false;
+        results.push({ passed: false, message: t("verify.syntax_error", { path: filePath }) });
       }
     }
 
@@ -170,6 +182,7 @@ export class StepVerifier {
       passed: results.every((r) => r.passed),
       syntaxValid,
       failed: results.filter((r) => !r.passed),
+      noFiles: false,
     };
   }
 

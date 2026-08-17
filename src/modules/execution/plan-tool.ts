@@ -248,6 +248,25 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           }
           const status = String(args.status || "done");
 
+          // Completed plan: re-marking a done step of a finished plan is the
+          // loop anchor (observed: 3× "plan update step=4 done" on a 4/4 plan
+          // while a NEW task waited). Archive + clear so the model can create a
+          // fresh plan for the new task instead of spinning.
+          if (tracker.isComplete()) {
+            const plan = tracker.getPlan();
+            deps.store.archivePlan(plan);
+            deps.trackerRef.current = null;
+            const done = plan.steps.filter((s) => s.status === "done").length;
+            return {
+              success: true,
+              output: t("plan.completed_archived", {
+                id: plan.id,
+                done: String(done),
+                total: String(plan.steps.length),
+              }),
+            };
+          }
+
           // Idempotency: re-marking a done step as done usually means the
           // plan was already auto-advanced (all step files exist) and the
           // model is confirming its own work. Return SUCCESS so the loop
@@ -321,6 +340,25 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           if (args.note) tracker.addNote(Number(args.step), String(args.note));
           tracker.syncCurrentStep();
           deps.store.saveActive(tracker.getPlan());
+
+          // If this update completed the last step → auto-archive. This breaks
+          // the loop where a finished plan stays active and anchors the model
+          // to "continue step N, do NOT create a new plan".
+          if (tracker.isComplete()) {
+            const plan = tracker.getPlan();
+            deps.store.archivePlan(plan);
+            deps.trackerRef.current = null;
+            const done = plan.steps.filter((s) => s.status === "done").length;
+            return {
+              success: true,
+              output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${t("plan.completed_archived", {
+                id: plan.id,
+                done: String(done),
+                total: String(plan.steps.length),
+              })}`,
+            };
+          }
+
           const progress = tracker.getProgressString();
           const display = tracker.toPromptBlock();
           _ctx.sessionLog?.plan(
@@ -494,6 +532,12 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
         const step = args.step ? tracker.getStep(Number(args.step)) : tracker.getCurrentStep();
         if (!step) return { success: false, output: t("plan.step_not_found") };
         const result = await deps.verifier.verifyStep(step.description);
+        if (result.noFiles) {
+          return {
+            success: true,
+            output: t("verify.no_files", { step: String(step.id) }),
+          };
+        }
         return {
           success: result.passed,
           output: result.passed

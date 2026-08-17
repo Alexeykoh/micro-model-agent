@@ -97,7 +97,16 @@ export class ExecutionModule implements AgentModule {
   restorePlan(): boolean {
     const plan = this.store.loadActive();
     if (!plan) return false;
-    this.tracker = new PlanTracker(plan);
+    const restored = new PlanTracker(plan);
+    // A plan that was already complete when saved must not come back as the
+    // active plan — archive it so it cannot re-anchor the agent (restored
+    // completed plans caused the "continue step 4" loop on restart).
+    if (restored.isComplete()) {
+      this.store.archivePlan(plan);
+      this.tracker = null;
+      return false;
+    }
+    this.tracker = restored;
     // Advance to the first non-done step
     this.tracker.syncCurrentStep();
     this._auditSkipsRemaining = 1; // restored plan — one free pass
@@ -151,7 +160,7 @@ export class ExecutionModule implements AgentModule {
   }
 
   getSystemPromptBlock(): PromptBlock | null {
-    if (!this.tracker) return null;
+    if (!this.tracker || this.tracker.isComplete()) return null;
     return {
       content: this.tracker.toPromptBlock(),
       priority: "critical",
@@ -165,13 +174,21 @@ export class ExecutionModule implements AgentModule {
    * is active. For 9B models the explicit instruction "continue it, do NOT
    * create a new plan" matters — after compaction the plan block is visible
    * but the model re-creates the plan anyway (observed: ses_msvuao0h).
+   *
+   * When the plan is complete, the summary says the plan is done and the
+   * model may create a new plan — NOT "continue step 4, do NOT create a
+   * new plan" which anchored the ses_msxjbnm4 loop.
    */
   getPlanSummary(): string | null {
     if (!this.tracker) return null;
     const plan = this.tracker.getPlan();
     const done = plan.steps.filter((s) => s.status === "done").length;
+    const total = plan.steps.length;
+    if (this.tracker.isComplete()) {
+      return `[${plan.id}] "${plan.title}" ${done}/${total} done — plan complete. You may create a new plan for new work (plan create), or reply with your final answer.`;
+    }
     const current = this.tracker.getCurrentStepIndex() + 1;
-    return `[${plan.id}] "${plan.title}" ${done}/${plan.steps.length} done, current: step ${current} — continue it (plan show / re-plan), do NOT create a new plan`;
+    return `[${plan.id}] "${plan.title}" ${done}/${total} done, current: step ${current} — continue it (plan show / re-plan), do NOT create a new plan`;
   }
 
   getToolDefinitions(): ToolDefinition[] {
@@ -377,6 +394,17 @@ export class ExecutionModule implements AgentModule {
         role: "user",
         content: `<system-summary>${nextMsg}</system-summary>`,
       });
+    }
+
+    // Auto-archive a plan that just became complete (all steps done/skipped).
+    // Keeps a finished plan from staying active forever and anchoring the agent
+    // to a completed task ("continue step 4, do NOT create a new plan" — the
+    // ses_msxjbnm4 loop). The per-step deliverable gate already verified files.
+    if (this.tracker?.isComplete()) {
+      const completed = this.tracker.getPlan();
+      this.store.archivePlan(completed);
+      this.tracker = null;
+      sessionLog?.plan("auto-archive", `Plan ${completed.id} complete — archived`);
     }
   }
 

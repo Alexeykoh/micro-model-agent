@@ -74,7 +74,7 @@ describe("plan update deliverable gate", () => {
     await tool.handler(ctx, {
       action: "create",
       title: "T",
-      steps: ["Create src/bicycles.ts"],
+      steps: ["Create src/bicycles.ts", "Update readme"],
     });
 
     // File lives in a nested project dir relative to baseDir.
@@ -170,8 +170,8 @@ describe("plan update deliverable gate", () => {
     await tool.handler(ctx, {
       action: "create",
       title: "T",
-      steps: ["Remove src/AboutPage.js"],
-      kinds: ["delete"],
+      steps: ["Remove src/AboutPage.js", "Update readme"],
+      kinds: ["delete", "create"],
     });
     expect(execModule.getTracker()!.getStep(1)!.kind).toBe("delete");
 
@@ -298,8 +298,8 @@ describe("plan update deliverable gate", () => {
     await tool.handler(ctx, {
       action: "create",
       title: "T",
-      steps: ["Remove src/old.js"],
-      kinds: ["delete"],
+      steps: ["Remove src/old.js", "Update readme"],
+      kinds: ["delete", "create"],
     });
     const plugin = execModule.getPlugin();
     mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -329,8 +329,8 @@ describe("plan update deliverable gate", () => {
     await tool.handler(ctx, {
       action: "create",
       title: "T",
-      steps: ["Удалить все .js дубликаты, оставить только .tsx/.ts"],
-      kinds: ["delete"],
+      steps: ["Удалить все .js дубликаты, оставить только .tsx/.ts", "Update readme"],
+      kinds: ["delete", "create"],
     });
     const plugin = execModule.getPlugin();
     mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -384,18 +384,20 @@ describe("plan create guard", () => {
     await tool.handler(ctx, {
       action: "create",
       title: "T",
-      steps: ["Create src/a.ts"],
+      steps: ["Create src/a.ts", "Create src/b.ts"],
     });
     mkdirSync(join(tmpDir, "src"), { recursive: true });
     writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
     const done = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(done.success).toBe(true);
+    // Plan not complete yet (step 2 pending) — tracker still active.
+    expect(execModule.getTracker()).not.toBeNull();
 
     const firstPlanId = execModule.getTracker()!.getPlan().id;
     const res = await tool.handler(ctx, {
       action: "create",
       title: "T2",
-      steps: ["Create src/b.ts"],
+      steps: ["Create src/c.ts"],
     });
     expect(res.success).toBe(false);
     expect(res.output).toContain(firstPlanId);

@@ -151,8 +151,11 @@ export class LintOnWritePlugin implements AgentPlugin {
       await runAsync(lintScript, ctx.baseDir, 30_000);
       ctx.logger.debug("Lint passed");
     } catch (err: any) {
+      const stderr = (err.stderr?.toString?.() || "").trim();
+      const stdout = (err.stdout?.toString?.() || "").trim();
+      const detail = (stderr || stdout || err.message).split("\n").filter(Boolean).slice(-5).join("\n");
       ctx.logger.warn(`Lint failed: ${err.message}`);
-      result.output += `\n\n[Project lint failed]: ${err.message}`;
+      result.output += `\n\n[Project lint failed]: ${detail}`;
     }
   }
 
