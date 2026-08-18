@@ -94,6 +94,7 @@ export class ExecutionModule implements AgentModule {
     depsGateHints: new Map<number, number>(),
     mutationsWithoutPlan: 0,
     planNudgeSent: false,
+    typecheckFailures: new Map<string, string>(),
   };
 
   /**
@@ -353,6 +354,7 @@ export class ExecutionModule implements AgentModule {
       stillExistingDeliverables: (s) => this.stillExistingDeliverables(s),
       parseKinds: (a, st) => this.parseKinds(a, st),
       getTaskText: (c) => this.getTaskText(c),
+      typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
     });
   }

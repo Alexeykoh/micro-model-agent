@@ -65,7 +65,7 @@ export const editFileTool: ToolDefinition = {
     if (!content.includes(oldStr)) {
       return {
         success: false,
-        output: t("file.string_not_found", { str: oldStr }),
+        output: t("file.string_not_found", { str: oldStr, path }),
       };
     }
 

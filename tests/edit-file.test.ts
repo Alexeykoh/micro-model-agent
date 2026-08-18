@@ -37,6 +37,18 @@ describe("edit_file", () => {
     expect(result.success).toBe(false);
   });
 
+  it("hints to read the file first when the string is not found", async () => {
+    // Regression (ses_msyghz8w): a wrong edit_file target string made the
+    // agent retry the same edit blind. The error must tell it to read_file.
+    const result = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "test.txt"),
+      old: "nonexistent",
+      new: "x",
+    });
+    expect(result.output).toContain("read_file");
+    expect(result.output).toContain("test.txt");
+  });
+
   it("should enforce path safety", async () => {
     const result = await editFileTool.handler(ctx, { path: "../outside.txt", old: "x", new: "y" });
     expect(result.success).toBe(false);

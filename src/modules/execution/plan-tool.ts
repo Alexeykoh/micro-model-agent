@@ -5,6 +5,7 @@ import type { PlanTracker } from "./tracker";
 import { PlanStore } from "./plan-store";
 import { StepVerifier } from "./verifier";
 import { checkPlanCoverage } from "./plan-coverage";
+import { stepTypecheckGate } from "./execution-plugin";
 
 export interface PlanToolDeps {
   store: PlanStore;
@@ -25,6 +26,9 @@ export interface PlanToolDeps {
     steps: string[],
   ): { kinds: StepKind[] | null; error: string | null };
   getTaskText(ctx: any): string;
+  /** Files the last write/edit reported as compile-broken (from the execution
+   *  plugin state). The done-gate refuses while a step's files are in here. */
+  typecheckFailures: ReadonlyMap<string, string>;
   baseDir: string;
 }
 
@@ -368,6 +372,25 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
                   }),
                 };
               }
+            }
+          }
+
+          // Typecheck gate: "done" while the last edit still fails to compile
+          // is a self-certification the harness must refuse (observed: steps
+          // marked done with the project typecheck failing on every write —
+          // a "fix it later" cascade that never got fixed). The model must
+          // either fix the errors (a clean re-edit clears the map) or mark
+          // the step skipped.
+          if (status === "done") {
+            const blocked = stepTypecheckGate(deps.typecheckFailures, target.description);
+            if (blocked) {
+              return {
+                success: false,
+                output: t("plan.typecheck_failed", {
+                  step: String(stepId),
+                  error: blocked,
+                }),
+              };
             }
           }
 

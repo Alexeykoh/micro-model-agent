@@ -106,6 +106,9 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
+  /** Shared ToolContext; `sessionId`/`sessionContext` are live getters over
+   *  the session manager, so a session switch is always reflected. */
+  toolCtx: ToolContext;
   configDir: string;
   baseDir: string;
   noAgentsMd: boolean;
@@ -258,8 +261,6 @@ export async function bootstrap(
     exitOnComplete,
     contextManager,
     activeToolTags,
-    sessionId: sessionManager.getActiveMeta()?.id,
-    sessionContext: sessionManager.getSessionContext() ?? undefined,
     recursionDepth: 0,
     fileOperationsCount: 0,
     sessionHistory: {
@@ -286,6 +287,23 @@ export async function bootstrap(
       },
     },
   };
+
+  // `sessionId`/`sessionContext` are exposed as LIVE getters over the session
+  // manager instead of being captured once at bootstrap. Capturing the values
+  // pinned them to the session active at startup, so after a REPL /new or
+  // /resume the new session's audit.jsonl entries were tagged with the
+  // PREVIOUS session's id (observed: ses_msyghz8w audit entries carrying
+  // ses_msyg892p_78kqhc) while sessionHistory kept reading the live meta.
+  // Everything that consumes ctx.sessionId — audit log, process registry,
+  // file-ops counters — now always sees the session that is actually active.
+  Object.defineProperty(toolCtx, "sessionId", {
+    get: () => sessionManager.getActiveMeta()?.id,
+    configurable: true,
+  });
+  Object.defineProperty(toolCtx, "sessionContext", {
+    get: () => sessionManager.getSessionContext() ?? undefined,
+    configurable: true,
+  });
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;
@@ -496,6 +514,7 @@ export async function bootstrap(
     sessionManager,
     skillsModule,
     pluginManager,
+    toolCtx,
     configDir: dir,
     baseDir,
     noAgentsMd: skipAgentsMd,

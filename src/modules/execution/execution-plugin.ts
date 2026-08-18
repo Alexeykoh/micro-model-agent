@@ -5,6 +5,7 @@ import { StuckDetector } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
+import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { platform } from "os";
 
 /**
@@ -34,6 +35,13 @@ export interface ExecutionPluginState {
   mutationsWithoutPlan: number;
   /** Whether the plan-creation nudge has already been injected. */
   planNudgeSent: boolean;
+  /**
+   * Files the last write/edit reported as failing the project typecheck or a
+   * syntax check, mapped to the first error line. Cleared by a clean
+   * write/edit result (the debounced project tsc re-ran and passed). The plan
+   * done-gate refuses "done" while a step's files are still in here.
+   */
+  typecheckFailures: Map<string, string>;
 }
 
 export interface ExecutionPluginDeps {
@@ -50,6 +58,70 @@ export interface ExecutionPluginDeps {
     },
   ): void;
   maybeSearchError: (ctx: any, call: any) => void;
+}
+
+/** A compile failure attributed to a file ("" = no file anchor). */
+export interface BrokenFile {
+  file: string;
+  error: string;
+}
+
+function normalizeBrokenPath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/** Parse a tsc / bun build / node --check error line into its file path.
+ *  Returns null when the line carries no file anchor (e.g. `error: Could not
+ *  resolve "..."`). */
+export function parseBrokenFile(line: string): string | null {
+  const trimmed = line.trim();
+  // tsc: src/index.tsx(17,15): error TS2322: ...
+  const tsc = /^(.+?)\s*\(\d+,\d+\)\s*:\s*error TS\d+/.exec(trimmed);
+  if (tsc) return normalizeBrokenPath(tsc[1]);
+  // bun build / node --check: /abs/file.tsx:1:10: error: ...
+  const bn = /^(.+?):\d+:\d+\s*:\s*(?:error|SyntaxError)/.exec(trimmed);
+  if (bn) return normalizeBrokenPath(bn[1]);
+  return null;
+}
+
+/** Extract per-file compile failures from a write/edit result output. Only
+ *  the marker lines are inspected (`[Project typecheck failed]: <line>` /
+ *  `[Syntax check failed]: <line>`) so a diff body can never false-positive. */
+export function extractBrokenFiles(output: string): BrokenFile[] {
+  const out: BrokenFile[] = [];
+  for (const line of output.split("\n")) {
+    const marker = /\[(?:Project typecheck failed|Syntax check failed)\]:\s*(.+)$/.exec(line);
+    if (!marker) continue;
+    const errLine = marker[1].trim();
+    out.push({ file: parseBrokenFile(errLine) ?? "", error: errLine.slice(0, 300) });
+  }
+  return out;
+}
+
+/**
+ * Gate for `plan update status=done`: refuse while the last write/edit still
+ * reports a compile error. A failure with no file anchor blocks the whole
+ * project; otherwise a step's named file tokens are matched against the
+ * broken files (path-suffix match, case-insensitive). A step naming no files
+ * cannot be blamed — its done stays vacuous. Returns the first error to show
+ * the model, or null to allow the done.
+ */
+export function stepTypecheckGate(
+  failures: ReadonlyMap<string, string>,
+  stepDescription: string,
+): string | null {
+  if (failures.size === 0) return null;
+  const projectError = failures.get("");
+  if (projectError) return projectError;
+  const stepTokens = extractFileLikeTokens(stripUrls(stepDescription)).map((p) =>
+    normalizeBrokenPath(p).toLowerCase(),
+  );
+  if (stepTokens.length === 0) return null;
+  for (const [file, err] of failures) {
+    const f = normalizeBrokenPath(file).toLowerCase();
+    if (stepTokens.some((tok) => f.endsWith(tok) || tok.endsWith(f))) return err;
+  }
+  return null;
 }
 
 /**
@@ -263,6 +335,20 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       );
       if (hasTypeError) {
         deps.stuckDetector.recordToolError(call.name, toolText.slice(0, 300));
+      }
+      // Track compile failures per-file so the plan done-gate can refuse
+      // "done" while the last edit still doesn't compile (observed: the agent
+      // marked plan steps done while the project typecheck failed on every
+      // write — a "fix it later" cascade). A CLEAN result clears the map: the
+      // debounced project tsc re-ran and passed (or no tsconfig applies), so
+      // old failures must not block completion forever.
+      if (call.name === "write_file" || call.name === "edit_file") {
+        const broken = extractBrokenFiles(toolText);
+        if (broken.length > 0) {
+          for (const b of broken) deps.state.typecheckFailures.set(b.file, b.error);
+        } else if (result.success) {
+          deps.state.typecheckFailures.clear();
+        }
       }
       if (!result.success) {
         // Hard stop for forbidden Windows commands: after the second

@@ -32,6 +32,29 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
+  it("exposes live sessionId/sessionContext that follow a session switch", async () => {
+    // Regression (ses_msyghz8w): toolCtx.sessionId was captured once at
+    // bootstrap, so after a REPL /new or /resume the new session's audit
+    // entries were tagged with the PREVIOUS session id (observed:
+    // ses_msyghz8w/audit.jsonl carrying ses_msyg892p_78kqhc). The getters
+    // must read the session manager live.
+    const dir = tempDir();
+    try {
+      const { toolCtx, sessionManager } = await bootstrap(dir, dir);
+      const first = sessionManager.getActiveMeta()!.id;
+      expect(first).toBeTruthy();
+      expect(toolCtx.sessionId).toBe(first);
+
+      sessionManager.create();
+      const second = sessionManager.getActiveMeta()!.id;
+      expect(second).not.toBe(first);
+      expect(toolCtx.sessionId).toBe(second);
+      expect(toolCtx.sessionContext?.sessionId).toBe(second);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("advertises Bun as the runtime for TypeScript scripts", () => {
     const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32 shell=cmd");
     expect(info).toContain("Bun is available");
