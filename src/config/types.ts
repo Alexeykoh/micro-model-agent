@@ -125,6 +125,30 @@ export interface NetworkSecurityConfig {
   maxResponseSize: number;
 }
 
+/**
+ * Master switch for the web search capability. When enabled=false the
+ * web_search tool replies "disabled" and the automatic error search
+ * (errorWebSearch) never fires — the feature is tied to this switch.
+ */
+export interface WebSearchConfig {
+  enabled: boolean;
+}
+
+export interface ErrorWebSearchConfig {
+  /** Independent switch for the auto error-search feature itself. */
+  enabled: boolean;
+  /** Same error signature repetition count that triggers the search (5). */
+  threshold: number;
+  /** Number of results injected into the context (5). */
+  maxResults: number;
+  /** Maximum length of the generated search query (200). */
+  maxQueryChars: number;
+  /** Session cap on automatic error searches (3). */
+  maxSearchesPerSession: number;
+  /** Network request timeout for the search in ms (10000). */
+  requestTimeoutMs: number;
+}
+
 export interface RateLimitConfig {
   maxRequestsPerMinute: number;
   maxParallelTasks: number;
@@ -235,6 +259,8 @@ export interface AppConfig {
   locale: string;
   session: SessionConfig;
   browser: BrowserToolConfig;
+  webSearch?: WebSearchConfig;
+  errorWebSearch?: ErrorWebSearchConfig;
   ui: UiConfig;
   mcpServers: Record<string, MCPServerConfigEntry>;
   security?: SecurityConfig;

@@ -81,6 +81,17 @@ export const DEFAULTS: AppConfig = {
     viewportHeight: 720,
     navigationTimeout: 15000,
   },
+  webSearch: {
+    enabled: true,
+  },
+  errorWebSearch: {
+    enabled: true,
+    threshold: 5,
+    maxResults: 5,
+    maxQueryChars: 200,
+    maxSearchesPerSession: 3,
+    requestTimeoutMs: 10000,
+  },
   ui: {
     spinner: true,
     toolStyle: "inline",

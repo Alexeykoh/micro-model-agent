@@ -45,6 +45,18 @@ describe("subagent defaults", () => {
   });
 });
 
+describe("web search defaults", () => {
+  it("enables web search and error web search by default", () => {
+    expect(DEFAULTS.webSearch?.enabled).toBe(true);
+    expect(DEFAULTS.errorWebSearch?.enabled).toBe(true);
+    expect(DEFAULTS.errorWebSearch?.threshold).toBe(5);
+    expect(DEFAULTS.errorWebSearch?.maxResults).toBe(5);
+    expect(DEFAULTS.errorWebSearch?.maxQueryChars).toBe(200);
+    expect(DEFAULTS.errorWebSearch?.maxSearchesPerSession).toBe(3);
+    expect(DEFAULTS.errorWebSearch?.requestTimeoutMs).toBe(10000);
+  });
+});
+
 describe("loadConfig", () => {
   const tmpDirs: string[] = [];
 
