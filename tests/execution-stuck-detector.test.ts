@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { StuckDetector, classifyError } from "../src/modules/execution/stuck-detector";
+import {
+  StuckDetector,
+  classifyError,
+  isSearchableError,
+  buildSearchQuery,
+  normalizeErrorSignature,
+} from "../src/modules/execution/stuck-detector";
 
 describe("StuckDetector", () => {
   let detector: StuckDetector;
@@ -431,5 +437,123 @@ describe("StuckDetector read-without-write loop detection", () => {
     expect(detector.hasReadOnlyLoop()).toBe(true);
     detector.setCurrentStep(2, "next step");
     expect(detector.hasReadOnlyLoop()).toBe(false);
+  });
+});
+
+describe("StuckDetector error signature counting", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3, 5);
+  });
+
+  it("returns null before the threshold", () => {
+    for (let i = 0; i < 4; i++) {
+      detector.recordToolError("bash", "error TS2322: not assignable");
+    }
+    expect(detector.getRepeatedErrorSignature()).toBeNull();
+  });
+
+  it("returns the signature at the threshold with its count", () => {
+    for (let i = 0; i < 5; i++) {
+      detector.recordToolError("bash", "error TS2322: not assignable");
+    }
+    const sig = detector.getRepeatedErrorSignature();
+    expect(sig).toContain("bash::");
+    expect(sig).toContain("TS2322");
+    expect(detector.getErrorSignatureCount(sig!)).toBe(5);
+  });
+
+  it("does not merge different errors of the same tool", () => {
+    for (let i = 0; i < 5; i++) detector.recordToolError("bash", "error TS2322: A");
+    for (let i = 0; i < 5; i++) detector.recordToolError("bash", "error TS1005: B");
+    expect(detector.getRepeatedErrorSignature()).toContain("TS2322");
+  });
+
+  it("normalizes paths, line locations and ANSI codes", () => {
+    const a = normalizeErrorSignature("bash", "\x1b[31merror TS2322: at C:\\proj\\src\\a.ts:12:34");
+    const b = normalizeErrorSignature("bash", "error TS2322: at D:\\other\\src\\b.ts:99:1");
+    expect(a).toBe(b);
+    expect(a).toContain("TS2322");
+  });
+
+  it("returns null for empty output", () => {
+    expect(normalizeErrorSignature("bash", "")).toBeNull();
+    expect(normalizeErrorSignature("bash", undefined)).toBeNull();
+  });
+
+  it("marks a signature as searched and unmarks it for retry", () => {
+    for (let i = 0; i < 5; i++) detector.recordToolError("bash", "error TS2322");
+    const sig = detector.getRepeatedErrorSignature()!;
+    detector.markErrorSearched(sig);
+    expect(detector.hasErrorSearched(sig)).toBe(true);
+    expect(detector.getRepeatedErrorSignature()).toBeNull();
+    detector.unmarkErrorSearched(sig);
+    expect(detector.getRepeatedErrorSignature()).toBe(sig);
+  });
+
+  it("clears signature counts and searched flags on step change", () => {
+    for (let i = 0; i < 5; i++) detector.recordToolError("bash", "error TS2322");
+    const sig = detector.getRepeatedErrorSignature()!;
+    detector.markErrorSearched(sig);
+    detector.setCurrentStep(2, "next step");
+    expect(detector.getRepeatedErrorSignature()).toBeNull();
+    expect(detector.hasErrorSearched(sig)).toBe(false);
+  });
+});
+
+describe("StuckDetector isSearchableError", () => {
+  it("accepts real error text", () => {
+    expect(isSearchableError("error TS2322: Type 'string' not assignable")).toBe(true);
+    expect(isSearchableError("ERR_MODULE_NOT_FOUND: Cannot find module")).toBe(true);
+    expect(isSearchableError("ENOENT: no such file or directory")).toBe(true);
+    expect(isSearchableError("TypeError: Cannot read properties of undefined")).toBe(true);
+    expect(isSearchableError("panic: runtime error")).toBe(true);
+  });
+
+  it("rejects empty and trivial output", () => {
+    expect(isSearchableError("")).toBe(false);
+    expect(isSearchableError("   ")).toBe(false);
+    expect(isSearchableError("Command failed with exit code 1")).toBe(false);
+    expect(isSearchableError("Process finished with exit code 1")).toBe(false);
+  });
+});
+
+describe("StuckDetector buildSearchQuery", () => {
+  it("uses up to 3 error lines and strips paths", () => {
+    const q = buildSearchQuery(
+      "run tests",
+      "bun run test",
+      "src/a.ts:12:34 error TS2322: X\nC:\\proj\\src\\b.ts:1:2 error TS1005: Y",
+      "bash",
+      200,
+    );
+    expect(q).not.toContain("C:\\proj");
+    expect(q).toContain("TS2322");
+    expect(q).toContain("how to fix");
+  });
+
+  it("adds runtime and framework from the step/bash context", () => {
+    const q = buildSearchQuery(
+      "install react app",
+      "npm run build",
+      "error: not found",
+      "bash",
+      200,
+    );
+    expect(q.toLowerCase()).toContain("npm");
+    expect(q.toLowerCase()).toContain("react");
+    expect(q.toLowerCase()).toContain("how to fix");
+  });
+
+  it("falls back to tool + step when error text is empty", () => {
+    const q = buildSearchQuery("fix the failing build", "", "", "bash", 200);
+    expect(q).toContain("bash");
+    expect(q).toContain("fix the failing build");
+  });
+
+  it("caps the query length", () => {
+    const q = buildSearchQuery("x", "y", "error TS2322: " + "very long ".repeat(100), "bash", 50);
+    expect(q.length).toBeLessThanOrEqual(50);
   });
 });
