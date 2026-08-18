@@ -2,24 +2,6 @@ import { describe, it, expect } from "vitest";
 import { PlanCreator } from "../src/modules/execution/planner";
 
 describe("PlanCreator", () => {
-  it("should detect multi-step task by file count", () => {
-    expect(PlanCreator.isMultiStep("create src/a.ts and src/b.ts")).toBe(true);
-  });
-
-  it("should detect multi-step by word count with action words", () => {
-    expect(
-      PlanCreator.isMultiStep("implement OAuth authentication with JWT tokens and refresh flow"),
-    ).toBe(true);
-  });
-
-  it("should return false for simple queries", () => {
-    expect(PlanCreator.isMultiStep("what is 2+2?")).toBe(false);
-  });
-
-  it("should return false for single file mention", () => {
-    expect(PlanCreator.isMultiStep("read src/index.ts")).toBe(false);
-  });
-
   it("should create a plan structure", () => {
     const plan = PlanCreator.createPlan(
       "implement login",

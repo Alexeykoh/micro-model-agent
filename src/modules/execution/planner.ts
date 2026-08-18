@@ -38,27 +38,6 @@ function generatePlanId(): string {
 }
 
 export class PlanCreator {
-  static isMultiStep(task: string): boolean {
-    const fileCount = (task.match(/\b[\w./-]+\.[a-z]+\b/gi) || []).length;
-    if (fileCount > 1) return true;
-
-    const actionWords = [
-      "implement",
-      "create",
-      "add",
-      "build",
-      "setup",
-      "configure",
-      "write",
-      "make",
-      "develop",
-    ];
-    const words = task.split(/\s+/);
-    const hasActionWord = actionWords.some((w) => task.toLowerCase().includes(w));
-
-    return hasActionWord && words.length > 8;
-  }
-
   static createPlan(
     title: string,
     stepDescriptions: string[],
@@ -85,16 +64,21 @@ export class PlanCreator {
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
     const totalSteps = kept.length + newSteps.length;
-    const added: PlanStep[] = newSteps.map((desc, i) => ({
-      id: kept.length + i + 1,
+    const added: PlanStep[] = newSteps.map((desc) => ({
+      id: -1, // renumbered below
       description: desc,
       status: "pending" as StepStatus,
       kind: "create",
     }));
+    // Renumber every step (kept + added) sequentially. Kept steps keep their
+    // status and kind but may collide with the added ids when the original
+    // plan skipped/pending steps in the middle (e.g. done 1, done 3 → kept
+    // [1,3], added [2…] collides with kept id 3).
+    const steps = [...kept, ...added].map((s, i) => ({ ...s, id: i + 1 }));
     return {
       id: plan.id,
       title: `[${totalSteps}] ${newTitle}`,
-      steps: [...kept, ...added],
+      steps,
       createdAt: plan.createdAt,
       baseDir: plan.baseDir,
       name: plan.name,
@@ -103,10 +87,15 @@ export class PlanCreator {
 
   static toPromptBlock(plan: Plan, currentStepIndex: number): string {
     const date = plan.createdAt.slice(0, 10);
+    const doneCount = plan.steps.filter((s) => s.status === "done").length;
+    const terminal = plan.steps.every((s) => s.status === "done" || s.status === "skipped");
+    const progress = terminal
+      ? `${doneCount}/${plan.steps.length} done, complete`
+      : `${doneCount}/${plan.steps.length} done, current: step ${currentStepIndex + 1}`;
     const lines: string[] = [
       `[${plan.id}] ${plan.title}`,
       `Dir: ${plan.baseDir}`,
-      `Created: ${date} | Progress: ${plan.steps.filter((s) => s.status === "done").length}/${plan.steps.length} done, current: step ${currentStepIndex + 1}`,
+      `Created: ${date} | Progress: ${progress}`,
       ``,
     ];
     for (const step of plan.steps) {

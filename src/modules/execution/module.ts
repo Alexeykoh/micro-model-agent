@@ -56,6 +56,13 @@ export class ExecutionModule implements AgentModule {
   // one chance to change the subject before the audit gate locks in.
   private _auditSkipsRemaining = 0;
   /**
+   * The last plan that was COMPLETED and auto-archived. `plan update` on the
+   * final step clears the tracker, which used to make runFinalAudit() return
+   * null and silently skip the final audit (tests + tsc + file checks) for a
+   * finished task. Keep the completed plan so the audit gate still runs.
+   */
+  private completedPlan: Plan | null = null;
+  /**
    * Deferred <system-summary> messages. Injected by onBeforeTool/onAfterTool
    * but flushed in onBeforeThink, so they never land between an assistant
    * tool_call message and its tool results (which breaks message pairing and
@@ -85,6 +92,8 @@ export class ExecutionModule implements AgentModule {
     lastStepId: -1,
     stuckNotified: false,
     depsGateHints: new Map<number, number>(),
+    mutationsWithoutPlan: 0,
+    planNudgeSent: false,
   };
 
   /**
@@ -128,8 +137,24 @@ export class ExecutionModule implements AgentModule {
 
   setPlan(plan: Plan): void {
     this.tracker = new PlanTracker(plan);
+    // Advance the pointer past any done/skipped steps of a restored/replanned
+    // plan so display ("current: step N") and the off-track alignment match
+    // reality instead of always pointing at step 1.
+    this.tracker.syncCurrentStep();
     this.store.saveActive(plan);
+    this.completedPlan = null; // a new plan supersedes the completed one
     this._auditSkipsRemaining = 0; // plan explicitly created — arm the audit gate
+  }
+
+  /** Remember the last completed plan so the final audit can still verify it
+   *  after the tracker was cleared by the auto-archive. */
+  recordCompleted(plan: Plan): void {
+    this.completedPlan = plan;
+  }
+
+  /** Forget the completed plan (abort/delete/purge — nothing left to audit). */
+  clearCompleted(): void {
+    this.completedPlan = null;
   }
 
   restorePlan(): boolean {
@@ -240,7 +265,27 @@ export class ExecutionModule implements AgentModule {
     missingFiles: string[];
     summary: string;
   } | null> {
-    if (!this.tracker) return null;
+    // No active tracker: audit the last completed plan instead of bailing.
+    // A plan finished via `plan update` auto-archives and clears the tracker;
+    // without this the final audit (tests + tsc + file checks) was silently
+    // skipped and the model could declare success on broken artifacts.
+    if (!this.tracker) {
+      if (!this.completedPlan) return null;
+      const plan = this.completedPlan;
+      const audit = await this.auditor.audit(plan);
+      const pendingSteps = plan.steps.flatMap((s) =>
+        s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
+      );
+      const done = plan.steps.filter((s) => s.status === "done").length;
+      return {
+        passed: audit.passed && pendingSteps.length === 0,
+        done,
+        total: plan.steps.length,
+        pendingSteps,
+        missingFiles: audit.missingFiles,
+        summary: audit.summary,
+      };
+    }
     if (this._auditSkipsRemaining > 0) {
       this._auditSkipsRemaining--;
       return null;
@@ -301,6 +346,9 @@ export class ExecutionModule implements AgentModule {
       trackerRef: this.trackerRef,
       preserveActive: () => this.preserveActive(),
       setPlan: (p) => this.setPlan(p),
+      recordCompleted: (p) => this.recordCompleted(p),
+      clearCompleted: () => this.clearCompleted(),
+      hasStepDeliverables: (s) => this.hasStepDeliverables(s),
       missingStepDeliverables: (s) => this.missingStepDeliverables(s),
       stillExistingDeliverables: (s) => this.stillExistingDeliverables(s),
       parseKinds: (a, st) => this.parseKinds(a, st),
@@ -355,7 +403,11 @@ export class ExecutionModule implements AgentModule {
     );
     if (stepPaths.length === 0) return null;
 
-    const argStr = JSON.stringify(call.arguments);
+    // Only path-ish arguments are inspected. JSON-stringifying the whole args
+    // blob made write_file/edit_file `content` feed its code tokens into the
+    // off-path check (e.g. `import "./styles.css"` inside the file body) and
+    // raised phantom alignment warnings for on-track writes.
+    const argStr = this.pathArgStrings(call.arguments).join(" ");
     const callPaths = extractFileLikeTokens(stripUrls(argStr)).map((p) => p.toLowerCase());
 
     if (callPaths.length === 0) return null;
@@ -388,6 +440,29 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
+  /** String values of the path-like arguments of a tool call. Limits the
+   *  off-path alignment check to arguments that actually name files (path,
+   *  file, dir, src, dst, source, target, input, output, destination, glob,
+   *  workdir, cwd, command, pattern) and never scans payload content. */
+  private pathArgStrings(args: Record<string, unknown> | undefined): string[] {
+    if (!args) return [];
+    const out: string[] = [];
+    for (const [key, value] of Object.entries(args)) {
+      if (
+        !/path|file|dir|src|dst|source|target|input|output|destination|glob|workdir|cwd|command|pattern|query/i.test(
+          key,
+        )
+      ) {
+        continue;
+      }
+      if (typeof value === "string") out.push(value);
+      else if (Array.isArray(value)) {
+        for (const v of value) if (typeof v === "string") out.push(v);
+      }
+    }
+    return out;
+  }
+
   private advancePlanIfStepComplete(
     contextManager?: any,
     sessionLog?: {
@@ -404,12 +479,14 @@ export class ExecutionModule implements AgentModule {
     // files to delete still exist (the raw regex path did exactly that).
     const stepPaths = extractFileLikeTokens(stripUrls(step.description)) || [];
 
-    // Step gate: verify dependencies when mentioned — check BEFORE file paths
+    // Step gate: verify dependencies when mentioned — check BEFORE file paths.
+    // Requires an actual package-manager verb (rule #10 — no bare keyword
+    // matching: "init" alone or "setup project" must NOT trigger the lockfile
+    // hint, only concrete dependency-install commands do).
     const isDepsStep =
-      stepText.includes("install") ||
-      stepText.includes("зависим") ||
-      stepText.includes("init") ||
-      stepText.includes("инициализац");
+      /(?:npm|bun|yarn|pnpm|pip|pip3|pipenv|poetry|composer|deno|go|gem|cargo)\s+(?:install|add|init|i|get)\b|bun\s+(?:add|install)|npm\s+(?:i|install|add)|(?:install|установ\w*)\s+(?:dependencies|зависимост\w*|пакет\w*|packages?)/i.test(
+        stepText,
+      );
     if (isDepsStep) {
       const lockFiles = [
         "package-lock.json",
@@ -446,22 +523,30 @@ export class ExecutionModule implements AgentModule {
 
     if (stepPaths.length === 0) return;
 
-    const allExist = stepPaths.every((p) => existsSync(resolve(this.baseDir, p)));
-    const allGone = stepPaths.every((p) => !existsSync(resolve(this.baseDir, p)));
+    // Resolve tokens with the SAME subtree walk the deliverable gate and the
+    // auditor use (findExistingFile), so a nested file
+    // ("bicycle-shop/src/bicycles.ts" for token "src/bicycles.ts") counts as
+    // present. The old exact existsSync(resolve()) never matched nested
+    // projects, so auto-advance stayed silent even after the model wrote the
+    // real file.
+    const resolved = stepPaths.map((p) => findExistingFile(this.baseDir, p));
+    const allExist = resolved.every((r) => r !== null);
+    const allGone = resolved.every((r) => r === null);
     const satisfied = step.kind === "delete" ? allGone && !allExist : allExist;
     if (!satisfied) return;
 
     // Step gate: verify files have content (not empty)
     if (step.kind !== "delete") {
       const emptyFiles: string[] = [];
-      for (const p of stepPaths) {
+      for (const r of resolved) {
+        if (!r) continue;
         try {
-          const content = readFileSync(resolve(this.baseDir, p), "utf-8");
+          const content = readFileSync(r, "utf-8");
           if (content.trim().length < 10) {
-            emptyFiles.push(p);
+            emptyFiles.push(r);
           }
         } catch {
-          // If we can't read it, rely on existsSync result
+          // If we can't read it, rely on the existence result
         }
       }
 
@@ -507,6 +592,7 @@ export class ExecutionModule implements AgentModule {
     if (this.tracker?.isComplete()) {
       const completed = this.tracker.getPlan();
       this.store.archivePlan(completed);
+      this.recordCompleted(completed); // final audit still verifies it
       this.tracker = null;
       sessionLog?.plan("auto-archive", `Plan ${completed.id} complete — archived`);
     }
@@ -535,6 +621,13 @@ export class ExecutionModule implements AgentModule {
     const tokens = extractFileLikeTokens(stripUrls(step.description));
     if (tokens.length === 0) return [];
     return tokens.filter((p) => findExistingFile(this.baseDir, p));
+  }
+
+  /** Whether a step description names at least one real file token. Steps
+   *  with no file tokens (pure commands, verification runs) cannot be
+   *  auto-verified — the done-gate is vacuous for them. */
+  private hasStepDeliverables(step: { description: string }): boolean {
+    return extractFileLikeTokens(stripUrls(step.description)).length > 0;
   }
 
   /**

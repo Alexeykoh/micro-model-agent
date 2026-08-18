@@ -176,4 +176,46 @@ export class PlanStore {
     if (archived) return { plan: archived, status: "archived" };
     return null;
   }
+
+  // ---- Deletion (the user asked for plans to actually go away) ----
+
+  /** Permanently delete a plan wherever it lives. Returns its status, or null
+   *  when no plan with that id exists. */
+  deletePlan(id: string): PlanStatus | null {
+    const active = this.loadActive();
+    if (active && active.id === id) {
+      this.clearActive();
+      return "active";
+    }
+    const draftPath = join(this.draftsDir, `${id}.json`);
+    if (existsSync(draftPath)) {
+      rmSync(draftPath, { force: true });
+      return "draft";
+    }
+    const archivedPath = join(this.archiveDir, `${id}.json`);
+    if (existsSync(archivedPath)) {
+      rmSync(archivedPath, { force: true });
+      return "archived";
+    }
+    return null;
+  }
+
+  /** Delete every plan (active, drafts, archive). Returns the number removed. */
+  purgeAll(): number {
+    let n = 0;
+    const active = this.loadActive();
+    if (active) {
+      this.clearActive();
+      n++;
+    }
+    for (const p of this.listDrafts()) {
+      this.removeDraft(p.id);
+      n++;
+    }
+    for (const p of this.listArchived()) {
+      this.removeArchived(p.id);
+      n++;
+    }
+    return n;
+  }
 }

@@ -12,6 +12,12 @@ export interface PlanToolDeps {
   trackerRef: { current: PlanTracker | null };
   preserveActive(): void;
   setPlan(plan: Plan): void;
+  /** Remember a completed plan so the final audit can still verify it after
+   *  the tracker is cleared by the auto-archive. */
+  recordCompleted(plan: Plan): void;
+  /** Forget the completed plan (abort/delete/purge). */
+  clearCompleted(): void;
+  hasStepDeliverables(step: { description: string }): boolean;
   missingStepDeliverables(step: { description: string }): string[];
   stillExistingDeliverables(step: { description: string }): string[];
   parseKinds(
@@ -34,13 +40,23 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       name: "plan",
       alwaysOn: true,
       description:
-        'Create, update, show, abort, list, switch, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive current plan and clear active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- For steps that REMOVE files, pass kinds: ["delete"] aligned with steps (the done-gate verifies those files are gone instead of demanding they exist).',
+        'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- For steps that REMOVE files, pass kinds: ["delete"] aligned with steps (the done-gate verifies those files are gone instead of demanding they exist).',
       parameters: {
         type: "object",
         properties: {
           action: {
             type: "string",
-            enum: ["create", "update", "show", "abort", "list", "switch", "re-plan"],
+            enum: [
+              "create",
+              "update",
+              "show",
+              "abort",
+              "list",
+              "switch",
+              "re-plan",
+              "delete",
+              "purge",
+            ],
           },
           title: { type: "string" },
           steps: { type: "array", items: { type: "string" } },
@@ -70,6 +86,8 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             const namePart = m.name ? ` (${m.name})` : "";
             return `${icon} ${m.id}${namePart} — ${m.title}  ${m.doneCount}/${m.stepCount}`;
           });
+          lines.push("");
+          lines.push(t("plan.list_legend"));
           return {
             success: true,
             output: `${t("plan.list_header")}\n${lines.join("\n")}`,
@@ -88,6 +106,19 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
               output: t("plan.not_found", { id: planId }),
             };
           }
+          // Switching to the plan that is already active must be a no-op, not
+          // a duplicate (observed: switch on the active plan preserved the
+          // active.json and re-set the same plan, leaving two copies).
+          if (found.status === "active") {
+            return {
+              success: true,
+              output: t("plan.already_active", {
+                id: found.plan.id,
+                title: found.plan.title,
+              }),
+              display: deps.trackerRef.current?.toPromptBlock(),
+            };
+          }
           deps.preserveActive();
           if (found.status === "draft") {
             deps.store.removeDraft(found.plan.id);
@@ -95,7 +126,10 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             deps.store.removeArchived(found.plan.id);
           }
           deps.setPlan(found.plan);
-          const display = PlanCreator.toPromptBlock(found.plan, 0);
+          // Display from the tracker (setPlan syncs the pointer past any
+          // done/skipped steps) so "current: step N" points at the first
+          // pending step of the switched-to plan, not always step 1.
+          const display = deps.trackerRef.current?.toPromptBlock();
           return {
             success: true,
             output: t("plan.switched", {
@@ -123,7 +157,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           );
           const keptCount = replanned.steps.length - newSteps.length;
           deps.setPlan(replanned);
-          const display = PlanCreator.toPromptBlock(replanned, keptCount);
+          const display = deps.trackerRef.current?.toPromptBlock();
           return {
             success: true,
             output: t("plan.replanned", {
@@ -255,6 +289,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           if (tracker.isComplete()) {
             const plan = tracker.getPlan();
             deps.store.archivePlan(plan);
+            deps.recordCompleted(plan); // final audit still verifies it
             deps.trackerRef.current = null;
             const done = plan.steps.filter((s) => s.status === "done").length;
             return {
@@ -341,21 +376,35 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           tracker.syncCurrentStep();
           deps.store.saveActive(tracker.getPlan());
 
+          // A "done" step that names no file tokens has a vacuous gate — its
+          // completion cannot be auto-verified. Inform the model instead of
+          // silently accepting a claim it cannot check (the auto-advance path
+          // also cannot verify it, so the model should run an explicit check
+          // command before finalizing).
+          const vacuousGate = status === "done" && !deps.hasStepDeliverables(target);
+          const vacuousNote = vacuousGate
+            ? `\n${t("plan.no_deliverables", { step: String(stepId) })}`
+            : "";
+
           // If this update completed the last step → auto-archive. This breaks
           // the loop where a finished plan stays active and anchors the model
           // to "continue step N, do NOT create a new plan".
           if (tracker.isComplete()) {
             const plan = tracker.getPlan();
             deps.store.archivePlan(plan);
+            deps.recordCompleted(plan); // final audit still verifies it
             deps.trackerRef.current = null;
             const done = plan.steps.filter((s) => s.status === "done").length;
             return {
               success: true,
-              output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${t("plan.completed_archived", {
-                id: plan.id,
-                done: String(done),
-                total: String(plan.steps.length),
-              })}`,
+              output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${t(
+                "plan.completed_archived",
+                {
+                  id: plan.id,
+                  done: String(done),
+                  total: String(plan.steps.length),
+                },
+              )}${vacuousNote}`,
             };
           }
 
@@ -367,7 +416,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           );
           return {
             success: true,
-            output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}`,
+            output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}${vacuousNote}`,
             display,
           };
         }
@@ -386,7 +435,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           }
           const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? []);
           deps.setPlan(plan);
-          const display = PlanCreator.toPromptBlock(plan, 0);
+          const display = deps.trackerRef.current?.toPromptBlock();
           const output = t("plan.updated", {
             title,
             steps: String(steps.length),
@@ -398,13 +447,76 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           };
         }
         if (action === "abort") {
-          const tracker = deps.trackerRef.current;
-          if (tracker) {
-            deps.store.archivePlan(tracker.getPlan());
+          const planId = args.id ? String(args.id) : "";
+          if (planId) {
+            // Abort a SPECIFIC plan (not the active one). Draft → archive,
+            // active → archive + clear tracker. Archived plans are already
+            // terminal — there is nothing to abort.
+            const found = deps.store.find(planId);
+            if (!found) {
+              return {
+                success: false,
+                output: t("plan.not_found", { id: planId }),
+              };
+            }
+            if (found.status === "archived") {
+              return {
+                success: false,
+                output: t("plan.already_archived", { id: planId }),
+              };
+            }
+            deps.store.archivePlan(found.plan); // clears active if it was active
+            if (found.status === "active") {
+              deps.trackerRef.current = null;
+              deps.clearCompleted();
+            }
+            return {
+              success: true,
+              output: t("plan.aborted_id", { id: found.plan.id }),
+            };
           }
+          const tracker = deps.trackerRef.current;
+          if (!tracker) {
+            // Abort with no active plan and no id — previously returned
+            // success:true, which made the model believe it aborted a plan
+            // that did not exist (observed: 3× abort on an empty list).
+            return { success: false, output: t("plan.no_active") };
+          }
+          deps.store.archivePlan(tracker.getPlan());
           deps.trackerRef.current = null;
           deps.store.clearActive();
+          deps.clearCompleted();
           return { success: true, output: t("plan.aborted") };
+        }
+        if (action === "delete") {
+          const planId = String(args.id || "");
+          if (!planId) {
+            return { success: false, output: t("plan.delete_no_id") };
+          }
+          const deleted = deps.store.deletePlan(planId);
+          if (!deleted) {
+            return {
+              success: false,
+              output: t("plan.not_found", { id: planId }),
+            };
+          }
+          if (deleted === "active") {
+            deps.trackerRef.current = null;
+            deps.clearCompleted();
+          }
+          return {
+            success: true,
+            output: t("plan.deleted", { id: planId }),
+          };
+        }
+        if (action === "purge") {
+          const count = deps.store.purgeAll();
+          deps.trackerRef.current = null;
+          deps.clearCompleted();
+          return {
+            success: true,
+            output: t("plan.purged", { count: String(count) }),
+          };
         }
         if (!deps.trackerRef.current) {
           return { success: false, output: t("plan.no_active") };

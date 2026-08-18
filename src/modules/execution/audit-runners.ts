@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import type { Dirent } from "fs";
 import { dirname, join, resolve } from "path";
 import type { Plan } from "./planner";
@@ -19,8 +19,57 @@ export const SKIP_DIRS = new Set([
 ]);
 
 const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
+const PY_TEST_RE = /^test_.*\.py$|^.*_test\.py$/i;
 const TEST_STEP_RE =
   /\b(test(ing|s)?|тест(ы|ирование|ировать)?|провер\w*\s+тест|запустить\s+тест)\b|bun test|npm test|vitest|pytest|go test|jest|mocha/i;
+
+/**
+ * Resolve the project's test command from its manifest, so the final audit
+ * actually runs the runner the project uses instead of always assuming
+ * `bun test` (a Python or Go project, or a vitest/jest setup, would fail or
+ * silently produce no summary under bun test).
+ *
+ * Priority: package.json scripts.test → test-framework config files → Python
+ * markers (pyproject/pytest.ini/conftest.py) → go.mod → Cargo.toml → bun.
+ */
+export function resolveTestCommand(dir: string): string {
+  const pkgPath = join(dir, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      const script = pkg?.scripts?.test;
+      if (typeof script === "string" && script.trim()) return script.trim();
+    } catch {
+      /* invalid package.json — fall through */
+    }
+  }
+  for (const f of [
+    "vitest.config.ts",
+    "vitest.config.js",
+    "vitest.config.mjs",
+    "jest.config.js",
+    "jest.config.ts",
+    "jest.config.mjs",
+    "jest.config.cjs",
+    "bunfig.toml",
+  ]) {
+    if (existsSync(join(dir, f))) {
+      if (f.startsWith("vitest")) return "bunx vitest run";
+      if (f.startsWith("jest")) return "npx --no-install jest";
+      if (f === "bunfig.toml") return "bun test";
+    }
+  }
+  if (
+    existsSync(join(dir, "pyproject.toml")) ||
+    existsSync(join(dir, "pytest.ini")) ||
+    existsSync(join(dir, "conftest.py"))
+  ) {
+    return "python -m pytest -q";
+  }
+  if (existsSync(join(dir, "go.mod"))) return "go test ./...";
+  if (existsSync(join(dir, "Cargo.toml"))) return "cargo test";
+  return "bun test";
+}
 
 export interface TestRunCheck {
   /** Whether a real test run was executed at all. */
@@ -49,7 +98,7 @@ export function findTestFile(dir: string, depth = 0): string | null {
       if (SKIP_DIRS.has(e.name)) continue;
       const found = findTestFile(full, depth + 1);
       if (found) return found;
-    } else if (TEST_EXT_RE.test(e.name)) {
+    } else if (TEST_EXT_RE.test(e.name) || PY_TEST_RE.test(e.name)) {
       return full;
     }
   }
@@ -73,7 +122,8 @@ function extractFailingNames(output: string, limit = 5): string[] {
 }
 
 export async function runTests(baseDir: string): Promise<TestRunCheck> {
-  const entry = processRegistry.start("bun test", baseDir);
+  const command = resolveTestCommand(baseDir);
+  const entry = processRegistry.start(command, baseDir);
   const exited = await processRegistry.waitForExit(entry.id, 90_000);
   const output = entry.log.join("\n");
   processRegistry.remove(entry.id);
@@ -85,8 +135,8 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
       passed: true, // don't block completion on an inconclusive run
       failed: 0,
       passedCount: 0,
-      detail: "test run timed out after 90s — result unknown",
-      command: "bun test",
+      detail: `test run timed out after 90s — result unknown`,
+      command,
     };
   }
 
@@ -102,7 +152,7 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
       failed: entry.exitCode === 0 ? 0 : 1,
       passedCount: 0,
       detail: output.slice(0, 200).trim(),
-      command: "bun test",
+      command,
     };
   }
 
@@ -115,7 +165,7 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
     detail: names.length
       ? names.join("; ")
       : run.summary || `${run.failed} failed / ${run.passed} passed`,
-    command: "bun test",
+    command,
   };
 }
 

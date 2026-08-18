@@ -15,6 +15,10 @@ import { platform } from "os";
 export const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
 const FORCE_SKIP_THRESHOLD = 10;
+/** How many file-mutating tool calls (write/edit/bash/download) without an
+ *  active plan trigger the plan-creation nudge. Evidence-based (rule #10):
+ *  the agent is clearly working on files, so a plan is warranted. */
+const PLAN_NUDGE_THRESHOLD = 2;
 
 /**
  * Mutable state the plugin writes into. The module OWNS this object and passes
@@ -26,6 +30,10 @@ export interface ExecutionPluginState {
   lastStepId: number;
   stuckNotified: boolean;
   depsGateHints: Map<number, number>;
+  /** write/edit/bash/download calls made while NO plan is active. */
+  mutationsWithoutPlan: number;
+  /** Whether the plan-creation nudge has already been injected. */
+  planNudgeSent: boolean;
 }
 
 export interface ExecutionPluginDeps {
@@ -71,6 +79,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         deps.state.consecutivePlanWarnings = 0;
         deps.state.lastStepId = -1;
         deps.state.stuckNotified = false;
+        deps.state.mutationsWithoutPlan = 0;
+        deps.state.planNudgeSent = false;
       } else {
         const step = deps.trackerRef.current?.getCurrentStep();
         if (deps.trackerRef.current && step) {
@@ -81,23 +91,31 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           }
           deps.stuckDetector.setCurrentStep(step.id, step.description);
           deps.stuckDetector.recordIteration(step.id);
+          // A plan is active — any mutation counter no longer applies.
+          deps.state.mutationsWithoutPlan = 0;
+          deps.state.planNudgeSent = false;
         } else {
           deps.stuckDetector.reset();
           deps.state.consecutivePlanWarnings = 0;
           deps.state.lastStepId = -1;
           deps.state.stuckNotified = false;
 
-          const iter: number = typeof ctx.iteration === "number" ? ctx.iteration : 0;
-          if (iter === 3 && !deps.trackerRef.current && ctx.contextManager) {
+          // Evidence-based plan nudge (rule #10 — no bare iteration counter,
+          // no keyword task classification): only after the agent actually
+          // made file-mutating tool calls (write/edit/bash/download) without
+          // a plan does the agent need a plan.
+          const mutations = deps.state.mutationsWithoutPlan;
+          if (
+            mutations >= PLAN_NUDGE_THRESHOLD &&
+            !deps.state.planNudgeSent &&
+            ctx.contextManager
+          ) {
+            deps.state.planNudgeSent = true;
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>You have made 3 tool calls without creating a plan. For any task that involves creating files, installing packages, or multiple steps — you MUST use plan create BEFORE continuing. Use the plan tool now with concrete steps (exact filenames, commands, deliverables). Do NOT make any more write/edit/bash calls until you have a plan.</system-summary>`,
-            });
-          }
-          if (iter >= 6 && !deps.trackerRef.current && ctx.contextManager) {
-            ctx.contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>STOP. ${iter} iterations without a plan. You MUST call plan create RIGHT NOW. No more tool calls until you create a plan.</system-summary>`,
+              content: `<system-summary>${t("exec.plan_nudge", {
+                count: String(mutations),
+              })}</system-summary>`,
             });
           }
         }
@@ -213,6 +231,17 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       const args = ctx?.args as Record<string, unknown>;
       if (toolName && args) {
         deps.stuckDetector.recordToolCall(toolName, args);
+        // Count file-mutating calls made with NO active plan — feeds the
+        // evidence-based plan-creation nudge in onBeforeThink.
+        if (
+          !deps.trackerRef.current &&
+          (toolName === "write_file" ||
+            toolName === "edit_file" ||
+            toolName === "bash" ||
+            toolName === "download_file")
+        ) {
+          deps.state.mutationsWithoutPlan++;
+        }
       }
     },
     onAfterTool: (ctx: any, call: any, result: any) => {

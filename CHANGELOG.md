@@ -5,13 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2026-08-18
+
+### Added
+
+- **`plan delete <id>` and `plan purge`** (`src/modules/execution/plan-tool.ts` + `plan-store.ts`): `delete` permanently removes a plan by id (active plan → tracker cleared, missing id → error), `purge` wipes every plan (active/drafts/archived) plus the tracker and completed-plan state. Fixes the post-mortem session where the "очисти все планы" task burned 21 iterations because the plan tool had no way to delete anything.
+- **`resolveTestCommand`** (`src/modules/execution/audit-runners.ts`): the final audit now runs the project's real test runner instead of always `bun test` — `package.json` `scripts.test` → vitest/jest/bunfig config files (detected independently of `package.json`) → `pyproject.toml`/`pytest.ini`/`conftest.py` → `go.mod` → `Cargo.toml` → `bun test` fallback. `findTestFile` also matches pytest files (`test_*.py`/`*_test.py`).
+
+### Fixed
+
+- **`plan abort` ignored `id`** — it always archived the active plan; now it archives the named plan (active or draft) and fails explicitly (`not found`/`already archived`/no active plan + no id) instead of returning `success:true` on an empty list.
+- **`plan switch` to the already-active plan** duplicated it (two `active` entries, same id); it is now a no-op (`plan.already_active`).
+- **Final audit skipped for a completed plan** — auto-archiving the last step cleared the tracker, so `runFinalAudit()` returned `null` and the agent declared success without checks. `ExecutionModule` now keeps `completedPlan` (set on both `plan update` completion and plugin auto-advance) and audits it when the tracker is null.
+- **Plan nudge fired on bare iteration counters** (`src/modules/execution/execution-plugin.ts`): the `iter===3`/`iter>=6` injections (rule #10 violation) are replaced with an evidence-based nudge that fires once after ≥2 file-mutating tool calls without a plan.
+- **`checkPlanAlignment` flagged phantom off-path warnings** — it JSON-stringified the whole args blob, so file tokens inside `content` (import strings, etc.) counted as off-path; it now scans only path-typed argument keys.
+- **`isDepsStep` treated any "install" as a dependency step** — now it requires an actual package-manager verb (`npm install`, `bun add`, `pnpm dlx`, …).
+- **Auto-advance couldn't see nested project files** — a step naming `src/App.tsx` with the real file at `baseDir/bicycle-shop/src/App.tsx` stayed pending; `findExistingFile` (bounded subtree walk) resolves it.
+- **`replan` id collisions** — kept steps kept their original ids, so a done step id 3 collided with a new step id 3; ids are now renumbered sequentially. `toPromptBlock` shows "N/N done, complete" once every step is terminal.
+- **File-less steps passed as verified** — `plan update ... done` on a step naming no files succeeds but notes `plan.no_deliverables` ("names no files").
+
 ## [Unreleased]
 
 ### Added
+
 - **Folder plugins** (`src/modules/plugins/loader.ts`): `loadFromDir` now treats a subdirectory of the plugin dir as a plugin when it contains an entry file (`plugin.ts` → `plugin.js` → `index.ts` → `index.js`). The entry imports the folder's other modules via normal relative imports; folders without an entry are skipped. Flat `*.ts`/`*.js` files keep working unchanged. Tests in `tests/plugin-loader.test.ts`.
 - **`trace-server` example split into a folder plugin** (`examples/plugins/trace-server/`): `plugin.ts` (entry) + `state.ts` (shared state + SSE primitives) + `util.ts` + `context.ts` (snapshots + conversation-text) + `plans.ts` (on-disk plan reading + poll) + `server.ts` (HTTP/SSE) + `page.html` (frontend, served **verbatim from disk** — never template-processed).
 
 ### Fixed
+
 - **trace-server page script parse error** (`examples/plugins/trace-server/`): embedding the page in a template literal interpreted `\n` inside the page's JS strings as real newlines, so `e.text.split('\n')` became a broken string literal and the whole `<script>` failed to parse — the trace page connected but rendered nothing. The page is now read from disk verbatim, keeping escape sequences literal.
 - **LSP servers dead in projects without a local `typescript`** (`src/modules/lsp/config.ts`): `typescript-language-server` (typescript/javascript) and the vscode html/css servers exited with `Could not find a valid TypeScript installation` on every write — `npx --package X` does not make `typescript` resolvable to the server process. The npx args now include `--package typescript@5` (pinned to TS 5.x: a bare `typescript` resolves to the native TS 7 preview whose `lib/` has no `tsserver.js`, so the server rejects it) and `--yes` (the old bare `npx typescript-language-server` prompted for confirmation on a cold cache). Verified: TS type error `Type 'string' is not assignable to type 'number'` is reported end-to-end through `checkFile`.
 - **LSP banner false negatives under parallel probing** (`src/modules/lsp/probe.ts`): the REPL banner probed all applicable servers in parallel, so simultaneous npx auto-installs fought over the shared npx cache lock and half the servers reported `LSP request timeout: initialize` on a cold cache. Probing is now sequential, each server gets its own config timeout (capped), and an overall deadline bounds the banner. In `E:\projects\mma_tests` all 5 servers (typescript/javascript/json/html/css) now probe OK in ~10s.
@@ -22,29 +43,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.41.2] - 2026-08-18
 
 ### Fixed
-- **REPL banner waited for the LSP probe** (`src/cli/repl.ts`): `Repl.start()` awaited `probeLspBanner()` *before* printing the box, so the banner was blocked for the whole probe (~5s warm, ~25s cold/stale). The probe now runs in the background: the box prints immediately with a `LSP: …` placeholder as the last data row, and when the probe finishes the row is rewritten in place (`\x1b[2A\r\x1b[2K<row>\x1b[2B\r` — the LSP row is always two terminal rows above the prompt, stable under earlier-row wrapping). The rewrite is skipped when it would corrupt the screen (agent already running, non-TTY, narrow terminal, or summary too wide); `updateLspRow` normalizes whitespace like `box()`'s `wrapText` so the rewritten row is byte-identical to what `box()` would render. Non-TTY: no LSP row and no probe (no orphaned npx on piped exit). MMA project: banner at ~5.7s → ~2s.
-- **Startup health check blocked the banner** (`src/core/bootstrap.ts`, `src/core/agent.ts`): bootstrap `await`ed `runStartupHealthCheck`, which runs `npx tsc --noEmit` over the whole project (observed 4.1s on MMA, returning null — a clean project), so every session start paid the full tsc cost before the banner. The check now starts in the background (a promise, never awaited at bootstrap) and is consumed via a new `AgentDeps.lazyPromptBlocks` supplier that `Agent.run()` awaits *before the first system prompt* — the baseline block still reaches the first LLM call (guaranteed resolved by the time the user types in the interactive REPL) without delaying the banner. Skipped for `--exit-on-complete` and tests, as before. Tests in `tests/core/agent.test.ts` (lazy blocks awaited once, included in the first system prompt; empty result tolerated).
+
+- **REPL banner waited for the LSP probe** (`src/cli/repl.ts`): `Repl.start()` awaited `probeLspBanner()` _before_ printing the box, so the banner was blocked for the whole probe (~5s warm, ~25s cold/stale). The probe now runs in the background: the box prints immediately with a `LSP: …` placeholder as the last data row, and when the probe finishes the row is rewritten in place (`\x1b[2A\r\x1b[2K<row>\x1b[2B\r` — the LSP row is always two terminal rows above the prompt, stable under earlier-row wrapping). The rewrite is skipped when it would corrupt the screen (agent already running, non-TTY, narrow terminal, or summary too wide); `updateLspRow` normalizes whitespace like `box()`'s `wrapText` so the rewritten row is byte-identical to what `box()` would render. Non-TTY: no LSP row and no probe (no orphaned npx on piped exit). MMA project: banner at ~5.7s → ~2s.
+- **Startup health check blocked the banner** (`src/core/bootstrap.ts`, `src/core/agent.ts`): bootstrap `await`ed `runStartupHealthCheck`, which runs `npx tsc --noEmit` over the whole project (observed 4.1s on MMA, returning null — a clean project), so every session start paid the full tsc cost before the banner. The check now starts in the background (a promise, never awaited at bootstrap) and is consumed via a new `AgentDeps.lazyPromptBlocks` supplier that `Agent.run()` awaits _before the first system prompt_ — the baseline block still reaches the first LLM call (guaranteed resolved by the time the user types in the interactive REPL) without delaying the banner. Skipped for `--exit-on-complete` and tests, as before. Tests in `tests/core/agent.test.ts` (lazy blocks awaited once, included in the first system prompt; empty result tolerated).
 
 ## [0.36.0] - 2026-08-15
 
 ### Added
+
 - **`trace-server` example plugin** (`examples/plugins/trace-server.ts`): single-file, zero-dependency live agent-loop trace in the browser over SSE — phases, LLM calls, `tool_start`/`tool_end` with full args and results (paired client-side by `toolCallId`), errors, coalesced text/meta (350ms debounce), plus **context tracking**: a live context bar (tokens/budget, quality %, compaction count, iterations since compaction, message count) fed by `context` events, and `compaction` events rendered as CTX log entries (tokens/quality before and after). Binds localhost only; credential-shaped payload values are scrubbed.
 - **`contextManager` exposed to all plugin hooks** (`src/core/agent.ts`): the plugin hook context now carries `contextManager` in `runOnPhase`, `runOnSessionStart`, `runOnError`, `runOnAfterThink`, `runOnToolStart`, `runOnToolEnd`, `runOnText`, `runOnMeta`, `runOnSessionEnd` (previously only in `runOnBeforeThink`). Enables plugins to observe live context state (budget, quality, compaction count).
 
 ### Changed
+
 - The trace-server example plugin dedupes double-loading (global + project copies): a shared server lives on `Symbol.for("mma.trace-server")`, `startServer()` dedupes concurrent starts with an in-flight promise, and identical context snapshots are broadcast once.
 
 ## [0.35.3] - 2026-08-14
 
 ### Fixed
+
 - **LSP dead for nested projects**: the workspace root is now resolved from the edited file's nearest project, using per-language markers declared in the LSP server config (`workspaceMarkers`). `typescript-language-server` could never find `typescript` when the project lived inside the agent baseDir, so every write/edit returned `[LSP check failed]: Could not find a valid TypeScript installation`.
 - **Phantom "1 files missing" loop**: the final audit now requires files only from steps marked `done` and treats `skipped` as a terminal complete state. A skipped step's prose could previously poison the audit forever (a step referencing "type.ts" for the existing "types.ts" kept a finished task rejected).
-- **Windows bash hints/block**: the win32 hint and hard-stop now key on the *original* command word. The `cat→type` translation previously hid `cat`/`ls`/`grep` failures from `UNIX_TO_WIN_HINTS`, so the model repeated them with no guidance.
+- **Windows bash hints/block**: the win32 hint and hard-stop now key on the _original_ command word. The `cat→type` translation previously hid `cat`/`ls`/`grep` failures from `UNIX_TO_WIN_HINTS`, so the model repeated them with no guidance.
 - **read_file blindness at near-full context**: tools that declare `boundedOutput` (`read_file`, `list_dir`, `file_info`, `process_log`) are never budget-truncated. A `read_file` output was being cut to ~2K chars when the context was near-full, making the model re-read the same file 8+ times.
 
 ## [0.27.0] - 2026-08-07
 
 ### Added
+
 - **LLM-as-judge consistency check** (`src/modules/hallucination/consistency.ts`): the keyword-based
   contradiction heuristic is replaced with a judge-provider call when configured. Detects decision
   reversals (e.g. switching DBs mid-task) and degrades to `pass` when the judge provider is
@@ -56,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now runs normally; a genuinely long-running command is always caught.
 
 ### Changed
+
 - **Async process execution in verifier** (`src/modules/execution/verifier.ts`, `lint-on-write`
   plugin): blocking `execSync` replaced with async spawn so long syntax checks don't freeze the agent
   loop.
@@ -69,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a kill-by-call-id registry (`registerKillable`/`unregisterKillable`/`killByCallId`).
 
 ### Fixed
+
 - **Hallucination factual check false positives on Windows** (`src/modules/hallucination/factual.ts`):
   the path-extraction regex matched absolute Windows paths starting at the first word boundary after
   the drive letter, so `E:\project\src\a.ts` became `project\src\a.ts` and `resolve()` glued it onto
@@ -93,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.26.0] - 2026-08-07
 
 ### Fixed
+
 - **Dead hallucination pipeline wired up** (`src/core/agent.ts`, `src/modules/hallucination/`):
   the factual check (pre-existing paths cross-check) and MoE stuck detection were never invoked —
   both are now active. `HallucinationDetector` runs factual/confidence checks on every response and
@@ -101,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.25.0] - 2026-08-06
 
 ### Added
+
 - **LSP module** (`src/modules/lsp/`): language server diagnostics after every `write_file`/`edit_file`:
   - JSON-RPC 2.0 client over stdio with Content-Length framing (`client.ts`)
   - 7 languages: TS/JS (`typescript-language-server` via `npx`), Python (`pyright`), JSON (`vscode-json-languageserver`),
@@ -111,6 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Config via `config.lsp` (`DEFAULT_LSP_CONFIG` in `src/config/defaults.ts`), new module per design spec §6.13
 
 ### Fixed
+
 - **Audit gate language-agnostic** (`src/modules/execution/auditor.ts`): removed hardcoded
   `tsc --noEmit` — auditor now only checks file existence from plan steps, works for any language
 - **Windows command hints** (`src/core/bootstrap.ts`): added `head`/`tail` to the platform-specific
@@ -119,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.0] - 2026-08-01
 
 ### Added
+
 - **Pipeline execution** (`src/tools/pipeline-run.ts`): `pipeline_run` now actually executes
   each step as an isolated sub-agent instead of only parsing/resolving the YAML DAG:
   - Parallel execution waves (up to 3 concurrent steps) honoring `depends_on`
@@ -127,6 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Recursion depth guard and audit logging on block
 
 ### Fixed
+
 - **Content scanning**: `dangerousPatterns` RegExp objects were serialized to `{}` in
   `~/.mma/config.json` (`JSON.stringify(/eval\(/)` → `{}`), causing `String.match({})` to
   match any content and block all `write_file`/`edit_file` calls. Added `regexReplacer` /
@@ -144,6 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.0] - 2026-08-01
 
 ### Added
+
 - **CLI security commands** (`src/cli/security-commands.ts`):
   - `mma security status` - Show current security configuration
   - `mma security policies` - List available security policies
@@ -154,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Translations** for CLI security commands in `en.json` and `ru.json`
 
 ### Fixed
+
 - **Path validation**: Fixed arrays being converted to objects during config decryption in `encryptSensitiveFields` and `decryptSensitiveFields`
 - **Audit notifications**: Fixed `globalAuditNotifier` not being updated with config from `loadConfig` - now updates in `bootstrap.ts`
 - **Type consistency**: Fixed `AuditNotifierConfig` type mismatch between `config/types.ts` and `modules/security/audit-notifier.ts`
@@ -167,6 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.10] - 2026-08-01
 
 ### Added
+
 - **Session file encryption** (`src/modules/security/session-encryption.ts`):
   - Encrypt `history.jsonl` and `session.jsonl` files with AES-256-GCM
   - Configurable via `security.sessionEncryption` in config
@@ -192,12 +228,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Transparent read/write operations
 
 ### Changed
+
 - Updated `SecurityConfig` type to include `sessionEncryption` and `auditNotifier`
 - Updated default security config in `src/config/security.ts`
 - Updated `SessionStore` to support encryption configuration
 - Updated `SessionManager` to pass encryption config to store
 
 ### Security
+
 - Session files can now be encrypted at rest
 - Audit trail with optional notifications
 - Predefined security policies for different environments
@@ -205,6 +243,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.9] - 2026-07-31
 
 ### Added
+
 - **Session isolation** (`src/modules/security/session-isolation.ts`):
   - Per-session security configuration overrides
   - Isolated plugin loading per session
@@ -217,12 +256,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Isolation configuration options
 
 ### Changed
+
 - Updated `SessionMeta` type to include `securityOverrides`
 - Updated session-related types in `src/modules/session/types.ts`
 
 ## [0.7.8] - 2026-07-30
 
 ### Added
+
 - **File operations counter** in `ToolContext`:
   - Track number of file operations per session
   - Configurable limit via `security.maxFileOperations`
@@ -243,6 +284,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration with existing logger
 
 ### Changed
+
 - Updated `ConfigEncryptor` to handle nested objects
 - Updated `AppConfig` type to support encrypted fields
 - Updated config loading to decrypt sensitive fields
@@ -250,6 +292,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.7] - 2026-07-29
 
 ### Added
+
 - **Bash command validation** (`src/modules/security/command-validator.ts`):
   - Blacklist of dangerous commands (rm, dd, chmod, etc.)
   - Whitelist mode (optional strict)
@@ -282,6 +325,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic removal of API keys, tokens, passwords from logs
 
 ### Changed
+
 - Updated all filesystem tools to use path validation
 - Updated bash tool to use command validation
 - Updated web tools to use network validation
@@ -290,6 +334,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.6] - 2026-07-28
 
 ### Added
+
 - Initial security module structure
 - Security configuration types
 - Basic security checks integration
@@ -297,6 +342,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] - 2026-07-20
 
 ### Added
+
 - Initial MMA v2 release
 - Agent state machine
 - Tool system with 20+ tools
