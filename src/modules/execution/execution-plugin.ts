@@ -229,7 +229,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       // fix the actual error, not keep rewriting the file blindly. Feed it
       // to the stuck detector so the rewrite-loop hint fires.
       const toolText = String(result.output ?? "");
-      if (/error TS\d+|\[Project typecheck failed\]|\[Syntax check failed\]/.test(toolText)) {
+      const hasTypeError = /error TS\d+|\[Project typecheck failed\]|\[Syntax check failed\]/.test(
+        toolText,
+      );
+      if (hasTypeError) {
         deps.stuckDetector.recordToolError(call.name, toolText.slice(0, 300));
       }
       if (!result.success) {
@@ -253,7 +256,14 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             }
           }
         }
-        deps.stuckDetector.recordToolError(call.name, result.output);
+        // A type/syntax error in an otherwise "successful" result was already
+        // recorded above. A failing call (result.success === false) would
+        // otherwise double-count the same error (typecheck branch + failure
+        // branch), inflating the error-signature count and triggering the
+        // web search at half the intended threshold.
+        if (!hasTypeError) {
+          deps.stuckDetector.recordToolError(call.name, result.output);
+        }
 
         // Immediately queue an actionable hint on failure (don't wait for
         // the stuck threshold). Flushed in onBeforeThink so it does not
