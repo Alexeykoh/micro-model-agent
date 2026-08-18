@@ -1,11 +1,11 @@
 import type { AgentModule } from "../types";
 import type { PromptBlock } from "../../core/types";
-import type { ToolDefinition } from "../../tools/types";
+import type { ToolDefinition, ToolContext, ToolCall } from "../../tools/types";
 import type { AgentPlugin } from "../types";
 import { t } from "../../i18n/index";
 import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
-import { StuckDetector } from "./stuck-detector";
+import { StuckDetector, isSearchableError, buildSearchQuery } from "./stuck-detector";
 import { Auditor, findExistingFile } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { getMessageText } from "../../llm/provider";
@@ -14,12 +14,35 @@ import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
+import type { NetworkSecurityConfig } from "../../config/types";
+import { performWebSearch, type SearchResult } from "../../tools/web-search";
+import { getSessionSecurityConfig } from "../security/session-isolation";
 import { createPlanToolDefinitions } from "./plan-tool";
 import {
   createExecutionPlugin,
   STUCK_RECOVERY_COOLDOWN,
   type ExecutionPluginState,
 } from "./execution-plugin";
+
+/**
+ * Injectable search runner. Defaults to performWebSearch (shared with the
+ * web_search tool) so tests can substitute a mock. `requestTimeoutMs` lets
+ * the caller override the network timeout (errorWebSearch.requestTimeoutMs).
+ */
+export type WebSearchRunner = (
+  query: string,
+  numResults: number,
+  networkConfig: NetworkSecurityConfig | undefined,
+  requestTimeoutMs?: number,
+) => Promise<{ success: boolean; results: SearchResult[]; error?: string; blocked?: boolean }>;
+
+/**
+ * Minimum interval between automatic error searches. The spec asked for a
+ * STUCK_RECOVERY_COOLDOWN-iteration cap, but onAfterTool has no iteration
+ * counter (executor context), so the same anti-spam protection is
+ * time-based. Injectable via the constructor for tests (0 disables it).
+ */
+const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 
 export class ExecutionModule implements AgentModule {
   name = "execution";
@@ -44,6 +67,12 @@ export class ExecutionModule implements AgentModule {
   // failure is evidence-based (actual command failures), not task
   // classification (rule #10).
   private forbiddenBashFailures = new Map<string, number>();
+  private searchRunner: WebSearchRunner;
+  private webSearchThreshold: number;
+  private searchesThisSession = 0;
+  private retryWebSearchSignatures = new Set<string>();
+  private lastErrorSearchAt = 0;
+  private readonly errorSearchCooldownMs: number;
 
   /**
    * The execution-plugin's mutable state. Owned HERE and passed BY REFERENCE
@@ -80,12 +109,21 @@ export class ExecutionModule implements AgentModule {
     };
   })();
 
-  constructor(baseDir: string, stuckThreshold = 6) {
+  constructor(
+    baseDir: string,
+    stuckThreshold = 6,
+    webSearchThreshold = 5,
+    searchRunner: WebSearchRunner = performWebSearch,
+    errorSearchCooldownMs = ERROR_SEARCH_MIN_INTERVAL_MS,
+  ) {
     this.baseDir = baseDir;
     this.verifier = new StepVerifier(baseDir);
-    this.stuckDetector = new StuckDetector(stuckThreshold);
+    this.stuckDetector = new StuckDetector(stuckThreshold, 3, webSearchThreshold);
     this.auditor = new Auditor(baseDir);
     this.store = new PlanStore(baseDir);
+    this.webSearchThreshold = webSearchThreshold;
+    this.searchRunner = searchRunner;
+    this.errorSearchCooldownMs = errorSearchCooldownMs;
   }
 
   setPlan(plan: Plan): void {
@@ -123,6 +161,71 @@ export class ExecutionModule implements AgentModule {
 
   getStuckDetector(): StuckDetector {
     return this.stuckDetector;
+  }
+
+  /**
+   * Automatic web search for a repeatedly failing error (>= errorWebSearch.threshold
+   * identical signatures). Fires the search fire-and-forget (never blocks the tool
+   * result) and queues the results as a <system-summary> in pendingMessages.
+   *
+   * Gates: webSearch master switch + errorWebSearch switch → repeated signature
+   * → not-searched (or retried) → session cap → meaningful error text →
+   * cooldown. One search per signature; empty results trigger a single retry
+   * (unmarkErrorSearched once), then the signature stays searched.
+   */
+  maybeSearchError(ctx: ToolContext, call: ToolCall): void {
+    if (ctx.config?.webSearch?.enabled === false) return;
+    const cfg = ctx.config?.errorWebSearch;
+    if (!cfg?.enabled) return;
+    const sig = this.stuckDetector.getRepeatedErrorSignature();
+    if (!sig) return;
+    if (this.stuckDetector.hasErrorSearched(sig) && !this.retryWebSearchSignatures.has(sig)) return;
+    if (this.searchesThisSession >= (cfg.maxSearchesPerSession ?? 3)) return;
+    const lastError = this.stuckDetector.getLastErrorOutput();
+    if (!isSearchableError(lastError)) {
+      ctx.logger?.debug(t("exec.error_search_no_query"));
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastErrorSearchAt < this.errorSearchCooldownMs) return;
+    const stepDesc = this.tracker?.getCurrentStep()?.description ?? "";
+    const query = buildSearchQuery(
+      stepDesc,
+      this.stuckDetector.getLastBashCommand(),
+      lastError,
+      call.name,
+      cfg.maxQueryChars ?? 200,
+    );
+    const count = this.stuckDetector.getErrorSignatureCount(sig);
+    this.stuckDetector.markErrorSearched(sig);
+    this.searchesThisSession++;
+    this.lastErrorSearchAt = now;
+    const networkConfig = getSessionSecurityConfig(ctx.config, ctx.sessionContext).network;
+    this.searchRunner(query, cfg.maxResults ?? 5, networkConfig, cfg.requestTimeoutMs ?? 10000)
+      .then((res) => {
+        if (!res.success || res.results.length === 0) {
+          if (!this.retryWebSearchSignatures.has(sig)) {
+            this.retryWebSearchSignatures.add(sig);
+            this.stuckDetector.unmarkErrorSearched(sig);
+          }
+          ctx.logger?.warn(t("exec.error_search_failed", { query }));
+          ctx.sessionLog?.plan("web-search", `empty/failed: ${query}`);
+          return;
+        }
+        const resultsText = res.results
+          .map((r, i) => `${i + 1}. ${r.title} \u2014 ${r.url}\n   ${r.snippet}`)
+          .join("\n");
+        this.pendingMessages.push({
+          role: "user",
+          content: `<system-summary>${t("exec.error_search_results", {
+            sig,
+            count: String(count),
+            query,
+            results: resultsText,
+          })}</system-summary>`,
+        });
+      })
+      .catch((e) => ctx.logger?.warn(`error web search: ${e.message}`));
   }
 
   /**
@@ -215,6 +318,7 @@ export class ExecutionModule implements AgentModule {
       state: this.state,
       checkPlanAlignment: (call) => this.checkPlanAlignment(call),
       advancePlanIfStepComplete: (cm, sl) => this.advancePlanIfStepComplete(cm, sl),
+      maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
     });
   }
 

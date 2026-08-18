@@ -41,6 +41,7 @@ export interface ExecutionPluginDeps {
       plan(event: string, detail: string, iteration?: number): void;
     },
   ): void;
+  maybeSearchError: (ctx: any, call: any) => void;
 }
 
 /**
@@ -316,6 +317,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         }
         deps.advancePlanIfStepComplete(ctx.contextManager, ctx.sessionLog);
       }
+
+      // Automatic web search for a repeatedly failing error (fire-and-forget,
+      // results land in pendingMessages on the next onBeforeThink flush).
+      deps.maybeSearchError(ctx, call);
     },
   };
 }

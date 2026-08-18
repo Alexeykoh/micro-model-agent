@@ -295,7 +295,11 @@ export async function bootstrap(
 
   const moduleRegistry = new ModuleRegistry();
 
-  const execModule = new ExecutionModule(baseDir, config.stuckThreshold);
+  const execModule = new ExecutionModule(
+    baseDir,
+    config.stuckThreshold,
+    config.errorWebSearch?.threshold ?? 5,
+  );
   const activeMeta = sessionManager.getActiveMeta();
   if (activeMeta && activeMeta.messageCount > 0) {
     execModule.restorePlan();
