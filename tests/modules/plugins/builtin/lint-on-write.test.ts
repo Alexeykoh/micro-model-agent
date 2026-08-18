@@ -87,4 +87,24 @@ describe("LintOnWritePlugin", () => {
     const third = await runWrite(path);
     expect(third.output).not.toContain("[Syntax check failed]");
   });
+
+  it("bails out immediately when the abort signal is already aborted (interrupt)", async () => {
+    const plugin = new LintOnWritePlugin();
+    const controller = new AbortController();
+    controller.abort();
+
+    const path = "good.ts";
+    writeFileSync(join(tmpDir, path), "const x: number = 1;\n");
+    const mockCtx = {
+      baseDir: tmpDir,
+      logger: { debug: () => {}, warn: () => {} },
+      signal: controller.signal,
+    } as any;
+    const result: any = { success: true, output: "File written" };
+    const call: any = { name: "write_file", arguments: { path } };
+
+    // Must return without spawning bun build / npx tsc / appending anything.
+    await plugin.onAfterTool!(mockCtx, call, result);
+    expect(result.output).toBe("File written");
+  });
 });

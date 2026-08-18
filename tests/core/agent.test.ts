@@ -1162,4 +1162,114 @@ describe("Agent", () => {
     expect(content).toContain("spawn npx ENOENT");
     expect(content).toContain("Repeated");
   });
+
+  it("stops mid-tool on shutdown: no tool-result rendering, no session log write", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: "tool_call" as const,
+            toolCall: { id: "call-1", name: "edit_file", arguments: "{}" },
+          };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        })(),
+      ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    // Deferred: the tool stays in-flight (like the slow LSP onAfterTool in
+    // the interrupted session) until shutdown is requested.
+    let resolveTool!: (r: { success: boolean; output: string; diff?: string }) => void;
+    const toolDone = new Promise<{ success: boolean; output: string; diff?: string }>((res) => {
+      resolveTool = res;
+    });
+    let capturedSignal: AbortSignal | undefined;
+    let resolveCalled!: () => void;
+    const executeCalled = new Promise<void>((res) => {
+      resolveCalled = res;
+    });
+    const mockExecutor = {
+      execute: vi.fn((_call: unknown, signal?: AbortSignal) => {
+        capturedSignal = signal;
+        resolveCalled();
+        return toolDone;
+      }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+    };
+
+    const sessionManagerMock = {
+      getActiveMeta: vi.fn().mockReturnValue({ id: "ses_test" }),
+      getSessionDirectory: vi.fn().mockReturnValue("/tmp"),
+      create: vi.fn(),
+      getActive: vi.fn().mockReturnValue("ses_test"),
+      appendLog: vi.fn(),
+      appendMessage: vi.fn(),
+      saveAssistantMessage: vi.fn(),
+      getActiveHistory: vi.fn().mockReturnValue([]),
+    };
+
+    const addMessage = vi.fn();
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+      sessionManager: sessionManagerMock as any,
+      contextManager: {
+        addMessage,
+        getMessageCount: vi.fn().mockReturnValue(0),
+        needsCompaction: vi.fn().mockReturnValue(false),
+        compact: vi.fn(),
+        getActiveHistory: vi.fn().mockReturnValue([]),
+        getEstimatedTokens: vi.fn().mockReturnValue(50),
+        getBudget: vi.fn().mockReturnValue({
+          systemPrompt: 1024,
+          responseReserve: 512,
+          history: 2560,
+        }),
+        updateSystemPrompt: vi.fn(),
+        getCompactionCount: vi.fn().mockReturnValue(0),
+        getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
+        getQuality: vi.fn().mockReturnValue(100),
+        noteIteration: vi.fn(),
+        setToolTokens: vi.fn(),
+      },
+    });
+    const agent = new Agent(deps as any);
+
+    const toolEvents: string[] = [];
+    const runPromise = agent.run("write a file", undefined, undefined, (ev: any) => {
+      toolEvents.push(ev.type);
+    });
+
+    await executeCalled;
+
+    // Interrupt (Esc) — the abort must reach the in-flight tool call.
+    expect(capturedSignal?.aborted).toBe(false);
+    agent.shutdown();
+    expect(capturedSignal?.aborted).toBe(true);
+
+    // The tool completes AFTER shutdown (observed in the interrupted session:
+    // the write already happened, the slow LSP check just took seconds).
+    resolveTool({ success: true, output: "Replaced in ...", diff: "..." });
+
+    const result = await runPromise;
+
+    // No "Replaced in ..." tool card rendered after "Session ended".
+    expect(toolEvents).toEqual(["start"]);
+    // No tool-result entry written to the session files after shutdown
+    // (appendMessage here is only the initial user message).
+    expect(
+      (sessionManagerMock.appendMessage as any).mock.calls.some(
+        (c: any[]) => c[0]?.role === "tool",
+      ),
+    ).toBe(false);
+    expect(
+      (sessionManagerMock.appendLog as any).mock.calls.some(
+        (c: any[]) => c[0]?.type === "tool_result",
+      ),
+    ).toBe(false);
+    // The discarded result must not enter the conversation context either.
+    expect(addMessage.mock.calls.some((c: any[]) => c[0]?.role === "tool")).toBe(false);
+  });
 });

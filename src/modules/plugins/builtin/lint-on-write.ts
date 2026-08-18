@@ -66,22 +66,28 @@ export class LintOnWritePlugin implements AgentPlugin {
     const fullPath = resolve(ctx.baseDir, path);
     if (!existsSync(fullPath)) return;
 
+    const signal = (ctx as { signal?: AbortSignal }).signal;
+    if (signal?.aborted) return;
+
     const ext = extname(fullPath);
-    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir);
+    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir, signal);
+    if (signal?.aborted) return;
 
     if (syntaxError) {
       result.output += `\n\n[Syntax check failed]: ${syntaxError}`;
       return;
     }
 
-    await this.runProjectLint(ctx, result);
-    await this.runProjectTypeCheck(fullPath, ctx.baseDir, result);
+    await this.runProjectLint(ctx, result, signal);
+    if (signal?.aborted) return;
+    await this.runProjectTypeCheck(fullPath, ctx.baseDir, result, signal);
   }
 
   private async checkSyntax(
     filePath: string,
     ext: string,
     baseDir: string,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
       // Syntax-only check via bun's parser (~200ms) instead of `npx tsc`
@@ -99,7 +105,9 @@ export class LintOnWritePlugin implements AgentPlugin {
         return cached.error;
       }
       try {
-        await runAsync(`bun build --no-bundle --target=bun "${filePath}"`, baseDir, 10000);
+        await runAsync(`bun build --no-bundle --target=bun "${filePath}"`, baseDir, 10000, signal);
+        // Aborted check (interrupt) never validated the file — don't cache it.
+        if (signal?.aborted) return null;
         syntaxCache.set(filePath, { hash, error: null });
         return null;
       } catch (err: any) {
@@ -120,7 +128,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
     if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
       try {
-        await runAsync(`node --check "${filePath}"`, baseDir, 5000);
+        await runAsync(`node --check "${filePath}"`, baseDir, 5000, signal);
         return null;
       } catch (err: any) {
         const stderr = err.stderr?.toString() || "";
@@ -133,7 +141,11 @@ export class LintOnWritePlugin implements AgentPlugin {
     return null;
   }
 
-  private async runProjectLint(ctx: ToolContext, result: ToolResult): Promise<void> {
+  private async runProjectLint(
+    ctx: ToolContext,
+    result: ToolResult,
+    signal?: AbortSignal,
+  ): Promise<void> {
     try {
       const packageJsonPath = join(ctx.baseDir, "package.json");
       if (!existsSync(packageJsonPath)) {
@@ -148,12 +160,16 @@ export class LintOnWritePlugin implements AgentPlugin {
       }
 
       ctx.logger.debug(`Running lint: ${lintScript}`);
-      await runAsync(lintScript, ctx.baseDir, 30_000);
+      await runAsync(lintScript, ctx.baseDir, 30_000, signal);
       ctx.logger.debug("Lint passed");
     } catch (err: any) {
       const stderr = (err.stderr?.toString?.() || "").trim();
       const stdout = (err.stdout?.toString?.() || "").trim();
-      const detail = (stderr || stdout || err.message).split("\n").filter(Boolean).slice(-5).join("\n");
+      const detail = (stderr || stdout || err.message)
+        .split("\n")
+        .filter(Boolean)
+        .slice(-5)
+        .join("\n");
       ctx.logger.warn(`Lint failed: ${err.message}`);
       result.output += `\n\n[Project lint failed]: ${detail}`;
     }
@@ -163,6 +179,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     filePath: string,
     baseDir: string,
     result: ToolResult,
+    signal?: AbortSignal,
   ): Promise<void> {
     // Resolve the project root from the EDITED FILE, not the agent baseDir.
     // In a nested layout (`baseDir/proj/tsconfig.json`) the old baseDir-based
@@ -184,16 +201,16 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
 
     this._checkTimestamp = now;
-    this._checkPromise = this.runTscCheck(projectRoot);
+    this._checkPromise = this.runTscCheck(projectRoot, signal);
     const error = await this._checkPromise;
     if (error) {
       result.output += `\n\n[Project typecheck failed]: ${error}`;
     }
   }
 
-  private async runTscCheck(baseDir: string): Promise<string | null> {
+  private async runTscCheck(baseDir: string, signal?: AbortSignal): Promise<string | null> {
     try {
-      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000);
+      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000, signal);
       return null;
     } catch (err: any) {
       if (
@@ -223,6 +240,7 @@ function runAsync(
   command: string,
   cwd: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, {
@@ -244,15 +262,31 @@ function runAsync(
       child.kill();
       reject(new Error(`Command timed out after ${timeoutMs}ms`));
     }, timeoutMs);
+    // Interrupt (Esc/Ctrl+C): kill the child so the agent loop can return to
+    // the prompt immediately instead of waiting out a long tsc/lint run. The
+    // close handler resolves empty when aborted — the caller's `signal.aborted`
+    // guard discards the result anyway.
+    const onAbort = () => child.kill();
+    if (signal?.aborted) {
+      child.kill();
+    } else {
+      signal?.addEventListener("abort", onAbort, { once: true });
+    }
     child.on("error", (err) => {
       clearTimeout(timer);
-      reject(err);
+      signal?.removeEventListener("abort", onAbort);
+      if (signal?.aborted) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(err);
+      }
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
       stdout += decoder.decode();
       stderr += decoder.decode();
-      if (code === 0) {
+      if (signal?.aborted || code === 0) {
         resolve({ stdout, stderr });
       } else {
         const err: any = new Error(`Command failed with exit code ${code}`);

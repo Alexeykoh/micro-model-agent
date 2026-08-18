@@ -128,12 +128,21 @@ export class ToolExecutor {
       };
     }
 
-    for (const plugin of this.pluginManager.getAllPlugins()) {
-      if (plugin.onAfterTool) {
-        try {
-          await plugin.onAfterTool(this.ctx, call, result);
-        } catch (e: any) {
-          this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
+    // After an abort the tool's work is discarded (the agent loop breaks
+    // without rendering or logging it), so skip the slow post-tool plugins
+    // (LSP checks, lint, tsc) entirely. When the abort lands mid-plugin the
+    // signal in the hook context lets the plugin kill its child processes.
+    if (signal?.aborted) {
+      this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
+    } else {
+      const pluginCtx = signal ? { ...this.ctx, signal } : this.ctx;
+      for (const plugin of this.pluginManager.getAllPlugins()) {
+        if (plugin.onAfterTool) {
+          try {
+            await plugin.onAfterTool(pluginCtx, call, result);
+          } catch (e: any) {
+            this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
+          }
         }
       }
     }

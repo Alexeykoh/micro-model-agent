@@ -94,6 +94,84 @@ describe("ToolExecutor", () => {
     expect(onAfter).toHaveBeenCalled();
   });
 
+  it("skips onAfterTool plugins when the abort signal is already aborted", async () => {
+    registry.register({
+      name: "tracked",
+      description: "",
+      parameters: { type: "object", properties: {} },
+      handler: async () => ({ success: true, output: "done" }),
+    });
+
+    const onAfter = vi.fn();
+    executor = new ToolExecutor(registry, ctx, {
+      getAllPlugins: () => [{ onAfterTool: onAfter }],
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+    const result = await executor.execute(
+      { id: "call_1", name: "tracked", arguments: {} },
+      controller.signal,
+    );
+    expect(result.success).toBe(true);
+    // Slow post-tool plugins (LSP/lint/tsc) must not run after an interrupt.
+    expect(onAfter).not.toHaveBeenCalled();
+  });
+
+  it("passes the abort signal into the onAfterTool plugin context", async () => {
+    registry.register({
+      name: "tracked",
+      description: "",
+      parameters: { type: "object", properties: {} },
+      handler: async () => ({ success: true, output: "done" }),
+    });
+
+    let gotSignal: AbortSignal | undefined;
+    const onAfter = vi.fn((pluginCtx: any) => {
+      gotSignal = pluginCtx.signal;
+    });
+    executor = new ToolExecutor(registry, ctx, {
+      getAllPlugins: () => [{ onAfterTool: onAfter }],
+    });
+
+    const controller = new AbortController();
+    await executor.execute({ id: "call_1", name: "tracked", arguments: {} }, controller.signal);
+    expect(onAfter).toHaveBeenCalled();
+    expect(gotSignal).toBe(controller.signal);
+  });
+
+  it("rejects the call on abort and skips onAfterTool even if the handler completes late", async () => {
+    let resolveHandler!: (r: { success: boolean; output: string }) => void;
+    registry.register({
+      name: "slow",
+      description: "",
+      parameters: { type: "object", properties: {} },
+      handler: () =>
+        new Promise<{ success: boolean; output: string }>((res) => {
+          resolveHandler = res;
+        }),
+    });
+
+    const onAfter = vi.fn();
+    executor = new ToolExecutor(registry, ctx, {
+      getAllPlugins: () => [{ onAfterTool: onAfter }],
+    });
+
+    const controller = new AbortController();
+    const promise = executor.execute(
+      { id: "call_1", name: "slow", arguments: {} },
+      controller.signal,
+    );
+    controller.abort();
+    const result = await promise;
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("interrupted by user");
+
+    // The handler finishing after the abort is discarded — no plugins run.
+    resolveHandler({ success: true, output: "late" });
+    expect(onAfter).not.toHaveBeenCalled();
+  });
+
   it("should handle handler errors gracefully", async () => {
     registry.register({
       name: "crash",

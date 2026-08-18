@@ -722,6 +722,11 @@ export class Agent {
 
           const tokensBeforeTool = contextManager.getEstimatedTokens();
           const result = await toolExecutor.execute(call, this.abortController?.signal);
+          // Interrupt during the tool call: the session is already shutting
+          // down (Esc/Ctrl+C), so stop immediately — no rendering, no session
+          // log writes, no context update for a result nobody will see. This
+          // fixes the "Replaced in ..." lines appearing AFTER "Session ended".
+          if (this.shutdownRequested) break;
           const duration = Date.now() - startTime;
           if (!result.success) anyToolFailed = true;
 
@@ -824,6 +829,7 @@ export class Agent {
             }
           }
         }
+        if (this.shutdownRequested) break;
         if (anyToolFailed) {
           consecutiveToolFailures++;
         } else {
