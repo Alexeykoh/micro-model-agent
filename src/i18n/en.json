@@ -217,6 +217,7 @@
   "verify.script_passed": "Script '{script}' passed",
   "verify.script_failed": "Script '{script}' failed: {message}",
   "verify.syntax_error": "Syntax error in: {path}",
+  "verify.file_still_exists": "File should be deleted but still exists: {path}",
   "verify.no_files": "Step {step} has no named files to verify — run a real check instead (bash: bun run build / bun test / lsp_check) and confirm the result.",
   "lsp.unavailable": "static checks are unavailable (server not found). Verify via the project's own build/test instead.",
   "lsp.check_disabled": "LSP checks are disabled in the config.",

@@ -3,6 +3,7 @@ import type { ToolCall } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { StuckDetector } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
+import type { PlanStore } from "./plan-store";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
@@ -50,6 +51,7 @@ export interface ExecutionPluginDeps {
   pendingMessages: Array<{ role: "user"; content: string }>;
   forbiddenBashFailures: Map<string, number>;
   state: ExecutionPluginState;
+  store: PlanStore;
   checkPlanAlignment(call: any): string | null;
   advancePlanIfStepComplete(
     contextManager?: any,
@@ -215,37 +217,28 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         if (currentIter - deps.state.lastRecoveryIteration >= STUCK_RECOVERY_COOLDOWN) {
           const recovery = deps.stuckDetector.getRecoveryMessage();
           if (recovery && ctx.contextManager) {
-            const lastError = deps.stuckDetector.getLastErrorOutput();
-            const skillHint = lastError
-              ? "\nIf you have relevant skills available, consider loading one with load_skill for expert guidance."
-              : "";
-
-            // Actionable hints based on actual error output
-            const actionableHints = deps.stuckDetector.getActionableHints();
-            const actionableHintStr =
-              actionableHints.length > 0
-                ? `\n${t("exec.hints", { hints: actionableHints.map((h) => `- ${h}`).join("\n") })}`
-                : "";
-
-            // Tool alternative suggestion
-            const alternative = deps.stuckDetector.getToolAlternative();
-            const altHint = alternative
-              ? `\nTool "${deps.stuckDetector.getLastFailedTool()}" is failing. Try "${alternative}" instead.`
-              : "";
+            // Include tsc error context so the model knows WHY it is stuck.
+            let tscContext = "";
+            if (deps.state.typecheckFailures.size > 0) {
+              const currentStep = deps.trackerRef.current?.getCurrentStep();
+              if (currentStep) {
+                const stepFiles = extractFileLikeTokens(stripUrls(currentStep.description));
+                for (const [file, error] of deps.state.typecheckFailures) {
+                  if (!file || stepFiles.some((f) => file.endsWith(f) || f.endsWith(file))) {
+                    tscContext = `\nLast compile error: ${error}`;
+                    break;
+                  }
+                }
+                if (!tscContext) {
+                  const first = deps.state.typecheckFailures.entries().next().value;
+                  if (first) tscContext = `\nLast compile error: ${first[1]}`;
+                }
+              }
+            }
 
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>${recovery}${skillHint}${actionableHintStr}${altHint}</system-summary>`,
-            });
-          }
-          const hints = deps.stuckDetector.getHints();
-          if (hints.length > 0 && ctx.contextManager) {
-            const hintMsg = t("exec.hints", {
-              hints: hints.map((h) => `- ${h}`).join("\n"),
-            });
-            ctx.contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>${hintMsg}</system-summary>`,
+              content: `<system-summary>${recovery}${tscContext}</system-summary>`,
             });
           }
           deps.stuckDetector.recordEscalation();
@@ -325,6 +318,28 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           String(result.output ?? ""),
         );
       }
+      // Auto-detect delete intent from model actions: when delete_file is
+      // called, find the matching plan step and set kind="delete". This is
+      // language-agnostic — based on what the model DID, not what it said.
+      if (call.name === "delete_file" && result.success && deps.trackerRef.current) {
+        const deletedPath = String(call.arguments?.path ?? "");
+        if (deletedPath) {
+          const plan = deps.trackerRef.current.getPlan();
+          const tokens = extractFileLikeTokens(stripUrls(deletedPath));
+          for (const step of plan.steps) {
+            if (step.status !== "pending" && step.status !== "in_progress") continue;
+            const stepTokens = extractFileLikeTokens(stripUrls(step.description));
+            const overlap = tokens.some((t) =>
+              stepTokens.some((st) => t.endsWith(st) || st.endsWith(t)),
+            );
+            if (overlap && step.kind !== "delete") {
+              step.kind = "delete";
+              deps.store.saveActive(plan);
+              break;
+            }
+          }
+        }
+      }
       // A write/edit/bash that reports success but still carries a
       // type/syntax error in its output is NOT a success — the model must
       // fix the actual error, not keep rewriting the file blindly. Feed it
@@ -379,22 +394,6 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         if (!hasTypeError) {
           deps.stuckDetector.recordToolError(call.name, result.output);
         }
-
-        // Immediately queue an actionable hint on failure (don't wait for
-        // the stuck threshold). Flushed in onBeforeThink so it does not
-        // land between tool messages.
-        const actionableHints = deps.stuckDetector.getActionableHints();
-        const alternative = deps.stuckDetector.getToolAlternative();
-        if (actionableHints.length > 0 || alternative) {
-          const parts = [...actionableHints];
-          if (alternative) {
-            parts.push(`Tool "${call.name}" crashed. Try "${alternative}" instead.`);
-          }
-          deps.pendingMessages.push({
-            role: "user",
-            content: `<system-summary>${t("exec.hints", { hints: parts.map((h) => `- ${h}`).join("\n") })}</system-summary>`,
-          });
-        }
       } else {
         deps.stuckDetector.recordToolSuccess();
 
@@ -413,11 +412,6 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             deps.pendingMessages.push({
               role: "user",
               content: `<system-summary>${testRun.framework}: all ${testRun.passed} test(s) passed for "${cmd}". You may mark the current step as done via plan update step=N status=done.</system-summary>`,
-            });
-          } else if (/node|tsx|ts-node|python|npm\s+(start|test|run)/.test(cmd)) {
-            deps.pendingMessages.push({
-              role: "user",
-              content: `<system-summary>The command "${cmd}" completed successfully. If this was testing your code, mark the current step as done via plan update step=N status=done.</system-summary>`,
             });
           }
         }

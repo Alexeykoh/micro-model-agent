@@ -366,6 +366,7 @@ export class ExecutionModule implements AgentModule {
       pendingMessages: this.pendingMessages,
       forbiddenBashFailures: this.forbiddenBashFailures,
       state: this.state,
+      store: this.store,
       checkPlanAlignment: (call) => this.checkPlanAlignment(call),
       advancePlanIfStepComplete: (cm, sl) => this.advancePlanIfStepComplete(cm, sl),
       maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),

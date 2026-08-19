@@ -348,6 +348,13 @@ export class StuckDetector {
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
     this.escalationCount = 0;
+    // Decay iteration counter on productive tool calls — reading new files,
+    // writing, editing all count as progress. Prevents false-positive stuck
+    // warnings during legitimate file exploration (e.g. reading 12 files in
+    // an analysis step).
+    if (this.iterationsOnCurrentStep > 0) {
+      this.iterationsOnCurrentStep = Math.max(0, this.iterationsOnCurrentStep - 1);
+    }
   }
 
   setCurrentStep(stepId: number, description: string): void {

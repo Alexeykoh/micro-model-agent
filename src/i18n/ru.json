@@ -215,6 +215,7 @@
   "verify.script_passed": "Скрипт '{script}' пройден",
   "verify.script_failed": "Скрипт '{script}' не пройден: {message}",
   "verify.syntax_error": "Синтаксическая ошибка в: {path}",
+  "verify.file_still_exists": "Файл должен быть удалён, но всё ещё существует: {path}",
   "verify.no_files": "Шаг {step} не содержит именованных файлов для проверки — выполни реальную проверку (bun run build / bun test / lsp_check) и подтверди результат.",
   "lsp.unavailable": "статические проверки недоступны (сервер не найден). Проверяйте через собственный build/test проекта.",
   "lsp.check_disabled": "LSP-проверки отключены в конфигурации.",

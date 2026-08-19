@@ -3,6 +3,7 @@ import { resolve, extname, dirname, join } from "path";
 import { spawn } from "child_process";
 import { t } from "../../i18n/index";
 import type { MoEPlan } from "./types";
+import type { StepKind } from "./planner";
 import type { AppConfig } from "../../config/types";
 import { validateExpertConfig } from "../../config/experts";
 import { findProjectRoot } from "../lsp/project-root";
@@ -151,7 +152,7 @@ export class StepVerifier {
     };
   }
 
-  async verifyStep(stepDescription: string): Promise<StepVerificationResult> {
+  async verifyStep(stepDescription: string, kind?: StepKind): Promise<StepVerificationResult> {
     const fileMatches = extractFileLikeTokens(stripUrls(stepDescription));
 
     // No named files — this step cannot be verified by file existence. Do NOT
@@ -166,7 +167,22 @@ export class StepVerifier {
 
     for (const filePath of fileMatches) {
       const resolved = findExistingFile(this.baseDir, filePath);
-      if (!resolved) {
+      const exists = !!resolved;
+
+      if (kind === "delete") {
+        // For delete steps: file NOT existing is a pass
+        results.push({
+          passed: !exists,
+          message: exists
+            ? t("verify.file_still_exists", { path: filePath })
+            : t("verify.file_not_found", { path: filePath }),
+        });
+        // Don't syntax-check a deleted file
+        continue;
+      }
+
+      // Create steps: file must exist + valid syntax
+      if (!exists) {
         results.push({ passed: false, message: t("verify.file_not_found", { path: filePath }) });
         continue;
       }

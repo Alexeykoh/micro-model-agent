@@ -398,12 +398,9 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           if (args.note) tracker.addNote(Number(args.step), String(args.note));
           tracker.syncCurrentStep();
           deps.store.saveActive(tracker.getPlan());
-
           // A "done" step that names no file tokens has a vacuous gate — its
-          // completion cannot be auto-verified. Inform the model instead of
-          // silently accepting a claim it cannot check (the auto-advance path
-          // also cannot verify it, so the model should run an explicit check
-          // command before finalizing).
+          // completion cannot be auto-verified. Inform the model so it can
+          // run an explicit check or add file paths to the step description.
           const vacuousGate = status === "done" && !deps.hasStepDeliverables(target);
           const vacuousNote = vacuousGate
             ? `\n${t("plan.no_deliverables", { step: String(stepId) })}`
@@ -666,7 +663,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
         const tracker = deps.trackerRef.current;
         const step = args.step ? tracker.getStep(Number(args.step)) : tracker.getCurrentStep();
         if (!step) return { success: false, output: t("plan.step_not_found") };
-        const result = await deps.verifier.verifyStep(step.description);
+        const result = await deps.verifier.verifyStep(step.description, step.kind);
         if (result.noFiles) {
           return {
             success: true,
