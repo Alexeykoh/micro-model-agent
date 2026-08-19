@@ -10,6 +10,7 @@ import { safeResolvePath } from "./path-utils";
 
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
+  icon: "📦",
   description: "Move or rename a file or directory.",
   tags: ["file"],
   parameters: {

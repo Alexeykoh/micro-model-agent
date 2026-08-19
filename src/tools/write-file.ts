@@ -11,6 +11,7 @@ import { safeResolvePath } from "./path-utils";
 
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
+  icon: "📝",
   description:
     "Create or overwrite a file with given content. Creates intermediate directories if needed.",
   tags: ["file", "code"],

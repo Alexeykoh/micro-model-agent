@@ -7,6 +7,7 @@ import { runChunkQuery } from "../modules/context/chunk-query";
 
 export const chunkQueryTool: ToolDefinition = {
   name: "chunk_query",
+  icon: "🧩",
   description:
     "Answer a query over a large text (file or inline) by splitting it into chunks and querying the model per chunk in parallel, then optionally synthesizing a final answer. Use when the input is too large for the context window.",
   tags: ["research", "code"],

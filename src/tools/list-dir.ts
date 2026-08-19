@@ -8,6 +8,7 @@ import { MAX_PREVIEW_LINES } from "./preview";
 
 export const listDirTool: ToolDefinition = {
   name: "list_dir",
+  icon: "📂",
   description: `List files and directories in a given path. Shows up to ${MAX_PREVIEW_LINES} entries by default.`,
   tags: ["file"],
   boundedOutput: true,

@@ -16,6 +16,7 @@ function truncateLines(output: string): string {
 
 export const grepTool: ToolDefinition = {
   name: "grep",
+  icon: "🔍",
   description: `Search file contents using a regular expression. Shows up to ${MAX_PREVIEW_LINES} matching lines by default. Uses ripgrep (rg) if available, otherwise falls back to grep -r.`,
   tags: ["file", "code", "research"],
   parameters: {

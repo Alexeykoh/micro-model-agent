@@ -36,6 +36,7 @@ describe("Agent hallucination reactions", () => {
     toolExecutor: {
       execute: async () => ({ success: true, output: "ok" }),
       getToolDefinitions: () => [],
+      getRegistry: () => ({ get: () => undefined }),
     } as any,
     pluginManager: {
       runOnBeforeThink: () => {},

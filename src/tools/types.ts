@@ -2,6 +2,9 @@ export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /** Emoji icon shown in the tool header (e.g. 📝, 🔍, 💻). Falls back to
+   *  the hardcoded marker in `toolMarker()` when not set. */
+  icon?: string;
   tags?: string[];
   /**
    * Tools that survive any tag-based filtering (getAllForLLM/getByTags/

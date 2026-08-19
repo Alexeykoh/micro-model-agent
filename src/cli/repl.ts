@@ -388,6 +388,7 @@ export class Repl implements ReplContext {
               ev.tool,
               ev.args,
               stepContextForTool(this.activePlan, ev.tool, ev.args),
+              ev.icon,
             );
           } else {
             renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);

@@ -8,6 +8,7 @@ const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"
 
 export const rememberTool: ToolDefinition = {
   name: "remember",
+  icon: "🧠",
   description:
     "Remember information across sessions. Use for user preferences, facts, conventions, decisions, or errors.",
   tags: ["memory"],

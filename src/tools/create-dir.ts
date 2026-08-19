@@ -9,6 +9,7 @@ import { safeResolvePath } from "./path-utils";
 
 export const createDirTool: ToolDefinition = {
   name: "create_dir",
+  icon: "📁",
   description: "Create a directory (and any intermediate directories).",
   tags: ["file"],
   parameters: {

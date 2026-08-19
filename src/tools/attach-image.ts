@@ -12,6 +12,7 @@ import { logSecurityBlock } from "../modules/security/audit-log";
 
 export const attachImageTool: ToolDefinition = {
   name: "attach_image",
+  icon: "🖼️",
   description:
     "Attach an image to the conversation from a file path, URL, or clipboard. The image will be included in the next message sent to the model. Supports PNG, JPEG, GIF, WebP.",
   tags: ["vision", "image"],

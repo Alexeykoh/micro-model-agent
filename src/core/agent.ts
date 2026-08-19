@@ -725,7 +725,8 @@ export class Agent {
             { iteration, logger, contextManager },
             { id: call.id, name: call.name, arguments: call.arguments },
           );
-          onTool?.({ type: "start", tool: call.name, args: call.arguments });
+          const toolIcon = this.deps.toolExecutor.getRegistry().get(call.name)?.icon;
+          onTool?.({ type: "start", tool: call.name, args: call.arguments, icon: toolIcon });
           slog.logToolCall(call, iteration);
 
           const tokensBeforeTool = contextManager.getEstimatedTokens();

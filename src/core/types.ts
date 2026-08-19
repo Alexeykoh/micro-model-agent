@@ -19,6 +19,7 @@ export interface ToolEvent {
   type: "start" | "end";
   tool: string;
   args: Record<string, unknown>;
+  icon?: string;
   duration?: number;
   error?: boolean;
   ctxDelta?: number;

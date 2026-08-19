@@ -25,6 +25,7 @@ function buildSubagentSystemPrompt(context: string, stable: boolean): string {
 
 export const subagentTool: ToolDefinition = {
   name: "subagent",
+  icon: "🤖",
   description:
     "Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.",
   tags: ["code"],

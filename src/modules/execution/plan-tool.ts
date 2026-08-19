@@ -46,6 +46,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
   return [
     {
       name: "plan",
+      icon: "📋",
       alwaysOn: true,
       description:
         'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped), or rebuild plan with new steps.\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- For steps that REMOVE files, pass kinds: ["delete"] aligned with steps (the done-gate verifies those files are gone instead of demanding they exist).',
@@ -577,6 +578,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
     },
     {
       name: "todo",
+      icon: "☑️",
       alwaysOn: true,
       description:
         "Manage sub-tasks within current plan step. Use to break down complex steps into smaller tasks.",
@@ -677,6 +679,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
     },
     {
       name: "verify",
+      icon: "✅",
       alwaysOn: true,
       description:
         "Run verification for the current step. Checks files mentioned in the step description.",

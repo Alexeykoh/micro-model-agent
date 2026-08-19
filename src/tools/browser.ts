@@ -44,6 +44,7 @@ export function formatScreenshotResult(
 export function createBrowserTool(): ToolDefinition {
   return {
     name: "browser",
+    icon: "🌐",
     tags: ["browser", "vision"],
     description: [
       "Control a headless browser. Navigate pages, click elements, type text, scroll, take screenshots.",

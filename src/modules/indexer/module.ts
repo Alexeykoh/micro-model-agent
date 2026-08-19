@@ -203,6 +203,7 @@ export class IndexerModule implements AgentModule {
   private createProjectMapTool(): ToolDefinition {
     return {
       name: "project_map",
+      icon: "🗺️",
       alwaysOn: true,
       description: t("indexer.project_map_desc"),
       parameters: {

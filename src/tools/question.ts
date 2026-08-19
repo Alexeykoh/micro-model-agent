@@ -61,6 +61,7 @@ function normalizeQuestions(args: Record<string, unknown>): QuestionSpec[] {
 
 export const questionTool: ToolDefinition = {
   name: "question",
+  icon: "❓",
   description: DESCRIPTION,
   tags: ["core"],
   interactive: true,

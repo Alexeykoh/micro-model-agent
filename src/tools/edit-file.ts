@@ -11,6 +11,7 @@ import { safeResolvePath } from "./path-utils";
 
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
+  icon: "✏️",
   description: "Find and replace text in an existing file. Uses exact string match (not regex).",
   tags: ["file", "code"],
   parameters: {

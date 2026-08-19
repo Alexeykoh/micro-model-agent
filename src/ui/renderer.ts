@@ -146,20 +146,25 @@ export class Renderer {
     this.spinner.stop();
   }
 
-  toolStart(tool: string, args: Record<string, unknown>, stepContext?: string | null): void {
+  toolStart(
+    tool: string,
+    args: Record<string, unknown>,
+    stepContext?: string | null,
+    icon?: string,
+  ): void {
     this.endCard();
     this.spinner.stop();
     const summary = summarizeArgs(args);
     const step = stepContext ? ` ${pc.cyan(`← ${stepContext}`)}` : "";
+    const marker = icon || toolMarker(tool);
     if (!this.rich) {
       this.out.write(
-        `\n${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
+        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
       );
       return;
     }
     this.card = { tool, args, body: [], start: Date.now() };
     if (this.toolStyle === "inline") {
-      const marker = toolMarker(tool);
       this.out.write(
         `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
       );
@@ -169,7 +174,7 @@ export class Renderer {
       return;
     }
     this.spinner.start(
-      `${pc.dim("⚙")} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}`,
+      `${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}`,
     );
   }
 

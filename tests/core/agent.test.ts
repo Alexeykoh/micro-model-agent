@@ -22,6 +22,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
   const mockToolExecutor = {
     execute: vi.fn().mockResolvedValue({ success: true, output: "tool ok" }),
     getToolDefinitions: vi.fn().mockReturnValue([]),
+    getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
   };
 
   const mockPluginManager = {
@@ -130,6 +131,15 @@ function createMockDeps(overrides?: Record<string, unknown>) {
       showCompaction: false,
     },
     skills: { budget: 8000 },
+    tools: { defaultTags: ["file", "code"], enableOnDemand: true },
+    subagent: {
+      resultMode: "text",
+      maxSummaryChars: 2000,
+      artifactsDir: ".mma/artifacts",
+      stableSystemPrompt: true,
+      maxParallelChunkQueries: 3,
+    },
+    updater: { enabled: false, checkOnStart: false, autoInstall: false, intervalMs: 0 },
   };
 
   return {
@@ -429,6 +439,7 @@ describe("Agent", () => {
         toolCallId: "call-1",
       }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({
@@ -476,6 +487,7 @@ describe("Agent", () => {
         toolCallId: "call-x",
       }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({
@@ -834,6 +846,7 @@ describe("Agent", () => {
     const mockExecutor = {
       execute: vi.fn().mockResolvedValue({ success: true, output: "tool ok" }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({
@@ -850,6 +863,7 @@ describe("Agent", () => {
     const mockExecutor = {
       execute: vi.fn().mockResolvedValue({ success: true, output: "tool ok" }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({ toolExecutor: mockExecutor as any });
@@ -1142,6 +1156,7 @@ describe("Agent", () => {
         toolCallId: "call-1",
       }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({
@@ -1220,6 +1235,7 @@ describe("Agent", () => {
         return Promise.resolve({ success: false, output: "Not found: src/old.ts" });
       }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const deps = createMockDeps({
@@ -1275,6 +1291,7 @@ describe("Agent", () => {
         return toolDone;
       }),
       getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
 
     const sessionManagerMock = {

@@ -66,6 +66,7 @@ async function runStep(
 
 export const pipelineRunTool: ToolDefinition = {
   name: "pipeline_run",
+  icon: "▶️",
   description:
     "Run a named pipeline with YAML definition. Creates a DAG of sub-agents that execute in dependency order.",
   tags: ["shell", "code"],

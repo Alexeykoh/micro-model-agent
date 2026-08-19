@@ -5,6 +5,7 @@ import { MAX_PREVIEW_LINES } from "./preview";
 
 export const globTool: ToolDefinition = {
   name: "glob",
+  icon: "🔎",
   description: `Search for files matching a glob pattern. Shows up to ${MAX_PREVIEW_LINES} results by default. Uses standard glob syntax (e.g., **/*.ts, src/**/*.test.ts).`,
   tags: ["file", "code", "research"],
   parameters: {

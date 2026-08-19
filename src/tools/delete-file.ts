@@ -10,6 +10,7 @@ import { safeResolvePath } from "./path-utils";
 
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
+  icon: "🗑️",
   description: "Delete a file from the filesystem.",
   tags: ["file"],
   parameters: {

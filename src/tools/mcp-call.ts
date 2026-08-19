@@ -29,6 +29,7 @@ function ensureInitialized(ctx: ToolContext): void {
 
 export const mcpCallTool: ToolDefinition = {
   name: "mcp_call",
+  icon: "🔗",
   description:
     "Call a tool on an MCP (Model Context Protocol) server. MCP servers provide external capabilities like databases, APIs, or specialized tools.",
   tags: ["code", "research"],

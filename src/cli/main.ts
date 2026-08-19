@@ -105,7 +105,7 @@ async function main(): Promise<void> {
       (meta) => renderer.meta(meta),
       (ev) => {
         if (ev.type === "start") {
-          renderer.toolStart(ev.tool, ev.args);
+          renderer.toolStart(ev.tool, ev.args, undefined, ev.icon);
         } else {
           renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
         }

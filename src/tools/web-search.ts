@@ -72,6 +72,7 @@ function formatResults(results: SearchResult[]): string {
 
 export const webSearchTool: ToolDefinition = {
   name: "web_search",
+  icon: "🌍",
   description:
     "Search the web for information. Returns search results with titles and snippets. Use this for search queries instead of opening search engines (Google/Yandex/Bing) in the browser — they block headless browsers.",
   tags: ["research"],

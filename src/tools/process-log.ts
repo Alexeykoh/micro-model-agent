@@ -7,6 +7,7 @@ const DEFAULT_TAIL = MAX_PREVIEW_LINES;
 
 export const processLogTool: ToolDefinition = {
   name: "process_log",
+  icon: "📜",
   description: `Show the buffered output of a background process started via bash. Shows the last ${DEFAULT_TAIL} lines by default. Use after starting a dev server to verify it came up without errors, and while it runs to check its state.`,
   tags: ["shell"],
   boundedOutput: true,

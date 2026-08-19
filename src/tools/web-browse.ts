@@ -9,6 +9,7 @@ const MAX_CHARS = 3000;
 
 export const webBrowseTool: ToolDefinition = {
   name: "web_browse",
+  icon: "🌐",
   description: `Fetch and read a web page. Returns the page content as plain text (max ${MAX_PREVIEW_LINES} lines / ${MAX_CHARS} chars). This is a plain HTTP request — it does NOT execute JavaScript, so JS-rendered single-page apps (weather sites, dashboards, modern SPAs) return empty or near-empty content. For such pages use the "browser" tool instead.`,
   tags: ["research"],
   parameters: {

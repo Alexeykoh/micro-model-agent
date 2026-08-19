@@ -8,6 +8,7 @@ const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"
 
 export const recallTool: ToolDefinition = {
   name: "recall",
+  icon: "💾",
   description:
     "Recall stored information from memory. Search across preferences, facts, conventions, decisions, errors.",
   tags: ["memory"],

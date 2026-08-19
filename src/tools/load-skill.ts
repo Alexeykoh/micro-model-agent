@@ -5,6 +5,7 @@ import type { SkillsModule } from "../modules/skills/module";
 export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
     name: "load_skill",
+    icon: "🎯",
     tags: ["core"],
     description:
       "Load a skill by name. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Only use when the task clearly requires domain-specific knowledge.",
