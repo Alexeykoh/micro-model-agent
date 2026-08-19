@@ -1163,6 +1163,84 @@ describe("Agent", () => {
     expect(content).toContain("Repeated");
   });
 
+  it("does not count file_info 'Not found' failures toward the per-tool failure threshold", async () => {
+    // Regression (session test scenario 9): file_info returns success:false
+    // on "Not found" after a delete_file. This is EXPECTED behavior (verifying
+    // the file is gone), not a real error. The agent should not count it
+    // toward the 3x memory-write threshold.
+    const tmpBase = mkdtempSync(join(tmpdir(), "mma-fileinfo-"));
+    const sessionManagerMock = {
+      getActiveMeta: vi.fn().mockReturnValue({ id: "ses_test" }),
+      getSessionDirectory: vi.fn().mockReturnValue(tmpBase),
+      create: vi.fn(),
+      getActive: vi.fn().mockReturnValue("ses_test"),
+      appendLog: vi.fn(),
+      appendMessage: vi.fn(),
+      saveAssistantMessage: vi.fn(),
+      getActiveHistory: vi.fn().mockReturnValue([]),
+    };
+
+    let callCount = 0;
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(() => {
+        callCount++;
+        // First 3 calls: delete_file (success) then file_info (fail: not found)
+        // 4th call: final answer
+        if (callCount <= 3) {
+          const toolName = callCount % 2 === 1 ? "delete_file" : "file_info";
+          return (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: {
+                id: `call-${callCount}`,
+                name: toolName,
+                arguments: '{"path":"src/old.ts"}',
+              },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })();
+        }
+        return (async function* () {
+          yield { type: "text" as const, content: "Done." };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        })();
+      }),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const mockExecutor = {
+      execute: vi.fn().mockImplementation((_call: any) => {
+        const name = _call.name || _call;
+        if (name === "delete_file") {
+          return Promise.resolve({ success: true, output: "Deleted src/old.ts" });
+        }
+        // file_info on a deleted file returns success:false (expected)
+        return Promise.resolve({ success: false, output: "Not found: src/old.ts" });
+      }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+    };
+
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+      sessionManager: sessionManagerMock as any,
+      baseDir: tmpBase,
+      memoryStore: new MemoryStore(join(tmpBase, "memory")),
+      config: { ...createMockDeps().config, maxToolIterations: 6 },
+    });
+    const agent = new Agent(deps as any);
+    await agent.run("delete old.ts and verify");
+
+    // file_info failures should NOT trigger a memory rule
+    const errorsMd = join(tmpBase, "memory", "errors.md");
+    if (existsSync(errorsMd)) {
+      const content = readFileSync(errorsMd, "utf-8");
+      expect(content).not.toContain("file_info");
+    }
+  });
+
   it("stops mid-tool on shutdown: no tool-result rendering, no session log write", async () => {
     const mockProvider = {
       model: "test-model",

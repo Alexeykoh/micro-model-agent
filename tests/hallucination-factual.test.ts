@@ -101,4 +101,28 @@ describe("FactualCheck", () => {
     const result = check.validate("Data is stored in ghost.json");
     expect(result.status).toBe("warn");
   });
+
+  it("passes for bare names added via addKnownFiles (compaction summary)", () => {
+    const check = new FactualCheck(dir);
+    // Component16.tsx is NOT on disk — only in a compaction summary
+    check.addKnownFiles(["Component16.tsx", "Component17.tsx"]);
+    const result = check.validate("Updated Component16.tsx and Component17.tsx");
+    expect(result.status).toBe("pass");
+  });
+
+  it("still warns for a bare name not in known files and not on disk", () => {
+    const check = new FactualCheck(dir);
+    check.addKnownFiles(["Component16.tsx"]);
+    const result = check.validate("Updated ghost.tsx");
+    expect(result.status).toBe("warn");
+    expect(result.reason).toContain("ghost.tsx");
+  });
+
+  it("passes for paths from known files even when directory is ignored", () => {
+    const check = new FactualCheck(dir);
+    // _testing/ is in IGNORED_DIRS — bare name scan won't find it
+    check.addKnownFiles(["_testing/compaction-test/Component16.tsx"]);
+    const result = check.validate("Updated Component16.tsx");
+    expect(result.status).toBe("pass");
+  });
 });

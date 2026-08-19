@@ -323,6 +323,7 @@ export async function bootstrap(
     execModule.restorePlan();
   }
   moduleRegistry.register(execModule);
+  execModule.setHallucinationDetector(hallucinationDetector);
 
   const sessionModule = new SessionModule(sessionManager);
   moduleRegistry.register(sessionModule);

@@ -80,6 +80,8 @@ export class ExecutionModule implements AgentModule {
   private retryWebSearchSignatures = new Set<string>();
   private lastErrorSearchAt = 0;
   private readonly errorSearchCooldownMs: number;
+  private hallucinationDetector: { getConsistencyCheck(): { getDeletedFiles(): string[] } } | null =
+    null;
 
   /**
    * The execution-plugin's mutable state. Owned HERE and passed BY REFERENCE
@@ -145,6 +147,14 @@ export class ExecutionModule implements AgentModule {
     this.store.saveActive(plan);
     this.completedPlan = null; // a new plan supersedes the completed one
     this._auditSkipsRemaining = 0; // plan explicitly created — arm the audit gate
+  }
+
+  /** Wire the hallucination detector so the plan tool can check whether
+   *  a file was tracked as deleted (auto-switch kind gate). */
+  setHallucinationDetector(detector: {
+    getConsistencyCheck(): { getDeletedFiles(): string[] };
+  }): void {
+    this.hallucinationDetector = detector;
   }
 
   /** Remember the last completed plan so the final audit can still verify it
@@ -356,6 +366,10 @@ export class ExecutionModule implements AgentModule {
       getTaskText: (c) => this.getTaskText(c),
       typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
+      wasFileDeleted: this.hallucinationDetector
+        ? (path: string) =>
+            this.hallucinationDetector!.getConsistencyCheck().getDeletedFiles().includes(path)
+        : undefined,
     });
   }
 

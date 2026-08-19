@@ -467,6 +467,8 @@ export class Agent {
         if (result) {
           logger.debug("Context compacted");
           slog.logCompaction({ reason: "interval", iteration, ...result });
+          // Seed hallucination checker with files from compaction summary
+          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
         }
       }
 
@@ -487,6 +489,7 @@ export class Agent {
             iteration,
             ...result,
           });
+          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
         }
       }
       if (currentTokens > budget.history) {
@@ -498,6 +501,7 @@ export class Agent {
             iteration,
             ...result,
           });
+          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
         }
       }
 
@@ -706,6 +710,10 @@ export class Agent {
         });
         const summaries: string[] = [];
         let anyToolFailed = false;
+        // Informational read-only tools whose "failure" is expected behavior
+        // (e.g. file_info "Not found" after delete_file) — excluded from
+        // per-tool failure counting and consecutive failure tracking.
+        const infoTools = new Set(["file_info"]);
         for (const call of toolCalls) {
           this.setScope();
           const startTime = Date.now();
@@ -728,7 +736,7 @@ export class Agent {
           // fixes the "Replaced in ..." lines appearing AFTER "Session ended".
           if (this.shutdownRequested) break;
           const duration = Date.now() - startTime;
-          if (!result.success) anyToolFailed = true;
+          if (!result.success && !infoTools.has(call.name)) anyToolFailed = true;
 
           if (result.success && call.arguments.path) {
             const filePath = String(call.arguments.path);
@@ -801,6 +809,7 @@ export class Agent {
                 iteration,
                 ...result,
               });
+              hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
             }
           }
           // Track per-tool failure counts (NOT just consecutive) so a tool
@@ -808,7 +817,7 @@ export class Agent {
           // is still learned from (observed: LSP spawn npx ENOENT failed
           // 8x in one session, never consecutively, so it never reached
           // memory via the 5-consecutive-failures path).
-          if (!result.success) {
+          if (!result.success && !infoTools.has(call.name)) {
             const key = call.name;
             const prev = toolFailureCounts.get(key) ?? { count: 0, error: "" };
             prev.count++;

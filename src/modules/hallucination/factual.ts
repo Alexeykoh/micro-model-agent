@@ -23,9 +23,18 @@ export class FactualCheck {
   private static readonly NAME_CACHE_TTL_MS = 5_000;
   private static readonly RESCAN_COOLDOWN_MS = 2_000;
   private static readonly MAX_INDEXED_FILES = 20_000;
+  /** Files known from compaction summaries — survive context resets. */
+  private knownFiles = new Set<string>();
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
+  }
+
+  /** Add file paths known from compaction summaries. These are checked
+   *  before the filesystem scan so bare filenames from compacted turns
+   *  are recognized even when the directory is in IGNORED_DIRS. */
+  addKnownFiles(files: string[]): void {
+    for (const f of files) this.knownFiles.add(f);
   }
 
   validate(response: string): HallucinationCheckResult {
@@ -58,6 +67,9 @@ export class FactualCheck {
   private pathExists(fp: string): boolean {
     if (isAbsolute(fp)) return existsSync(fp);
 
+    // Check known files from compaction summaries first
+    if (this.knownFiles.has(fp)) return true;
+
     // "foo.json" has no directory part — treat it as a bare name that may
     // live anywhere under baseDir (e.g. src/data/bikes.json). Resolving it
     // against the workspace root alone produced false "unknown file" warnings.
@@ -71,6 +83,12 @@ export class FactualCheck {
   private bareNameExists(name: string): boolean {
     if (existsSync(resolve(this.baseDir, name))) return true;
     if (this.indexHas(name)) return true;
+    // Check known files — a bare name may match a full path from compaction
+    for (const known of this.knownFiles) {
+      if (known.endsWith(`/${name}`) || known.endsWith(`\\${name}`) || known === name) {
+        return true;
+      }
+    }
 
     // A write_file from this session may have created the file after the
     // index was built. Do a one-off rescan (rate-limited) before warning.

@@ -158,6 +158,13 @@ export class FactExtractor {
     return `[Files: ${liveFiles.slice(-15).join("; ")}]`;
   }
 
+  /** All known live files (not deleted) — used to seed the hallucination
+   *  checker's known-files set after compaction. */
+  getKnownFiles(): string[] {
+    const deletedSet = new Set(this.deletedFacts);
+    return this.fileFacts.filter((p) => !deletedSet.has(p));
+  }
+
   /** `[Deleted: c]` line, or null. */
   deletedLine(): string | null {
     if (this.deletedFacts.length === 0) return null;

@@ -361,6 +361,66 @@ describe("plan update deliverable gate", () => {
     expect(ok.success).toBe(true);
     expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
   });
+
+  it("auto-switches kind to delete when all named files are gone and model says done", async () => {
+    // Regression (session test scenario 9): model calls `plan update step=N
+    // status=done` after deleting files. The step has kind=create (default),
+    // so the deliverable gate blocks done (file not found) and the agent
+    // loops. The fix: when ALL named files are gone AND the agent tracked
+    // them as deleted (via ConsistencyCheck), auto-switch kind to delete.
+    const deletedFiles = new Set<string>(["src/old.ts"]);
+    execModule.setHallucinationDetector({
+      getConsistencyCheck: () =>
+        ({
+          getDeletedFiles: () => Array.from(deletedFiles),
+        }) as any,
+    } as any);
+    // Get tool AFTER setting the detector — handler closes over deps
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Remove src/old.ts"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "old.ts"), "export const x = 1;\n");
+    // After plan create without explicit kinds, kind defaults to "create"
+    expect(execModule.getTracker()!.getStep(1)!.kind).toBe("create");
+
+    // Simulate the agent deleting the file
+    rmSync(join(tmpDir, "src", "old.ts"));
+
+    // Now mark done — kind should auto-switch to delete
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(res.success).toBe(true);
+    // Plan auto-archives after the last step → tracker is null
+    expect(execModule.getTracker()).toBeNull();
+    // Verify the plan was archived with kind=delete
+    const archived = execModule
+      .getStore()
+      .listArchived()
+      .find((p) => p.steps[0]?.kind === "delete");
+    expect(archived).toBeDefined();
+    expect(archived!.steps[0].kind).toBe("delete");
+  });
+
+  it("does NOT auto-switch kind when files are missing but never tracked as deleted", async () => {
+    // When files are missing but the agent never ran delete_file on them,
+    // auto-switch should NOT fire — the model must create the files.
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Create src/missing.ts"],
+    });
+    // No file created, no delete tracked
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("missing.ts");
+    expect(execModule.getTracker()!.getStep(1)!.kind).toBe("create");
+  });
 });
 
 describe("plan create guard", () => {

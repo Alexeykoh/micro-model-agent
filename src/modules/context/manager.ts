@@ -197,6 +197,12 @@ export class ContextManager {
     return this.iterationsSinceCompaction;
   }
 
+  /** Files known from compaction summaries — for seeding the hallucination
+   *  checker's known-files set so bare filenames survive context resets. */
+  getKnownFiles(): string[] {
+    return this.facts.getKnownFiles();
+  }
+
   noteIteration(): void {
     this.iterationsSinceCompaction++;
   }

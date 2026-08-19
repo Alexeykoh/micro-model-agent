@@ -30,6 +30,10 @@ export interface PlanToolDeps {
    *  plugin state). The done-gate refuses while a step's files are in here. */
   typecheckFailures: ReadonlyMap<string, string>;
   baseDir: string;
+  /** Check if a file was tracked as deleted by the agent (ConsistencyCheck).
+   *  Used by the auto-switch logic to confirm the model actually deleted the
+   *  file (via delete_file or bash rm) before switching kind to delete. */
+  wasFileDeleted?(path: string): boolean;
 }
 
 /**
@@ -349,6 +353,30 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           // intent. "create" (default) → named files must exist; "delete"
           // → named files must be GONE. Intent is model-declared (kind),
           // never keyword-inferred (rule #10).
+          //
+          // Auto-switch: when kind is "create" but ALL named files are gone,
+          // check if the agent actually deleted them (via delete_file/bash rm).
+          // Only then switch to "delete" — files that were never created
+          // (create-kind steps) remain blocked so the agent must create them.
+          if (status === "done" && target.kind !== "delete") {
+            const missing = deps.missingStepDeliverables(target);
+            if (missing.length > 0) {
+              const existing = deps.stillExistingDeliverables(target);
+              const allGone = deps.hasStepDeliverables(target) && existing.length === 0;
+              if (allGone) {
+                // Confirm the agent actually deleted these files (not just
+                // never created them) before auto-switching.
+                const wasDeleted = deps.wasFileDeleted
+                  ? missing.every((f) => deps.wasFileDeleted!(f))
+                  : false;
+                if (wasDeleted) {
+                  target.kind = "delete";
+                  deps.store.saveActive(tracker.getPlan());
+                }
+              }
+            }
+          }
+
           if (status === "done") {
             if (target.kind === "delete") {
               const leftovers = deps.stillExistingDeliverables(target);

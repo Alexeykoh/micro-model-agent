@@ -34,6 +34,11 @@ export class HallucinationDetector {
     return this.confidence;
   }
 
+  /** Add files known from compaction summaries to the factual checker. */
+  addKnownFiles(files: string[]): void {
+    this.factual?.addKnownFiles(files);
+  }
+
   async validate(response: string): Promise<HallucinationCheckResult> {
     const confidenceResult = this.confidence.validate(response);
     if (confidenceResult.status === "retry" || confidenceResult.status === "block") {
