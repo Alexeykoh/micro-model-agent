@@ -198,8 +198,12 @@ export class Renderer {
     error?: boolean,
     ctxDelta?: number,
     costUsd?: number,
+    provider?: string,
+    model?: string,
   ): void {
     this.spinner.stop();
+    const prov =
+      provider && model ? `${pc.dim(`${provider}·${model}`)}` : undefined;
     if (!this.rich) {
       const parts: string[] = [];
       if (ctxDelta !== undefined && ctxDelta !== 0) {
@@ -209,6 +213,7 @@ export class Renderer {
       if (costUsd !== undefined && costUsd > 0) {
         parts.push(`${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`);
       }
+      if (prov) parts.push(prov);
       if (parts.length > 0) this.out.write(`${parts.join("  ")}\n`);
       return;
     }
@@ -222,6 +227,9 @@ export class Renderer {
     }
     if (costUsd !== undefined && costUsd > 0) {
       footer += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
+    }
+    if (prov) {
+      footer += `  ${pc.dim("via")} ${prov}`;
     }
     if (this.toolStyle === "inline") {
       this.out.write(`${GUTTER}${footer}\n`);

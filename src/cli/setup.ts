@@ -3,6 +3,7 @@ import type { LineInput } from "../ui/line-editor";
 import { pc } from "../ui/colors";
 import { t, setLocale } from "../i18n/index";
 import { Spinner } from "../ui/spinner";
+import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
 import { renderTable } from "../ui/table";
 
@@ -46,16 +47,10 @@ function ask(rl: LineInput, question: string, defaultValue?: string): Promise<st
   });
 }
 
-const PROVIDER_TYPES = [
-  {
-    value: "openai-compat",
-    label: "OpenAI-compatible (LM Studio, Ollama, vLLM, etc.)",
-  },
-  { value: "openai", label: "OpenAI API" },
-  { value: "anthropic", label: "Anthropic Claude" },
-  { value: "opencode-zen", label: "OpenCode Zen (opencode.ai/zen)" },
-  { value: "opencode-go", label: "OpenCode Go (opencode.ai/go)" },
-];
+const PROVIDER_TYPES = BUILTIN_PROVIDERS.map((spec) => ({
+  value: spec.type,
+  label: spec.label,
+}));
 
 const KNOWN_PORTS = [
   { port: 1234, label: "LM Studio" },
@@ -63,14 +58,6 @@ const KNOWN_PORTS = [
   { port: 8080, label: "vLLM / custom" },
   { port: 4891, label: "GPT4All" },
 ];
-
-/** Fixed base URLs for hosted providers (no port scan / model autodetect). */
-export const HOSTED_BASE_URLS: Record<string, string> = {
-  openai: "https://api.openai.com/v1",
-  anthropic: "https://api.anthropic.com",
-  "opencode-zen": "https://opencode.ai/zen/v1",
-  "opencode-go": "https://opencode.ai/zen/go/v1",
-};
 
 async function scanPorts(): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = [];

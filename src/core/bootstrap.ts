@@ -1,6 +1,6 @@
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
-import { OpenAICompatProvider } from "../llm/openai-compat";
+import { ProviderManager } from "../modules/providers/index";
 import { ModelLoader } from "../llm/model-loader";
 import { ToolRegistry, registerAllTools } from "../tools/index";
 import { buildHiddenToolsBlock } from "../tools/hidden-tools-block";
@@ -168,14 +168,16 @@ export async function bootstrap(
   profile.load() || profile.collect();
   profile.save();
 
-  const llmProvider = new OpenAICompatProvider({
-    model: config.model,
-    baseUrl: config.provider.baseUrl,
-    apiKey: config.provider.apiKey,
+  // Multi-provider manager (Phase 2). Built from the (possibly legacy flat)
+  // config; the active provider is resolved through it. The initial provider
+  // comes from the manager so the active entry is honored on startup.
+  const providerManager = new ProviderManager(config.provider, {
     contextWindow: config.contextWindow,
     retry: config.retry,
     rateLimits: config.security?.rateLimits,
   });
+  providerManager.setModel(config.model);
+  const llmProvider = providerManager.active;
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
 

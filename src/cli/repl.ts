@@ -373,7 +373,15 @@ export class Repl implements ReplContext {
               ev.icon,
             );
           } else {
-            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
+            renderer.toolEnd(
+              ev.tool,
+              ev.duration ?? 0,
+              ev.error,
+              ev.ctxDelta,
+              ev.costUsd,
+              ev.provider,
+              ev.model,
+            );
             if (ev.tool === "plan" || ev.tool === "todo") {
               this.refreshActivePlan(renderer);
             }

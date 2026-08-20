@@ -17,6 +17,7 @@ export class SessionLogger {
   constructor(
     private session: SessionManager | undefined,
     logger?: Logger,
+    private getCaller?: () => { provider: string; model: string },
   ) {
     this.logger = logger;
     this.bindSessionDir();
@@ -67,12 +68,15 @@ export class SessionLogger {
     toolCalls?: ToolCall[],
     iteration?: number,
   ): void {
+    const caller = this.getCaller?.();
     if (reasoning) {
       this.session?.appendLog({
         ts: new Date().toISOString(),
         type: "reasoning",
         content: reasoning,
         iteration,
+        provider: caller?.provider,
+        model: caller?.model,
       });
     }
     this.session?.appendLog({
@@ -89,14 +93,19 @@ export class SessionLogger {
           }
         : {}),
       iteration,
+      provider: caller?.provider,
+      model: caller?.model,
     });
   }
 
   saveAssistantMessage(content: string): void {
+    const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "assistant",
       content: content.slice(0, 500),
       timestamp: new Date().toISOString(),
+      provider: caller?.provider,
+      model: caller?.model,
     });
   }
 
@@ -127,11 +136,14 @@ export class SessionLogger {
     duration: number,
     iteration: number,
   ): void {
+    const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "tool",
       content: result.output.slice(0, 500),
       name: call.name,
       timestamp: new Date().toISOString(),
+      provider: caller?.provider,
+      model: caller?.model,
     });
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -143,6 +155,8 @@ export class SessionLogger {
       diff: result.diff,
       duration,
       iteration,
+      provider: caller?.provider,
+      model: caller?.model,
     });
   }
 
@@ -180,6 +194,8 @@ export class SessionLogger {
   logContext(info: {
     kind: "start" | "iteration";
     iteration: number;
+    provider?: string;
+    model?: string;
     window?: number;
     systemBudget?: number;
     reserveBudget?: number;
@@ -206,6 +222,8 @@ export class SessionLogger {
           ? "context snapshot at session start"
           : `context at iteration ${info.iteration}`,
       iteration: info.iteration,
+      provider: info.provider,
+      model: info.model,
       window: info.window,
       systemBudget: info.systemBudget,
       reserveBudget: info.reserveBudget,
@@ -224,6 +242,8 @@ export class SessionLogger {
   logLlmUsage(
     iteration: number,
     usage: {
+      provider?: string;
+      model?: string;
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
@@ -235,6 +255,8 @@ export class SessionLogger {
       ts: new Date().toISOString(),
       type: "llm_usage",
       iteration,
+      provider: usage.provider,
+      model: usage.model,
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       totalTokens: usage.totalTokens,

@@ -1,5 +1,6 @@
-import { OpenAICompatProvider, type RetryConfig } from "./openai-compat";
+import { createProvider } from "../modules/providers/create";
 import type { LLMProvider, Message } from "./provider";
+import type { RetryConfig } from "../config/types";
 import type { MoEPlan } from "../modules/execution/types";
 import type { OrchestratorResult, VerifyInput } from "./types";
 import { jsonrepair } from "jsonrepair";
@@ -73,18 +74,20 @@ export class OrchestratorClient {
     this.config = config;
     if (config.model) {
       if (config.provider) {
-        this.provider = new OpenAICompatProvider({
+        this.provider = createProvider(config.provider.type ?? "openai-compat", {
           model: config.model,
           baseUrl: config.provider.baseUrl || "http://localhost:1234/v1",
           apiKey: config.provider.apiKey,
+          contextWindow: 32768,
           retry: config.retry,
         });
       } else if (defaultProvider) {
         this.provider = defaultProvider;
       } else {
-        this.provider = new OpenAICompatProvider({
+        this.provider = createProvider("openai-compat", {
           model: config.model,
           baseUrl: "http://localhost:1234/v1",
+          contextWindow: 32768,
           retry: config.retry,
         });
       }

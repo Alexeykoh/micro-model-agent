@@ -1,10 +1,11 @@
 import type { LLMProvider, ContentPart } from "../llm/provider";
+import { ProviderManager } from "../modules/providers/manager";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../modules/context/manager";
 import type { HallucinationDetector } from "../modules/hallucination/detector";
 import type { Logger } from "../logger/app-logger";
-import type { AppConfig } from "../config/types";
+import type { AppConfig, ProviderEntry } from "../config/types";
 import type { ToolScope, ToolDefinition } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
@@ -109,6 +110,13 @@ export class Agent {
   /** Expose context manager for REPL image attachment and other direct access. */
   get contextManager(): ContextManager {
     return this.deps.contextManager;
+  }
+
+  callerProvenance(): { provider: string; model: string } {
+    return {
+      provider: this.deps.config.provider?.type || "unknown",
+      model: this.deps.config.model,
+    };
   }
 
   private setScope(): void {
@@ -298,7 +306,7 @@ export class Agent {
       baseDir,
     } = this.deps;
 
-    const slog = new SessionLogger(sessionManager, logger);
+    const slog = new SessionLogger(sessionManager, logger, () => this.callerProvenance());
 
     if (sessionManager && !sessionManager.getActive()) {
       sessionManager.create();
@@ -387,7 +395,7 @@ export class Agent {
       baseDir,
     } = this.deps;
 
-    const slog = new SessionLogger(sessionManager, logger);
+    const slog = new SessionLogger(sessionManager, logger, () => this.callerProvenance());
     this.abortController = new AbortController();
     let iteration = 0;
     let lastText = "";
@@ -1145,6 +1153,33 @@ export class Agent {
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
     this.costTracker.setModel(config.model);
+  }
+
+  setProvider(name: string, model?: string): void {
+    const manager = new ProviderManager(this.deps.config.provider, {
+      contextWindow: this.deps.config.contextWindow,
+      retry: this.deps.config.retry,
+      rateLimits: this.deps.config.security?.rateLimits,
+    });
+    manager.switch(name, model);
+    const providerCfg = manager.toConfig();
+    this.deps.config.provider = providerCfg;
+    this.deps.llmProvider = manager.active;
+    this.deps.toolExecutor.updateProvider(manager.active);
+    (this.deps.toolExecutor as any).ctx.llmProvider = manager.active;
+  }
+
+  listProviders(): Array<ProviderEntry & { label: string; active: boolean }> {
+    const manager = new ProviderManager(this.deps.config.provider, {
+      contextWindow: this.deps.config.contextWindow,
+      retry: this.deps.config.retry,
+      rateLimits: this.deps.config.security?.rateLimits,
+    });
+    const activeName = this.deps.config.provider.active;
+    return manager.list().map((e) => ({
+      ...e,
+      active: e.label === activeName || e.type === activeName,
+    }));
   }
 
   setContext(

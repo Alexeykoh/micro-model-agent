@@ -25,6 +25,10 @@ export interface ToolEvent {
   ctxDelta?: number;
   /** Running session cost in USD at the time the tool finished (if pricing known). */
   costUsd?: number;
+  /** Provider name that serviced the tool call (multi-provider mode). */
+  provider?: string;
+  /** Model that serviced the tool call. */
+  model?: string;
 }
 
 /** Agent lifecycle phases surfaced to the renderer (spinner control). */

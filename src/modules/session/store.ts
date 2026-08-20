@@ -74,7 +74,9 @@ export interface SessionLogEntry {
   removedTurns?: number;
   keptTurns?: number;
   summary?: string;
-  // llm_usage fields
+  // llm_usage / provenance fields
+  provider?: string;
+  model?: string;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;

@@ -614,6 +614,10 @@
   "tools.hidden_header": "Additional tools (enable on demand via enable_tools or route to subagent tool_tags):",
   "tool.friendly.enable_tools": "Enable tools",
   "cli.provider_base_hint": "Base URL set to: {baseUrl}",
+  "cli.add_provider": "Add a provider to the config",
+  "cli.provider_no_url": "No base URL for provider \"{name}\". Pass --url.",
+  "cli.provider_added": "Provider added: {name}",
+  "cli.provider_switch_hint": "Switch to it with: mma provider use <name>",
   "repl.cost": "Total cost: {cost}",
   "repl.tokens": "Tokens used: {tokens}"
 }

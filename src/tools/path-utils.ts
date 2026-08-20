@@ -1,4 +1,4 @@
-import { resolve, normalize, dirname, basename, sep } from "path";
+import { resolve, normalize, dirname, basename, sep, isAbsolute } from "path";
 import { existsSync } from "fs";
 
 /**
@@ -14,6 +14,23 @@ import { existsSync } from "fs";
  */
 export function safeResolvePath(baseDir: string, userPath: string): string {
   const norm = normalize(userPath);
+
+  // Absolute paths are used verbatim — do NOT strip a leading slash and
+  // re-resolve against baseDir (that would turn /var/folders/... into
+  // baseDir/var/folders/... on POSIX). The leading-slash heuristic below
+  // only applies as a fallback when the absolute path does not resolve.
+  if (isAbsolute(norm)) {
+    if (existsSync(norm) || existsSync(dirname(norm))) return norm;
+    // Absolute but not on disk yet (e.g. a new file whose dirs don't exist).
+    // Model mistake recovery: a leading slash may mean "relative to baseDir".
+    const stripped = norm.replace(/^[/\\]/, "");
+    const relativeCandidate = resolve(baseDir, stripped);
+    if (existsSync(relativeCandidate) || existsSync(dirname(relativeCandidate))) {
+      return relativeCandidate;
+    }
+    return norm;
+  }
+
   const stripped = norm.replace(/^[/\\]/, "");
   const resolved = resolve(baseDir, stripped);
 

@@ -614,6 +614,10 @@
   "tools.hidden_header": "Дополнительные тулы (включите по требованию через enable_tools или маршрутизируйте через subagent tool_tags):",
   "tool.friendly.enable_tools": "Включить тулы",
   "cli.provider_base_hint": "Базовый URL установлен: {baseUrl}",
+  "cli.add_provider": "Добавить провайдера в конфиг",
+  "cli.provider_no_url": "Нет базового URL для провайдера \"{name}\". Укажите --url.",
+  "cli.provider_added": "Провайдер добавлен: {name}",
+  "cli.provider_switch_hint": "Переключитесь на него: mma provider use <имя>",
   "repl.cost": "Итого потрачено: {cost}",
   "repl.tokens": "Потрачено токенов: {tokens}"
 }

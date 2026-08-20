@@ -87,7 +87,7 @@ describe("Renderer", () => {
     renderer.flush();
     const out = text();
     expect(out).not.toContain("┌");
-    expect(out).toContain("⚙");
+    expect(out).toContain("←");
     expect(out).toContain("created");
   });
 

@@ -34,4 +34,8 @@ export interface SessionMessage {
   }>;
   tool_call_id?: string;
   timestamp: string;
+  /** Provider that serviced this message (multi-provider mode). */
+  provider?: string;
+  /** Model that serviced this message. */
+  model?: string;
 }

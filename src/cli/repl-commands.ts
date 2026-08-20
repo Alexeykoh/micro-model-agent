@@ -200,7 +200,15 @@ function registerMmaCommands(ctx: ReplContext): void {
       const sys = Math.floor(ctxW * cfg.contextBudget.systemPrompt);
       const res = Math.floor(ctxW * cfg.contextBudget.responseReserve);
       console.log(`${t("repl.model")}       ${cfg.model}`);
-      console.log(`${t("repl.provider")}    ${cfg.provider.type}  →  ${cfg.provider.baseUrl}`);
+      const providers = ctx.agent.listProviders();
+      const active = providers.find((p) => p.active);
+      if (active) {
+        console.log(
+          `${t("repl.provider")}    ${active.label} (${pc.dim(active.type)})  →  ${pc.dim(active.baseUrl)}`,
+        );
+      } else {
+        console.log(`${t("repl.provider")}    ${cfg.provider.type}  →  ${cfg.provider.baseUrl}`);
+      }
       console.log(
         `${t("repl.context")}     ${ctxW}  (sys:${sys}  res:${res}  hist:${ctxW - sys - res})`,
       );
@@ -234,10 +242,18 @@ function registerMmaCommands(ctx: ReplContext): void {
     description: t("repl.status"),
     usage: t("repl.status_usage"),
     action: () => {
+      const providers = ctx.agent.listProviders();
+      const active = providers.find((p) => p.active);
       console.log(`${t("repl.model")} ${ctx.config.model}`);
-      console.log(
-        `${t("repl.provider")} ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
-      );
+      if (active) {
+        console.log(
+          `${t("repl.provider")} ${active.label} (${pc.dim(active.type)}) @ ${pc.dim(active.baseUrl)}`,
+        );
+      } else {
+        console.log(
+          `${t("repl.provider")} ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
+        );
+      }
       const meta = ctx.sessionManager?.getActiveMeta();
       if (meta) {
         console.log(
@@ -296,8 +312,17 @@ function registerMmaCommands(ctx: ReplContext): void {
     action: async (args: string[]) => {
       const subcmd = args[0];
       if (!subcmd || subcmd === "list") {
-        console.log(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
-        console.log(`  ${ctx.config.provider.baseUrl}`);
+        const providers = ctx.agent.listProviders();
+        if (providers.length === 0) {
+          console.log(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
+          console.log(`  ${ctx.config.provider.baseUrl}`);
+        } else {
+          console.log(t("repl.provider_current"));
+          for (const p of providers) {
+            const marker = p.active ? pc.green("* ") : "  ";
+            console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
+          }
+        }
         return;
       }
       if (subcmd === "use") {
@@ -306,11 +331,12 @@ function registerMmaCommands(ctx: ReplContext): void {
           console.log(t("repl.provider_usage"));
           return;
         }
-        ctx.config.provider.type = name;
-        const configPath = join(homedir(), ".mma", "config.json");
-        saveConfig(ctx.config, configPath);
-        await ctx.agent.reconfigure(ctx.config);
-        console.log(pc.green(t("repl.provider_set", { name })));
+        try {
+          await ctx.agent.setProvider(name);
+          console.log(pc.green(t("repl.provider_set", { name })));
+        } catch (e: any) {
+          console.log(pc.red(e.message));
+        }
         return;
       }
       console.log(t("repl.provider_usage"));

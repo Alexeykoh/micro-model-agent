@@ -3,12 +3,13 @@ import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
 import { runSetup } from "./setup";
 import { t } from "../i18n/index";
+import { pc } from "../ui/colors";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
-import { HOSTED_BASE_URLS } from "./setup";
+import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { fileURLToPath } from "url";
 
 function readVersion(): string {
@@ -131,8 +132,8 @@ export function createProgram(): Command {
       console.log(t("cli.current_model"), config.model);
 
       // Fetch available models from provider
-      const { OpenAICompatProvider } = await import("../llm/openai-compat");
-      const provider = new OpenAICompatProvider({
+      const { createProvider } = await import("../modules/providers/create");
+      const provider = createProvider(config.provider.type, {
         model: config.model,
         baseUrl: config.provider.baseUrl,
         apiKey: config.provider.apiKey,
@@ -250,7 +251,16 @@ export function createProgram(): Command {
     .command("list")
     .description(t("cli.list_providers"))
     .action(async () => {
-      const { config } = await bootstrap();
+      const { config, agent } = await bootstrap();
+      const providers = agent.listProviders();
+      if (providers.length > 0) {
+        console.log(t("cli.current_provider"));
+        for (const p of providers) {
+          const marker = p.active ? pc.green("* ") : "  ";
+          console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
+        }
+        return;
+      }
       console.log(t("cli.current_provider"), config.provider.type);
       console.log(t("cli.base_url"), config.provider.baseUrl);
     });
@@ -260,7 +270,16 @@ export function createProgram(): Command {
     .description(t("cli.set_provider"))
     .action(async (name: string) => {
       const configPath = join(homedir(), ".mma", "config.json");
-      const { config } = await bootstrap();
+      const { config, agent } = await bootstrap();
+      if (config.provider.entries && config.provider.entries.length > 0) {
+        try {
+          await agent.setProvider(name);
+          console.log(t("cli.provider_set", { name }));
+        } catch (e: any) {
+          console.log(pc.red(e.message));
+        }
+        return;
+      }
       config.provider.type = name;
       const baseUrl = HOSTED_BASE_URLS[name];
       if (baseUrl) {
@@ -271,6 +290,44 @@ export function createProgram(): Command {
       if (baseUrl) {
         console.log(t("cli.provider_base_hint", { baseUrl }));
       }
+    });
+  provider
+    .command("add")
+    .argument("<name>", "Provider type or label")
+    .option("--url <url>", "Base URL")
+    .option("--key <key>", "API key")
+    .description(t("cli.add_provider"))
+    .action(async (name: string, opts: { url?: string; key?: string }) => {
+      const configPath = join(homedir(), ".mma", "config.json");
+      const { config } = await bootstrap();
+      const entries = Array.isArray(config.provider.entries)
+        ? config.provider.entries
+        : [];
+      // If a legacy single provider exists, seed the list with it first.
+      if (entries.length === 0) {
+        entries.push({
+          type: config.provider.type,
+          label: config.provider.type,
+          baseUrl: config.provider.baseUrl,
+          apiKey: config.provider.apiKey,
+        });
+      }
+      const baseUrl = opts.url || HOSTED_BASE_URLS[name] || HOSTED_BASE_URLS[`opencode-${name}`] || "";
+      if (!baseUrl) {
+        console.log(pc.red(t("cli.provider_no_url", { name })));
+        return;
+      }
+      entries.push({
+        type: name,
+        label: name,
+        baseUrl,
+        apiKey: opts.key,
+      });
+      config.provider.entries = entries;
+      config.provider.active = config.provider.active || config.provider.type;
+      saveConfig(config, configPath);
+      console.log(pc.green(t("cli.provider_added", { name })));
+      console.log(t("cli.provider_switch_hint"));
     });
 
   const session = program.command("session").description(t("cli.manage_sessions"));

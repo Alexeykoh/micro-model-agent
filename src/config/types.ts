@@ -1,4 +1,30 @@
+/** A single configured provider (one of possibly many). */
+export interface ProviderEntry {
+  /** Registry type: "openai-compat" | "openrouter" | "openai" | "opencode-zen" | ... */
+  type: string;
+  /** User-facing name (defaults to type when empty). */
+  label?: string;
+  baseUrl: string;
+  apiKey?: string;
+  contextWindow?: number;
+  retry?: RetryConfig;
+  rateLimits?: RateLimitConfig;
+  /** Fallback order (lower = tried first). */
+  priority?: number;
+}
+
 export interface ProviderConfig {
+  /**
+   * Name/label of the active provider (matches a `ProviderEntry.label` or
+   * `.type`). When `entries` is absent, this is a single-provider legacy
+   * config and `type`/`baseUrl`/`apiKey` apply.
+   */
+  active?: string;
+  /** All configured providers (multi-provider mode). */
+  entries?: ProviderEntry[];
+  /** Auto-failover to the next provider on 429/5xx (default false). */
+  fallback?: boolean;
+  // Legacy single-provider fields — kept working (mirror the active entry).
   type: string;
   baseUrl: string;
   apiKey?: string;
