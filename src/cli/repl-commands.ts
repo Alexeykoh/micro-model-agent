@@ -73,6 +73,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   reload: "agent",
   wizard: "agent",
   sysprompt: "agent",
+  lsp: "agent",
   sessions: "session",
   new: "session",
   resume: "session",
@@ -480,6 +481,89 @@ function registerMmaCommands(ctx: ReplContext): void {
         const builtinCount = infos.filter(({ plugin }) => plugin.isBuiltin).length;
         if (builtinCount > 0) {
           console.log(pc.dim(`  (${builtinCount} builtin hidden — /plugins --all to show)`));
+        }
+      }
+    },
+  });
+
+  ctx.registerCommand({
+    name: "lsp",
+    description: t("repl.lsp"),
+    usage: t("repl.lsp_usage"),
+    action: async (args: string[]) => {
+      const subcommand = args[0] || "status";
+
+      // Access LSP module via the agent's module registry
+      const lspModule = (ctx.agent as any).deps?.moduleRegistry
+        ?.getModules?.()
+        ?.find((m: any) => m.name === "lsp");
+
+      if (!lspModule) {
+        console.log(pc.yellow(t("repl.lsp_not_available")));
+        return;
+      }
+
+      switch (subcommand) {
+        case "status": {
+          const disabled = lspModule.getDisabledServers();
+          const failures = lspModule.getFailureCounts();
+          const config = ctx.config.lsp;
+
+          console.log(pc.bold(t("repl.lsp_status_header")));
+          console.log(`${t("repl.lsp_enabled")} ${config?.enabled ? pc.green("yes") : pc.red("no")}`);
+
+          if (disabled.length > 0) {
+            console.log(pc.yellow(`${t("repl.lsp_disabled_servers")} ${disabled.join(", ")}`));
+          }
+
+          if (failures.size > 0) {
+            console.log(pc.dim(t("repl.lsp_failure_counts")));
+            for (const [server, count] of failures) {
+              console.log(pc.dim(`  ${server}: ${count}`));
+            }
+          }
+
+          if (disabled.length === 0 && failures.size === 0) {
+            console.log(pc.green(t("repl.lsp_all_ok")));
+          }
+          break;
+        }
+
+        case "restart": {
+          console.log(pc.yellow(t("repl.lsp_restarting")));
+          lspModule.resetDisabledServers();
+          console.log(pc.green(t("repl.lsp_restarted")));
+          break;
+        }
+
+        case "check": {
+          const path = args[1];
+          if (!path) {
+            console.log(pc.yellow(t("repl.lsp_check_usage")));
+            return;
+          }
+          console.log(pc.dim(t("repl.lsp_checking", { path })));
+          // Run lsp_check tool via the agent's tool executor
+          try {
+            const result = await (ctx.agent as any).deps?.toolExecutor?.execute(
+              "lsp_check",
+              { path },
+              (ctx.agent as any).deps?.toolCtx,
+            );
+            if (result?.output) {
+              console.log(result.output);
+            }
+          } catch (e) {
+            console.log(pc.red(t("repl.lsp_check_error", {
+              error: e instanceof Error ? e.message : String(e),
+            })));
+          }
+          break;
+        }
+
+        default: {
+          console.log(pc.dim(t("repl.lsp_usage")));
+          break;
         }
       }
     },

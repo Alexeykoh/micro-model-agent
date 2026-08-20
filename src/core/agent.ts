@@ -286,6 +286,8 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
   ): Promise<AgentResult> {
+    // Reset shutdown flag from previous interrupt
+    this.shutdownRequested = false;
     this.setScope();
     const {
       config,
@@ -1178,7 +1180,8 @@ export class Agent {
     if (killed > 0) {
       logger.info(`Killed ${killed} background process(es) on shutdown`);
     }
-    logger.closeSessionLog();
+    // Note: do NOT close session log here — the session is still active.
+    // Session log is closed only when the session actually ends (exit, session delete).
     pluginManager.runOnSessionEnd({
       logger,
       sessionManager: sessionManager?.getActiveMeta(),

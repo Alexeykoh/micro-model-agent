@@ -348,7 +348,7 @@ export async function bootstrap(
     }
   }
 
-  const lspModule = new LspModule(config.lsp);
+  const lspModule = new LspModule(config.lsp, undefined, logger);
   moduleRegistry.register(lspModule);
   const lspPlugin = lspModule.getPlugin();
   if (lspPlugin) {

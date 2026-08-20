@@ -3,7 +3,7 @@ import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
 import { existsSync } from "fs";
 import { relative, resolve } from "path";
-import { LspClient } from "./client";
+import { LspClient, type LspClientLogger } from "./client";
 import { getServerForFile, DEFAULT_LSP_CONFIG } from "./config";
 import { findProjectRoot } from "./project-root";
 import { isPathInScope } from "../security/path-validator";
@@ -29,10 +29,35 @@ export class LspModule implements AgentModule {
   private client: LspClient;
   private failuresByServer = new Map<string, number>();
   private disabledServers = new Set<string>();
+  private logger: LspClientLogger | null = null;
 
-  constructor(config?: Partial<LspConfig>, client?: LspClient) {
+  constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger) {
     this.config = { ...DEFAULT_LSP_CONFIG, ...config };
     this.client = client ?? new LspClient();
+    this.logger = logger ?? null;
+    this.client.setLogger(this.logger);
+  }
+
+  /** Update the logger (e.g., after session switch). */
+  setLogger(logger: LspClientLogger | null): void {
+    this.logger = logger;
+    this.client.setLogger(logger);
+  }
+
+  /** Reset disabled servers (e.g., after /lsp restart). */
+  resetDisabledServers(): void {
+    this.failuresByServer.clear();
+    this.disabledServers.clear();
+  }
+
+  /** Get list of disabled server keys. */
+  getDisabledServers(): string[] {
+    return Array.from(this.disabledServers);
+  }
+
+  /** Get failure counts per server. */
+  getFailureCounts(): Map<string, number> {
+    return new Map(this.failuresByServer);
   }
 
   /** Test hook: has the module disabled any LSP server for the session? */

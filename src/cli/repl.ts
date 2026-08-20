@@ -242,6 +242,8 @@ export class Repl implements ReplContext {
       this.running = false;
       this.saveHistory();
       this.agent.shutdown();
+      // Close session log when REPL exits
+      this.logger?.closeSessionLog();
       if (this.exitOnClose) process.exit(0);
     });
 
@@ -250,6 +252,8 @@ export class Repl implements ReplContext {
         this.running = false;
         this.saveHistory();
         this.agent.shutdown();
+        // Close session log when REPL exits
+        this.logger?.closeSessionLog();
         process.exit(0);
       });
     }
@@ -710,6 +714,8 @@ export class Repl implements ReplContext {
     this.running = false;
     this.saveHistory();
     this.agent.shutdown();
+    // Close session log when REPL stops
+    this.logger?.closeSessionLog();
     this.rl.close();
   }
 }

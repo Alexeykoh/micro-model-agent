@@ -10,9 +10,21 @@ interface PendingRequest {
   reject: (reason: Error) => void;
 }
 
+export interface LspClientLogger {
+  debug(msg: string, meta?: Record<string, unknown>): void;
+  info(msg: string, meta?: Record<string, unknown>): void;
+  warn(msg: string, meta?: Record<string, unknown>): void;
+  error(msg: string, meta?: Record<string, unknown>): void;
+}
+
 const DEFAULT_TIMEOUT = 15000;
 
 export class LspClient {
+  private logger: LspClientLogger | null = null;
+
+  setLogger(logger: LspClientLogger | null): void {
+    this.logger = logger;
+  }
   private process: ChildProcess | null = null;
   private requestId = 0;
   private pending = new Map<number, PendingRequest>();
@@ -97,11 +109,25 @@ export class LspClient {
     try {
       await this.sendRequest("initialize", initParams, timeout);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger?.warn(`LSP initialize failed (attempt 1): ${msg}`, {
+        command: config.command,
+        projectRoot,
+      });
       // npx auto-install can blow past the initialize timeout on first run — retry once.
       if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
       await this.shutdown();
       await this.startServer(config, projectRoot);
-      await this.sendRequest("initialize", initParams, timeout);
+      try {
+        await this.sendRequest("initialize", initParams, timeout);
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        this.logger?.error(`LSP initialize failed (attempt 2, giving up): ${retryMsg}`, {
+          command: config.command,
+          projectRoot,
+        });
+        throw retryErr;
+      }
     }
     this.initialized = true;
   }
@@ -148,7 +174,11 @@ export class LspClient {
       this.process = proc;
 
       setTimeout(() => {
-        if (!this.initialized && this.process) reject(new Error("LSP server start timeout"));
+        if (!this.initialized && this.process) {
+          const msg = "LSP server start timeout";
+          this.logger?.error(msg, { command: config.command, projectRoot, timeout: config.timeout ?? 10000 });
+          reject(new Error(msg));
+        }
       }, config.timeout ?? 10000);
     });
   }
@@ -191,7 +221,9 @@ export class LspClient {
       try {
         const msg = JSON.parse(body);
         this.handleMessage(msg);
-      } catch {}
+      } catch (e) {
+        this.logger?.debug(`LSP JSON parse error: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   }
 
@@ -236,7 +268,9 @@ export class LspClient {
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
-          reject(new Error(`LSP request timeout: ${method}`));
+          const msg = `LSP request timeout: ${method}`;
+          this.logger?.warn(msg, { method, timeout });
+          reject(new Error(msg));
         }
       }, timeout);
     });
@@ -248,21 +282,29 @@ export class LspClient {
   }
 
   private write(message: string): void {
-    if (!this.process?.stdin?.writable) return;
+    if (!this.process?.stdin?.writable) {
+      this.logger?.debug("LSP write failed: process stdin not writable");
+      return;
+    }
     const header = `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n`;
     try {
       this.process.stdin.write(header + message);
-    } catch {}
+    } catch (e) {
+      this.logger?.debug(`LSP write error: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private async shutdown(): Promise<void> {
     try {
       if (this.process && this.initialized && this.process.stdin?.writable) {
-        this.sendRequest("shutdown", null, 3000).catch(() => {});
+        this.sendRequest("shutdown", null, 3000).catch((e) => {
+          this.logger?.debug(`LSP shutdown request failed: ${e instanceof Error ? e.message : String(e)}`);
+        });
         this.sendNotification("exit", null);
         await new Promise((r) => setTimeout(r, 200));
       }
-    } catch {
+    } catch (e) {
+      this.logger?.debug(`LSP shutdown error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       if (this.process) {
         // The direct child on win32 is the cmd.exe wrapper; killing it alone
@@ -270,7 +312,9 @@ export class LspClient {
         // processes after every check). Tree-kill so the whole chain dies.
         try {
           killTree(this.process);
-        } catch {}
+        } catch (e) {
+          this.logger?.debug(`LSP killTree error: ${e instanceof Error ? e.message : String(e)}`);
+        }
         this.process = null;
       }
       this.initialized = false;
