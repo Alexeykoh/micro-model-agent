@@ -38,6 +38,8 @@
   "error.llm_retries": "LLM request failed after retries",
   "error.llm_429": "Rate limit exceeded (HTTP 429) for {model} on {baseUrl}. The provider is throttling requests — free models are especially strict. Get an API key or switch to a paid/faster model: {baseUrl}",
   "error.no_response_body": "No response body stream",
+  "error.llm_stream_idle": "LLM stream stalled — no data for {timeout}ms",
+  "error.llm_timeout": "LLM request timed out ({timeout}ms)",
   "session.started": "Session started: {id}",
   "session.ended": "Session ended: {id}",
   "session.not_found": "Session not found: {id}",

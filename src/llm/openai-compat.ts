@@ -8,7 +8,13 @@ export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
   maxDelay: number;
+  /** Extra retries when the response stream breaks BEFORE any content is delivered. */
+  maxStreamRetries?: number;
+  /** Max silence (ms) between stream chunks before the connection is treated as dead. */
+  noDataTimeoutMs?: number;
 }
+
+const REQUEST_TIMEOUT_MS = 120000;
 
 export interface OpenAICompatConfig {
   model: string;
@@ -74,6 +80,8 @@ export class OpenAICompatProvider implements LLMProvider {
       maxRetries: 3,
       baseDelay: 1000,
       maxDelay: 30000,
+      maxStreamRetries: 2,
+      noDataTimeoutMs: 60000,
     };
     this.rateLimiter = createRateLimiter(config.rateLimits);
   }
@@ -123,6 +131,41 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
+    const { baseDelay, maxDelay, maxStreamRetries, noDataTimeoutMs } = this.retryConfig;
+    const streamRetries = maxStreamRetries ?? 2;
+    const idleTimeoutMs = noDataTimeoutMs ?? 60000;
+
+    for (let attempt = 0; ; attempt++) {
+      let emitted = false;
+      const onEmit = (): void => {
+        emitted = true;
+      };
+      try {
+        const sawDone = yield* this.streamOnce(messages, tools, signal, options, onEmit, idleTimeoutMs);
+        // Clean [DONE] or any partial content → deliver what we have.
+        if (sawDone || emitted) return;
+        // Stream closed before [DONE] with zero content → retryable truncation.
+        if (attempt >= streamRetries) return;
+      } catch (err: any) {
+        if (err?.name === "AbortError" || err?.llmTerminal || signal?.aborted) throw err;
+        // Content was already delivered — a re-stream would duplicate chunks.
+        if (emitted || attempt >= streamRetries) throw err;
+        // Connection dropped before any content → retry the whole request.
+      }
+      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+      const jitter = Math.random() * baseDelay * 0.1;
+      await this.sleep(delay + jitter, signal);
+    }
+  }
+
+  private async *streamOnce(
+    messages: Message[],
+    tools: ToolDefinition[] | undefined,
+    signal: AbortSignal | undefined,
+    options: import("./provider").ChatOptions | undefined,
+    onEmit: () => void,
+    idleTimeoutMs: number,
+  ): AsyncGenerator<Chunk, boolean> {
     const body = buildRequestBody({
       model: this.model,
       messages,
@@ -140,8 +183,11 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     const controller = new AbortController();
-    const totalTimeoutMs = 120000;
-    const timeoutId = setTimeout(() => controller.abort(), totalTimeoutMs);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
     const abortSignal: AbortSignal = (() => {
       if (!signal) return controller.signal;
       try {
@@ -154,23 +200,35 @@ export class OpenAICompatProvider implements LLMProvider {
       }
     })();
 
-    const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: abortSignal,
+      });
+    } catch (err: any) {
+      // Fetch-level failures are already HTTP-retried inside fetchWithRetry —
+      // don't double-retry them at the stream level.
+      if (err?.name === "AbortError") throw err;
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      (wrapped as any).llmTerminal = true;
+      throw wrapped;
+    }
 
     if (!response.ok) {
       clearTimeout(timeoutId);
       const errorText = await response.text();
-      throw new Error(
+      const err = new Error(
         t("error.llm_api", {
           status: response.status,
           statusText: response.statusText,
           errorText,
         }),
       );
+      (err as any).llmTerminal = true;
+      throw err;
     }
 
     const reader = response.body?.getReader();
@@ -184,10 +242,32 @@ export class OpenAICompatProvider implements LLMProvider {
     const toolCallAccs = new Map<number, ToolCallAcc>();
 
     let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+    let sawDone = false;
+
+    type ReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
+    const readIdle = (): Promise<ReadResult> =>
+      new Promise<ReadResult>((resolve, reject) => {
+        const idleTimer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, idleTimeoutMs);
+        reader.read().then(
+          (result) => {
+            clearTimeout(idleTimer);
+            if (timedOut) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            else resolve(result);
+          },
+          (err) => {
+            clearTimeout(idleTimer);
+            if (timedOut) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            else reject(err);
+          },
+        );
+      });
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readIdle();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -199,7 +279,10 @@ export class OpenAICompatProvider implements LLMProvider {
           if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
           const data = trimmed.slice(6);
-          if (data === "[DONE]") continue;
+          if (data === "[DONE]") {
+            sawDone = true;
+            continue;
+          }
 
           try {
             const parsed = JSON.parse(data);
@@ -220,6 +303,7 @@ export class OpenAICompatProvider implements LLMProvider {
             const finishReason = choice.finish_reason;
 
             if (delta.reasoning_content) {
+              onEmit();
               yield { type: "reasoning", content: delta.reasoning_content };
             }
 
@@ -239,12 +323,14 @@ export class OpenAICompatProvider implements LLMProvider {
             }
 
             if (delta.content) {
+              onEmit();
               yield { type: "text", content: delta.content };
             }
 
             if (finishReason === "tool_calls" && toolCallAccs.size > 0) {
               for (const [, acc] of toolCallAccs) {
                 if (acc.name) {
+                  onEmit();
                   yield {
                     type: "tool_call",
                     toolCall: {
@@ -263,12 +349,14 @@ export class OpenAICompatProvider implements LLMProvider {
         }
       }
       if (usage) {
+        onEmit();
         yield { type: "done", usage };
       }
     } finally {
       clearTimeout(timeoutId);
       reader.releaseLock();
     }
+    return sawDone;
   }
 
   private async doNonStreaming(
@@ -293,12 +381,30 @@ export class OpenAICompatProvider implements LLMProvider {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     }
 
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+    const abortSignal: AbortSignal = (() => {
+      if (!signal) return controller.signal;
+      try {
+        return AbortSignal.any([controller.signal, signal]);
+      } catch {
+        signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+        return controller.signal;
+      }
+    })();
+
     try {
       const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal,
+        signal: abortSignal,
       });
 
       if (!response.ok) {
@@ -353,8 +459,13 @@ export class OpenAICompatProvider implements LLMProvider {
       }
 
       return chunks;
-    } catch (err) {
+    } catch (err: any) {
+      if (timedOut && err?.name === "AbortError") {
+        throw new Error(t("error.llm_timeout", { timeout: REQUEST_TIMEOUT_MS }));
+      }
       throw err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
