@@ -393,28 +393,43 @@ export class OpenAICompatProvider implements LLMProvider {
 
   private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
     const { maxRetries, baseDelay, maxDelay } = this.retryConfig;
-    let lastError: Error | null = null;
+    let lastStatus = 0;
+    let lastRetryAfter = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const response = await fetch(url, init);
         if (!this.isRetryable(response.status)) return response;
-        lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        lastStatus = response.status;
+        const retryAfter = Number(response.headers.get("retry-after") ?? 0);
+        lastRetryAfter = retryAfter > 0 ? retryAfter * 1000 : 0;
       } catch (err: any) {
         if (err.name === "AbortError") {
           throw err;
         }
-        lastError = err;
+        if (attempt === maxRetries) throw err;
       }
 
       if (attempt < maxRetries) {
-        const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+        // Prefer the provider's Retry-After window (saturating at maxDelay);
+        // otherwise exponential backoff. 429s from free tiers need a real wait.
+        const delay = lastRetryAfter > 0
+          ? Math.min(lastRetryAfter, maxDelay)
+          : Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
         const jitter = Math.random() * baseDelay * 0.1;
         await this.sleep(delay + jitter, init.signal ?? undefined);
       }
     }
 
-    throw lastError ?? new Error(t("error.llm_retries"));
+    if (lastStatus === 429) {
+      throw new Error(
+        t("error.llm_429", {
+          model: this.model,
+          baseUrl: this.config.baseUrl,
+        }),
+      );
+    }
+    throw new Error(t("error.llm_retries"));
   }
 
   private isRetryable(status: number): boolean {

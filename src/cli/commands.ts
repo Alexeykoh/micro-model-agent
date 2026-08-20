@@ -8,6 +8,7 @@ import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
+import { HOSTED_BASE_URLS } from "./setup";
 import { fileURLToPath } from "url";
 
 function readVersion(): string {
@@ -261,8 +262,15 @@ export function createProgram(): Command {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config } = await bootstrap();
       config.provider.type = name;
+      const baseUrl = HOSTED_BASE_URLS[name];
+      if (baseUrl) {
+        config.provider.baseUrl = baseUrl;
+      }
       saveConfig(config, configPath);
       console.log(t("cli.provider_set", { name }));
+      if (baseUrl) {
+        console.log(t("cli.provider_base_hint", { baseUrl }));
+      }
     });
 
   const session = program.command("session").description(t("cli.manage_sessions"));

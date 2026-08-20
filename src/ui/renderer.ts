@@ -4,6 +4,11 @@ import { Spinner } from "./spinner";
 import { box, divider } from "./box";
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
+import { formatCost } from "../modules/pricing/prices";
+
+function formatUsd(cost: number): string {
+  return formatCost(cost);
+}
 
 export interface RendererOptions {
   rich?: boolean;
@@ -187,13 +192,24 @@ export class Renderer {
     }
   }
 
-  toolEnd(_tool: string, duration: number, error?: boolean, ctxDelta?: number): void {
+  toolEnd(
+    _tool: string,
+    duration: number,
+    error?: boolean,
+    ctxDelta?: number,
+    costUsd?: number,
+  ): void {
     this.spinner.stop();
     if (!this.rich) {
+      const parts: string[] = [];
       if (ctxDelta !== undefined && ctxDelta !== 0) {
         const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
-        this.out.write(`${pc.dim("ctx")} ${deltaStr}\n`);
+        parts.push(`${pc.dim("ctx")} ${deltaStr}`);
       }
+      if (costUsd !== undefined && costUsd > 0) {
+        parts.push(`${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`);
+      }
+      if (parts.length > 0) this.out.write(`${parts.join("  ")}\n`);
       return;
     }
     if (!this.card) return;
@@ -203,6 +219,9 @@ export class Renderer {
     if (ctxDelta !== undefined && ctxDelta !== 0) {
       const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
       footer += `  ${pc.dim("ctx")} ${deltaStr}`;
+    }
+    if (costUsd !== undefined && costUsd > 0) {
+      footer += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
     }
     if (this.toolStyle === "inline") {
       this.out.write(`${GUTTER}${footer}\n`);

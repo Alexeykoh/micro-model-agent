@@ -4,6 +4,24 @@ export interface ProviderConfig {
   apiKey?: string;
 }
 
+/** Price of a model in USD per 1M tokens (input / output). */
+export interface ModelPrice {
+  input: number;
+  output: number;
+}
+
+/**
+ * Tariff / cost tracking. `overrides` lets the user set or override per-model
+ * prices (USD per 1M tokens) manually; `builtin` tables cover known providers
+ * (OpenCode Zen / Go). When no price is known, cost is not shown.
+ */
+export interface PricingConfig {
+  /** Master switch for cost tracking and display. */
+  enabled: boolean;
+  /** User-supplied per-model prices (model id -> {input, output}). */
+  overrides: Record<string, ModelPrice>;
+}
+
 export interface OrchestratorConfig {
   model?: string;
   provider?: ProviderConfig;
@@ -261,6 +279,7 @@ export interface AppConfig {
   browser: BrowserToolConfig;
   webSearch?: WebSearchConfig;
   errorWebSearch?: ErrorWebSearchConfig;
+  pricing?: PricingConfig;
   ui: UiConfig;
   mcpServers: Record<string, MCPServerConfigEntry>;
   security?: SecurityConfig;

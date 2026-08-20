@@ -17,6 +17,7 @@ import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
 import { StepVerifier } from "../modules/execution/verifier";
+import { CostTracker } from "../modules/pricing/index";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -98,9 +99,11 @@ export class Agent {
   private shutdownRequested = false;
   private abortController: AbortController | null = null;
   private lastCompactionShown = 0;
+  private costTracker: CostTracker;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
+    this.costTracker = new CostTracker(deps.config.model, deps.config.pricing);
   }
 
   /** Expose context manager for REPL image attachment and other direct access. */
@@ -638,6 +641,7 @@ export class Agent {
           source,
           durationMs: Date.now() - llmStart,
         });
+        this.costTracker.record(prompt, completion);
       }
 
       if (this.shutdownRequested) {
@@ -792,6 +796,7 @@ export class Agent {
             duration,
             error: !result.success,
             ctxDelta: tokensAfterTool - tokensBeforeTool,
+            costUsd: this.costTracker.total,
           });
 
           summaries.push(
@@ -1091,6 +1096,7 @@ export class Agent {
         promptTokens: usageTokens.prompt,
         completionTokens: usageTokens.completion,
         totalTokens: usageTokens.total,
+        totalCost: this.costTracker.total,
         compactionCount: contextManager.getCompactionCount(),
         contextQuality: contextManager.getQuality(),
       };
@@ -1110,6 +1116,7 @@ export class Agent {
       promptTokens: usageTokens.prompt,
       completionTokens: usageTokens.completion,
       totalTokens: usageTokens.total,
+      totalCost: this.costTracker.total,
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
     };
@@ -1137,6 +1144,7 @@ export class Agent {
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
+    this.costTracker.setModel(config.model);
   }
 
   setContext(

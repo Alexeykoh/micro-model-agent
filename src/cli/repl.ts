@@ -2,9 +2,8 @@ import * as readline from "readline";
 import { pc } from "../ui/colors";
 import { LineEditor, type LineInput } from "../ui/line-editor";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import { homedir } from "os";
-import { fileURLToPath } from "url";
 import {
   Completer,
   SlashCommandProvider,
@@ -13,7 +12,7 @@ import {
   SkillNameProvider,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
-import { box, divider } from "../ui/box";
+import { divider } from "../ui/box";
 import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
@@ -28,24 +27,7 @@ import { probeLspServers } from "../modules/lsp/probe";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { Plan } from "../modules/execution/planner";
-
-function readVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8"));
-        if (raw.version) return raw.version;
-      } catch {
-        // Broken package.json — fall through to the next candidate
-      }
-    }
-  }
-  return "0.0.0";
-}
-
-const version = readVersion();
+import { formatCost } from "../modules/pricing/prices";
 
 function formatContextBar(
   used: number,
@@ -391,7 +373,7 @@ export class Repl implements ReplContext {
               ev.icon,
             );
           } else {
-            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
+            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
             if (ev.tool === "plan" || ev.tool === "todo") {
               this.refreshActivePlan(renderer);
             }
@@ -524,6 +506,7 @@ export class Repl implements ReplContext {
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    totalCost?: number;
   }): void {
     if (
       result.contextUsed === undefined ||
@@ -548,6 +531,9 @@ export class Repl implements ReplContext {
           `  API: ${result.promptTokens} prompt + ${result.completionTokens} completion = ${result.totalTokens} total`,
         );
         console.log(apiLine);
+      }
+      if (result.totalCost !== undefined && result.totalCost > 0) {
+        console.log(pc.yellow(`  ${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
       }
     } else if (ui?.showCompaction && result.compactionCount !== undefined) {
       if (result.compactionCount > this.lastCompactionShown) {
@@ -659,12 +645,9 @@ export class Repl implements ReplContext {
       row(t("repl.lsp_label"), pc.dim("…"));
     }
 
-    const boxLines = box(info, {
-      title: t("repl.title", { version }),
-      width: headerWidth,
-    });
-    for (const line of boxLines) {
-      console.log(line);
+    // Plain banner without a surrounding box — line-based, wraps to width.
+    for (const line of info) {
+      console.log(pc.dim(line).trimEnd());
     }
     console.log();
     this.rl.prompt();
@@ -672,7 +655,7 @@ export class Repl implements ReplContext {
     if (lspEnabled) {
       this.probeLspBanner()
         .then((lspSummary) => {
-          if (lspSummary) this.updateLspRow(boxLines.length, headerWidth, lspSummary);
+          if (lspSummary) this.updateLspRow(headerWidth, lspSummary);
         })
         .catch(() => {});
     }
@@ -686,21 +669,16 @@ export class Repl implements ReplContext {
    * corrupt the screen: the agent is already running, the terminal is not a
    * TTY, a box line wrapped, or the summary is too wide for a single row.
    */
-  private updateLspRow(boxLineCount: number, headerWidth: number, summary: string): void {
+  private updateLspRow(headerWidth: number, summary: string): void {
     if (this.agentRunning || !process.stdout.isTTY) return;
     if ((process.stdout.columns ?? 96) < headerWidth) return;
-    const inner = headerWidth - 4;
-    // Match box()'s wrapText normalization (leading space stripped, runs of
-    // whitespace collapsed) so the rewritten row is byte-identical to what
-    // box() would render for the same text.
     const rowText = `${pc.yellow(t("repl.lsp_label"))} ${summary.replace(/\s+/g, " ").trim()}`;
-    if (stringWidth(rowText) > inner) return;
-    const padded = rowText + " ".repeat(Math.max(0, inner - stringWidth(rowText)));
-    const line = pc.dim("│") + " " + padded + " " + pc.dim("│");
-    // From the prompt row (boxLineCount) up 2 to the LSP row (last data row,
-    // directly above the bottom border), clear it, write the new row, and
-    // return the cursor to the prompt row. The editor re-positions itself on
-    // the next keystroke, so any typed input is preserved.
+    if (stringWidth(rowText) > headerWidth) return;
+    const line = pc.dim(rowText);
+    // From the prompt row up 2 to the LSP row (last banner data row, directly
+    // above the trailing blank line), clear it, write the new row, and return
+    // the cursor to the prompt row. The editor re-positions itself on the next
+    // keystroke, so any typed input is preserved.
     process.stdout.write(`\x1b[2A\r\x1b[2K${line}\x1b[2B\r`);
   }
 

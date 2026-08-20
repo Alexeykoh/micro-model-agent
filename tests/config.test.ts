@@ -57,6 +57,13 @@ describe("web search defaults", () => {
   });
 });
 
+describe("pricing defaults", () => {
+  it("enables pricing with empty overrides by default", () => {
+    expect(DEFAULTS.pricing?.enabled).toBe(true);
+    expect(DEFAULTS.pricing?.overrides).toEqual({});
+  });
+});
+
 describe("loadConfig", () => {
   const tmpDirs: string[] = [];
 

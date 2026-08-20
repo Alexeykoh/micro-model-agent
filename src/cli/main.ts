@@ -85,6 +85,7 @@ async function main(): Promise<void> {
             promptTokens: result.promptTokens ?? null,
             completionTokens: result.completionTokens ?? null,
             totalTokens: result.totalTokens ?? null,
+            totalCost: result.totalCost ?? null,
           },
           null,
           2,
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
         if (ev.type === "start") {
           renderer.toolStart(ev.tool, ev.args, undefined, ev.icon);
         } else {
-          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta);
+          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
         }
       },
       (phase) => {

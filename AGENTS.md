@@ -321,6 +321,13 @@ const body = { model, messages, stream: false, max_tokens };
 
 Поле `type: "function"` обязательно внутри каждого tool_call. Поле `arguments` — строка JSON. Без `type` некоторые бэкенды не распознают tool_call.
 
+### Правило 5: Обработка HTTP 429 (rate limit)
+
+`fetchWithRetry` в `openai-compat.ts` ретраит 429/5xx с экспоненциальным бэкоффом. Для 429:
+
+- **Уважение `Retry-After`** — если провайдер отдал заголовок `retry-after`, задержка берётся из него (с капом `maxDelay`), иначе экспоненциальный бэкофф. Free-модели (например `*-free` на OpenCode Zen) требуют реальной паузы — короткий бэкофф не помогает.
+- **Понятное сообщение об ошибке** — если 429 сохраняется после всех ретраев, бросается `error.llm_429` (i18n, en+ru) с model/baseUrl и подсказкой: получить API-ключ или сменить модель. Агент показывает его как `Ошибка LLM: …` вместо голого `HTTP 429`.
+
 ### История проблемы
 
 Агент создавал папку (первый tool_call), но на второй итерации модель возвращала пустой ответ. Агент уходил в hallucination retry и зацикливался. Диагностика:
@@ -388,6 +395,9 @@ src/
 ├── modules/            # All modules implement AgentModule interface
 │   ├── registry.ts     # ModuleRegistry: collect blocks/tools/plugins from modules
 │   ├── types.ts        # AgentModule, AgentPlugin interfaces
+│   ├── pricing/        # Cost tracking + display (budget/tariff)
+│   │   ├── prices.ts   # Builtin Zen/Go price table (USD/1M tokens) + calculateCost/formatCost
+│   │   └── index.ts    # CostTracker — accumulate per-LLM-call cost for a session
 │   ├── skills/         # Skills loader (builtin/global/project) + progressive disclosure L1/L2/L3
 │   ├── plugins/        # PluginManager with lifecycle hooks + error isolation
 │   ├── mcp/            # MCP client (stdio/SSE) + server registry
@@ -881,6 +891,25 @@ The context events need the `contextManager` in the plugin hook contexts — `ag
 | 128K          | 13K          | 19K           | 96K           |
 
 Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
+
+## Cost Tracking (pricing / budget display)
+
+> **Source:** `src/modules/pricing/` (`prices.ts` — builtin price table + cost math; `index.ts` — `CostTracker`).
+
+When a model has a known price, MMA shows the session's running cost **together with token usage**:
+
+- **Inline tool footer** — each `toolEnd` appends `cost $X` next to `ctx ±N` (rich + plain modes).
+- **After calls** — REPL context bar (`repl.cost`) and the single-run result (`run-result.ts` / `--json` `totalCost`).
+- `AgentResult.totalCost` is set when pricing is enabled and the model's price is known; `ToolEvent.costUsd` carries the running total at each tool end.
+
+**How prices resolve** (`resolvePrice`): user `pricing.overrides` win → builtin table (`ZEN_PRICES`) → unknown = no cost shown. Model ids are normalized by stripping provider prefixes (`opencode/`, `opencode-go/`, `openai/`, `anthropic/`) and vendor paths, so one table serves Zen and Go.
+
+**Config** (`~/.mma/config.json`):
+```json
+{ "pricing": { "enabled": true, "overrides": { "opencode/gpt-5.5": { "input": 1, "output": 2 } } } }
+```
+
+**Hosted providers** with fixed base URLs are selectable via `mma provider use opencode-zen|opencode-go` and the setup wizard (`HOSTED_BASE_URLS` in `src/cli/setup.ts`): Zen → `https://opencode.ai/zen/v1`, Go → `https://opencode.ai/zen/go/v1`. Both are OpenAI-compatible (`/chat/completions`); model ids use the `opencode/…` / `opencode-go/…` prefix. Builtin pricing is maintained from https://opencode.ai/docs/zen/ and /docs/go/ — update `ZEN_PRICES` when those tables change.
 
 ## Process Management
 

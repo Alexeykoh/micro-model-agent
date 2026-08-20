@@ -92,6 +92,10 @@ export const DEFAULTS: AppConfig = {
     maxSearchesPerSession: 3,
     requestTimeoutMs: 10000,
   },
+  pricing: {
+    enabled: true,
+    overrides: {},
+  },
   ui: {
     spinner: true,
     toolStyle: "inline",

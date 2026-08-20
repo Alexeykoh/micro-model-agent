@@ -178,6 +178,35 @@ describe("Renderer", () => {
     expect(out.text()).not.toContain("⠋");
   });
 
+  it("shows the session cost in the tool footer when pricing is known", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 10, false, 5, 0.0012);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("cost");
+    expect(out).toContain("$0.0012");
+  });
+
+  it("omits the cost when the value is zero or unknown", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 10, false, 5, 0);
+    renderer.flush();
+    expect(text()).not.toContain("cost");
+  });
+
+  it("shows the cost in plain (non-rich) mode", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 10, false, 5, 0.02);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("cost");
+    expect(out).toContain("$0.02");
+  });
+
   it("appends a step context suffix in plain mode", () => {
     const { renderer, text } = makeRenderer({ rich: false });
     renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");

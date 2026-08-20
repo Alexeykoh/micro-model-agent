@@ -53,6 +53,8 @@ const PROVIDER_TYPES = [
   },
   { value: "openai", label: "OpenAI API" },
   { value: "anthropic", label: "Anthropic Claude" },
+  { value: "opencode-zen", label: "OpenCode Zen (opencode.ai/zen)" },
+  { value: "opencode-go", label: "OpenCode Go (opencode.ai/go)" },
 ];
 
 const KNOWN_PORTS = [
@@ -61,6 +63,14 @@ const KNOWN_PORTS = [
   { port: 8080, label: "vLLM / custom" },
   { port: 4891, label: "GPT4All" },
 ];
+
+/** Fixed base URLs for hosted providers (no port scan / model autodetect). */
+export const HOSTED_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com",
+  "opencode-zen": "https://opencode.ai/zen/v1",
+  "opencode-go": "https://opencode.ai/zen/go/v1",
+};
 
 async function scanPorts(): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = [];
@@ -185,10 +195,8 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
       console.log(t("setup.no_servers"));
       apiBase = await ask(rl, t("setup.api_base"), "http://localhost:1234/v1");
     }
-  } else if (provider === "openai") {
-    apiBase = "https://api.openai.com/v1";
-  } else if (provider === "anthropic") {
-    apiBase = "https://api.anthropic.com";
+  } else {
+    apiBase = HOSTED_BASE_URLS[provider] ?? "";
   }
 
   const defaultKey = provider === "openai-compat" ? "not-needed" : "";

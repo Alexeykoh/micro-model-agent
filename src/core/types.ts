@@ -23,6 +23,8 @@ export interface ToolEvent {
   duration?: number;
   error?: boolean;
   ctxDelta?: number;
+  /** Running session cost in USD at the time the tool finished (if pricing known). */
+  costUsd?: number;
 }
 
 /** Agent lifecycle phases surfaced to the renderer (spinner control). */
@@ -76,6 +78,8 @@ export interface AgentResult {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  /** Running session cost in USD (undefined when no model price is known). */
+  totalCost?: number;
   compactionCount?: number;
   contextQuality?: number;
 }

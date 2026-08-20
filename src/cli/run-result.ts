@@ -1,5 +1,6 @@
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
+import { formatCost } from "../modules/pricing/prices";
 
 /**
  * Render a single-run AgentResult to the terminal (non-JSON mode) and return
@@ -11,11 +12,22 @@ import { pc } from "../ui/colors";
  * suggests the task succeeded.
  */
 export function printRunResult(
-  result: { success: boolean; text?: string; error?: string },
+  result: {
+    success: boolean;
+    text?: string;
+    error?: string;
+    totalCost?: number;
+    totalTokens?: number;
+  },
   flush: () => void,
 ): number {
   flush();
   if (result.success) {
+    if (result.totalCost !== undefined && result.totalCost > 0) {
+      console.log(pc.dim(`${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
+    } else if (result.totalTokens !== undefined && result.totalTokens > 0) {
+      console.log(pc.dim(`${t("repl.tokens", { tokens: result.totalTokens })}`));
+    }
     if (!result.text) {
       console.log(pc.yellow(t("cli.no_output")));
     }

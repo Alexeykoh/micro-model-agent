@@ -35,6 +35,7 @@
   "error.http": "HTTP {status}: {statusText}",
   "error.llm_api": "Ошибка LLM API {status} ({statusText}): {errorText}",
   "error.llm_retries": "Запрос LLM не удался после повторов",
+  "error.llm_429": "Превышен лимит запросов (HTTP 429) для {model} на {baseUrl}. Провайдер ограничивает трафик — особенно строгие free-модели. Получите API-ключ или переключитесь на платную/быструю модель: {baseUrl}",
   "error.no_response_body": "Нет потока тела ответа",
   "session.started": "Сессия начата: {id}",
   "session.ended": "Сессия завершена: {id}",
@@ -89,7 +90,7 @@
   "tool.web_fetch_result": "Загружена страница: {url} — {chars} симв., {lines} строк{truncated}",
   "tool.web_browse_result": "Просмотрена страница: {url} — {chars} симв., {lines} строк{truncated}",
   "tool.web_search_result": "Результаты поиска \"{query}\" — {count} результатов",
-  "tool.downloaded": "Скачано {url} \u2192 {path} ({size} байт, {type})",
+  "tool.downloaded": "Скачано {url} → {path} ({size} байт, {type})",
   "tool.download_too_large": "Скачивание заблокировано: файл превышает лимит {max} байт",
   "tool.friendly.browser": "Браузер",
   "tool.friendly.subagent": "Задача подагенту",
@@ -611,5 +612,8 @@
   "tools.enable_already_active": "Теги тулов уже активны: {tags}.",
   "tools.enable_added": "Включены теги тулов: {tags}. Теперь доступны тулы: {tools}",
   "tools.hidden_header": "Дополнительные тулы (включите по требованию через enable_tools или маршрутизируйте через subagent tool_tags):",
-  "tool.friendly.enable_tools": "Включить тулы"
+  "tool.friendly.enable_tools": "Включить тулы",
+  "cli.provider_base_hint": "Базовый URL установлен: {baseUrl}",
+  "repl.cost": "Итого потрачено: {cost}",
+  "repl.tokens": "Потрачено токенов: {tokens}"
 }

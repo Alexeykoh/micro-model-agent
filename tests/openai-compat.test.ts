@@ -374,4 +374,74 @@ describe("OpenAICompatProvider", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
+
+  it("should surface a helpful message when 429 persists after retries", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "deepseek-v4-flash-free",
+      baseUrl: "https://opencode.ai/zen/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50 },
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      headers: new Headers({}),
+      json: () => Promise.reject(new Error("Rate limited")),
+      text: () => Promise.resolve("Rate limited"),
+    });
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.message).toContain("429");
+      expect(e.message).toContain("deepseek-v4-flash-free");
+      expect(e.message).toContain("API key");
+    }
+  });
+
+  it("should respect Retry-After when retrying 429", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50 },
+    });
+
+    const spy = vi.spyOn(provider as any, "sleep").mockResolvedValue(undefined);
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: new Headers({ "retry-after": "2" }),
+        json: () => Promise.reject(new Error("Rate limited")),
+        text: () => Promise.resolve("Rate limited"),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: "test" } }] }),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      });
+    global.fetch = mockFetch as any;
+
+    for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+    }
+
+    // Retry-After: 2s → capped at maxDelay 50ms (+ jitter)
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [delay] = spy.mock.calls[0];
+    expect(delay).toBeGreaterThanOrEqual(50);
+    expect(delay).toBeLessThan(52);
+    spy.mockRestore();
+  });
 });
