@@ -185,4 +185,28 @@ export class Logger {
     }
     return sanitized;
   }
+
+  /**
+   * Write a structured record to app.jsonl only (no console / .log output).
+   * Used for machine-readable reports (environment, etc.) that would be too
+   * noisy on the terminal but are valuable for cross-device diagnosis.
+   */
+  logStructured(type: string, data: Record<string, unknown>): void {
+    const logTarget = this.sessionDir ?? this.logDir;
+    if (!logTarget) return;
+    try {
+      appendFileSync(
+        join(logTarget, "app.jsonl"),
+        JSON.stringify({
+          level: "info",
+          ts: new Date().toISOString(),
+          type,
+          meta: this.sanitizeMeta(data),
+        }) + "\n",
+        "utf-8",
+      );
+    } catch {
+      /* file logging is best-effort */
+    }
+  }
 }

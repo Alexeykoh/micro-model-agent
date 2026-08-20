@@ -34,6 +34,7 @@ import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
+import { collectEnvironment, logEnvironment } from "./environment";
 
 export function buildSystemInfo(
   config: AppConfig,
@@ -178,6 +179,19 @@ export async function bootstrap(
   });
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
+
+  // Cross-device diagnosis: log a full environment report (OS, runtime,
+  // engines, PATH tools, provider/retry, playwright) at every startup.
+  const envReport = collectEnvironment({
+    configDir: dir,
+    baseDir,
+    config,
+    scanTools: process.env.NODE_ENV !== "test",
+  });
+  logEnvironment(envReport, logger);
+  for (const warning of envReport.warnings) {
+    logger.warn(warning);
+  }
 
   const projectMapCacheDir = join(baseDir, ".mma");
   const indexerModule = new IndexerModule({

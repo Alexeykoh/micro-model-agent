@@ -12,6 +12,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { UpdaterModule } from "../modules/updater/index";
+import { installCrashHandlers } from "../core/crash-handler";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,10 @@ function startAutoUpdate(config: {
 }
 
 async function main(): Promise<void> {
+  // Install global crash handlers first — every crash lands in
+  // ~/.mma/logs/crash.jsonl (with env report) instead of a bare stderr stack.
+  installCrashHandlers();
+
   const program = createProgram();
   program.parse(process.argv);
 
