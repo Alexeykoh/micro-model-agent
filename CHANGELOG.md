@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.1] - 2026-08-21
+
+### Fixed
+
+- **Stale pre-0.48 security config upgraded on load** (`src/config/config.ts`): existing installations whose `~/.mma/config.json` carried the old `security: { enabled: false }` section silently kept security off after 0.48.0 ("security by default" never reached them). `loadConfig` now normalizes a stored section matching the legacy default signature to the current defaults (in-memory, mirrors `normalizeLspServerArgs`); explicitly customized configs are untouched.
+- **Network validator disabled by default — SSRF checks never fired** (`src/config/security.ts`): `isUrlAllowed` gates all checks on `network.enabled`, which defaulted to `false`, so `web_fetch`/`download_file`/`attach_image` could reach `127.0.0.1`, link-local metadata IPs and `file:` URLs despite the 0.48.0 "SSRF protection" changelog entry. `network.enabled` now defaults to `true`.
+- **Cross-platform path containment** (`src/tools/path-utils.ts`, `scope-check.ts`, `path-validator.ts`): subagent scope entries matched sibling prefixes (`docs` authorized `docs-other/...`), containment was case-sensitive on Windows (`E:\Proj` vs `e:\proj` false-rejected), and glob denied/allowed patterns mixed separators ad hoc. All checks now go through `path.relative()`-based `isInsideDir`/`matchesScopeEntry` helpers with win32 case-folding.
+- **Parent scope locked out after subagent call** (`src/tools/subagent.ts`): the post-subagent scope restore converted the parent's unrestricted `undefined` into an empty `{[],[]}` scope, permanently denying every write for the rest of the session. The parent's exact scope (including `undefined`) is now restored.
+- **i18n rule #8**: remaining hardcoded user/model-facing strings routed through `t()` (Ctrl+C interrupt, stuck-detector hints, test-runner reports, plan subtask outputs) with en+ru keys.
+
+### Changed
+
+- Refactors: single `readMmaVersion()` source, dedup openai-compat request helpers, dead code removal; docs synced with reality (README defaults/CLI/REPL/tools/modules, AGENTS path-safety rules + safeResolvePath invariant).
+
 ## [0.48.0] - 2026-08-21
 
 ### Added
