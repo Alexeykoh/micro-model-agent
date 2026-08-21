@@ -27,6 +27,12 @@ describe("i18n", () => {
     expect(t("error.timeout")).toBe("Request timed out");
   });
 
+  it("defines exec.task_reminder in en and ru", () => {
+    expect(t("exec.task_reminder", { task: "x" })).not.toBe("exec.task_reminder");
+    setLocale("ru");
+    expect(t("exec.task_reminder", { task: "x" })).not.toBe("exec.task_reminder");
+  });
+
   it("should fallback to en when locale missing key", () => {
     setLocale("ru");
     const result = t("session.started", { id: "abc" });
