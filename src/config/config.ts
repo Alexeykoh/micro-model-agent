@@ -218,6 +218,14 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   // Replace stale pre-0.41.1 LSP server args with the current defaults.
   normalizeLspServerArgs(config);
 
+  // Upgrade a stale pre-0.48 security section (persisted when security was
+  // disabled by default) to the current defaults — otherwise "security on by
+  // default" never reaches existing installations. Only fires when the stored
+  // section matches the legacy default signature; explicitly customized
+  // security configs are left untouched. In-memory only, mirrors the
+  // normalizeLspServerArgs precedent.
+  normalizeStaleSecurityConfig(config);
+
   config = applyEnvVars(config);
 
   // Decrypt sensitive fields in the loaded config

@@ -307,3 +307,72 @@ describe("loadConfig", () => {
     expect(cfg.lsp!.servers.typescript.command).toBe("typescript-language-server");
   });
 });
+
+describe("stale security config normalization", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(() => {
+    for (const d of tmpDirs) {
+      try {
+        rmSync(d, { recursive: true });
+      } catch {}
+    }
+    tmpDirs.length = 0;
+  });
+
+  function makeTempDir(): string {
+    const d = mkdtempSync(join(tmpdir(), "mma-test-"));
+    tmpDirs.push(d);
+    return d;
+  }
+
+  const LEGACY_SECURITY = {
+    enabled: false,
+    bash: {
+      enabled: false,
+      blacklist: ["rm", "dd", "chmod", "wget", "curl"],
+      whitelist: [],
+      blockDangerousFlags: false,
+      logCommands: true,
+      dangerousFlags: ["--force", "-rf"],
+      dangerousOperators: [">", ">>", "2>", "2>>", "`"],
+    },
+  };
+
+  it("upgrades legacy disabled security to current defaults", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({ version: "2.0.0", security: LEGACY_SECURITY }),
+    );
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    expect(cfg.security.enabled).toBe(true);
+    expect(cfg.security.bash.enabled).toBe(true);
+    expect(cfg.security.bash.blockDangerousFlags).toBe(true);
+    expect(cfg.security.bash.dangerousOperators).toContain(";");
+    expect(cfg.security.bash.blacklist).toContain("bash");
+  });
+
+  it("keeps explicitly customized security config untouched", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        security: {
+          ...LEGACY_SECURITY,
+          bash: { ...LEGACY_SECURITY.bash, blacklist: ["my-custom-cmd"] },
+        },
+      }),
+    );
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    expect(cfg.security.enabled).toBe(false);
+    expect(cfg.security.bash.blacklist).toContain("my-custom-cmd");
+  });
+});
