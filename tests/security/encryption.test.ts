@@ -6,9 +6,12 @@ import {
   encryptSensitiveFields,
   decryptSensitiveFields,
   ConfigEncryptor,
+  getOrCreateEncryptionKey,
   SENSITIVE_FIELD_NAMES,
 } from "../../src/modules/security/encryption";
 import { describe, it, expect } from "vitest";
+import { join } from "path";
+import { tmpdir } from "os";
 
 describe("Encryption", () => {
   const testKey = Buffer.from("test-key-32-bytes-long-1234567890", "utf8");
@@ -182,6 +185,13 @@ describe("Encryption", () => {
       expect(SENSITIVE_FIELD_NAMES).toContain("token");
       expect(SENSITIVE_FIELD_NAMES).toContain("password");
       expect(SENSITIVE_FIELD_NAMES).toContain("secret");
+    });
+  });
+
+  describe("key persistence", () => {
+    it("throws when encryption key cannot be persisted", () => {
+      const badPath = join(tmpdir(), "mma-nonexistent-dir-" + Date.now(), "nested", "key");
+      expect(() => getOrCreateEncryptionKey({ keyPath: badPath })).toThrow();
     });
   });
 });
