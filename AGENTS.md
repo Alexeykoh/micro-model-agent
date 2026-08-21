@@ -348,7 +348,11 @@ const body = { model, messages, stream: false, max_tokens };
 3. **KISS state machine** — no god objects, no if-else nesting in agent loop
 4. **Single source of truth** — `config/defaults.ts` for config, `tools/registry.ts` for tools
 5. **Plugin error isolation** — one plugin crash never stops others
-6. **Path safety** — all filesystem tools check `targetPath.startsWith(baseDir)`
+6. **Path safety** — all filesystem tools validate resolved paths through `isInsideDir` / `isPathWritable` / `isPathInScope` (separator- and case-safe on win32; sibling prefixes like `docs` vs `docs-other` cannot pass). After a subagent call the parent's scope is restored EXACTLY (`undefined` stays `undefined` — an empty `{[],[]}` scope would deny everything).
+
+### Known path-handling nuance (do not forget)
+
+`safeResolvePath` (`src/tools/path-utils.ts`) "fixes" model typos like `E:\agent_test` → `E:\agent\_test` by walking ancestors and substring-matching directory names, and honors existing absolute paths as-is. This heuristic is intentionally risky: it can resolve a path outside baseDir (e.g. a bare `/foo` that exists on disk, or a substring match against an ancestor name). It is SAFE today only because every caller re-validates the returned path via `isPathInScope`/`isPathWritable` before touching the filesystem. **Rule: any new tool that uses `safeResolvePath` MUST re-validate the result with one of those two functions** — do not trust its return value alone. If this invariant breaks, prefer removing the heuristic over adding containment inside it.
 7. **TDD** — write test first, then implement, then commit
 8. **No hardcoded user-facing strings** — ALL text shown to users MUST go through `t()` from `i18n/index.ts`. Both `en.json` and `ru.json` must have matching keys. No exceptions — CLI labels, error messages, tool outputs, REPL prompts, setup wizard text, everything.
 9. **No full-screen TUI** — no alternate screen buffer, no raw-mode, no full-frame redraw. Rich ANSI output is allowed: spinner (single-line `\r` overwrite on stderr), boxed tool cards, aligned tables. Auto-degrades to plain text when `!isTTY` or `CI`.
