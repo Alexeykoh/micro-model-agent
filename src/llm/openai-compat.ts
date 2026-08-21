@@ -106,14 +106,10 @@ export class OpenAICompatProvider implements LLMProvider {
 
     let hasToolCall = false;
     let hasText = false;
-    let reasoningAcc = "";
 
     for await (const chunk of streamResult) {
       if (chunk.type === "tool_call") hasToolCall = true;
       if (chunk.type === "text") hasText = true;
-      if (chunk.type === "reasoning" && chunk.content) {
-        reasoningAcc += chunk.content;
-      }
       yield chunk;
     }
 

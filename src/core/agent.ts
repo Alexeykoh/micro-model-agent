@@ -1146,7 +1146,6 @@ export class Agent {
     });
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
-    (this.deps.toolExecutor as any).ctx.llmProvider = newProvider;
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
