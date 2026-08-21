@@ -2,6 +2,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ToolCall } from "./types";
 import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
+import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { join } from "path";
 import { readFileSync, existsSync } from "fs";
 
@@ -51,15 +52,16 @@ export class SessionLogger {
   }
 
   logUser(content: string): void {
+    const sanitized = sanitizeLogMessage(content);
     this.session?.appendMessage({
       role: "user",
-      content,
+      content: sanitized,
       timestamp: new Date().toISOString(),
     });
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "user",
-      content,
+      content: sanitized,
     });
   }
 
@@ -118,7 +120,7 @@ export class SessionLogger {
       type: "tool_call",
       tool: call.name,
       tool_call_id: call.id,
-      args: call.arguments,
+      args: JSON.parse(sanitizeLogMessage(JSON.stringify(call.arguments))),
       iteration,
     });
   }
@@ -131,7 +133,7 @@ export class SessionLogger {
   ): void {
     this.session?.appendMessage({
       role: "tool",
-      content: result.output.slice(0, 500),
+      content: sanitizeLogMessage(result.output.slice(0, 500)),
       name: call.name,
       timestamp: new Date().toISOString(),
     });
@@ -141,7 +143,7 @@ export class SessionLogger {
       tool: call.name,
       tool_call_id: call.id,
       success: result.success,
-      content: result.output.slice(0, 1000),
+      content: sanitizeLogMessage(result.output.slice(0, 1000)),
       diff: result.diff,
       duration,
       iteration,

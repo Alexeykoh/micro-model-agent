@@ -80,7 +80,7 @@ export class Logger {
     promptPreview: string,
     caller?: string,
   ): void {
-    this.fileLog.logLLMRequest(model, messagesCount, promptPreview, caller);
+    this.fileLog.logLLMRequest(model, messagesCount, sanitizeLogMessage(promptPreview), caller);
   }
 
   logLLMResponse(
@@ -94,15 +94,15 @@ export class Logger {
   }
 
   logToolCall(tool: string, preview: string, result?: string): void {
-    this.fileLog.logToolCall(tool, preview, result);
+    this.fileLog.logToolCall(tool, sanitizeLogMessage(preview), result !== undefined ? sanitizeLogMessage(result) : undefined);
   }
 
   logToolOutput(tool: string, output: string, exitCode: number): void {
-    this.fileLog.logToolOutput(tool, output, exitCode);
+    this.fileLog.logToolOutput(tool, sanitizeLogMessage(output), exitCode);
   }
 
   logREPL(tag: "user" | "assistant" | "system", content: string): void {
-    this.fileLog.logREPL(tag, content);
+    this.fileLog.logREPL(tag, sanitizeLogMessage(content));
   }
 
   child(prefix: string): Logger {
