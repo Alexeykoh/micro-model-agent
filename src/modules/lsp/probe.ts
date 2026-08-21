@@ -98,6 +98,7 @@ export async function probeLspServers(
     const serverTimeout = Math.min(server.timeout ?? timeoutCap, timeoutCap);
     const started = Date.now();
     const probeClient = deps.client ?? new LspClient();
+    if (!deps.client) probeClient.setLogger(deps.logger ?? null);
     try {
       await probeClient.probe(server, projectRoot, serverTimeout);
       ok.push({ language, ok: true, durationMs: Date.now() - started });

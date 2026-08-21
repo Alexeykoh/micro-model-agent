@@ -694,7 +694,7 @@ export class Repl implements ReplContext {
   private async probeLspBanner(): Promise<string | null> {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
-      const summary = await probeLspServers(config, this.baseDir);
+      const summary = await probeLspServers(config, this.baseDir, { logger: this.logger });
       if (summary.noneApplicable) return null;
       const parts: string[] = [];
       for (const r of summary.ok) {

@@ -379,7 +379,7 @@ export async function bootstrap(
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
     !exitOnComplete && process.env.NODE_ENV !== "test"
-      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir)
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger })
       : Promise.resolve(null);
 
   const moduleTools = moduleRegistry.collectToolDefinitions();

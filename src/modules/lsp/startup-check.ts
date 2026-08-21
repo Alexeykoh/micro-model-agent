@@ -80,6 +80,7 @@ async function runCheck(
   }
 
   const client = deps.client ?? new LspClient();
+  if (!deps.client) client.setLogger(deps.logger ?? null);
   const files = await collectCheckFiles(baseDir, config);
   const lines: string[] = [];
   let checked = 0;
