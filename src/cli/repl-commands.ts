@@ -1,4 +1,5 @@
 import { pc } from "../ui/colors";
+import { readMmaVersion } from "../core/version";
 import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
@@ -16,23 +17,7 @@ import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { LspModule } from "../modules/lsp/module";
 
-function readVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8"));
-        if (raw.version) return raw.version;
-      } catch {
-        // Broken package.json — fall through to the next candidate
-      }
-    }
-  }
-  return "0.0.0";
-}
-
-const version = readVersion();
+const version = readMmaVersion();
 
 export interface SlashCommand {
   name: string;
