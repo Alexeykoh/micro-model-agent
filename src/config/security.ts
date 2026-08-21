@@ -5,9 +5,9 @@ import type { SecurityConfig, SessionEncryptionConfig, AuditNotifierConfig } fro
  * These settings provide a balance between security and usability.
  */
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
-  enabled: false,
+  enabled: true,
   bash: {
-    enabled: false,
+    enabled: true,
     // Commands that are always blocked (dangerous)
     blacklist: [
       "rm",
@@ -48,12 +48,25 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "powershell",
       "pwsh",
       "cmd",
+      "bash",
+      "sh",
+      "zsh",
+      "dash",
+      "python",
+      "python3",
+      "node",
+      "bun",
+      "perl",
+      "ruby",
+      "del",
+      "rd",
+      "erase",
+      "taskkill",
     ],
     // If whitelist is non-empty, only these commands are allowed
     whitelist: [],
     // Block dangerous flags like --force, -rf, etc.
-    // Disabled by default — enable in config if needed.
-    blockDangerousFlags: false,
+    blockDangerousFlags: true,
     // Log all executed commands to audit log
     logCommands: true,
     // Dangerous flags that are always blocked
@@ -75,7 +88,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     // Dangerous operators that are always blocked
     // Note: "&" (background) is not blocked — "&&" (AND) is a legitimate shell operator.
     // Single "&" for backgrounding is harmless and blocking it breaks "cd dir && npm install".
-    dangerousOperators: [">", ">>", "2>", "2>>", "`"],
+    dangerousOperators: [">", ">>", "2>", "2>>", ";", "&&", "||", "|", "`", "$("],
   },
   paths: {
     enabled: false,
@@ -100,7 +113,10 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     allowed: [],
   },
   network: {
-    enabled: false,
+    // SSRF protection (private/link-local IPs, non-http schemes) is part of
+    // the balanced default policy — without this flag the checks in
+    // isUrlAllowed never fire and web tools can reach internal networks.
+    enabled: true,
     // Domains that are always denied
     deniedDomains: ["localhost", "127.0.0.1", "::1"],
     // If allowedDomains is non-empty, only these domains are allowed

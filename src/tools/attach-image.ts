@@ -47,6 +47,24 @@ export const attachImageTool: ToolDefinition = {
         const result = await bufferToDataUrl(clipBuf);
         dataUrl = result.dataUrl;
       } else if (source.startsWith("http://") || source.startsWith("https://")) {
+        // Security: validate URL against the network policy (SSRF).
+        const { isUrlAllowed } = await import("../modules/security/network-validator");
+        const { getSessionSecurityConfig } = await import(
+          "../modules/security/session-isolation"
+        );
+        const networkConfig = ctx.sessionContext
+          ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
+          : ctx.config?.security?.network;
+        const urlCheck = isUrlAllowed(source, networkConfig);
+        if (!urlCheck.allowed) {
+          logSecurityBlock(
+            ctx.sessionId,
+            "network_request",
+            urlCheck.reason ?? "attach_image URL blocked",
+            source,
+          );
+          return { success: false, output: `[SECURITY BLOCKED] ${urlCheck.reason}` };
+        }
         const result = await loadUrlAsDataUrl(source);
         dataUrl = result.dataUrl;
       } else {

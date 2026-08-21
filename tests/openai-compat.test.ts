@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { OpenAICompatProvider } from "../src/llm/openai-compat";
+
+const originalFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("OpenAICompatProvider", () => {
   it("should construct with config", () => {

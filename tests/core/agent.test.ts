@@ -3,6 +3,7 @@ import { mkdtempSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Agent } from "../../src/core/agent";
+import { ModuleRegistry } from "../../src/modules/registry";
 import { MemoryStore } from "../../src/modules/memory/store";
 import type { AppConfig } from "../../src/config/types";
 
@@ -157,6 +158,16 @@ function createMockDeps(overrides?: Record<string, unknown>) {
 }
 
 describe("Agent", () => {
+  it("exposes getModule() for CLI access", () => {
+    const deps = createMockDeps({
+      moduleRegistry: new ModuleRegistry().register({ name: "lsp", getSystemPromptBlock: () => null }),
+    });
+    const agent = new Agent(deps as any);
+    const mod = agent.getModule("lsp");
+    expect(mod).toBeDefined();
+    expect(agent.getModule("nope")).toBeUndefined();
+  });
+
   it("returns text response for simple text LLM output", async () => {
     const deps = createMockDeps();
     const agent = new Agent(deps as any);

@@ -10,24 +10,9 @@ import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "./setup";
 import { fileURLToPath } from "url";
+import { readMmaVersion } from "../core/version";
 
-function readVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8"));
-        if (raw.version) return raw.version;
-      } catch {
-        // Broken package.json — fall through to the next candidate
-      }
-    }
-  }
-  return "0.0.0";
-}
-
-const version = readVersion();
+const version = readMmaVersion();
 
 export function createProgram(): Command {
   const program = new Command()
@@ -53,12 +38,13 @@ export function createProgram(): Command {
       config.contextWindow = answers.contextWindow;
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
-      // Apply security settings from wizard
+      // Apply security settings from wizard.
+      // Security is enabled by default (balanced); wizard answers only tighten it.
       if (config.security) {
-        config.security.enabled =
-          answers.securityBashBlock || answers.securityFlagsBlock || !answers.securityPathsDeny;
-        config.security.bash.enabled = config.security.enabled;
-        config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
+        config.security.enabled = true;
+        config.security.bash.enabled = true;
+        config.security.bash.blockDangerousFlags =
+          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
         if (answers.securityBashBlock) {
           config.security.bash.blacklist = [
             ...new Set([

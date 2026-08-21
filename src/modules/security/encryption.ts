@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { homedir } from "os";
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "fs";
@@ -54,10 +54,12 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
     try {
       writeFileSync(keyPath, key.toString("base64"), { mode: 0o600 });
       return key;
-    } catch {
-      // If we can't write the key file, return the key anyway
-      // The caller can handle the error
-      return key;
+    } catch (e) {
+      // If we can't persist the key, encrypted data would be unrecoverable
+      // on the next run — fail loudly instead of silently degrading.
+      throw new Error(
+        `Cannot write encryption key to ${keyPath}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -134,7 +136,7 @@ export function decryptString(encryptedText: string, key: Buffer): string {
   hmac.update(Buffer.from(encrypted, "base64"));
   const computedTag = hmac.digest();
 
-  if (!computedTag.equals(authTag)) {
+  if (computedTag.length !== authTag.length || !timingSafeEqual(computedTag, authTag)) {
     throw new Error("Authentication failed: invalid tag");
   }
 

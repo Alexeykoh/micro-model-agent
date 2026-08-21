@@ -18,7 +18,7 @@ import { SessionStore, SessionManager, SessionModule } from "../modules/session/
 import { UserProfile } from "../modules/user-profile/profile";
 import { SkillsLoader, SkillsModule } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
-import { LspModule, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
+import { LspModule, FileOnlyLogger, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
 import { runStartupHealthCheck } from "../modules/lsp/startup-check";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
@@ -47,6 +47,8 @@ export function buildSystemInfo(
     `You are MMA v2, an AI coding agent for small models (${config.model}). Date: ${now}. Workspace: ${baseDir}. ${profileCompressed}.`,
     `Reply in the user's language. Use tools for file ops (read/write/edit/delete), search (glob/grep), shell (bash), web, subagents, browser, MCP. Explain briefly if not obvious. On tool failure: analyze, fix the call, retry up to 2x with different approaches, then ask the user.`,
     `Design: YAGNI (no unneeded code), KISS (simple over clever), DRY (reuse existing utilities).`,
+    `SCOPE DISCIPLINE: do ONLY what the user explicitly asked — no extra features, files, refactors, "improvements", or fixes beyond the request. Read-only requests ("расскажи", "покажи", "объясни", "check") mean READ-ONLY: inspect and answer, never create/modify/delete anything. If the task is ambiguous (what to create, where, which variant) or the request implies action on something you could not find — STOP and ask the user a short clarifying question in plain text instead of guessing.`,
+    `NOT FOUND ≠ MISSING PROJECT: a "not found" tool result means the PATH was wrong (typo, different location), not that the project does not exist. Before creating or scaffolding ANY project/files: first run list_dir on the working directory to see what is already there; if a user-named path is not found, list its parent directory to locate the real path. NEVER create a new project when the user asked about an existing one — inspect first, create only after confirming the workspace is empty AND the user asked for creation.`,
   ];
 
   if (isWin) {
@@ -363,7 +365,8 @@ export async function bootstrap(
     }
   }
 
-  const lspModule = new LspModule(config.lsp, undefined, logger);
+  const lspLogger = new FileOnlyLogger(logger);
+  const lspModule = new LspModule(config.lsp, undefined, lspLogger);
   moduleRegistry.register(lspModule);
   const lspPlugin = lspModule.getPlugin();
   if (lspPlugin) {
@@ -380,7 +383,7 @@ export async function bootstrap(
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
     !exitOnComplete && process.env.NODE_ENV !== "test"
-      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger })
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
       : Promise.resolve(null);
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
@@ -519,6 +522,7 @@ export async function bootstrap(
     },
     sessionManager,
     memoryStore,
+    moduleRegistry,
     exitOnComplete,
   };
 

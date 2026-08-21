@@ -1,5 +1,33 @@
-import { resolve, normalize, dirname, basename, sep } from "path";
+import { resolve, normalize, dirname, basename, sep, relative, isAbsolute } from "path";
 import { existsSync } from "fs";
+
+/**
+ * True when targetPath equals dirPath or lies inside it.
+ *
+ * Cross-platform notes:
+ * - Uses path.relative() instead of raw startsWith, so a sibling directory
+ *   sharing the string prefix ("src" vs "src-other") can never pass.
+ * - On Windows the filesystem is case-insensitive: both sides are lowercased
+ *   before comparison so "E:\Proj" and "e:\proj" resolve to the same dir.
+ */
+export function isInsideDir(targetPath: string, dirPath: string): boolean {
+  const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+  const t = norm(resolve(targetPath));
+  const d = norm(resolve(dirPath));
+  if (t === d) return true;
+  const rel = relative(d, t);
+  return rel.length > 0 && !isAbsolute(rel) && !rel.startsWith("..");
+}
+
+/**
+ * True when targetPath matches a scope entry: either the entry file itself or
+ * anything inside the entry directory. Separator- and case-safe (see
+ * isInsideDir).
+ */
+export function matchesScopeEntry(targetResolved: string, entryResolved: string): boolean {
+  if (targetResolved === entryResolved) return true;
+  return isInsideDir(targetResolved, entryResolved);
+}
 
 /**
  * Resolve a user-provided path against baseDir.
@@ -13,6 +41,12 @@ import { existsSync } from "fs";
  * the full path so write_file still works.
  */
 export function safeResolvePath(baseDir: string, userPath: string): string {
+  // Absolute path that actually exists — honor it as-is
+  const asIs = resolve(normalize(userPath));
+  if (userPath.startsWith("/") || userPath.startsWith("\\")) {
+    if (existsSync(asIs) || existsSync(dirname(asIs))) return asIs;
+  }
+
   const norm = normalize(userPath);
   const stripped = norm.replace(/^[/\\]/, "");
   const resolved = resolve(baseDir, stripped);

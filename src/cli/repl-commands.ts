@@ -1,4 +1,5 @@
 import { pc } from "../ui/colors";
+import { readMmaVersion } from "../core/version";
 import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
@@ -14,24 +15,9 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { LspModule } from "../modules/lsp/module";
 
-function readVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8"));
-        if (raw.version) return raw.version;
-      } catch {
-        // Broken package.json — fall through to the next candidate
-      }
-    }
-  }
-  return "0.0.0";
-}
-
-const version = readVersion();
+const version = readMmaVersion();
 
 export interface SlashCommand {
   name: string;
@@ -411,10 +397,6 @@ function registerMmaCommands(ctx: ReplContext): void {
       console.log(pc.yellow(t("repl.reloading")));
 
       if (ctx.sessionManager && ctx.config.session.autoSave) {
-        const active = ctx.sessionManager.getActiveMeta();
-        if (active) {
-          // Session is already auto-saved on each message
-        }
       }
 
       ctx.agent.shutdown();
@@ -494,9 +476,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       const subcommand = args[0] || "status";
 
       // Access LSP module via the agent's module registry
-      const lspModule = (ctx.agent as any).deps?.moduleRegistry
-        ?.getModules?.()
-        ?.find((m: any) => m.name === "lsp");
+      const lspModule = ctx.agent.getModule<LspModule>("lsp");
 
       if (!lspModule) {
         console.log(pc.yellow(t("repl.lsp_not_available")));

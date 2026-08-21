@@ -106,14 +106,10 @@ export class OpenAICompatProvider implements LLMProvider {
 
     let hasToolCall = false;
     let hasText = false;
-    let reasoningAcc = "";
 
     for await (const chunk of streamResult) {
       if (chunk.type === "tool_call") hasToolCall = true;
       if (chunk.type === "text") hasText = true;
-      if (chunk.type === "reasoning" && chunk.content) {
-        reasoningAcc += chunk.content;
-      }
       yield chunk;
     }
 
@@ -174,31 +170,8 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
       reasoningEffort: options?.reasoningEffort,
     });
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.config.apiKey && this.config.apiKey !== "not-needed") {
-      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
-    }
-
-    const controller = new AbortController();
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, REQUEST_TIMEOUT_MS);
-    const abortSignal: AbortSignal = (() => {
-      if (!signal) return controller.signal;
-      try {
-        return AbortSignal.any([controller.signal, signal]);
-      } catch {
-        signal.addEventListener("abort", () => controller.abort(), {
-          once: true,
-        });
-        return controller.signal;
-      }
-    })();
+    const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
+      this.buildRequestSetup(signal);
 
     let response: Response;
     try {
@@ -218,7 +191,7 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (!response.ok) {
-      clearTimeout(timeoutId);
+      cleanup();
       const errorText = await response.text();
       const err = new Error(
         t("error.llm_api", {
@@ -233,7 +206,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
     const reader = response.body?.getReader();
     if (!reader) {
-      clearTimeout(timeoutId);
+      cleanup();
       throw new Error(t("error.no_response_body"));
     }
 
@@ -248,18 +221,18 @@ export class OpenAICompatProvider implements LLMProvider {
     const readIdle = (): Promise<ReadResult> =>
       new Promise<ReadResult>((resolve, reject) => {
         const idleTimer = setTimeout(() => {
-          timedOut = true;
+          flagTimeout();
           controller.abort();
         }, idleTimeoutMs);
         reader.read().then(
           (result) => {
             clearTimeout(idleTimer);
-            if (timedOut) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            if (isTimeout()) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
             else resolve(result);
           },
           (err) => {
             clearTimeout(idleTimer);
-            if (timedOut) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            if (isTimeout()) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
             else reject(err);
           },
         );
@@ -353,34 +326,27 @@ export class OpenAICompatProvider implements LLMProvider {
         yield { type: "done", usage };
       }
     } finally {
-      clearTimeout(timeoutId);
+      cleanup();
       reader.releaseLock();
     }
     return sawDone;
   }
 
-  private async doNonStreaming(
-    messages: Message[],
-    tools?: ToolDefinition[],
-    signal?: AbortSignal,
-    options?: import("./provider").ChatOptions,
-  ): Promise<Chunk[]> {
-    const body = buildRequestBody({
-      model: this.model,
-      messages,
-      tools,
-      stream: false,
-      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
-      reasoningEffort: options?.reasoningEffort,
-    });
-
+  /** Shared request setup: auth headers + timeout/abort controller wiring. */
+  private buildRequestSetup(signal?: AbortSignal): {
+    headers: Record<string, string>;
+    abortSignal: AbortSignal;
+    cleanup: () => void;
+    isTimeout: () => boolean;
+    flagTimeout: () => void;
+    controller: AbortController;
+  } {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
     if (this.config.apiKey && this.config.apiKey !== "not-needed") {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     }
-
     const controller = new AbortController();
     let timedOut = false;
     const timeoutId = setTimeout(() => {
@@ -398,6 +364,34 @@ export class OpenAICompatProvider implements LLMProvider {
         return controller.signal;
       }
     })();
+    return {
+      headers,
+      abortSignal,
+      cleanup: () => clearTimeout(timeoutId),
+      isTimeout: () => timedOut,
+      flagTimeout: () => {
+        timedOut = true;
+      },
+      controller,
+    };
+  }
+
+  private async doNonStreaming(
+    messages: Message[],
+    tools?: ToolDefinition[],
+    signal?: AbortSignal,
+    options?: import("./provider").ChatOptions,
+  ): Promise<Chunk[]> {
+    const body = buildRequestBody({
+      model: this.model,
+      messages,
+      tools,
+      stream: false,
+      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
+      reasoningEffort: options?.reasoningEffort,
+    });
+
+    const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(signal);
 
     try {
       const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
@@ -460,12 +454,12 @@ export class OpenAICompatProvider implements LLMProvider {
 
       return chunks;
     } catch (err: any) {
-      if (timedOut && err?.name === "AbortError") {
+      if (isTimeout() && err?.name === "AbortError") {
         throw new Error(t("error.llm_timeout", { timeout: REQUEST_TIMEOUT_MS }));
       }
       throw err instanceof Error ? err : new Error(String(err));
     } finally {
-      clearTimeout(timeoutId);
+      cleanup();
     }
   }
 

@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
@@ -12,6 +12,50 @@ function truncateLines(output: string): string {
     lines.slice(0, MAX_PREVIEW_LINES).join("\n") +
     `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`
   );
+}
+
+/**
+ * Run a search command asynchronously with kill-on-timeout.
+ * Exit code 1 (no matches) resolves to an empty string, like execFileSync semantics.
+ */
+export function runSearch(
+  bin: string,
+  args: string[],
+  cwd: string,
+  timeoutMs = 30000,
+): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(bin, args, { cwd, windowsHide: true });
+    let out = "";
+    let err = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.stdout?.on("data", (d) => {
+      out += d;
+    });
+    child.stderr?.on("data", (d) => {
+      err += d;
+    });
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error(`search timed out after ${timeoutMs}ms`));
+      } else if (code === 1) {
+        resolvePromise("");
+      } else if (code === 0) {
+        resolvePromise(out);
+      } else {
+        reject(new Error(err || `exit ${code}`));
+      }
+    });
+  });
 }
 
 export const grepTool: ToolDefinition = {
@@ -49,29 +93,27 @@ export const grepTool: ToolDefinition = {
     logBashCommand(ctx.sessionId, `rg ${rgArgs.join(" ")}`, false, "grep-tool");
 
     try {
-      const output = execFileSync("rg", rgArgs, {
-        encoding: "utf-8",
-        maxBuffer: 1024 * 1024,
-        cwd: ctx.baseDir,
-      });
+      const output = await runSearch("rg", rgArgs, ctx.baseDir);
       return {
         success: true,
         output: truncateLines(output || t("file.no_matches")),
       };
     } catch (e: any) {
-      if (e.status === 1) return { success: true, output: t("file.no_matches") };
+      if (e.code === "ENOENT") {
+        // fall through to grep fallback
+      } else if (/timed out/.test(e.message)) {
+        return { success: false, output: t("error.grep_failed", { message: e.message }) };
+      } else if (e.status === 1) {
+        return { success: true, output: t("file.no_matches") };
+      }
       // Fall back to plain grep -r when rg is not available or fails.
-      // Using execFileSync with array args avoids shell injection.
+      // Using array args avoids shell injection.
       try {
         const grepArgs = ["-rn", pattern, searchPath];
         if (args.include) {
           grepArgs.push("--include", String(args.include));
         }
-        const output = execFileSync("grep", grepArgs, {
-          encoding: "utf-8",
-          maxBuffer: 1024 * 1024,
-          cwd: ctx.baseDir,
-        });
+        const output = await runSearch("grep", grepArgs, ctx.baseDir);
         return {
           success: true,
           output: truncateLines(output || t("file.no_matches")),

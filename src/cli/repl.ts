@@ -25,6 +25,7 @@ import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
+import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { SessionLogger } from "../core/session-logger";
 import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
@@ -93,6 +94,7 @@ export class Repl implements ReplContext {
     logger?: Logger,
     exitOnClose?: boolean,
     envReport?: EnvironmentReport,
+    historyPath?: string,
   ) {
     this.agent = agent;
     this.config = config;
@@ -106,7 +108,7 @@ export class Repl implements ReplContext {
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
-    this.historyPath = join(homedir(), ".mma", "repl-history");
+    this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
     this.rl = process.stdin.isTTY
@@ -275,7 +277,7 @@ export class Repl implements ReplContext {
 
     process.on("SIGINT", () => {
       if (this.agentRunning) {
-        console.log(pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"));
+        console.log(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
         this.agentRunning = false;
         if (forceExitTimer) clearTimeout(forceExitTimer);
@@ -703,7 +705,8 @@ export class Repl implements ReplContext {
   private async probeLspBanner(): Promise<string | null> {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
-      const summary = await probeLspServers(config, this.baseDir, { logger: this.logger });
+      const lspOnlyLogger = this.logger ? new FileOnlyLogger(this.logger) : undefined;
+      const summary = await probeLspServers(config, this.baseDir, { logger: lspOnlyLogger });
       // Log LSP probe results to session for post-mortem visibility
       this.slog.logSessionStart({
         environment: this.envReport as unknown as Record<string, unknown>,

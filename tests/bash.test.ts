@@ -101,7 +101,7 @@ describe("bash", () => {
   });
 
   it("should start long-running commands in background and return a process id", async () => {
-    const ctx = makeCtx({ sessionId: "bash-ses" });
+    const ctx = makeCtx({ sessionId: "bash-ses", config: { security: { enabled: false } } });
     const result = await bashTool.handler(ctx, {
       command: `node ${idleScript}`,
       background: true,
@@ -136,7 +136,7 @@ describe("bash", () => {
   });
 
   it("should not background one-shot commands, even when they mention long-running words", async () => {
-    const ctx = makeCtx();
+    const ctx = makeCtx({ config: { security: { enabled: false } } });
     const result = await bashTool.handler(ctx, {
       command: "node -e \"console.log('vite dev server')\"",
     });

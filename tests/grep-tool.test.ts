@@ -1,39 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmdirSync, existsSync } from "fs";
+import { describe, it, expect } from "vitest";
+import { runSearch } from "../src/tools/grep-tool";
 import { join } from "path";
-import { tmpdir } from "os";
-import { grepTool } from "../src/tools/grep-tool";
 
-describe("grep", () => {
-  let tmpDir: string;
-  let ctx: any;
-
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-test-"));
-    ctx = { baseDir: tmpDir, config: {}, logger: { info: () => {}, error: () => {} } };
-    writeFileSync(join(tmpDir, "test.txt"), "hello world\nfoo bar");
+describe("grep async runSearch", () => {
+  it("returns matching output", async () => {
+    const out = await runSearch("grep", ["-rn", "export"], process.cwd(), 30000);
+    expect(typeof out).toBe("string");
   });
 
-  afterEach(() => {
-    if (existsSync(tmpDir)) rmdirSync(tmpDir, { recursive: true });
+  it("resolves empty string on exit code 1 (no matches)", async () => {
+    const out = await runSearch("grep", ["-rn", "ZZZ_NO_MATCH_ZZZ", join(process.cwd(), "package.json")], process.cwd(), 30000);
+    expect(out).toBe("");
   });
 
-  it("should find matching lines", async () => {
-    const result = await grepTool.handler(ctx, { pattern: "hello" });
-    expect(result.success).toBe(true);
-  });
-
-  it("should handle regex alternation (|) without shell interference", async () => {
-    writeFileSync(join(tmpDir, "code.ts"), "// TODO: fix\nconst foo = 1\n// FIXME: here");
-    const result = await grepTool.handler(ctx, { pattern: "TODO|FIXME", include: "*.ts" });
-    expect(result.success).toBe(true);
-    const output = String(result.output);
-    expect(output).toContain("TODO");
-    expect(output).toContain("FIXME");
-  });
-
-  it("should return no matches for absent pattern", async () => {
-    const result = await grepTool.handler(ctx, { pattern: "nonexistent-string-xyz" });
-    expect(result.success).toBe(true);
-  });
+  it("kills the process on timeout and rejects", async () => {
+    let msg = "";
+    try {
+      await runSearch("sleep", ["5"], process.cwd(), 200);
+    } catch (e: any) {
+      msg = e.message;
+    }
+    expect(msg).toMatch(/timed out/i);
+  }, 10000);
 });

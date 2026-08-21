@@ -85,3 +85,29 @@ describe("isPathWritable", () => {
     expect(result.allowed).toBe(true);
   });
 });
+
+describe("cross-platform scope edge cases", () => {
+  it("sibling directory sharing prefix does not match scope entry", () => {
+    // entry "src" must not authorize "src-other/..."
+    const result = isPathInScope("/workspace", "src-other/file.ts", {
+      allowed_files: ["src"],
+      read_only_files: [],
+    });
+    expect(result.allowed).toBe(false);
+  });
+
+  it("sibling directory sharing prefix does not pass baseDir containment", () => {
+    const result = isPathInScope("/workspace", "/workspace2/file.ts");
+    expect(result.allowed).toBe(false);
+  });
+
+  if (process.platform === "win32") {
+    it("case-insensitive baseDir containment on Windows", () => {
+      const result = isPathInScope("E:\\Proj", "SRC\\file.ts", {
+        allowed_files: ["src"],
+        read_only_files: [],
+      });
+      expect(result.allowed).toBe(true);
+    });
+  }
+});

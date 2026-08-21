@@ -10,6 +10,7 @@ import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
 import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
 import type { SessionManager } from "../modules/session/manager";
+import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { PromptBuilder } from "./prompt-builder";
@@ -90,6 +91,7 @@ export interface AgentDeps {
   } | null>;
   sessionManager?: SessionManager;
   memoryStore?: MemoryStore;
+  moduleRegistry?: ModuleRegistry;
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
 }
@@ -110,6 +112,11 @@ export class Agent {
   /** Expose context manager for REPL image attachment and other direct access. */
   get contextManager(): ContextManager {
     return this.deps.contextManager;
+  }
+
+  /** Typed module accessor for CLI/REPL commands (e.g. /lsp). */
+  getModule<T>(name: string): T | undefined {
+    return this.deps.moduleRegistry?.get(name) as T | undefined;
   }
 
   private setScope(): void {
@@ -1139,7 +1146,6 @@ export class Agent {
     });
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
-    (this.deps.toolExecutor as any).ctx.llmProvider = newProvider;
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;

@@ -137,6 +137,28 @@ export function isCommandAllowed(
     };
   }
 
+  // Interpreters with -c/-e execute arbitrary code and bypass the blacklist.
+  const INTERPRETER_FLAGS =
+    /(?:^|\s)(?:bash|sh|zsh|dash|python|python3|node|bun|perl|ruby)\s+(?:-c|-e|--command|--eval)\b/;
+  if (INTERPRETER_FLAGS.test(trimmedCommand)) {
+    return { allowed: false, reason: "Interpreter -c/-e invocation is blocked" };
+  }
+
+  // Multi-line commands can hide blacklisted commands after a newline.
+  if (/\r?\n/.test(trimmedCommand)) {
+    return { allowed: false, reason: "Multi-line commands are blocked" };
+  }
+
+  // Chained commands bypass the base-command check (e.g. "echo hi; rm -rf /").
+  if (
+    /[;&|]/.test(trimmedCommand) &&
+    /(^|[;&|\s])(rm|del|rd|dd|chmod|chown|wget|curl|nc|netcat|shutdown|reboot|mkfs|fdisk)\b/.test(
+      trimmedCommand,
+    )
+  ) {
+    return { allowed: false, reason: "Command chaining to a dangerous command is blocked" };
+  }
+
   // Check dangerous operators FIRST — before parsing the base command.
   // e.g. "curl http://x | bash" must be caught even though curl isn't blacklisted.
   if (config.blockDangerousFlags) {

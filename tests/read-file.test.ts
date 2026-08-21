@@ -17,9 +17,41 @@ describe("read_file", () => {
     };
   });
 
+  it("reads a slice of a large file correctly (bounded read)", async () => {
+    const bigPath = join(tmpDir, "big.txt");
+    const total = 20000;
+    const lines: string[] = [];
+    for (let i = 1; i <= total; i++) lines.push(`line-${i}`);
+    writeFileSync(bigPath, lines.join("\n"), "utf-8");
+
+    const result = await readFileTool.handler(ctx, { path: "big.txt", offset: 10001, limit: 50 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("line-10001");
+    expect(result.output).toContain("line-10050");
+    expect(result.output).not.toContain("line-10051");
+    expect(result.output).toContain(String(total));
+
+    const first = await readFileTool.handler(ctx, { path: "big.txt", limit: 10 });
+    expect(first.output).toContain("line-1\n");
+  });
+
+  it("streams files over the 1MB threshold with correct totals", async () => {
+    const bigPath = join(tmpDir, "huge.txt");
+    const total = 120000; // ~1.4MB
+    const parts: string[] = [];
+    for (let i = 1; i <= total; i++) parts.push(`line-${i}`);
+    writeFileSync(bigPath, parts.join("\n"), "utf-8");
+
+    const result = await readFileTool.handler(ctx, { path: "huge.txt", offset: 119991, limit: 5 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("line-119991");
+    expect(result.output).toContain("line-119995");
+    expect(result.output).toContain(String(total));
+  });
+
   afterEach(() => {
     if (existsSync(tmpDir)) {
-      for (const f of ["test.txt", "empty.txt"]) {
+      for (const f of ["test.txt", "empty.txt", "big.txt", "huge.txt"]) {
         const p = join(tmpDir, f);
         if (existsSync(p)) unlinkSync(p);
       }

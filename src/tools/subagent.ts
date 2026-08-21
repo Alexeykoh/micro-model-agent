@@ -182,7 +182,6 @@ export const subagentTool: ToolDefinition = {
 
       const subAgent = new Agent(subDeps);
       const fullTask = context ? `${task}\n\nContext: ${context}` : task;
-      let scopeRestored = false;
       try {
         const result = await subAgent.run(fullTask);
         if (!result.success) {
@@ -225,9 +224,9 @@ export const subagentTool: ToolDefinition = {
           output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
         };
       } finally {
-        if (!scopeRestored) {
-          ctx.toolExecutor.setScope(parentScope || { allowed_files: [], read_only_files: [] });
-        }
+        // Restore the parent's exact scope: undefined means "no restrictions"
+        // and must not become an empty scope (which denies everything).
+        ctx.toolExecutor.setScope(parentScope);
       }
     } catch (e: any) {
       return { success: false, output: `Sub-agent error: ${e.message}` };

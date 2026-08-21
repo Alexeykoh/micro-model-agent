@@ -7,14 +7,15 @@ import {
   SessionIsolationConfig,
 } from "../../src/modules/security/session-isolation";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { mkdirSync, rmSync, existsSync, mkdtempSync } from "fs";
 import { join, resolve } from "path";
-import { homedir } from "os";
+import { tmpdir } from "os";
 
 describe("Session Isolation", () => {
   const testSessionId = "test-session-123";
-  const testProjectDir = join(homedir(), "test-project");
-  const testTempDir = join(homedir(), ".mma", "sessions", testSessionId, "temp");
+  const isolationRoot = mkdtempSync(join(tmpdir(), "mma-session-isolation-"));
+  const testProjectDir = join(isolationRoot, "test-project");
+  const testTempDir = join(isolationRoot, ".mma", "sessions", testSessionId, "temp");
 
   beforeEach(() => {
     // Create test directories
@@ -29,8 +30,7 @@ describe("Session Isolation", () => {
   afterEach(() => {
     // Clean up test directories
     try {
-      rmSync(testProjectDir, { recursive: true, force: true });
-      rmSync(testTempDir, { recursive: true, force: true });
+      rmSync(isolationRoot, { recursive: true, force: true });
     } catch {
       // Ignore if cleanup fails
     }
@@ -193,7 +193,7 @@ describe("Session Isolation", () => {
 
     it("should return false for paths outside working and temp directories", () => {
       const context = createSessionContext(testSessionId, testProjectDir);
-      const outsidePath = join(homedir(), "outside", "file.txt");
+      const outsidePath = join(tmpdir(), "outside", "file.txt");
 
       expect(isPathInSessionScope(context, outsidePath)).toBe(false);
     });

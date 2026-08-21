@@ -4,6 +4,29 @@ import { platform } from "os";
 import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
 import { killTree } from "../processes/registry";
+import type { Logger } from "../../logger/app-logger";
+
+/**
+ * Logger adapter that writes LSP diagnostics to app.jsonl only — never to
+ * console/terminal. LSP warnings are noisy (timeout on first run, npx
+ * install) and should be diagnosable from session files without polluting
+ * the user's chat.
+ */
+export class FileOnlyLogger implements LspClientLogger {
+  constructor(private logger: Logger) {}
+  debug(msg: string, meta?: Record<string, unknown>): void {
+    this.logger.logSilent("debug", msg, meta);
+  }
+  info(msg: string, meta?: Record<string, unknown>): void {
+    this.logger.logSilent("info", msg, meta);
+  }
+  warn(msg: string, meta?: Record<string, unknown>): void {
+    this.logger.logSilent("warn", msg, meta);
+  }
+  error(msg: string, meta?: Record<string, unknown>): void {
+    this.logger.logSilent("error", msg, meta);
+  }
+}
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -141,10 +164,34 @@ export class LspClient {
       }
     }
 
+    // When the command is npx, try to find the actual binary globally first.
+    // npx downloads packages on every invocation (slow on Windows, ~8-15s),
+    // even when the binary is already installed globally.
+    let effectiveCommand = config.command;
+    let effectiveArgs = config.args ?? [];
+    if (config.command === "npx" && effectiveArgs.length > 0) {
+      const binaryName = this.extractBinaryFromNpxArgs(effectiveArgs);
+      if (binaryName) {
+        const whichCmd = platform() === "win32" ? `where ${binaryName}` : `which ${binaryName}`;
+        try {
+          execSync(whichCmd, { stdio: "pipe", timeout: 3000 });
+          // Binary found globally — use it directly, skip npx.
+          effectiveCommand = binaryName;
+          effectiveArgs = effectiveArgs.filter(
+            (a) => a !== "--yes" && a !== "--package" && a !== binaryName && !this.isPackageVersion(a),
+          );
+          this.logger?.debug(`LSP: using globally installed ${binaryName} (skipped npx)`);
+        } catch {
+          // Not found globally — fall back to npx (will auto-install).
+          this.logger?.debug(`LSP: ${binaryName} not found globally, falling back to npx`);
+        }
+      }
+    }
+
     return new Promise((resolve, reject) => {
-      const args = config.args ?? [];
+      const args = effectiveArgs;
       const isWin = platform() === "win32";
-      let spawnCommand = resolveSpawnCommand(config.command);
+      let spawnCommand = resolveSpawnCommand(effectiveCommand);
       let spawnArgs = args;
       const spawnOpts: SpawnOptions = {
         stdio: ["pipe", "pipe", "pipe"],
@@ -361,5 +408,27 @@ export class LspClient {
       yml: "yaml",
     };
     return map[ext ?? ""] ?? "plaintext";
+  }
+
+  /**
+   * Extract the actual binary name from npx args.
+   * For `npx --yes --package typescript-language-server --package typescript@5 typescript-language-server --stdio`
+   * returns `typescript-language-server` (the last non-flag arg before `--stdio`).
+   */
+  private extractBinaryFromNpxArgs(args: string[]): string | null {
+    // Find the binary: last arg that doesn't start with -- and isn't a package version
+    for (let i = args.length - 1; i >= 0; i--) {
+      const arg = args[i];
+      if (arg === "--stdio") continue;
+      if (arg.startsWith("--")) return null; // unexpected format
+      if (this.isPackageVersion(arg)) continue;
+      return arg;
+    }
+    return null;
+  }
+
+  /** Check if a string looks like a package version specifier (e.g. "typescript@5"). */
+  private isPackageVersion(s: string): boolean {
+    return /^[\w-]+@[\d.+*-]/.test(s);
   }
 }

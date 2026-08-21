@@ -33,9 +33,11 @@ mma "перепиши модуль авторизации на JWT"
 - **Детекция галлюцинаций** — фактическая (пути файлов), согласованности (откат решений), уверенности (короткие/повторяющиеся ответы)
 - **Гарантии выполнения** — авто-планирование через LLM (без keyword-эвристик), stuck-detection, off-track предупреждения, авто-продвижение плана
 - **Agent-Level MoE** — Router + экспертные сабагенты с фильтрацией инструментов, изолированным контекстом, файловым скоупом и топологическим параллельным выполнением
-- **20+ инструментов** — файловая система, шелл, веб-поиск/fetch, браузер (Playwright), планирование, взаимодействие, сабагенты, MCP, пайплайны
-- **13 модулей** — скиллы, плагины, MCP-клиент, пайплайны, indexer проекта, постоянная память, контекст, сессии, браузер, выполнение, детекция галлюцинаций, апдейтер, профиль пользователя
+- **33 инструмента** — файловая система, шелл, веб-поиск/fetch, браузер (Playwright), планирование, взаимодействие, сабагенты, MCP, пайплайны
+- **19 модулей** — скиллы, плагины, MCP-клиент, пайплайны, indexer проекта, постоянная память, контекст, сессии, браузер, выполнение, детекция галлюцинаций, апдейтер, профиль пользователя, LSP, сертификация моделей, безопасность, артефакты, процессы, ценообразование
 - **MCP-клиент** — подключение к любому MCP-серверу (stdio или SSE)
+- **Модуль безопасности** — включён по умолчанию (balanced): валидация bash-команд, path/network-политики, сканирование контента, шифрование сессий, audit-лог
+- **LSP-диагностика** — TypeScript/CSS/HTML серверы: проверка типов после каждой правки и по запросу
 - **YAML-пайплайны** — DAG-движок с параллельными волнами, зависимостями и повторными попытками
 - **Управление сессиями** — постоянные JSONL-сессии с REPL-командами
 - **Карта проекта** — автоматический обход файлов + извлечение экспортов + дисковый кэш
@@ -120,14 +122,30 @@ bun run mma "<prompt>"
 
 # Подкоманды
 bun run mma init                       # Интерактивный мастер настройки
-bun run mma config set model qwen3.5-9b
+bun run mma config set model qwen/qwen3.5-9b
 bun run mma config show
-bun run mma model list                 # Список доступных моделей
+bun run mma model list                 # Список доступных моделей (✔ = сертифицирована)
 bun run mma model use qwen3.5-9b       # Переключить модель
+bun run mma model certify <name>       # Сертификация модели на бэкенде
+bun run mma model cert-status <name>   # Статус сертификации
+bun run mma model cert-list            # Все сертификации
+bun run mma model uncertify <name>     # Отозвать сертификацию
 bun run mma provider list              # Список провайдеров
+bun run mma provider use opencode-zen  # Хостед-провайдер (zen / go)
+bun run mma context                    # Токены/бюджет контекста
+bun run mma security status            # Текущая конфигурация безопасности
+bun run mma security policies          # Доступные политики (strict/balanced/permissive)
+bun run mma security set-policy strict # Применить политику
+bun run mma plugins list               # Загруженные плагины (--all — включая встроенные)
 bun run mma session list               # Список сессий
 bun run mma session show <id>          # Детали сессии
 bun run mma session delete <id>        # Удалить сессию
+
+# Флаги одноразового запуска
+bun run mma "<prompt>" --json              # Машиночитаемый JSON-результат
+bun run mma "<prompt>" -d <dir>            # Рабочая директория агента
+bun run mma "<prompt>" --no-agents-md      # Не грузить AGENTS.md в системный промпт
+bun run mma "<prompt>" --exit-on-complete  # Выйти после первого финального ответа
 ```
 
 ### REPL
@@ -144,8 +162,23 @@ bun run dev
 | `/resume <id\|name>` | `/switch`, `/use` | Переключиться на сессию |
 | `/rename <name>` | | Переименовать текущую сессию |
 | `/delete <id>` | `/rm` | Удалить сессию |
-| `/config set <key> <value>` | | Установить значение конфига |
+| `/model [name]` | | Показать/сменить модель |
+| `/provider` | | Показать/сменить провайдера |
+| `/status` | | Статус: модель, плагины, сессия, стоимость |
+| `/context` | `/ctx` | Токены и бюджет контекста |
+| `/reasoning` | | Переключить показ reasoning |
+| `/image <path\|url>` | | Прикрепить изображение (или Ctrl+V) |
+| `/run <cmd>` | | Выполнить shell-команду без агента |
+| `/sysprompt` | | Показать системный промпт |
+| `/wizard` | | Мастер настройки |
+| `/skill <name>` | | Загрузить скилл |
+| `/plugins` | | Плагины (`--all` — все) |
+| `/lsp [status\|restart\|check <path>]` | | Диагностика LSP |
+| `/reload` | | Перечитать конфиг и модули |
+| `/clear` | | Очистить контекст сессии |
 | `/exit` | | Выйти из REPL |
+
+Горячие клавиши: `Esc Esc` — прервать агента; `Ctrl+C` — выход; `Ctrl+V` — вставить изображение из буфера обмена; `Shift+Enter` — перенос строки.
 
 ### Разработка
 
@@ -167,13 +200,14 @@ bun run typecheck                       # Проверка типов
 
 | Опция | По умолчанию | Описание |
 |-------|-------------|----------|
-| `model` | `qwen3.5-9b` | Имя модели для бэкенда |
+| `model` | `qwen/qwen3.5-9b` | Имя модели для бэкенда |
 | `provider.baseUrl` | `http://localhost:1234/v1` | URL OpenAI-совместимого API |
 | `contextWindow` | `32768` | Контекстное окно модели в токенах |
 | `autoPlan` | `true` | Авто-создание планов для многошаговых задач |
-| `maxToolIterations` | `25` | Макс. вызовов инструментов за запуск |
-| `stuckThreshold` | `8` | Итераций без прогресса до stuck-detection |
+| `maxToolIterations` | `1000` | Макс. вызовов инструментов за запуск |
+| `stuckThreshold` | `6` | Итераций без прогресса до stuck-detection |
 | `moe.enabled` | `false` | Включить Agent-Level MoE |
+| `security.enabled` | `true` | Модуль безопасности (balanced-политика по умолчанию) |
 | `locale` | `en` | Язык интерфейса (`en` / `ru`) |
 | `logLevel` | `info` | Уровень логирования |
 
@@ -187,9 +221,9 @@ bun run typecheck                       # Проверка типов
     "provider": { "baseUrl": "http://localhost:1234/v1" }
   },
   "experts": {
-    "code": { "model": "qwen3.5-9b", "tool_tags": ["file", "code", "shell"], "max_attempts": 3 },
-    "research": { "model": "qwen3.5-9b", "tool_tags": ["research"], "max_attempts": 3 },
-    "browser": { "model": "qwen3.5-9b", "tool_tags": ["browser", "vision"], "max_attempts": 3 }
+    "code": { "model": "qwen/qwen3.5-9b", "tool_tags": ["file", "code", "shell"], "max_attempts": 3 },
+    "research": { "model": "qwen/qwen3.5-9b", "tool_tags": ["research"], "max_attempts": 3 },
+    "browser": { "model": "qwen/qwen3.5-9b", "tool_tags": ["browser", "vision"], "max_attempts": 3 }
   }
 }
 ```
@@ -202,9 +236,10 @@ bun run typecheck                       # Проверка типов
 CLI (main.ts → commands.ts / repl.ts / setup.ts)
   → Core (agent.ts state machine → prompt-builder.ts)
     → LLM Layer (provider.ts → openai-compat.ts → response.ts → token-counter.ts)
-      → Tools (registry.ts → executor.ts → 20+ tools)
+      → Tools (registry.ts → executor.ts → 33 tools)
         → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session,
-                   hallucination, execution, updater, user-profile, browser)
+                   hallucination, execution, updater, user-profile, browser, lsp,
+                   security, certification, artifacts, processes, pricing)
 ```
 
 ### Структура проекта
@@ -213,8 +248,10 @@ CLI (main.ts → commands.ts / repl.ts / setup.ts)
 src/
 ├── core/          # Цикл агента, сборщик промптов, типы
 ├── llm/           # Абстракция провайдера, OpenAI-совместимость, стриминг, подсчёт токенов
-├── tools/         # 20+ инструментов с реестром, исполнителем, скоуп-гардами
-├── modules/       # 13 модулей (скиллы, плагины, mcp, пайплайны, indexer, память, контекст, сессии, галлюцинации, выполнение, апдейтер, профиль, браузер)
+├── tools/         # 33 инструмента с реестром, исполнителем, скоуп-гардами
+├── modules/       # 19 модулей (скиллы, плагины, mcp, пайплайны, indexer, память, контекст,
+│                  #   сессии, галлюцинации, выполнение, апдейтер, профиль, браузер, LSP,
+│                  #   безопасность, сертификация моделей, артефакты, процессы, ценообразование)
 ├── cli/           # Точка входа, команды, REPL, мастер настройки
 ├── config/        # 3-слойный конфиг: defaults → глобальный → проект
 ├── i18n/          # en.json + ru.json + t()
@@ -242,16 +279,25 @@ src/
 | `subagent` | Изолированный сабагент со скоупом |
 | `web_search` | Поиск в интернете |
 | `web_fetch` | Загрузка веб-страницы (15K символов, 15s таймаут) |
-| `web_browse` | Браузер на Playwright (клик, ввод, скролл, скриншот) |
+| `web_browse` | JS-less HTTP fetch страницы (без движка браузера) |
+| `browser` | Браузер на Playwright (клик, ввод, скролл, скриншот) |
 | `plan` | Создание/обновление/отмена планов |
 | `todo` | Отслеживание задач |
-| `question` | Задать вопрос пользователю |
-| `approve` | Запросить подтверждение пользователя |
 | `load_skill` | Загрузить скилл во время выполнения |
 | `pipeline_run` | Выполнить YAML-пайплайн |
 | `mcp_call` | Вызвать инструмент MCP-сервера |
 | `search_history` | Поиск по истории сессий |
 | `project_map` | Запрос карты проекта (summary, refresh, find) |
+| `chunk_query` | Параллельная обработка больших текстов чанками |
+| `download_file` | Скачать бинарный файл по URL на диск |
+| `process_list` / `process_log` / `process_kill` | Управление фоновыми процессами |
+| `remember` / `recall` | Постоянная память агента |
+| `attach_image` | Прикрепить изображение (файл/URL/буфер обмена) |
+| `enable_tools` | Включить скрытые группы инструментов на ходу |
+| `lsp_check` | Диагностика LSP (TypeScript/CSS/HTML) |
+| `verify` | Верификация шагов плана |
+
+> Примечание: интерактивные тулзы `question`/`approve` выключены — модель задаёт вопросы текстом в ответе.
 
 ---
 
