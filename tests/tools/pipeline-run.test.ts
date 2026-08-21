@@ -6,7 +6,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
     config: {
       contextWindow: 64000,
       contextBudget: {},
-      session: { baselineCheck: false },
+      session: {},
     },
     baseDir: process.cwd(),
     logger: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} },

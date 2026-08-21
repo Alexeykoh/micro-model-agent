@@ -37,7 +37,6 @@ export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
   isolateMemory: boolean;
-  baselineCheck?: boolean;
 }
 
 export interface ModelLoadConfig {

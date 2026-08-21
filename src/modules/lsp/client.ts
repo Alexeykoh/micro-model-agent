@@ -297,9 +297,15 @@ export class LspClient {
   private async shutdown(): Promise<void> {
     try {
       if (this.process && this.initialized && this.process.stdin?.writable) {
-        this.sendRequest("shutdown", null, 3000).catch((e) => {
+        // Await the shutdown response (with timeout) so the server has time to
+        // acknowledge before we send exit and kill the process.  The old code
+        // fired shutdown as fire-and-forget, then killed immediately — the
+        // server never had a chance to reply, producing spurious timeout warnings.
+        try {
+          await this.sendRequest("shutdown", null, 3000);
+        } catch (e) {
           this.logger?.debug(`LSP shutdown request failed: ${e instanceof Error ? e.message : String(e)}`);
-        });
+        }
         this.sendNotification("exit", null);
         await new Promise((r) => setTimeout(r, 200));
       }
