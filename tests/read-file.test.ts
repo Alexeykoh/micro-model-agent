@@ -17,9 +17,27 @@ describe("read_file", () => {
     };
   });
 
+  it("reads a slice of a large file correctly (bounded read)", async () => {
+    const bigPath = join(tmpDir, "big.txt");
+    const total = 20000;
+    const lines: string[] = [];
+    for (let i = 1; i <= total; i++) lines.push(`line-${i}`);
+    writeFileSync(bigPath, lines.join("\n"), "utf-8");
+
+    const result = await readFileTool.handler(ctx, { path: "big.txt", offset: 10001, limit: 50 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("line-10001");
+    expect(result.output).toContain("line-10050");
+    expect(result.output).not.toContain("line-10051");
+    expect(result.output).toContain(String(total));
+
+    const first = await readFileTool.handler(ctx, { path: "big.txt", limit: 10 });
+    expect(first.output).toContain("line-1\n");
+  });
+
   afterEach(() => {
     if (existsSync(tmpDir)) {
-      for (const f of ["test.txt", "empty.txt"]) {
+      for (const f of ["test.txt", "empty.txt", "big.txt"]) {
         const p = join(tmpDir, f);
         if (existsSync(p)) unlinkSync(p);
       }
