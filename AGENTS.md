@@ -1133,7 +1133,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.47.0
+### Current Version: 0.48.1
 
 - **57** = session startup diagnostics logging — environment, LSP probe, baseline typecheck now written to `session.jsonl` for full post-mortem visibility (user request: "при старте пустой сессии нужно писать лог для LSP и подобных механизмов"): (1) **`logSessionStart()`** in `SessionLogger` — writes `{type: "session_start"}` as the FIRST entry in `session.jsonl` with environment report (OS/runtime/provider/tools), LSP probe results (ok/failed/noneApplicable), plugins, skills; dedup check prevents double-logging when both REPL and agent call it. (2) **`logBaselineTypecheck()`** — logs async typecheck result `{type: "baseline_typecheck"}` with passed/message. (3) **`envReport` threaded** from `bootstrap()` → `BootstrapResult` → `AgentDeps` → `agent.run()` → `slog.logSessionStart({environment})`. (4) **REPL logs LSP probe** — `probeLspBanner()` calls `slog.logSessionStart({environment, lspProbe})` after `probeLspServers()` returns. (5) **`SessionLogEntry`** extended with `session_start` + `baseline_typecheck` types + new optional fields (`environment`, `lspProbe`, `plugins`, `skills`, `passed`, `message`). Flow: one-shot → agent.ts logs session_start; interactive → REPL logs session_start (with LSP probe), agent.ts skips (dedup via file check). New session.jsonl entries enable diagnosing dead LSP servers, wrong provider config, missing tools, and typecheck issues from session files alone without cross-referencing global logs. Version: **0.47.0** (MINOR — new session log types + observability).
 
