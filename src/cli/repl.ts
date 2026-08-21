@@ -93,6 +93,7 @@ export class Repl implements ReplContext {
     logger?: Logger,
     exitOnClose?: boolean,
     envReport?: EnvironmentReport,
+    historyPath?: string,
   ) {
     this.agent = agent;
     this.config = config;
@@ -106,7 +107,7 @@ export class Repl implements ReplContext {
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
-    this.historyPath = join(homedir(), ".mma", "repl-history");
+    this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
     this.rl = process.stdin.isTTY
