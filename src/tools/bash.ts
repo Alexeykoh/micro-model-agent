@@ -475,10 +475,14 @@ export const bashTool: ToolDefinition = {
         const testRun = detectTestResults(output);
         if (testRun && testRun.failed > 0) {
           output =
-            `[test-runner] ${testRun.framework}: ${testRun.failed} test(s) FAILING, ${testRun.passed} passing — do NOT mark verification steps as done while tests fail. Investigate the failures, fix the code, then re-run the tests.\n\n` +
-            output;
+            t("exec.test_runner_fail", {
+              framework: testRun.framework,
+              failed: String(testRun.failed),
+              passed: String(testRun.passed),
+            }) +
+            `\n\n${output}`;
         } else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
-          output = `[test-runner] ${testRun.framework}: all ${testRun.passed} test(s) passing.\n\n${output}`;
+          output = `${t("exec.test_runner_pass", { framework: testRun.framework, passed: String(testRun.passed) })}\n\n${output}`;
         }
 
         if (!output && code !== 0) {

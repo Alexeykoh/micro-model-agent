@@ -277,7 +277,7 @@ export class Repl implements ReplContext {
 
     process.on("SIGINT", () => {
       if (this.agentRunning) {
-        console.log(pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"));
+        console.log(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
         this.agentRunning = false;
         if (forceExitTimer) clearTimeout(forceExitTimer);

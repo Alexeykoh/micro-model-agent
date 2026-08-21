@@ -260,7 +260,11 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             const step = deps.trackerRef.current?.getCurrentStep();
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>STOP. Step ${step?.id ?? "?"} ("${step?.description ?? ""}") took ${deps.stuckDetector.getIterationsOnCurrentStep()} iterations with no progress. DO NOT continue this step. Immediately call: plan update step=${step?.id ?? "?"} status=done (if code works despite warnings) OR plan update step=${step?.id ?? "?"} status=skipped note="reason". Do NOT make any other tool calls before updating the plan.</system-summary>`,
+              content: `<system-summary>${t("exec.stop_directive", {
+                stepId: String(step?.id ?? "?"),
+                description: step?.description ?? "",
+                iterations: String(deps.stuckDetector.getIterationsOnCurrentStep()),
+              })}</system-summary>`,
             });
           }
         }

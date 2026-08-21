@@ -638,5 +638,19 @@
   "tool.friendly.enable_tools": "Включить тулы",
   "cli.provider_base_hint": "Базовый URL установлен: {baseUrl}",
   "repl.cost": "Итого потрачено: {cost}",
-  "repl.tokens": "Потрачено токенов: {tokens}"
+  "repl.tokens": "Потрачено токенов: {tokens}",
+  "repl.ctrl_c_interrupt": "\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)",
+  "exec.stop_directive": "STOP. Step {stepId} (\"{description}\") took {iterations} iterations with no progress. DO NOT continue this step. Immediately call: plan update step={stepId} status=done (if code works despite warnings) OR plan update step={stepId} status=skipped note=\"reason\". Do NOT make any other tool calls before updating the plan.",
+  "exec.test_runner_fail": "[test-runner] {framework}: {failed} test(s) FAILING, {passed} passing — do NOT mark verification steps as done while tests fail. Investigate the failures, fix the code, then re-run the tests.",
+  "exec.test_runner_pass": "[test-runner] {framework}: all {passed} test(s) passing.",
+  "plan.subtasks_done": "All sub-tasks done — call plan update step={stepId} status=done to complete this step.",
+  "plan.no_subtasks": "(no sub-tasks)",
+  "plan.step_label": "Step {stepId}: {description}",
+  "exec.hint_deps": "Check if a lock file exists (package-lock.json, poetry.lock). If missing, run the install command first.",
+  "exec.hint_test": "Make sure the source files exist and have real code before running tests.",
+  "exec.hint_build": "Check that all dependencies are installed and source files are not empty.",
+  "exec.hint_deploy": "Verify credentials and network access before deploying.",
+  "exec.hint_repetitive": "You are calling the same tool repeatedly with the same arguments. Try a different approach.",
+  "exec.hint_consecutive": "Multiple different tools are failing. Check if the environment is set up correctly.",
+  "exec.hint_read_only": "You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps."
 }
