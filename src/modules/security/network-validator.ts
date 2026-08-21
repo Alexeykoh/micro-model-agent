@@ -10,6 +10,21 @@ export interface NetworkValidationResult {
 }
 
 /**
+ * Check if a hostname is a private/link-local address (SSRF protection).
+ */
+export function isIpPrivate(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    /^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(
+      h,
+    ) ||
+    h === "::1" ||
+    /^(fc|fd)/.test(h) ||
+    (h.includes(":") && h.startsWith("fe80"))
+  );
+}
+
+/**
  * Check if a URL is allowed based on security configuration
  */
 export function isUrlAllowed(
@@ -24,6 +39,14 @@ export function isUrlAllowed(
   try {
     const urlObj = new URL(url);
     const domain = urlObj.hostname.toLowerCase();
+
+    const scheme = urlObj.protocol.toLowerCase();
+    if (scheme !== "http:" && scheme !== "https:") {
+      return { allowed: false, reason: `Scheme "${scheme}" is not allowed` };
+    }
+    if (isIpPrivate(domain)) {
+      return { allowed: false, reason: `Private address "${domain}" is blocked (SSRF)` };
+    }
 
     // Check denied domains first
     if (securityConfig.deniedDomains?.length) {

@@ -57,21 +57,46 @@ export const webFetchTool: ToolDefinition = {
     try {
       const response = await fetch(url, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
+        redirect: "manual",
       });
-      if (!response.ok) {
+      let finalResponse = response;
+      let finalUrl = url;
+      // Follow one redirect level manually, re-validating the target (SSRF).
+      if (response.status >= 300 && response.status < 400) {
+        const loc = response.headers.get("location");
+        if (!loc) {
+          return { success: false, output: t("error.fetch_failed", { message: "Redirect without location" }) };
+        }
+        finalUrl = new URL(loc, url).toString();
+        const recheck = isUrlAllowed(finalUrl, securityConfig);
+        if (!recheck.allowed) {
+          logSecurityBlock(
+            ctx.sessionId,
+            "network_request",
+            recheck.reason || "redirect blocked",
+            sanitizeUrl(finalUrl),
+          );
+          return { success: false, output: `[SECURITY BLOCKED] redirect: ${recheck.reason}` };
+        }
+        finalResponse = await fetch(finalUrl, {
+          signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
+          redirect: "follow",
+        });
+      }
+      if (!finalResponse.ok) {
         return {
           success: false,
           output: t("error.http", {
-            status: response.status,
-            statusText: response.statusText,
+            status: finalResponse.status,
+            statusText: finalResponse.statusText,
           }),
         };
       }
-      const contentType = response.headers.get("content-type") || "";
-      const text = await response.text();
+      const contentType = finalResponse.headers.get("content-type") || "";
+      const text = await finalResponse.text();
       const cleaned = contentType.includes("html") ? stripHtml(text) : text;
 
-      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), true, `Status: ${response.status}`);
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(finalUrl), true, `Status: ${finalResponse.status}`);
 
       const fullChars = cleaned.length;
       const fullLines = cleaned.split("\n").length;
