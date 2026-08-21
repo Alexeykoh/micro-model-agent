@@ -109,6 +109,9 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
+  /** Owner of plan state — UI consumers (REPL) read the active plan from
+   *  here instead of re-reading .mma/plans/active.json from disk. */
+  execModule: ExecutionModule;
   /** Shared ToolContext; `sessionId`/`sessionContext` are live getters over
    *  the session manager, so a session switch is always reflected. */
   toolCtx: ToolContext;
@@ -535,6 +538,7 @@ export async function bootstrap(
     sessionManager,
     skillsModule,
     pluginManager,
+    execModule,
     toolCtx,
     configDir: dir,
     baseDir,

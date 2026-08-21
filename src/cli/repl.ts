@@ -28,8 +28,8 @@ import { probeLspServers } from "../modules/lsp/probe";
 import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { SessionLogger } from "../core/session-logger";
-import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
-import type { Plan } from "../modules/execution/planner";
+import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
+import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
 
 function formatContextBar(
@@ -69,8 +69,8 @@ export class Repl implements ReplContext {
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
   private exitOnClose = false;
-  private activePlan: Plan | null = null;
-  private lastPlanSig: string | null = null;
+  /** Owner of plan state (bootstrap). Null in tests — plan UI degrades. */
+  private execModule?: ExecutionModule;
 
   public rl: LineInput;
   public agent: Agent;
@@ -95,6 +95,7 @@ export class Repl implements ReplContext {
     exitOnClose?: boolean,
     envReport?: EnvironmentReport,
     historyPath?: string,
+    execModule?: ExecutionModule,
   ) {
     this.agent = agent;
     this.config = config;
@@ -104,6 +105,7 @@ export class Repl implements ReplContext {
     this.pluginManager = pluginManager;
     this.logger = logger;
     this.envReport = envReport;
+    this.execModule = execModule;
     this.slog = new SessionLogger(sessionManager, logger);
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
@@ -374,7 +376,6 @@ export class Repl implements ReplContext {
         spinner: this.config.ui?.spinner ?? true,
         toolStyle: this.config.ui?.toolStyle ?? "inline",
       });
-      this.refreshActivePlan(renderer);
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
@@ -384,13 +385,13 @@ export class Repl implements ReplContext {
             renderer.toolStart(
               ev.tool,
               ev.args,
-              stepContextForTool(this.activePlan, ev.tool, ev.args),
+              stepContextForTool(this.execModule?.getActivePlan() ?? null, ev.tool, ev.args),
               ev.icon,
             );
           } else {
             renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
             if (ev.tool === "plan" || ev.tool === "todo") {
-              this.refreshActivePlan(renderer);
+              this.renderPlan(renderer);
             }
           }
         },
@@ -422,27 +423,13 @@ export class Repl implements ReplContext {
     }
   }
 
-  /** Re-read the active plan from disk; print a live checklist when it changed. */
-  private refreshActivePlan(renderer: Renderer): void {
-    const plan = readActivePlan(this.baseDir);
-    const sig = plan ? JSON.stringify(plan.steps.map((s) => `${s.id}:${s.status}`)) : "";
-    if (!plan) {
-      this.activePlan = null;
-      this.lastPlanSig = "";
-      return;
-    }
-    this.activePlan = plan;
-    // First refresh only records the signature: a plan that already existed
-    // on disk before this REPL session must not be printed into the chat
-    // unprompted — the checklist appears only after the plan actually changes.
-    if (this.lastPlanSig === null) {
-      this.lastPlanSig = sig;
-      return;
-    }
-    if (sig !== this.lastPlanSig) {
-      this.lastPlanSig = sig;
-      renderer.planBlock(formatPlanChecklist(plan));
-    }
+  /** Print the checklist of the plan currently tracked by ExecutionModule.
+   *  Called only on plan/todo tool events (a change event) — never polled,
+   *  so a disk-resident plan from a previous session cannot leak into chat. */
+  private renderPlan(renderer: Renderer): void {
+    const plan = this.execModule?.getActivePlan();
+    if (!plan) return;
+    renderer.planBlock(formatPlanChecklist(plan));
   }
 
   private commands: Map<string, SlashCommand> = new Map();

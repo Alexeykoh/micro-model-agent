@@ -171,6 +171,7 @@ async function main(): Promise<void> {
       sessionManager,
       skillsModule,
       pluginManager,
+      execModule,
       configDir,
       baseDir,
       logger,
@@ -189,6 +190,8 @@ async function main(): Promise<void> {
       logger,
       true,
       envReport,
+      undefined,
+      execModule,
     );
     await repl.start();
   }

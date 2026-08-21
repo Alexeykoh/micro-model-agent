@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo } from "../../src/core/bootstrap";
@@ -50,6 +50,29 @@ describe("bootstrap", () => {
       expect(second).not.toBe(first);
       expect(toolCtx.sessionId).toBe(second);
       expect(toolCtx.sessionContext?.sessionId).toBe(second);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("does not restore a disk-resident plan into a fresh session", async () => {
+    // Regression: the REPL used to poll .mma/plans/active.json and print a
+    // leftover plan from a previous session unprompted. Now only
+    // ExecutionModule owns plan state and a fresh session restores nothing.
+    const dir = tempDir();
+    try {
+      mkdirSync(join(dir, ".mma", "plans"), { recursive: true });
+      writeFileSync(
+        join(dir, ".mma", "plans", "active.json"),
+        JSON.stringify({
+          id: "stale-plan",
+          title: "Old plan",
+          createdAt: new Date().toISOString(),
+          steps: [{ id: 1, description: "create src/index.ts", status: "pending" }],
+        }),
+      );
+      const { execModule } = await bootstrap(dir, dir);
+      expect(execModule.getActivePlan()).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
