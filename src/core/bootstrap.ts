@@ -91,6 +91,36 @@ export function buildSystemInfo(
     `Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done". Check existing servers first with process_list/process_log: a stale dev server started BEFORE your change still runs the old pipeline and keeps failing even after the files on disk are fixed. Restart or kill it (process_kill) and verify the exact endpoint/port the user reported — a fresh server on a new port does NOT prove the user's error is gone.`,
   );
 
+  // Security rules: when security is enabled the model should know the
+  // restrictions up front — a blocked call costs an iteration, while this
+  // block costs ~100 tokens once. Kept compact and capped so a long user
+  // blacklist cannot blow the system budget.
+  const sec = config.security;
+  if (sec?.enabled) {
+    const secLines: string[] = [`SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them):`];
+    if (sec.bash?.enabled && sec.bash.blacklist.length > 0) {
+      const cmds = sec.bash.blacklist.slice(0, 15).join(", ");
+      secLines.push(`Forbidden bash commands: ${cmds}${sec.bash.blacklist.length > 15 ? ", …" : ""}.`);
+      if (sec.bash.whitelist.length > 0) {
+        secLines.push(`Only whitelisted bash commands are allowed: ${sec.bash.whitelist.slice(0, 15).join(", ")}.`);
+      }
+      if (sec.bash.blockDangerousFlags) {
+        secLines.push(`Pipes/redirects/chaining (| > >> ; &&) in bash are blocked — one plain command per call.`);
+      }
+    }
+    if (sec.paths?.enabled && sec.paths.denied.length > 0) {
+      const paths = sec.paths.denied.slice(0, 10).join(", ");
+      secLines.push(`Denied paths (read/write): ${paths}${sec.paths.denied.length > 10 ? ", …" : ""}.`);
+    }
+    if (sec.network?.enabled && sec.network.deniedDomains.length > 0) {
+      const domains = sec.network.deniedDomains.slice(0, 10).join(", ");
+      secLines.push(`Denied network domains: ${domains}${sec.network.deniedDomains.length > 10 ? ", …" : ""}.`);
+    }
+    if (secLines.length > 1) {
+      lines.push(...secLines);
+    }
+  }
+
   const hasMCP =
     config.mcpServers && Object.values(config.mcpServers).some((s) => s.enabled !== false);
   if (hasMCP) {

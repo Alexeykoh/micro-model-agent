@@ -97,4 +97,26 @@ describe("bootstrap", () => {
     expect(info).toContain("runtime behavior");
     expect(info).toContain("plan update");
   });
+
+  it("lists security restrictions only when security is enabled", () => {
+    const sec = {
+      enabled: true,
+      bash: { enabled: true, blacklist: ["rm", "dd"], whitelist: [], blockDangerousFlags: true },
+      paths: { enabled: true, denied: [".git/", ".env"] },
+      network: { enabled: true, deniedDomains: ["evil.example.com"], allowedDomains: [] },
+    };
+    const withSec = buildSystemInfo({ model: "m", security: sec } as any, "/tmp", "win32");
+    expect(withSec).toContain("SECURITY RESTRICTIONS");
+    expect(withSec).toContain("rm, dd");
+    expect(withSec).toContain(".git/, .env");
+    expect(withSec).toContain("evil.example.com");
+    expect(withSec).toContain("[SECURITY BLOCKED]");
+
+    const noList = { ...sec, bash: { ...sec.bash, blacklist: [] }, paths: { ...sec.paths, denied: [] }, network: { ...sec.network, deniedDomains: [] } };
+    const noRules = buildSystemInfo({ model: "m", security: noList } as any, "/tmp", "win32");
+    expect(noRules).not.toContain("SECURITY RESTRICTIONS");
+
+    const disabled = buildSystemInfo({ model: "m", security: { ...sec, enabled: false } } as any, "/tmp", "win32");
+    expect(disabled).not.toContain("SECURITY RESTRICTIONS");
+  });
 });
