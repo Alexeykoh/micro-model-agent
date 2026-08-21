@@ -70,7 +70,7 @@ export class Repl implements ReplContext {
   private pendingClipboardImage: string | null = null;
   private exitOnClose = false;
   private activePlan: Plan | null = null;
-  private lastPlanSig = "";
+  private lastPlanSig: string | null = null;
 
   public rl: LineInput;
   public agent: Agent;
@@ -432,6 +432,13 @@ export class Repl implements ReplContext {
       return;
     }
     this.activePlan = plan;
+    // First refresh only records the signature: a plan that already existed
+    // on disk before this REPL session must not be printed into the chat
+    // unprompted — the checklist appears only after the plan actually changes.
+    if (this.lastPlanSig === null) {
+      this.lastPlanSig = sig;
+      return;
+    }
     if (sig !== this.lastPlanSig) {
       this.lastPlanSig = sig;
       renderer.planBlock(formatPlanChecklist(plan));
