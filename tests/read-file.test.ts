@@ -35,9 +35,23 @@ describe("read_file", () => {
     expect(first.output).toContain("line-1\n");
   });
 
+  it("streams files over the 1MB threshold with correct totals", async () => {
+    const bigPath = join(tmpDir, "huge.txt");
+    const total = 120000; // ~1.4MB
+    const parts: string[] = [];
+    for (let i = 1; i <= total; i++) parts.push(`line-${i}`);
+    writeFileSync(bigPath, parts.join("\n"), "utf-8");
+
+    const result = await readFileTool.handler(ctx, { path: "huge.txt", offset: 119991, limit: 5 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("line-119991");
+    expect(result.output).toContain("line-119995");
+    expect(result.output).toContain(String(total));
+  });
+
   afterEach(() => {
     if (existsSync(tmpDir)) {
-      for (const f of ["test.txt", "empty.txt", "big.txt"]) {
+      for (const f of ["test.txt", "empty.txt", "big.txt", "huge.txt"]) {
         const p = join(tmpDir, f);
         if (existsSync(p)) unlinkSync(p);
       }

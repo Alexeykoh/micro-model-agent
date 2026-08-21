@@ -25,6 +25,7 @@ import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
+import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { SessionLogger } from "../core/session-logger";
 import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
@@ -704,7 +705,8 @@ export class Repl implements ReplContext {
   private async probeLspBanner(): Promise<string | null> {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
-      const summary = await probeLspServers(config, this.baseDir, { logger: this.logger });
+      const lspOnlyLogger = this.logger ? new FileOnlyLogger(this.logger) : undefined;
+      const summary = await probeLspServers(config, this.baseDir, { logger: lspOnlyLogger });
       // Log LSP probe results to session for post-mortem visibility
       this.slog.logSessionStart({
         environment: this.envReport as unknown as Record<string, unknown>,

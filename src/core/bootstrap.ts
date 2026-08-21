@@ -18,7 +18,7 @@ import { SessionStore, SessionManager, SessionModule } from "../modules/session/
 import { UserProfile } from "../modules/user-profile/profile";
 import { SkillsLoader, SkillsModule } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
-import { LspModule, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
+import { LspModule, FileOnlyLogger, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
 import { runStartupHealthCheck } from "../modules/lsp/startup-check";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
@@ -363,7 +363,8 @@ export async function bootstrap(
     }
   }
 
-  const lspModule = new LspModule(config.lsp, undefined, logger);
+  const lspLogger = new FileOnlyLogger(logger);
+  const lspModule = new LspModule(config.lsp, undefined, lspLogger);
   moduleRegistry.register(lspModule);
   const lspPlugin = lspModule.getPlugin();
   if (lspPlugin) {
@@ -380,7 +381,7 @@ export async function bootstrap(
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
     !exitOnComplete && process.env.NODE_ENV !== "test"
-      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger })
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
       : Promise.resolve(null);
 
   const moduleTools = moduleRegistry.collectToolDefinitions();

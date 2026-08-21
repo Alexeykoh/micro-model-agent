@@ -209,4 +209,32 @@ export class Logger {
       /* file logging is best-effort */
     }
   }
+
+  /**
+   * Write a log entry to app.jsonl only — no console output, no .log file.
+   * Use this for noisy subsystems (LSP, probes) whose warnings should be
+   * diagnosable from session files but not pollute the user's terminal.
+   */
+  logSilent(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
+    const logTarget = this.sessionDir ?? this.logDir;
+    if (!logTarget) return;
+    const ts = new Date().toISOString();
+    const sanitizedMsg = sanitizeLogMessage(msg);
+    const sanitizedMeta = meta ? this.sanitizeMeta(meta) : undefined;
+    try {
+      appendFileSync(
+        join(logTarget, "app.jsonl"),
+        JSON.stringify({
+          level,
+          ts,
+          prefix: this.prefix,
+          msg: sanitizedMsg,
+          meta: sanitizedMeta ?? null,
+        }) + "\n",
+        "utf-8",
+      );
+    } catch {
+      /* file logging is best-effort */
+    }
+  }
 }
