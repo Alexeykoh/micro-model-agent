@@ -414,4 +414,58 @@ describe("MoEExecutor executePlan", () => {
     expect(result.success).toBe(false);
     expect(result.errors[0]).toContain("Subagent tool not found");
   });
+
+  it("caps concurrent subtasks per wave at maxParallelTasks", async () => {
+    let active = 0;
+    let peak = 0;
+    subagentHandler.mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 20));
+      active--;
+      return { success: true, output: "ok" };
+    });
+
+    const config: any = {
+      ...DEFAULTS,
+      security: { ...(DEFAULTS as any).security, rateLimits: { maxRequestsPerMinute: 60, maxParallelTasks: 2 } },
+    };
+
+    const plan: MoEPlan = {
+      title: "Parallel cap",
+      shared_context: { rules: [], refs: [] },
+      subtasks: Array.from({ length: 8 }, (_, i) => ({
+        id: `task-${i}`,
+        description: "independent",
+        expert_tag: "code",
+        allowed_files: [],
+        read_only_files: [],
+        depends_on: [],
+        input_from: [],
+        expected_output: "",
+        success_criteria: [],
+      })),
+    };
+
+    const executor = new MoEExecutor({
+      config,
+      toolRegistry: registry,
+      toolExecutor: mockToolExecutor,
+      llmProvider: {} as any,
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        logLLMRequest: vi.fn(),
+        logLLMResponse: vi.fn(),
+      } as any,
+      baseDir: tmpDir,
+    });
+
+    const result = await executor.executePlan(plan);
+    expect(result.success).toBe(true);
+    expect(result.results).toHaveLength(8);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
 });

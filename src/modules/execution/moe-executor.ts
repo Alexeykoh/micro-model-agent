@@ -325,25 +325,41 @@ export class MoEExecutor {
     for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
       const wave = waves[waveIdx];
 
-      const wavePromises = wave.map((subtask) =>
-        executeSubtask(subtask, this.deps, plan.shared_context)
-          .then((result) => {
-            results.push(result);
-            return result;
-          })
-          .catch((e) => {
-            const errResult: SubtaskResult = {
-              subtaskId: subtask.id,
-              success: false,
-              summary: `Unhandled error: ${subtask.id}`,
-              result: "",
-              error: e.message,
-              durationMs: 0,
-            };
-            results.push(errResult);
-            return errResult;
-          }),
-      );
+      // Cap concurrent subtasks per wave (rateLimits.maxParallelTasks, default 5).
+      const maxParallel =
+        this.deps.config?.security?.rateLimits?.maxParallelTasks ?? 5;
+      let active = 0;
+      const waiters: Array<() => void> = [];
+      const acquire = () =>
+        active < maxParallel
+          ? Promise.resolve(active++)
+          : new Promise<number>((resolve) => waiters.push(() => resolve(active++)));
+      const release = () => {
+        active--;
+        const next = waiters.shift();
+        if (next) next();
+      };
+
+      const wavePromises = wave.map(async (subtask) => {
+        await acquire();
+        let result: SubtaskResult;
+        try {
+          result = await executeSubtask(subtask, this.deps, plan.shared_context);
+        } catch (e) {
+          result = {
+            subtaskId: subtask.id,
+            success: false,
+            summary: `Unhandled error: ${subtask.id}`,
+            result: "",
+            error: e instanceof Error ? e.message : String(e),
+            durationMs: 0,
+          };
+        } finally {
+          release();
+        }
+        results.push(result);
+        return result;
+      });
 
       await Promise.all(wavePromises);
     }
