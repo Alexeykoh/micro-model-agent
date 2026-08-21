@@ -118,7 +118,6 @@ async function executeSubtask(
 
   const maxAttempts = expertConfig.max_attempts || 3;
   let lastError = "";
-  let lastResult: any = null;
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -189,7 +188,6 @@ async function executeSubtask(
       }
 
       lastError = result.output;
-      lastResult = result;
       stuckDetector.recordToolError("subagent", result.output);
 
       // Inject actionable hints into the next retry's prompt
@@ -370,9 +368,5 @@ export class MoEExecutor {
     }
 
     return { success: failed.length === 0, results, errors, warnings };
-  }
-
-  getChainMaxAttempts(): number {
-    return 3;
   }
 }

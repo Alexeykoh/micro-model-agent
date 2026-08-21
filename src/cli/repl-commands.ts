@@ -412,10 +412,6 @@ function registerMmaCommands(ctx: ReplContext): void {
       console.log(pc.yellow(t("repl.reloading")));
 
       if (ctx.sessionManager && ctx.config.session.autoSave) {
-        const active = ctx.sessionManager.getActiveMeta();
-        if (active) {
-          // Session is already auto-saved on each message
-        }
       }
 
       ctx.agent.shutdown();
