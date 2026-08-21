@@ -13,6 +13,12 @@ import { existsSync } from "fs";
  * the full path so write_file still works.
  */
 export function safeResolvePath(baseDir: string, userPath: string): string {
+  // Absolute path that actually exists — honor it as-is
+  const asIs = resolve(normalize(userPath));
+  if (userPath.startsWith("/") || userPath.startsWith("\\")) {
+    if (existsSync(asIs) || existsSync(dirname(asIs))) return asIs;
+  }
+
   const norm = normalize(userPath);
   const stripped = norm.replace(/^[/\\]/, "");
   const resolved = resolve(baseDir, stripped);
