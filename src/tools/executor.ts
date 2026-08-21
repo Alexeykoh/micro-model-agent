@@ -170,7 +170,7 @@ export class ToolExecutor {
     return this.registry;
   }
 
-  setScope(scope: import("./types").ToolScope): void {
+  setScope(scope: import("./types").ToolScope | undefined): void {
     this.ctx.scope = scope;
   }
 

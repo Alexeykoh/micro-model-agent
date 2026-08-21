@@ -1,6 +1,9 @@
 import { isPathInScope, isPathWritable } from "../../src/modules/security/path-validator";
 import { describe, it, expect } from "vitest";
 import { resolve } from "path";
+import { mkdtempSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
 describe("Path Validator", () => {
   const baseDir = "/home/user/project";
@@ -131,5 +134,27 @@ describe("Path Validator", () => {
       const result2 = isPathWritable(baseDir, "tests/test.ts", scope, undefined);
       expect(result2.allowed).toBe(false);
     });
+  });
+});
+
+describe("cross-platform path-validator edge cases", () => {
+  const cfg = { enabled: true, denied: [], allowed: [] };
+
+  it("sibling prefix does not match subagent scope entry", () => {
+    const base = "/home/user/project";
+    const target = "/home/user/project-src/secret.txt";
+    expect(isPathInScope(base, target, { allowed_files: ["project-files"], read_only_files: ["project"] }, cfg).allowed).toBe(false);
+    expect(isPathWritable(base, target, { allowed_files: ["project"] }, cfg).allowed).toBe(false);
+  });
+
+  it("denied pattern with directory glob still matches nested files", () => {
+    const tmpBase = mkdtempSync(join(tmpdir(), "mma-pv-"));
+    try {
+      const cfg2 = { enabled: true, denied: ["secrets/"], allowed: [] };
+      expect(isPathInScope(tmpBase, "secrets/key.txt", undefined, cfg2).allowed).toBe(false);
+      expect(isPathInScope(tmpBase, "src/code.ts", undefined, cfg2).allowed).toBe(true);
+    } finally {
+      rmSync(tmpBase, { recursive: true, force: true });
+    }
   });
 });

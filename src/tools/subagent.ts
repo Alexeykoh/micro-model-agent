@@ -224,7 +224,9 @@ export const subagentTool: ToolDefinition = {
           output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
         };
       } finally {
-        ctx.toolExecutor.setScope(parentScope || { allowed_files: [], read_only_files: [] });
+        // Restore the parent's exact scope: undefined means "no restrictions"
+        // and must not become an empty scope (which denies everything).
+        ctx.toolExecutor.setScope(parentScope);
       }
     } catch (e: any) {
       return { success: false, output: `Sub-agent error: ${e.message}` };

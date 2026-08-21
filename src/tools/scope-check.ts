@@ -1,4 +1,5 @@
-import { resolve, normalize, sep } from "path";
+import { resolve, normalize } from "path";
+import { isInsideDir, matchesScopeEntry } from "./path-utils";
 import type { ToolScope } from "./types";
 
 export function isPathInScope(
@@ -9,15 +10,19 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  const contained = (t: string) => t === baseResolved || t.startsWith(baseResolved + sep);
-  if (!contained(targetResolved)) {
+  // Separator- and case-safe containment (sibling prefixes cannot pass).
+  if (!isInsideDir(targetResolved, baseResolved)) {
     return { allowed: false, reason: "Path is outside the base working directory" };
   }
 
   if (!scope) return { allowed: true };
 
-  const isRead = scope.read_only_files.some((f) => targetResolved.startsWith(resolve(baseDir, f)));
-  const isWrite = scope.allowed_files.some((f) => targetResolved.startsWith(resolve(baseDir, f)));
+  const isRead = scope.read_only_files.some((f) =>
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+  );
+  const isWrite = scope.allowed_files.some((f) =>
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+  );
 
   if (isWrite) return { allowed: true };
   if (isRead) return { allowed: true, reason: "Read-only file" };
@@ -33,14 +38,15 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  const contained = (t: string) => t === baseResolved || t.startsWith(baseResolved + sep);
-  if (!contained(targetResolved)) {
+  if (!isInsideDir(targetResolved, baseResolved)) {
     return { allowed: false, reason: "Path is outside the base working directory" };
   }
 
   if (!scope) return { allowed: true };
 
-  const isWrite = scope.allowed_files.some((f) => targetResolved.startsWith(resolve(baseDir, f)));
+  const isWrite = scope.allowed_files.some((f) =>
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+  );
 
   if (isWrite) return { allowed: true };
 
