@@ -316,6 +316,20 @@ export class ContextManager {
     return this.messages.length;
   }
 
+  // Per-message token cache: messages are treated as immutable once added
+  // (compaction/updateSystemPrompt create new objects), so a WeakMap is safe
+  // and turns repeated full-history estimation from O(n) encodes into O(1).
+  private tokenCache = new WeakMap<Message, number>();
+
+  private estimateMessageTokensCached(m: Message): number {
+    let t = this.tokenCache.get(m);
+    if (t === undefined) {
+      t = this.estimateMessageTokens(m);
+      this.tokenCache.set(m, t);
+    }
+    return t;
+  }
+
   private estimateMessageTokens(m: Message): number {
     const text = getMessageText(m.content);
     if (this.tokenCounter) {
@@ -366,7 +380,7 @@ export class ContextManager {
 
   needsCompaction(): boolean {
     if (this.iterationsSinceCompaction >= COMPACTION_INTERVAL) return true;
-    const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0);
+    const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
     return totalTokens > this.budget.history * this.compactionThreshold;
   }
 
@@ -512,7 +526,7 @@ export class ContextManager {
 
   getEstimatedTokens(): number {
     return (
-      this.messages.reduce((sum, m) => sum + this.estimateMessageTokens(m), 0) + this.toolTokens
+      this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0) + this.toolTokens
     );
   }
 
