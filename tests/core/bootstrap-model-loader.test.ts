@@ -1,4 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
 import { bootstrap } from "../../src/core/bootstrap";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
@@ -15,8 +17,8 @@ describe("Bootstrap model loader", () => {
   });
 
   it("should call ModelLoader.ensureModelLoaded when autoLoad is true", async () => {
-    const configDir = "/tmp/test-config-model-auto";
-    if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
+    const configDir = mkdtempSync(join(tmpdir(), "mma-test-config-model-auto-"));
+    
     writeFileSync(
       join(configDir, "config.json"),
       JSON.stringify({
@@ -41,7 +43,7 @@ describe("Bootstrap model loader", () => {
     });
     global.fetch = mockFetch as any;
 
-    const result = await bootstrap(configDir, "/tmp/test-project");
+    const result = await bootstrap(configDir, configDir);
 
     expect(mockFetch).toHaveBeenCalled();
     const calls = mockFetch.mock.calls;
@@ -52,8 +54,8 @@ describe("Bootstrap model loader", () => {
   });
 
   it("should not call ModelLoader when autoLoad is false", async () => {
-    const configDir = "/tmp/test-config-no-auto";
-    if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
+    const configDir = mkdtempSync(join(tmpdir(), "mma-test-config-no-auto-"));
+    
     writeFileSync(
       join(configDir, "config.json"),
       JSON.stringify({
@@ -78,7 +80,7 @@ describe("Bootstrap model loader", () => {
     });
     global.fetch = mockFetch as any;
 
-    const result = await bootstrap(configDir, "/tmp/test-project");
+    const result = await bootstrap(configDir, configDir);
 
     const calls = mockFetch.mock.calls;
     const modelLoadCall = calls.find((c) => c[0].toString().includes("/api/v1/models/load"));

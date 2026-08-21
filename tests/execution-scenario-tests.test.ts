@@ -3,7 +3,7 @@ import { StuckDetector } from "../src/modules/execution/stuck-detector";
 import { PlanCreator } from "../src/modules/execution/planner";
 import { PlanTracker } from "../src/modules/execution/tracker";
 import { ExecutionModule } from "../src/modules/execution/module";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import { resolve, join } from "path";
 import { tmpdir } from "os";
 
@@ -450,7 +450,7 @@ describe("Scenario: Step Gate verification", () => {
 
 describe("Scenario: rewrite of completed-step files is not blocked", () => {
   it("allows writing files that belong to done steps (fixing type errors)", () => {
-    const execModule = new ExecutionModule("/tmp", 8);
+    const execModule = new ExecutionModule(mkdtempSync(join(tmpdir(), "mma-exec-scen-")), 8);
     execModule.setPlan(mkPlan("Test", ["create src/a.ts", "create src/b.ts"]));
     const tracker = execModule.getTracker()!;
     tracker.updateStepStatus(1, "done");
