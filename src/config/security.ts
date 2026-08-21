@@ -113,7 +113,10 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     allowed: [],
   },
   network: {
-    enabled: false,
+    // SSRF protection (private/link-local IPs, non-http schemes) is part of
+    // the balanced default policy — without this flag the checks in
+    // isUrlAllowed never fire and web tools can reach internal networks.
+    enabled: true,
     // Domains that are always denied
     deniedDomains: ["localhost", "127.0.0.1", "::1"],
     // If allowedDomains is non-empty, only these domains are allowed

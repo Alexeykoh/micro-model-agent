@@ -354,6 +354,7 @@ describe("stale security config normalization", () => {
     expect(cfg.security.bash.blockDangerousFlags).toBe(true);
     expect(cfg.security.bash.dangerousOperators).toContain(";");
     expect(cfg.security.bash.blacklist).toContain("bash");
+    expect(cfg.security.network.enabled).toBe(true);
   });
 
   it("keeps explicitly customized security config untouched", () => {
