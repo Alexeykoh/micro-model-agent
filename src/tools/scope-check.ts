@@ -1,4 +1,4 @@
-import { resolve, normalize } from "path";
+import { resolve, normalize, sep } from "path";
 import type { ToolScope } from "./types";
 
 export function isPathInScope(
@@ -9,7 +9,8 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  if (!targetResolved.startsWith(baseResolved)) {
+  const contained = (t: string) => t === baseResolved || t.startsWith(baseResolved + sep);
+  if (!contained(targetResolved)) {
     return { allowed: false, reason: "Path is outside the base working directory" };
   }
 
@@ -32,7 +33,8 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  if (!targetResolved.startsWith(baseResolved)) {
+  const contained = (t: string) => t === baseResolved || t.startsWith(baseResolved + sep);
+  if (!contained(targetResolved)) {
     return { allowed: false, reason: "Path is outside the base working directory" };
   }
 

@@ -17,6 +17,13 @@ describe("Path Validator", () => {
       expect(result.reason).toContain("outside the base working directory");
     });
 
+    it("does not treat sibling dir with shared prefix as in-scope", () => {
+      const base = resolve("/home/user/project");
+      const sibling = resolve("/home/user/project2/secret.txt");
+      expect(isPathInScope(base, sibling, undefined, { enabled: true, denied: [], allowed: [] }).allowed).toBe(false);
+      expect(isPathWritable(base, sibling, undefined, { enabled: true, denied: [], allowed: [] }).allowed).toBe(false);
+    });
+
     it("should block paths matching denied patterns", () => {
       const config = {
         enabled: true,

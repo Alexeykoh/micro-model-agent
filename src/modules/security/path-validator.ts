@@ -1,4 +1,4 @@
-import { resolve, normalize } from "path";
+import { resolve, normalize, sep } from "path";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -23,8 +23,9 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir
-  if (!targetResolved.startsWith(baseResolved)) {
+  // First, check that path is within baseDir (separator-aware: a sibling
+  // directory sharing the prefix must not pass).
+  if (targetResolved !== baseResolved && !targetResolved.startsWith(baseResolved + sep)) {
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
@@ -113,8 +114,9 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir
-  if (!targetResolved.startsWith(baseResolved)) {
+  // First, check that path is within baseDir (separator-aware: a sibling
+  // directory sharing the prefix must not pass).
+  if (targetResolved !== baseResolved && !targetResolved.startsWith(baseResolved + sep)) {
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
