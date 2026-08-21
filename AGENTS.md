@@ -995,7 +995,7 @@ Plans are stored in `<project>/.mma/plans/` with automatic history management:
 
 ### Stuck Detection
 
-- `stuckThreshold` (default 8) — too many iterations on the same step injects a recovery message
+- `stuckThreshold` (default 6) — too many iterations on the same step injects a recovery message
 - `tool repetition` — 3 identical tool calls with the same arguments inject a recovery message
 - `off-track` — tool calls touching files not in the current step trigger a warning
 

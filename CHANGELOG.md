@@ -26,7 +26,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-08-21
+
 ### Added
+
+- **Security enabled by default (balanced policy)** (`src/config/security.ts`): `security.enabled` and `security.bash.enabled` are now `true`, `blockDangerousFlags: true`, extended operator blacklist (`;`, `&&`, `||`, `|`, `` ` ``, `$(`), and an extended command blacklist (interpreters, Windows `del`/`rd`/`erase`/`taskkill`). The setup wizard no longer disables security when the user skips the security questions — answers only tighten the defaults. Master switch `security.enabled: false` still turns everything off.
+- **Bash validator bypass closures** (`src/modules/security/command-validator.ts`): interpreter `-c/-e` invocations (bash/python/node/…), multi-line commands, and chaining to a blacklisted command (`echo hi; rm -rf /`) are blocked.
+- **SSRF protection** (`src/modules/security/network-validator.ts` + tools): private/link-local IPs (127.0.0.1, 10.x, 192.168.x, 169.254.x, ::1, fc00::/7, fe80::) and non-http(s) schemes are blocked; `web_fetch` follows redirects manually with re-validation; `attach_image` validates URLs; browser `open` rejects `file:`/`chrome:`/`about:`/`data:` schemes.
+- **MoE parallel cap** (`src/modules/execution/moe-executor.ts`): concurrent subtasks per wave are capped at `rateLimits.maxParallelTasks` (default 5).
+- New i18n keys (en+ru): `exec.task_reminder`, `exec.stop_directive`, `exec.test_runner_fail/pass`, `exec.hint_*`, `plan.subtasks_done/no_subtasks/step_label`, `repl.ctrl_c_interrupt`, `setup.security_status_on`.
+
+### Fixed
+
+- **Path prefix escape** (`path-validator.ts`, `scope-check.ts`): containment now requires a path separator — a sibling directory sharing the prefix (`agent2` vs `agent`) is correctly rejected.
+- **Secrets in logs**: session log (`logUser`/`logToolCall`/`logToolResult`) and app logger writes are sanitized through `sanitizeLogMessage`.
+- **Encryption** (`encryption.ts`): key-persistence failure now throws instead of silently returning an unpersisted key; HMAC comparison uses `timingSafeEqual`.
+- **Session file permissions**: session dirs 0700, files 0600.
+- **Missing i18n key** `exec.task_reminder`; `/lsp` REPL command unbroken via typed `Agent.getModule()`; dead code removed (`reasoningAcc`, duplicate `updateProvider` call, `lastResult`, `getChainMaxAttempts`, `scopeRestored`).
+
+### Performance
+
+- Per-message token cache in `ContextManager` (eliminates O(n²) re-encoding on every iteration).
+- Async `grep` with kill-on-timeout (no longer blocks the event loop).
+- `read_file` streams files >1MB instead of loading them whole.
+
+### Tests
+
+- Integration suite excluded from default `bun test` (opt-in via `MMA_RUN_INTEGRATION=1`); tests isolated to temp dirs (no more touching real `~/.mma` or `/tmp` fixed paths); locale and `global.fetch` restored after tests.
+
+## [0.43.0] - 2026-08-18
 
 - **Folder plugins** (`src/modules/plugins/loader.ts`): `loadFromDir` now treats a subdirectory of the plugin dir as a plugin when it contains an entry file (`plugin.ts` → `plugin.js` → `index.ts` → `index.js`). The entry imports the folder's other modules via normal relative imports; folders without an entry are skipped. Flat `*.ts`/`*.js` files keep working unchanged. Tests in `tests/plugin-loader.test.ts`.
 - **`trace-server` example split into a folder plugin** (`examples/plugins/trace-server/`): `plugin.ts` (entry) + `state.ts` (shared state + SSE primitives) + `util.ts` + `context.ts` (snapshots + conversation-text) + `plans.ts` (on-disk plan reading + poll) + `server.ts` (HTTP/SSE) + `page.html` (frontend, served **verbatim from disk** — never template-processed).
