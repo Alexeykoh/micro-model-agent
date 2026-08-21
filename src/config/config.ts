@@ -4,7 +4,7 @@ import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
-import type { AppConfig } from "./types";
+import type { AppConfig, SecurityConfig } from "./types";
 import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
@@ -123,6 +123,37 @@ function normalizeLspServerArgs(config: AppConfig): void {
       server.timeout = def.timeout;
     }
   }
+}
+
+/**
+ * Upgrade a stale pre-0.48 security section (persisted when security was
+ * disabled by default) to the current defaults — otherwise "security on by
+ * default" never reaches existing installations whose `~/.mma/config.json`
+ * carries the old `enabled: false` section. Fires only when the stored
+ * section matches the legacy default signature; explicitly customized
+ * security configs are left untouched. In-memory only, mirrors the
+ * normalizeLspServerArgs precedent.
+ */
+function normalizeStaleSecurityConfig(config: AppConfig): void {
+  const sec = config.security;
+  if (!sec || sec.enabled !== false) return;
+  const bash = sec.bash as
+    | {
+        enabled?: boolean;
+        blockDangerousFlags?: boolean;
+        dangerousOperators?: string[];
+        blacklist?: string[];
+      }
+    | undefined;
+  if (!bash || bash.enabled !== false || bash.blockDangerousFlags !== false) return;
+  const LEGACY_OPERATORS = [">", ">>", "2>", "2>>", "`"];
+  if (JSON.stringify(bash.dangerousOperators ?? []) !== JSON.stringify(LEGACY_OPERATORS)) return;
+  // A blacklist containing anything outside the current default set means the
+  // user customized it — leave the whole section alone.
+  const defaultCmds = new Set(DEFAULT_SECURITY_CONFIG.bash.blacklist);
+  const blacklist = Array.isArray(bash.blacklist) ? bash.blacklist : [];
+  if (blacklist.some((cmd) => !defaultCmds.has(cmd))) return;
+  config.security = JSON.parse(JSON.stringify(DEFAULT_SECURITY_CONFIG)) as SecurityConfig;
 }
 
 function loadJSON(path: string): Record<string, unknown> | null {
