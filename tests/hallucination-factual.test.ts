@@ -96,6 +96,15 @@ describe("FactualCheck", () => {
     expect(result.status).toBe("pass");
   });
 
+  it("passes when a dotfile is mentioned without its leading dot", () => {
+    writeFileSync(join(dir, ".prettierrc.json"), "{}");
+    const check = new FactualCheck(dir);
+    // The token regex cannot anchor a leading dot, so ".prettierrc.json"
+    // is extracted as "prettierrc.json" — must not be flagged as missing.
+    const result = check.validate("Settings live in .prettierrc.json");
+    expect(result.status).toBe("pass");
+  });
+
   it("still warns for a genuine bare missing file", () => {
     const check = new FactualCheck(dir);
     const result = check.validate("Data is stored in ghost.json");

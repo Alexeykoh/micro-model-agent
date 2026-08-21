@@ -1133,7 +1133,9 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.48.2
+### Current Version: 0.48.3
+
+- **59** = hallucination dotfile false-positive fix (user report: «пишет что нет файла а он есть» — `[WARN] Упомянутые файлы не найдены: prettierrc.json` while `.prettierrc.json` exists): the file-token regex `\b[\w./\\-]+\.[a-z]+\b` cannot anchor a leading dot (no word boundary before `.`), so `.prettierrc.json` is extracted as `prettierrc.json` and the factual check found no such file. Fix: `FactualCheck.pathExists`/`bareNameExists` (`src/modules/hallucination/factual.ts`) now try the dot-prefixed basename variant (`prettierrc.json` → `.prettierrc.json`, `src/config.json` → `src/.config.json`) across disk, name index, and compaction known-files before declaring a path missing. Test: dotfile case in `tests/hallucination-factual.test.ts`. Version: **0.48.3** (PATCH — bugfix).
 
 - **58** = REPL stale-plan print fix (user report: «при открытии чата если есть план, он сразу загружается и попадает в чат сам по себе»): `Repl.refreshActivePlan` (`src/cli/repl.ts`) printed the on-disk plan checklist on the FIRST agent run of a session because `lastPlanSig` started as `""` and any existing plan's signature differed — a plan left over from a previous session was dumped into the chat unprompted. Fix: `lastPlanSig` is now nullable; the first refresh only records the signature (no print), so the checklist appears only after the plan actually changes during the session. Version: **0.48.2** (PATCH — bugfix).
 
