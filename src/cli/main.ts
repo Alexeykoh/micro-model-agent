@@ -146,10 +146,11 @@ async function main(): Promise<void> {
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
       if (config.security) {
-        config.security.enabled =
-          answers.securityBashBlock || answers.securityFlagsBlock || !answers.securityPathsDeny;
-        config.security.bash.enabled = config.security.enabled;
-        config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
+        // Security is enabled by default (balanced); wizard answers only tighten it.
+        config.security.enabled = true;
+        config.security.bash.enabled = true;
+        config.security.bash.blockDangerousFlags =
+          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
         if (answers.securityBashBlock) {
           config.security.bash.blacklist = [
             ...new Set([

@@ -484,6 +484,7 @@
   "setup.summary_value": "Значение",
   "setup.security_header": "\n  --- Безопасность ---",
   "setup.security_status_off": "  Безопасность: ВЫКЛ (по умолчанию — все команды разрешены)",
+  "setup.security_status_on": "  Безопасность: ВКЛ (по умолчанию — политика balanced)",
   "setup.security_configure": "  Настроить безопасность? (y/N)",
   "setup.security_bash_block": "  Блокировать опасные команды (rm, sudo, ssh и т.д.)? (y/N)",
   "setup.security_flags_block": "  Блокировать опасные флаги (--force, -rf и т.д.)? (y/N)",

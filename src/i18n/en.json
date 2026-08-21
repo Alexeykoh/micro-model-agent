@@ -486,6 +486,7 @@
   "setup.summary_value": "Value",
   "setup.security_header": "\n  --- Security ---",
   "setup.security_status_off": "  Security: OFF (default — all commands allowed)",
+  "setup.security_status_on": "  Security: ON (balanced policy by default)",
   "setup.security_configure": "  Configure security? (y/N)",
   "setup.security_bash_block": "  Block dangerous commands (rm, sudo, ssh, etc.)? (y/N)",
   "setup.security_flags_block": "  Block dangerous flags (--force, -rf, etc.)? (y/N)",

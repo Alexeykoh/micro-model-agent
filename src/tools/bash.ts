@@ -407,7 +407,11 @@ export const bashTool: ToolDefinition = {
     const fullSecurityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(appConfig, ctx.sessionContext)
       : appConfig.security || DEFAULT_SECURITY_CONFIG;
-    const securityConfig = fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash;
+    // Master switch off → all sub-modules off, even when defaults are enabled.
+    const securityConfig =
+      fullSecurityConfig.enabled === false
+        ? { ...(fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash), enabled: false }
+        : fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash;
     const validation = isCommandAllowed(command, securityConfig);
 
     if (!validation.allowed) {
