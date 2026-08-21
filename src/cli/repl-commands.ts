@@ -14,6 +14,7 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { LspModule } from "../modules/lsp/module";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -494,9 +495,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       const subcommand = args[0] || "status";
 
       // Access LSP module via the agent's module registry
-      const lspModule = (ctx.agent as any).deps?.moduleRegistry
-        ?.getModules?.()
-        ?.find((m: any) => m.name === "lsp");
+      const lspModule = ctx.agent.getModule<LspModule>("lsp");
 
       if (!lspModule) {
         console.log(pc.yellow(t("repl.lsp_not_available")));

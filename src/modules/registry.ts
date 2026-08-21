@@ -5,8 +5,9 @@ import type { ToolDefinition } from "../tools/types";
 export class ModuleRegistry {
   private modules: Map<string, AgentModule> = new Map();
 
-  register(mod: AgentModule): void {
+  register(mod: AgentModule): this {
     this.modules.set(mod.name, mod);
+    return this;
   }
 
   get(name: string): AgentModule | undefined {

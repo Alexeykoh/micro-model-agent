@@ -519,6 +519,7 @@ export async function bootstrap(
     },
     sessionManager,
     memoryStore,
+    moduleRegistry,
     exitOnComplete,
   };
 
