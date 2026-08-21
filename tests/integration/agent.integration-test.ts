@@ -2,7 +2,7 @@
  * Integration tests for the Agent — all mechanics covered.
  * Run: bun run test:integration
  * Real LLM tests require an OpenAI-compatible API at $MMA_PROVIDER_BASEURL.
- * Skip with: $env:MMA_SKIP_INTEGRATION=1
+ * Skip with: $env:MMA_RUN_INTEGRATION=1 (opt-in)
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
@@ -26,7 +26,7 @@ import { rmSync, mkdtempSync } from "fs";
 const BASE_URL = process.env.MMA_PROVIDER_BASEURL || "http://localhost:1234/v1";
 const MODEL = process.env.MMA_MODEL || "qwen/qwen3.5-9b";
 const API_KEY = process.env.MMA_PROVIDER_APIKEY || "not-needed";
-const shouldSkip = process.env.MMA_SKIP_INTEGRATION === "1";
+const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 
 function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
   return {

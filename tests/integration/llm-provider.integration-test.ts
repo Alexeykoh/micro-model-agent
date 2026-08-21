@@ -2,7 +2,7 @@
  * Integration tests for LLM provider.
  * Run: bun run test:integration
  * Requires an OpenAI-compatible API at $MMA_PROVIDER_BASEURL (default: http://localhost:1234/v1)
- * Skip with: $env:MMA_SKIP_INTEGRATION=1
+ * Skip with: $env:MMA_RUN_INTEGRATION=1 (opt-in)
  */
 
 import { describe, it, expect } from "vitest";
@@ -12,7 +12,7 @@ const BASE_URL = process.env.MMA_PROVIDER_BASEURL || "http://localhost:1234/v1";
 const MODEL = process.env.MMA_MODEL || "qwen/qwen3.5-9b";
 const API_KEY = process.env.MMA_PROVIDER_APIKEY || "not-needed";
 
-const shouldSkip = process.env.MMA_SKIP_INTEGRATION === "1";
+const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 
 describe.skipIf(shouldSkip)("LLM Provider (integration)", () => {
   it("should connect and return a chat response", async () => {
