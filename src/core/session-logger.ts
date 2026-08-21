@@ -2,6 +2,8 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ToolCall } from "./types";
 import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
+import { join } from "path";
+import { readFileSync, existsSync } from "fs";
 
 /**
  * Thin wrapper around SessionManager that eliminates repetitive
@@ -267,6 +269,45 @@ export class SessionLogger {
       content: detail,
       tool: event,
       ...(iteration !== undefined ? { iteration } : {}),
+    });
+  }
+
+  /**
+   * Log session startup diagnostics: environment, LSP probe, plugins, skills.
+   * Should be the FIRST entry in session.jsonl so the file is self-describing.
+   * Skips if a session_start entry already exists (e.g. logged by REPL).
+   */
+  logSessionStart(data: {
+    environment?: Record<string, unknown>;
+    lspProbe?: {
+      ok: Array<{ language: string; durationMs: number }>;
+      failed: Array<{ language: string; error?: string; durationMs: number }>;
+      noneApplicable: boolean;
+    };
+    plugins?: string[];
+    skills?: number;
+  }): void {
+    // Skip if session_start already logged (REPL may have logged it with LSP probe)
+    const meta = this.session?.getActiveMeta();
+    if (meta) {
+      const logPath = join(this.session!.getSessionDirectory(meta.id), "session.jsonl");
+      try {
+        if (existsSync(logPath)) {
+          const content = readFileSync(logPath, "utf-8");
+          if (content.includes('"type":"session_start"')) return;
+        }
+      } catch {
+        // File read error — proceed to write
+      }
+    }
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "session_start",
+      content: "session started",
+      environment: data.environment,
+      lspProbe: data.lspProbe,
+      plugins: data.plugins,
+      skills: data.skills,
     });
   }
 }

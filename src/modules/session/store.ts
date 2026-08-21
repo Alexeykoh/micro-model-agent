@@ -28,7 +28,9 @@ export interface SessionLogEntry {
     | "audit"
     | "plan"
     | "context"
-    | "llm_usage";
+    | "llm_usage"
+    | "session_start"
+    | "baseline_typecheck";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -80,6 +82,18 @@ export interface SessionLogEntry {
   totalTokens?: number;
   source?: string;
   durationMs?: number;
+  // session_start fields
+  environment?: Record<string, unknown>;
+  lspProbe?: {
+    ok: Array<{ language: string; durationMs: number }>;
+    failed: Array<{ language: string; error?: string; durationMs: number }>;
+    noneApplicable: boolean;
+  };
+  plugins?: string[];
+  skills?: number;
+  // baseline_typecheck fields
+  passed?: boolean;
+  message?: string;
 }
 
 export class SessionStore {

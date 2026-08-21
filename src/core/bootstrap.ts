@@ -113,6 +113,7 @@ export interface BootstrapResult {
   configDir: string;
   baseDir: string;
   noAgentsMd: boolean;
+  envReport: ReturnType<typeof collectEnvironment>;
 }
 
 export async function bootstrap(
@@ -490,6 +491,7 @@ export async function bootstrap(
     baseDir,
     toolTags: activeToolTags,
     promptBlocks,
+    envReport,
     getDynamicPromptBlocks: () => {
       const blocks: PromptBlock[] = [];
       const planBlock = execModule.getSystemPromptBlock();
@@ -533,5 +535,6 @@ export async function bootstrap(
     configDir: dir,
     baseDir,
     noAgentsMd: skipAgentsMd,
+    envReport,
   };
 }

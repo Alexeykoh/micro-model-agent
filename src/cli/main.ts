@@ -188,6 +188,7 @@ async function main(): Promise<void> {
       configDir,
       baseDir,
       logger,
+      envReport,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
     startAutoUpdate(config);
     const repl = new Repl(
@@ -201,6 +202,7 @@ async function main(): Promise<void> {
       noAgentsMd,
       logger,
       true,
+      envReport,
     );
     await repl.start();
   }

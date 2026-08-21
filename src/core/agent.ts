@@ -7,6 +7,7 @@ import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import type { ToolScope, ToolDefinition } from "../tools/types";
 import type { PromptBlock } from "./types";
+import type { EnvironmentReport } from "./environment";
 import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import { t } from "../i18n/index";
@@ -16,7 +17,6 @@ import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
-import { StepVerifier } from "../modules/execution/verifier";
 import { CostTracker } from "../modules/pricing/index";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
@@ -91,6 +91,7 @@ export interface AgentDeps {
   sessionManager?: SessionManager;
   memoryStore?: MemoryStore;
   exitOnComplete?: boolean;
+  envReport?: EnvironmentReport;
 }
 
 export class Agent {
@@ -311,6 +312,15 @@ export class Agent {
       !this.systemPromptAdded &&
       !contextManager.getActiveHistory().some((m) => m.role === "system")
     ) {
+      // Log session startup diagnostics (environment, plugins, skills) as the
+      // first entry in session.jsonl so the file is self-describing for
+      // post-mortem analysis. LSP probe is logged separately from repl.ts
+      // since it may complete after this point. Dedup: logSessionStart
+      // checks for existing session_start entry to avoid double-logging.
+      slog.logSessionStart({
+        environment: this.deps.envReport as unknown as Record<string, unknown>,
+      });
+
       const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
       if (lazy.length > 0) {
         this.deps.promptBlocks.push(...lazy);
@@ -327,19 +337,6 @@ export class Agent {
         sessionManager: sessionManager?.getActiveMeta(),
         contextManager,
       });
-
-      if (config.session?.baselineCheck !== false) {
-        const verifier = new StepVerifier(baseDir);
-        verifier
-          .runTypeCheck()
-          .then((tc) => {
-            if (!tc.passed) {
-              logger.warn(`Baseline typecheck has issues: ${tc.message?.slice(0, 500)}`);
-              onMeta?.(pc.yellow(`\n⚠ Baseline typecheck has issues\n`));
-            }
-          })
-          .catch(() => {});
-      }
     }
 
     // A new user message starts a fresh compaction interval — iterations

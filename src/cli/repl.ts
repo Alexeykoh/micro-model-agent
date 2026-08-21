@@ -21,10 +21,12 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { SessionLogger } from "../core/session-logger";
 import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { Plan } from "../modules/execution/planner";
 import { formatCost } from "../modules/pricing/prices";
@@ -76,6 +78,8 @@ export class Repl implements ReplContext {
   public skillsModule?: SkillsModule;
   public pluginManager?: PluginManager;
   public logger?: Logger;
+  private slog: SessionLogger;
+  private envReport?: EnvironmentReport;
 
   constructor(
     agent: Agent,
@@ -88,6 +92,7 @@ export class Repl implements ReplContext {
     noAgentsMd?: boolean,
     logger?: Logger,
     exitOnClose?: boolean,
+    envReport?: EnvironmentReport,
   ) {
     this.agent = agent;
     this.config = config;
@@ -96,6 +101,8 @@ export class Repl implements ReplContext {
     this.skillsModule = skillsModule;
     this.pluginManager = pluginManager;
     this.logger = logger;
+    this.envReport = envReport;
+    this.slog = new SessionLogger(sessionManager, logger);
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
@@ -223,6 +230,7 @@ export class Repl implements ReplContext {
       }
 
       if (!trimmed) {
+        this.rl.setPrompt(pc.cyan(t("repl.you")));
         this.rl.prompt();
         return;
       }
@@ -234,6 +242,7 @@ export class Repl implements ReplContext {
       }
 
       if (this.running) {
+        this.rl.setPrompt(pc.cyan(t("repl.you")));
         this.rl.prompt();
       }
     });
@@ -695,6 +704,19 @@ export class Repl implements ReplContext {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
       const summary = await probeLspServers(config, this.baseDir, { logger: this.logger });
+      // Log LSP probe results to session for post-mortem visibility
+      this.slog.logSessionStart({
+        environment: this.envReport as unknown as Record<string, unknown>,
+        lspProbe: {
+          ok: summary.ok.map((r) => ({ language: r.language, durationMs: r.durationMs })),
+          failed: summary.failed.map((r) => ({
+            language: r.language,
+            error: r.error,
+            durationMs: r.durationMs,
+          })),
+          noneApplicable: summary.noneApplicable,
+        },
+      });
       if (summary.noneApplicable) return null;
       const parts: string[] = [];
       for (const r of summary.ok) {
