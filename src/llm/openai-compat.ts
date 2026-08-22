@@ -527,14 +527,18 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (lastStatus === 429) {
-      throw new Error(
+      const e429 = new Error(
         t("error.llm_429", {
           model: this.model,
           baseUrl: this.config.baseUrl,
         }),
       );
+      (e429 as any).llmStatus = lastStatus;
+      throw e429;
     }
-    throw new Error(t("error.llm_retries"));
+    const eRetry = new Error(t("error.llm_retries"));
+    (eRetry as any).llmStatus = lastStatus;
+    throw eRetry;
   }
 
   private isRetryable(status: number): boolean {

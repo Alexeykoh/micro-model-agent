@@ -1,6 +1,8 @@
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
 import { ProviderManager } from "../modules/providers/index";
+import { FallbackProvider } from "../modules/providers/fallback";
+import type { LLMProvider } from "../llm/provider";
 import { ModelLoader } from "../llm/model-loader";
 import { ToolRegistry, registerAllTools } from "../tools/index";
 import { buildHiddenToolsBlock } from "../tools/hidden-tools-block";
@@ -214,7 +216,16 @@ export async function bootstrap(
     rateLimits: config.security?.rateLimits,
   });
   providerManager.setModel(config.model);
-  const llmProvider = providerManager.active;
+  let llmProvider: LLMProvider = providerManager.active;
+  // Phase 4.2: transparent failover to the next configured provider on
+  // 429/5xx/network errors (only with multiple entries + fallback: true).
+  if (config.provider.fallback && providerManager.listNames().length > 1) {
+    llmProvider = new FallbackProvider(providerManager, (from, to, error) => {
+      logger.warn(
+        `provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
+      );
+    });
+  }
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
 
