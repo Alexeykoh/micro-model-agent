@@ -21,6 +21,7 @@ import { createPlanToolDefinitions } from "./plan-tool";
 import {
   createExecutionPlugin,
   STUCK_RECOVERY_COOLDOWN,
+  STUCK_WARN_REPEAT_EVERY,
   type ExecutionPluginState,
 } from "./execution-plugin";
 
@@ -93,6 +94,8 @@ export class ExecutionModule implements AgentModule {
     consecutivePlanWarnings: 0,
     lastStepId: -1,
     stuckNotified: false,
+    lastStuckWarnKey: "",
+    lastStuckWarnIter: -STUCK_WARN_REPEAT_EVERY,
     depsGateHints: new Map<number, number>(),
     mutationsWithoutPlan: 0,
     planNudgeSent: false,
