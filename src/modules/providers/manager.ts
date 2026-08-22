@@ -70,6 +70,36 @@ export class ProviderManager {
     return this.list().map((e) => e.label);
   }
 
+  /**
+   * CODE-ONLY capability routing (Phase 4.4): pick the first entry (priority
+   * order) whose preset capabilities and context window satisfy `needs`.
+   * Never exposed to the LLM — the model must not choose providers.
+   */
+  pickFor(needs: {
+    vision?: boolean;
+    tools?: boolean;
+    minContext?: number;
+  }): string | undefined {
+    const globalWindow = this.opts.contextWindow;
+    // No constraints → keep the current active provider.
+    if (!needs.vision && !needs.tools && needs.minContext === undefined) {
+      return this.activeProviderName;
+    }
+    for (const e of this.list()) {
+      const caps = this.registry.get(e.type)?.capabilities;
+      if (needs.vision && !caps?.vision) continue;
+      if (needs.tools && !caps?.tools) continue;
+      if (
+        needs.minContext !== undefined &&
+        (e.contextWindow ?? globalWindow) < needs.minContext
+      ) {
+        continue;
+      }
+      return e.label;
+    }
+    return undefined;
+  }
+
   /** Hot-swap to a named provider; rebuild the active provider. */
   switch(name: string, model?: string): LLMProvider {
     if (!this.entryByName(name)) {

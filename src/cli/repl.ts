@@ -31,6 +31,8 @@ import { SessionLogger } from "../core/session-logger";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
+import { probeProviders, targetsFromProviders } from "../modules/providers/health";
+import { writeWarning } from "../ui/output";
 
 function formatContextBar(
   used: number,
@@ -673,6 +675,33 @@ export class Repl implements ReplContext {
       this.probeLspBanner()
         .then((lspSummary) => {
           if (lspSummary) this.updateLspRow(headerWidth, lspSummary);
+        })
+        .catch(() => {});
+    }
+
+    if ((this.config.provider.entries?.length ?? 0) > 1) {
+      // Phase 4.4: background health probe of all entries (free listModels
+      // calls). Failed providers are surfaced as warnings — failover (Phase
+      // 4.2) would silently mask a dead primary.
+      void probeProviders(
+        targetsFromProviders(
+          (this.config.provider.entries ?? [])
+            .map((e) => ({
+              name: e.label || e.type,
+              provider: this.agent.getProviderFor(e.label || e.type),
+            }))
+            .filter((x): x is { name: string; provider: NonNullable<typeof x.provider> } =>
+              Boolean(x.provider),
+            ),
+        ),
+        { timeoutMs: 5000 },
+      )
+        .then((results) => {
+          for (const r of results) {
+            if (!r.ok && r.name !== this.config.provider.active) {
+              writeWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" }));
+            }
+          }
         })
         .catch(() => {});
     }

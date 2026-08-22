@@ -7,4 +7,10 @@ export type {
 export { ProviderRegistry } from "./registry";
 export { createProvider, defaultRegistry } from "./create";
 export { ProviderManager, presetOf } from "./manager";
+export {
+  probeProviders,
+  targetsFromProviders,
+  type ProbeTarget,
+  type ProviderHealth,
+} from "./health";
 export { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "./presets";

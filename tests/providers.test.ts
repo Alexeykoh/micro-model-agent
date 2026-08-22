@@ -258,5 +258,52 @@ describe("providers module", () => {
       expect(cfg.entries![0].priority).toBe(2);
       expect(cfg.entries![0].rateLimits!.maxRequestsPerMinute).toBe(10);
     });
+
+    it("pickFor returns the first capable entry by priority order", () => {
+      const registry = new ProviderRegistry();
+      const cap = (over: Partial<{ vision: boolean; tools: boolean; listModels: boolean }>) => ({
+        streaming: true, tools: true, vision: false, reasoningEffort: false,
+        listModels: false, requiresKey: false, ...over,
+      });
+      registry.register({
+        type: "novision", label: "novision", baseUrl: "",
+        capabilities: cap({}),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      registry.register({
+        type: "visionprov", label: "visionprov", baseUrl: "",
+        capabilities: cap({ vision: true }),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      const m = new ProviderManager(
+        {
+          active: "plain",
+          entries: [
+            { type: "novision", label: "plain", baseUrl: "http://p/v1" },
+            { type: "visionprov", label: "vis", baseUrl: "http://v/v1", priority: -1 },
+          ],
+        },
+        { ...opts, registry },
+      );
+      expect(m.pickFor({})).toBe("plain");
+      expect(m.pickFor({ vision: true })).toBe("vis");
+    });
+
+    it("pickFor respects minContext against entry or global window", () => {
+      const registry = defaultRegistry();
+      const m = new ProviderManager(
+        {
+          active: "small",
+          entries: [
+            { type: "openai-compat", label: "small", baseUrl: "http://s/v1" },
+            { type: "openai-compat", label: "big", baseUrl: "http://b/v1", contextWindow: 131072 },
+          ],
+        },
+        { contextWindow: 32768, registry },
+      );
+      expect(m.pickFor({ minContext: 8192 })).toBe("small");
+      expect(m.pickFor({ minContext: 65536 })).toBe("big");
+      expect(m.pickFor({ minContext: 999999 })).toBeUndefined();
+    });
   });
 });

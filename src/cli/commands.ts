@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
+import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { fileURLToPath } from "url";
 import { readMmaVersion } from "../core/version";
 
@@ -233,6 +234,42 @@ export function createProgram(): Command {
     });
 
   const provider = program.command("provider").description(t("cli.manage_providers"));
+  provider
+    .command("check")
+    .description(t("cli.provider_check"))
+    .option("--timeout <ms>", "Per-provider probe timeout in ms")
+    .action(async (opts: { timeout?: string }) => {
+      const { config, agent } = await bootstrap();
+      const providers = agent.listProviders();
+      const targets = targetsFromProviders(
+        providers.length > 0
+          ? providers
+              .map((p) => ({ name: p.label, provider: agent.getProviderFor(p.label) }))
+              .filter((x): x is { name: string; provider: NonNullable<typeof x.provider> } =>
+                Boolean(x.provider),
+              )
+          : [
+              {
+                name: config.provider.type,
+                provider: agent.getProviderFor(
+                  config.provider.active || config.provider.type,
+                ),
+              },
+            ].filter((x): x is { name: string; provider: NonNullable<typeof x.provider> } =>
+              Boolean(x.provider),
+            ),
+      );
+      const results = await probeProviders(targets, {
+        timeoutMs: opts.timeout ? Number(opts.timeout) : 5000,
+      });
+      for (const r of results) {
+        const mark = r.ok ? pc.green("✓") : pc.red("✗");
+        const detail = r.ok
+          ? pc.dim(`${r.ms}ms, ${r.models} models`)
+          : pc.red(r.error ?? "failed");
+        console.log(` ${mark} ${r.name.padEnd(16)} ${detail}`);
+      }
+    });
   provider
     .command("list")
     .description(t("cli.list_providers"))

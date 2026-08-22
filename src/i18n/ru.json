@@ -285,6 +285,8 @@
   "cli.cert_fixture_missing": "Фикстура отсутствует для {id}: {path}",
   "cli.cert_marks_hint": "Маркеры: ✔ сертифицировано на этом провайдере, ○ сертифицировано на старой версии MMA, · не сертифицировано",
   "cli.manage_providers": "Управление провайдерами",
+  "cli.provider_check": "Проверить доступность провайдеров (бесплатный вызов listModels)",
+  "repl.provider_down": "[ВНИМАНИЕ] Провайдер «{name}» недоступен: {error}",
   "cli.list_providers": "Список провайдеров",
   "cli.current_provider": "Текущий провайдер:",
   "cli.base_url": "Базовый URL:",

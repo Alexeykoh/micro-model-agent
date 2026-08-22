@@ -1189,6 +1189,22 @@ export class Agent {
     }));
   }
 
+  /** Build (or get cached) the provider for a named entry — health checks, routing. */
+  getProviderFor(name: string): import("../llm/provider").LLMProvider | undefined {
+    try {
+      const manager = new ProviderManager(this.deps.config.provider, {
+        contextWindow: this.deps.config.contextWindow,
+        retry: this.deps.config.retry,
+        rateLimits: this.deps.config.security?.rateLimits,
+      });
+      manager.setModel(this.deps.config.model);
+      manager.switch(name);
+      return manager.active;
+    } catch {
+      return undefined;
+    }
+  }
+
   setContext(
     messages: Array<{
       role: string;

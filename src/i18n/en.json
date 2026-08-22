@@ -291,6 +291,8 @@
   "cli.cert_fixture_missing": "Fixture missing for {id}: {path}",
   "cli.cert_marks_hint": "Markers: ✔ certified on this provider, ○ certified on an older MMA version, · not certified",
   "cli.manage_providers": "Manage providers",
+  "cli.provider_check": "Probe configured providers (free listModels call)",
+  "repl.provider_down": "[WARN] Provider \"{name}\" is unreachable: {error}",
   "cli.list_providers": "List providers",
   "cli.current_provider": "Current provider:",
   "cli.base_url": "Base URL:",
