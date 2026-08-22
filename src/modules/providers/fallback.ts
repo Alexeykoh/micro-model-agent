@@ -21,12 +21,26 @@ export type FailoverListener = (from: string, to: string, error: Error) => void;
 
 /** True when the error is worth failing over to another provider. */
 export function isFailoverError(err: unknown): boolean {
-  const e = err as { name?: string; llmStatus?: number; message?: string };
+  const e = err as {
+    name?: string;
+    llmStatus?: number;
+    message?: string;
+    code?: string;
+  };
   if (e?.name === "AbortError") return false;
   // HTTP status attached by openai-compat: retryable statuses only.
   if (typeof e?.llmStatus === "number") return e.llmStatus === 429 || e.llmStatus >= 500;
-  // Network-level failures (fetch failed, connection refused, DNS, timeouts).
-  return /fetch failed|network|econnrefused|enotfound|etimedout|socket hang up/i.test(
+  // Network-level failures by errno-style code (Bun: "ConnectionRefused",
+  // Node: "ECONNREFUSED", DNS: "ENOTFOUND"/"EAI_AGAIN", etc).
+  const normCode = (e?.code ?? "").replace(/[-_]/g, "").toLowerCase();
+  if (/^abort/.test(normCode)) return false;
+  if (
+    /conn(refused|reset|timedout)|enotfound|eai_again|namenotresolved/.test(normCode)
+  ) {
+    return true;
+  }
+  // Network-level failures by message (fetch failed, timeouts, socket resets).
+  return /fetch failed|unable to connect|network|econnrefused|enotfound|etimedout|socket hang up|connection refused|connection reset/i.test(
     e?.message ?? "",
   );
 }

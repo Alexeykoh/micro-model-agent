@@ -134,6 +134,35 @@ describe("FallbackProvider", () => {
     expect(src.activeName).toBe("b");
   });
 
+  it("fails over on Bun-style connection errors (code: ConnectionRefused)", async () => {
+    const a = makeProvider("a", () => {
+      throw Object.assign(new Error("Unable to connect. Is the computer able to access the url?"), {
+        code: "ConnectionRefused",
+        llmTerminal: true,
+      });
+    });
+    const b = makeProvider("b", async function* () {
+      yield { type: "text", content: "ok" };
+    });
+    const src = makeSource(["a", "b"], new Map([["a", a], ["b", b]]));
+    const fb = new FallbackProvider(src);
+    await collect(fb.chat([{ role: "user", content: "hi" }]));
+    expect(src.activeName).toBe("b");
+  });
+
+  it("fails over on Node-style ECONNREFUSED code", async () => {
+    const a = makeProvider("a", () => {
+      throw Object.assign(new Error("request failed"), { code: "ECONNREFUSED" });
+    });
+    const b = makeProvider("b", async function* () {
+      yield { type: "text", content: "ok" };
+    });
+    const src = makeSource(["a", "b"], new Map([["a", a], ["b", b]]));
+    const fb = new FallbackProvider(src);
+    await collect(fb.chat([{ role: "user", content: "hi" }]));
+    expect(src.activeName).toBe("b");
+  });
+
   it("wraps around the entry list when failing over from the last entry", async () => {
     const b = makeProvider("b", () => {
       throw err(429, "b-limited");
