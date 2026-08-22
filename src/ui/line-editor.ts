@@ -31,6 +31,12 @@ export interface LineEditorOptions {
   history?: string[];
   historySize?: number;
   tabSize?: number;
+  /**
+   * Ctrl+C handler. Default: emit "SIGINT" when a listener exists (the REPL
+   * installs one). Injectable so tests never fire process-level signals —
+   * under load a real SIGINT can terminate the whole test runner.
+   */
+  onInterrupt?: () => void;
 }
 
 interface EditorListeners {
@@ -44,6 +50,7 @@ export class LineEditor implements LineInput {
 
   /** Host hook: return true to swallow the key before the editor handles it. */
   onKeyInput?: (str: string, key: unknown) => boolean;
+  private onInterrupt?: () => void;
 
   private promptStr: string;
   private completer?: (line: string) => [string[], string];
@@ -78,6 +85,7 @@ export class LineEditor implements LineInput {
     this.output = opts.output;
     this.promptStr = opts.prompt ?? "";
     this.completer = opts.completer;
+    this.onInterrupt = opts.onInterrupt;
     this.history = opts.history ?? [];
     this.historySize = opts.historySize ?? 50;
     if (this.history.length > this.historySize) {
@@ -413,7 +421,16 @@ export class LineEditor implements LineInput {
     this.col = 0;
     this.prevCursorRow = 0;
     this.render();
-    process.emit("SIGINT");
+    if (this.onInterrupt) {
+      this.onInterrupt();
+      return;
+    }
+    // Default: emit only when someone listens. With zero handlers
+    // process.emit("SIGINT") takes the DEFAULT action (process termination);
+    // the REPL always installs a listener, so production is unaffected.
+    if (process.listenerCount("SIGINT") > 0) {
+      process.emit("SIGINT");
+    }
   }
 
   private ctrlD(): void {

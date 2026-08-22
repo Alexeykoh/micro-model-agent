@@ -170,7 +170,17 @@ export const readFileTool: ToolDefinition = {
             next: String(end + 1),
           })
         : "";
-    const display = truncated ? `${header}${truncated}` : header;
+    // Compact user-facing display: the tool header already shows the path,
+    // so only a partial read needs extra info (the range within the file).
+    // A full read adds nothing — keeps the card to two lines.
+    const fullRead = offset === 1 && end >= total;
+    const display = fullRead
+      ? ""
+      : t("file.read_range", {
+          from: String(offset),
+          to: String(end),
+          total: String(total),
+        });
     return {
       success: true,
       output: `${header}\n${selected}${truncated}`,

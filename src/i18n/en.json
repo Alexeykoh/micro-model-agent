@@ -17,6 +17,7 @@
   "file.no_matches": "No matches",
   "file.truncated": "\n... (truncated)",
   "file.read_header": "── {path} ({ext}, {total} lines, lines {from}-{to})",
+  "file.read_range": "lines {from}-{to} of {total}",
   "file.read_truncated": "\n\n[Truncated: {remaining} more lines. Use read_file with offset={next} to continue]",
   "file.empty_page": "(empty page)",
   "error.timeout": "Request timed out",

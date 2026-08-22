@@ -21,7 +21,10 @@ class FakeOutput {
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-function makeEditor(opts?: { columns?: number }) {
+function makeEditor(opts?: {
+  columns?: number;
+  onInterrupt?: () => void;
+}) {
   const input = new FakeInput();
   const output = new FakeOutput();
   if (opts?.columns) output.columns = opts.columns;
@@ -29,6 +32,7 @@ function makeEditor(opts?: { columns?: number }) {
     input: input as never,
     output: output as never,
     prompt: "> ",
+    onInterrupt: opts?.onInterrupt,
   });
   const lines: string[] = [];
   editor.on("line", (l) => lines.push(l ?? ""));
@@ -95,20 +99,16 @@ describe("LineEditor interactive", () => {
     expect(lines).toEqual([]);
   });
 
-  it("emits SIGINT on Ctrl+C", async () => {
-    const { input } = makeEditor();
-    let sig = false;
-    const h = () => {
-      sig = true;
-    };
-    process.on("SIGINT", h);
-    try {
-      input.pushData("\u0003");
-      await tick();
-      expect(sig).toBe(true);
-    } finally {
-      process.removeListener("SIGINT", h);
-    }
+  it("invokes the onInterrupt hook on Ctrl+C (never a process signal)", async () => {
+    let interrupted = false;
+    const { input } = makeEditor({
+      onInterrupt: () => {
+        interrupted = true;
+      },
+    });
+    input.pushData("\u0003");
+    await tick();
+    expect(interrupted).toBe(true);
   });
 
   it("re-presents a clean prompt after reset()", async () => {

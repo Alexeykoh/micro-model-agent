@@ -315,7 +315,14 @@ export class Repl implements ReplContext {
 
     let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
 
-    process.on("SIGINT", () => {
+    // Idempotent registration: a second Repl in the same process must not add
+    // another global SIGINT handler. Leaked handlers from REPL instances
+    // created in tests fired process.exit(0) on ANY process.emit("SIGINT")
+    // elsewhere and silently terminated the whole bun test runner.
+    if (typeof (Repl as any).sigintHandler === "function") {
+      process.removeListener("SIGINT", (Repl as any).sigintHandler);
+    }
+    (Repl as any).sigintHandler = () => {
       if (this.agentRunning) {
         console.log(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
@@ -325,7 +332,8 @@ export class Repl implements ReplContext {
       } else {
         process.exit(0);
       }
-    });
+    };
+    process.on("SIGINT", (Repl as any).sigintHandler);
   }
 
   private handleSpecialKey(str: string, key: any): boolean {
@@ -413,6 +421,7 @@ export class Repl implements ReplContext {
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
         toolStyle: this.config.ui?.toolStyle ?? "inline",
+        baseDir: this.baseDir,
       });
       const result = await this.agent.run(
         input,

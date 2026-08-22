@@ -150,4 +150,25 @@ describe("read_file", () => {
     const result = await readFileTool.handler(ctx, { path: "../etc/passwd" });
     expect(result.success).toBe(false);
   });
+
+  it("compact display: empty for a full read", async () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join("\n");
+    writeFileSync(join(tmpDir, "test.txt"), lines);
+    const result = await readFileTool.handler(ctx, { path: "test.txt" });
+    expect(result.success).toBe(true);
+    // The tool header already shows the path — a full read needs no display line.
+    expect(result.display).toBe("");
+  });
+
+  it("compact display: range only for a partial read", async () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join("\n");
+    writeFileSync(join(tmpDir, "test.txt"), lines);
+    const result = await readFileTool.handler(ctx, { path: "test.txt", offset: 3, limit: 2 });
+    expect(result.success).toBe(true);
+    expect(result.display).toContain("3-4");
+    expect(result.display).toContain("10");
+    expect(result.display).not.toContain("test.txt");
+    // LLM-facing output keeps the full header (fact extraction depends on it).
+    expect(result.output).toContain("test.txt");
+  });
 });

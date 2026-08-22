@@ -5,6 +5,7 @@ import { box, divider } from "./box";
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
 import { formatCost } from "../modules/pricing/prices";
+import { isAbsolute, relative, sep } from "path";
 
 function formatUsd(cost: number): string {
   return formatCost(cost);
@@ -18,6 +19,31 @@ export interface RendererOptions {
   err?: NodeJS.WritableStream;
   /** "box" keeps the legacy boxed tool cards; "inline" uses opencode-like headers. */
   toolStyle?: "box" | "inline";
+  /**
+   * Workspace root — absolute paths inside it are shown as short relative
+   * paths in tool headers (the agent already knows the root).
+   */
+  baseDir?: string;
+}
+
+/** Tools whose `path` argument is shown in the header. */
+const PATH_TOOLS = new Set([
+  "read_file",
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "create_dir",
+  "move_file",
+  "list_dir",
+  "file_info",
+]);
+
+function toDisplayPath(baseDir: string | undefined, p: string): string {
+  if (!baseDir || !isAbsolute(p)) return p;
+  const rel = relative(baseDir, p);
+  // Outside baseDir (../ prefix) or another drive (absolute result) → keep as-is.
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return p;
+  return rel.split(sep).join("/");
 }
 
 const GUTTER = "  ";
@@ -85,6 +111,7 @@ export class Renderer {
   private err: NodeJS.WritableStream;
   private width: number;
   private toolStyle: "box" | "inline";
+  private baseDir?: string;
   private card: {
     tool: string;
     args: Record<string, unknown>;
@@ -98,6 +125,7 @@ export class Renderer {
     this.err = opts.err ?? process.stderr;
     this.width = opts.width ?? getTerminalWidth();
     this.toolStyle = opts.toolStyle ?? "inline";
+    this.baseDir = opts.baseDir;
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
       stream: this.err,
@@ -159,7 +187,11 @@ export class Renderer {
   ): void {
     this.endCard();
     this.spinner.stop();
-    const summary = summarizeArgs(args);
+    const displayArgs =
+      PATH_TOOLS.has(tool) && typeof args.path === "string"
+        ? { ...args, path: toDisplayPath(this.baseDir, args.path) }
+        : args;
+    const summary = summarizeArgs(displayArgs);
     const step = stepContext ? ` ${pc.cyan(`← ${stepContext}`)}` : "";
     const marker = icon || toolMarker(tool);
     if (!this.rich) {

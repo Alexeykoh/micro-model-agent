@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { join, sep } from "path";
 import { Renderer, summarizeArgs } from "../../src/ui/renderer";
 
 function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
@@ -231,5 +232,45 @@ describe("Renderer", () => {
     const out = text();
     expect(out).toContain("✓");
     expect(out).toContain("[plan_x] Check");
+  });
+
+  describe("relative paths in tool headers", () => {
+    function makeBaseRenderer(baseDir?: string) {
+      const out = makeOut();
+      const renderer = new Renderer({
+        rich: true,
+        spinner: false,
+        toolStyle: "inline",
+        out: out.stream,
+        err: out.stream,
+        width: 60,
+        baseDir,
+      });
+      return { renderer, text: out.text };
+    }
+
+    it("shortens absolute paths inside the workspace", () => {
+      const abs = join("E:", sep, "proj", "src", "a.ts");
+      const { renderer, text } = makeBaseRenderer(join("E:", sep, "proj"));
+      renderer.toolStart("read_file", { path: abs });
+      renderer.flush();
+      expect(text()).toContain("src/a.ts");
+      expect(text()).not.toContain(`${sep}proj${sep}src`);
+    });
+
+    it("keeps paths outside the workspace as-is", () => {
+      const abs = join("E:", sep, "other", "b.ts");
+      const { renderer, text } = makeBaseRenderer(join("E:", sep, "proj"));
+      renderer.toolStart("read_file", { path: abs });
+      renderer.flush();
+      expect(text()).toContain(abs);
+    });
+
+    it("keeps relative paths untouched when no baseDir is set", () => {
+      const { renderer, text } = makeRenderer({ rich: true });
+      renderer.toolStart("read_file", { path: "src/a.ts" });
+      renderer.flush();
+      expect(text()).toContain("src/a.ts");
+    });
   });
 });

@@ -24,7 +24,9 @@ const MISSING_BINARY_RE =
   /command not found|not recognized|не является внутренней|не распознан|не є внутрішньою|".+?" не является/i;
 
 function isMissingBinaryError(err: any, combinedOutput: string): boolean {
-  if (err.status === 127) return true;
+  // 127 = POSIX sh "command not found"; 9009 = Windows cmd.exe "is not
+  // recognized" — both are authoritative regardless of output encoding.
+  if (err.status === 127 || err.status === 9009) return true;
   if (err.code === "ENOENT") return true;
   return MISSING_BINARY_RE.test(combinedOutput);
 }
@@ -42,27 +44,60 @@ function contentHash(content: string): string {
   return String(h);
 }
 
-let _winDecoder: TextDecoder | null | undefined;
+let _winDecoder: TextDecoder | undefined;
 
+/**
+ * OEM decoder for the active console code page (CP866 on Russian Windows).
+ * Mirrors `getOemDecoder()` in modules/processes/registry.ts: a transient
+ * chcp.com failure under load must NOT be cached — only a successful probe
+ * (or the hard ibm866 fallback) is memoized.
+ */
 function getWinDecoder(): TextDecoder {
-  if (_winDecoder === undefined) {
-    if (platform() !== "win32") {
-      _winDecoder = null;
-    } else {
-      try {
-        const cpOut = execSync("chcp.com", {
-          encoding: "buffer",
-          timeout: 2000,
-          windowsHide: true,
-        }).toString("latin1");
-        const m = cpOut.match(/(\d+)/);
-        _winDecoder = m ? new TextDecoder("ibm" + m[1]) : null;
-      } catch {
-        _winDecoder = null;
-      }
+  if (_winDecoder !== undefined) return _winDecoder;
+  if (platform() !== "win32") {
+    _winDecoder = new TextDecoder("utf-8");
+    return _winDecoder;
+  }
+  let decoder: TextDecoder | null = null;
+  try {
+    const cpOut = execSync("chcp.com", {
+      encoding: "buffer",
+      timeout: 2000,
+      windowsHide: true,
+    }).toString("latin1");
+    const m = cpOut.match(/(\d+)/);
+    if (m) decoder = new TextDecoder("ibm" + m[1]);
+  } catch {
+    /* chcp failed (load/ENOENT) — retry on the next call */
+  }
+  if (!decoder) {
+    try {
+      decoder = new TextDecoder("ibm866");
+    } catch {
+      return new TextDecoder("utf-8"); // unknown encoding — do not cache
     }
   }
-  return _winDecoder ?? new TextDecoder("utf-8");
+  _winDecoder = decoder;
+  return _winDecoder;
+}
+
+/**
+ * Decode child-process output to UTF-8. Modern tools (bun, node, npm, tsc)
+ * write UTF-8 into the pipe; cmd.exe builtins/errors use the OEM code page.
+ * Strict UTF-8 first; on invalid byte sequences fall back to OEM.
+ */
+function decodeOutput(chunks: Buffer[]): string {
+  const raw = Buffer.concat(chunks);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(raw);
+  } catch {
+    /* not valid UTF-8 → OEM code page output */
+  }
+  try {
+    return getWinDecoder().decode(raw);
+  } catch {
+    return raw.toString("latin1");
+  }
 }
 
 export class LintOnWritePlugin implements AgentPlugin {
@@ -287,14 +322,13 @@ function runAsync(
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let stdout = "";
-    let stderr = "";
-    const decoder = getWinDecoder();
+    const utf8Chunks: Buffer[] = [];
+    const oemChunks: Buffer[] = [];
     child.stdout?.on("data", (d: Buffer) => {
-      stdout += decoder.decode(d, { stream: true });
+      utf8Chunks.push(Buffer.from(d));
     });
     child.stderr?.on("data", (d: Buffer) => {
-      stderr += decoder.decode(d, { stream: true });
+      oemChunks.push(Buffer.from(d));
     });
     const timer = setTimeout(() => {
       child.kill();
@@ -314,7 +348,7 @@ function runAsync(
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       if (signal?.aborted) {
-        resolve({ stdout, stderr });
+        resolve({ stdout: decodeOutput(utf8Chunks), stderr: decodeOutput(oemChunks) });
       } else {
         reject(err);
       }
@@ -322,8 +356,8 @@ function runAsync(
     child.on("close", (code) => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
-      stdout += decoder.decode();
-      stderr += decoder.decode();
+      const stdout = decodeOutput(utf8Chunks);
+      const stderr = decodeOutput(oemChunks);
       if (signal?.aborted || code === 0) {
         resolve({ stdout, stderr });
       } else {

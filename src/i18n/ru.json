@@ -16,6 +16,7 @@
   "file.no_matches": "Нет совпадений",
   "file.truncated": "\n... (обрезано)",
   "file.read_header": "── {path} ({ext}, {total} строк, строки {from}-{to})",
+  "file.read_range": "строки {from}-{to} из {total}",
   "file.read_truncated": "\n\n[Обрезано: ещё {remaining} строк. Продолжите чтение через read_file с offset={next}]",
   "file.empty_page": "(пустая страница)",
   "error.timeout": "Таймаут запроса",

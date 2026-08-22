@@ -56,7 +56,7 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    const { agent, config, baseDir } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
 
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
@@ -90,6 +90,7 @@ async function main(): Promise<void> {
     const renderer = new Renderer({
       spinner: config.ui?.spinner ?? true,
       toolStyle: config.ui?.toolStyle ?? "inline",
+      baseDir,
     });
     const result = await agent.run(
       prompt,
