@@ -210,6 +210,8 @@
   "plan.deleted": "Plan {id} deleted permanently.",
   "plan.purged": "Deleted {count} plan(s). Plan storage is empty.",
   "plan.no_deliverables": "note: step {step} names no files — its completion cannot be auto-verified; run an explicit check (e.g. build/tests) before your final answer.",
+  "plan.bulk_update_rejected": "Bulk steps[] rewrite via action=update is not supported: it would discard all step statuses. Use \"re-plan\" (keeps completed steps, replaces the rest) or mark steps individually: plan update step=N status=done|failed|skipped.",
+  "plan.readonly": "Plan {id} is {status} (read-only) — it cannot be updated. Use \"plan switch\" to activate it, or create a new plan for new work.",
   "plan.list_legend": "[*] active · [ ] draft · [-] archived",
   "exec.plan_nudge": "You made {count} file-changing tool call(s) without a plan. For tasks that create or modify files, or span multiple steps, create a plan first (plan create) with concrete steps (exact filenames, commands, deliverables), then continue.",
   "todo.added": "Added {count} todo(s): {items}",

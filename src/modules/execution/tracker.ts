@@ -1,4 +1,4 @@
-import { PlanCreator, type Plan, type StepStatus } from "./planner";
+import { PlanCreator, getPlanProgress, type Plan, type StepStatus } from "./planner";
 
 export class PlanTracker {
   private plan: Plan;
@@ -65,13 +65,15 @@ export class PlanTracker {
   }
 
   getProgressString(): string {
-    const done = this.plan.steps.filter((s) => s.status === "done").length;
-    const total = this.plan.steps.length;
-    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const p = getPlanProgress(this.plan);
+    const total = p.total;
+    const settled = p.settled;
+    const pct = total > 0 ? Math.round((settled / total) * 100) : 0;
     const barWidth = 10;
-    const filled = Math.round((done / total) * barWidth);
+    const filled = Math.round((settled / total) * barWidth);
     const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
-    return `[${this.plan.id}] ${this.plan.title}  ${done}/${total}  ${bar}  ${pct}%`;
+    const skippedPart = p.skipped > 0 ? ` (${p.skipped} skipped)` : "";
+    return `[${this.plan.id}] ${this.plan.title}  ${settled}/${total}${skippedPart}  ${bar}  ${pct}%`;
   }
 
   toPromptBlock(): string {
