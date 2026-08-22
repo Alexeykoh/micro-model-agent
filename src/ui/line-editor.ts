@@ -708,7 +708,12 @@ export class LineEditor implements LineInput {
   }
 
   private layout(): LayoutRow[] {
-    return buildLayout(this.lines, this.columns());
+    const promptWidth = stringWidth(stripAnsi(this.promptStr));
+    return buildLayout(
+      this.lines,
+      this.columns(),
+      Math.max(1, this.columns() - promptWidth),
+    );
   }
 
   private render(): void {

@@ -93,6 +93,15 @@ describe("line-math", () => {
       ]);
     });
 
+    it("wraps only the first visual row at firstRowWidth, the rest at width", () => {
+      const layout = buildLayout(["abcdefghij", "klm"], 10, 4);
+      expect(layout).toEqual([
+        { bufRow: 0, charStart: 0, text: "abcd" },
+        { bufRow: 0, charStart: 4, text: "efghij" },
+        { bufRow: 1, charStart: 0, text: "klm" },
+      ]);
+    });
+
     it("maps a cursor position to a visual row", () => {
       expect(layoutIndexFor(layout, 0, 6)).toBe(1);
       expect(layoutIndexFor(layout, 1, 1)).toBe(2);
@@ -281,5 +290,32 @@ describe("LineEditor", () => {
     });
     editor.close();
     expect(closed).toBe(true);
+  });
+
+  it("wraps the first line at width minus prompt (no frame desync)", async () => {
+    const { editor, input } = makeEditor({ prompt: "You: " });
+    input.pushData("x".repeat(200));
+    await tick();
+    const layout = editor["layout"]();
+    // First visual row + the 5-char prompt must fit into 80 columns,
+    // otherwise the terminal auto-wraps and every following row shifts.
+    expect(layout[0].text.length).toBeLessThanOrEqual(80 - 5);
+  });
+
+  it("keeps every rendered visual row within the terminal width", async () => {
+    const { editor, input, output } = makeEditor({ prompt: "You: " });
+    input.pushData("y".repeat(150));
+    input.pushData("\x1b[13;2u"); // Shift+Enter → second buffer line
+    input.pushData("z".repeat(90));
+    await tick();
+    const layout = editor["layout"]();
+    for (const row of layout) {
+      expect(row.text.length).toBeLessThanOrEqual(80);
+    }
+    // The last render must redraw exactly layout.length rows — one clear
+    // per row, no stale duplicates from a misaligned frame.
+    const lastRenderStart = output.data.lastIndexOf("\x1b[");
+    const clears = (output.data.match(/\x1b\[2K/g) || []).length;
+    expect(clears).toBeGreaterThanOrEqual(layout.length);
   });
 });

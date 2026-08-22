@@ -21,8 +21,11 @@ export function charLen(s: string): number {
   return Array.from(s).length;
 }
 
-export function wrapLine(line: string, width: number): WrappedRow[] {
+export function wrapLine(line: string, width: number, firstRowWidth?: number): WrappedRow[] {
   const w = width > 0 ? width : 80;
+  // Only the FIRST visual row shares its screen line with something else
+  // (e.g. the prompt); every continuation row uses the full width.
+  let limit = firstRowWidth !== undefined && firstRowWidth > 0 ? firstRowWidth : w;
   const chars = Array.from(line);
   const rows: WrappedRow[] = [];
   let start = 0;
@@ -36,10 +39,11 @@ export function wrapLine(line: string, width: number): WrappedRow[] {
       continue;
     }
     const cw = stringWidth(ch);
-    if (cells + cw > w && cells > 0) {
+    if (cells + cw > limit && cells > 0) {
       rows.push({ text: chars.slice(start, i).join(""), charStart: start });
       start = i;
       cells = cw;
+      limit = w;
     } else {
       cells += cw;
     }
@@ -48,10 +52,14 @@ export function wrapLine(line: string, width: number): WrappedRow[] {
   return rows;
 }
 
-export function buildLayout(lines: string[], width: number): LayoutRow[] {
+export function buildLayout(
+  lines: string[],
+  width: number,
+  firstRowWidth?: number,
+): LayoutRow[] {
   const rows: LayoutRow[] = [];
   for (let b = 0; b < lines.length; b++) {
-    for (const r of wrapLine(lines[b], width)) {
+    for (const r of wrapLine(lines[b], width, b === 0 ? firstRowWidth : undefined)) {
       rows.push({ bufRow: b, charStart: r.charStart, text: r.text });
     }
   }

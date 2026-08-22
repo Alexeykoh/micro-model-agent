@@ -50,14 +50,15 @@ describe("LineEditor interactive", () => {
     expect(output.data.endsWith("\r\x1b[2K> hi\x1b[J\r\x1b[4C")).toBe(true);
   });
 
-  it("wraps long input into multiple rows", async () => {
+  it("wraps long input into multiple rows (first row fits with the prompt)", async () => {
     const { editor, input, output } = makeEditor({ columns: 5 });
     editor.prompt();
     input.pushData("abcdef");
     await tick();
-    expect(output.data).toContain("> abcde");
-    expect(output.data).toContain("\r\n");
-    expect(output.data).toContain("\x1b[2Kf");
+    // Prompt (2) + first visual row must fit into 5 columns → "> abc",
+    // the continuation row gets the full width → "def".
+    expect(output.data).toContain("> abc\r\n");
+    expect(output.data).toContain("\x1b[2Kdef");
   });
 
   it("redraws from the frame top when typing on a lower row (no duplicates)", async () => {
