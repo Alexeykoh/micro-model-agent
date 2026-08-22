@@ -12,29 +12,15 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { UpdaterModule } from "../modules/updater/index";
-
-function readVersion(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [join(here, "..", "..", "package.json"), join(here, "..", "package.json")];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8"));
-        if (raw.version) return raw.version;
-      } catch {
-        // fall through
-      }
-    }
-  }
-  return "0.0.0";
-}
+import { installCrashHandlers } from "../core/crash-handler";
+import { readMmaVersion } from "../core/version";
 
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
   updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
 }): UpdaterModule | undefined {
   try {
-    const module = new UpdaterModule(config.updater, readVersion(), "micro-models-agent", {
+    const module = new UpdaterModule(config.updater, readMmaVersion(), "micro-models-agent", {
       info: (m) => process.stderr.write(pc.dim(m) + "\n"),
       warn: (m) => process.stderr.write(pc.yellow(m) + "\n"),
       error: (m) => process.stderr.write(pc.red(m) + "\n"),
@@ -48,6 +34,10 @@ function startAutoUpdate(config: {
 }
 
 async function main(): Promise<void> {
+  // Install global crash handlers first — every crash lands in
+  // ~/.mma/logs/crash.jsonl (with env report) instead of a bare stderr stack.
+  installCrashHandlers();
+
   const program = createProgram();
   program.parse(process.argv);
 
@@ -141,10 +131,11 @@ async function main(): Promise<void> {
       config.maxToolIterations = answers.maxToolIterations;
       config.locale = answers.locale;
       if (config.security) {
-        config.security.enabled =
-          answers.securityBashBlock || answers.securityFlagsBlock || !answers.securityPathsDeny;
-        config.security.bash.enabled = config.security.enabled;
-        config.security.bash.blockDangerousFlags = answers.securityFlagsBlock;
+        // Security is enabled by default (balanced); wizard answers only tighten it.
+        config.security.enabled = true;
+        config.security.bash.enabled = true;
+        config.security.bash.blockDangerousFlags =
+          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
         if (answers.securityBashBlock) {
           config.security.bash.blacklist = [
             ...new Set([
@@ -180,9 +171,11 @@ async function main(): Promise<void> {
       sessionManager,
       skillsModule,
       pluginManager,
+      execModule,
       configDir,
       baseDir,
       logger,
+      envReport,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
     startAutoUpdate(config);
     const repl = new Repl(
@@ -196,6 +189,9 @@ async function main(): Promise<void> {
       noAgentsMd,
       logger,
       true,
+      envReport,
+      undefined,
+      execModule,
     );
     await repl.start();
   }

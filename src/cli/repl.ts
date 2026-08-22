@@ -21,12 +21,15 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
+import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
-import { readActivePlan, formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
-import type { Plan } from "../modules/execution/planner";
+import { SessionLogger } from "../core/session-logger";
+import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
+import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
 
 function formatContextBar(
@@ -66,8 +69,8 @@ export class Repl implements ReplContext {
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
   private exitOnClose = false;
-  private activePlan: Plan | null = null;
-  private lastPlanSig = "";
+  /** Owner of plan state (bootstrap). Null in tests — plan UI degrades. */
+  private execModule?: ExecutionModule;
 
   public rl: LineInput;
   public agent: Agent;
@@ -76,6 +79,8 @@ export class Repl implements ReplContext {
   public skillsModule?: SkillsModule;
   public pluginManager?: PluginManager;
   public logger?: Logger;
+  private slog: SessionLogger;
+  private envReport?: EnvironmentReport;
 
   constructor(
     agent: Agent,
@@ -88,6 +93,9 @@ export class Repl implements ReplContext {
     noAgentsMd?: boolean,
     logger?: Logger,
     exitOnClose?: boolean,
+    envReport?: EnvironmentReport,
+    historyPath?: string,
+    execModule?: ExecutionModule,
   ) {
     this.agent = agent;
     this.config = config;
@@ -96,10 +104,13 @@ export class Repl implements ReplContext {
     this.skillsModule = skillsModule;
     this.pluginManager = pluginManager;
     this.logger = logger;
+    this.envReport = envReport;
+    this.execModule = execModule;
+    this.slog = new SessionLogger(sessionManager, logger);
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
-    this.historyPath = join(homedir(), ".mma", "repl-history");
+    this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
     this.rl = process.stdin.isTTY
@@ -223,6 +234,7 @@ export class Repl implements ReplContext {
       }
 
       if (!trimmed) {
+        this.rl.setPrompt(pc.cyan(t("repl.you")));
         this.rl.prompt();
         return;
       }
@@ -234,6 +246,7 @@ export class Repl implements ReplContext {
       }
 
       if (this.running) {
+        this.rl.setPrompt(pc.cyan(t("repl.you")));
         this.rl.prompt();
       }
     });
@@ -242,6 +255,8 @@ export class Repl implements ReplContext {
       this.running = false;
       this.saveHistory();
       this.agent.shutdown();
+      // Close session log when REPL exits
+      this.logger?.closeSessionLog();
       if (this.exitOnClose) process.exit(0);
     });
 
@@ -250,6 +265,8 @@ export class Repl implements ReplContext {
         this.running = false;
         this.saveHistory();
         this.agent.shutdown();
+        // Close session log when REPL exits
+        this.logger?.closeSessionLog();
         process.exit(0);
       });
     }
@@ -262,7 +279,7 @@ export class Repl implements ReplContext {
 
     process.on("SIGINT", () => {
       if (this.agentRunning) {
-        console.log(pc.yellow("\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)"));
+        console.log(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
         this.agentRunning = false;
         if (forceExitTimer) clearTimeout(forceExitTimer);
@@ -359,7 +376,6 @@ export class Repl implements ReplContext {
         spinner: this.config.ui?.spinner ?? true,
         toolStyle: this.config.ui?.toolStyle ?? "inline",
       });
-      this.refreshActivePlan(renderer);
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
@@ -369,7 +385,7 @@ export class Repl implements ReplContext {
             renderer.toolStart(
               ev.tool,
               ev.args,
-              stepContextForTool(this.activePlan, ev.tool, ev.args),
+              stepContextForTool(this.execModule?.getActivePlan() ?? null, ev.tool, ev.args),
               ev.icon,
             );
           } else {
@@ -383,7 +399,7 @@ export class Repl implements ReplContext {
               ev.model,
             );
             if (ev.tool === "plan" || ev.tool === "todo") {
-              this.refreshActivePlan(renderer);
+              this.renderPlan(renderer);
             }
           }
         },
@@ -415,20 +431,13 @@ export class Repl implements ReplContext {
     }
   }
 
-  /** Re-read the active plan from disk; print a live checklist when it changed. */
-  private refreshActivePlan(renderer: Renderer): void {
-    const plan = readActivePlan(this.baseDir);
-    const sig = plan ? JSON.stringify(plan.steps.map((s) => `${s.id}:${s.status}`)) : "";
-    if (!plan) {
-      this.activePlan = null;
-      this.lastPlanSig = "";
-      return;
-    }
-    this.activePlan = plan;
-    if (sig !== this.lastPlanSig) {
-      this.lastPlanSig = sig;
-      renderer.planBlock(formatPlanChecklist(plan));
-    }
+  /** Print the checklist of the plan currently tracked by ExecutionModule.
+   *  Called only on plan/todo tool events (a change event) — never polled,
+   *  so a disk-resident plan from a previous session cannot leak into chat. */
+  private renderPlan(renderer: Renderer): void {
+    const plan = this.execModule?.getActivePlan();
+    if (!plan) return;
+    renderer.planBlock(formatPlanChecklist(plan));
   }
 
   private commands: Map<string, SlashCommand> = new Map();
@@ -698,7 +707,21 @@ export class Repl implements ReplContext {
   private async probeLspBanner(): Promise<string | null> {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
-      const summary = await probeLspServers(config, this.baseDir);
+      const lspOnlyLogger = this.logger ? new FileOnlyLogger(this.logger) : undefined;
+      const summary = await probeLspServers(config, this.baseDir, { logger: lspOnlyLogger });
+      // Log LSP probe results to session for post-mortem visibility
+      this.slog.logSessionStart({
+        environment: this.envReport as unknown as Record<string, unknown>,
+        lspProbe: {
+          ok: summary.ok.map((r) => ({ language: r.language, durationMs: r.durationMs })),
+          failed: summary.failed.map((r) => ({
+            language: r.language,
+            error: r.error,
+            durationMs: r.durationMs,
+          })),
+          noneApplicable: summary.noneApplicable,
+        },
+      });
       if (summary.noneApplicable) return null;
       const parts: string[] = [];
       for (const r of summary.ok) {
@@ -718,6 +741,8 @@ export class Repl implements ReplContext {
     this.running = false;
     this.saveHistory();
     this.agent.shutdown();
+    // Close session log when REPL stops
+    this.logger?.closeSessionLog();
     this.rl.close();
   }
 }

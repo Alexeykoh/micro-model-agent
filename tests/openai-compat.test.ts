@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { OpenAICompatProvider } from "../src/llm/openai-compat";
+
+const originalFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("OpenAICompatProvider", () => {
   it("should construct with config", () => {
@@ -443,5 +448,242 @@ describe("OpenAICompatProvider", () => {
     expect(delay).toBeGreaterThanOrEqual(50);
     expect(delay).toBeLessThan(52);
     spy.mockRestore();
+  });
+
+  it("should retry a stream that breaks before any content is delivered", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi
+      .fn()
+      .mockImplementationOnce((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              setTimeout(() => controller.error(new Error("connection terminated")), 10);
+            },
+          }),
+        }),
+      )
+      .mockImplementation((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          }),
+        }),
+      );
+    global.fetch = mockFetch as any;
+
+    const chunks: string[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(chunks.join("")).toBe("ok");
+  });
+
+  it("should NOT retry a stream that breaks after content was already delivered", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 3 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'),
+            );
+            setTimeout(() => controller.error(new Error("connection terminated")), 10);
+          },
+        }),
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.message).toContain("connection terminated");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should retry when the stream is idle (no data) before any content", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: {
+        maxRetries: 1,
+        baseDelay: 5,
+        maxDelay: 50,
+        maxStreamRetries: 1,
+        noDataTimeoutMs: 25,
+      },
+    });
+
+    const encoder = new TextEncoder();
+    let firstSignal: AbortSignal | undefined;
+    const mockFetch = vi
+      .fn()
+      .mockImplementationOnce((_url: string, init: RequestInit) => {
+        firstSignal = init.signal ?? undefined;
+        return Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              firstSignal!.addEventListener("abort", () => {
+                controller.error(new DOMException("Aborted", "AbortError"));
+              });
+            },
+            pull() {
+              return new Promise(() => {});
+            },
+          }),
+        });
+      })
+      .mockImplementation((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          }),
+        }),
+      );
+    global.fetch = mockFetch as any;
+
+    const chunks: string[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(chunks.join("")).toBe("ok");
+  });
+
+  it("should retry a stream that closes before [DONE] with zero content", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi
+      .fn()
+      .mockImplementationOnce((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        }),
+      )
+      .mockImplementation((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          }),
+        }),
+      );
+    global.fetch = mockFetch as any;
+
+    const chunks: string[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(chunks.join("")).toBe("ok");
+  });
+
+  it("should NOT retry when the caller aborts mid-stream", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 3 },
+    });
+
+    const encoder = new TextEncoder();
+    let capturedSignal: AbortSignal | undefined;
+    const mockFetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      capturedSignal = init.signal ?? undefined;
+      return Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'),
+            );
+            capturedSignal!.addEventListener("abort", () => {
+              controller.error(new DOMException("Aborted", "AbortError"));
+            });
+          },
+          pull() {
+            return new Promise(() => {});
+          },
+        }),
+      });
+    });
+    global.fetch = mockFetch as any;
+
+    const ac = new AbortController();
+    const consumer = (async () => {
+      const chunks: string[] = [];
+      for await (const chunk of provider.chat([{ role: "user", content: "hi" }], undefined, ac.signal)) {
+        if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+      }
+      return chunks;
+    })();
+
+    await new Promise((r) => setTimeout(r, 20));
+    ac.abort();
+
+    try {
+      await consumer;
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e?.name).toBe("AbortError");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

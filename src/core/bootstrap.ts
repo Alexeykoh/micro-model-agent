@@ -18,7 +18,7 @@ import { SessionStore, SessionManager, SessionModule } from "../modules/session/
 import { UserProfile } from "../modules/user-profile/profile";
 import { SkillsLoader, SkillsModule } from "../modules/skills/index";
 import { BrowserModule } from "../modules/browser/index";
-import { LspModule, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
+import { LspModule, FileOnlyLogger, DEFAULT_LSP_CONFIG } from "../modules/lsp/index";
 import { runStartupHealthCheck } from "../modules/lsp/startup-check";
 import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
@@ -34,6 +34,7 @@ import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
+import { collectEnvironment, logEnvironment } from "./environment";
 
 export function buildSystemInfo(
   config: AppConfig,
@@ -46,6 +47,8 @@ export function buildSystemInfo(
     `You are MMA v2, an AI coding agent for small models (${config.model}). Date: ${now}. Workspace: ${baseDir}. ${profileCompressed}.`,
     `Reply in the user's language. Use tools for file ops (read/write/edit/delete), search (glob/grep), shell (bash), web, subagents, browser, MCP. Explain briefly if not obvious. On tool failure: analyze, fix the call, retry up to 2x with different approaches, then ask the user.`,
     `Design: YAGNI (no unneeded code), KISS (simple over clever), DRY (reuse existing utilities).`,
+    `SCOPE DISCIPLINE: do ONLY what the user explicitly asked — no extra features, files, refactors, "improvements", or fixes beyond the request. Read-only requests ("расскажи", "покажи", "объясни", "check") mean READ-ONLY: inspect and answer, never create/modify/delete anything. If the task is ambiguous (what to create, where, which variant) or the request implies action on something you could not find — STOP and ask the user a short clarifying question in plain text instead of guessing.`,
+    `NOT FOUND ≠ MISSING PROJECT: a "not found" tool result means the PATH was wrong (typo, different location), not that the project does not exist. Before creating or scaffolding ANY project/files: first run list_dir on the working directory to see what is already there; if a user-named path is not found, list its parent directory to locate the real path. NEVER create a new project when the user asked about an existing one — inspect first, create only after confirming the workspace is empty AND the user asked for creation.`,
   ];
 
   if (isWin) {
@@ -88,6 +91,36 @@ export function buildSystemInfo(
     `Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done". Check existing servers first with process_list/process_log: a stale dev server started BEFORE your change still runs the old pipeline and keeps failing even after the files on disk are fixed. Restart or kill it (process_kill) and verify the exact endpoint/port the user reported — a fresh server on a new port does NOT prove the user's error is gone.`,
   );
 
+  // Security rules: when security is enabled the model should know the
+  // restrictions up front — a blocked call costs an iteration, while this
+  // block costs ~100 tokens once. Kept compact and capped so a long user
+  // blacklist cannot blow the system budget.
+  const sec = config.security;
+  if (sec?.enabled) {
+    const secLines: string[] = [`SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them):`];
+    if (sec.bash?.enabled && sec.bash.blacklist.length > 0) {
+      const cmds = sec.bash.blacklist.slice(0, 15).join(", ");
+      secLines.push(`Forbidden bash commands: ${cmds}${sec.bash.blacklist.length > 15 ? ", …" : ""}.`);
+      if (sec.bash.whitelist.length > 0) {
+        secLines.push(`Only whitelisted bash commands are allowed: ${sec.bash.whitelist.slice(0, 15).join(", ")}.`);
+      }
+      if (sec.bash.blockDangerousFlags) {
+        secLines.push(`Pipes/redirects/chaining (| > >> ; &&) in bash are blocked — one plain command per call.`);
+      }
+    }
+    if (sec.paths?.enabled && sec.paths.denied.length > 0) {
+      const paths = sec.paths.denied.slice(0, 10).join(", ");
+      secLines.push(`Denied paths (read/write): ${paths}${sec.paths.denied.length > 10 ? ", …" : ""}.`);
+    }
+    if (sec.network?.enabled && sec.network.deniedDomains.length > 0) {
+      const domains = sec.network.deniedDomains.slice(0, 10).join(", ");
+      secLines.push(`Denied network domains: ${domains}${sec.network.deniedDomains.length > 10 ? ", …" : ""}.`);
+    }
+    if (secLines.length > 1) {
+      lines.push(...secLines);
+    }
+  }
+
   const hasMCP =
     config.mcpServers && Object.values(config.mcpServers).some((s) => s.enabled !== false);
   if (hasMCP) {
@@ -106,12 +139,16 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
+  /** Owner of plan state — UI consumers (REPL) read the active plan from
+   *  here instead of re-reading .mma/plans/active.json from disk. */
+  execModule: ExecutionModule;
   /** Shared ToolContext; `sessionId`/`sessionContext` are live getters over
    *  the session manager, so a session switch is always reflected. */
   toolCtx: ToolContext;
   configDir: string;
   baseDir: string;
   noAgentsMd: boolean;
+  envReport: ReturnType<typeof collectEnvironment>;
 }
 
 export async function bootstrap(
@@ -180,6 +217,19 @@ export async function bootstrap(
   const llmProvider = providerManager.active;
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
+
+  // Cross-device diagnosis: log a full environment report (OS, runtime,
+  // engines, PATH tools, provider/retry, playwright) at every startup.
+  const envReport = collectEnvironment({
+    configDir: dir,
+    baseDir,
+    config,
+    scanTools: process.env.NODE_ENV !== "test",
+  });
+  logEnvironment(envReport, logger);
+  for (const warning of envReport.warnings) {
+    logger.warn(warning);
+  }
 
   const projectMapCacheDir = join(baseDir, ".mma");
   const indexerModule = new IndexerModule({
@@ -350,7 +400,8 @@ export async function bootstrap(
     }
   }
 
-  const lspModule = new LspModule(config.lsp);
+  const lspLogger = new FileOnlyLogger(logger);
+  const lspModule = new LspModule(config.lsp, undefined, lspLogger);
   moduleRegistry.register(lspModule);
   const lspPlugin = lspModule.getPlugin();
   if (lspPlugin) {
@@ -367,7 +418,7 @@ export async function bootstrap(
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
     !exitOnComplete && process.env.NODE_ENV !== "test"
-      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir)
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
       : Promise.resolve(null);
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
@@ -478,6 +529,7 @@ export async function bootstrap(
     baseDir,
     toolTags: activeToolTags,
     promptBlocks,
+    envReport,
     getDynamicPromptBlocks: () => {
       const blocks: PromptBlock[] = [];
       const planBlock = execModule.getSystemPromptBlock();
@@ -505,6 +557,7 @@ export async function bootstrap(
     },
     sessionManager,
     memoryStore,
+    moduleRegistry,
     exitOnComplete,
   };
 
@@ -517,9 +570,11 @@ export async function bootstrap(
     sessionManager,
     skillsModule,
     pluginManager,
+    execModule,
     toolCtx,
     configDir: dir,
     baseDir,
     noAgentsMd: skipAgentsMd,
+    envReport,
   };
 }

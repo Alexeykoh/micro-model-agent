@@ -335,3 +335,31 @@ describe("subagentTool", () => {
     expect(deps.promptBlocks[0].content).toMatch(/verify/i);
   });
 });
+
+describe("subagent scope restore", () => {
+  it("restores undefined parent scope after run (no empty-scope lockdown)", async () => {
+    const { subagentTool } = await import("../../src/tools/subagent");
+    const setScope = vi.fn();
+    const ctx: any = {
+      baseDir: "/tmp/ws",
+      config: {},
+      logger: { info() {}, error() {}, warn() {} },
+      sessionId: "t",
+      scope: undefined,
+      toolExecutor: { setScope, getRegistry: () => ({ getByTags: () => [] }) },
+      llmProvider: {
+        chat: async () => ({
+          content: "done",
+          toolCalls: [],
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        }),
+        countTokens: () => 1,
+      },
+    };
+    await subagentTool.handler(ctx, { task: "x", allowed_files: ["docs"] });
+    const calls = setScope.mock.calls.map((c: any[]) => c[0]);
+    // First call installs the subagent scope, the final restore must be
+    // exactly `undefined`, not an empty scope that denies everything.
+    expect(calls[calls.length - 1]).toBeUndefined();
+  });
+});

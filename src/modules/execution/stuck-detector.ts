@@ -433,18 +433,16 @@ export class StuckDetector {
     const desc = this.currentStepDescription.toLowerCase();
 
     if (desc.includes("install") || desc.includes("npm") || desc.includes("pip")) {
-      hints.push(
-        "Check if a lock file exists (package-lock.json, poetry.lock). If missing, run the install command first.",
-      );
+      hints.push(t("exec.hint_deps"));
     }
     if (desc.includes("test") || desc.includes("spec")) {
-      hints.push("Make sure the source files exist and have real code before running tests.");
+      hints.push(t("exec.hint_test"));
     }
     if (desc.includes("build") || desc.includes("compile")) {
-      hints.push("Check that all dependencies are installed and source files are not empty.");
+      hints.push(t("exec.hint_build"));
     }
     if (desc.includes("deploy") || desc.includes("publish")) {
-      hints.push("Verify credentials and network access before deploying.");
+      hints.push(t("exec.hint_deploy"));
     }
 
     // State-based bullets. The recovery message (getRecoveryMessage) already
@@ -454,19 +452,13 @@ export class StuckDetector {
     // bullet when the recovery message is NOT already covering that state.
     const primary = this.getPrimaryReason();
     if (this.hasRepetitiveToolCalls() && primary !== "repetitive") {
-      hints.push(
-        "You are calling the same tool repeatedly with the same arguments. Try a different approach.",
-      );
+      hints.push(t("exec.hint_repetitive"));
     }
     if (this.hasConsecutiveFailures() && primary !== "consecutive") {
-      hints.push(
-        "Multiple different tools are failing. Check if the environment is set up correctly.",
-      );
+      hints.push(t("exec.hint_consecutive"));
     }
     if (this.hasReadOnlyLoop() && primary !== "read-only") {
-      hints.push(
-        "You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps.",
-      );
+      hints.push(t("exec.hint_read_only"));
     }
     return hints;
   }

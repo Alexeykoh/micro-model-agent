@@ -70,6 +70,11 @@ export class FactualCheck {
     // Check known files from compaction summaries first
     if (this.knownFiles.has(fp)) return true;
 
+    for (const cand of this.dotfileVariants(fp)) {
+      if (this.knownFiles.has(cand)) return true;
+      if (existsSync(resolve(this.baseDir, cand))) return true;
+    }
+
     // "foo.json" has no directory part — treat it as a bare name that may
     // live anywhere under baseDir (e.g. src/data/bikes.json). Resolving it
     // against the workspace root alone produced false "unknown file" warnings.
@@ -77,16 +82,32 @@ export class FactualCheck {
       return this.bareNameExists(fp);
     }
 
-    return existsSync(resolve(this.baseDir, fp));
+    return false;
+  }
+
+  /**
+   * The token regex cannot anchor a leading dot (`\b` never matches between a
+   * non-word char and `.`), so dotfiles (.prettierrc.json, .env, …) are
+   * extracted as "prettierrc.json". Try the dot-prefixed basename too before
+   * declaring the file missing. "src/config.json" also yields
+   * "src/.config.json".
+   */
+  private dotfileVariants(fp: string): string[] {
+    const idx = Math.max(fp.lastIndexOf("/"), fp.lastIndexOf("\\"));
+    const base = idx >= 0 ? fp.slice(idx + 1) : fp;
+    if (base.startsWith(".")) return [fp];
+    return idx >= 0 ? [fp, `${fp.slice(0, idx + 1)}.${base}`] : [fp, `.${fp}`];
   }
 
   private bareNameExists(name: string): boolean {
-    if (existsSync(resolve(this.baseDir, name))) return true;
-    if (this.indexHas(name)) return true;
-    // Check known files — a bare name may match a full path from compaction
-    for (const known of this.knownFiles) {
-      if (known.endsWith(`/${name}`) || known.endsWith(`\\${name}`) || known === name) {
-        return true;
+    for (const cand of this.dotfileVariants(name)) {
+      if (existsSync(resolve(this.baseDir, cand))) return true;
+      if (this.indexHas(cand)) return true;
+      // Check known files — a bare name may match a full path from compaction
+      for (const known of this.knownFiles) {
+        if (known.endsWith(`/${cand}`) || known.endsWith(`\\${cand}`) || known === cand) {
+          return true;
+        }
       }
     }
 

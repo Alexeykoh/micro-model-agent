@@ -58,6 +58,8 @@ export const DEFAULTS: AppConfig = {
     maxRetries: 3,
     baseDelay: 1000,
     maxDelay: 30000,
+    maxStreamRetries: 2,
+    noDataTimeoutMs: 60000,
   },
   maxToolIterations: 1000,
   stuckThreshold: 6,

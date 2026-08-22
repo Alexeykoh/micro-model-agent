@@ -63,7 +63,6 @@ export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
   isolateMemory: boolean;
-  baselineCheck?: boolean;
 }
 
 export interface ModelLoadConfig {
@@ -77,6 +76,10 @@ export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
   maxDelay: number;
+  /** Extra retries when the response stream breaks BEFORE any content is delivered. */
+  maxStreamRetries?: number;
+  /** Max silence (ms) between stream chunks before the connection is treated as dead. */
+  noDataTimeoutMs?: number;
 }
 
 export interface MoeConfig {

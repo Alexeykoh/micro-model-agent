@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ToolRegistry } from "../src/tools/registry";
+import { ModuleRegistry } from "../src/modules/registry";
 import type { ToolDefinition } from "../src/tools/types";
+
+describe("ModuleRegistry", () => {
+  it("listModules() returns registered names", () => {
+    const r = new ModuleRegistry();
+    r.register({ name: "lsp", getSystemPromptBlock: () => null });
+    expect(r.listModules()).toEqual(["lsp"]);
+  });
+
+  it("get() returns the module by name", () => {
+    const r = new ModuleRegistry();
+    r.register({ name: "lsp", getSystemPromptBlock: () => null });
+    expect(r.get("lsp")).toBeDefined();
+    expect(r.get("nope")).toBeUndefined();
+  });
+});
 
 describe("ToolRegistry", () => {
   let registry: ToolRegistry;

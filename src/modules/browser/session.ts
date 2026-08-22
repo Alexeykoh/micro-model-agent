@@ -228,6 +228,11 @@ export class BrowserSession {
   private async open(url: string): Promise<ActionResult> {
     if (!url) return { success: false, output: t("browser.url_required") };
 
+    // Security: block dangerous schemes (file:, chrome:, about:, data:).
+    if (/^(file|chrome|about|data|javascript|view-source):/i.test(url)) {
+      return { success: false, output: `[SECURITY BLOCKED] scheme not allowed: ${url}` };
+    }
+
     if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
       const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
       url = isLocalhost ? "http://" + url : "https://" + url;

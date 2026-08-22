@@ -68,6 +68,49 @@ describe("Network Validator", () => {
       const result = isUrlAllowed("http://localhost:8080/api", config);
       expect(result.allowed).toBe(false);
     });
+
+    it("blocks private IPs and link-local (SSRF)", () => {
+      const config = {
+        enabled: true,
+        deniedDomains: [],
+        allowedDomains: [],
+        requestTimeout: 15000,
+        maxResponseSize: 15000,
+      };
+      for (const u of [
+        "http://127.0.0.1/",
+        "http://localhost/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.1/",
+        "http://192.168.1.1/",
+        "http://[::1]/",
+      ]) {
+        expect(isUrlAllowed(u, config).allowed).toBe(false);
+      }
+    });
+
+    it("blocks non-http(s) schemes", () => {
+      const config = {
+        enabled: true,
+        deniedDomains: [],
+        allowedDomains: [],
+        requestTimeout: 15000,
+        maxResponseSize: 15000,
+      };
+      expect(isUrlAllowed("file:///etc/passwd", config).allowed).toBe(false);
+      expect(isUrlAllowed("chrome://settings", config).allowed).toBe(false);
+    });
+
+    it("allows public https", () => {
+      const config = {
+        enabled: true,
+        deniedDomains: [],
+        allowedDomains: [],
+        requestTimeout: 15000,
+        maxResponseSize: 15000,
+      };
+      expect(isUrlAllowed("https://example.com/x", config).allowed).toBe(true);
+    });
   });
 
   describe("sanitizeUrl", () => {

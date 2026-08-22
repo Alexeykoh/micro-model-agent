@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo } from "../../src/core/bootstrap";
@@ -55,6 +55,29 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
+  it("does not restore a disk-resident plan into a fresh session", async () => {
+    // Regression: the REPL used to poll .mma/plans/active.json and print a
+    // leftover plan from a previous session unprompted. Now only
+    // ExecutionModule owns plan state and a fresh session restores nothing.
+    const dir = tempDir();
+    try {
+      mkdirSync(join(dir, ".mma", "plans"), { recursive: true });
+      writeFileSync(
+        join(dir, ".mma", "plans", "active.json"),
+        JSON.stringify({
+          id: "stale-plan",
+          title: "Old plan",
+          createdAt: new Date().toISOString(),
+          steps: [{ id: 1, description: "create src/index.ts", status: "pending" }],
+        }),
+      );
+      const { execModule } = await bootstrap(dir, dir);
+      expect(execModule.getActivePlan()).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("advertises Bun as the runtime for TypeScript scripts", () => {
     const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32 shell=cmd");
     expect(info).toContain("Bun is available");
@@ -73,5 +96,27 @@ describe("bootstrap", () => {
     expect(info).toContain("reproduce");
     expect(info).toContain("runtime behavior");
     expect(info).toContain("plan update");
+  });
+
+  it("lists security restrictions only when security is enabled", () => {
+    const sec = {
+      enabled: true,
+      bash: { enabled: true, blacklist: ["rm", "dd"], whitelist: [], blockDangerousFlags: true },
+      paths: { enabled: true, denied: [".git/", ".env"] },
+      network: { enabled: true, deniedDomains: ["evil.example.com"], allowedDomains: [] },
+    };
+    const withSec = buildSystemInfo({ model: "m", security: sec } as any, "/tmp", "win32");
+    expect(withSec).toContain("SECURITY RESTRICTIONS");
+    expect(withSec).toContain("rm, dd");
+    expect(withSec).toContain(".git/, .env");
+    expect(withSec).toContain("evil.example.com");
+    expect(withSec).toContain("[SECURITY BLOCKED]");
+
+    const noList = { ...sec, bash: { ...sec.bash, blacklist: [] }, paths: { ...sec.paths, denied: [] }, network: { ...sec.network, deniedDomains: [] } };
+    const noRules = buildSystemInfo({ model: "m", security: noList } as any, "/tmp", "win32");
+    expect(noRules).not.toContain("SECURITY RESTRICTIONS");
+
+    const disabled = buildSystemInfo({ model: "m", security: { ...sec, enabled: false } } as any, "/tmp", "win32");
+    expect(disabled).not.toContain("SECURITY RESTRICTIONS");
   });
 });

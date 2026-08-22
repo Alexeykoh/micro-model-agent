@@ -5,7 +5,7 @@
  * then verifies results via file-system checks, exit codes, and output content.
  *
  * Prerequisites: an OpenAI-compatible API at $MMA_PROVIDER_BASEURL.
- * Skip: $env:MMA_SKIP_INTEGRATION=1
+ * Skip: $env:MMA_RUN_INTEGRATION=1 (opt-in)
  *
  * Run: bun run test:integration
  *
@@ -25,7 +25,7 @@ const BASE_URL = process.env.MMA_PROVIDER_BASEURL || "http://localhost:1234/v1";
 const MODEL = process.env.MMA_MODEL || "qwen/qwen3.5-9b";
 const API_KEY = process.env.MMA_PROVIDER_APIKEY || "not-needed";
 const CONTEXT_WINDOW = process.env.MMA_CONTEXT_WINDOW || "32768";
-const shouldSkip = process.env.MMA_SKIP_INTEGRATION === "1";
+const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 
 const MMA_ROOT = join(__dirname, "..", "..");
 const SANDBOX_ROOT = join(MMA_ROOT, "_testing", "all-mechanics");

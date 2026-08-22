@@ -220,7 +220,7 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
 
   // Security settings
   console.log(t("setup.security_header"));
-  console.log(pc.dim(t("setup.security_status_off")));
+  console.log(pc.dim(t("setup.security_status_on")));
   const configureSecurity = await ask(rl, t("setup.security_configure"), "n");
   let securityBashBlock = false;
   let securityFlagsBlock = false;

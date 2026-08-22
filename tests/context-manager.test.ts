@@ -3,6 +3,19 @@ import { ContextManager, extractTriedAndFailed } from "../src/modules/context/ma
 import type { Message } from "../src/modules/context/manager";
 
 describe("ContextManager", () => {
+  it("caches per-message token counts across getEstimatedTokens calls", () => {
+    let countCalls = 0;
+    const counter = { count: (s: string) => { countCalls++; return Math.ceil(s.length / 2); } };
+    const cm = new ContextManager(32768, undefined, counter as any);
+    for (let i = 0; i < 50; i++) cm.addMessage({ role: "user", content: `message number ${i} with some content` });
+    cm.getEstimatedTokens();
+    const callsAfterFirst = countCalls;
+    cm.getEstimatedTokens();
+    cm.getEstimatedTokens();
+    cm.getEstimatedTokens();
+    expect(countCalls).toBe(callsAfterFirst);
+  });
+
   it("should calculate budget from context window", () => {
     const cm = new ContextManager(32768);
     const budget = cm.getBudget();

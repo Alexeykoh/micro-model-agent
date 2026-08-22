@@ -21,3 +21,6 @@ export function readMmaVersion(): string {
   }
   return "0.0.0";
 }
+
+/** Legacy alias — use readMmaVersion(). */
+export const readVersion = readMmaVersion;

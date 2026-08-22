@@ -1,24 +1,21 @@
 import { describe, expect, it, afterEach } from "bun:test";
 import { Repl } from "../../src/cli/repl";
-import { existsSync, readFileSync, unlinkSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { tmpdir } from "os";
 
 describe("REPL persistent history", () => {
-  const historyPath = join(homedir(), ".mma", "repl-history");
+  let dir: string;
+  let historyPath: string;
 
   afterEach(() => {
-    if (existsSync(historyPath)) {
-      unlinkSync(historyPath);
+    if (dir && existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("should save history to ~/.mma/repl-history on stop", () => {
-    const mockAgent = {
-      run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
-      shutdown: () => {},
-    } as any;
-    const mockConfig = {
+  const makeMockConfig = () =>
+    ({
       model: "test",
       provider: { type: "test", baseUrl: "test", apiKey: "test" },
       contextWindow: 32768,
@@ -30,9 +27,18 @@ describe("REPL persistent history", () => {
       autoPlan: true,
       showReasoning: false,
       session: { autoSave: false, maxSessions: 50, isolateMemory: false },
+    }) as any;
+
+  it("should save history to the injected history path on stop", () => {
+    dir = mkdtempSync(join(tmpdir(), "mma-repl-history-"));
+    historyPath = join(dir, "repl-history");
+
+    const mockAgent = {
+      run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
+      shutdown: () => {},
     } as any;
 
-    const repl = new Repl(mockAgent, mockConfig);
+    const repl = new Repl(mockAgent, makeMockConfig(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, historyPath);
 
     const rl = (repl as any).rl;
     rl.write("test command 1\n");
@@ -45,33 +51,19 @@ describe("REPL persistent history", () => {
     expect(history).toContain("test command 2");
   });
 
-  it("should load history from ~/.mma/repl-history on start", () => {
-    const mmaDir = join(homedir(), ".mma");
-    if (!existsSync(mmaDir)) mkdirSync(mmaDir, { recursive: true });
+  it("should load history from the injected history path on start", () => {
+    dir = mkdtempSync(join(tmpdir(), "mma-repl-history-"));
+    historyPath = join(dir, "repl-history");
 
     const testHistory = "old command 1\nold command 2\nold command 3\n";
-    const { writeFileSync } = require("fs");
     writeFileSync(historyPath, testHistory);
 
     const mockAgent = {
       run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
       shutdown: () => {},
     } as any;
-    const mockConfig = {
-      model: "test",
-      provider: { type: "test", baseUrl: "test", apiKey: "test" },
-      contextWindow: 32768,
-      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
-      logLevel: "info",
-      locale: "en",
-      maxToolIterations: 25,
-      stuckThreshold: 8,
-      autoPlan: true,
-      showReasoning: false,
-      session: { autoSave: false, maxSessions: 50, isolateMemory: false },
-    } as any;
 
-    const repl = new Repl(mockAgent, mockConfig);
+    const repl = new Repl(mockAgent, makeMockConfig(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, historyPath);
     const history = (repl as any).history;
 
     expect(history).toContain("old command 1");

@@ -20,6 +20,8 @@ export interface StartupHealthDeps {
   client?: LspClient;
   /** Injectable tsc runner (tests). Returns parsed "error TS" lines. */
   runTsc?: (projectRoot: string, timeoutMs: number) => Promise<string[]>;
+  /** Logger for error reporting. */
+  logger?: { debug(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void; warn(msg: string, meta?: Record<string, unknown>): void; error(msg: string, meta?: Record<string, unknown>): void };
 }
 
 /**
@@ -78,6 +80,7 @@ async function runCheck(
   }
 
   const client = deps.client ?? new LspClient();
+  if (!deps.client) client.setLogger(deps.logger ?? null);
   const files = await collectCheckFiles(baseDir, config);
   const lines: string[] = [];
   let checked = 0;
@@ -93,8 +96,9 @@ async function runCheck(
           lines.push(formatStartupError(file, baseDir, d));
         }
       }
-    } catch {
-      // Per-file LSP failure → skip silently (fail-open).
+    } catch (e) {
+      // Per-file LSP failure → log and skip (fail-open).
+      deps.logger?.debug(`Startup LSP check failed for ${file}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   if (checked === 0 || lines.length === 0) return null;

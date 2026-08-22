@@ -657,7 +657,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           });
           output += ` (${doneCount}/${subs.length})`;
           if (doneCount === subs.length) {
-            output += `\nAll sub-tasks done — call plan update step=${currentStep.id} status=done to complete this step.`;
+            output += `\n${t("plan.subtasks_done", { stepId: String(currentStep.id) })}`;
           }
           return { success: true, output, display };
         }
@@ -665,10 +665,10 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           const subs = currentStep.subtasks ?? [];
           const lines = subs.length
             ? subs.map((s) => `${s.done ? "[x]" : "[ ]"} ${s.text}`)
-            : ["(no sub-tasks)"];
+            : [t("plan.no_subtasks")];
           return {
             success: true,
-            output: `Step ${currentStep.id}: ${currentStep.description}\n${lines.join("\n")}`,
+            output: `${t("plan.step_label", { stepId: String(currentStep.id), description: currentStep.description })}\n${lines.join("\n")}`,
           };
         }
         return {

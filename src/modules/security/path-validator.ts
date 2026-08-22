@@ -1,4 +1,5 @@
 import { resolve, normalize } from "path";
+import { isInsideDir, matchesScopeEntry } from "../../tools/path-utils";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -23,8 +24,9 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir
-  if (!targetResolved.startsWith(baseResolved)) {
+  // First, check that path is within baseDir (separator- and case-safe: a
+  // sibling directory sharing the prefix must not pass).
+  if (!isInsideDir(targetResolved, baseResolved)) {
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
@@ -36,10 +38,10 @@ export function isPathInScope(
     // Still enforce subagent scope if present
     if (scope) {
       const isReadScope = scope.read_only_files.some((f: string) =>
-        targetResolved.startsWith(resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
       );
       const isWriteScope = scope.allowed_files.some((f: string) =>
-        targetResolved.startsWith(resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
       );
       if (isWriteScope) return { allowed: true };
       if (isReadScope) return { allowed: true, reason: "Read-only file" };
@@ -86,10 +88,10 @@ export function isPathInScope(
   }
 
   const isRead = scope.read_only_files.some((f: string) =>
-    targetResolved.startsWith(resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
   );
   const isWrite = scope.allowed_files.some((f: string) =>
-    targetResolved.startsWith(resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
   );
 
   if (isWrite) return { allowed: true };
@@ -113,8 +115,9 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir
-  if (!targetResolved.startsWith(baseResolved)) {
+  // First, check that path is within baseDir (separator- and case-safe: a
+  // sibling directory sharing the prefix must not pass).
+  if (!isInsideDir(targetResolved, baseResolved)) {
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
@@ -126,7 +129,7 @@ export function isPathWritable(
     // Still enforce subagent scope if present
     if (scope) {
       const isWriteScope = scope.allowed_files.some((f: string) =>
-        targetResolved.startsWith(resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
       );
       if (isWriteScope) return { allowed: true };
       return {
@@ -172,7 +175,7 @@ export function isPathWritable(
   }
 
   const isWrite = scope.allowed_files.some((f: string) =>
-    targetResolved.startsWith(resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
   );
 
   if (isWrite) return { allowed: true };
@@ -196,20 +199,7 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     const dirPattern = pattern.slice(0, -1);
     const resolvedDirPattern = resolve(baseDir, dirPattern);
 
-    // Exact match
-    if (resolvedTargetPath === resolvedDirPattern) {
-      return true;
-    }
-
-    // Check if target is inside the directory
-    if (
-      resolvedTargetPath.startsWith(resolvedDirPattern + "/") ||
-      resolvedTargetPath.startsWith(resolvedDirPattern + "\\")
-    ) {
-      return true;
-    }
-
-    return false;
+    return isInsideDir(resolvedTargetPath, resolvedDirPattern);
   }
 
   // Handle **/* pattern (recursive)
@@ -219,10 +209,7 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     const suffix = parts[1];
 
     const resolvedPrefix = resolve(baseDir, prefix);
-    if (
-      !resolvedTargetPath.startsWith(resolvedPrefix + "/") &&
-      !resolvedTargetPath.startsWith(resolvedPrefix + "\\")
-    ) {
+    if (!isInsideDir(resolvedTargetPath, resolvedPrefix)) {
       return false;
     }
 
@@ -242,10 +229,7 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     const suffix = parts[1];
 
     const resolvedPrefix = resolve(baseDir, prefix);
-    if (
-      !resolvedTargetPath.startsWith(resolvedPrefix + "/") &&
-      !resolvedTargetPath.startsWith(resolvedPrefix + "\\")
-    ) {
+    if (!isInsideDir(resolvedTargetPath, resolvedPrefix)) {
       return false;
     }
 
@@ -268,6 +252,10 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     return regex.test(relativePath);
   }
 
-  // Exact match
-  return resolvedTargetPath === resolve(baseDir, pattern);
+  // Exact match (case-insensitive on win32, where the FS is case-insensitive)
+  const exactTarget = resolve(baseDir, pattern);
+  if (process.platform === "win32") {
+    return resolvedTargetPath.toLowerCase() === exactTarget.toLowerCase();
+  }
+  return resolvedTargetPath === exactTarget;
 }

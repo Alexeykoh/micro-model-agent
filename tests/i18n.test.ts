@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { t, setLocale, loadLocale } from "../src/i18n/index";
 
 describe("i18n", () => {
   beforeEach(() => {
+    setLocale("en");
+  });
+
+  afterEach(() => {
     setLocale("en");
   });
 
@@ -25,6 +29,12 @@ describe("i18n", () => {
 
   it("should handle error messages", () => {
     expect(t("error.timeout")).toBe("Request timed out");
+  });
+
+  it("defines exec.task_reminder in en and ru", () => {
+    expect(t("exec.task_reminder", { task: "x" })).not.toBe("exec.task_reminder");
+    setLocale("ru");
+    expect(t("exec.task_reminder", { task: "x" })).not.toBe("exec.task_reminder");
   });
 
   it("should fallback to en when locale missing key", () => {

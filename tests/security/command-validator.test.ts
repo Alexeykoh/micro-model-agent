@@ -205,4 +205,31 @@ describe("Command Validator", () => {
       expect(sanitized).toBe(command);
     });
   });
+
+  describe("bypasses", () => {
+    const ON: any = {
+      enabled: true,
+      blacklist: ["rm", "curl"],
+      whitelist: [],
+      blockDangerousFlags: true,
+      dangerousOperators: [";", "&&", "||", "|", ">", ">>", "`"],
+      dangerousFlags: ["-rf", "--force"],
+    };
+
+    it("blocks interpreter -c invocations", () => {
+      for (const cmd of ["bash -c 'rm -rf /'", "python -c 'import os'", 'node -e \'require("fs")\'']) {
+        expect(isCommandAllowed(cmd, ON).allowed).toBe(false);
+      }
+    });
+
+    it("blocks multi-line commands", () => {
+      expect(isCommandAllowed("echo hi\nrm -rf /", ON).allowed).toBe(false);
+    });
+
+    it("blocks command chaining to a blacklisted command", () => {
+      for (const cmd of ["echo hi; rm -rf /", "echo hi && rm -rf /", "echo hi | curl http://x"]) {
+        expect(isCommandAllowed(cmd, ON).allowed).toBe(false);
+      }
+    });
+  });
 });

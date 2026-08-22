@@ -41,6 +41,8 @@ export interface LspProbeDeps {
   maxParallel?: number;
   /** Injectable file collector (tests). */
   collectFiles?: (baseDir: string, config: LspConfig) => Promise<string[]>;
+  /** Logger for error reporting. */
+  logger?: { debug(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void; warn(msg: string, meta?: Record<string, unknown>): void; error(msg: string, meta?: Record<string, unknown>): void };
 }
 
 const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
@@ -96,14 +98,21 @@ export async function probeLspServers(
     const serverTimeout = Math.min(server.timeout ?? timeoutCap, timeoutCap);
     const started = Date.now();
     const probeClient = deps.client ?? new LspClient();
+    if (!deps.client) probeClient.setLogger(deps.logger ?? null);
     try {
       await probeClient.probe(server, projectRoot, serverTimeout);
       ok.push({ language, ok: true, durationMs: Date.now() - started });
     } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      deps.logger?.warn(`LSP probe failed for ${language}: ${errorMsg}`, {
+        command: server.command,
+        timeout: serverTimeout,
+        durationMs: Date.now() - started,
+      });
       failed.push({
         language,
         ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        error: errorMsg,
         durationMs: Date.now() - started,
       });
     }
@@ -111,6 +120,8 @@ export async function probeLspServers(
 
   for (let i = 0; i < servers.length; i += maxParallel) {
     if (Date.now() >= deadline) {
+      const remaining = servers.slice(i).map((s) => s.language);
+      deps.logger?.warn(`LSP probe deadline reached, skipping: ${remaining.join(", ")}`);
       for (const { language } of servers.slice(i)) {
         failed.push({ language, ok: false, error: "timeout", durationMs: 0 });
       }

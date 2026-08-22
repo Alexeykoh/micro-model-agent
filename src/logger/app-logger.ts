@@ -80,7 +80,7 @@ export class Logger {
     promptPreview: string,
     caller?: string,
   ): void {
-    this.fileLog.logLLMRequest(model, messagesCount, promptPreview, caller);
+    this.fileLog.logLLMRequest(model, messagesCount, sanitizeLogMessage(promptPreview), caller);
   }
 
   logLLMResponse(
@@ -94,15 +94,15 @@ export class Logger {
   }
 
   logToolCall(tool: string, preview: string, result?: string): void {
-    this.fileLog.logToolCall(tool, preview, result);
+    this.fileLog.logToolCall(tool, sanitizeLogMessage(preview), result !== undefined ? sanitizeLogMessage(result) : undefined);
   }
 
   logToolOutput(tool: string, output: string, exitCode: number): void {
-    this.fileLog.logToolOutput(tool, output, exitCode);
+    this.fileLog.logToolOutput(tool, sanitizeLogMessage(output), exitCode);
   }
 
   logREPL(tag: "user" | "assistant" | "system", content: string): void {
-    this.fileLog.logREPL(tag, content);
+    this.fileLog.logREPL(tag, sanitizeLogMessage(content));
   }
 
   child(prefix: string): Logger {
@@ -184,5 +184,57 @@ export class Logger {
       }
     }
     return sanitized;
+  }
+
+  /**
+   * Write a structured record to app.jsonl only (no console / .log output).
+   * Used for machine-readable reports (environment, etc.) that would be too
+   * noisy on the terminal but are valuable for cross-device diagnosis.
+   */
+  logStructured(type: string, data: Record<string, unknown>): void {
+    const logTarget = this.sessionDir ?? this.logDir;
+    if (!logTarget) return;
+    try {
+      appendFileSync(
+        join(logTarget, "app.jsonl"),
+        JSON.stringify({
+          level: "info",
+          ts: new Date().toISOString(),
+          type,
+          meta: this.sanitizeMeta(data),
+        }) + "\n",
+        "utf-8",
+      );
+    } catch {
+      /* file logging is best-effort */
+    }
+  }
+
+  /**
+   * Write a log entry to app.jsonl only — no console output, no .log file.
+   * Use this for noisy subsystems (LSP, probes) whose warnings should be
+   * diagnosable from session files but not pollute the user's terminal.
+   */
+  logSilent(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
+    const logTarget = this.sessionDir ?? this.logDir;
+    if (!logTarget) return;
+    const ts = new Date().toISOString();
+    const sanitizedMsg = sanitizeLogMessage(msg);
+    const sanitizedMeta = meta ? this.sanitizeMeta(meta) : undefined;
+    try {
+      appendFileSync(
+        join(logTarget, "app.jsonl"),
+        JSON.stringify({
+          level,
+          ts,
+          prefix: this.prefix,
+          msg: sanitizedMsg,
+          meta: sanitizedMeta ?? null,
+        }) + "\n",
+        "utf-8",
+      );
+    } catch {
+      /* file logging is best-effort */
+    }
   }
 }

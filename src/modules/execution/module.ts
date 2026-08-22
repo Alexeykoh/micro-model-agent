@@ -191,6 +191,13 @@ export class ExecutionModule implements AgentModule {
     return this.tracker;
   }
 
+  /** The currently tracked plan (single source of truth for UI consumers).
+   *  Null in a fresh session — a disk-resident plan is restored only when
+   *  resuming a session with history, so the REPL must never see stale plans. */
+  getActivePlan(): Plan | null {
+    return this.tracker?.getPlan() ?? null;
+  }
+
   getStore(): PlanStore {
     return this.store;
   }
