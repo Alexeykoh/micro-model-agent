@@ -332,6 +332,9 @@ export function emptyCliRunHint(
  */
 const NPM_EXEC_RE = /could not determine executable to run/i;
 
+/** process-management tools hidden behind enable_tools (tag "shell"). */
+const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill"];
+
 export function npmExecHint(output: string): string {
   if (NPM_EXEC_RE.test(output)) {
     return `${output}\n\nHint: ${t("exec.npm_exec_hint")}`;
@@ -386,6 +389,22 @@ export const bashTool: ToolDefinition = {
     }
 
     const command = adaptCommandForWindows(originalCommand);
+
+    // Hidden-tool discovery (ses_mt4fn58c): with tool-set narrowing the
+    // process_* tools are invisible to the model, so running them through
+    // cmd.exe only yields "is not recognized" — three wasted attempts in
+    // that session. Point the model at enable_tools. (k=v forms are handled
+    // by the redirect above and reach the real tool.)
+    const baseCmd = originalCommand.trim().split(/\s+/)[0];
+    if (
+      HIDDEN_PROCESS_TOOLS.includes(baseCmd) &&
+      ctx.toolExecutor?.hasTool?.(baseCmd)
+    ) {
+      return {
+        success: false,
+        output: t("exec.hidden_tool_hint", { tool: baseCmd }),
+      };
+    }
 
     // echo/printf redirection to a file is unreliable in cmd.exe (single
     // quotes don't group, multi-line commands split, embedded double quotes

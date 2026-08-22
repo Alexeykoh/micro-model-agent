@@ -537,6 +537,7 @@
   "exec.error_search_failed": "Поиск в интернете для \"{query}\" ничего не дал.",
   "exec.error_search_no_query": "Текст ошибки незначимый — поиск в интернете пропущен.",
   "exec.npm_exec_hint": "\"could not determine executable to run\" — у пакета/скрипта нет \"bin\". Используй \"npm run <script>\" (скрипт должен быть в package.json) или \"bunx <pkg>\" для пакета с объявленным bin.",
+  "exec.hidden_tool_hint": "\"{tool}\" — не команда оболочки, это инструмент MMA, который сейчас скрыт. Вызови тул enable_tools с tags [\"shell\"], чтобы включить его; он станет доступен на следующей итерации.",
   "exec.task_reminder": "Задача: {task}. Продолжай работу — не повторяй неудачные действия.",
   "hall.max_retries_exhausted": "Модель вернула пустой или недостаточный ответ после нескольких попыток",
   "hall.short_response": "Слишком короткий или пустой ответ",
