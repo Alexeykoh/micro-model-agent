@@ -483,7 +483,9 @@ export class OpenAICompatProvider implements LLMProvider {
       });
 
       if (!response.ok) {
-        return [];
+        // Surface the failure: health probes must distinguish a dead
+        // provider from one that serves an empty model list.
+        throw new Error(`HTTP ${response.status} from ${url}`);
       }
 
       const data = (await response.json()) as any;
@@ -491,8 +493,8 @@ export class OpenAICompatProvider implements LLMProvider {
         .map((m: any) => m.id || m.name || m.model || "")
         .filter(Boolean);
       return models;
-    } catch {
-      return [];
+    } catch (err) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
