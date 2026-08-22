@@ -55,7 +55,10 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "python",
       "python3",
       "node",
-      "bun",
+      // "bun" intentionally NOT blacklisted: the system prompt tells the model
+      // to run TypeScript with `bun <file.ts>` — banning it here contradicts
+      // that and burned a whole session on blocked `bun run build` calls.
+      // Arbitrary-code execution via flags is still caught by INTERPRETER_FLAGS.
       "perl",
       "ruby",
       "del",
@@ -70,6 +73,9 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     // Log all executed commands to audit log
     logCommands: true,
     // Dangerous flags that are always blocked
+    // Note: -y/--yes are intentionally absent — they are routine, harmless
+    // confirmation flags (npm init -y, apt-get -y) and blocking them breaks
+    // project scaffolding.
     dangerousFlags: [
       "--force",
       "-rf",
@@ -81,8 +87,6 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "--delete",
       "--remove",
       "--dangerous",
-      "--yes",
-      "-y",
       "--no-confirm",
     ],
     // Dangerous operators that are always blocked

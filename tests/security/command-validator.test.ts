@@ -2,6 +2,7 @@ import {
   isCommandAllowed,
   sanitizeCommandForLog,
 } from "../../src/modules/security/command-validator";
+import { DEFAULT_SECURITY_CONFIG } from "../../src/config/security";
 import { describe, it, expect } from "vitest";
 
 describe("Command Validator", () => {
@@ -166,6 +167,22 @@ describe("Command Validator", () => {
       const result = isCommandAllowed("", config);
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain("Empty command");
+    });
+
+    it("default config allows npm init -y and bun run build (ses_mt4fn58c)", () => {
+      // -y/--yes are routine, non-destructive npm/apt flags; blocking them
+      // broke project scaffolding for a whole session. Same for blacklisting
+      // `bun` while the system prompt tells the model to use bun.
+      const bash = DEFAULT_SECURITY_CONFIG.bash;
+      expect(bash.dangerousFlags).not.toContain("-y");
+      expect(bash.dangerousFlags).not.toContain("--yes");
+      expect(bash.blacklist).not.toContain("bun");
+
+      const withFlagsOn = { ...bash, enabled: true };
+      expect(isCommandAllowed("npm init -y", withFlagsOn).allowed).toBe(true);
+      expect(isCommandAllowed("bun run build", withFlagsOn).allowed).toBe(true);
+      // interpreter escape hatch stays closed
+      expect(isCommandAllowed("bun -e 'console.log(1)'", withFlagsOn).allowed).toBe(false);
     });
   });
 

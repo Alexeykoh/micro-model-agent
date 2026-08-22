@@ -339,7 +339,10 @@ describe("stale security config normalization", () => {
     },
   };
 
-  it("upgrades legacy disabled security to current defaults", () => {
+  it("keeps a legacy disabled security section untouched (explicit opt-out)", () => {
+    // ses_mt4fn58c post-mortem: silently force-upgrading a stored
+    // enabled:false section overrode an explicit user choice and broke
+    // legit workflows (npm init -y, bun run build) mid-session.
     const tmpDir = makeTempDir();
     writeFileSync(
       join(tmpDir, "config.json"),
@@ -349,12 +352,20 @@ describe("stale security config normalization", () => {
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
+    expect(cfg.security.enabled).toBe(false);
+    expect(cfg.security.bash.enabled).toBe(false);
+    expect(cfg.security.bash.blockDangerousFlags).toBe(false);
+  });
+
+  it("applies current defaults (security on) when no security section exists", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(join(tmpDir, "config.json"), JSON.stringify({ version: "2.0.0" }));
+    const cfg = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
     expect(cfg.security.enabled).toBe(true);
-    expect(cfg.security.bash.enabled).toBe(true);
     expect(cfg.security.bash.blockDangerousFlags).toBe(true);
-    expect(cfg.security.bash.dangerousOperators).toContain(";");
-    expect(cfg.security.bash.blacklist).toContain("bash");
-    expect(cfg.security.network.enabled).toBe(true);
   });
 
   it("keeps explicitly customized security config untouched", () => {
