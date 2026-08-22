@@ -156,6 +156,8 @@
   "proc.output_preview": "First output:\n{lines}",
   "proc.none": "No background processes running.",
   "proc.not_found": "Process not found: {id}",
+  "proc.missing_id": "Provide the process id: process_kill id=proc_xxx (the id is returned by bash when a command goes to the background, or by process_list).",
+  "proc.missing_id_list": "No background processes are currently running.",
   "proc.killed": "Process {id} (PID {pid}) killed.",
   "proc.kill_failed": "Failed to kill process {id}",
   "proc.list_header": "Background processes",

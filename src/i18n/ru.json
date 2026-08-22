@@ -154,6 +154,8 @@
   "proc.output_preview": "Первые строки вывода:\n{lines}",
   "proc.none": "Фоновых процессов нет.",
   "proc.not_found": "Процесс не найден: {id}",
+  "proc.missing_id": "Укажите id процесса: process_kill id=proc_xxx (id возвращается bash при уходе команды в фон или выводится через process_list).",
+  "proc.missing_id_list": "Сейчас фоновых процессов нет.",
   "proc.killed": "Процесс {id} (PID {pid}) остановлен.",
   "proc.kill_failed": "Не удалось остановить процесс {id}",
   "proc.list_header": "Фоновые процессы",
