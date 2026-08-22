@@ -10,6 +10,7 @@ import {
   SessionNameProvider,
   SubcommandProvider,
   SkillNameProvider,
+  ProviderArgProvider,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
 import { divider } from "../ui/box";
@@ -176,6 +177,13 @@ export class Repl implements ReplContext {
         new SubcommandProvider("skill", ["list", "loaded", "load", "unload", "search"]),
       );
       this.completer.registerProvider(new SkillNameProvider(this.skillsModule));
+    }
+    // Subcommand + argument completion for provider/model management.
+    this.completer.registerProvider(new SubcommandProvider("provider", ["list", "use"]));
+    this.completer.registerProvider(new SubcommandProvider("model", ["list", "use"]));
+    const entryLabels = this.config.provider?.entries?.map((e) => e.label || e.type) ?? [];
+    if (entryLabels.length > 0) {
+      this.completer.registerProvider(new ProviderArgProvider(entryLabels));
     }
   }
 
