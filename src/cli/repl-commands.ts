@@ -41,6 +41,7 @@ export interface ReplContext {
   withExclusiveInput(fn: () => Promise<void>): Promise<void>;
   showHelp(): void;
   setupCompleter(): void;
+  refreshModelCache(): void;
   stop(): void;
 }
 
@@ -320,6 +321,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         }
         try {
           await ctx.agent.setProvider(name);
+          ctx.refreshModelCache();
           console.log(pc.green(t("repl.provider_set", { name })));
         } catch (e: any) {
           console.log(pc.red(e.message));
@@ -353,6 +355,7 @@ function registerMmaCommands(ctx: ReplContext): void {
           const models = await provider.listModels();
           s.stop();
           if (models.length > 0) {
+            ctx.refreshModelCache();
             console.log(t("cli.available_models"));
             const { getCertMark } = await import("../modules/certification/manifest");
             for (const m of models) {

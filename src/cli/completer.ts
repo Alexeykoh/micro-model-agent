@@ -54,18 +54,18 @@ export class SubcommandProvider implements CompletionProvider {
 
 export class ModelArgProvider implements CompletionProvider {
   name = "model-args";
-  private models: string[];
+  private getModels: () => string[];
 
-  constructor(models: string[]) {
-    this.models = models;
+  constructor(getModels: () => string[]) {
+    this.getModels = getModels;
   }
 
   match(ctx: CompletionContext): boolean {
-    return ctx.tokenIndex === 2 && (ctx.tokens[0] === "/model" || ctx.tokens[0] === "/config");
+    return ctx.tokenIndex === 2 && ctx.tokens[0] === "/model" && ctx.tokens[1] === "use";
   }
 
   complete(ctx: CompletionContext): string[] {
-    return this.models.filter((m) => m.startsWith(ctx.partial));
+    return this.getModels().filter((m) => m.startsWith(ctx.partial));
   }
 }
 

@@ -11,6 +11,7 @@ import {
   SubcommandProvider,
   SkillNameProvider,
   ProviderArgProvider,
+  ModelArgProvider,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
 import { divider } from "../ui/box";
@@ -59,6 +60,7 @@ function formatContextBar(
 
 export class Repl implements ReplContext {
   private completer: Completer = new Completer();
+  private modelCache: string[] = [];
   private running = false;
   private agentRunning = false;
   private inputLocked = false;
@@ -185,6 +187,32 @@ export class Repl implements ReplContext {
     if (entryLabels.length > 0) {
       this.completer.registerProvider(new ProviderArgProvider(entryLabels));
     }
+    this.completer.registerProvider(new ModelArgProvider(() => this.modelCache));
+    // Warm the model cache in the background (free listModels call).
+    this.refreshModelCache();
+  }
+
+  /**
+   * Background refresh of the cached model list used by `/model use <Tab>`.
+   * Best-effort: on failure the cache keeps its previous contents.
+   */
+  public refreshModelCache(): void {
+    void (async () => {
+      try {
+        const name =
+          this.config.provider.active ||
+          this.config.provider.entries?.[0]?.label ||
+          this.config.provider.type;
+        const provider = this.agent.getProviderFor(name);
+        if (!provider) return;
+        const models = await provider.listModels();
+        if (models.length > 0) {
+          this.modelCache = models.sort();
+        }
+      } catch {
+        // keep previous cache
+      }
+    })();
   }
 
   private setupListeners(): void {
