@@ -642,6 +642,7 @@
   "cli.provider_added": "Provider added: {name}",
   "cli.provider_switch_hint": "Switch to it with: mma provider use <name>",
   "repl.cost": "Total cost: {cost}",
+  "repl.cost_breakdown": "By provider: {breakdown}",
   "repl.tokens": "Tokens used: {tokens}",
   "repl.ctrl_c_interrupt": "\n[Ctrl+C] Stopping agent... (press again to force)",
   "exec.stop_directive": "STOP. Step {stepId} (\"{description}\") took {iterations} iterations with no progress. DO NOT continue this step. Immediately call: plan update step={stepId} status=done (if code works despite warnings) OR plan update step={stepId} status=skipped note=\"reason\". Do NOT make any other tool calls before updating the plan.",

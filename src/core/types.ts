@@ -84,6 +84,8 @@ export interface AgentResult {
   totalTokens?: number;
   /** Running session cost in USD (undefined when no model price is known). */
   totalCost?: number;
+  /** Per-provider cost attribution (priced providers only, cost desc). */
+  costBreakdown?: Array<{ provider: string; cost: number }>;
   compactionCount?: number;
   contextQuality?: number;
 }

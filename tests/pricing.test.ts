@@ -104,5 +104,38 @@ describe("pricing module", () => {
       tracker.record(1_000_000, 0);
       expect(tracker.total).toBeCloseTo(5, 6);
     });
+
+    it("attributes cost per provider", () => {
+      const tracker = new CostTracker("gpt-5.5", config);
+      tracker.record(1_000_000, 0, "zen");
+      tracker.record(1_000_000, 0, "zen");
+      tracker.record(1_000_000, 0, "go");
+      expect(tracker.totalFor("zen")).toBeCloseTo(10, 6);
+      expect(tracker.totalFor("go")).toBeCloseTo(5, 6);
+      expect(tracker.total).toBeCloseTo(15, 6);
+    });
+
+    it("records without a provider fall into 'unknown'", () => {
+      const tracker = new CostTracker("gpt-5.5", config);
+      tracker.record(1_000_000, 0);
+      expect(tracker.totalFor("unknown")).toBeCloseTo(5, 6);
+    });
+
+    it("breakdown lists providers sorted by cost desc", () => {
+      const tracker = new CostTracker("gpt-5.5", config);
+      tracker.record(1_000_000, 0, "go");
+      tracker.record(1_000_000, 1_000_000, "zen");
+      expect(tracker.breakdown()).toEqual([
+        { provider: "zen", cost: 35 },
+        { provider: "go", cost: 5 },
+      ]);
+    });
+
+    it("totalFor is undefined for a provider with no known price", () => {
+      const tracker = new CostTracker("unknown-model", config);
+      tracker.record(1000, 1000, "zen");
+      expect(tracker.totalFor("zen")).toBeUndefined();
+      expect(tracker.breakdown()).toEqual([]);
+    });
   });
 });

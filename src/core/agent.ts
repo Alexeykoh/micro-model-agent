@@ -655,7 +655,7 @@ export class Agent {
           source,
           durationMs: Date.now() - llmStart,
         });
-        this.costTracker.record(prompt, completion);
+        this.costTracker.record(prompt, completion, this.callerProvenance().provider);
       }
 
       if (this.shutdownRequested) {
@@ -1110,7 +1110,8 @@ export class Agent {
         promptTokens: usageTokens.prompt,
         completionTokens: usageTokens.completion,
         totalTokens: usageTokens.total,
-        totalCost: this.costTracker.total,
+      totalCost: this.costTracker.total,
+      costBreakdown: this.costTracker.breakdown(),
         compactionCount: contextManager.getCompactionCount(),
         contextQuality: contextManager.getQuality(),
       };
@@ -1131,6 +1132,7 @@ export class Agent {
       completionTokens: usageTokens.completion,
       totalTokens: usageTokens.total,
       totalCost: this.costTracker.total,
+        costBreakdown: this.costTracker.breakdown(),
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
     };

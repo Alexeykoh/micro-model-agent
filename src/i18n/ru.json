@@ -642,6 +642,7 @@
   "cli.provider_added": "Провайдер добавлен: {name}",
   "cli.provider_switch_hint": "Переключитесь на него: mma provider use <имя>",
   "repl.cost": "Итого потрачено: {cost}",
+  "repl.cost_breakdown": "По провайдерам: {breakdown}",
   "repl.tokens": "Потрачено токенов: {tokens}",
   "repl.ctrl_c_interrupt": "\n[Ctrl+C] Остановка агента... (ещё раз — принудительно)",
   "exec.stop_directive": "STOP. Step {stepId} (\"{description}\") took {iterations} iterations with no progress. DO NOT continue this step. Immediately call: plan update step={stepId} status=done (if code works despite warnings) OR plan update step={stepId} status=skipped note=\"reason\". Do NOT make any other tool calls before updating the plan.",

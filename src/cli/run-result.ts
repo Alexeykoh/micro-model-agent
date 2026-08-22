@@ -17,6 +17,7 @@ export function printRunResult(
     text?: string;
     error?: string;
     totalCost?: number;
+    costBreakdown?: Array<{ provider: string; cost: number }>;
     totalTokens?: number;
   },
   flush: () => void,
@@ -25,6 +26,12 @@ export function printRunResult(
   if (result.success) {
     if (result.totalCost !== undefined && result.totalCost > 0) {
       console.log(pc.dim(`${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
+      if (result.costBreakdown && result.costBreakdown.length > 1) {
+        const parts = result.costBreakdown.map(
+          (e) => `${e.provider} ${formatCost(e.cost)}`,
+        );
+        console.log(pc.dim(`  ${t("repl.cost_breakdown", { breakdown: parts.join(", ") })}`));
+      }
     } else if (result.totalTokens !== undefined && result.totalTokens > 0) {
       console.log(pc.dim(`${t("repl.tokens", { tokens: result.totalTokens })}`));
     }
