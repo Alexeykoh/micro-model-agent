@@ -54,12 +54,16 @@ export class ProviderManager {
     return entry;
   }
 
-  /** All configured entries (resolved with preset metadata). */
+  /** All configured entries (resolved with preset metadata), priority-ordered. */
   list(): Array<ProviderEntry & { label: string }> {
-    return this.entries.map((e) => {
-      const preset = this.registry.get(e.type);
-      return { ...e, label: e.label || preset?.label || e.type };
-    });
+    return this.entries
+      .map((e) => {
+        const preset = this.registry.get(e.type);
+        return { ...e, label: e.label || preset?.label || e.type };
+      })
+      .map((e, i) => ({ e, i, p: e.priority ?? Number.MAX_SAFE_INTEGER }))
+      .sort((a, b) => a.p - b.p || a.i - b.i)
+      .map(({ e }) => e);
   }
 
   listNames(): string[] {

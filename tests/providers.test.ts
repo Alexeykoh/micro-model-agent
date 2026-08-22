@@ -175,4 +175,88 @@ describe("providers module", () => {
       expect(cfg.baseUrl).toBe("https://openrouter.ai/api/v1");
     });
   });
+
+  describe("per-entry isolation (Phase 4.3)", () => {
+    const opts = { contextWindow: 32768 };
+
+    it("builds each entry with its own apiKey, retry and rateLimits", () => {
+      const registry = new ProviderRegistry();
+      const captured: any[] = [];
+      registry.register({
+        type: "capturing",
+        label: "Capturing",
+        baseUrl: "",
+        capabilities: {
+          streaming: true, tools: true, vision: false, reasoningEffort: false,
+          listModels: false, requiresKey: false,
+        },
+        create: (o) => {
+          captured.push(o);
+          return { model: o.model, contextWindow: o.contextWindow } as any;
+        },
+      });
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            {
+              type: "capturing", label: "a", baseUrl: "http://a/v1",
+              apiKey: "key-a", contextWindow: 8192,
+              retry: { maxRetries: 1, baseDelay: 10, maxDelay: 20 },
+              rateLimits: { maxRequestsPerMinute: 30, maxParallelTasks: 1 },
+            },
+            { type: "capturing", label: "b", baseUrl: "http://b/v1" },
+          ],
+        },
+        { ...opts, registry },
+      );
+      void m.switch("a");
+      void m.active;
+      void m.switch("b");
+      void m.active;
+      expect(captured).toHaveLength(2);
+      expect(captured[0].apiKey).toBe("key-a");
+      expect(captured[0].contextWindow).toBe(8192);
+      expect(captured[0].retry.maxRetries).toBe(1);
+      expect(captured[0].rateLimits.maxRequestsPerMinute).toBe(30);
+      // Entry b has none of its own → falls back to global options.
+      expect(captured[1].apiKey).toBeUndefined();
+      expect(captured[1].contextWindow).toBe(opts.contextWindow);
+    });
+
+    it("listNames orders entries by priority ascending (undefined last, stable)", () => {
+      const m = new ProviderManager(
+        {
+          active: "local",
+          entries: [
+            { type: "openai-compat", label: "local", baseUrl: "http://l/v1" },
+            { type: "openrouter", label: "router", baseUrl: "http://r/v1", priority: 1 },
+            { type: "opencode-zen", label: "zen", baseUrl: "http://z/v1", priority: 0 },
+            { type: "openai", label: "oai", baseUrl: "http://o/v1" },
+          ],
+        },
+        opts,
+      );
+      expect(m.listNames()).toEqual(["zen", "router", "local", "oai"]);
+    });
+
+    it("toConfig preserves per-entry retry/rateLimits/priority", () => {
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            {
+              type: "openai-compat", label: "a", baseUrl: "http://a/v1",
+              priority: 2,
+              rateLimits: { maxRequestsPerMinute: 10, maxParallelTasks: 2 },
+            },
+          ],
+        },
+        opts,
+      );
+      const cfg = m.toConfig();
+      expect(cfg.entries![0].priority).toBe(2);
+      expect(cfg.entries![0].rateLimits!.maxRequestsPerMinute).toBe(10);
+    });
+  });
 });

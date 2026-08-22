@@ -243,7 +243,11 @@ export function createProgram(): Command {
         console.log(t("cli.current_provider"));
         for (const p of providers) {
           const marker = p.active ? pc.green("* ") : "  ";
-          console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
+          const prio =
+            p.priority !== undefined ? `  ${pc.dim(`prio=${p.priority}`)}` : "";
+          console.log(
+            ` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}${prio}`,
+          );
         }
         return;
       }
@@ -282,8 +286,23 @@ export function createProgram(): Command {
     .argument("<name>", "Provider type or label")
     .option("--url <url>", "Base URL")
     .option("--key <key>", "API key")
+    .option("--priority <n>", "Fallback priority (lower = tried first)")
+    .option("--context-window <n>", "Context window override for this entry")
+    .option("--rpm <n>", "Max requests per minute for this entry")
+    .option("--parallel <n>", "Max parallel tasks for this entry")
     .description(t("cli.add_provider"))
-    .action(async (name: string, opts: { url?: string; key?: string }) => {
+    .action(
+      async (
+        name: string,
+        opts: {
+          url?: string;
+          key?: string;
+          priority?: string;
+          contextWindow?: string;
+          rpm?: string;
+          parallel?: string;
+        },
+      ) => {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config } = await bootstrap();
       const entries = Array.isArray(config.provider.entries)
@@ -308,13 +327,26 @@ export function createProgram(): Command {
         label: name,
         baseUrl,
         apiKey: opts.key,
+        ...(opts.priority !== undefined ? { priority: Number(opts.priority) } : {}),
+        ...(opts.contextWindow !== undefined
+          ? { contextWindow: Number(opts.contextWindow) }
+          : {}),
+        ...(opts.rpm !== undefined || opts.parallel !== undefined
+          ? {
+              rateLimits: {
+                maxRequestsPerMinute: Number(opts.rpm ?? 0) || 60,
+                maxParallelTasks: Number(opts.parallel ?? 0) || 1,
+              },
+            }
+          : {}),
       });
       config.provider.entries = entries;
       config.provider.active = config.provider.active || config.provider.type;
       saveConfig(config, configPath);
       console.log(pc.green(t("cli.provider_added", { name })));
       console.log(t("cli.provider_switch_hint"));
-    });
+      },
+    );
 
   const session = program.command("session").description(t("cli.manage_sessions"));
   session
