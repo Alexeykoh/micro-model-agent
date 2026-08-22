@@ -107,4 +107,32 @@ describe("LintOnWritePlugin", () => {
     await plugin.onAfterTool!(mockCtx, call, result);
     expect(result.output).toBe("File written");
   });
+
+  it("skips project lint when the lint binary is missing (ses_mt4fn58c)", async () => {
+    // package.json declares "lint": "eslint ." but eslint is not installed —
+    // every write used to append `[Project lint failed]: "eslint" не является
+    // внутренней...`, polluting context ~25 times per session.
+    const lintDir = mkdtempSync(join(tmpdir(), "mma-lint-missing-"));
+    try {
+      writeFileSync(
+        join(lintDir, "package.json"),
+        JSON.stringify({ name: "t", version: "0.0.0", scripts: { lint: "definitely-not-installed-linter ." } }),
+      );
+      writeFileSync(join(lintDir, "fine.ts"), "const x: number = 1;\n");
+
+      const ctx = { baseDir: lintDir, logger: { debug: () => {}, warn: () => {} } } as any;
+      const plugin = new LintOnWritePlugin();
+
+      const first: any = { success: true, output: "Written" };
+      await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "fine.ts" } } as any, first);
+      expect(first.output).not.toContain("[Project lint failed]");
+
+      // Second write in the same project: still clean (skip is cached).
+      const second: any = { success: true, output: "Written" };
+      await plugin.onAfterTool!(ctx, { name: "write_file", arguments: { path: "fine.ts" } } as any, second);
+      expect(second.output).not.toContain("[Project lint failed]");
+    } finally {
+      rmSync(lintDir, { recursive: true, force: true });
+    }
+  });
 });

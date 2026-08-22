@@ -16,6 +16,16 @@ export const processKillTool: ToolDefinition = {
     required: ["id"],
   },
   handler: async (ctx, args) => {
+    if (args.id === undefined || String(args.id).trim() === "") {
+      // ses_mt4fn58c: `process_kill -p=5173` produced "Process not found:
+      // undefined" — no hint about the correct format. Answer with usage.
+      const known = processRegistry.list();
+      const ids = known.map((p) => p.id);
+      const listPart = ids.length
+        ? `\n${t("proc.list_header")}: ${ids.join(", ")}`
+        : `\n${t("proc.missing_id_list")}`;
+      return { success: false, output: `${t("proc.missing_id")}${listPart}` };
+    }
     const id = String(args.id);
     const entry = processRegistry.get(id);
     if (!entry) {

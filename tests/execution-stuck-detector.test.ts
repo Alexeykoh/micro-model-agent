@@ -56,6 +56,21 @@ describe("StuckDetector", () => {
     expect(detector.hasRepetitiveErrors("bash")).toBe(true);
   });
 
+  it("decays per-tool error counters on successful calls (ses_mt4fn58c)", () => {
+    // bash failed 3x early in the session, then the model moved on and made
+    // 30 successful write_file calls — the stale counter must not keep the
+    // "Tool bash failed N times" warning alive forever.
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    expect(detector.hasRepetitiveErrors("bash")).toBe(true);
+
+    detector.recordToolSuccess();
+    expect(detector.hasRepetitiveErrors("bash")).toBe(false);
+
+    // Fresh failures rebuild the count from scratch.
+    for (let i = 0; i < 3; i++) detector.recordToolError("bash");
+    expect(detector.hasRepetitiveErrors("bash")).toBe(true);
+  });
+
   // checkOffTrack removed — duplicate of checkPlanAlignment in module.ts
 
   it("should return recovery message when stuck", () => {

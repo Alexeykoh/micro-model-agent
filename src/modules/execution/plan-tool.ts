@@ -1,6 +1,6 @@
 import type { ToolDefinition } from "../../tools/types";
 import { t } from "../../i18n/index";
-import { PlanCreator, type Plan, type StepKind } from "./planner";
+import { PlanCreator, getPlanProgress, type Plan, type StepKind } from "./planner";
 import type { PlanTracker } from "./tracker";
 import { PlanStore } from "./plan-store";
 import { StepVerifier } from "./verifier";
@@ -300,12 +300,12 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             deps.store.archivePlan(plan);
             deps.recordCompleted(plan); // final audit still verifies it
             deps.trackerRef.current = null;
-            const done = plan.steps.filter((s) => s.status === "done").length;
+            const p = getPlanProgress(plan);
             return {
               success: true,
               output: t("plan.completed_archived", {
                 id: plan.id,
-                done: String(done),
+                done: String(p.settled),
                 total: String(plan.steps.length),
               }),
             };
@@ -443,14 +443,14 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             deps.store.archivePlan(plan);
             deps.recordCompleted(plan); // final audit still verifies it
             deps.trackerRef.current = null;
-            const done = plan.steps.filter((s) => s.status === "done").length;
+            const p = getPlanProgress(plan);
             return {
               success: true,
               output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${t(
                 "plan.completed_archived",
                 {
                   id: plan.id,
-                  done: String(done),
+                  done: String(p.settled),
                   total: String(plan.steps.length),
                 },
               )}${vacuousNote}`,
@@ -473,9 +473,20 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           action === "update" &&
           Array.isArray(args.steps) &&
           args.steps.length > 0 &&
-          deps.trackerRef.current
+          !args.step
         ) {
           const tracker = deps.trackerRef.current;
+          if (!tracker) {
+            return { success: false, output: t("plan.no_active") };
+          }
+          // Rebuilding a plan that already has progress silently discards
+          // every status (ses_mt4fn58c: the model sent its whole step list
+          // with ✅-emoji statuses expecting progress marks and got a fresh
+          // plan back). A not-yet-started plan is safe to rebuild.
+          const progressed = tracker.getPlan().steps.some((s) => s.status !== "pending");
+          if (progressed) {
+            return { success: false, output: t("plan.bulk_update_rejected") };
+          }
           const title = String(args.title || tracker.getPlan().title);
           const steps = args.steps.map(String);
           const parsed = deps.parseKinds(args, steps);
@@ -568,6 +579,19 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           };
         }
         if (!deps.trackerRef.current) {
+          // Update with an id that points at a draft/archived plan: say the
+          // plan is read-only instead of a bare "No active plan" (observed:
+          // 10+ iterations re-updating an archived plan and getting the same
+          // unhelpful answer back).
+          if (args.id) {
+            const found = deps.store.find(String(args.id));
+            if (found && found.status !== "active") {
+              return {
+                success: false,
+                output: t("plan.readonly", { id: found.plan.id, status: found.status }),
+              };
+            }
+          }
           return { success: false, output: t("plan.no_active") };
         }
         return {

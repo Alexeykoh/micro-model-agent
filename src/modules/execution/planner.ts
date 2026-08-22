@@ -37,6 +37,26 @@ function generatePlanId(): string {
   return `plan_${id}`;
 }
 
+/**
+ * Single source of truth for plan progress counting (ses_mt4fn58c: `show`
+ * said "6/7 done, complete" while `list` said "7/7" for the same plan —
+ * one counted only "done", the other counted done+skipped). A skipped step
+ * needs no further work, so it counts as settled everywhere.
+ */
+export function getPlanProgress(plan: Plan): {
+  done: number;
+  skipped: number;
+  total: number;
+  settled: number;
+  terminal: boolean;
+} {
+  const done = plan.steps.filter((s) => s.status === "done").length;
+  const skipped = plan.steps.filter((s) => s.status === "skipped").length;
+  const total = plan.steps.length;
+  const settled = done + skipped;
+  return { done, skipped, total, settled, terminal: total > 0 && settled === total };
+}
+
 export class PlanCreator {
   static createPlan(
     title: string,
@@ -87,11 +107,11 @@ export class PlanCreator {
 
   static toPromptBlock(plan: Plan, currentStepIndex: number): string {
     const date = plan.createdAt.slice(0, 10);
-    const doneCount = plan.steps.filter((s) => s.status === "done").length;
-    const terminal = plan.steps.every((s) => s.status === "done" || s.status === "skipped");
-    const progress = terminal
-      ? `${doneCount}/${plan.steps.length} done, complete`
-      : `${doneCount}/${plan.steps.length} done, current: step ${currentStepIndex + 1}`;
+    const p = getPlanProgress(plan);
+    const skippedPart = p.skipped > 0 ? `, ${p.skipped} skipped` : "";
+    const progress = p.terminal
+      ? `${p.settled}/${p.total} done${skippedPart}, complete`
+      : `${p.settled}/${p.total} done${skippedPart}, current: step ${currentStepIndex + 1}`;
     const lines: string[] = [
       `[${plan.id}] ${plan.title}`,
       `Dir: ${plan.baseDir}`,

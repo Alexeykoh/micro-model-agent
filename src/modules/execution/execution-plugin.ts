@@ -17,6 +17,11 @@ import { platform } from "os";
 export const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
 const FORCE_SKIP_THRESHOLD = 10;
+/** Re-log the SAME stuck-warning key at most every N iterations (a new key
+ *  always logs immediately). Prevents the identical warning from flooding
+ *  every iteration (ses_mt4fn58c: "Tool bash failed N times" after ~30
+ *  successful writes, "No write/exec" on every read). */
+export const STUCK_WARN_REPEAT_EVERY = 5;
 /** How many file-mutating tool calls (write/edit/bash/download) without an
  *  active plan trigger the plan-creation nudge. Evidence-based (rule #10):
  *  the agent is clearly working on files, so a plan is warranted. */
@@ -31,6 +36,9 @@ export interface ExecutionPluginState {
   consecutivePlanWarnings: number;
   lastStepId: number;
   stuckNotified: boolean;
+  /** Stable key of the last logged stuck-warning (getWarningKey) + iteration. */
+  lastStuckWarnKey: string;
+  lastStuckWarnIter: number;
   depsGateHints: Map<number, number>;
   /** write/edit/bash/download calls made while NO plan is active. */
   mutationsWithoutPlan: number;
@@ -196,8 +204,17 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       }
       const stuckReason = deps.stuckDetector.getStuckReason();
       if (stuckReason) {
-        // Log once per stuck episode instead of spamming every iteration.
-        const logIt = deps.stuckDetector.isStuck() ? !deps.state.stuckNotified : true;
+        // Log once per warning episode instead of spamming every iteration:
+        // a new warning key logs immediately; the SAME key re-logs only every
+        // STUCK_WARN_REPEAT_EVERY iterations. The step-stuck reason keeps its
+        // dedicated once-per-episode flag.
+        const isStuck = deps.stuckDetector.isStuck();
+        const warnKey = deps.stuckDetector.getWarningKey();
+        const iter = typeof ctx.iteration === "number" ? ctx.iteration : 0;
+        const logIt = isStuck
+          ? !deps.state.stuckNotified
+          : warnKey !== deps.state.lastStuckWarnKey ||
+            iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY;
         if (logIt) {
           ctx.logger?.warn(stuckReason);
           ctx.sessionLog?.plan(
@@ -205,8 +222,12 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             stuckReason,
             typeof ctx.iteration === "number" ? ctx.iteration : undefined,
           );
-          if (deps.stuckDetector.isStuck()) deps.state.stuckNotified = true;
+          deps.state.lastStuckWarnKey = warnKey;
+          deps.state.lastStuckWarnIter = iter;
+          if (isStuck) deps.state.stuckNotified = true;
         }
+      } else {
+        deps.state.lastStuckWarnKey = "";
       }
       if (
         deps.stuckDetector.isStuck() ||

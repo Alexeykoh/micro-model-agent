@@ -348,6 +348,14 @@ export class StuckDetector {
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
     this.escalationCount = 0;
+    // Decay per-tool error counters on productive calls: a tool that failed
+    // early must not keep the "Tool X failed N times" warning alive forever
+    // (ses_mt4fn58c — bash failed 3x, warning re-logged after 30 successful
+    // writes). Fresh failures rebuild the count.
+    for (const [tool, count] of this.toolErrors) {
+      if (count <= 1) this.toolErrors.delete(tool);
+      else this.toolErrors.set(tool, count - 1);
+    }
     // Decay iteration counter on productive tool calls — reading new files,
     // writing, editing all count as progress. Prevents false-positive stuck
     // warnings during legitimate file exploration (e.g. reading 12 files in
@@ -631,6 +639,22 @@ export class StuckDetector {
       tool: last.name,
       count: this.repetitionThreshold,
     });
+  }
+
+  /**
+   * Stable warning identity for anti-spam dedup: the same key re-logged every
+   * iteration is spam, a NEW key (or a long gap) deserves a re-warn.
+   */
+  getWarningKey(): string {
+    if (this.isStuck()) return "stuck";
+    const errorTool = Array.from(this.toolErrors.entries()).find(
+      ([_, c]) => c >= this.errorThreshold,
+    );
+    if (errorTool) return `tool-errors:${errorTool[0]}`;
+    if (this.hasConsecutiveFailures()) return "consecutive";
+    if (this.hasRepetitiveToolCalls()) return "repetitive";
+    if (this.hasReadOnlyLoop()) return "read-only";
+    return "";
   }
 
   getStuckReason(): string {
