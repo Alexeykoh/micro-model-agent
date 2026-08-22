@@ -8,6 +8,27 @@ import { findProjectRoot } from "../../lsp/project-root";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
 
+// Projects whose lint script points at a binary that is not installed
+// (keyed by baseDir::script). The run itself is expensive and the failure
+// marker is pure noise — skip for the rest of the process.
+const missingLintBinaries = new Set<string>();
+
+function lintCacheKey(baseDir: string, lintScript: string): string {
+  return `${baseDir}::${lintScript}`;
+}
+
+// Shell-level "command not found" across locales/runtimes: POSIX `sh` prints
+// "command not found" (exit 127); Windows cmd.exe prints "is not recognized"
+// (en) / "не является внутренней или внешней командой" (ru) with exit 1/9009.
+const MISSING_BINARY_RE =
+  /command not found|not recognized|не является внутренней|не распознан|не є внутрішньою|".+?" не является/i;
+
+function isMissingBinaryError(err: any, combinedOutput: string): boolean {
+  if (err.status === 127) return true;
+  if (err.code === "ENOENT") return true;
+  return MISSING_BINARY_RE.test(combinedOutput);
+}
+
 // Per-file syntax checks are cached by (path, content hash): re-writing a file
 // with identical content skips the (expensive) check. Content changes → cache
 // miss → fresh check.
@@ -146,6 +167,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     result: ToolResult,
     signal?: AbortSignal,
   ): Promise<void> {
+    let lintScript: string | undefined;
     try {
       const packageJsonPath = join(ctx.baseDir, "package.json");
       if (!existsSync(packageJsonPath)) {
@@ -153,9 +175,18 @@ export class LintOnWritePlugin implements AgentPlugin {
       }
 
       const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-      const lintScript = packageJson.scripts?.lint;
+      lintScript = packageJson.scripts?.lint;
 
       if (!lintScript) {
+        return;
+      }
+
+      // A declared-but-missing linter binary ("eslint" not installed) is a
+      // project-setup gap, not a code problem — appending it to every write
+      // result polluted the context ~25×/session (ses_mt4fn58c). Detect it
+      // once and skip silently for the rest of the process.
+      if (missingLintBinaries.has(lintCacheKey(ctx.baseDir, lintScript))) {
+        ctx.logger.debug(`Lint skipped (linter for "${lintScript}" not installed)`);
         return;
       }
 
@@ -165,7 +196,14 @@ export class LintOnWritePlugin implements AgentPlugin {
     } catch (err: any) {
       const stderr = (err.stderr?.toString?.() || "").trim();
       const stdout = (err.stdout?.toString?.() || "").trim();
-      const detail = (stderr || stdout || err.message)
+      const combined = `${stderr}\n${stdout}`;
+      if (lintScript && isMissingBinaryError(err, combined)) {
+        missingLintBinaries.add(lintCacheKey(ctx.baseDir, lintScript));
+        ctx.logger.debug(`Lint binary missing — skipping project lint for this session`);
+        return;
+      }
+      const detail = combined
+        .trim()
         .split("\n")
         .filter(Boolean)
         .slice(-5)
