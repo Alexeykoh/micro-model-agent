@@ -1133,7 +1133,7 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.49.0
+### Current Version: 0.50.0
 
 - **63** = provider health probe + code-only capability routing (provider module Phase 4, item 4): (1) **`probeProviders()`** (`src/modules/providers/health.ts`) — concurrent ✓/✗ probes per entry using the FREE `listModels()` call (never a billed chat completion), timeout-bounded, input order preserved; `targetsFromProviders()` builds targets from name→provider pairs. (2) **CLI `mma provider check [--timeout <ms>]`** — table of `✓/✗ name ms models|error`. (3) **REPL banner background probe** — with >1 entries, failed non-active providers surface as `[WARN] Provider "X" is unreachable` warnings after startup (failover would otherwise silently mask a dead primary); i18n `repl.provider_down`, `cli.provider_check` (en+ru). (4) **`ProviderManager.pickFor({vision, tools, minContext})`** — CODE-ONLY capability routing: first priority-ordered entry whose preset capabilities + context window satisfy the need; no constraints → active provider; explicitly never exposed to the LLM (the budget-risky LLM-driven `provider` tool was dropped from the spec). New `Agent.getProviderFor(name)`. Tests: new `tests/providers-health.test.ts` (5), `tests/providers.test.ts` +2 pickFor cases.
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2026-08-22
+
+### Added
+
+- **Per-provider cost attribution** (`src/modules/pricing/index.ts`): `CostTracker.record()` takes a provider name and keys totals by it; new `totalFor(provider)` and `breakdown()`, surfaced in single-run output (`repl.cost_breakdown`, en+ru) and `--json` (`costBreakdown`).
+- **Transparent provider failover** (`src/modules/providers/fallback.ts`): with `provider.fallback: true` and >1 entries, retryable failures (429/5xx/network, incl. Bun-style `ConnectionRefused` codes) switch to the next entry BEFORE any chunk is emitted; sticky; mid-stream failures rethrow; AbortError never fails over. Failovers logged via `logger.warn`.
+- **Priority fallback order**: `ProviderManager.list()` sorts entries by `priority` (undefined last, stable), so failover tries preferred providers first.
+- **Per-entry isolation**: each entry honors its own `apiKey`/`retry`/`rateLimits`/`contextWindow` (entry value ?? global option) - now covered by tests.
+- **CLI flags on `mma provider add`**: `--priority <n>`, `--context-window <n>`, `--rpm <n>` / `--parallel <n>`; `mma provider list` shows `prio=N`.
+- **Provider health probe** (`src/modules/providers/health.ts`): concurrent timeout-bounded probes using the free `listModels()` call. New CLI `mma provider check [--timeout <ms>]`; REPL warns at startup when a non-active entry is unreachable.
+- **Code-only capability routing**: `ProviderManager.pickFor({vision, tools, minContext})` picks the first capable entry by priority order; never exposed to the LLM (the budget-risky LLM-driven provider tool was dropped from the spec).
+- **REPL tab completion** for `/provider list|use` (entry names) and `/model use` (models cached from the free `listModels` call, warmed at startup, refreshed on `/model list` and `/provider use`); clearer `/help` descriptions for both commands (en+ru).
+
+### Fixed
+
+- **`listModels()` swallowed all errors** (returned `[]`): health probes could not distinguish a dead provider from an empty model list; now throws (callers already had try/catch).
+- **Failover missed Bun network errors**: `isFailoverError` now checks errno-style codes ("ConnectionRefused", "ECONNREFUSED", ...) in addition to HTTP status.
+
 ## [0.43.0] - 2026-08-18
 
 ### Added
