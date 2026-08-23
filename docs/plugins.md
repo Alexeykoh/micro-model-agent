@@ -108,6 +108,51 @@ interface AgentPlugin {
 - **Приоритет:** `priority` сортирует плагины по убыванию (10 раньше 1). Плагины модулей и builtin помечаются `isBuiltin`.
 - **`onBeforeTool`** — единственный короткозамыкающий хук.
 
+## Host Bridge — управление агентом из плагина
+
+Хуки позволяют плагину **наблюдать** за агентом. Чтобы **управлять** им (отправлять сообщения, прерывать), REPL регистрирует в `PluginManager` узкий интерфейс `HostBridge`; диспетчер подмешивает его в контекст каждого хука как `ctx.hostBridge`:
+
+```ts
+interface HostBridge {
+  isBusy(): boolean;                                   // агент обрабатывает ход?
+  submit(text: string, opts?: { images?: string[] }): Promise<unknown>; // как ввод с клавиатуры
+  interrupt(): void;                                   // аналог double-Esc
+}
+```
+
+- Сообщения идут через тот же путь `Repl.runAgent()` — рендеринг, сессия, логи общие с терминалом.
+- `submit` отклоняется (`throw`) при занятом агенте: сначала проверяйте `isBusy()`.
+- Картинки передаются data URL'ами (`data:image/jpeg;base64,...`) — они попадают в контекст так же, как Ctrl+V.
+- В одноразовом режиме (`mma "prompt" --exit-on-complete`) моста нет — `ctx.hostBridge === undefined`.
+
+```ts
+// .mma/plugins/remote.ts — пример использования
+export default {
+  name: "remote",
+  onSessionStart(ctx) {
+    const bridge = ctx.hostBridge;
+    if (!bridge) return ctx.logger?.warn("[remote] no host bridge (single-run mode)");
+    if (!bridge.isBusy()) bridge.submit("привет из плагина");
+  },
+};
+```
+
+## `onTurnEnd`
+
+Вызывается **один раз** на каждый завершённый `Agent.run()` — финальный ответ, ошибка или прерывание:
+
+```ts
+interface TurnSummary {
+  success: boolean;
+  durationMs: number;
+  textLength: number;
+  toolCalls: number;
+  interrupted?: boolean;
+}
+```
+
+В отличие от `onPhase('done')` (это конец одного LLM-вызова внутри цикла тулов), `onTurnEnd` означает «весь ход завершён» — можно снимать busy-состояние, слать уведомления.
+
 ## Пример: ред-акт секретов
 
 ```ts
@@ -127,6 +172,10 @@ export default {
 ## Пример: live trace в браузере (папка-плагин)
 
 Полный пример многофайлового плагина — `examples/plugins/trace-server/` (HTTP-сервер + SSE, контекст, планы). Установка: скопировать папку целиком в `~/.mma/plugins/` или `<project>/.mma/plugins/`. Внутри — `plugin.ts` (entry) и модули `state.ts` / `util.ts` / `context.ts` / `plans.ts` / `server.ts` + ассет `page.html`.
+
+## Пример: двусторонний веб-интерфейс (web-ui)
+
+`examples/plugins/web-ui/` — чат с агентом из браузера: стриминг хода (SSE), отправка сообщений и картинок (`POST /api/message` → HostBridge), прерывание (`POST /api/interrupt`), план, бэктолл истории. Демонстрирует связку всех UI-хуков + `onTurnEnd` + `ctx.hostBridge`. Env-конфиг: `MMA_WEBUI_PORT`, `MMA_WEBUI_HOST`, `MMA_WEBUI_TOKEN` (обязателен для не-loopback бинда), `MMA_WEBUI_MAX_CLIENTS`, `MMA_WEBUI_OPEN=0`.
 
 ## Пример: статистика сессии
 

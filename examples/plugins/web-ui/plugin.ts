@@ -114,8 +114,9 @@ const ASSETS: WebUiAssets = {
 function syncState(ctx: PluginContextLike): void {
   state.sessionMeta = ctx.sessionManager || null;
   state.projectDir = ctx.sessionManager?.projectDir || null;
-  // History lives at <configDir>/sessions/<id>/history.jsonl (SessionStore layout).
-  state.configDir = join(homedir(), ".mma");
+  // History lives at <configDir>/sessions/<id>/history.jsonl (SessionStore
+  // layout). MMA_WEBUI_CONFIG_DIR overrides the default ~/.mma (tests/sandboxes).
+  state.configDir = process.env.MMA_WEBUI_CONFIG_DIR || join(homedir(), ".mma");
   state.bridge = ctx.hostBridge ?? null;
 }
 

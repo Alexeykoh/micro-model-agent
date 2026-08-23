@@ -12,6 +12,11 @@ const ASSETS: WebUiAssets = {
   js: "// app",
 };
 
+// Other tests in the shared process may stub globalThis.fetch; use the
+// runtime's own fetch so HTTP assertions stay real.
+const doFetch: typeof fetch =
+  typeof Bun !== "undefined" ? ((Bun as any).fetch.bind(Bun) as typeof fetch) : fetch;
+
 interface BridgeStub {
   isBusy: () => boolean;
   submit: (text: string, opts?: { images?: string[] }) => Promise<unknown>;
@@ -58,12 +63,12 @@ describe("web-ui server", () => {
     await withServer(
       () => {},
       async (base) => {
-        expect(await (await fetch(`${base}/`)).text()).toContain("web-ui-test");
-        expect(await (await fetch(`${base}/styles.css`)).text()).toBe("body{}");
-        expect((await fetch(`${base}/app.js`)).headers.get("content-type")).toContain(
+        expect(await (await doFetch(`${base}/`)).text()).toContain("web-ui-test");
+        expect(await (await doFetch(`${base}/styles.css`)).text()).toBe("body{}");
+        expect((await doFetch(`${base}/app.js`)).headers.get("content-type")).toContain(
           "javascript",
         );
-        expect((await fetch(`${base}/nope`)).status).toBe(404);
+        expect((await doFetch(`${base}/nope`)).status).toBe(404);
       },
     );
   });
@@ -75,7 +80,7 @@ describe("web-ui server", () => {
       },
       async (base, s) => {
         const ctrl = new AbortController();
-        const res = await fetch(`${base}/events`, { signal: ctrl.signal });
+        const res = await doFetch(`${base}/events`, { signal: ctrl.signal });
         expect(res.status).toBe(200);
         const reader = res.body!.getReader();
         const { value } = await reader.read();
@@ -87,9 +92,9 @@ describe("web-ui server", () => {
         while (s.clients.size < 5) {
           const c = new AbortController();
           extras.push(c);
-          await fetch(`${base}/events`, { signal: c.signal });
+          await doFetch(`${base}/events`, { signal: c.signal });
         }
-        const overflow = await fetch(`${base}/events`);
+        const overflow = await doFetch(`${base}/events`);
         expect(overflow.status).toBe(503);
         ctrl.abort();
         for (const c of extras) c.abort();
@@ -126,7 +131,7 @@ describe("web-ui server", () => {
         s.sessionMeta = { id: "ses_a", name: "demo", model: "m" };
       },
       async (base) => {
-        const res = await fetch(`${base}/api/state`);
+        const res = await doFetch(`${base}/api/state`);
         expect(res.status).toBe(200);
         const body = (await res.json()) as any;
         expect(body.busy).toBe(false);
@@ -151,7 +156,7 @@ describe("web-ui server", () => {
         });
       },
       async (base) => {
-        const res = await fetch(`${base}/api/message`, {
+        const res = await doFetch(`${base}/api/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: "make a file", images: [] }),
@@ -171,7 +176,7 @@ describe("web-ui server", () => {
       },
       async (base, s) => {
         // busy → 409
-        let res = await fetch(`${base}/api/message`, {
+        let res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "x" }),
         });
@@ -179,7 +184,7 @@ describe("web-ui server", () => {
 
         // no bridge → 503
         s.bridge = null;
-        res = await fetch(`${base}/api/message`, {
+        res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "x" }),
         });
@@ -187,25 +192,25 @@ describe("web-ui server", () => {
         s.bridge = makeBridge();
 
         // invalid JSON → 400
-        res = await fetch(`${base}/api/message`, { method: "POST", body: "{oops" });
+        res = await doFetch(`${base}/api/message`, { method: "POST", body: "{oops" });
         expect(res.status).toBe(400);
 
         // empty text → 400
-        res = await fetch(`${base}/api/message`, {
+        res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "  " }),
         });
         expect(res.status).toBe(400);
 
         // oversized text → 413
-        res = await fetch(`${base}/api/message`, {
+        res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "a".repeat(33_000) }),
         });
         expect(res.status).toBe(413);
 
         // too many / malformed images → 400
-        res = await fetch(`${base}/api/message`, {
+        res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({
             text: "x",
@@ -213,7 +218,7 @@ describe("web-ui server", () => {
           }),
         });
         expect(res.status).toBe(400);
-        res = await fetch(`${base}/api/message`, {
+        res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "x", images: ["http://evil/x.png"] }),
         });
@@ -230,7 +235,7 @@ describe("web-ui server", () => {
         s.lastPostTs = Date.now();
       },
       async (base) => {
-        const res = await fetch(`${base}/api/message`, {
+        const res = await doFetch(`${base}/api/message`, {
           method: "POST",
           body: JSON.stringify({ text: "spam" }),
         });
@@ -250,12 +255,12 @@ describe("web-ui server", () => {
         });
       },
       async (base, s) => {
-        let res = await fetch(`${base}/api/interrupt`, { method: "POST" });
+        let res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
         expect(res.status).toBe(409);
         expect(interrupted).toBe(0);
 
         s.busy = true;
-        res = await fetch(`${base}/api/interrupt`, { method: "POST" });
+        res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
         expect(res.status).toBe(200);
         expect(interrupted).toBe(1);
         expect(s.busy).toBe(false);
@@ -270,13 +275,13 @@ describe("web-ui server", () => {
         s.bridge = makeBridge();
       },
       async (base) => {
-        let res = await fetch(`${base}/api/state`);
+        let res = await doFetch(`${base}/api/state`);
         expect(res.status).toBe(401);
-        res = await fetch(`${base}/api/state`, { headers: { "x-mma-token": "wrong" } });
+        res = await doFetch(`${base}/api/state`, { headers: { "x-mma-token": "wrong" } });
         expect(res.status).toBe(401);
-        res = await fetch(`${base}/api/state`, { headers: { "x-mma-token": "sekret" } });
+        res = await doFetch(`${base}/api/state`, { headers: { "x-mma-token": "sekret" } });
         expect(res.status).toBe(200);
-        res = await fetch(`${base}/api/message?token=sekret`, {
+        res = await doFetch(`${base}/api/message?token=sekret`, {
           method: "POST",
           body: JSON.stringify({ text: "ok" }),
         });
