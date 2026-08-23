@@ -1,4 +1,4 @@
-import type { AgentPlugin } from "../types";
+import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import { semverGt } from "../updater/checker";
@@ -15,6 +15,24 @@ export interface PluginInfo {
 
 export class PluginManager {
   private plugins: AgentPlugin[] = [];
+  private hostBridge: HostBridge | null = null;
+
+  /**
+   * Register the host bridge (set once by the REPL). It is merged into every
+   * hook context as `ctx.hostBridge` unless the caller already provided one.
+   */
+  setHostBridge(bridge: HostBridge): void {
+    this.hostBridge = bridge;
+  }
+
+  /** Merge the host bridge into a hook context (caller-provided value wins). */
+  private withHost<T>(ctx: T): T {
+    if (!ctx || typeof ctx !== "object") return ctx;
+    if (!this.hostBridge || (ctx as Record<string, unknown>).hostBridge !== undefined) {
+      return ctx;
+    }
+    return { ...(ctx as object), hostBridge: this.hostBridge } as T;
+  }
 
   /**
    * Register a plugin. Plugins with the same `name` are deduplicated — the
@@ -66,7 +84,8 @@ export class PluginManager {
     });
   }
 
-  async runOnBeforeTool(ctx: any, call: ToolCall): Promise<boolean> {
+  async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onBeforeTool) {
         try {
@@ -80,7 +99,8 @@ export class PluginManager {
     return true;
   }
 
-  async runOnAfterTool(ctx: any, call: ToolCall, result: ToolResult): Promise<void> {
+  async runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onAfterTool) {
         try {
@@ -92,7 +112,8 @@ export class PluginManager {
     }
   }
 
-  async runOnError(ctx: any, error: Error): Promise<void> {
+  async runOnError(rawCtx: any, error: Error): Promise<void> {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onError) {
         try {
@@ -104,7 +125,8 @@ export class PluginManager {
     }
   }
 
-  runOnSessionStart(ctx: any): void {
+  runOnSessionStart(rawCtx: any): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onSessionStart) {
         try {
@@ -116,7 +138,8 @@ export class PluginManager {
     }
   }
 
-  runOnBeforeThink(ctx: any): void {
+  runOnBeforeThink(rawCtx: any): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onBeforeThink) {
         try {
@@ -128,7 +151,8 @@ export class PluginManager {
     }
   }
 
-  runOnAfterThink(ctx: any, response: LLMResponse | null): void {
+  runOnAfterThink(rawCtx: any, response: LLMResponse | null): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onAfterThink) {
         try {
@@ -140,7 +164,8 @@ export class PluginManager {
     }
   }
 
-  runOnSessionEnd(ctx: any): void {
+  runOnSessionEnd(rawCtx: any): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onSessionEnd) {
         try {
@@ -152,7 +177,8 @@ export class PluginManager {
     }
   }
 
-  runOnToolCall(ctx: any): void {
+  runOnToolCall(rawCtx: any): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolCall) {
         try {
@@ -164,7 +190,8 @@ export class PluginManager {
     }
   }
 
-  runOnPhase(ctx: any, phase: AgentPhase): void {
+  runOnPhase(rawCtx: any, phase: AgentPhase): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onPhase) {
         try {
@@ -176,7 +203,8 @@ export class PluginManager {
     }
   }
 
-  runOnToolStart(ctx: any, call: ToolCall): void {
+  runOnToolStart(rawCtx: any, call: ToolCall): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolStart) {
         try {
@@ -188,7 +216,8 @@ export class PluginManager {
     }
   }
 
-  runOnToolEnd(ctx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
+  runOnToolEnd(rawCtx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolEnd) {
         try {
@@ -201,7 +230,8 @@ export class PluginManager {
   }
 
   /** Pipe a text chunk through plugin transforms; returns the (possibly replaced) chunk. */
-  runOnText(ctx: any, chunk: string): string {
+  runOnText(rawCtx: any, chunk: string): string {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onText) {
         try {
@@ -216,7 +246,8 @@ export class PluginManager {
   }
 
   /** Pipe a meta chunk through plugin transforms; returns the (possibly replaced) chunk. */
-  runOnMeta(ctx: any, chunk: string): string {
+  runOnMeta(rawCtx: any, chunk: string): string {
+    const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onMeta) {
         try {
@@ -228,5 +259,19 @@ export class PluginManager {
       }
     }
     return chunk;
+  }
+
+  /** Dispatch a completed-run summary to all plugins (once per Agent.run()). */
+  runOnTurnEnd(rawCtx: any, summary: TurnSummary): void {
+    const ctx = this.withHost(rawCtx);
+    for (const plugin of this.plugins) {
+      if (plugin.onTurnEnd) {
+        try {
+          plugin.onTurnEnd(ctx, summary);
+        } catch {
+          /* error isolation */
+        }
+      }
+    }
   }
 }

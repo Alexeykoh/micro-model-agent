@@ -8,6 +8,37 @@ export interface AgentModule {
   getPlugin?(): AgentPlugin;
 }
 
+export interface HostBridgeSubmitOptions {
+  /** Image data URLs attached to the message (`data:image/png;base64,...`). */
+  images?: string[];
+}
+
+/**
+ * Narrow API the host (REPL) exposes to plugins for driving the agent.
+ * Registered via `PluginManager.setHostBridge()` and merged into every hook
+ * context as `ctx.hostBridge`. Absent in single-run mode and tests without a host.
+ */
+export interface HostBridge {
+  /** True while the agent is processing a turn. */
+  isBusy(): boolean;
+  /**
+   * Submit a user message through the host's normal input path (same as typing
+   * into the REPL). Rejects when the agent is busy. Resolves when the turn ends.
+   */
+  submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown>;
+  /** Interrupt the current run (no-op when idle). */
+  interrupt(): void;
+}
+
+/** Summary of a completed agent run, passed to `AgentPlugin.onTurnEnd`. */
+export interface TurnSummary {
+  success: boolean;
+  durationMs: number;
+  textLength: number;
+  toolCalls: number;
+  interrupted?: boolean;
+}
+
 export interface AgentPlugin {
   name: string;
   priority?: number;
@@ -46,4 +77,6 @@ export interface AgentPlugin {
   onText?(ctx: any, chunk: string): string | void;
   /** Transform/filter streamed meta (reasoning + tool output); return a string to replace, undefined to pass through. */
   onMeta?(ctx: any, chunk: string): string | void;
+  /** Called once when an agent `run()` completes (final answer, error or interrupt). */
+  onTurnEnd?(ctx: any, summary: TurnSummary): void;
 }
