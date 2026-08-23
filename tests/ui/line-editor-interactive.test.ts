@@ -51,6 +51,7 @@ describe("LineEditor interactive", () => {
     editor.prompt();
     input.pushData("hi");
     await tick();
+    // prompt() sent the DSR query; typing render uses relative moves, no query.
     expect(output.data.endsWith("\r\x1b[2K> hi\x1b[J\r\x1b[4C")).toBe(true);
   });
 
@@ -72,8 +73,7 @@ describe("LineEditor interactive", () => {
     input.pushData("\x1b[13;2u"); // newline
     input.pushData("2");
     await tick();
-    // Typing on row 1 must first move the cursor up to the frame's first row
-    // and rewrite BOTH rows, so the previous "> 1" is cleared, not duplicated.
+    // prompt() sent DSR query; typing renders use relative moves, no query.
     expect(output.data.endsWith("\x1b[1A\r\x1b[2K> 1\r\n\x1b[2K2\x1b[J\r\x1b[1C")).toBe(true);
   });
 

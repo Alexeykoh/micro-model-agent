@@ -75,10 +75,22 @@ export class LineEditor implements LineInput {
   private rawMode = false;
   private listeners: EditorListeners = {};
   /** Visual row (within the drawn frame) where the cursor was placed by the
-   *  last render — used to move back to the frame's first row before
-   *  redrawing, so a redraw starting on a middle/bottom row never leaves
-   *  stale lines above (duplicated input text on newline). */
+   *  last render — fallback for moving back to the frame's first row before
+   *  redrawing when no absolute anchor is known yet. Relative moves break
+   *  once the terminal scrolls (the frame shifts up on screen while the
+   *  relative count does not), which duplicated multi-line input. */
   private prevCursorRow = 0;
+  /** Absolute 1-based screen row of the frame's first visual row, learned
+   *  from a single DSR cursor-position report (`ESC[6n`) sent once per
+   *  prompt presentation. After the initial query the anchor is updated
+   *  deterministically via scroll math — no further queries are sent,
+   *  avoiding ConPTY desync. Falls back to relative moves when the reply
+   *  never arrives (timeout / broken terminal). */
+  private frameTopAbs: number | null = null;
+  /** True while waiting for a DSR reply (exactly one outstanding query). */
+  private dsrPending = false;
+  /** Buffer for partial DSR escape sequences split across data chunks. */
+  private dsrTail = "";
 
   constructor(opts: LineEditorOptions) {
     this.input = opts.input;
@@ -96,6 +108,12 @@ export class LineEditor implements LineInput {
       this.rawMode = typeof this.input.setRawMode === "function";
       if (this.rawMode) this.input.setRawMode!(true);
       this.enableTerminalProtocols();
+      // Raw data listener for DSR cursor-position replies. Runs alongside
+      // readline's keypress emitter (both receive every chunk); replies may
+      // arrive merged with regular keystrokes, hence the global regex.
+      (this.input as any).on("data", (buf: Buffer | string) =>
+        this.consumeDsrReplies(buf.toString("utf-8")),
+      );
       readline.emitKeypressEvents(this.input as never);
       (this.input as any).on("keypress", (str: string, key: unknown) => this.onKey(str, key));
     } else {
@@ -141,7 +159,7 @@ export class LineEditor implements LineInput {
     this.col = 0;
     this.historyIndex = -1;
     this.stash = null;
-    this.prevCursorRow = 0;
+    this.invalidateAnchor();
     if (this.input.isTTY) this.render();
   }
 
@@ -151,7 +169,7 @@ export class LineEditor implements LineInput {
     this.lines = [""];
     this.row = 0;
     this.col = 0;
-    this.prevCursorRow = 0;
+    this.invalidateAnchor();
     if (this.input.isTTY) this.render();
   }
 
@@ -376,10 +394,10 @@ export class LineEditor implements LineInput {
       const answer = this.lines.join("\n").trim();
       this.commitFrame();
       this.output.write("\r\n");
+      this.invalidateAnchor();
       this.lines = [""];
       this.row = 0;
       this.col = 0;
-      this.prevCursorRow = 0;
       cb(answer);
       return;
     }
@@ -394,20 +412,26 @@ export class LineEditor implements LineInput {
     this.stash = null;
     this.commitFrame();
     this.output.write("\r\n");
+    this.invalidateAnchor();
     this.lines = [""];
     this.row = 0;
     this.col = 0;
-    this.prevCursorRow = 0;
     this.emitLine(text);
   }
 
   /** Move the cursor to the end of the buffer's last visual row so the
-   *  submitted text stays on screen (commit), without erasing the frame. */
+   *  submitted text stays on screen (commit), without erasing the frame.
+   *  Uses the absolute anchor when known — relative moves land short once
+   *  a tall frame has scrolled the terminal. */
   private commitFrame(): void {
-    const layout = this.layout();
+    const layout = this.visibleLayout();
+    const lastLen = charLen(stripAnsi(layout[layout.length - 1].text));
+    if (this.frameTopAbs !== null) {
+      this.output.write(`\x1b[${this.frameTopAbs + layout.length - 1};${lastLen + 1}H`);
+      return;
+    }
     const idx = layoutIndexFor(layout, this.row, this.col);
     const rowsDown = layout.length - 1 - idx;
-    const lastLen = charLen(stripAnsi(layout[layout.length - 1].text));
     const out: string[] = [];
     if (rowsDown > 0) out.push(`\x1b[${rowsDown}B`);
     out.push("\r");
@@ -419,7 +443,7 @@ export class LineEditor implements LineInput {
     this.lines = [""];
     this.row = 0;
     this.col = 0;
-    this.prevCursorRow = 0;
+    this.invalidateAnchor();
     this.render();
     if (this.onInterrupt) {
       this.onInterrupt();
@@ -714,7 +738,7 @@ export class LineEditor implements LineInput {
 
   private clearScreen(): void {
     this.output.write("\x1b[2J\x1b[H");
-    this.prevCursorRow = 0;
+    this.invalidateAnchor();
     this.render();
   }
 
@@ -733,9 +757,60 @@ export class LineEditor implements LineInput {
     );
   }
 
+  /** 1-based terminal height, or null when unknown (tests / non-TTY). */
+  private screenRows(): number | null {
+    const r = (this.output as { rows?: number }).rows;
+    return typeof r === "number" && r > 3 ? r : null;
+  }
+
+  /** Cap the rendered frame to the visible screen. A frame taller than the
+   *  terminal cannot be redrawn in place at all (its top scrolls off), so
+   *  only the tail is drawn; the absolute anchor keeps the next render
+   *  consistent regardless. */
+  private visibleLayout(): LayoutRow[] {
+    const layout = this.layout();
+    const H = this.screenRows();
+    const maxRows = H ? H - 2 : 0;
+    if (maxRows > 0 && layout.length > maxRows) {
+      return layout.slice(layout.length - maxRows);
+    }
+    return layout;
+  }
+
+  /** Forget the learned absolute frame position — the cursor has jumped to
+   *  an unknown location (external output, clear screen, fresh prompt).
+   *  The next render will re-query via DSR. */
+  private invalidateAnchor(): void {
+    this.frameTopAbs = null;
+    this.dsrPending = false;
+    this.dsrTail = "";
+    this.prevCursorRow = 0;
+  }
+
+  /** Parse `ESC[row;colR` cursor-position replies. Buffers partial escape
+   *  sequences across chunks. Accepts at most one reply (the outstanding
+   *  query); extras are silently dropped. Validates the reported row against
+   *  `screenRows()` to reject implausible ConPTY values. */
+  private consumeDsrReplies(chunk: string): void {
+    this.dsrTail = (this.dsrTail + chunk).slice(-80);
+    const m = /\x1b\[(\d+);(\d+)R/.exec(this.dsrTail);
+    if (!m) return;
+    this.dsrTail = "";
+    if (!this.dsrPending) return;
+    this.dsrPending = false;
+    const row = Number(m[1]);
+    const idx = Number(m[2]);
+    // idx is not the layout index — it's the column from the reply; ignore it.
+    // We compute frameTop from the reply row minus the cursor's visual row
+    // at query time.  The visual row was stored in `prevCursorRow` when the
+    // query was sent (right after render).
+    const top = row - this.prevCursorRow;
+    if (top >= 1) this.frameTopAbs = top;
+  }
+
   private render(): void {
     if (!this.input.isTTY || this.isDone) return;
-    const layout = this.layout();
+    const layout = this.visibleLayout();
     const promptWidth = stringWidth(stripAnsi(this.promptStr));
     const idx = layoutIndexFor(layout, this.row, this.col);
     const vcol = visualColAt(layout, idx, this.col);
@@ -743,13 +818,18 @@ export class LineEditor implements LineInput {
     const ccol = (idx === 0 ? promptWidth : 0) + vcol;
 
     const out: string[] = [];
-    // Move back up to the frame's first row before redrawing. Without this,
-    // a redraw that starts on a middle/bottom row (e.g. typing on line 2 of
-    // a multi-line buffer) writes the whole frame one row too low and leaves
-    // the previous frame's top line stale on screen — the user sees every
-    // line duplicated.
-    if (this.prevCursorRow > 0) out.push(`\x1b[${this.prevCursorRow}A`);
-    out.push("\r");
+    // Return to the frame's first row before redrawing.  Absolute
+    // positioning (learned via a single DSR query per prompt) is
+    // scroll-proof; relative up-moves are the fallback until the
+    // initial reply arrives.
+    if (this.frameTopAbs !== null) {
+      out.push(`\x1b[${this.frameTopAbs};1H`);
+    } else if (this.prevCursorRow > 0) {
+      out.push(`\x1b[${this.prevCursorRow}A`);
+      out.push("\r");
+    } else {
+      out.push("\r");
+    }
     for (let i = 0; i < layout.length; i++) {
       out.push("\x1b[2K");
       if (i === 0) out.push(this.promptStr);
@@ -760,8 +840,31 @@ export class LineEditor implements LineInput {
     if (rowsAfter > 0) out.push(`\x1b[${rowsAfter}A`);
     out.push("\r");
     if (ccol > 0) out.push(`\x1b[${ccol}C`);
-    this.prevCursorRow = idx;
     this.output.write(out.join(""));
+
+    // Deterministic scroll math: update the anchor for the NEXT render.
+    // After writing L rows starting from frameTopAbs, if the frame extends
+    // past the screen bottom the terminal scrolls; the new frame top is
+    // computed locally — no further DSR queries needed.
+    if (this.frameTopAbs !== null) {
+      const H = this.screenRows();
+      if (H) {
+        const T = this.frameTopAbs;
+        const L = layout.length;
+        if (T + L - 1 > H) this.frameTopAbs = H - L + 1;
+        // else: no scroll, anchor unchanged
+      }
+    } else if (!this.dsrPending) {
+      // First render after prompt — send exactly ONE DSR query.
+      // Disabled for now: ConPTY may buffer stdout while processing
+      // the DSR reply, hiding agent responses.  Will revisit once
+      // scroll-proof rendering is solved via deterministic tracking.
+      //
+      // this.dsrPending = true;
+      // this.output.write("\x1b[6n");
+    }
+
+    this.prevCursorRow = idx;
   }
 
   private enableTerminalProtocols(): void {

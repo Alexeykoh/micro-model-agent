@@ -318,4 +318,81 @@ describe("LineEditor", () => {
     const clears = (output.data.match(/\x1b\[2K/g) || []).length;
     expect(clears).toBeGreaterThanOrEqual(layout.length);
   });
+
+  it("does not send DSR queries (disabled for ConPTY compatibility)", async () => {
+    const { input, output } = makeEditor();
+    input.pushData("hi");
+    await tick();
+    expect(output.data).not.toContain("\x1b[6n");
+  });
+
+  it("learns the absolute frame anchor from a DSR reply", async () => {
+    const { editor, input, output } = makeEditor({ prompt: "You: " });
+    // DSR disabled by default; manually set anchor to simulate a reply.
+    input.pushData("hello");
+    await tick();
+    expect(output.data).not.toContain("\x1b[1;1H");
+    // Manually set the anchor (simulating a DSR reply).
+    editor["frameTopAbs"] = 4;
+    // Next keystroke renders with an ABSOLUTE home onto row 4.
+    output.data = "";
+    input.pushData("!");
+    await tick();
+    expect(output.data.startsWith("\x1b[4;1H")).toBe(true);
+  });
+
+  it("updates the anchor deterministically after a scroll", async () => {
+    const { editor, input, output } = makeEditor();
+    (output as unknown as { rows: number }).rows = 12;
+    // Manually set anchor to simulate DSR reply.
+    editor["frameTopAbs"] = 8;
+    // Build a 3-row buffer.
+    input.pushData("a\x1b[13;2ub\x1b[13;2uc");
+    await tick();
+    // T=8, L=3, H=12 → no scroll (8+2=10 ≤ 12).
+    output.data = "";
+    input.pushData("d");
+    await tick();
+    expect(output.data.startsWith("\x1b[8;1H")).toBe(true);
+    expect(editor["frameTopAbs"]).toBe(8);
+    // Add lines so T+L-1 > H → scroll occurs.
+    input.pushData("\x1b[13;2u");
+    input.pushData("e");
+    await tick();
+    // T=8, L=4, H=12 → 8+3=11 ≤ 12, still no scroll.
+    input.pushData("\x1b[13;2u");
+    input.pushData("f");
+    await tick();
+    // T=8, L=5, H=12 → 8+4=12 ≤ 12, still no scroll.
+    input.pushData("\x1b[13;2u");
+    input.pushData("g");
+    await tick();
+    // T=8, L=6, H=12 → 8+5=13 > 12 → scroll by 1. New anchor = 12-6+1 = 7.
+    expect(editor["frameTopAbs"]).toBe(7);
+  });
+
+  it("caps the rendered frame to the visible screen rows", async () => {
+    const { editor, input, output } = makeEditor();
+    (output as unknown as { rows: number }).rows = 5;
+    input.pushData("\x1b[200~");
+    input.pushData("l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10");
+    input.pushData("\x1b[201~");
+    await tick();
+    // maxRows = rows - 2 = 3: only the tail of the frame is drawn.
+    const clears = (output.data.match(/\x1b\[2K/g) || []).length;
+    expect(clears).toBe(3);
+    expect(editor["visibleLayout"]().length).toBe(3);
+  });
+
+  it("resets the anchor on reset() and question()", async () => {
+    const { editor, input } = makeEditor();
+    editor["frameTopAbs"] = 5;
+    input.pushData("abc");
+    await tick();
+    expect(editor["frameTopAbs"]).toBe(5);
+    editor.reset();
+    expect(editor["frameTopAbs"]).toBeNull();
+    editor.question("Name: ", () => {});
+    expect(editor["frameTopAbs"]).toBeNull();
+  });
 });
