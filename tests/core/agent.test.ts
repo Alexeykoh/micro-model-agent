@@ -598,6 +598,64 @@ describe("Agent", () => {
     expect(result.text).toBe("Final answer");
   });
 
+  it("feeds a recoverable LLM error back into context instead of dying", async () => {
+    let call = 0;
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(() => {
+        call++;
+        if (call === 1) {
+          const err = new Error("Response hit the completion token limit (4096) mid tool_call");
+          (err as any).recoverableLlm = true;
+          throw err;
+        }
+        return (async function* () {
+          yield { type: "text" as const, content: "Recovered answer" };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        })();
+      }),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("task");
+
+    expect(mockProvider.chat).toHaveBeenCalledTimes(2);
+    expect(result.success).toBe(true);
+    expect(result.text).toBe("Recovered answer");
+    // The localized error reason is fed back as a system-summary message.
+    const addMessage = deps.contextManager.addMessage as any;
+    expect(addMessage).toHaveBeenCalled();
+    expect(
+      addMessage.mock.calls.some(
+        ([msg]: any[]) => msg?.role === "user" && msg?.content.includes("<system-summary>"),
+      ),
+    ).toBe(true);
+  });
+
+  it("gives up after MAX_LLM_ERROR_RETRIES recoverable errors", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(() => {
+        const err = new Error("Response hit the completion token limit (4096)");
+        (err as any).recoverableLlm = true;
+        throw err;
+      }),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("task");
+
+    // 1 initial + 2 retries, then the fatal path.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(3);
+    expect(result.success).toBe(false);
+  });
+
   it("streams reasoning via onMeta when showReasoning is true", async () => {
     const mockProvider = {
       model: "test-model",

@@ -572,3 +572,64 @@ describe("StuckDetector buildSearchQuery", () => {
     expect(q.length).toBeLessThanOrEqual(50);
   });
 });
+
+describe("StuckDetector bash flailing (P4)", () => {
+  let detector: StuckDetector;
+
+  beforeEach(() => {
+    detector = new StuckDetector(5, 3);
+  });
+
+  it("does not fire below the failure threshold", () => {
+    detector.recordBashAttempt(false);
+    detector.recordBashAttempt(true);
+    detector.recordBashAttempt(false);
+    detector.recordBashAttempt(true);
+    detector.recordBashAttempt(false);
+    expect(detector.hasBashFlailing()).toBe(false);
+  });
+
+  it("fires when 4 of the last 6 bash attempts failed", () => {
+    for (const ok of [true, false, true, false, false, false]) {
+      detector.recordBashAttempt(ok);
+    }
+    expect(detector.hasBashFlailing()).toBe(true);
+    expect(detector.getWarningKey()).toBe("bash-flailing");
+    const recovery = detector.getRecoveryMessage();
+    expect(recovery).toContain("bash");
+    expect(recovery).toContain("read_file");
+  });
+
+  it("window slides — old failures age out", () => {
+    // 4 failures then 2 successes → only 4 in window, still flailing;
+    // one more success pushes the oldest failure out → 3 of 6 → clears.
+    for (const ok of [false, false, false, false, true, true]) {
+      detector.recordBashAttempt(ok);
+    }
+    expect(detector.hasBashFlailing()).toBe(true);
+    detector.recordBashAttempt(true);
+    expect(detector.hasBashFlailing()).toBe(false);
+  });
+
+  it("interleaved successes do not reset the counter", () => {
+    // The exact ses_mt4x3zbo pattern: bash fails, read_file succeeds,
+    // different bash command fails… consecutive-failure reset must not hide it.
+    for (const ok of [false, true, false, true, false]) {
+      detector.recordBashAttempt(ok);
+      if (!ok) detector.recordToolError("bash", "cmd not found");
+      else {
+        detector.recordToolCall("read_file", { path: "x" });
+        detector.recordToolSuccess();
+      }
+    }
+    detector.recordBashAttempt(false);
+    expect(detector.hasBashFlailing()).toBe(true);
+  });
+
+  it("reset() clears the window", () => {
+    for (let i = 0; i < 6; i++) detector.recordBashAttempt(false);
+    expect(detector.hasBashFlailing()).toBe(true);
+    detector.reset();
+    expect(detector.hasBashFlailing()).toBe(false);
+  });
+});

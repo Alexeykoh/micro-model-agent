@@ -589,6 +589,148 @@ describe("OpenAICompatProvider", () => {
     expect(chunks.join("")).toBe("ok");
   });
 
+  it("should enrich the idle-timeout error when a tool_call has started", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: {
+        maxRetries: 1,
+        baseDelay: 5,
+        maxDelay: 50,
+        maxStreamRetries: 0,
+        noDataTimeoutMs: 25,
+      },
+    });
+
+    const encoder = new TextEncoder();
+    let firstSignal: AbortSignal | undefined;
+    const mockFetch = vi
+      .fn()
+      .mockImplementationOnce((_url: string, init: RequestInit) => {
+        firstSignal = init.signal ?? undefined;
+        return Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              // First packet: tool_call starts, then silence forever (buffered provider).
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"t1","type":"function","function":{"name":"write_file","arguments":""}}]}}]}\n\n',
+                ),
+              );
+              firstSignal!.addEventListener("abort", () => {
+                controller.error(new DOMException("Aborted", "AbortError"));
+              });
+            },
+            pull() {
+              return new Promise(() => {});
+            },
+          }),
+        });
+      })
+      .mockImplementation((_url: string, _init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          }),
+        }),
+      );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.message).toContain("tool_call");
+      expect(e.message).toContain("retry.noDataTimeoutMs");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should throw an actionable error when a tool_call is cut off by the length limit", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"t1","type":"function","function":{"name":"write_file","arguments":"{\\"path\\":\\"story.md\\",\\"content\\":\\"long st"}}]}}]}\n\n',
+              ),
+            );
+            // Length limit hit mid-arguments — no finish_reason "tool_calls".
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.message).toContain("tool_call");
+      expect(e.message).toContain("maxCompletionTokens");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1); // llmTerminal — no blind retries
+  });
+
+  it("should throw an actionable error when the response is empty and length-capped", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.message).toContain("maxCompletionTokens");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("should retry a stream that closes before [DONE] with zero content", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",

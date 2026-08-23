@@ -391,6 +391,12 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         }
       }
       if (!result.success) {
+        // Feed the bash attempt outcome into the flailing window BEFORE the
+        // per-command handling — rotation across different failing commands
+        // (wc → cat → Get-Content → …) must still trip the detector.
+        if (call.name === "bash") {
+          deps.stuckDetector.recordBashAttempt(false);
+        }
         // Hard stop for forbidden Windows commands: after the second
         // failure of the same forbidden command (grep/sed/ls/find/…),
         // inject a STOP message so the session stops burning bash calls
@@ -421,6 +427,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         }
       } else {
         deps.stuckDetector.recordToolSuccess();
+        if (call.name === "bash") {
+          deps.stuckDetector.recordBashAttempt(true);
+        }
 
         // When a bash command runs code successfully, suggest marking the
         // step done — unless the output shows failing tests, which must

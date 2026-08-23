@@ -30,6 +30,7 @@ const QUALITY_TRIGGER_THRESHOLD = 40;
  * (observed: 56 compactions in ~28 min) and the compaction itself can't
  * restore quality, so the agent burns the whole budget compacting. */
 const FORCED_COMPACTION_COOLDOWN = 3;
+const MAX_LLM_ERROR_RETRIES = 2;
 
 /** True when the text looks like a raw JSON tool payload (garbage to display). */
 function isToolCallJson(text: string): boolean {
@@ -436,6 +437,7 @@ export class Agent {
     let suppressRepetitionRetry = false;
     let repeatedToolCount = 0;
     const MAX_REPEATED_TOOL_CALLS = 2;
+    let llmErrorRetries = 0;
 
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
@@ -600,6 +602,23 @@ export class Agent {
         if (this.shutdownRequested || err?.name === "AbortError") {
           logger.info("LLM call aborted (interrupt)");
           break;
+        }
+        // Recoverable LLM errors (e.g. the completion hit the token limit
+        // mid-tool_call): feed the localized reason back into context so the
+        // model can adapt (split the write into smaller chunks) instead of
+        // the whole session dying. Bounded to avoid infinite loops.
+        if (err?.recoverableLlm && llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
+          llmErrorRetries++;
+          logger.warn(
+            `Recoverable LLM error, feeding back (${llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
+          );
+          slog.logError(err.message);
+          pluginManager.runOnError({ iteration, logger, contextManager }, err);
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>${err.message}</system-summary>`,
+          });
+          continue;
         }
         logger.logLLMResponse(
           config.model,

@@ -81,7 +81,7 @@ export class OpenAICompatProvider implements LLMProvider {
       baseDelay: 1000,
       maxDelay: 30000,
       maxStreamRetries: 2,
-      noDataTimeoutMs: 60000,
+      noDataTimeoutMs: 180000,
     };
     this.rateLimiter = createRateLimiter(config.rateLimits);
   }
@@ -129,7 +129,7 @@ export class OpenAICompatProvider implements LLMProvider {
   ): AsyncIterable<Chunk> {
     const { baseDelay, maxDelay, maxStreamRetries, noDataTimeoutMs } = this.retryConfig;
     const streamRetries = maxStreamRetries ?? 2;
-    const idleTimeoutMs = noDataTimeoutMs ?? 60000;
+    const idleTimeoutMs = noDataTimeoutMs ?? 180000;
 
     for (let attempt = 0; ; attempt++) {
       let emitted = false;
@@ -162,12 +162,13 @@ export class OpenAICompatProvider implements LLMProvider {
     onEmit: () => void,
     idleTimeoutMs: number,
   ): AsyncGenerator<Chunk, boolean> {
+    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096;
     const body = buildRequestBody({
       model: this.model,
       messages,
       tools,
       stream: true,
-      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
+      maxTokens,
       reasoningEffort: options?.reasoningEffort,
     });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
@@ -213,9 +214,15 @@ export class OpenAICompatProvider implements LLMProvider {
     const decoder = new TextDecoder();
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
+    // A tool_call started accumulating — the server committed to a response.
+    // If the stream stalls after this, the provider most likely buffers SSE
+    // instead of streaming argument deltas (seen with LM Studio).
+    let sawToolCallStart = false;
 
     let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
     let sawDone = false;
+    let lastFinishReason: string | undefined;
+    let sawText = false;
 
     type ReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
     const readIdle = (): Promise<ReadResult> =>
@@ -227,12 +234,28 @@ export class OpenAICompatProvider implements LLMProvider {
         reader.read().then(
           (result) => {
             clearTimeout(idleTimer);
-            if (isTimeout()) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            if (isTimeout())
+              reject(
+                new Error(
+                  t(
+                    sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
+                    { timeout: idleTimeoutMs },
+                  ),
+                ),
+              );
             else resolve(result);
           },
           (err) => {
             clearTimeout(idleTimer);
-            if (isTimeout()) reject(new Error(t("error.llm_stream_idle", { timeout: idleTimeoutMs })));
+            if (isTimeout())
+              reject(
+                new Error(
+                  t(
+                    sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
+                    { timeout: idleTimeoutMs },
+                  ),
+                ),
+              );
             else reject(err);
           },
         );
@@ -274,6 +297,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
             const delta = choice.delta || {};
             const finishReason = choice.finish_reason;
+            if (finishReason) lastFinishReason = finishReason;
 
             if (delta.reasoning_content) {
               onEmit();
@@ -281,6 +305,7 @@ export class OpenAICompatProvider implements LLMProvider {
             }
 
             if (delta.tool_calls) {
+              sawToolCallStart = true;
               for (const tc of delta.tool_calls) {
                 const idx = tc.index ?? 0;
                 if (!toolCallAccs.has(idx)) {
@@ -297,6 +322,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
             if (delta.content) {
               onEmit();
+              sawText = true;
               yield { type: "text", content: delta.content };
             }
 
@@ -324,6 +350,27 @@ export class OpenAICompatProvider implements LLMProvider {
       if (usage) {
         onEmit();
         yield { type: "done", usage };
+      }
+
+      // finish_reason "length": the completion hit the token limit. An
+      // unfinished tool_call would otherwise be silently swallowed (tool_calls
+      // are only yielded on finish_reason "tool_calls") and surface as an
+      // empty response → blind hallucination retries. Surface the real cause.
+      if (lastFinishReason === "length") {
+        const truncatedToolCall = sawToolCallStart && toolCallAccs.size > 0;
+        if (truncatedToolCall || !sawText) {
+          const err = new Error(
+            t(truncatedToolCall ? "error.llm_truncated_toolcall" : "error.llm_truncated", {
+              tokens: maxTokens,
+            }),
+          );
+          (err as any).llmTerminal = true;
+          // The provider is fine — the model just overran the completion
+          // limit. The agent loop feeds this back so the model can adapt
+          // (split the output) instead of the session dying.
+          (err as any).recoverableLlm = true;
+          throw err;
+        }
       }
     } finally {
       cleanup();

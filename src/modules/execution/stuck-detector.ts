@@ -76,6 +76,17 @@ const READ_ONLY_TOOLS = new Set([
 /** Consecutive read-only tool calls that constitute a loop. */
 const READ_ONLY_LOOP_THRESHOLD = 10;
 
+/**
+ * Bash flailing: ≥BASH_FLAIL_THRESHOLD failures within the last
+ * BASH_FLAIL_WINDOW bash attempts, regardless of interleaved successes.
+ * The per-word hard-stop (bash.ts) is evaded by rotating commands
+ * (wc → cat → Get-Content → …); this window catches the rotation itself
+ * (observed in ses_mt4x3zbo: 8 failed shell tricks across ~12 iterations
+ * trying to count/merge files on Windows).
+ */
+const BASH_FLAIL_WINDOW = 6;
+const BASH_FLAIL_THRESHOLD = 4;
+
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 /** Пути (абсолютные/относительные) + опционально :line:col. */
 const ERROR_LOC_RE =
@@ -224,6 +235,7 @@ export class StuckDetector {
   private lastBashOutput = "";
   private emptyBashRunCount = 0;
   private readOnlyStreak = 0;
+  private bashRecent: boolean[] = [];
   private errorSignatureCounts: Map<string, number> = new Map();
   private searchedErrorSignatures: Set<string> = new Set();
   private webSearchThreshold: number;
@@ -295,6 +307,20 @@ export class StuckDetector {
     }
     this.lastBashCommand = command;
     this.lastBashOutput = output;
+  }
+
+  /** Outcome of one bash attempt (success or failure), for flailing detection. */
+  recordBashAttempt(success: boolean): void {
+    this.bashRecent.push(success);
+    if (this.bashRecent.length > BASH_FLAIL_WINDOW) this.bashRecent.shift();
+  }
+
+  /** True when most recent bash attempts failed — the model is flailing. */
+  hasBashFlailing(): boolean {
+    if (this.bashRecent.length < BASH_FLAIL_THRESHOLD) return false;
+    let failures = 0;
+    for (const ok of this.bashRecent) if (!ok) failures++;
+    return failures >= BASH_FLAIL_THRESHOLD;
   }
 
   getLastBashCommand(): string {
@@ -651,6 +677,7 @@ export class StuckDetector {
       ([_, c]) => c >= this.errorThreshold,
     );
     if (errorTool) return `tool-errors:${errorTool[0]}`;
+    if (this.hasBashFlailing()) return "bash-flailing";
     if (this.hasConsecutiveFailures()) return "consecutive";
     if (this.hasRepetitiveToolCalls()) return "repetitive";
     if (this.hasReadOnlyLoop()) return "read-only";
@@ -704,6 +731,13 @@ export class StuckDetector {
         count: this.consecutiveFailures,
       });
     }
+    if (reason === "bash-flailing") {
+      const fails = this.bashRecent.filter((ok) => !ok).length;
+      return t("exec.bash_flailing_recovery", {
+        fails: String(fails),
+        window: String(this.bashRecent.length),
+      });
+    }
     if (reason === "repetitive") {
       return this.getRepetitiveToolMessage();
     }
@@ -723,12 +757,19 @@ export class StuckDetector {
    * read-only).
    */
   private getPrimaryReason():
-    "stuck" | "tool-errors" | "consecutive" | "repetitive" | "read-only" | null {
+    | "stuck"
+    | "tool-errors"
+    | "consecutive"
+    | "repetitive"
+    | "read-only"
+    | "bash-flailing"
+    | null {
     if (this.isStuck()) return "stuck";
     const errorTool = Array.from(this.toolErrors.entries()).find(
       ([_, c]) => c >= this.errorThreshold,
     );
     if (errorTool) return "tool-errors";
+    if (this.hasBashFlailing()) return "bash-flailing";
     if (this.hasConsecutiveFailures()) return "consecutive";
     if (this.hasRepetitiveToolCalls()) return "repetitive";
     if (this.hasReadOnlyLoop()) return "read-only";
@@ -748,6 +789,7 @@ export class StuckDetector {
     this.lastBashCommand = "";
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
+    this.bashRecent = [];
     this.readOnlyStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
@@ -771,6 +813,7 @@ export class StuckDetector {
     this.lastBashCommand = "";
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
+    this.bashRecent = [];
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
   }
@@ -792,6 +835,7 @@ export class StuckDetector {
     this.lastBashCommand = "";
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
+    this.bashRecent = [];
     this.readOnlyStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
