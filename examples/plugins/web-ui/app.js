@@ -29,12 +29,169 @@ function escapeHtml(s) {
   })[c]);
 }
 
+/* ---------------- syntax highlighting ---------------- */
+
+/** Lightweight regex-based highlighter. Produces <span class="tok-*"> tokens. */
+function highlightCode(code, lang) {
+  if (!lang) return escapeHtml(code);
+  const l = lang.toLowerCase();
+  const rules = {
+    ts: [
+      [/(\/\/.*$)/gm, "tok-cm"],
+      [/(\/\*[\s\S]*?\*\/)/g, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, "tok-str"],
+      [/\b(const|let|var|function|return|if|else|for|while|switch|case|break|continue|new|this|class|extends|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|void|delete|yield|type|interface|enum|abstract|implements|readonly|private|public|protected|static|as|is|keyof|infer|satisfies|never|unknown|any)\b/g, "tok-kw"],
+      [/\b(true|false|null|undefined|NaN|Infinity)\b/g, "tok-num"],
+      [/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, "tok-num"],
+      [/(\w+)(?=\s*\()/g, "tok-fn"],
+      [/[=!<>]=?=?|&&|\|\||[+\-*/%]=?|\?\?|\.\.\./g, "tok-op"],
+    ],
+    js: null, // will use ts rules
+    jsx: null, tsx: null, mjs: null, cjs: null,
+    py: [
+      [/(#.*$)/gm, "tok-cm"],
+      [/("""[\s\S]*?"""|'''[\s\S]*?''')/g, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, "tok-str"],
+      [/\b(def|class|return|if|elif|else|for|while|import|from|as|try|except|finally|raise|with|yield|lambda|pass|break|continue|and|or|not|is|in|True|False|None|self|print|async|await|global|nonlocal|del|assert)\b/g, "tok-kw"],
+      [/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, "tok-num"],
+      [/(\w+)(?=\s*\()/g, "tok-fn"],
+    ],
+    sh: [
+      [/(#.*$)/gm, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, "tok-str"],
+      [/\b(if|then|else|elif|fi|for|do|done|while|case|esac|function|return|exit|local|export|source|sudo|apt|npm|bun|yarn|pip|git|docker|curl|wget|chmod|mkdir|rm|cp|mv|ls|cat|grep|sed|awk|find|xargs|echo|test)\b/g, "tok-kw"],
+      [/\b(\d+)\b/g, "tok-num"],
+      [/\$\{?\w+\}?/g, "tok-fn"],
+    ],
+    html: [
+      [/(<!--[\s\S]*?-->)/g, "tok-cm"],
+      [/(<\/?[\w-]+)/g, "tok-tag"],
+      [/(\s[\w-]+)(?==)/g, "tok-attr"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, "tok-str"],
+    ],
+    css: [
+      [/(\/\*[\s\S]*?\*\/)/g, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, "tok-str"],
+      [/(\.[\w-]+)/g, "tok-fn"],
+      [/#[\w-]+/g, "tok-type"],
+      [/\b(color|background|display|margin|padding|border|font|width|height|position|flex|grid|opacity|transition|transform|overflow)\b/g, "tok-kw"],
+      [/\b(\d+(?:px|rem|em|%|vh|vw)?)\b/g, "tok-num"],
+    ],
+    json: [
+      [/("(?:[^"\\]|\\.)*")\s*:/g, "tok-attr"],
+      [/("(?:[^"\\]|\\.)*")/g, "tok-str"],
+      [/\b(true|false|null)\b/g, "tok-kw"],
+      [/\b(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, "tok-num"],
+    ],
+    go: [
+      [/(\/\/.*$)/gm, "tok-cm"],
+      [/(\/\*[\s\S]*?\*\/)/g, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|`[^`]*`)/g, "tok-str"],
+      [/\b(func|package|import|return|if|else|for|range|switch|case|default|var|const|type|struct|interface|map|chan|go|defer|select|break|continue|nil|true|false|make|new|append|len|cap|error|string|int|bool|float64|byte)\b/g, "tok-kw"],
+      [/\b(\d+(?:\.\d+)?)\b/g, "tok-num"],
+    ],
+    rs: [
+      [/\/\/.*$/gm, "tok-cm"],
+      [/\/\*[\s\S]*?\*\//g, "tok-cm"],
+      [/(b?"(?:[^"\\]|\\.)*")/g, "tok-str"],
+      [/\b(fn|let|mut|const|return|if|else|match|for|while|loop|break|continue|struct|enum|impl|trait|pub|use|mod|crate|self|super|where|as|move|async|await|type|true|false|i32|u32|i64|u64|f32|f64|bool|String|Vec|Option|Result|Box|Rc|Arc)\b/g, "tok-kw"],
+      [/\b(\d+(?:\.\d+)?)\b/g, "tok-num"],
+    ],
+    java: [
+      [/(\/\/.*$)/gm, "tok-cm"],
+      [/(\/\*[\s\S]*?\*\/)/g, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*")/g, "tok-str"],
+      [/\b(public|private|protected|class|interface|extends|implements|return|if|else|for|while|switch|case|break|continue|new|this|super|static|final|void|int|long|double|float|boolean|char|String|try|catch|finally|throw|import|package|abstract|synchronized)\b/g, "tok-kw"],
+      [/\b(true|false|null)\b/g, "tok-num"],
+      [/\b(\d+(?:\.\d+)?)\b/g, "tok-num"],
+    ],
+    rb: [
+      [/#.*$/gm, "tok-cm"],
+      [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, "tok-str"],
+      [/\b(def|class|module|return|if|elsif|else|unless|for|while|do|end|begin|rescue|raise|require|include|extend|attr|lambda|proc|yield|self|true|false|nil|puts|print|gets)\b/g, "tok-kw"],
+      [/\b(\d+(?:\.\d+)?)\b/g, "tok-num"],
+    ],
+    md: [
+      [/^(#{1,6}\s.*)$/gm, "tok-kw"],
+      [/(```[\s\S]*?```)/g, "tok-str"],
+      [/`([^`]+)`/g, "tok-str"],
+      [/\*\*([^*]+)\*\*/g, "tok-op"],
+      [/^(\s*[-*+]\s)/gm, "tok-op"],
+      [/^(\s*\d+\.\s)/gm, "tok-op"],
+    ],
+    graphql: [
+      [/(#.*$)/gm, "tok-cm"],
+      [/\b(query|mutation|subscription|fragment|on|type|input|enum|interface|union|scalar|schema|extend|directive|repeatable| implements| @)\b/g, "tok-kw"],
+      [/("(?:[^"\\]|\\.)*")/g, "tok-str"],
+      [/(\w+)(?=\s*[({:])/g, "tok-fn"],
+      [/\b(\d+)\b/g, "tok-num"],
+    ],
+    sql: [
+      [/(--.*$)/gm, "tok-cm"],
+      [/(\/\*[\s\S]*?\*\/)/g, "tok-cm"],
+      [/('(?:[^'\\]|\\.)*')/g, "tok-str"],
+      [/\b(SELECT|FROM|WHERE|INSERT|INTO|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AND|OR|NOT|IN|EXISTS|BETWEEN|LIKE|IS|NULL|AS|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|UNION|ALL|DISTINCT|COUNT|SUM|AVG|MAX|MIN|CASE|WHEN|THEN|ELSE|END|PRIMARY|KEY|FOREIGN|REFERENCES|CONSTRAINT|DEFAULT|AUTO_INCREMENT|INT|VARCHAR|TEXT|BOOLEAN|DATE|TIMESTAMP|INTEGER)\b/gi, "tok-kw"],
+      [/\b(\d+(?:\.\d+)?)\b/g, "tok-num"],
+    ],
+  };
+  // Aliases
+  rules.js = rules.ts;
+  rules.jsx = rules.ts;
+  rules.tsx = rules.ts;
+  rules.mjs = rules.ts;
+  rules.cjs = rules.ts;
+  rules.yaml = rules.json;
+  rules.yml = rules.json;
+  rules.toml = rules.json;
+  rules.lock = null;
+  rules.txt = null;
+
+  const r = rules[l] ?? rules[l.split(".").pop()];
+  if (!r) return escapeHtml(code);
+
+  // Tokenize: apply rules sequentially, collecting spans
+  const spans = [];
+  for (const [re, cls] of r) {
+    // For JSON attr rule that builds HTML directly
+    if (typeof cls === "undefined") continue;
+    let m;
+    const rx = new RegExp(re.source, re.flags);
+    while ((m = rx.exec(code)) !== null) {
+      spans.push({ i: m.index, j: m.index + m[0].length, cls, text: m[0] });
+    }
+  }
+  // Sort by start, then longer match first
+  spans.sort((a, b) => a.i - b.i || b.j - a.j);
+
+  // Merge non-overlapping spans
+  const merged = [];
+  let lastEnd = 0;
+  for (const s of spans) {
+    if (s.i >= lastEnd) {
+      merged.push(s);
+      lastEnd = s.j;
+    }
+  }
+
+  // Build output
+  let out = "";
+  let pos = 0;
+  for (const s of merged) {
+    if (s.i > pos) out += escapeHtml(code.slice(pos, s.i));
+    out += `<span class="${s.cls}">${escapeHtml(s.text)}</span>`;
+    pos = s.j;
+  }
+  if (pos < code.length) out += escapeHtml(code.slice(pos));
+  return out;
+}
+
 /** Escape-first minimal markdown: fenced code, inline code, bold, links, autolinks, file chips. */
 function renderInline(text) {
   const blocks = [];
-  // 1. Fenced code blocks
-  let out = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
-    blocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+  // 1. Fenced code blocks — with syntax highlighting
+  let out = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+    const highlighted = highlightCode(code, lang);
+    blocks.push(`<pre><code class="lang-${lang || "text"}">${highlighted}</code></pre>`);
     return `\u0000${blocks.length - 1}\u0000`;
   });
   // 2. Escape HTML
@@ -333,11 +490,27 @@ function openToolCard(d) {
   det.appendChild(sum);
   const body = document.createElement("div");
   body.className = "tool-body";
+
+  // Build tabs container
+  const tabs = document.createElement("div");
+  tabs.className = "tool-tabs";
+
+  // Always create args tab + panel
   if (d.args) {
-    const argsPre = document.createElement("pre");
-    argsPre.innerHTML = `<div class="label">args</div><code>${escapeHtml(d.args)}</code>`;
-    body.appendChild(argsPre);
+    const btn = document.createElement("button");
+    btn.className = "tool-tab active";
+    btn.textContent = "args";
+    btn.dataset.tab = "args";
+    tabs.appendChild(btn);
+
+    const panel = document.createElement("div");
+    panel.className = "tool-tab-panel active";
+    panel.dataset.tab = "args";
+    panel.textContent = d.args;
+    body.appendChild(tabs);
+    body.appendChild(panel);
   }
+
   det.appendChild(body);
   messages.appendChild(det);
   state.toolCards.set(det.dataset.callId, det);
@@ -396,8 +569,8 @@ const TOOL_PREVIEW = {
 const GENERIC_CAP = 600;
 
 /**
- * Build the output block for a tool card.
- * Returns a DOM element. For long/HTML output: collapsible with expand toggle.
+ * Build the output content element for a tool card.
+ * Returns a DOM element with text/summary/full structure.
  */
 function buildToolOutput(output, toolName, success) {
   if (!output) return null;
@@ -463,17 +636,59 @@ function closeToolCard(d) {
   det.classList.add(d.success ? "ok" : "err");
   det.querySelector(".duration").textContent =
     `${d.success ? "✓" : "✗"} ${((d.durationMs || 0) / 1000).toFixed(1)}s`;
+
+  const body = det.querySelector(".tool-body");
+  const tabs = body.querySelector(".tool-tabs");
+
   if (d.output) {
-    const body = det.querySelector(".tool-body");
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = "output";
-    body.appendChild(label);
+    // Create or find tabs container
+    if (!tabs) {
+      const newTabs = document.createElement("div");
+      newTabs.className = "tool-tabs";
+      body.prepend(newTabs);
+    }
+    const tabBar = body.querySelector(".tool-tabs");
+
+    // Add output tab button
+    const outBtn = document.createElement("button");
+    outBtn.className = "tool-tab";
+    outBtn.textContent = "output";
+    outBtn.dataset.tab = "output";
+    tabBar.appendChild(outBtn);
+
+    // Add output panel
+    const outPanel = document.createElement("div");
+    outPanel.className = "tool-tab-panel";
+    outPanel.dataset.tab = "output";
     const outBlock = buildToolOutput(d.output, d.name, d.success);
-    if (outBlock) body.appendChild(outBlock);
+    if (outBlock) outPanel.appendChild(outBlock);
+    body.appendChild(outPanel);
+
+    // Switch to output tab
+    tabBar.querySelectorAll(".tool-tab").forEach((b) => b.classList.remove("active"));
+    body.querySelectorAll(".tool-tab-panel").forEach((p) => p.classList.remove("active"));
+    outBtn.classList.add("active");
+    outPanel.classList.add("active");
+
     // Auto-open the card on failure so the error is visible immediately.
     if (!d.success) det.open = true;
   }
+
+  // Wire up tab switching (after all tabs exist)
+  const tabBarFinal = body.querySelector(".tool-tabs");
+  if (tabBarFinal && !tabBarFinal._wired) {
+    tabBarFinal._wired = true;
+    tabBarFinal.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tool-tab");
+      if (!btn) return;
+      const name = btn.dataset.tab;
+      tabBarFinal.querySelectorAll(".tool-tab").forEach((b) => b.classList.remove("active"));
+      body.querySelectorAll(".tool-tab-panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      body.querySelector(`.tool-tab-panel[data-tab="${name}"]`)?.classList.add("active");
+    });
+  }
+
   state.toolCards.delete(d.toolCallId);
   scrollDown();
 }
@@ -590,6 +805,7 @@ async function submitText(text, images) {
       body: JSON.stringify({ text, images: images || [] }),
     });
     if (res.status === 202) {
+      finalizeAssistant(); // close any in-progress stream before showing the new message
       addUserMessage(renderInline(text));
       setBusy(true);
       setTyping(true); // feedback until the first llm_start/text arrives

@@ -40,15 +40,15 @@ body {
 #app { display: flex; height: 100%; }
 
 #side {
-  width: 260px; flex-shrink: 0;
+  width: 340px; flex-shrink: 0;
   background: var(--side);
   border-right: 1px solid var(--border);
   padding: 14px;
   overflow-y: auto;
   transition: margin-left .18s ease;
 }
-body.side-collapsed #side { margin-left: -260px; }
-@media (max-width: 900px) { body:not(.side-open) #side { margin-left: -260px; } }
+body.side-collapsed #side { margin-left: -340px; }
+@media (max-width: 900px) { body:not(.side-open) #side { margin-left: -340px; } }
 
 .side-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -234,13 +234,28 @@ details.tool.err > summary::before { background: var(--red); }
 .tname { font-weight: 600; }
 .tsummary { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .duration { margin-left: auto; color: var(--dim); font-size: 12px; flex-shrink: 0; }
+/* tool body & tabs */
 .tool-body { padding: 0 16px 12px; overflow-wrap: anywhere; }
-.tool-body .label { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-.tool-body pre {
-  background: var(--bg); margin: 6px 0 10px; font-size: 12.5px;
-  max-height: 320px; overflow: auto;
-  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+.tool-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); margin: 4px 0 0;
 }
+.tool-tab {
+  background: none; border: none; color: var(--dim);
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  padding: 6px 14px; cursor: pointer; border-bottom: 2px solid transparent;
+  transition: color .12s, border-color .12s;
+}
+.tool-tab:hover { color: var(--fg); }
+.tool-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.tool-tab-panel {
+  display: none; margin: 6px 0 0;
+  background: var(--bg);
+  border-radius: 8px; font-family: var(--mono); font-size: 12.5px;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  max-height: 320px; overflow: auto; line-height: 1.5;
+  padding: 8px 12px;
+}
+.tool-tab-panel.active { display: block; }
 .tool-out { margin: 4px 0 0; }
 .tool-out-summary {
   padding: 8px 12px; background: var(--bg);
@@ -274,6 +289,18 @@ details.tool.err > summary::before { background: var(--red); }
   color: var(--accent); text-decoration: none; word-break: break-all;
 }
 .tool-url-chip:hover { text-decoration: underline; }
+
+/* syntax highlighting tokens */
+.tok-kw { color: #c678dd; }      /* keywords */
+.tok-str { color: #98c379; }     /* strings */
+.tok-num { color: #d19a66; }     /* numbers */
+.tok-cm { color: #5c6370; font-style: italic; }  /* comments */
+.tok-fn { color: #61afef; }      /* function names */
+.tok-op { color: #56b6c2; }      /* operators */
+.tok-type { color: #e5c07b; }    /* types / classes */
+.tok-tag { color: #e06c75; }     /* HTML tags */
+.tok-attr { color: #d19a66; }    /* HTML attributes */
+.tok-punct { color: #abb2bf; }   /* punctuation */
 
 /* ---------- composer ---------- */
 #composer-wrap { padding: 6px 20px 14px; }
