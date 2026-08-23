@@ -23,6 +23,7 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { HostBridge } from "../modules/types";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
@@ -56,6 +57,31 @@ function formatContextBar(
     line += `  ${qColor(`quality: ${quality}%`)}`;
   }
   return line;
+}
+
+/**
+ * Build the HostBridge exposed to plugins as `ctx.hostBridge`. Web clients
+ * (and any other plugin) submit messages through the SAME runAgent path as
+ * terminal input — rendering, session logging and single-flight guard are
+ * shared, never duplicated.
+ */
+export function createHostBridge(opts: {
+  isBusy: () => boolean;
+  addPendingImage: (dataUrl: string) => void;
+  runAgent: (text: string) => Promise<unknown>;
+  interruptRun: () => void;
+}): HostBridge {
+  return {
+    isBusy: opts.isBusy,
+    async submit(text, o) {
+      if (opts.isBusy()) throw new Error("agent is busy");
+      for (const url of o?.images ?? []) opts.addPendingImage(url);
+      return opts.runAgent(text);
+    },
+    interrupt() {
+      if (opts.isBusy()) opts.interruptRun();
+    },
+  };
 }
 
 export class Repl implements ReplContext {
@@ -148,6 +174,23 @@ export class Repl implements ReplContext {
     registerAllCommands(this);
     this.setupCompleter();
     this.setupListeners();
+
+    // Expose the agent to plugins (web UI etc.) through a narrow bridge.
+    if (pluginManager) {
+      pluginManager.setHostBridge(
+        createHostBridge({
+          isBusy: () => this.agentRunning,
+          addPendingImage: (url) => {
+            this.agent.contextManager?.addPendingImage?.({
+              type: "image_url",
+              image_url: { url },
+            });
+          },
+          runAgent: (text) => this.runAgent(text),
+          interruptRun: () => this.agent.shutdown(),
+        }),
+      );
+    }
   }
 
   private loadHistory(): void {
