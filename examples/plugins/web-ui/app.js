@@ -228,7 +228,11 @@ function addUserMessage(html) {
   bubble.className = "bubble";
   bubble.innerHTML = html;
   div.appendChild(bubble);
-  messages.appendChild(div);
+  if (state.typingEl) {
+    messages.insertBefore(div, state.typingEl);
+  } else {
+    messages.appendChild(div);
+  }
   scrollDown();
 }
 
@@ -241,7 +245,12 @@ function addAssistantMessage() {
   const content = document.createElement("div");
   content.className = "content text";
   div.append(av, content);
-  messages.appendChild(div);
+  // Insert before typing dots so dots stay below the message
+  if (state.typingEl) {
+    messages.insertBefore(div, state.typingEl);
+  } else {
+    messages.appendChild(div);
+  }
   scrollDown();
   return content;
 }
@@ -257,7 +266,9 @@ function addSystemLine(html) {
 /* ---------------- typing indicator ---------------- */
 
 function setTyping(on) {
-  if (on && !state.typingEl && !state.currentAssistant) {
+  if (on) {
+    // Always ensure dots are the last element in messages
+    if (state.typingEl) state.typingEl.remove();
     const row = document.createElement("div");
     row.className = "msg assistant";
     const av = document.createElement("div");
@@ -270,7 +281,7 @@ function setTyping(on) {
     messages.appendChild(row);
     state.typingEl = row;
     scrollDown();
-  } else if (!on && state.typingEl) {
+  } else if (state.typingEl) {
     state.typingEl.remove();
     state.typingEl = null;
   }
@@ -806,6 +817,7 @@ async function submitText(text, images) {
     });
     if (res.status === 202) {
       finalizeAssistant(); // close any in-progress stream before showing the new message
+      setTyping(false);   // remove any lingering typing dots
       addUserMessage(renderInline(text));
       setBusy(true);
       setTyping(true); // feedback until the first llm_start/text arrives
