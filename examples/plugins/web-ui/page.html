@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MMA — Web UI</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header id="topbar">
+  <span class="brand">MMA</span>
+  <span id="conn" class="conn conn-off" title="SSE connection">●</span>
+  <span id="session-name" class="meta"></span>
+  <span id="model" class="meta"></span>
+  <span id="ctx" class="meta"></span>
+  <span class="spacer"></span>
+</header>
+
+<main id="layout">
+  <section id="chat" aria-label="Chat">
+    <div id="messages"></div>
+
+    <div id="dropzone" class="hidden">
+      <div>Drop images to attach</div>
+    </div>
+
+    <div id="composer">
+      <div id="thumbs"></div>
+      <div id="inputrow">
+        <label id="attach" title="Attach images">
+          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          ＋
+        </label>
+        <textarea id="input" rows="2" placeholder="Message the agent… (Enter to send, Shift+Enter for newline)" disabled></textarea>
+        <button id="send" title="Send (Enter)" disabled>Send</button>
+        <button id="stop" title="Interrupt the agent (like Esc Esc)" class="hidden">Stop</button>
+      </div>
+    </div>
+  </section>
+
+  <aside id="side" aria-label="Plan and status">
+    <h2>Plan</h2>
+    <div id="plan" class="plan-empty">No active plan.</div>
+    <h2>Status</h2>
+    <div id="status" class="statusline idle">idle</div>
+    <div id="logmeta" class="meta-block"></div>
+  </aside>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
