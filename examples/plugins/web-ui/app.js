@@ -18,6 +18,7 @@ const state = {
   currentAssistant: null, // { node } streaming content span
   typingEl: null,
   toolCards: new Map(), // toolCallId -> details element
+  plans: { active: null, drafts: [], archived: [] },
 };
 
 /* ---------------- utilities ---------------- */
@@ -28,17 +29,33 @@ function escapeHtml(s) {
   })[c]);
 }
 
-/** Escape-first minimal markdown: fenced code, inline code, bold, links. */
+/** Escape-first minimal markdown: fenced code, inline code, bold, links, autolinks, file chips. */
 function renderInline(text) {
   const blocks = [];
+  // 1. Fenced code blocks
   let out = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
     blocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
     return `\u0000${blocks.length - 1}\u0000`;
   });
+  // 2. Escape HTML
   out = escapeHtml(out);
-  out = out.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  // 3. Inline code
+  const inlineCodes = [];
+  out = out.replace(/`([^`\n]+)`/g, (_m, code) => {
+    inlineCodes.push(`<code>${code}</code>`);
+    return `\u0001${inlineCodes.length - 1}\u0001`;
+  });
+  // 4. Bold
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  // 5. Markdown links
   out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 6. Autolink bare URLs (not already inside an href)
+  out = out.replace(/(?<![href=">])((?:https?:\/\/)[^\s<>"')\]])+/g, '<a class="tool-url-chip" href="$1" target="_blank" rel="noopener">$1</a>');
+  // 7. File path chips (relative paths with known extensions, not inside tags)
+  out = out.replace(/(?<!=["'])((?:[A-Za-z0-9_.\-~]\/)*[A-Za-z0-9_.\-~]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|py|css|scss|html|yaml|yml|toml|lock|go|rs|java|rb|sh|ps1|sln|csproj|graphql|sql|txt|cfg|ini))\b/g, '<span class="tool-file-chip">$1</span>');
+  // 8. Restore inline code placeholders
+  out = out.replace(/\u0001(\d+)\u0001/g, (_m, i) => inlineCodes[Number(i)]);
+  // 9. Restore fenced code blocks
   out = out.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)]);
   return `<p>${out.replace(/\n{2,}/g, "</p><p>")}</p>`;
 }
@@ -165,7 +182,11 @@ function connect() {
     setTyping(false);
     addSystemLine(`⚠ ${renderInline(d.message)}`);
   });
-  es.addEventListener("plans", (e) => renderPlan(JSON.parse(e.data)));
+  es.addEventListener("plans", (e) => {
+    const d = JSON.parse(e.data);
+    state.plans = { active: d.active, drafts: d.drafts || [], archived: d.archived || [] };
+    renderPlans();
+  });
   es.addEventListener("turn_end", (e) => {
     const d = JSON.parse(e.data);
     finalizeAssistant();
@@ -179,7 +200,110 @@ function connect() {
   });
 }
 
-/* ---------------- rendering ---------------- */
+/* ---------------- plan browser ---------------- */
+
+function planStepsHtml(p) {
+  let firstPending = true;
+  let html = "";
+  for (const s of p.steps || []) {
+    let mark, cls;
+    switch (s.status) {
+      case "done": mark = "✓"; cls = "mark-done"; break;
+      case "failed": mark = "✗"; cls = "mark-failed"; break;
+      case "skipped": mark = "−"; cls = "mark-skipped"; break;
+      default:
+        mark = firstPending ? "●" : "○";
+        cls = firstPending ? "mark-current" : "";
+        firstPending = false;
+    }
+    html += `<div class="plan-step"><span class="${cls}">${mark}</span> ${escapeHtml(s.description)}</div>`;
+    for (const st of s.subtasks || []) {
+      html += `<div class="plan-sub">${st.done ? "✓" : "○"} ${escapeHtml(st.text)}</div>`;
+    }
+  }
+  return html;
+}
+
+function planProgress(p) {
+  const steps = p.steps || [];
+  const done = steps.filter((s) => s.status === "done" || s.status === "skipped").length;
+  return { done, total: steps.length };
+}
+
+function planCardHtml(p, kind) {
+  const { done, total } = planProgress(p);
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const title = p.title || p.name || "Untitled plan";
+  const btn =
+    kind === "archived" || !total
+      ? ""
+      : `<button class="plan-btn" data-plan-id="${escapeHtml(p.id || "")}" data-kind="${kind}" ${
+          state.busy ? "disabled" : ""
+        }>${kind === "active" ? "Продолжить" : "Приступить"}</button>`;
+  return (
+    `<details class="plan-card kind-${kind}"${kind === "active" ? " open" : ""}>` +
+    `<summary>` +
+    `<span class="plan-card-title">${escapeHtml(title)}</span>` +
+    `<span class="plan-progress">${done}/${total}</span>` +
+    `</summary>` +
+    `<div class="plan-bar"><i style="width:${pct}%"></i></div>` +
+    `<div class="plan-steps">${planStepsHtml(p) || '<div class="plan-empty">Нет шагов.</div>'}</div>` +
+    btn +
+    `</details>`
+  );
+}
+
+function renderPlans() {
+  const el = $("plan");
+  const { active, drafts, archived } = state.plans;
+  let html = "";
+  html += `<div class="plan-group-label">Активный</div>`;
+  html += active
+    ? planCardHtml(active, "active")
+    : `<div class="plan-empty">Нет активного плана.</div>`;
+  if (drafts.length) {
+    html += `<div class="plan-group-label">Черновики (${drafts.length})</div>`;
+    html += drafts.map((p) => planCardHtml(p, "draft")).join("");
+  }
+  if (archived.length) {
+    html += `<div class="plan-group-label">Архив (${archived.length})</div>`;
+    html += archived.map((p) => planCardHtml(p, "archived")).join("");
+  }
+  el.innerHTML = html;
+  el.className = "";
+}
+
+/** Prompt sent to the agent when a plan button is pressed. */
+function planContinuePrompt(p, kind) {
+  const title = p.title || p.name || "Untitled plan";
+  if (kind === "active") {
+    return (
+      `Продолжай работу по активному плану «${title}». ` +
+      `Работай по первому незавершённому шагу, план не пересоздавай.`
+    );
+  }
+  return (
+    `Переключись на сохранённый план id=${p.id || ""} «${title}» ` +
+    `(tool plan, action=switch), затем продолжи его выполнение ` +
+    `с первого незавершённого шага.`
+  );
+}
+
+async function continuePlan(btn) {
+  const { planId, kind } = btn.dataset;
+  const pool =
+    kind === "active"
+      ? [state.plans.active]
+      : [...state.plans.drafts, ...state.plans.archived];
+  const plan = pool.find((p) => p && (p.id || "") === planId);
+  if (!plan || state.busy) return;
+  await submitText(planContinuePrompt(plan, kind));
+}
+
+$("plan").addEventListener("click", (e) => {
+  const btn = e.target.closest("button.plan-btn");
+  if (btn && !btn.disabled) continuePlan(btn);
+});
 
 function streamText(text) {
   if (!text) return;
@@ -220,6 +344,119 @@ function openToolCard(d) {
   scrollDown();
 }
 
+/* ---------------- tool output helpers ---------------- */
+
+/** Detect if a string is likely raw HTML (page dump from bash curl, browser, etc.) */
+function looksLikeHtml(s) {
+  if (!s) return false;
+  const head = s.slice(0, 2000);
+  if (/^\s*<!doctype\s+html/i.test(head)) return true;
+  if (/<html[\s>]/i.test(head)) return true;
+  // tag-soup heuristic: many closing tags in the head
+  const closeTags = head.match(/<\/\w+>/g);
+  return closeTags && closeTags.length > 30;
+}
+
+/** Extract readable text from raw HTML: strip scripts/styles/comments, tags, decode entities. */
+function htmlToText(html) {
+  let s = html;
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, "");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, "");
+  s = s.replace(/<noscript[\s\S]*?<\/noscript>/gi, "");
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
+  s = s.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/(?:p|div|li|h[1-6]|tr|blockquote|section|article|header|footer|nav|main)>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, "");
+  const ents = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", mdash: "—", ndash: "–", deg: "°" };
+  s = s.replace(/&(\w+);/g, (_m, e) => ents[e] || _m);
+  s = s.replace(/&#(\d+);/g, (_m, c) => String.fromCharCode(Number(c)));
+  s = s.replace(/\n{3,}/g, "\n\n");
+  s = s.replace(/[ \t]+/g, " ");
+  return s.trim();
+}
+
+/** Extract <title> from an HTML page. */
+function htmlTitle(html) {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return m ? m[1].trim().replace(/\s+/g, " ") : null;
+}
+
+/** Per-tool preview caps (chars). */
+const TOOL_PREVIEW = {
+  browser: 1200,
+  web_search: 1000,
+  web_fetch: 800,
+  web_browse: 800,
+  bash: 1200,
+  read_file: 600,
+  list_dir: 600,
+  grep: 800,
+  glob: 400,
+};
+const GENERIC_CAP = 600;
+
+/**
+ * Build the output block for a tool card.
+ * Returns a DOM element. For long/HTML output: collapsible with expand toggle.
+ */
+function buildToolOutput(output, toolName, success) {
+  if (!output) return null;
+
+  const isHtml = looksLikeHtml(output);
+  let text = isHtml ? htmlToText(output) : output;
+  const title = isHtml ? htmlTitle(output) : null;
+
+  // Prepend title hint for HTML pages
+  let header = "";
+  if (title) {
+    header = `📄 ${title}\n`;
+    text = header + text;
+  }
+
+  const cap = TOOL_PREVIEW[toolName] ?? GENERIC_CAP;
+  const needsCollapse = text.length > cap;
+
+  const wrap = document.createElement("div");
+  wrap.className = "tool-out";
+
+  if (!needsCollapse) {
+    const block = document.createElement("div");
+    block.className = "tool-out-full";
+    block.textContent = text;
+    wrap.appendChild(block);
+    return wrap;
+  }
+
+  // Collapsible: summary + hidden full
+  const summary = document.createElement("div");
+  summary.className = "tool-out-summary faded";
+  summary.textContent = text.slice(0, cap);
+  wrap.appendChild(summary);
+
+  const full = document.createElement("div");
+  full.className = "tool-out-full";
+  full.textContent = text;
+  full.style.display = "none";
+  wrap.appendChild(full);
+
+  const btn = document.createElement("button");
+  btn.className = "tool-more-link";
+  btn.textContent = `▸ показать весь вывод (${text.length.toLocaleString()} символов)`;
+  let expanded = false;
+  btn.onclick = (e) => {
+    e.preventDefault();
+    expanded = !expanded;
+    summary.style.display = expanded ? "none" : "";
+    full.style.display = expanded ? "" : "none";
+    btn.textContent = expanded
+      ? `▾ свернуть (${cap.toLocaleString()} / ${text.length.toLocaleString()})`
+      : `▸ показать весь вывод (${text.length.toLocaleString()} символов)`;
+  };
+  wrap.appendChild(btn);
+
+  return wrap;
+}
+
 function closeToolCard(d) {
   const det = state.toolCards.get(d.toolCallId || "");
   if (!det) return;
@@ -228,44 +465,17 @@ function closeToolCard(d) {
     `${d.success ? "✓" : "✗"} ${((d.durationMs || 0) / 1000).toFixed(1)}s`;
   if (d.output) {
     const body = det.querySelector(".tool-body");
-    const outPre = document.createElement("pre");
-    outPre.innerHTML = `<div class="label">output</div><code>${escapeHtml(d.output)}</code>`;
-    body.appendChild(outPre);
+    const label = document.createElement("div");
+    label.className = "label";
+    label.textContent = "output";
+    body.appendChild(label);
+    const outBlock = buildToolOutput(d.output, d.name, d.success);
+    if (outBlock) body.appendChild(outBlock);
     // Auto-open the card on failure so the error is visible immediately.
     if (!d.success) det.open = true;
   }
   state.toolCards.delete(d.toolCallId);
   scrollDown();
-}
-
-function renderPlan(d) {
-  const el = $("plan");
-  const p = d.active;
-  if (!p || !Array.isArray(p.steps)) {
-    el.textContent = "No active plan.";
-    el.className = "plan-empty";
-    return;
-  }
-  el.className = "";
-  let firstPending = true;
-  let html = `<div class="plan-title">${escapeHtml(p.title || "Untitled plan")}</div>`;
-  for (const s of p.steps) {
-    let mark, cls;
-    switch (s.status) {
-      case "done": mark = "✓"; cls = "mark-done"; break;
-      case "failed": mark = "✗"; cls = "mark-failed"; break;
-      case "skipped": mark = "−"; cls = "mark-skipped"; break;
-      default:
-        mark = firstPending ? "●" : "○";
-        cls = firstPending ? "mark-current" : "";
-        firstPending = false;
-    }
-    html += `<div class="plan-step"><span class="${cls}">${mark}</span> ${escapeHtml(s.description)}</div>`;
-    for (const st of s.subtasks || []) {
-      html += `<div class="plan-sub">${st.done ? "✓" : "○"} ${escapeHtml(st.text)}</div>`;
-    }
-  }
-  el.innerHTML = html;
 }
 
 function setStatus(text) {
@@ -278,6 +488,7 @@ function setBusy(busy) {
   input.disabled = busy;
   stopBtn.classList.toggle("hidden", !busy);
   sendBtn.classList.toggle("hidden", busy);
+  document.querySelectorAll("button.plan-btn").forEach((b) => (b.disabled = busy));
   if (!busy) {
     setStatus("idle");
     updateSendEnabled();
@@ -369,40 +580,54 @@ window.addEventListener("drop", (e) => {
 
 /* ---------------- sending ---------------- */
 
-async function sendMessage() {
-  const text = input.value.trim();
-  if ((!text && state.pendingImages.length === 0) || state.busy) return;
+/** Shared submit path: composer and plan buttons both go through here. */
+async function submitText(text, images) {
+  if (state.busy) return false;
   try {
     const res = await fetch("/api/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text || "(images)", images: state.pendingImages }),
+      body: JSON.stringify({ text, images: images || [] }),
     });
     if (res.status === 202) {
-      // Echo the outgoing message locally (server streams only the agent side).
-      let html = escapeHtml(text);
-      if (state.pendingImages.length) {
-        html +=
-          `<div class="imgline">` +
-          state.pendingImages.map((u) => `<img src="${u}" alt="">`).join("") +
-          `</div>`;
-      }
-      addUserMessage(html);
-      input.value = "";
-      input.style.height = "auto";
-      state.pendingImages = [];
-      renderThumbs();
+      addUserMessage(renderInline(text));
       setBusy(true);
       setTyping(true); // feedback until the first llm_start/text arrives
-    } else if (res.status === 409) {
-      setBusy(true); // terminal started a turn meanwhile — just reflect it
-    } else {
-      const body = await res.json().catch(() => ({}));
-      addSystemLine(`⚠ ${body.error || res.statusText}`);
+      return true;
     }
+    if (res.status === 409) {
+      setBusy(true); // terminal started a turn meanwhile — just reflect it
+      return false;
+    }
+    const body = await res.json().catch(() => ({}));
+    addSystemLine(`⚠ ${body.error || res.statusText}`);
+    return false;
   } catch (err) {
     addSystemLine(`⚠ network error: ${escapeHtml(String(err))}`);
+    return false;
   }
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if ((!text && state.pendingImages.length === 0) || state.busy) return;
+  const images = state.pendingImages;
+  const ok = await submitText(text || "(images)", images);
+  if (!ok) return;
+  // Echo attachments locally (submitText echoes only the text).
+  if (images.length) {
+    const div = messages.lastElementChild;
+    if (div) {
+      const line = document.createElement("div");
+      line.className = "imgline";
+      line.innerHTML = images.map((u) => `<img src="${u}" alt="">`).join("");
+      div.querySelector(".bubble").appendChild(line);
+    }
+  }
+  input.value = "";
+  input.style.height = "auto";
+  state.pendingImages = [];
+  renderThumbs();
 }
 
 sendBtn.onclick = sendMessage;
@@ -435,7 +660,12 @@ async function loadState() {
       $("session-name").textContent = d.session.name || "";
       $("model").textContent = d.session.model || "";
     }
-    if (d.plan) renderPlan({ active: d.plan });
+    state.plans = {
+      active: d.plan || null,
+      drafts: d.drafts || [],
+      archived: d.archived || [],
+    };
+    renderPlans();
     for (const m of d.history || []) {
       if (m.role === "user") addUserMessage(renderInline(m.text));
       else if (m.role === "assistant") {

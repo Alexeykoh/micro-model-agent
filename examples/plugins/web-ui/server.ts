@@ -154,6 +154,8 @@ export function handleRequest(
         busy: s.busy,
         url: s.url,
         plan: plans.active,
+        drafts: plans.drafts,
+        archived: plans.archived,
         history: readHistoryTail(s.configDir, s.sessionMeta?.id, s.historyTail),
       });
       return;

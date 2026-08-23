@@ -118,12 +118,21 @@ describe("web-ui server", () => {
           ].join("\n"),
         );
         const plansDir = join(tmp, ".mma", "plans");
-        mkdirSync(plansDir, { recursive: true });
+        mkdirSync(join(plansDir, "drafts"), { recursive: true });
         writeFileSync(
           join(plansDir, "active.json"),
           JSON.stringify({
+            id: "plan_a",
             title: "Demo",
             steps: [{ id: 1, description: "do it", status: "pending" }],
+          }),
+        );
+        writeFileSync(
+          join(plansDir, "drafts", "plan_old.json"),
+          JSON.stringify({
+            id: "plan_old",
+            title: "Old plan",
+            steps: [{ id: 1, description: "legacy", status: "done" }],
           }),
         );
         s.configDir = tmp;
@@ -136,6 +145,9 @@ describe("web-ui server", () => {
         const body = (await res.json()) as any;
         expect(body.busy).toBe(false);
         expect(body.plan.title).toBe("Demo");
+        expect(body.plan.id).toBe("plan_a");
+        expect(body.drafts?.map((p: any) => p.id)).toEqual(["plan_old"]);
+        expect(Array.isArray(body.archived)).toBe(true);
         const roles = body.history.map((h: any) => h.role);
         expect(roles).toEqual(["user", "assistant", "user"]);
         expect(body.history[2].text).toContain("[image]");

@@ -39,6 +39,28 @@ import { emitPlans, startPlanPolling, stopPlanPolling } from "./plans-snap";
 import { startServer, stopServer, tryOpenBrowser } from "./server";
 import type { WebUiAssets } from "./server";
 
+// ---- per-tool output caps for SSE broadcast ----
+
+const TOOL_OUTPUT_CAPS: Record<string, number> = {
+  browser: 8000,
+  web_search: 6000,
+  web_fetch: 4000,
+  web_browse: 4000,
+  bash: 16000,
+  read_file: 12000,
+  list_dir: 4000,
+  grep: 4000,
+  glob: 2000,
+  download_file: 2000,
+};
+const DEFAULT_OUTPUT_CAP = 6000;
+
+function clipToolOutput(toolName: string, output: string): string {
+  const cap = TOOL_OUTPUT_CAPS[toolName] ?? DEFAULT_OUTPUT_CAP;
+  if (output.length <= cap) return output;
+  return output.slice(0, cap) + `\n… [truncated from ${output.length.toLocaleString()} chars]`;
+}
+
 // ---- minimal structural types (duck-typed against core) ----
 
 interface ToolCallLike {
@@ -235,7 +257,7 @@ export const plugin = {
         name: call.name,
         success: result.success,
         durationMs,
-        output: scrub(clip(result.output || "", 100_000)),
+        output: scrub(clipToolOutput(call.name, result.output || "")),
       },
       state,
     );
