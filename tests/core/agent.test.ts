@@ -42,6 +42,8 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     runOnError: vi.fn(),
     runOnSessionStart: vi.fn(),
     runOnSessionEnd: vi.fn(),
+    runOnTurnEnd: vi.fn(),
+    setHostBridge: vi.fn(),
   };
 
   const mockContextManager = {

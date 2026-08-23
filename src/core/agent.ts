@@ -365,22 +365,55 @@ export class Agent {
     contextManager.addMessage({ role: "user", content: input });
     slog.logUser(input);
 
-    if (config.moe?.enabled) {
-      return runWithMoE(
+    // Turn lifecycle for plugins: count tool events without touching the loop,
+    // and dispatch onTurnEnd exactly once — success, error or interrupt.
+    const startedAt = Date.now();
+    let toolCalls = 0;
+    const countTool = (ev: ToolEvent) => {
+      if (ev.type === "end") toolCalls++;
+      onTool?.(ev);
+    };
+    const emitTurnEnd = (result: AgentResult | null, err?: unknown) => {
+      const interrupted =
+        (err instanceof Error && err.name === "AbortError") || this.shutdownRequested;
+      pluginManager.runOnTurnEnd?.(
         {
-          config,
-          llmProvider,
-          toolExecutor,
           logger,
-          baseDir: this.deps.baseDir,
+          sessionManager: sessionManager?.getActiveMeta(),
+          contextManager,
         },
-        input,
-        () => this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase),
-        { onMeta, onTool, onPhase },
+        {
+          success: !!result && result.success !== false && !err,
+          durationMs: Date.now() - startedAt,
+          textLength: (result?.text || "").length,
+          toolCalls,
+          interrupted: interrupted || undefined,
+        },
       );
-    }
+    };
 
-    return this.executeSingleAgentLoop(input, onChunk, onMeta, onTool, onPhase);
+    try {
+      const result =
+        config.moe?.enabled === true
+          ? await runWithMoE(
+              {
+                config,
+                llmProvider,
+                toolExecutor,
+                logger,
+                baseDir: this.deps.baseDir,
+              },
+              input,
+              () => this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase),
+              { onMeta, onTool: countTool, onPhase },
+            )
+          : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
+      emitTurnEnd(result);
+      return result;
+    } catch (err) {
+      emitTurnEnd(null, err);
+      throw err;
+    }
   }
 
   private async executeSingleAgentLoop(
