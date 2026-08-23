@@ -1,9 +1,11 @@
-/* web-ui frontend: SSE client + chat rendering + composer.
- * Vanilla JS, no dependencies. Served verbatim by the plugin server. */
+/* MMA web-ui frontend — ChatGPT/DeepSeek-style chat.
+ * Vanilla JS, no dependencies. Served verbatim by the plugin server.
+ * Downstream: SSE (/events). Upstream: POST /api/message + /api/interrupt. */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 const messages = $("messages");
+const scroller = $("scroller");
 const input = $("input");
 const sendBtn = $("send");
 const stopBtn = $("stop");
@@ -13,7 +15,8 @@ const fileInput = $("file-input");
 const state = {
   busy: false,
   pendingImages: [], // data URLs
-  currentAssistant: null, // streaming text node
+  currentAssistant: null, // { node } streaming content span
+  typingEl: null,
   toolCards: new Map(), // toolCallId -> details element
 };
 
@@ -28,7 +31,7 @@ function escapeHtml(s) {
 /** Escape-first minimal markdown: fenced code, inline code, bold, links. */
 function renderInline(text) {
   const blocks = [];
-  let out = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+  let out = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
     blocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
     return `\u0000${blocks.length - 1}\u0000`;
   });
@@ -37,29 +40,66 @@ function renderInline(text) {
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
   out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   out = out.replace(/\u0000(\d+)\u0000/g, (_m, i) => blocks[Number(i)]);
-  return out;
+  return `<p>${out.replace(/\n{2,}/g, "</p><p>")}</p>`;
 }
 
 function scrollDown() {
-  messages.scrollTop = messages.scrollHeight;
+  scroller.scrollTop = scroller.scrollHeight;
 }
 
-function addMessage(role, html, cls) {
+function addUserMessage(html) {
   const div = document.createElement("div");
-  div.className = "msg " + (cls || role);
-  if (role !== "meta") {
-    const who = document.createElement("span");
-    who.className = "who";
-    who.textContent = role === "user" ? "You:" : "Agent:";
-    div.appendChild(who);
-  }
-  const body = document.createElement("span");
-  body.className = "text";
-  body.innerHTML = html;
-  div.appendChild(body);
+  div.className = "msg user";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = html;
+  div.appendChild(bubble);
   messages.appendChild(div);
   scrollDown();
-  return body;
+}
+
+function addAssistantMessage() {
+  const div = document.createElement("div");
+  div.className = "msg assistant";
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = "M";
+  const content = document.createElement("div");
+  content.className = "content text";
+  div.append(av, content);
+  messages.appendChild(div);
+  scrollDown();
+  return content;
+}
+
+function addSystemLine(html) {
+  const div = document.createElement("div");
+  div.className = "msg system-line";
+  div.innerHTML = html;
+  messages.appendChild(div);
+  scrollDown();
+}
+
+/* ---------------- typing indicator ---------------- */
+
+function setTyping(on) {
+  if (on && !state.typingEl && !state.currentAssistant) {
+    const row = document.createElement("div");
+    row.className = "msg assistant";
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = "M";
+    const dots = document.createElement("div");
+    dots.className = "typing-dots";
+    dots.innerHTML = "<i></i><i></i><i></i>";
+    row.append(av, dots);
+    messages.appendChild(row);
+    state.typingEl = row;
+    scrollDown();
+  } else if (!on && state.typingEl) {
+    state.typingEl.remove();
+    state.typingEl = null;
+  }
 }
 
 /* ---------------- SSE ---------------- */
@@ -76,7 +116,7 @@ function connect() {
   es.onerror = () => {
     $("conn").className = "conn conn-off";
     es.close();
-    setTimeout(connect, Math.min(reconnectDelay *= 2, 15000));
+    setTimeout(connect, Math.min((reconnectDelay *= 2), 15000));
   };
   es.addEventListener("session", (e) => {
     const d = JSON.parse(e.data);
@@ -87,19 +127,21 @@ function connect() {
     setBusy(!!d.busy);
   });
   es.addEventListener("state", (e) => setBusy(JSON.parse(e.data).busy === true));
-  es.addEventListener("phase", (e) => {
-    const d = JSON.parse(e.data);
-    if (d.phase === "thinking" && !state.busy) setBusy(true);
-    markThinking(d.phase === "thinking");
+  es.addEventListener("phase", () => {});
+  es.addEventListener("llm_start", () => {
+    setTyping(true);
+    setStatus("thinking…");
   });
-  es.addEventListener("llm_start", () => setStatus("thinking…"));
   es.addEventListener("llm_end", (e) => {
     const d = JSON.parse(e.data);
-    setStatus(`llm ${d.kind || ""} ${(d.durationMs / 1000).toFixed(1)}s`);
+    setStatus(`llm ${d.kind || ""} · ${(d.durationMs / 1000).toFixed(1)}s`);
+    $("logmeta").textContent =
+      `last call: ${d.kind || "?"}${d.callCount ? ` · ${d.callCount} tool call(s)` : ""}` +
+      `${d.durationMs ? ` · ${(d.durationMs / 1000).toFixed(1)}s` : ""}`;
   });
   es.addEventListener("context", (e) => {
     const d = JSON.parse(e.data);
-    $("ctx").textContent = `${d.tokens} tok · q${Math.round(d.quality)}%`;
+    $("ctx").textContent = `${d.tokens} tok`;
   });
   es.addEventListener("text", (e) => {
     const d = JSON.parse(e.data);
@@ -107,27 +149,33 @@ function connect() {
   });
   es.addEventListener("meta", (e) => {
     const d = JSON.parse(e.data);
-    addMessage("meta", renderInline(d.text.trim()), "meta-msg");
+    const t = (d.text || "").trim();
+    if (!t) return;
+    setTyping(false);
+    addSystemLine(renderInline(t));
   });
   es.addEventListener("tool_start", (e) => {
     const d = JSON.parse(e.data);
+    setTyping(false);
     openToolCard(d);
   });
-  es.addEventListener("tool_end", (e) => {
-    const d = JSON.parse(e.data);
-    closeToolCard(d);
-  });
+  es.addEventListener("tool_end", (e) => closeToolCard(JSON.parse(e.data)));
   es.addEventListener("error", (e) => {
     const d = JSON.parse(e.data);
-    addMessage("meta", `⚠ ${renderInline(d.message)}`, "meta-msg");
+    setTyping(false);
+    addSystemLine(`⚠ ${renderInline(d.message)}`);
   });
   es.addEventListener("plans", (e) => renderPlan(JSON.parse(e.data)));
   es.addEventListener("turn_end", (e) => {
     const d = JSON.parse(e.data);
     finalizeAssistant();
-    markThinking(false);
+    setTyping(false);
     setBusy(false);
-    setStatus(d.success ? `done in ${(d.durationMs / 1000).toFixed(1)}s` : `failed${d.error ? ": " + d.error : ""}`);
+    setStatus(
+      d.success
+        ? `done in ${((d.durationMs || 0) / 1000).toFixed(1)}s`
+        : `failed${d.error ? ": " + d.error : ""}`,
+    );
   });
 }
 
@@ -135,9 +183,9 @@ function connect() {
 
 function streamText(text) {
   if (!text) return;
+  setTyping(false);
   if (!state.currentAssistant) {
-    state.currentAssistant = { node: addMessage("assistant", ""), raw: "" };
-    markThinking(false);
+    state.currentAssistant = { node: addAssistantMessage(), raw: "" };
   }
   state.currentAssistant.raw += text;
   state.currentAssistant.node.innerHTML = renderInline(state.currentAssistant.raw);
@@ -148,13 +196,6 @@ function finalizeAssistant() {
   state.currentAssistant = null;
 }
 
-function markThinking(on) {
-  const last = messages.lastElementChild;
-  if (!last) return;
-  if (on) last.classList.add("thinking");
-  else last.classList.remove("thinking");
-}
-
 function openToolCard(d) {
   finalizeAssistant();
   const det = document.createElement("details");
@@ -162,15 +203,15 @@ function openToolCard(d) {
   det.dataset.callId = d.toolCallId || "";
   const sum = document.createElement("summary");
   sum.innerHTML =
-    `<span class="tname">${escapeHtml(d.name)}</span> ` +
-    `<span>${escapeHtml(d.summary || "")}</span>` +
+    `<span class="tname">${escapeHtml(d.name)}</span>` +
+    `<span class="tsummary">${escapeHtml(d.summary || "")}</span>` +
     `<span class="duration">running…</span>`;
   det.appendChild(sum);
   const body = document.createElement("div");
   body.className = "tool-body";
   if (d.args) {
     const argsPre = document.createElement("pre");
-    argsPre.innerHTML = `<span class="label">args</span>\n${escapeHtml(d.args)}`;
+    argsPre.innerHTML = `<div class="label">args</div><code>${escapeHtml(d.args)}</code>`;
     body.appendChild(argsPre);
   }
   det.appendChild(body);
@@ -184,11 +225,14 @@ function closeToolCard(d) {
   if (!det) return;
   det.classList.add(d.success ? "ok" : "err");
   det.querySelector(".duration").textContent =
-    `${d.success ? "✓" : "✗"} ${(d.durationMs / 1000).toFixed(1)}s`;
+    `${d.success ? "✓" : "✗"} ${((d.durationMs || 0) / 1000).toFixed(1)}s`;
   if (d.output) {
+    const body = det.querySelector(".tool-body");
     const outPre = document.createElement("pre");
-    outPre.innerHTML = `<span class="label">output</span>\n${escapeHtml(d.output)}`;
-    det.querySelector(".tool-body").appendChild(outPre);
+    outPre.innerHTML = `<div class="label">output</div><code>${escapeHtml(d.output)}</code>`;
+    body.appendChild(outPre);
+    // Auto-open the card on failure so the error is visible immediately.
+    if (!d.success) det.open = true;
   }
   state.toolCards.delete(d.toolCallId);
   scrollDown();
@@ -199,8 +243,10 @@ function renderPlan(d) {
   const p = d.active;
   if (!p || !Array.isArray(p.steps)) {
     el.textContent = "No active plan.";
+    el.className = "plan-empty";
     return;
   }
+  el.className = "";
   let firstPending = true;
   let html = `<div class="plan-title">${escapeHtml(p.title || "Untitled plan")}</div>`;
   for (const s of p.steps) {
@@ -210,7 +256,7 @@ function renderPlan(d) {
       case "failed": mark = "✗"; cls = "mark-failed"; break;
       case "skipped": mark = "−"; cls = "mark-skipped"; break;
       default:
-        mark = firstPending ? "▶" : "○";
+        mark = firstPending ? "●" : "○";
         cls = firstPending ? "mark-current" : "";
         firstPending = false;
     }
@@ -230,13 +276,28 @@ function setStatus(text) {
 function setBusy(busy) {
   state.busy = busy;
   input.disabled = busy;
-  sendBtn.disabled = busy;
   stopBtn.classList.toggle("hidden", !busy);
-  $("status").className = "statusline " + (busy ? "busy" : "idle");
-  if (!busy) setStatus("idle");
+  sendBtn.classList.toggle("hidden", busy);
+  if (!busy) {
+    setStatus("idle");
+    updateSendEnabled();
+  }
+  if (!busy) setTyping(false);
 }
 
-/* ---------------- images ---------------- */
+/* ---------------- composer ---------------- */
+
+function updateSendEnabled() {
+  const hasText = input.value.trim().length > 0;
+  const hasImages = state.pendingImages.length > 0;
+  sendBtn.disabled = !(hasText || hasImages);
+}
+
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  updateSendEnabled();
+});
 
 async function downscale(file) {
   const bitmap = await createImageBitmap(file);
@@ -261,7 +322,7 @@ function renderThumbs() {
     img.src = url;
     const btn = document.createElement("button");
     btn.textContent = "×";
-    btn.title = "Remove";
+    btn.title = "Убрать";
     btn.onclick = () => {
       state.pendingImages.splice(i, 1);
       renderThumbs();
@@ -269,6 +330,7 @@ function renderThumbs() {
     wrap.append(img, btn);
     thumbsEl.appendChild(wrap);
   });
+  updateSendEnabled();
 }
 
 async function addFiles(files) {
@@ -325,19 +387,21 @@ async function sendMessage() {
           state.pendingImages.map((u) => `<img src="${u}" alt="">`).join("") +
           `</div>`;
       }
-      addMessage("user", html);
+      addUserMessage(html);
       input.value = "";
+      input.style.height = "auto";
       state.pendingImages = [];
       renderThumbs();
       setBusy(true);
+      setTyping(true); // feedback until the first llm_start/text arrives
     } else if (res.status === 409) {
       setBusy(true); // terminal started a turn meanwhile — just reflect it
     } else {
       const body = await res.json().catch(() => ({}));
-      addMessage("meta", `⚠ ${body.error || res.statusText}`, "meta-msg");
+      addSystemLine(`⚠ ${body.error || res.statusText}`);
     }
   } catch (err) {
-    addMessage("meta", `⚠ network error: ${err}`, "meta-msg");
+    addSystemLine(`⚠ network error: ${escapeHtml(String(err))}`);
   }
 }
 
@@ -345,7 +409,9 @@ sendBtn.onclick = sendMessage;
 stopBtn.onclick = async () => {
   try {
     await fetch("/api/interrupt", { method: "POST" });
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 };
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -353,6 +419,11 @@ input.addEventListener("keydown", (e) => {
     sendMessage();
   }
 });
+
+$("sb-toggle").onclick = () => {
+  if (window.innerWidth <= 900) document.body.classList.toggle("side-open");
+  else document.body.classList.toggle("side-collapsed");
+};
 
 /* ---------------- boot ---------------- */
 
@@ -365,14 +436,20 @@ async function loadState() {
       $("model").textContent = d.session.model || "";
     }
     if (d.plan) renderPlan({ active: d.plan });
-    for (const m of (d.history || [])) {
-      if (m.role === "assistant" || m.role === "user") {
-        addMessage(m.role, renderInline(m.text));
+    for (const m of d.history || []) {
+      if (m.role === "user") addUserMessage(renderInline(m.text));
+      else if (m.role === "assistant") {
+        const node = addAssistantMessage();
+        node.innerHTML = renderInline(m.text);
       }
     }
     setBusy(!!d.busy);
-  } catch { /* server not ready yet; SSE will drive updates */ }
+    scrollDown();
+  } catch {
+    /* server not ready yet; SSE will drive updates */
+  }
 }
 
+updateSendEnabled();
 connect();
 loadState();

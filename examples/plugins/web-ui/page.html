@@ -3,50 +3,70 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MMA — Web UI</title>
+<title>MMA</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<header id="topbar">
-  <span class="brand">MMA</span>
-  <span id="conn" class="conn conn-off" title="SSE connection">●</span>
-  <span id="session-name" class="meta"></span>
-  <span id="model" class="meta"></span>
-  <span id="ctx" class="meta"></span>
-  <span class="spacer"></span>
-</header>
+<div id="app">
 
-<main id="layout">
-  <section id="chat" aria-label="Chat">
-    <div id="messages"></div>
-
-    <div id="dropzone" class="hidden">
-      <div>Drop images to attach</div>
+  <!-- Left sidebar: plan + status -->
+  <aside id="side">
+    <div class="side-head">
+      <span class="brand">MMA</span>
+      <span id="conn" class="conn conn-off" title="connection">●</span>
     </div>
 
-    <div id="composer">
-      <div id="thumbs"></div>
-      <div id="inputrow">
-        <label id="attach" title="Attach images">
-          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-          ＋
-        </label>
-        <textarea id="input" rows="2" placeholder="Message the agent… (Enter to send, Shift+Enter for newline)" disabled></textarea>
-        <button id="send" title="Send (Enter)" disabled>Send</button>
-        <button id="stop" title="Interrupt the agent (like Esc Esc)" class="hidden">Stop</button>
-      </div>
-    </div>
-  </section>
+    <section class="side-section">
+      <h2>Plan</h2>
+      <div id="plan" class="plan-empty">No active plan.</div>
+    </section>
 
-  <aside id="side" aria-label="Plan and status">
-    <h2>Plan</h2>
-    <div id="plan" class="plan-empty">No active plan.</div>
-    <h2>Status</h2>
-    <div id="status" class="statusline idle">idle</div>
-    <div id="logmeta" class="meta-block"></div>
+    <section class="side-section">
+      <h2>Status</h2>
+      <div id="status" class="statusline idle">idle</div>
+      <div id="logmeta" class="meta-block"></div>
+    </section>
   </aside>
-</main>
 
+  <!-- Main column -->
+  <div id="main">
+    <header id="topbar">
+      <button id="sb-toggle" title="Toggle panel" aria-label="Toggle panel">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <span id="model" class="topmeta"></span>
+      <span id="session-name" class="topmeta dim"></span>
+      <span class="spacer"></span>
+      <span id="ctx" class="topmeta dim"></span>
+    </header>
+
+    <div id="scroller">
+      <div id="messages" class="col"></div>
+    </div>
+
+    <div id="composer-wrap">
+      <div id="composer" class="col">
+        <div id="thumbs"></div>
+        <div id="inputrow">
+          <label id="attach" title="Attach images">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          </label>
+          <textarea id="input" rows="1" placeholder="Спросите что-нибудь…" disabled></textarea>
+          <button id="send" title="Send (Enter)" disabled aria-label="Send">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+          <button id="stop" title="Interrupt (Esc Esc)" class="hidden" aria-label="Stop">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="hint" class="col dim">MMA — агент для малых моделей · проверяйте важную информацию</div>
+    </div>
+  </div>
+</div>
+
+<div id="dropzone" class="hidden"><div>Отпустите, чтобы прикрепить изображения</div></div>
 <script src="/app.js"></script>
 </body>
 </html>
