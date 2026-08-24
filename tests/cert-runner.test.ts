@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from "fs";
+import { mkdtempSync, writeFileSync, existsSync, rmSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { runScenario } from "../src/modules/certification/runner";
+import { runScenario, collectDiagnostics } from "../src/modules/certification/runner";
 import type { CertScenario } from "../src/modules/certification/types";
 
 const sandboxBase = mkdtempSync(join(tmpdir(), "cert-r-"));
@@ -181,5 +181,49 @@ describe("cert runner", () => {
     expect(res.status).toBe("pass");
     expect(res.passed).toBe(1);
     expect(res.of).toBe(1);
+  });
+
+  it("collectDiagnostics lists files and plan state", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cert-diag-"));
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src/app.ts"), "export default 1;");
+    writeFileSync(join(dir, "README.md"), "# test");
+    const planDir = join(dir, ".mma", "plans");
+    mkdirSync(planDir, { recursive: true });
+    writeFileSync(join(planDir, "active.json"), JSON.stringify({
+      steps: [
+        { id: 1, description: "Create file", status: "done" },
+        { id: 2, description: "Run tests", status: "pending" },
+      ],
+    }));
+    const diag = collectDiagnostics(dir);
+    expect(diag).toContain("src/app.ts");
+    expect(diag).toContain("README.md");
+    expect(diag).toContain("1/2 steps done");
+    expect(diag).toContain("#2 Run tests");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("collectDiagnostics handles empty sandbox", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cert-diag-empty-"));
+    const diag = collectDiagnostics(dir);
+    expect(diag).toContain("(none)");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("runScenario returns diagnostics on failure", async () => {
+    const s = scenario({ checks: [{ type: "fileExists", path: "missing.txt" }] });
+    const res = await runScenario(s, {
+      model: "m",
+      providerUrl: "http://localhost:8080",
+      mmaRoot,
+      sandboxBase,
+      defaultReps: 1,
+      defaultThreshold: 1,
+      runner: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }),
+    });
+    expect(res.status).toBe("fail");
+    expect(res.diagnostics).toBeDefined();
+    expect(res.diagnostics).toContain("Files created");
   });
 });

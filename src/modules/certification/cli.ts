@@ -1,4 +1,4 @@
-import { rmSync } from "fs";
+import { rmSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
@@ -145,6 +145,9 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   } else {
     console.log(pc.yellow(`\n⚠ ${opts.name} is NOT certified — all scenarios must pass`));
   }
+
+  // Always write report file
+  writeReport(entry, opts.projectDir);
 }
 
 export async function certStatus(name: string, config: AppConfig, projectDir: string): Promise<void> {
@@ -211,5 +214,38 @@ function printResults(results: ScenarioResult[]): void {
     const detail = r.status === "skipped" ? pc.dim(r.title) : `${r.passed}/${r.of}`;
     console.log(`  ${icon} ${r.id}  ${detail}`);
     if (r.error) console.log(`    ${pc.dim(r.error)}`);
+    if (r.diagnostics) console.log(r.diagnostics);
+  }
+}
+
+function writeReport(entry: CertificationEntry, projectDir: string): void {
+  const reportDir = join(projectDir, "certification");
+  const ts = entry.certifiedAt.replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `report-${entry.model.replace(/[/\\:]/g, "_")}-${ts}.json`;
+  const reportPath = join(reportDir, filename);
+
+  const report = {
+    model: entry.model,
+    providerUrl: entry.providerUrl,
+    mmaVersion: entry.mmaVersion,
+    certifiedAt: entry.certifiedAt,
+    certified: isFullyPassed(entry),
+    suite: entry.suite,
+    results: entry.results.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      passed: r.passed,
+      of: r.of,
+      error: r.error,
+      diagnostics: r.diagnostics,
+    })),
+  };
+
+  try {
+    writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf-8");
+    console.log(pc.dim(`\nReport: ${reportPath}`));
+  } catch (e: any) {
+    console.error(pc.yellow(`  Failed to write report: ${e.message}`));
   }
 }

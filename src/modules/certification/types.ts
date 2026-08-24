@@ -38,6 +38,8 @@ export interface ScenarioResult {
   passed: number;
   of: number;
   error?: string;
+  /** Diagnostic info from the sandbox: files created, plan state. Only on failure. */
+  diagnostics?: string;
 }
 
 export interface SuiteSummary {

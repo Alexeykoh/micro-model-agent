@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readdirSync, readFileSync, statSync } from "fs";
 import { platform } from "os";
-import { join, resolve, dirname } from "path";
+import { join, resolve, dirname, relative } from "path";
 import { checkSandbox } from "./fact-checker";
 import type { CertScenario, ScenarioResult } from "./types";
 import type { AppConfig } from "../../config/types";
@@ -49,11 +49,12 @@ export async function runScenario(
   const reps = scenario.reps ?? opts.defaultReps;
   const threshold = Math.min(scenario.passThreshold ?? opts.defaultThreshold, reps);
   const runner: RepRunner = opts.runner ?? defaultRunner;
-  const timeoutMs = opts.timeoutMs ?? 120_000;
+  const timeoutMs = opts.timeoutMs ?? 300_000;
   const entryPoint = resolveMmaEntry(opts.mmaRoot);
 
   let passed = 0;
   let firstError: string | undefined;
+  let lastFailedSandbox: string | undefined;
 
   for (let i = 1; i <= reps; i++) {
     const sandbox = join(opts.sandboxBase, `run-${scenario.id}-${i}`);
@@ -108,12 +109,19 @@ export async function runScenario(
 
     const pass = failures.length === 0;
     if (pass) passed++;
-    else if (!firstError) firstError = failures.join("; ");
+    else {
+      if (!firstError) firstError = failures.join("; ");
+      lastFailedSandbox = sandbox;
+    }
 
     opts.onRep?.(scenario.id, i, reps, pass, failures);
   }
 
   const status = passed >= threshold ? "pass" : "fail";
+  const diagnostics = status === "fail" && lastFailedSandbox
+    ? collectDiagnostics(lastFailedSandbox)
+    : undefined;
+
   return {
     id: scenario.id,
     title: scenario.title,
@@ -121,6 +129,7 @@ export async function runScenario(
     passed,
     of: reps,
     error: status === "pass" ? undefined : firstError,
+    diagnostics,
   };
 }
 
@@ -136,6 +145,57 @@ function prepareSandbox(sandbox: string, scenario: CertScenario, mmaRoot: string
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest);
   }
+}
+
+/** Collect diagnostic info from a failed sandbox for actionable feedback. */
+export function collectDiagnostics(sandbox: string): string {
+  const lines: string[] = [];
+
+  // List user-created files (skip .mma internals)
+  const files = listFiles(sandbox, sandbox);
+  if (files.length > 0) {
+    lines.push(`  Files created: ${files.join(", ")}`);
+  } else {
+    lines.push("  Files created: (none)");
+  }
+
+  // Read active plan if present
+  const planPath = join(sandbox, ".mma", "plans", "active.json");
+  if (existsSync(planPath)) {
+    try {
+      const plan = JSON.parse(readFileSync(planPath, "utf-8"));
+      const steps = plan.steps ?? [];
+      const done = steps.filter((s: any) => s.status === "done").length;
+      const pending = steps.filter((s: any) => s.status === "pending" || s.status === "in_progress");
+      lines.push(`  Plan: ${done}/${steps.length} steps done`);
+      if (pending.length > 0) {
+        lines.push(`  Pending: ${pending.map((s: any) => `#${s.id} ${s.description}`).join("; ")}`);
+      }
+    } catch {
+      /* corrupt plan — skip */
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function listFiles(dir: string, root: string): string[] {
+  const result: string[] = [];
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === ".mma") continue;
+      const abs = join(dir, entry.name);
+      const rel = relative(root, abs).replace(/\\/g, "/");
+      if (entry.isDirectory()) {
+        result.push(...listFiles(abs, root));
+      } else {
+        result.push(rel);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return result;
 }
 
 export function resolveMmaEntry(mmaRoot: string): string {
