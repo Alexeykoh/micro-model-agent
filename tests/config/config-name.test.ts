@@ -15,7 +15,7 @@ describe("Config project file name", () => {
 
     writeFileSync(join(projectDir, ".mmrc"), JSON.stringify({ model: "test-model" }));
 
-    const config = loadConfig({ configDir, projectConfigPath: join(projectDir, ".mmrc") });
+    const { config } = loadConfig({ configDir, projectConfigPath: join(projectDir, ".mmrc") });
 
     expect(config.model).toBe("test-model");
 

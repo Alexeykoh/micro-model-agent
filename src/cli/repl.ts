@@ -757,6 +757,19 @@ export class Repl implements ReplContext {
       console.log(pc.dim(line).trimEnd());
     }
     console.log();
+
+    // Legacy config hint
+    try {
+      const { existsSync: exists } = await import("fs");
+      const { join: pathJoin } = await import("path");
+      const { hasDomainFiles } = await import("../config/domains");
+      const legacyPath = pathJoin(this.configDir, "config.json");
+      if (exists(legacyPath) && !hasDomainFiles(this.configDir)) {
+        console.log(pc.yellow(`  ${t("config.legacy_hint")}`));
+        console.log();
+      }
+    } catch {}
+
     this.rl.prompt();
 
     if (lspEnabled) {

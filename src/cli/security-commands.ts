@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import {
   SECURITY_POLICIES,
@@ -100,7 +100,7 @@ export function createSecurityCommand(program: Command): void {
 
       // Merge with existing config
       (appConfig as any).security = newSecurityConfig;
-      saveConfig(appConfig, configPath);
+      saveConfig(appConfig, configPath, dirname(configPath));
 
       console.log(t("cli.security.policy_applied", { name: policy.name }));
       console.log(t("cli.security.policy_description", { description: policy.description }));
@@ -121,7 +121,7 @@ export function createSecurityCommand(program: Command): void {
         encryptSessionLog: true,
       };
 
-      saveConfig(appConfig, configPath);
+      saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.encryption_enabled"));
     });
 
@@ -140,7 +140,7 @@ export function createSecurityCommand(program: Command): void {
         encryptSessionLog: false,
       };
 
-      saveConfig(appConfig, configPath);
+      saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.encryption_disabled"));
     });
 
@@ -161,7 +161,7 @@ export function createSecurityCommand(program: Command): void {
         webhookTimeout: 5000,
       };
 
-      saveConfig(appConfig, configPath);
+      saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.audit_enabled"));
     });
 
@@ -180,7 +180,7 @@ export function createSecurityCommand(program: Command): void {
         webhookTimeout: 5000,
       };
 
-      saveConfig(appConfig, configPath);
+      saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.audit_disabled"));
     });
 

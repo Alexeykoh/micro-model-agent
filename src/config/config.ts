@@ -1,14 +1,23 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
+import { homedir } from "os";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
-import type { AppConfig, SecurityConfig } from "./types";
+import type { AppConfig } from "./types";
 import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
-import { ConfigEncryptor, isEncryptedString } from "../modules/security/encryption";
+import { ConfigEncryptor } from "../modules/security/encryption";
+import { loadDomainFiles, saveDomainFiles, hasDomainFiles } from "./domains";
+
+// ── Centralized path constants ──────────────────────────────────────────
+export const CONFIG_DIR = join(homedir(), ".mma");
+export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+export const CONFIG_DOMAIN_DIR = join(CONFIG_DIR, "config");
+
+// ── Internal helpers ────────────────────────────────────────────────────
 
 /**
  * Restore RegExp instances in dangerousPatterns that were serialized as {}
@@ -22,7 +31,6 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
   }
   return patterns.map((p, i) => {
     if (p instanceof RegExp) return p;
-    // If the pattern was serialized as {__regex, source, flags}, revive it
     if (p && typeof p === "object") {
       const { source, flags } = p as { source?: string; flags?: string };
       if (source && typeof source === "string") {
@@ -33,7 +41,6 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
         }
       }
     }
-    // Corrupted entry (e.g. serialized as {} pre-0.8.0): use default by index
     return fallback[i] || fallback[0] || (p as RegExp);
   });
 }
@@ -86,13 +93,7 @@ function regexReviver(_key: string, value: unknown): unknown {
 }
 
 /**
- * Legacy npx `args` for LSP servers that predate the fixed invocation
- * (`--yes --package <server> --package typescript@5 …`). These exact arrays
- * are unsafe: without `--yes`/`--package` the servers fail to bootstrap
- * (`Could not find a valid TypeScript installation`) or the package name is
- * wrong, so the server hangs until the initialize timeout. When a stored
- * server's `args` matches one of these (or is missing) it is replaced with the
- * current default args — user-customized arrays that differ are left alone.
+ * Legacy npx `args` for LSP servers that predate the fixed invocation.
  */
 const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }> = {
   typescript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
@@ -103,11 +104,7 @@ const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }
 };
 
 /**
- * Replace stale pre-0.41.1 LSP server invocations (npx bootstrap args) with
- * the current defaults, so an old `~/.mma/config.json` that overrides the
- * fixed server args can't silently re-break every LSP server. In-memory only —
- * mirrors the `restoreDangerousPatterns` precedent; the file keeps the old
- * args and is normalized again on every load.
+ * Replace stale pre-0.41.1 LSP server invocations with current defaults.
  */
 function normalizeLspServerArgs(config: AppConfig): void {
   const servers = config.lsp?.servers;
@@ -124,14 +121,6 @@ function normalizeLspServerArgs(config: AppConfig): void {
     }
   }
 }
-
-/**
- * Stale-security upgrade REMOVED (ses_mt4fn58c post-mortem): silently
- * replacing a stored `security.enabled: false` section with current defaults
- * overrode an explicit user opt-out and blocked legit commands mid-session.
- * A stored security section is now always honored verbatim; fresh installs
- * get the enabled-by-default DEFAULT_SECURITY_CONFIG through merging.
- */
 
 function loadJSON(path: string): Record<string, unknown> | null {
   try {
@@ -177,16 +166,39 @@ function applyEnvVars(config: AppConfig): AppConfig {
   return result;
 }
 
+// ── Public API ──────────────────────────────────────────────────────────
+
 export interface LoadConfigOptions {
   configDir: string;
   projectConfigPath: string;
 }
 
-export function loadConfig(options: LoadConfigOptions): AppConfig {
+export interface LoadConfigResult {
+  config: AppConfig;
+  /** true when a legacy config.json was used (no domain files found). */
+  legacyDetected: boolean;
+}
+
+/**
+ * Load config from domain files (preferred) or legacy config.json (fallback).
+ *
+ * Pipeline:
+ *   1. DEFAULTS
+ *   2. deepMerge(legacy config.json)  — if exists
+ *   3. deepMerge(domain files)        — if exist, override legacy
+ *   4. deepMerge(project .mmrc)       — overrides everything
+ *   5. Post-load fixups (RegExp, LSP args)
+ *   6. Env vars
+ *   7. Decrypt
+ *
+ * On first run (no config.json, no domain files), auto-creates domain files.
+ */
+export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const globalPath = join(options.configDir, "config.json");
 
   mkdirSync(options.configDir, { recursive: true });
 
+  // v1 → v2 migration check (reads config.json directly, before domain logic)
   const detector = new MigrationDetector(options.configDir);
   if (detector.needsMigration()) {
     const backup = new BackupManager(options.configDir);
@@ -199,51 +211,57 @@ export function loadConfig(options: LoadConfigOptions): AppConfig {
   }
 
   let config: AppConfig = { ...DEFAULTS };
+  let legacyDetected = false;
 
+  // Step 1: legacy config.json (fallback)
   const globalData = loadJSON(globalPath);
   if (globalData) {
     config = deepMerge(config, globalData as Partial<AppConfig>);
+    legacyDetected = true;
   }
 
-  if (!existsSync(globalPath)) {
-    saveConfig(config, globalPath);
+  // Step 2: domain files (override legacy)
+  const domainConfig = loadDomainFiles(options.configDir);
+  if (domainConfig) {
+    config = deepMerge(config, domainConfig);
+    legacyDetected = false;
   }
 
+  // Step 3: first run — auto-create domain files instead of config.json
+  if (!globalData && !domainConfig) {
+    saveDomainFiles(config, options.configDir);
+  }
+
+  // Step 4: project .mmrc (overrides everything)
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {
     config = deepMerge(config, projectData as Partial<AppConfig>);
   }
 
-  // Restore RegExp patterns in contentScan that may have been serialized
-  // as {} in pre-0.8.0 config files, or merged from user config.
+  // Step 5: post-load fixups — AFTER all merges
   if (config.security?.contentScan?.dangerousPatterns) {
     config.security.contentScan.dangerousPatterns = restoreDangerousPatterns(
       config.security.contentScan.dangerousPatterns,
       DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns,
     );
   }
-
-  // Replace stale pre-0.41.1 LSP server args with the current defaults.
   normalizeLspServerArgs(config);
 
+  // Step 6: env vars
   config = applyEnvVars(config);
 
-  // Decrypt sensitive fields in the loaded config
+  // Step 7: decrypt
   try {
     const encryptor = new ConfigEncryptor();
     const decrypted = encryptor.decrypt(config as unknown as Record<string, unknown>);
-    // Merge decrypted sensitive fields back into config
     for (const key of Object.keys(decrypted)) {
       (config as any)[key] = decrypted[key];
     }
   } catch (e: any) {
-    // If decryption fails, log a warning but continue with the config
     console.warn(t("config.decryption_warning", { error: e.message }));
   }
 
-  // Update global audit notifier with config (done in bootstrap.ts)
-
-  return config;
+  return { config, legacyDetected };
 }
 
 export function validateConfig(config: AppConfig, allToolTags: string[]): void {
@@ -261,11 +279,23 @@ export function validateConfig(config: AppConfig, allToolTags: string[]): void {
   }
 }
 
-export function saveConfig(config: AppConfig, configPath: string): void {
+/**
+ * Save config to domain files (preferred) or legacy single file (fallback).
+ *
+ * @param config   Full AppConfig to save
+ * @param configPath  Legacy path (e.g. ~/.mma/config.json) — used when configDir is absent
+ * @param configDir  Optional config directory (e.g. ~/.mma). When provided, writes domain files.
+ */
+export function saveConfig(config: AppConfig, configPath: string, configDir?: string): void {
+  if (configDir) {
+    saveDomainFiles(config, configDir);
+    return;
+  }
+
+  // Legacy single-file write (backward compat for tests / edge cases)
   const dir = dirname(configPath);
   mkdirSync(dir, { recursive: true });
 
-  // Encrypt sensitive fields before saving
   try {
     const encryptor = new ConfigEncryptor();
     const encryptedConfig = encryptor.encrypt({
@@ -273,7 +303,6 @@ export function saveConfig(config: AppConfig, configPath: string): void {
     } as unknown as Record<string, unknown>);
     writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
   } catch (e: any) {
-    // If encryption fails, save without encryption
     console.warn(t("config.encryption_warning", { error: e.message }));
     writeFileSync(configPath, JSON.stringify(config, regexReplacer, 2), "utf-8");
   }

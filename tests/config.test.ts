@@ -84,7 +84,7 @@ describe("loadConfig", () => {
 
   it("should return defaults when no files exist", () => {
     const tmpDir = makeTempDir();
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -110,7 +110,7 @@ describe("loadConfig", () => {
         },
       }),
     );
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -138,7 +138,7 @@ describe("loadConfig", () => {
       }),
     );
     writeFileSync(join(tmpDir, ".mmrc"), JSON.stringify({ model: "project-model" }));
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -150,7 +150,7 @@ describe("loadConfig", () => {
     const prev = process.env.MMA_MODEL;
     process.env.MMA_MODEL = "env-model";
     try {
-      const cfg = loadConfig({
+      const { config: cfg } = loadConfig({
         configDir: tmpDir,
         projectConfigPath: join(tmpDir, ".mmrc"),
       });
@@ -166,7 +166,7 @@ describe("loadConfig", () => {
     const prev = process.env.MMA_PROVIDER_BASEURL;
     process.env.MMA_PROVIDER_BASEURL = "http://env:8080/v1";
     try {
-      const cfg = loadConfig({
+      const { config: cfg } = loadConfig({
         configDir: tmpDir,
         projectConfigPath: join(tmpDir, ".mmrc"),
       });
@@ -188,7 +188,7 @@ describe("loadConfig", () => {
       }),
     );
 
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -223,7 +223,7 @@ describe("loadConfig", () => {
       }),
     );
 
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -272,7 +272,7 @@ describe("loadConfig", () => {
       }),
     );
 
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -299,7 +299,7 @@ describe("loadConfig", () => {
       }),
     );
 
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -348,7 +348,7 @@ describe("stale security config normalization", () => {
       join(tmpDir, "config.json"),
       JSON.stringify({ version: "2.0.0", security: LEGACY_SECURITY }),
     );
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -360,7 +360,7 @@ describe("stale security config normalization", () => {
   it("applies current defaults (security on) when no security section exists", () => {
     const tmpDir = makeTempDir();
     writeFileSync(join(tmpDir, "config.json"), JSON.stringify({ version: "2.0.0" }));
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
@@ -380,7 +380,7 @@ describe("stale security config normalization", () => {
         },
       }),
     );
-    const cfg = loadConfig({
+    const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });

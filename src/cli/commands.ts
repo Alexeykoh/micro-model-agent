@@ -74,7 +74,7 @@ export function createProgram(): Command {
           config.security.paths.denied = [];
         }
       }
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.config_saved"));
     });
 
@@ -99,7 +99,7 @@ export function createProgram(): Command {
       else if (/^\d+$/.test(value)) obj[lastKey] = parseInt(value, 10);
       else if (/^\d+\.\d+$/.test(value)) obj[lastKey] = parseFloat(value);
       else obj[lastKey] = value;
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.set_done", { key, value }));
     });
   configCmd
@@ -108,6 +108,39 @@ export function createProgram(): Command {
     .action(async () => {
       const { config } = await bootstrap();
       console.log(JSON.stringify(config, null, 2));
+    });
+  configCmd
+    .command("migrate")
+    .description(t("cli.migrate_config"))
+    .action(async () => {
+      const { loadConfig } = await import("../config/config");
+      const { hasDomainFiles } = await import("../config/domains");
+      const configDir = join(homedir(), ".mma");
+      const configPath = join(configDir, "config.json");
+
+      if (hasDomainFiles(configDir)) {
+        console.log(pc.yellow(t("config.migrate_no_legacy")));
+        return;
+      }
+
+      if (!existsSync(configPath)) {
+        console.log(pc.yellow(t("config.migrate_no_legacy")));
+        return;
+      }
+
+      console.log(t("config.migrate_start"));
+
+      const { config } = loadConfig({ configDir, projectConfigPath: join(configDir, ".mmrc") });
+      saveConfig(config, configPath, configDir);
+
+      // Rename legacy file
+      const bakPath = configPath + ".bak";
+      const { renameSync } = await import("fs");
+      renameSync(configPath, bakPath);
+
+      const { readdirSync } = await import("fs");
+      const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) => f.endsWith(".json"));
+      console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
     });
 
   const model = program.command("model").description(t("cli.manage_models"));
@@ -160,7 +193,7 @@ export function createProgram(): Command {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config } = await bootstrap();
       config.model = name;
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.model_set", { name }));
     });
   model
@@ -229,7 +262,7 @@ export function createProgram(): Command {
         return;
       }
       config.contextWindow = contextWindow;
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.context_set", { size: contextWindow }));
     });
 
@@ -312,7 +345,7 @@ export function createProgram(): Command {
       if (baseUrl) {
         config.provider.baseUrl = baseUrl;
       }
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.provider_set", { name }));
       if (baseUrl) {
         console.log(t("cli.provider_base_hint", { baseUrl }));
@@ -379,7 +412,7 @@ export function createProgram(): Command {
       });
       config.provider.entries = entries;
       config.provider.active = config.provider.active || config.provider.type;
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
       console.log(pc.green(t("cli.provider_added", { name })));
       console.log(t("cli.provider_switch_hint"));
       },

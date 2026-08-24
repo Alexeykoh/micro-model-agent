@@ -151,6 +151,8 @@ export interface BootstrapResult {
   baseDir: string;
   noAgentsMd: boolean;
   envReport: ReturnType<typeof collectEnvironment>;
+  /** true when legacy config.json was used (no domain files found). */
+  legacyDetected: boolean;
 }
 
 export async function bootstrap(
@@ -162,7 +164,7 @@ export async function bootstrap(
   const dir = configDir || join(homedir(), ".mma");
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
-  const config = loadConfig({ configDir: dir, projectConfigPath });
+  const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });
   setLocale(config.locale);
 
   // Update global audit notifier with config
@@ -588,5 +590,6 @@ export async function bootstrap(
     baseDir,
     noAgentsMd: skipAgentsMd,
     envReport,
+    legacyDetected,
   };
 }

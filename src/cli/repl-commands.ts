@@ -216,6 +216,37 @@ function registerMmaCommands(ctx: ReplContext): void {
     },
   });
   ctx.registerCommand({
+    name: "config migrate",
+    description: t("cli.migrate_config"),
+    action: async () => {
+      const { hasDomainFiles } = await import("../config/domains");
+      const { loadConfig: loadCfg } = await import("../config/config");
+      const configDir = ctx.configDir;
+      const configPath = join(configDir, "config.json");
+
+      if (hasDomainFiles(configDir)) {
+        console.log(pc.yellow(t("config.migrate_no_legacy")));
+        return;
+      }
+
+      if (!existsSync(configPath)) {
+        console.log(pc.yellow(t("config.migrate_no_legacy")));
+        return;
+      }
+
+      console.log(t("config.migrate_start"));
+
+      const { config } = loadCfg({ configDir, projectConfigPath: join(configDir, ".mmrc") });
+      saveConfig(config, configPath, configDir);
+
+      const { renameSync, readdirSync } = await import("fs");
+      renameSync(configPath, configPath + ".bak");
+
+      const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) => f.endsWith(".json"));
+      console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
+    },
+  });
+  ctx.registerCommand({
     name: "reasoning",
     description: t("repl.reasoning"),
     usage: t("repl.reasoning_usage"),
@@ -267,7 +298,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         ctx.config.contextWindow = answers.contextWindow;
         ctx.config.maxToolIterations = answers.maxToolIterations;
         ctx.config.locale = answers.locale;
-        saveConfig(ctx.config, configPath);
+        saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("cli.config_saved")));
       });
@@ -388,7 +419,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         }
         ctx.config.model = name;
         const configPath = join(homedir(), ".mma", "config.json");
-        saveConfig(ctx.config, configPath);
+        saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("repl.model_set", { name })));
         return;
@@ -413,7 +444,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       }
       ctx.config.contextWindow = size;
       const configPath = join(homedir(), ".mma", "config.json");
-      saveConfig(ctx.config, configPath);
+      saveConfig(ctx.config, configPath, dirname(configPath));
       await ctx.agent.reconfigure(ctx.config);
       console.log(pc.green(t("cli.context_set", { size })));
     },
@@ -437,7 +468,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       const baseDir = ctx.baseDir;
       const projectConfigPath = join(baseDir, ".mmrc");
 
-      const freshConfig = loadConfig({ configDir, projectConfigPath });
+      const { config: freshConfig } = loadConfig({ configDir, projectConfigPath });
 
       Object.assign(ctx.config, freshConfig);
 

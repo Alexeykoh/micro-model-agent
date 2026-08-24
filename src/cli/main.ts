@@ -56,7 +56,11 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config, baseDir } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    const { agent, config, baseDir, legacyDetected } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+
+    if (legacyDetected) {
+      console.error(pc.yellow(`  ${t("config.legacy_hint")}`));
+    }
 
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
@@ -121,7 +125,7 @@ async function main(): Promise<void> {
     if (!existsSync(configPath)) {
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup();
-      const config = loadConfig({
+      const { config } = loadConfig({
         configDir: join(homedir(), ".mma"),
         projectConfigPath: projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc"),
       });
@@ -165,7 +169,7 @@ async function main(): Promise<void> {
           config.security.paths.denied = [];
         }
       }
-      saveConfig(config, configPath);
+      saveConfig(config, configPath, dirname(configPath));
     }
     const {
       agent,
