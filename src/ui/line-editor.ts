@@ -284,6 +284,12 @@ export class LineEditor implements LineInput {
           this.lastWasCR = false;
           return;
         }
+        // In question mode, LF should also submit (script/pipes send
+        // \n without preceding \r, unlike real terminals).
+        if (this.questionCb) {
+          this.submit();
+          return;
+        }
         this.insertNewline();
         return;
       case "backspace":

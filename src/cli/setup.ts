@@ -234,13 +234,17 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
 
   if (ownRl) {
     rl.close();
-    // Bun: closed readline leaves keypress/data machinery on stdin that
-    // swallows input from a later raw-mode LineEditor. Hard-detach.
+    // Bun: closed readline can leave stdin in a state where a later
+    // raw-mode LineEditor never receives keypress events. Force-reset:
     process.stdin.removeAllListeners("data");
     process.stdin.removeAllListeners("keypress");
     if (typeof process.stdin.setRawMode === "function") {
       process.stdin.setRawMode(false);
     }
+    // Pause + resume forces Bun to flush its internal buffer and
+    // release the stream so LineEditor can attach cleanly.
+    process.stdin.pause();
+    process.stdin.resume();
   }
 
   const answers: SetupAnswers = {

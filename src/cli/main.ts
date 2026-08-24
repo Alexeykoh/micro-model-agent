@@ -130,55 +130,6 @@ async function main(): Promise<void> {
         hasAnyConfig = hasDomainFiles(mmaDir);
       } catch {}
     }
-    if (!hasAnyConfig) {
-      console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
-      const answers = await runSetup();
-      const { config } = loadConfig({
-        configDir: join(homedir(), ".mma"),
-        projectConfigPath: projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc"),
-      });
-      config.provider.type = answers.provider;
-      config.provider.baseUrl = answers.apiBase;
-      config.provider.apiKey = answers.apiKey;
-      config.model = answers.model;
-      config.contextWindow = answers.contextWindow;
-      config.maxToolIterations = answers.maxToolIterations;
-      config.locale = answers.locale;
-      if (config.security) {
-        // Security is enabled by default (balanced); wizard answers only tighten it.
-        config.security.enabled = true;
-        config.security.bash.enabled = true;
-        config.security.bash.blockDangerousFlags =
-          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
-        if (answers.securityBashBlock) {
-          config.security.bash.blacklist = [
-            ...new Set([
-              ...config.security.bash.blacklist,
-              "rm",
-              "dd",
-              "chmod",
-              "wget",
-              "curl",
-              "scp",
-              "ssh",
-              "nc",
-              "netcat",
-              "sudo",
-              "su",
-              "kill",
-              "pkill",
-              "killall",
-              "shutdown",
-              "reboot",
-            ]),
-          ];
-        }
-        if (!answers.securityPathsDeny) {
-          config.security.paths.denied = [];
-        }
-      }
-      saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
-    }
     const {
       agent,
       config,
@@ -191,7 +142,7 @@ async function main(): Promise<void> {
       logger,
       envReport,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
-    startAutoUpdate(config);
+
     const repl = new Repl(
       agent,
       config,
@@ -207,6 +158,43 @@ async function main(): Promise<void> {
       undefined,
       execModule,
     );
+
+    if (!hasAnyConfig) {
+      // First run: wizard via the REPL's LineEditor (avoids Bun stdin conflict
+      // from creating a second readline on process.stdin).
+      console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
+      const answers = await runSetup(repl.rl);
+      config.provider.type = answers.provider;
+      config.provider.baseUrl = answers.apiBase;
+      config.provider.apiKey = answers.apiKey;
+      config.model = answers.model;
+      config.contextWindow = answers.contextWindow;
+      config.maxToolIterations = answers.maxToolIterations;
+      config.locale = answers.locale;
+      if (config.security) {
+        config.security.enabled = true;
+        config.security.bash.enabled = true;
+        config.security.bash.blockDangerousFlags =
+          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
+        if (answers.securityBashBlock) {
+          config.security.bash.blacklist = [
+            ...new Set([
+              ...config.security.bash.blacklist,
+              "rm", "dd", "chmod", "wget", "curl", "scp", "ssh",
+              "nc", "netcat", "sudo", "su", "kill", "pkill",
+              "killall", "shutdown", "reboot",
+            ]),
+          ];
+        }
+        if (!answers.securityPathsDeny) {
+          config.security.paths.denied = [];
+        }
+      }
+      saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
+      await agent.reconfigure(config);
+    }
+
+    startAutoUpdate(config);
     await repl.start();
   }
 }
