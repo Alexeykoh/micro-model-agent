@@ -55,10 +55,11 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
-  it("does not restore a disk-resident plan into a fresh session", async () => {
-    // Regression: the REPL used to poll .mma/plans/active.json and print a
-    // leftover plan from a previous session unprompted. Now only
-    // ExecutionModule owns plan state and a fresh session restores nothing.
+  it("restores a disk-resident plan in a fresh session (project state)", async () => {
+    // A plan in .mma/plans/active.json belongs to the PROJECT, not to a
+    // session — bootstrap must restore the tracker so `plan show` works
+    // and the REPL checklist renders on plan/todo tool events. Nothing is
+    // printed unprompted: rendering is event-driven (repl-plan.test.ts).
     const dir = tempDir();
     try {
       mkdirSync(join(dir, ".mma", "plans"), { recursive: true });
@@ -72,7 +73,7 @@ describe("bootstrap", () => {
         }),
       );
       const { execModule } = await bootstrap(dir, dir);
-      expect(execModule.getActivePlan()).toBeNull();
+      expect(execModule.getActivePlan()?.id).toBe("stale-plan");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

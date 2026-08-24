@@ -381,10 +381,11 @@ export async function bootstrap(
     config.stuckThreshold,
     config.errorWebSearch?.threshold ?? 5,
   );
-  const activeMeta = sessionManager.getActiveMeta();
-  if (activeMeta && activeMeta.messageCount > 0) {
-    execModule.restorePlan();
-  }
+  // A plan in .mma/plans/active.json is PROJECT state, not session state —
+  // restore it in every session so `plan show` works and the checklist is
+  // visible. Nothing is printed unprompted: the REPL renders the checklist
+  // only on plan/todo tool events.
+  execModule.restorePlan();
   moduleRegistry.register(execModule);
   execModule.setHallucinationDetector(hallucinationDetector);
 

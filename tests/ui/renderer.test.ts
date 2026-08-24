@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { join, sep } from "path";
+import { tmpdir } from "os";
 import { Renderer, summarizeArgs } from "../../src/ui/renderer";
 
 function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
@@ -235,7 +236,7 @@ describe("Renderer", () => {
   });
 
   describe("relative paths in tool headers", () => {
-    function makeBaseRenderer(baseDir?: string) {
+    function makeBaseRenderer(baseDir?: string, width = 60) {
       const out = makeOut();
       const renderer = new Renderer({
         rich: true,
@@ -243,27 +244,34 @@ describe("Renderer", () => {
         toolStyle: "inline",
         out: out.stream,
         err: out.stream,
-        width: 60,
+        width,
         baseDir,
       });
       return { renderer, text: out.text };
     }
 
     it("shortens absolute paths inside the workspace", () => {
-      const abs = join("E:", sep, "proj", "src", "a.ts");
-      const { renderer, text } = makeBaseRenderer(join("E:", sep, "proj"));
+      // Platform-neutral workspace root (win32 E:\ paths are not absolute
+      // on posix, so path.relative cannot shorten them there).
+      const base = join(tmpdir(), `mma-renderer-${process.pid}`);
+      const abs = join(base, "src", "a.ts");
+      const { renderer, text } = makeBaseRenderer(base);
       renderer.toolStart("read_file", { path: abs });
       renderer.flush();
-      expect(text()).toContain("src/a.ts");
-      expect(text()).not.toContain(`${sep}proj${sep}src`);
+      expect(text()).toContain(`src${sep}a.ts`.split(sep).join("/"));
+      expect(text()).not.toContain(`${sep}mma-renderer-${process.pid}${sep}src`);
     });
 
     it("keeps paths outside the workspace as-is", () => {
-      const abs = join("E:", sep, "other", "b.ts");
-      const { renderer, text } = makeBaseRenderer(join("E:", sep, "proj"));
+      const root = join(tmpdir(), `mma-renderer-out-${process.pid}`);
+      const abs = join(root, "elsewhere", "b.ts");
+      // baseDir is a sibling — the path resolves outside it (../ prefix).
+      const { renderer, text } = makeBaseRenderer(join(root, "workspace"));
       renderer.toolStart("read_file", { path: abs });
       renderer.flush();
-      expect(text()).toContain(abs);
+      // The absolute path is preserved verbatim (summarizeArgs may truncate
+      // its tail visually, hence matching only the leading part).
+      expect(text()).toContain(abs.slice(0, 30));
     });
 
     it("keeps relative paths untouched when no baseDir is set", () => {

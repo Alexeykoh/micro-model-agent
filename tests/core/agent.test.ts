@@ -687,6 +687,82 @@ describe("Agent", () => {
     expect(text.some((c) => c.includes("Let me think"))).toBe(false);
   });
 
+  it("suppresses REPL output when a tool result has an empty display string", async () => {
+    // read_file full read returns display "" — the fallback to raw output
+    // would dump the whole file content into the terminal (regression).
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "t1", name: "read_file", arguments: '{"path":"a.ts"}' },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "read done" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const toolExecutor = {
+      execute: vi
+        .fn()
+        .mockResolvedValue({ success: true, output: "── header\nFULL FILE BODY", display: "" }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+    const deps = createMockDeps({ llmProvider: mockProvider, toolExecutor });
+    const agent = new Agent(deps as any);
+    const meta: string[] = [];
+    await agent.run("read it", undefined, (m) => meta.push(m));
+
+    expect(meta.join("")).not.toContain("FULL FILE BODY");
+  });
+
+  it("shows the raw output when a tool result has no display field", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "t1", name: "bash", arguments: "{}" },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "done" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const toolExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, output: "plain tool output" }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+    const deps = createMockDeps({ llmProvider: mockProvider, toolExecutor });
+    const agent = new Agent(deps as any);
+    const meta: string[] = [];
+    await agent.run("run it", undefined, (m) => meta.push(m));
+
+    expect(meta.join("")).toContain("plain tool output");
+  });
+
   it("hides reasoning when showReasoning is false", async () => {
     const mockProvider = {
       model: "test-model",

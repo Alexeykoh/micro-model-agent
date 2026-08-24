@@ -824,8 +824,14 @@ export class Agent {
             result,
             duration,
           );
-          if (result.display) {
-            onMeta?.("\n" + result.display + "\n");
+          // Presence check, not truthiness: read_file returns display ""
+          // on a full read to suppress output entirely (the tool header
+          // already shows the path) — falling back on empty string would
+          // dump the whole file content into the REPL.
+          if (result.display !== undefined) {
+            if (result.display.length > 0) {
+              onMeta?.("\n" + result.display + "\n");
+            }
           } else {
             const metaOut = pluginManager.runOnMeta(
               { iteration, logger, contextManager },
