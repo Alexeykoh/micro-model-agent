@@ -34,7 +34,7 @@ src/modules/certification/
 ├── loader.ts       # Scenario loading: builtin + ~/.mma/certification/scenarios/*.yaml
 ├── fact-checker.ts # Pure check functions (path + content only)
 ├── runner.ts       # Orchestrator: scenario × N reps → subprocess MMA → fact-check → M/N tally
-├── manifest.ts     # Read/write ~/.mma/certifications.json, staleness by mmaVersion
+├── manifest.ts     # Read/write <project>/certification/certifications.json, staleness by mmaVersion
 └── cli.ts          # Handlers for mma model certify / cert-status / cert-list / uncertify
 ```
 

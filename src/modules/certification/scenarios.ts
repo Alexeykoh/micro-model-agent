@@ -14,6 +14,19 @@ const SECURITY_BASE = {
 export const BUILTIN_SCENARIOS: CertScenario[] = [
   // ─── Core ────────────────────────────────────────────────────────────
   {
+    id: "2.1-read-file",
+    title: "Read file content",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create a file secret.ts with content: export const key = "abc123". Then use read_file to read it and create a file result.txt with the exact content of the key variable (just the string value abc123).',
+    checks: [
+      { type: "fileExists", path: "secret.ts" },
+      { type: "fileExists", path: "result.txt" },
+      { type: "fileContent", path: "result.txt", contains: "abc123" },
+    ],
+  },
+  {
     id: "2.2-create-file",
     title: "Create single file",
     tags: ["core"],
@@ -38,6 +51,31 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     ],
   },
   {
+    id: "2.4-edit-file",
+    title: "Create then edit file",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      "Create helpers.ts with functions add and subtract. Then edit the add function to also log its arguments with console.log before returning.",
+    checks: [
+      { type: "fileExists", path: "helpers.ts" },
+      { type: "fileRegex", path: "helpers.ts", pattern: "console\\.log" },
+    ],
+  },
+  {
+    id: "2.5-read-edit-chain",
+    title: "Read existing file then edit it",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create file config.json with content: {"version": 1, "debug": false}. Then use read_file to read it, and edit the file to change "debug" from false to true. Verify the final file contains "debug": true.',
+    checks: [
+      { type: "fileExists", path: "config.json" },
+      { type: "fileContent", path: "config.json", contains: '"debug": true' },
+      { type: "fileContent", path: "config.json", contains: '"version": 1' },
+    ],
+  },
+  {
     id: "2.6-move-file",
     title: "Move/rename file",
     tags: ["core"],
@@ -50,15 +88,57 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     ],
   },
   {
-    id: "2.4-edit-file",
-    title: "Create then edit file",
+    id: "2.7-delete-file",
+    title: "Delete a file",
     tags: ["core"],
     mode: "run",
     prompt:
-      "Create helpers.ts with functions add and subtract. Then edit the add function to also log its arguments with console.log before returning.",
+      'Create file disposable.txt with content "temp". Then delete it using delete_file. Verify the file no longer exists.',
     checks: [
-      { type: "fileExists", path: "helpers.ts" },
-      { type: "fileRegex", path: "helpers.ts", pattern: "console\\.log" },
+      { type: "fileNotExists", path: "disposable.txt" },
+    ],
+  },
+  {
+    id: "2.8-create-dir",
+    title: "Create directory standalone",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      "Create the directory structure deep/nested/path using create_dir. Then create a file deep/nested/path/leaf.ts with content: export default 42;",
+    checks: [
+      { type: "dirExists", path: "deep/nested/path" },
+      { type: "fileExists", path: "deep/nested/path/leaf.ts" },
+      { type: "fileContent", path: "deep/nested/path/leaf.ts", contains: "42" },
+    ],
+  },
+  {
+    id: "2.9-list-dir",
+    title: "List directory contents",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create files a.txt, b.txt, c.txt in the root. Then use list_dir to list the current directory and create a file listing.txt that contains the names of all three files.',
+    fixtures: [],
+    checks: [
+      { type: "fileExists", path: "a.txt" },
+      { type: "fileExists", path: "b.txt" },
+      { type: "fileExists", path: "c.txt" },
+      { type: "fileExists", path: "listing.txt" },
+      { type: "fileContent", path: "listing.txt", contains: "a.txt" },
+      { type: "fileContent", path: "listing.txt", contains: "b.txt" },
+      { type: "fileContent", path: "listing.txt", contains: "c.txt" },
+    ],
+  },
+  {
+    id: "2.10-file-info",
+    title: "Get file info",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create a file known.ts with content: export const x = 1;. Then use file_info to get its size and save the result to info.txt.',
+    checks: [
+      { type: "fileExists", path: "known.ts" },
+      { type: "fileExists", path: "info.txt" },
     ],
   },
   {
@@ -89,6 +169,58 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
       { type: "fileExists", path: "data/input.json" },
       { type: "fileExists", path: "src/process.ts" },
       { type: "fileExists", path: "output.json" },
+    ],
+  },
+  {
+    id: "3.6-bash-run",
+    title: "Run bash command and capture output",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Run the command "echo hello-mma" using the bash tool and save the output to bash-output.txt.',
+    checks: [
+      { type: "fileExists", path: "bash-output.txt" },
+      { type: "fileContent", path: "bash-output.txt", contains: "hello-mma" },
+    ],
+  },
+  {
+    id: "3.7-grep-search",
+    title: "Search file contents with grep",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create file src/utils.ts with content: export const PI = 3.14; export const E = 2.71;. Then use the grep tool to search for "PI" in src/utils.ts and save the match to grep-result.txt.',
+    checks: [
+      { type: "fileExists", path: "src/utils.ts" },
+      { type: "fileExists", path: "grep-result.txt" },
+      { type: "fileContent", path: "grep-result.txt", contains: "PI" },
+    ],
+  },
+  {
+    id: "3.8-glob-find",
+    title: "Find files with glob",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create files: src/a.ts, src/b.ts, lib/c.ts. Then use the glob tool to find all .ts files matching "src/**/*.ts" and save the file list to glob-result.txt.',
+    checks: [
+      { type: "fileExists", path: "src/a.ts" },
+      { type: "fileExists", path: "src/b.ts" },
+      { type: "fileExists", path: "glob-result.txt" },
+      { type: "fileContent", path: "glob-result.txt", contains: "a.ts" },
+      { type: "fileContent", path: "glob-result.txt", contains: "b.ts" },
+    ],
+  },
+  {
+    id: "3.9-multi-tool-chain",
+    title: "Read → grep → edit chain",
+    tags: ["core"],
+    mode: "run",
+    prompt:
+      'Create file app.ts with content: const DEBUG = false; export function run() { return "ok"; }. Then: 1. Use read_file to read app.ts. 2. Use grep to find "DEBUG" in app.ts. 3. Use edit_file to change DEBUG from false to true. 4. Verify the file contains DEBUG = true.',
+    checks: [
+      { type: "fileExists", path: "app.ts" },
+      { type: "fileContent", path: "app.ts", contains: "DEBUG = true" },
     ],
   },
   {

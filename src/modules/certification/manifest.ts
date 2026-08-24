@@ -3,7 +3,7 @@ import { join } from "path";
 import type { CertManifest, CertificationEntry, CertMark } from "./types";
 
 export function manifestPath(projectDir: string): string {
-  return join(projectDir, ".mma", "certifications.json");
+  return join(projectDir, "certification", "certifications.json");
 }
 
 export function readManifest(projectDir: string): CertManifest {
@@ -21,7 +21,7 @@ export function readManifest(projectDir: string): CertManifest {
 
 export function saveManifest(m: CertManifest, projectDir: string): void {
   const path = manifestPath(projectDir);
-  mkdirSync(join(projectDir, ".mma"), { recursive: true });
+  mkdirSync(join(projectDir, "certification"), { recursive: true });
   writeFileSync(path, JSON.stringify(m, null, 2), "utf-8");
 }
 
@@ -60,6 +60,10 @@ export function isStale(entry: CertificationEntry, currentVersion: string): bool
   return entry.mmaVersion !== currentVersion;
 }
 
+export function isFullyPassed(entry: CertificationEntry): boolean {
+  return entry.suite.failed === 0 && entry.suite.passed > 0;
+}
+
 export function getCertMark(
   model: string,
   providerUrl: string,
@@ -69,5 +73,6 @@ export function getCertMark(
   const m = readManifest(projectDir);
   const entry = m.certifications.find((e) => e.model === model && e.providerUrl === providerUrl);
   if (!entry) return "none";
-  return isStale(entry, currentVersion) ? "stale" : "certified";
+  if (isStale(entry, currentVersion)) return "stale";
+  return isFullyPassed(entry) ? "certified" : "none";
 }

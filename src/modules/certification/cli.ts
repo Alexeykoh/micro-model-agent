@@ -6,7 +6,7 @@ import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 import { loadScenarios, filterByTags } from "./loader";
 import { runScenario, findMmaRoot } from "./runner";
-import { readManifest, upsertCertification, removeCertification } from "./manifest";
+import { readManifest, upsertCertification, removeCertification, isFullyPassed } from "./manifest";
 import type { AppConfig } from "../../config/types";
 import type { CertTag, CertificationEntry, ScenarioResult, SuiteSummary } from "./types";
 
@@ -139,6 +139,12 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     }),
   );
   printResults(results);
+
+  if (isFullyPassed(entry)) {
+    console.log(pc.green(`\n✔ ${opts.name} is certified`));
+  } else {
+    console.log(pc.yellow(`\n⚠ ${opts.name} is NOT certified — all scenarios must pass`));
+  }
 }
 
 export async function certStatus(name: string, config: AppConfig, projectDir: string): Promise<void> {
@@ -156,6 +162,10 @@ export async function certStatus(name: string, config: AppConfig, projectDir: st
   console.log(
     `${t("cli.cert_suite_col")}: ${entry.suite.passed} pass / ${entry.suite.failed} fail / ${entry.suite.skipped} skipped`,
   );
+  const status = isFullyPassed(entry)
+    ? pc.green("✔ certified")
+    : pc.yellow("⚠ NOT certified");
+  console.log(`Status: ${status}`);
   printResults(entry.results);
 }
 
@@ -166,8 +176,9 @@ export async function certList(projectDir: string): Promise<void> {
     return;
   }
   for (const e of m.certifications) {
+    const mark = isFullyPassed(e) ? pc.green("✔") : pc.red("✘");
     console.log(
-      `  ${pc.green("✔")} ${e.model}  ${pc.dim(e.providerUrl)}  ${e.mmaVersion}  ${e.certifiedAt.slice(0, 10)}  ${e.suite.passed}/${e.suite.total} pass`,
+      `  ${mark} ${e.model}  ${pc.dim(e.providerUrl)}  ${e.mmaVersion}  ${e.certifiedAt.slice(0, 10)}  ${e.suite.passed}/${e.suite.total} pass`,
     );
   }
 }

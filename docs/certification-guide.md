@@ -4,11 +4,11 @@
 
 ## Что это
 
-Сертификация — это прогоны тестовых сценариев через реального агента (MMA) против конкретной пары `(модель, провайдер)`. Результат сохраняется в `<project>/.mma/certifications.json` и отображается как `✔` / `○` / `·` в `mma model list` и REPL `/model`.
+Сертификация — это прогоны тестовых сценариев через реального агента (MMA) против конкретной пары `(модель, провайдер)`. Результат сохраняется в `<project>/certification/certifications.json` и отображается как `✔` / `○` / `·` в `mma model list` и REPL `/model`.
 
 **Сертификация — не одобрение модели.** Это утверждение: "на этом бэкенде модель прошла N/M повторов suite".
 
-**Хранение:** результаты хранятся в проекте (`<project>/.mma/certifications.json`), не глобально. Каждый проект имеет свою сертификацию.
+**Хранение:** результаты хранятся в проекте (`<project>/certification/certifications.json`), не глобально. Каждый проект имеет свою сертификацию.
 
 ## Быстрый старт
 
@@ -316,4 +316,4 @@ bun run mma "<prompt>" --no-agents-md --exit-on-complete -d <sandbox> --json
 ```
 
 ### Где хранятся результаты
-В корне проекта: `<project>/.mma/certifications.json`. Песочницы: `<project>/.mma/certification/run-<id>-<rep>/`. Кастомные сценарии: `<project>/.mma/certification/scenarios/*.yaml`.
+Манифест: `<project>/certification/certifications.json`. Песочницы: `<project>/.mma/certification/run-<id>-<rep>/`. Кастомные сценарии: `<project>/.mma/certification/scenarios/*.yaml`.
