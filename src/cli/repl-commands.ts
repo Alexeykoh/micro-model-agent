@@ -391,7 +391,7 @@ function registerMmaCommands(ctx: ReplContext): void {
             const { getCertMark } = await import("../modules/certification/manifest");
             for (const m of models) {
               const marker = m === ctx.config.model ? pc.green("* ") : "  ";
-              const mark = getCertMark(m, ctx.config.provider.baseUrl, version);
+              const mark = getCertMark(m, ctx.config.provider.baseUrl, version, process.cwd());
               const cert =
                 mark === "certified"
                   ? pc.green("✔")

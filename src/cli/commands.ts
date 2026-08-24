@@ -171,7 +171,7 @@ export function createProgram(): Command {
           const { getCertMark } = await import("../modules/certification/manifest");
           for (const m of models) {
             const marker = m === config.model ? "* " : "  ";
-            const mark = getCertMark(m, config.provider.baseUrl, version);
+            const mark = getCertMark(m, config.provider.baseUrl, version, process.cwd());
             const cert = mark === "certified" ? "✔" : mark === "stale" ? "○" : "·";
             console.log(` ${marker}${cert} ${m}`);
           }
@@ -220,6 +220,7 @@ export function createProgram(): Command {
         force: cmdOpts.force === true,
         clean: cmdOpts.clean === true,
         config,
+        projectDir: process.cwd(),
       });
     });
   model
@@ -229,14 +230,14 @@ export function createProgram(): Command {
     .action(async (name: string) => {
       const { config } = await bootstrap();
       const { certStatus } = await import("../modules/certification/cli");
-      await certStatus(name, config);
+      await certStatus(name, config, process.cwd());
     });
   model
     .command("cert-list")
     .description(t("cli.cert_list"))
     .action(async () => {
       const { certList } = await import("../modules/certification/cli");
-      await certList();
+      await certList(process.cwd());
     });
   model
     .command("uncertify")
@@ -245,7 +246,7 @@ export function createProgram(): Command {
     .action(async (name: string) => {
       const { config } = await bootstrap();
       const { uncertify } = await import("../modules/certification/cli");
-      await uncertify(name, config);
+      await uncertify(name, config, process.cwd());
     });
 
   // Context window command

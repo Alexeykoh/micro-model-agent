@@ -161,7 +161,7 @@ export async function bootstrap(
   noAgentsMd?: boolean,
   exitOnComplete?: boolean,
 ): Promise<BootstrapResult> {
-  const dir = configDir || join(homedir(), ".mma");
+  const dir = configDir || process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
   const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });

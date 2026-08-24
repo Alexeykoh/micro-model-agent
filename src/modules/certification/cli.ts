@@ -1,5 +1,4 @@
 import { rmSync } from "fs";
-import { homedir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
@@ -13,7 +12,6 @@ import type { CertTag, CertificationEntry, ScenarioResult, SuiteSummary } from "
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MMA_ROOT = findMmaRoot(HERE);
-const USER_SCENARIO_DIR = join(homedir(), ".mma", "certification", "scenarios");
 
 function readVersion(): string {
   const candidates = [join(MMA_ROOT, "package.json")];
@@ -47,18 +45,13 @@ export interface CertifyOptions {
   force: boolean;
   clean: boolean;
   config: AppConfig;
+  projectDir: string;
 }
 
 export async function certify(opts: CertifyOptions): Promise<void> {
   const providerUrl = opts.providerUrl || opts.config.provider.baseUrl;
 
-  if (opts.tags.includes("security") && !opts.config.security?.enabled) {
-    console.error(pc.red(t("cli.cert_security_required")));
-    process.exitCode = 1;
-    return;
-  }
-
-  const { scenarios, errors } = loadScenarios(USER_SCENARIO_DIR);
+  const { scenarios, errors } = loadScenarios(join(opts.projectDir, ".mma", "certification", "scenarios"));
   for (const e of errors) console.error(pc.yellow(`  ${e}`));
 
   const selected = filterByTags(scenarios, opts.tags);
@@ -68,7 +61,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     return;
   }
 
-  const manifest = readManifest();
+  const manifest = readManifest(opts.projectDir);
   const existing = manifest.certifications.find(
     (e) => e.model === opts.name && e.providerUrl === providerUrl,
   );
@@ -108,6 +101,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
       sandboxBase,
       defaultReps: opts.reps,
       defaultThreshold: 2,
+      baseConfig: opts.config,
       onRep: (id, rep, reps, passed, failures) => {
         const word = passed ? pc.green(t("cli.cert_rep_pass")) : pc.red(t("cli.cert_rep_fail"));
         console.log(`[${idx}/${total}] ${id} (${rep}/${reps})... ${word}`);
@@ -134,7 +128,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     suite,
     results,
   };
-  upsertCertification(entry);
+  upsertCertification(entry, opts.projectDir);
 
   console.log(
     t("cli.cert_done", {
@@ -147,8 +141,8 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   printResults(results);
 }
 
-export async function certStatus(name: string, config: AppConfig): Promise<void> {
-  const m = readManifest();
+export async function certStatus(name: string, config: AppConfig, projectDir: string): Promise<void> {
+  const m = readManifest(projectDir);
   const providerUrl = config.provider.baseUrl;
   const entry = m.certifications.find((e) => e.model === name && e.providerUrl === providerUrl);
   if (!entry) {
@@ -165,8 +159,8 @@ export async function certStatus(name: string, config: AppConfig): Promise<void>
   printResults(entry.results);
 }
 
-export async function certList(): Promise<void> {
-  const m = readManifest();
+export async function certList(projectDir: string): Promise<void> {
+  const m = readManifest(projectDir);
   if (m.certifications.length === 0) {
     console.log(t("cli.cert_empty"));
     return;
@@ -178,8 +172,8 @@ export async function certList(): Promise<void> {
   }
 }
 
-export async function uncertify(name: string, config: AppConfig): Promise<void> {
-  const removed = removeCertification(name, config.provider.baseUrl);
+export async function uncertify(name: string, config: AppConfig, projectDir: string): Promise<void> {
+  const removed = removeCertification(name, config.provider.baseUrl, projectDir);
   if (removed) console.log(t("cli.cert_uncertified", { model: name }));
   else console.log(t("cli.cert_not_found", { model: name }));
 }

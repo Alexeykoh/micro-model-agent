@@ -1,9 +1,10 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, cpSync } from "fs";
+import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync } from "fs";
 import { platform } from "os";
 import { join, resolve, dirname } from "path";
 import { checkSandbox } from "./fact-checker";
 import type { CertScenario, ScenarioResult } from "./types";
+import type { AppConfig } from "../../config/types";
 
 export interface SpawnResult {
   code: number | null;
@@ -27,6 +28,7 @@ export interface RunScenarioOptions {
   defaultThreshold: number;
   timeoutMs?: number;
   runner?: RepRunner;
+  baseConfig?: AppConfig;
   onRep?: (id: string, rep: number, reps: number, passed: boolean, failures: string[]) => void;
 }
 
@@ -76,6 +78,15 @@ export async function runScenario(
         MMA_CONTEXT_WINDOW: String(opts.contextWindow ?? 32000),
       };
       if (opts.providerKey) env.MMA_PROVIDER_APIKEY = opts.providerKey;
+
+      // Write cert-specific config if scenario declares overrides
+      if (scenario.config && opts.baseConfig) {
+        const merged = deepMergeAny(opts.baseConfig, scenario.config);
+        const certConfigDir = join(sandbox, ".mma");
+        mkdirSync(certConfigDir, { recursive: true });
+        writeFileSync(join(certConfigDir, "config.json"), JSON.stringify(merged, null, 2), "utf-8");
+        env.MMA_CONFIG_DIR = certConfigDir;
+      }
 
       const res = await runner(env, opts.mmaRoot, args, timeoutMs);
       output = `${res.stdout}\n${res.stderr}`;
@@ -194,4 +205,21 @@ function killTree(child: import("child_process").ChildProcess): void {
       /* already dead */
     }
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deepMergeAny(target: any, source: any): any {
+  if (!source || typeof source !== "object") return source;
+  if (!target || typeof target !== "object") return source;
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const sv = source[key];
+    const tv = result[key];
+    if (sv && typeof sv === "object" && !Array.isArray(sv) && tv && typeof tv === "object" && !Array.isArray(tv)) {
+      result[key] = deepMergeAny(tv, sv);
+    } else {
+      result[key] = sv;
+    }
+  }
+  return result;
 }

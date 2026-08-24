@@ -4,7 +4,7 @@ import { parse as parseYaml } from "yaml";
 import { BUILTIN_SCENARIOS } from "./scenarios";
 import type { CertScenario, CertTag } from "./types";
 
-const TAGS: CertTag[] = ["core", "security", "image", "network", "browser"];
+const TAGS: CertTag[] = ["core", "security", "image", "network", "browser", "moe"];
 
 const CHECK_TYPES = [
   "fileExists",
@@ -104,6 +104,7 @@ function normalizeScenario(data: unknown, file: string): CertScenario {
     fixtures: Array.isArray(d.fixtures) ? (d.fixtures as CertScenario["fixtures"]) : undefined,
     checks: Array.isArray(d.checks) ? (d.checks as CertScenario["checks"]) : [],
     skipReason: typeof d.skipReason === "string" ? d.skipReason : undefined,
+    config: typeof d.config === "object" && d.config !== null ? (d.config as Record<string, unknown>) : undefined,
   };
 }
 

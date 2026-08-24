@@ -1,4 +1,4 @@
-export type CertTag = "core" | "security" | "image" | "network" | "browser";
+export type CertTag = "core" | "security" | "image" | "network" | "browser" | "moe";
 
 export type CertCheck =
   | { type: "fileExists"; path: string }
@@ -25,6 +25,8 @@ export interface CertScenario {
   fixtures?: CertFixture[];
   checks: CertCheck[];
   skipReason?: string;
+  /** Config overrides for this scenario. Merged into base config and written to sandbox. */
+  config?: Record<string, unknown>;
 }
 
 export type ScenarioStatus = "pass" | "fail" | "error" | "skipped";

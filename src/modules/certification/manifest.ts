@@ -1,11 +1,13 @@
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import type { CertManifest, CertificationEntry, CertMark } from "./types";
 
-export const MANIFEST_PATH = join(homedir(), ".mma", "certifications.json");
+export function manifestPath(projectDir: string): string {
+  return join(projectDir, ".mma", "certifications.json");
+}
 
-export function readManifest(path: string = MANIFEST_PATH): CertManifest {
+export function readManifest(projectDir: string): CertManifest {
+  const path = manifestPath(projectDir);
   try {
     if (existsSync(path)) {
       const raw = JSON.parse(readFileSync(path, "utf-8")) as CertManifest;
@@ -17,37 +19,38 @@ export function readManifest(path: string = MANIFEST_PATH): CertManifest {
   return { version: 1, certifications: [] };
 }
 
-export function saveManifest(m: CertManifest, path: string = MANIFEST_PATH): void {
-  mkdirSync(join(homedir(), ".mma"), { recursive: true });
+export function saveManifest(m: CertManifest, projectDir: string): void {
+  const path = manifestPath(projectDir);
+  mkdirSync(join(projectDir, ".mma"), { recursive: true });
   writeFileSync(path, JSON.stringify(m, null, 2), "utf-8");
 }
 
 export function upsertCertification(
   entry: CertificationEntry,
-  path: string = MANIFEST_PATH,
+  projectDir: string,
 ): CertManifest {
-  const m = readManifest(path);
+  const m = readManifest(projectDir);
   const idx = m.certifications.findIndex(
     (e) => e.model === entry.model && e.providerUrl === entry.providerUrl,
   );
   if (idx >= 0) m.certifications[idx] = entry;
   else m.certifications.push(entry);
-  saveManifest(m, path);
+  saveManifest(m, projectDir);
   return m;
 }
 
 export function removeCertification(
   model: string,
   providerUrl: string,
-  path: string = MANIFEST_PATH,
+  projectDir: string,
 ): boolean {
-  const m = readManifest(path);
+  const m = readManifest(projectDir);
   const before = m.certifications.length;
   m.certifications = m.certifications.filter(
     (e) => !(e.model === model && e.providerUrl === providerUrl),
   );
   if (m.certifications.length !== before) {
-    saveManifest(m, path);
+    saveManifest(m, projectDir);
     return true;
   }
   return false;
@@ -61,9 +64,9 @@ export function getCertMark(
   model: string,
   providerUrl: string,
   currentVersion: string,
-  path: string = MANIFEST_PATH,
+  projectDir: string,
 ): CertMark {
-  const m = readManifest(path);
+  const m = readManifest(projectDir);
   const entry = m.certifications.find((e) => e.model === model && e.providerUrl === providerUrl);
   if (!entry) return "none";
   return isStale(entry, currentVersion) ? "stale" : "certified";

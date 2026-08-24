@@ -212,13 +212,14 @@ mma security audit-stats         # Show audit notification statistics
 
 Purpose: distinguish "this model works with MMA on this backend" from "untested". A certification is **not** a general endorsement — it states that on a specific provider URL the model ran the suite and passed N/M repetitions.
 
-- **Commands:** `mma model certify <name> [--provider-url <url>] [--tags core,security,image,network,browser] [--reps N] [--force] [--clean]`, `mma model cert-status <name>`, `mma model cert-list`, `mma model uncertify <name>`.
-- **Tags:** `core` (default, no external deps), `security` (requires `security.enabled`, pre-check fails fast), `image`, `network`, `browser`.
-- **Manifest:** `~/.mma/certifications.json` — entries keyed by `(model, providerUrl)`, recording `mmaVersion`, suite summary, and per-scenario results.
+- **Commands:** `mma model certify <name> [--provider-url <url>] [--tags core,security,image,network,browser,moe] [--reps N] [--force] [--clean]`, `mma model cert-status <name>`, `mma model cert-list`, `mma model uncertify <name>`.
+- **Tags:** `core` (default, no external deps), `security` (requires config, applied per-scenario), `image`, `network`, `browser`, `moe`.
+- **Per-scenario config:** scenarios can declare `config:` overrides that are deep-merged into the base config and written to the sandbox as `<sandbox>/.mma/config.json`. The spawned process reads it via `MMA_CONFIG_DIR` env var. This enables security/MoE/LSP testing without requiring the user's global config to have those features enabled.
+- **Manifest:** `<project>/.mma/certifications.json` — entries keyed by `(model, providerUrl)`, recording `mmaVersion`, suite summary, and per-scenario results. Stored per-project (not global).
 - **Checkmarks:** `mma model list` and REPL `/model` show `✔` (certified on this provider, MMA version matches), `○` (certified on an older MMA version — re-run `--force`), `·` (not certified).
 - **Harness mechanics:** spawns `bun src/cli/main.ts` per scenario rep with `--no-agents-md --exit-on-complete -d <sandbox>`, injecting `(model, provider)` via the existing env overrides (`MMA_MODEL`, `MMA_PROVIDER_BASEURL`, `MMA_PROVIDER_APIKEY`, `MMA_CONTEXT_WINDOW`). Fact-checks: files, exit code, output substring (`outputContains` for security scenarios). M/N tally per scenario (default 2/3).
 - **Source:** `src/modules/certification/` (`types`, `scenarios`, `loader`, `fact-checker`, `runner`, `manifest`, `cli`). It is an offline tool independent of the agent loop — never part of the system prompt or context.
-- **Scenarios:** builtin in `scenarios.ts` (ported from `docs/testing/scenarios.md`); user-defined YAML in `~/.mma/certification/scenarios/*.yaml`. Image fixtures in `docs/testing/fixtures/`.
+- **Scenarios:** builtin in `scenarios.ts` (ported from `docs/testing/scenarios.md`); user-defined YAML in `<project>/.mma/certification/scenarios/*.yaml`. Image fixtures in `docs/testing/fixtures/`.
 
 ### Agent-Level MoE
 
