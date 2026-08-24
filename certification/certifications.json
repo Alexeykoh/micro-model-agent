@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "certifications": [
+    {
+      "model": "qwen3.5-9b",
+      "providerUrl": "http://localhost:1234/v1",
+      "mmaVersion": "0.51.2",
+      "certifiedAt": "2026-08-24T21:15:56.331Z",
+      "suite": {
+        "passed": 18,
+        "failed": 2,
+        "skipped": 1,
+        "total": 21
+      },
+      "results": [
+        {
+          "id": "2.1-read-file",
+          "title": "Read file content",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.2-create-file",
+          "title": "Create single file",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.3-create-dir-file",
+          "title": "Create directory and file",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.4-edit-file",
+          "title": "Create then edit file",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.5-read-edit-chain",
+          "title": "Read existing file then edit it",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.6-move-file",
+          "title": "Move/rename file",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.7-delete-file",
+          "title": "Delete a file",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.8-create-dir",
+          "title": "Create directory standalone",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.9-list-dir",
+          "title": "List directory contents",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "2.10-file-info",
+          "title": "Get file info",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "3.1-calculator",
+          "title": "Multi-step calculator module",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "3.5-data-pipeline",
+          "title": "Data processing pipeline",
+          "status": "fail",
+          "passed": 0,
+          "of": 1,
+          "error": "file missing: output.json",
+          "diagnostics": "  Files created: data/input.json, src/process.ts\n  Plan: 1/4 steps done\n  Pending: #2 Создать src/process.ts — скрипт на Bun/TypeScript для чтения input.json, фильтрации value > 50 и записи output.json; #3 Запустить скрипт через bun run process.ts; #4 Проверить результат: подтвердить существование output.json с отфильтрованными данными"
+        },
+        {
+          "id": "3.6-bash-run",
+          "title": "Run bash command and capture output",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "3.7-grep-search",
+          "title": "Search file contents with grep",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "3.8-glob-find",
+          "title": "Find files with glob",
+          "status": "fail",
+          "passed": 0,
+          "of": 1,
+          "error": "glob-result.txt does not contains \"a.ts\"; glob-result.txt does not contains \"b.ts\"",
+          "diagnostics": "  Files created: glob-result.txt, lib/c.ts, src/a.ts, src/b.ts\n  Plan: 4/5 steps done\n  Pending: #5 Выполнить glob для поиска всех .ts файлов в src/**/*.ts и сохранить результат в glob-result.txt"
+        },
+        {
+          "id": "3.9-multi-tool-chain",
+          "title": "Read → grep → edit chain",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "1.1-question-tool",
+          "title": "Question tool (removed)",
+          "status": "skipped",
+          "passed": 0,
+          "of": 0
+        },
+        {
+          "id": "6.1-plan-create-execute",
+          "title": "Plan creation and step tracking",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "7.1-subagent-file",
+          "title": "Subagent writes file in isolated scope",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "8.1-enable-tools",
+          "title": "Enable hidden tools on demand",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        },
+        {
+          "id": "9.1-lsp-check",
+          "title": "LSP detects TypeScript errors",
+          "status": "pass",
+          "passed": 1,
+          "of": 1
+        }
+      ]
+    }
+  ]
+}
