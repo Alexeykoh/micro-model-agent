@@ -232,7 +232,16 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     securityPathsDeny = (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !== "n";
   }
 
-  if (ownRl) rl.close();
+  if (ownRl) {
+    rl.close();
+    // Bun: closed readline leaves keypress/data machinery on stdin that
+    // swallows input from a later raw-mode LineEditor. Hard-detach.
+    process.stdin.removeAllListeners("data");
+    process.stdin.removeAllListeners("keypress");
+    if (typeof process.stdin.setRawMode === "function") {
+      process.stdin.setRawMode(false);
+    }
+  }
 
   const answers: SetupAnswers = {
     provider,

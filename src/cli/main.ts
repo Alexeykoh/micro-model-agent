@@ -121,8 +121,16 @@ async function main(): Promise<void> {
     await updater?.waitForIdle();
     process.exit(exitCode);
   } else {
-    const configPath = join(homedir(), ".mma", "config.json");
-    if (!existsSync(configPath)) {
+    const mmaDir = join(homedir(), ".mma");
+    const legacyConfigPath = join(mmaDir, "config.json");
+    let hasAnyConfig = existsSync(legacyConfigPath);
+    if (!hasAnyConfig) {
+      try {
+        const { hasDomainFiles } = await import("../config/domains");
+        hasAnyConfig = hasDomainFiles(mmaDir);
+      } catch {}
+    }
+    if (!hasAnyConfig) {
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup();
       const { config } = loadConfig({
@@ -169,7 +177,7 @@ async function main(): Promise<void> {
           config.security.paths.denied = [];
         }
       }
-      saveConfig(config, configPath, dirname(configPath));
+      saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
     }
     const {
       agent,
