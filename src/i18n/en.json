@@ -276,7 +276,7 @@
   "cli.cert_provider_url": "Provider base URL to certify against (default: current config)",
   "cli.cert_provider_key": "Provider API key (optional)",
   "cli.cert_context_window": "Context window size in tokens",
-  "cli.cert_tags": "Comma-separated scenario tags (core, security, image, network, browser)",
+  "cli.cert_tags": "Comma-separated scenario tags (core, security, image, network, browser, shell, research)",
   "cli.cert_reps": "Default repetitions per scenario (overridden by scenario)",
   "cli.cert_force": "Re-run an existing certification",
   "cli.cert_clean": "Remove sandbox directories after a successful run",

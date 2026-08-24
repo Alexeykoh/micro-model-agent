@@ -4,7 +4,7 @@ import { parse as parseYaml } from "yaml";
 import { BUILTIN_SCENARIOS } from "./scenarios";
 import type { CertScenario, CertTag } from "./types";
 
-const TAGS: CertTag[] = ["core", "security", "image", "network", "browser", "moe"];
+const TAGS: CertTag[] = ["core", "security", "image", "network", "browser", "moe", "shell", "research"];
 
 const CHECK_TYPES = [
   "fileExists",

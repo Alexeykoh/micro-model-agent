@@ -1,4 +1,4 @@
-export type CertTag = "core" | "security" | "image" | "network" | "browser" | "moe";
+export type CertTag = "core" | "security" | "image" | "network" | "browser" | "moe" | "shell" | "research";
 
 export type CertCheck =
   | { type: "fileExists"; path: string }
