@@ -15,7 +15,6 @@ import {
 } from "./completer";
 import { Renderer } from "../ui/renderer";
 import { divider } from "../ui/box";
-import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
 import type { Agent } from "../core/agent";
@@ -744,13 +743,9 @@ export class Repl implements ReplContext {
       );
     }
 
-    const headerWidth = Math.max(50, Math.min(96, process.stdout.columns || 96));
     // LSP status is probed in the background — it must never block the banner.
     const isTty = process.stdout.isTTY === true;
     const lspEnabled = isTty && (this.config.lsp ?? DEFAULT_LSP_CONFIG).enabled !== false;
-    if (lspEnabled) {
-      row(t("repl.lsp_label"), pc.dim("…"));
-    }
 
     // Plain banner without a surrounding box — line-based, wraps to width.
     for (const line of info) {
@@ -775,7 +770,11 @@ export class Repl implements ReplContext {
     if (lspEnabled) {
       this.probeLspBanner()
         .then((lspSummary) => {
-          if (lspSummary) this.updateLspRow(headerWidth, lspSummary);
+          if (lspSummary) {
+            const line = `${pc.green(t("repl.agent"))}${pc.yellow(t("repl.lsp_label"))} ${lspSummary}`;
+            process.stdout.write(`\x1b[2K\r${divider()}\n${line}\n`);
+            this.rl.prompt();
+          }
         })
         .catch(() => {});
     }
@@ -806,27 +805,6 @@ export class Repl implements ReplContext {
         })
         .catch(() => {});
     }
-  }
-
-  /**
-   * Replace the LSP banner row (rendered as "…") in place once the probe
-   * finishes. The LSP row is the last data row of the box, so it sits exactly
-   * two terminal rows above the prompt line — that offset is stable no matter
-   * how earlier rows wrap. Skipped (placeholder stays) when a rewrite would
-   * corrupt the screen: the agent is already running, the terminal is not a
-   * TTY, a box line wrapped, or the summary is too wide for a single row.
-   */
-  private updateLspRow(headerWidth: number, summary: string): void {
-    if (this.agentRunning || !process.stdout.isTTY) return;
-    if ((process.stdout.columns ?? 96) < headerWidth) return;
-    const rowText = `${pc.yellow(t("repl.lsp_label"))} ${summary.replace(/\s+/g, " ").trim()}`;
-    if (stringWidth(rowText) > headerWidth) return;
-    const line = pc.dim(rowText);
-    // From the prompt row up 2 to the LSP row (last banner data row, directly
-    // above the trailing blank line), clear it, write the new row, and return
-    // the cursor to the prompt row. The editor re-positions itself on the next
-    // keystroke, so any typed input is preserved.
-    process.stdout.write(`\x1b[2A\r\x1b[2K${line}\x1b[2B\r`);
   }
 
   /**
