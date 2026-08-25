@@ -11,7 +11,20 @@ const SECURITY_BASE = {
   },
 };
 
-export const BUILTIN_SCENARIOS: CertScenario[] = [
+/** Reasoning-heavy local models (qwen3.5-9b in LM Studio) truncate tool_call
+ *  arguments at the default 4096 completion cap — the run then dies in
+ *  recoverable-error retries before finishing the task. 12288 is still not
+ *  enough: the model occasionally burns 12K+ on reasoning alone mid-tool_call
+ *  (cert run 2026-08-25, scenario 3.5 rep 2/3). Raise the cap for every
+ *  certification scenario so results measure task completion, not tokenizer
+ *  luck (docs/small-model-observations.md, 2026-08-25). */
+const PROVIDER_BASE = {
+  provider: { maxCompletionTokens: 16384 },
+};
+
+type ScenarioDef = Omit<CertScenario, "config"> & { config?: Record<string, unknown> };
+
+const SCENARIO_DEFS: ScenarioDef[] = [
   // ─── Core ────────────────────────────────────────────────────────────
   {
     id: "2.1-read-file",
@@ -164,7 +177,7 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     tags: ["core"],
     mode: "run",
     prompt:
-      "Create a data processing script: 1. Create data/input.json with an array of 10 objects {id, name, value}. 2. Create src/process.ts that reads input, filters value > 50, writes output.json. 3. Run the script and verify output.json has filtered results.",
+      "Create a data processing script: 1. Create data/input.json with an array of 10 objects {id, name, value}. 2. Create src/process.ts that reads input, filters value > 50, writes output.json AT THE PROJECT ROOT (not inside data/). 3. Run the script and verify output.json has filtered results.",
     checks: [
       { type: "fileExists", path: "data/input.json" },
       { type: "fileExists", path: "src/process.ts" },
@@ -428,3 +441,8 @@ export const BUILTIN_SCENARIOS: CertScenario[] = [
     ],
   },
 ];
+
+export const BUILTIN_SCENARIOS: CertScenario[] = SCENARIO_DEFS.map((s) => ({
+  ...s,
+  config: { ...PROVIDER_BASE, ...(s.config ?? {}) },
+}));

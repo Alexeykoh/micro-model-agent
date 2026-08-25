@@ -70,7 +70,11 @@
 - **Симптом:** reasoning-тяжёлые модели (qwen3.5-9b в LM Studio) упираются в дефолтный
   `max_tokens: 4096`: ответ обрезается посреди tool_call или до всякого контента. После 2
   recoverable-ретраев сессия умирает, задача не доделана.
-- **Где проявилось:** `_testing/cert-fix-3.5` (первый прогон 3.5-data-pipeline).
+- **Где проявилось:** `_testing/cert-fix-3.5` (первый прогон 3.5-data-pipeline); повторно —
+  сертификация 2026-08-25, сценарий 3.5 rep 2/3: даже кап 12288 срезал tool_call посреди
+  аргументов (успешные итерации тратят <100 completion-токенов, но модель эпизодически
+  уходит в reasoning на 12K+). Для сертификации кап поднят до 16384
+  (`PROVIDER_BASE` в `scenarios.ts`).
 - **Реакция harness:** (1) recoverable-ошибка обрезки кормится модели обратно
   (`error.llm_truncated*`, MAX_LLM_ERROR_RETRIES=2); (2) ключ `maxCompletionTokens`
   добавлен в конфиг провайдера (`provider.entries[].maxCompletionTokens` / legacy flat
