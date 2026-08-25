@@ -30,7 +30,7 @@ const OPENAI_COMPAT: ProviderSpec = {
     streaming: true,
     tools: true,
     vision: false,
-    reasoningStrategy: "none",
+    reasoningStrategy: "prompt-tag",
     listModels: true,
     requiresKey: false,
     auth: "bearer",

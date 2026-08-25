@@ -634,7 +634,7 @@ export class Agent {
       const reasoningConfig = config.reasoning;
       let effectiveReasoningLevel: ReasoningLevel | undefined;
       let reasoningStrategy = this.deps.reasoningStrategy;
-      if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed && reasoningStrategy && reasoningStrategy !== "none") {
+      if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed) {
         const policyResult = evaluateReasoningPolicy({
           hallucinationRetry: iterHallucinationRetry,
           auditRejection: iterAuditRejection,
