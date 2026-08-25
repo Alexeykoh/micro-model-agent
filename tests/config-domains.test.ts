@@ -69,8 +69,10 @@ describe("domains.ts — extractDomain", () => {
 
 describe("domains.ts — getDomainFilePath", () => {
   it("returns correct path", () => {
+    // join() normalizes separators to the platform (win32 → backslashes),
+    // so compare against join() output instead of a literal POSIX path.
     expect(getDomainFilePath("/home/user/.mma", "core")).toBe(
-      "/home/user/.mma/config/core.json",
+      join("/home/user/.mma", "config", "core.json"),
     );
   });
 });

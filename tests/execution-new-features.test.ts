@@ -283,7 +283,13 @@ describe("auto-detect delete kind from delete_file call", () => {
       { success: true, output: "Deleted src/utils/old.ts" },
     );
 
-    const plan = execModule.getTracker()!.getPlan();
-    expect(plan.steps[0].kind).toBe("delete");
+    // Since auto-advance covers delete_file (fs-mutating), the kind switch
+    // ALSO completes the step: the only deliverable is gone → done → the
+    // single-step plan auto-archives. Verify via the archive, not the
+    // (now null) tracker.
+    expect(execModule.getTracker()).toBeNull();
+    const archived = execModule.getStore().listArchived().at(-1);
+    expect(archived).toBeDefined();
+    expect(archived!.steps[0].kind).toBe("delete");
   });
 });
