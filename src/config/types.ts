@@ -291,6 +291,32 @@ export interface UpdaterConfig {
   intervalMs: number;
 }
 
+/** Reasoning effort levels aligned with opencode + OpenAI API. */
+export type ReasoningLevel = "default" | "none" | "low" | "medium" | "high" | "max";
+
+/**
+ * How a provider expresses reasoning effort in the API request.
+ * - "openai-effort": `reasoning_effort` field in body (OpenAI, OpenRouter, vLLM)
+ * - "template-kwarg": backend-specific body field (llama.cpp `chat_template_kwargs`)
+ * - "prompt-tag": tag appended to last user message (`/no_think` for Qwen)
+ * - "none": unsupported — feature disabled
+ */
+export type ReasoningStrategy = "openai-effort" | "template-kwarg" | "prompt-tag" | "none";
+
+/** Mode: "auto" = policy-driven dynamic control; anything else = fixed level. */
+export type ReasoningMode = ReasoningLevel | "auto";
+
+export interface ReasoningConfig {
+  /** Active mode. "auto" = harness policy adjusts level per iteration. */
+  mode: ReasoningMode;
+  /** Minimum level in auto mode (clamp floor). */
+  min: Exclude<ReasoningLevel, "default" | "auto">;
+  /** Maximum level in auto mode (clamp ceiling). */
+  max: Exclude<ReasoningLevel, "default" | "auto">;
+  /** Min iterations between agent override calls. */
+  overrideCooldown: number;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -322,4 +348,5 @@ export interface AppConfig {
   subagent: SubagentConfig;
   lsp?: LspConfig;
   updater: UpdaterConfig;
+  reasoning?: ReasoningConfig;
 }

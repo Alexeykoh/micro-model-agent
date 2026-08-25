@@ -2,6 +2,7 @@
 import type { LLMProvider } from "../../llm/provider";
 import type { RetryConfig } from "../../config/types";
 import type { RateLimitConfig } from "../../config/types";
+import type { ReasoningStrategy } from "../../config/types";
 
 /**
  * What a provider advertises it supports. The agent loop uses these to adapt
@@ -12,7 +13,8 @@ export interface ProviderCapabilities {
   streaming: boolean;
   tools: boolean;
   vision: boolean;
-  reasoningEffort: boolean;
+  /** How this provider expresses reasoning effort. */
+  reasoningStrategy: ReasoningStrategy;
   listModels: boolean;
   requiresKey: boolean;
   auth?: "bearer" | "header";

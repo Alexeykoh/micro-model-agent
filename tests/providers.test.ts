@@ -13,7 +13,7 @@ describe("providers module", () => {
     it("registers and looks up specs by type", () => {
       const registry = new ProviderRegistry();
       registry.register({ type: "test", label: "Test", baseUrl: "", capabilities: {
-        streaming: true, tools: true, vision: false, reasoningEffort: false,
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
         listModels: false, requiresKey: false,
       }, create: (opts) => ({ ...opts, model: opts.model, contextWindow: opts.contextWindow } as any) });
 
@@ -187,7 +187,7 @@ describe("providers module", () => {
         label: "Capturing",
         baseUrl: "",
         capabilities: {
-          streaming: true, tools: true, vision: false, reasoningEffort: false,
+          streaming: true, tools: true, vision: false, reasoningStrategy: "none",
           listModels: false, requiresKey: false,
         },
         create: (o) => {
@@ -262,7 +262,7 @@ describe("providers module", () => {
     it("pickFor returns the first capable entry by priority order", () => {
       const registry = new ProviderRegistry();
       const cap = (over: Partial<{ vision: boolean; tools: boolean; listModels: boolean }>) => ({
-        streaming: true, tools: true, vision: false, reasoningEffort: false,
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
         listModels: false, requiresKey: false, ...over,
       });
       registry.register({

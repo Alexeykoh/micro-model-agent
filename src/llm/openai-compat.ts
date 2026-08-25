@@ -39,6 +39,7 @@ function buildRequestBody(opts: {
   stream: boolean;
   maxTokens?: number;
   reasoningEffort?: string;
+  reasoningStrategy?: string;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -46,9 +47,19 @@ function buildRequestBody(opts: {
     stream: opts.stream,
   };
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
-  if (opts.reasoningEffort) {
-    body.reasoning_effort = opts.reasoningEffort;
+
+  // Apply reasoning effort via the provider's strategy
+  const strategy = opts.reasoningStrategy ?? "openai-effort";
+  const level = opts.reasoningEffort;
+
+  if (strategy === "openai-effort" && level && level !== "default") {
+    body.reasoning_effort = level;
+  } else if (strategy === "template-kwarg") {
+    body.chat_template_kwargs = { enable_thinking: level !== "none" };
   }
+  // "prompt-tag" is handled at the message level (outgoing copy only)
+  // "none" = unsupported, skip
+
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
       type: "function",
@@ -102,7 +113,13 @@ export class OpenAICompatProvider implements LLMProvider {
     // Record this request
     this.rateLimiter.recordRequest();
 
-    const streamResult = this.doStream(messages, tools, signal, options);
+    // Apply prompt-tag strategy: append /no_think to last user message (outgoing copy only)
+    let effectiveMessages = messages;
+    if (options?.reasoningStrategy === "prompt-tag" && options?.reasoningEffort === "none") {
+      effectiveMessages = this.applyPromptTag(messages, "/no_think");
+    }
+
+    const streamResult = this.doStream(effectiveMessages, tools, signal, options);
 
     let hasToolCall = false;
     let hasText = false;
@@ -114,11 +131,30 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (!hasToolCall && !hasText) {
-      const fallback = await this.doNonStreaming(messages, tools, signal, options);
+      const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
       for (const chunk of fallback) {
         yield chunk;
       }
     }
+  }
+
+  /** Append a tag to the last user message (outgoing copy, never stored in context). */
+  private applyPromptTag(messages: Message[], tag: string): Message[] {
+    const copy = [...messages];
+    for (let i = copy.length - 1; i >= 0; i--) {
+      if (copy[i].role === "user") {
+        const msg = { ...copy[i] };
+        if (typeof msg.content === "string") {
+          msg.content = msg.content + "\n" + tag;
+        } else {
+          // Array of parts — append a text part
+          msg.content = [...msg.content, { type: "text" as const, text: tag }];
+        }
+        copy[i] = msg;
+        break;
+      }
+    }
+    return copy;
   }
 
   private async *doStream(
@@ -170,6 +206,7 @@ export class OpenAICompatProvider implements LLMProvider {
       stream: true,
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
+      reasoningStrategy: options?.reasoningStrategy,
     });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
       this.buildRequestSetup(signal);
@@ -436,6 +473,7 @@ export class OpenAICompatProvider implements LLMProvider {
       stream: false,
       maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
       reasoningEffort: options?.reasoningEffort,
+      reasoningStrategy: options?.reasoningStrategy,
     });
 
     const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(signal);

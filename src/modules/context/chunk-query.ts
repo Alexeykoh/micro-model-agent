@@ -1,4 +1,5 @@
 import type { LLMProvider, Message } from "../../llm/provider";
+import type { ReasoningLevel } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 
 export interface ChunkQueryOptions {
@@ -18,7 +19,7 @@ export interface ChunkQueryOptions {
    * an empty text answer, which silently corrupts chunk query results. Override
    * to "low"/"medium"/"high" when the provider/model needs it.
    */
-  reasoningEffort?: "none" | "low" | "medium" | "high";
+  reasoningEffort?: ReasoningLevel;
   querySystemPrompt?: string;
   synthesisSystemPrompt?: string;
   /** Optional logger for chunking/parallelism diagnostics. */
@@ -65,7 +66,7 @@ async function chatText(
   provider: LLMProvider,
   messages: Message[],
   maxTokens?: number,
-  reasoningEffort?: "none" | "low" | "medium" | "high",
+  reasoningEffort?: ReasoningLevel,
 ): Promise<string> {
   let out = "";
   for await (const chunk of provider.chat(messages, undefined, undefined, {

@@ -1,4 +1,5 @@
-// src/llm/provider.ts
+// src/llm/provider
+import type { ReasoningLevel, ReasoningStrategy } from "../config/types";
 
 export interface TextPart {
   type: "text";
@@ -53,13 +54,10 @@ export interface Chunk {
 export interface ChatOptions {
   /** Cap on generated tokens for this call (overrides provider default). */
   maxTokens?: number;
-  /**
-   * Reasoning effort for models that support it (OpenAI-compat `reasoning_effort`).
-   * "none" disables long "thinking" chains so the budget goes to the answer —
-   * essential for chunk queries on reasoning models (qwen3.5), where thinking
-   * alone can consume all of maxTokens and leave an empty text answer.
-   */
-  reasoningEffort?: "none" | "low" | "medium" | "high";
+  /** Reasoning effort level. */
+  reasoningEffort?: ReasoningLevel;
+  /** How the provider expresses reasoning effort in the API request. */
+  reasoningStrategy?: ReasoningStrategy;
 }
 
 export interface LLMProvider {

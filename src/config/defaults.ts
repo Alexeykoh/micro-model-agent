@@ -140,4 +140,10 @@ export const DEFAULTS: AppConfig = {
     autoInstall: true,
     intervalMs: 0,
   },
+  reasoning: {
+    mode: "auto",
+    min: "low",
+    max: "high",
+    overrideCooldown: 5,
+  },
 };
