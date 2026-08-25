@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
-import { loadScenarios, filterByTags } from "./loader";
+import { loadScenarios, filterByTags, filterByScenarios, unknownScenarioIds } from "./loader";
 import { runScenario, findMmaRoot } from "./runner";
 import {
   readMergedManifest,
@@ -49,6 +49,10 @@ export interface CertifyOptions {
   reps: number;
   force: boolean;
   clean: boolean;
+  /** Scenario ids to (re-)run; when set, only these scenarios run and the rest of an existing certification is preserved. */
+  scenarios?: string[];
+  /** Default per-rep timeout in ms (overridden by scenario.timeoutMs). */
+  timeout?: number;
   config: AppConfig;
   projectDir: string;
 }
@@ -59,7 +63,24 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   const { scenarios, errors } = loadScenarios(join(opts.projectDir, ".mma", "certification", "scenarios"));
   for (const e of errors) console.error(pc.yellow(`  ${e}`));
 
-  const selected = filterByTags(scenarios, opts.tags);
+  let selected = filterByTags(scenarios, opts.tags);
+  const isPartial = Array.isArray(opts.scenarios) && opts.scenarios.length > 0;
+  if (isPartial) {
+    const unknown = unknownScenarioIds(scenarios, opts.scenarios!);
+    if (unknown.length > 0) {
+      console.error(
+        pc.red(
+          t("cli.cert_scenarios_unknown", {
+            ids: unknown.join(", "),
+            available: scenarios.map((s) => s.id).join(", "),
+          }),
+        ),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    selected = filterByScenarios(selected, opts.scenarios!);
+  }
   if (selected.length === 0) {
     console.error(pc.red(t("cli.cert_no_scenarios", { tags: opts.tags.join(",") })));
     process.exitCode = 1;
@@ -70,7 +91,9 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   const existing = manifest.certifications.find(
     (e) => e.model === opts.name && e.providerUrl === providerUrl,
   );
-  if (existing && !opts.force) {
+  // A full-suite re-run overwrites the entry and requires --force; a partial
+  // (scenario-targeted) run is an incremental update by definition.
+  if (existing && !opts.force && !isPartial) {
     console.error(pc.yellow(t("cli.cert_exists", { model: opts.name })));
     console.error(pc.yellow(t("cli.cert_exists_hint")));
     process.exitCode = 1;
@@ -106,6 +129,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
       sandboxBase,
       defaultReps: opts.reps,
       defaultThreshold: 2,
+      timeoutMs: opts.timeout,
       baseConfig: opts.config,
       onRep: (id, rep, reps, passed, failures) => {
         const word = passed ? pc.green(t("cli.cert_rep_pass")) : pc.red(t("cli.cert_rep_fail"));
@@ -124,14 +148,20 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     }
   }
 
-  const suite = summarize(results);
+  // Partial run: keep previous results for scenarios that were not re-run.
+  const runIds = new Set(selected.map((s) => s.id));
+  const finalResults = isPartial && existing
+    ? mergePartialResults(results, existing.results, runIds)
+    : results;
+
+  const suite = summarize(finalResults);
   const entry: CertificationEntry = {
     model: opts.name,
     providerUrl,
     mmaVersion: readVersion(),
     certifiedAt: new Date().toISOString(),
     suite,
-    results,
+    results: finalResults,
   };
   // Certifications are per (model, providerUrl) — machine-scoped, not
   // project-scoped: store them in the global manifest so marks follow the
@@ -146,7 +176,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
       total: String(suite.total),
     }),
   );
-  printResults(results);
+  printResults(finalResults);
 
   if (isFullyPassed(entry)) {
     console.log(pc.green(`\n✔ ${opts.name} is certified`));
@@ -209,6 +239,23 @@ function summarize(results: ScenarioResult[]): SuiteSummary {
     skipped: results.filter((r) => r.status === "skipped").length,
     total: results.length,
   };
+}
+
+/**
+ * Merge a partial run's results with a previous certification: fresh results
+ * replace old ones by scenario id; results for scenarios that were not re-run
+ * are preserved verbatim.
+ */
+export function mergePartialResults(
+  fresh: ScenarioResult[],
+  previous: ScenarioResult[],
+  rerunIds: Set<string>,
+): ScenarioResult[] {
+  const preserved = previous.filter((r) => !rerunIds.has(r.id));
+  if (preserved.length > 0) {
+    console.log(pc.dim(t("cli.cert_partial_merge", { kept: String(preserved.length) })));
+  }
+  return [...fresh, ...preserved];
 }
 
 function printResults(results: ScenarioResult[]): void {

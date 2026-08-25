@@ -216,6 +216,10 @@ const SCENARIO_DEFS: ScenarioDef[] = [
     title: "Data processing pipeline",
     tags: ["core"],
     mode: "run",
+    // Reasoning-heavy local models need ~12 LLM calls at 30-45s each here;
+    // the work completes correctly but the default 300s rep timeout kills the
+    // process before the final answer (cert runs 2026-08-25: qwen3.6-35b-a3b).
+    timeoutMs: 600_000,
     prompt:
       "Create a data processing script: 1. Create data/input.json with an array of 10 objects {id, name, value}. 2. Create src/process.ts that reads input, filters value > 50, writes output.json AT THE PROJECT ROOT (not inside data/). 3. Run the script and verify output.json has filtered results.",
     checks: [

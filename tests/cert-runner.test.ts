@@ -227,3 +227,42 @@ describe("cert runner", () => {
     expect(res.diagnostics).toContain("Files created");
   });
 });
+
+describe("scenario timeout priority", () => {
+  const base = {
+    model: "m",
+    providerUrl: "http://localhost:8080",
+    mmaRoot,
+    sandboxBase,
+    defaultReps: 1,
+    defaultThreshold: 1,
+    runner: async () => ({ code: 0, stdout: "", stderr: "", timedOut: false }),
+  };
+
+  it("uses scenario.timeoutMs over the run default", async () => {
+    let captured = 0;
+    await runScenario(
+      scenario({ timeoutMs: 600_000, checks: [{ type: "exitCode", code: 0 }] }),
+      { ...base, timeoutMs: 300_000, runner: async (_e, _c, _a, t) => { captured = t; return { code: 0, stdout: "", stderr: "", timedOut: false }; } },
+    );
+    expect(captured).toBe(600_000);
+  });
+
+  it("falls back to the run-level timeout when scenario has none", async () => {
+    let captured = 0;
+    await runScenario(
+      scenario({ checks: [{ type: "exitCode", code: 0 }] }),
+      { ...base, timeoutMs: 450_000, runner: async (_e, _c, _a, t) => { captured = t; return { code: 0, stdout: "", stderr: "", timedOut: false }; } },
+    );
+    expect(captured).toBe(450_000);
+  });
+
+  it("falls back to 300s when neither is set", async () => {
+    let captured = 0;
+    await runScenario(
+      scenario({ checks: [{ type: "exitCode", code: 0 }] }),
+      { ...base, runner: async (_e, _c, _a, t) => { captured = t; return { code: 0, stdout: "", stderr: "", timedOut: false }; } },
+    );
+    expect(captured).toBe(300_000);
+  });
+});

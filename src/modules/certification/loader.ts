@@ -50,6 +50,9 @@ export function validateScenario(s: CertScenario): string[] {
   if (s.reps !== undefined && (!Number.isInteger(s.reps) || s.reps < 1)) {
     errors.push(`[${s.id}] reps must be a positive integer`);
   }
+  if (s.timeoutMs !== undefined && (!Number.isInteger(s.timeoutMs) || s.timeoutMs < 1000)) {
+    errors.push(`[${s.id}] timeoutMs must be an integer >= 1000`);
+  }
   if (
     s.passThreshold !== undefined &&
     (!Number.isInteger(s.passThreshold) || s.passThreshold < 1)
@@ -101,6 +104,7 @@ function normalizeScenario(data: unknown, file: string): CertScenario {
     prompt: String(d.prompt ?? ""),
     reps: typeof d.reps === "number" ? d.reps : undefined,
     passThreshold: typeof d.passThreshold === "number" ? d.passThreshold : undefined,
+    timeoutMs: typeof d.timeoutMs === "number" ? d.timeoutMs : undefined,
     fixtures: Array.isArray(d.fixtures) ? (d.fixtures as CertScenario["fixtures"]) : undefined,
     checks: Array.isArray(d.checks) ? (d.checks as CertScenario["checks"]) : [],
     skipReason: typeof d.skipReason === "string" ? d.skipReason : undefined,
@@ -113,4 +117,16 @@ export function filterByTags(scenarios: CertScenario[], tags: CertTag[]): CertSc
     return scenarios.filter((s) => s.tags.includes("core"));
   }
   return scenarios.filter((s) => s.tags.some((t) => tags.includes(t)));
+}
+
+/** Keep only scenarios whose id is in the list (exact, case-insensitive match). */
+export function filterByScenarios(scenarios: CertScenario[], ids: string[]): CertScenario[] {
+  const wanted = new Set(ids.map((id) => id.toLowerCase()));
+  return scenarios.filter((s) => wanted.has(s.id.toLowerCase()));
+}
+
+/** Return ids from the request that do not exist among loaded scenarios. */
+export function unknownScenarioIds(scenarios: CertScenario[], ids: string[]): string[] {
+  const known = new Set(scenarios.map((s) => s.id.toLowerCase()));
+  return ids.filter((id) => !known.has(id.toLowerCase()));
 }

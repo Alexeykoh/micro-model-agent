@@ -22,6 +22,8 @@ export interface CertScenario {
   prompt: string;
   reps?: number;
   passThreshold?: number;
+  /** Per-rep timeout in ms. Slow multi-step scenarios on local reasoning models need more than the 300s default. */
+  timeoutMs?: number;
   fixtures?: CertFixture[];
   checks: CertCheck[];
   skipReason?: string;

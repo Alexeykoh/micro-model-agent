@@ -209,6 +209,8 @@ export function createProgram(): Command {
     .option("--provider-key <key>", t("cli.cert_provider_key"))
     .option("--context-window <n>", t("cli.cert_context_window"))
     .option("--tags <tags>", t("cli.cert_tags"), "core")
+    .option("--scenarios <ids>", t("cli.cert_scenarios"))
+    .option("--timeout <ms>", t("cli.cert_timeout"))
     .option("--reps <n>", t("cli.cert_reps"))
     .option("--force", t("cli.cert_force"))
     .option("--clean", t("cli.cert_clean"))
@@ -222,7 +224,14 @@ export function createProgram(): Command {
         providerKey: cmdOpts.providerKey,
         contextWindow: cmdOpts.contextWindow ? parseInt(cmdOpts.contextWindow, 10) : undefined,
         tags: parseTags(cmdOpts.tags),
+        scenarios: cmdOpts.scenarios
+          ? String(cmdOpts.scenarios)
+              .split(",")
+              .map((x: string) => x.trim())
+              .filter(Boolean)
+          : undefined,
         reps: cmdOpts.reps ? parseInt(cmdOpts.reps, 10) : 3,
+        timeout: cmdOpts.timeout ? parseInt(cmdOpts.timeout, 10) : undefined,
         force: cmdOpts.force === true,
         clean: cmdOpts.clean === true,
         config,
