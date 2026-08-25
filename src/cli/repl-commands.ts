@@ -250,10 +250,21 @@ function registerMmaCommands(ctx: ReplContext): void {
     name: "reasoning",
     description: t("repl.reasoning"),
     usage: t("repl.reasoning_usage"),
-    action: () => {
-      ctx.config.showReasoning = !ctx.config.showReasoning;
-      const status = ctx.config.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"));
-      console.log(t("repl.reasoning_status", { status }));
+    action: (args: string[]) => {
+      const level = args[0]?.trim().toLowerCase();
+      const VALID_LEVELS = ["auto", "none", "low", "medium", "high", "max"];
+      if (!level) {
+        // Toggle show/hide reasoning content
+        ctx.config.showReasoning = !ctx.config.showReasoning;
+        const status = ctx.config.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"));
+        console.log(t("repl.reasoning_status", { status }));
+      } else if (VALID_LEVELS.includes(level)) {
+        // Set reasoning effort level
+        ctx.agent.setReasoningLevel(level as any);
+        console.log(pc.green(t("repl.reasoning_level_set", { level })));
+      } else {
+        console.log(pc.yellow(t("repl.reasoning_invalid_level", { level, valid: VALID_LEVELS.join(", ") })));
+      }
     },
   });
   ctx.registerCommand({

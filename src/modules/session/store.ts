@@ -30,7 +30,8 @@ export interface SessionLogEntry {
     | "context"
     | "llm_usage"
     | "session_start"
-    | "baseline_typecheck";
+    | "baseline_typecheck"
+    | "reasoning_control";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -96,6 +97,10 @@ export interface SessionLogEntry {
   // baseline_typecheck fields
   passed?: boolean;
   message?: string;
+  // reasoning_control fields
+  level?: string;
+  strategy?: string;
+  probePassed?: boolean;
 }
 
 export class SessionStore {

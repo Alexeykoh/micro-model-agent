@@ -20,6 +20,7 @@ const SECURITY_BASE = {
  *  luck (docs/small-model-observations.md, 2026-08-25). */
 const PROVIDER_BASE = {
   provider: { maxCompletionTokens: 16384 },
+  reasoning: { mode: "none", min: "low", max: "high", overrideCooldown: 3 },
 };
 
 type ScenarioDef = Omit<CertScenario, "config"> & { config?: Record<string, unknown> };

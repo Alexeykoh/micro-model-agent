@@ -2,6 +2,7 @@ import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
 import { ProviderManager } from "../modules/providers/index";
 import { FallbackProvider } from "../modules/providers/fallback";
+import { BUILTIN_PROVIDERS } from "../modules/providers/presets";
 import type { LLMProvider } from "../llm/provider";
 import { ModelLoader } from "../llm/model-loader";
 import { ToolRegistry, registerAllTools } from "../tools/index";
@@ -160,12 +161,19 @@ export async function bootstrap(
   projectDir?: string,
   noAgentsMd?: boolean,
   exitOnComplete?: boolean,
+  reasoningLevel?: string,
 ): Promise<BootstrapResult> {
   const dir = configDir || process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
   const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });
   setLocale(config.locale);
+
+  // CLI --reasoning overrides config mode (priority: CLI > config > default)
+  if (reasoningLevel && reasoningLevel !== "auto") {
+    if (!config.reasoning) config.reasoning = { mode: reasoningLevel as any, min: "low", max: "high", overrideCooldown: 3 };
+    else config.reasoning.mode = reasoningLevel as any;
+  }
 
   // Update global audit notifier with config
   try {
@@ -240,6 +248,31 @@ export async function bootstrap(
         `provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
       );
     });
+  }
+
+  // Resolve reasoning strategy from provider preset + probe
+  const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
+  const reasoningStrategy = providerSpec?.capabilities.reasoningStrategy ?? "none";
+  let reasoningProbePassed = false;
+  if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
+    try {
+      const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
+      const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
+      const cached = getCachedProbeResult(cacheK);
+      if (cached !== undefined) {
+        reasoningProbePassed = cached;
+      } else {
+        reasoningProbePassed = await probeReasoningSupport(llmProvider, reasoningStrategy);
+        setCachedProbeResult(cacheK, reasoningProbePassed);
+      }
+      if (reasoningProbePassed) {
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism respected`);
+      } else {
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism IGNORED (falling back to prompt-tag)`);
+      }
+    } catch {
+      reasoningProbePassed = false;
+    }
   }
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
@@ -586,9 +619,22 @@ export async function bootstrap(
     memoryStore,
     moduleRegistry,
     exitOnComplete,
+    reasoningProbePassed,
+    reasoningStrategy,
   };
 
   const agent = new Agent(agentDeps);
+
+  // Register set_thinking tool (needs agent's shared reasoning state)
+  if (config.reasoning) {
+    const { createSetThinkingTool } = await import("../tools/set-thinking");
+    const setThinkingTool = createSetThinkingTool(
+      agent.reasoningState,
+      config.reasoning,
+      () => agent.currentIteration,
+    );
+    toolRegistry.register(setThinkingTool);
+  }
 
   return {
     agent,

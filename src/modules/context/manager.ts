@@ -141,6 +141,8 @@ export class ContextManager {
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
+  /** Current reasoning level (set by agent loop, included in compaction summary). */
+  thinkingLevel: string | null = null;
   onCompact: ((summary: Message) => void) | null = null;
   /**
    * Optional short line appended to the compaction summary so the model knows
@@ -432,6 +434,8 @@ export class ContextManager {
     if (decisionsLine) parts.push(decisionsLine);
     const errorsLine = this.facts.errorsLine();
     if (errorsLine) parts.push(errorsLine);
+
+    if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
 
     const triedAndFailed = extractTriedAndFailed(oldTurns);
     if (triedAndFailed.length > 0) {

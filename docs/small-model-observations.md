@@ -127,3 +127,17 @@
   отклоняет преждевременный ответ, модель получает `<system-summary>` с pending-шагами
   и шанс доделать (ограничено MAX_AUDIT_RETRIES / MAX_HALLUCINATION_RETRIES).
 - **Статус:** fixed (тест «exitOnComplete does not bypass the audit gate» в tests/core/agent.test.ts).
+
+## 2026-08-25 — Dynamic reasoning control: reasoning strategy и probe
+
+- **Симптом:** модели с reasoning (Qwen3.5-9B, DeepSeek-R1) всегда генерируют reasoning_content
+  даже при `reasoning_effort: "none"`, т.к. llama.cpp/xinference не передают effort-параметр
+  в бэкенд. Prompt-tag стратегия (`/no_think`) может быть проигнорирована.
+- **Где проявилось:** реализация dynamic reasoning control (spec `docs/specs/2026-08-25-dynamic-reasoning-control.ru.md`).
+- **Реакция harness:** three-layer design:
+  1. **EffortMechanism** — probe при старте проверяет, уважает ли бэкенд effort-сигнал.
+     Если нет → prompt-tag (`/no_think`) как fallback.
+  2. **ReasoningPolicy** — structural signals (hallucination retry, audit rejection,
+     recoverable LLM error) только через harness, не через текстовый анализ (rule #10).
+  3. **set_thinking tool** — агент может принудительно изменить уровень для сложных подзадач.
+- **Статус:** implemented.

@@ -47,6 +47,7 @@ async function main(): Promise<void> {
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
   const jsonMode = opts.json === true;
+  const reasoningLevel = opts.reasoning as string | undefined;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -56,7 +57,7 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config, baseDir, legacyDetected } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    const { agent, config, baseDir, legacyDetected } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
 
     if (legacyDetected) {
       console.error(pc.yellow(`  ${t("config.legacy_hint")}`));

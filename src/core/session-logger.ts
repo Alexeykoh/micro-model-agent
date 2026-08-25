@@ -334,4 +334,26 @@ export class SessionLogger {
       skills: data.skills,
     });
   }
+
+  /**
+   * Log a reasoning control event (level set, policy evaluation).
+   */
+  logReasoningControl(data: {
+    iteration: number;
+    level: string;
+    strategy?: string;
+    probePassed?: boolean;
+    source?: string;
+  }): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "reasoning_control",
+      content: `reasoning level: ${data.level} (source: ${data.source ?? "policy"})`,
+      iteration: data.iteration,
+      level: data.level,
+      strategy: data.strategy,
+      probePassed: data.probePassed,
+      source: data.source,
+    });
+  }
 }

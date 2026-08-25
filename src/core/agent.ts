@@ -20,6 +20,10 @@ import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
 import { CostTracker } from "../modules/pricing/index";
+import { evaluateReasoningPolicy, createPolicyState } from "../modules/reasoning/policy";
+import type { PolicyState } from "../modules/reasoning/policy";
+import type { ReasoningLevel } from "../config/types";
+import type { ReasoningState } from "../tools/set-thinking";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -96,6 +100,10 @@ export interface AgentDeps {
   moduleRegistry?: ModuleRegistry;
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
+  /** Whether the reasoning effort mechanism was validated by probe. */
+  reasoningProbePassed?: boolean;
+  /** Strategy for expressing reasoning effort on this provider. */
+  reasoningStrategy?: import("../config/types").ReasoningStrategy;
 }
 
 export class Agent {
@@ -105,15 +113,38 @@ export class Agent {
   private abortController: AbortController | null = null;
   private lastCompactionShown = 0;
   private costTracker: CostTracker;
+  private policyState: PolicyState;
+  /** Shared mutable reasoning state (owned by agent, shared with set_thinking tool). */
+  readonly reasoningState: ReasoningState;
+  /** Current iteration counter (exposed for tool cooldown checks). */
+  private _currentIteration = 0;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
     this.costTracker = new CostTracker(deps.config.model, deps.config.pricing);
+    this.policyState = createPolicyState();
+    const initialLevel = (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ?? "medium";
+    this.reasoningState = { level: initialLevel, overrideIteration: -100 };
   }
 
   /** Expose context manager for REPL image attachment and other direct access. */
   get contextManager(): ContextManager {
     return this.deps.contextManager;
+  }
+
+  /** Current effective reasoning level. */
+  get reasoningLevel(): ReasoningLevel {
+    return this.reasoningState.level;
+  }
+
+  /** Set reasoning level (used by REPL and CLI). */
+  setReasoningLevel(level: ReasoningLevel): void {
+    this.reasoningState.level = level;
+  }
+
+  /** Current iteration number (for tool cooldown checks). */
+  get currentIteration(): number {
+    return this._currentIteration;
   }
 
   callerProvenance(): { provider: string; model: string } {
@@ -472,6 +503,12 @@ export class Agent {
     const MAX_REPEATED_TOOL_CALLS = 2;
     let llmErrorRetries = 0;
 
+    // Per-iteration reasoning signal flags (reset each iteration)
+    let iterHallucinationRetry = false;
+    let iterAuditRejection = false;
+    let iterRecoverableLlmError = false;
+    let iterPlanCreated = false;
+
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
     // (which mutates the shared activeToolTags array) can grow the
@@ -489,7 +526,14 @@ export class Agent {
 
     while (iteration < config.maxToolIterations && !this.shutdownRequested) {
       iteration++;
+      this._currentIteration = iteration;
       contextManager.noteIteration();
+
+      // Reset per-iteration reasoning signals
+      iterHallucinationRetry = false;
+      iterAuditRejection = false;
+      iterRecoverableLlmError = false;
+      iterPlanCreated = false;
 
       // Re-read the mutable tag set in case enable_tools was called.
       allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
@@ -585,11 +629,44 @@ export class Agent {
       const promptBefore = apiPromptTokens;
       const completionBefore = apiCompletionTokens;
       logger.logLLMRequest(config.model, history.length, input, "agent");
+
+      // Compute reasoning effort for this iteration
+      const reasoningConfig = config.reasoning;
+      let effectiveReasoningLevel: ReasoningLevel | undefined;
+      let reasoningStrategy = this.deps.reasoningStrategy;
+      if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed && reasoningStrategy && reasoningStrategy !== "none") {
+        const policyResult = evaluateReasoningPolicy({
+          hallucinationRetry: iterHallucinationRetry,
+          auditRejection: iterAuditRejection,
+          recoverableLlmError: iterRecoverableLlmError,
+          planCreated: iterPlanCreated,
+          consecutiveSuccesses: 0,
+          isRepetitive: false,
+          baseline: "medium",
+        }, this.policyState);
+        effectiveReasoningLevel = policyResult.level;
+      } else if (reasoningConfig && reasoningConfig.mode !== "auto") {
+        effectiveReasoningLevel = reasoningConfig.mode;
+      }
+
+      // Log reasoning control event
+      if (effectiveReasoningLevel) {
+        slog.logReasoningControl({
+          iteration,
+          level: effectiveReasoningLevel,
+          strategy: reasoningStrategy,
+          probePassed: this.deps.reasoningProbePassed,
+          source: this.reasoningState.overrideIteration === iteration ? "agent_override" : "policy",
+        });
+        contextManager.thinkingLevel = effectiveReasoningLevel;
+      }
+
       try {
         for await (const chunk of llmProvider.chat(
           history,
           allToolsForBudget as ToolDefinition[],
           this.abortController?.signal,
+          effectiveReasoningLevel ? { reasoningEffort: effectiveReasoningLevel, reasoningStrategy } : undefined,
         )) {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
@@ -641,6 +718,7 @@ export class Agent {
         // model can adapt (split the write into smaller chunks) instead of
         // the whole session dying. Bounded to avoid infinite loops.
         if (err?.recoverableLlm && llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
+          iterRecoverableLlmError = true;
           llmErrorRetries++;
           logger.warn(
             `Recoverable LLM error, feeding back (${llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
@@ -1007,6 +1085,7 @@ export class Agent {
         }
       }
       if (hallucinationResult.status === "retry") {
+        iterHallucinationRetry = true;
         // Exit-on-complete fast-exit must NOT bypass the final audit gate:
         // when a plan is active the model may be answering "done" while steps
         // are pending (cert regression: model replied without running its
@@ -1122,6 +1201,7 @@ export class Agent {
         if (this.deps.finalAudit) {
           const audit = await this.deps.finalAudit();
           if (audit && !audit.passed) {
+            iterAuditRejection = true;
             logger.warn(`Final audit incomplete: ${audit.summary}`);
             const steps = audit.pendingSteps.slice(0, 5).join("; ") || "—";
             contextManager.addMessage({
