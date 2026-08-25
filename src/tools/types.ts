@@ -88,6 +88,12 @@ export interface ToolContext {
    * this stays empty and getAllForLLM returns every tool (legacy mode).
    */
   activeToolTags?: string[];
+  /**
+   * Optional cleanup callback invoked by the executor when the tool times
+   * out or is aborted. Used by subagent to restore the parent's scope even
+   * when the agent's `finally` block never runs (abandoned promise).
+   */
+  cleanup?: () => void;
 }
 
 export interface ToolResult {

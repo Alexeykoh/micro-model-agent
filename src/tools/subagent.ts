@@ -29,6 +29,7 @@ export const subagentTool: ToolDefinition = {
   description:
     "Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.",
   tags: ["code"],
+  timeoutMs: 180000,
   parameters: {
     type: "object",
     properties: {
@@ -154,6 +155,9 @@ export const subagentTool: ToolDefinition = {
       // permanently mutate the parent's scope.
       const parentScope = ctx.scope;
       ctx.toolExecutor.setScope(scope || { allowed_files: [], read_only_files: [] });
+      // Register cleanup so the executor restores scope on timeout/abort
+      // even when the agent's `finally` block never runs (abandoned promise).
+      ctx.cleanup = () => ctx.toolExecutor?.setScope(parentScope);
 
       const systemPrompt: PromptBlock = {
         content: buildSubagentSystemPrompt(
@@ -227,6 +231,7 @@ export const subagentTool: ToolDefinition = {
         // Restore the parent's exact scope: undefined means "no restrictions"
         // and must not become an empty scope (which denies everything).
         ctx.toolExecutor.setScope(parentScope);
+        ctx.cleanup = undefined;
       }
     } catch (e: any) {
       return { success: false, output: `Sub-agent error: ${e.message}` };

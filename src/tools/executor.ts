@@ -89,6 +89,10 @@ export class ToolExecutor {
           setTimeout(() => {
             // Kill any long-running child process registered for this call.
             killByCallId(call.id);
+            // Run tool-specific cleanup (e.g. subagent scope restore) before
+            // rejecting so shared state is restored even on abandonment.
+            this.ctx.cleanup?.();
+            this.ctx.cleanup = undefined;
             reject(
               new Error(
                 t("tool.timeout", {
@@ -107,6 +111,8 @@ export class ToolExecutor {
           const abortPromise = new Promise<ToolResult>((_, reject) => {
             const onAbort = () => {
               killByCallId(call.id);
+              this.ctx.cleanup?.();
+              this.ctx.cleanup = undefined;
               reject(new Error(t("tool.aborted", { name: call.name })));
             };
             if (signal.aborted) {

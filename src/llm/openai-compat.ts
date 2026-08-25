@@ -56,8 +56,11 @@ function buildRequestBody(opts: {
     body.reasoning_effort = level;
   } else if (strategy === "template-kwarg") {
     body.chat_template_kwargs = { enable_thinking: level !== "none" };
+  } else if (strategy === "prompt-tag" && level && level !== "default") {
+    // Send reasoning_effort in body (models that respect it via API) AND
+    // add /no_think tag to message (models that only respect prompt signals).
+    body.reasoning_effort = level;
   }
-  // "prompt-tag" is handled at the message level (outgoing copy only)
   // "none" = unsupported, skip
 
   if (opts.tools && opts.tools.length > 0) {

@@ -254,30 +254,25 @@ export async function bootstrap(
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
   const reasoningStrategy = providerSpec?.capabilities.reasoningStrategy ?? "none";
   let reasoningProbePassed = false;
-  if (config.reasoning && config.reasoning.mode !== "none") {
-    if (reasoningStrategy === "prompt-tag") {
-      // Prompt-tag is a harness mechanism, no provider probe needed
-      reasoningProbePassed = true;
-    } else if (reasoningStrategy !== "none") {
-      try {
-        const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
-        const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
-        const cached = getCachedProbeResult(cacheK);
-        if (cached !== undefined) {
-          reasoningProbePassed = cached;
-        } else {
-          reasoningProbePassed = await probeReasoningSupport(llmProvider, reasoningStrategy);
-          setCachedProbeResult(cacheK, reasoningProbePassed);
-        }
-        if (reasoningProbePassed) {
-          logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism respected`);
-        } else {
-          logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism IGNORED (falling back to prompt-tag)`);
-        }
-      } catch {
+  if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
+    try {
+      const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
+      const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
+      const cached = getCachedProbeResult(cacheK);
+      if (cached !== undefined) {
+        reasoningProbePassed = cached;
+      } else {
+        reasoningProbePassed = await probeReasoningSupport(llmProvider, reasoningStrategy);
+        setCachedProbeResult(cacheK, reasoningProbePassed);
+      }
+      if (reasoningProbePassed) {
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism respected`);
+      } else {
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism IGNORED`);
+      }
+    } catch {
         reasoningProbePassed = false;
       }
-    }
   }
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
