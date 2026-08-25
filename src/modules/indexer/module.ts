@@ -7,6 +7,7 @@ import { IndexCache } from "./cache";
 import { buildProjectProfileLine } from "./project-profile";
 import type { IndexResult, IndexedFile } from "./walker";
 import { t } from "../../i18n/index";
+import { toForwardSlash } from "../../tools/path-utils";
 
 export interface IndexerModuleOptions {
   baseDir: string;
@@ -125,7 +126,7 @@ export class IndexerModule implements AgentModule {
         .join(", ") || "-";
 
     const fileLines = result.files.slice(0, 100).map((f) => {
-      const path = f.path.replace(/\\/g, "/");
+      const path = toForwardSlash(f.path);
       const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
       return `- ${path}${exports}`;
     });
@@ -160,7 +161,7 @@ export class IndexerModule implements AgentModule {
   private findDuplicateBasenames(result: IndexResult): string[] {
     const byDir: Record<string, Map<string, string[]>> = {};
     for (const f of result.files) {
-      const path = f.path.replace(/\\/g, "/");
+      const path = toForwardSlash(f.path);
       const idx = path.lastIndexOf("/");
       const dir = idx >= 0 ? path.slice(0, idx) : "";
       const name = path.slice(idx + 1);
@@ -188,7 +189,7 @@ export class IndexerModule implements AgentModule {
   private getDirectoryCounts(result: IndexResult): Record<string, number> {
     const counts: Record<string, number> = {};
     for (const f of result.files) {
-      const normalized = f.path.replace(/\\/g, "/");
+      const normalized = toForwardSlash(f.path);
       const dir = dirname(normalized);
       const key = dir === "." ? "(root)" : dir;
       counts[key] = (counts[key] || 0) + 1;
@@ -241,7 +242,7 @@ export class IndexerModule implements AgentModule {
           }
           const lines = matches
             .map((f) => {
-              const path = f.path.replace(/\\/g, "/");
+              const path = toForwardSlash(f.path);
               const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
               return `- ${path}${exports}`;
             })

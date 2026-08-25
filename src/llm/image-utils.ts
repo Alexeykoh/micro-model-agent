@@ -46,26 +46,31 @@ async function readClipboardFallback(): Promise<Buffer | null> {
   const { readFileSync, unlinkSync } = await import("fs");
   const { join } = await import("path");
 
+  if (platform() !== "linux") return null; // macOS/Windows use Bun.Image
+
   const tmpPath = join(process.env.TEMP || process.env.TMP || "/tmp", `mma-clip-${Date.now()}.png`);
 
-  try {
-    if (platform() === "linux") {
-      execSync(`xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`, {
-        timeout: 5000,
-      });
-    } else {
-      return null; // macOS/Windows should use Bun.Image
-    }
+  // Try Wayland (wl-paste) first, then X11 (xclip)
+  const commands = [
+    `wl-paste --type image/png > "${tmpPath}" 2>/dev/null`,
+    `xclip -selection clipboard -t image/png -o > "${tmpPath}" 2>/dev/null`,
+  ];
 
-    const buf = readFileSync(tmpPath);
-    unlinkSync(tmpPath);
-    return buf.length > 0 ? buf : null;
-  } catch {
+  for (const cmd of commands) {
     try {
+      execSync(cmd, { timeout: 5000 });
+      const buf = readFileSync(tmpPath);
       unlinkSync(tmpPath);
-    } catch {}
-    return null;
+      if (buf.length > 0) return buf;
+    } catch {
+      // try next command
+    }
   }
+
+  try {
+    unlinkSync(tmpPath);
+  } catch {}
+  return null;
 }
 
 /**

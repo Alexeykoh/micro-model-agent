@@ -1,5 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { platform } from "os";
+import { killTree } from "./kill-tree";
 
 export type ProcessStatus = "running" | "exited" | "killed";
 
@@ -80,57 +81,7 @@ function decodeLineToUtf8(buf: Buffer): string {
   return buf.toString("latin1");
 }
 
-/** Synchronous pause without blocking the event loop (via Atomics.wait). */
-function sleepSync(ms: number): void {
-  try {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  } catch {
-    /* ignore */
-  }
-}
-
-function taskkillPid(pid: number): void {
-  try {
-    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      stdio: "ignore",
-      timeout: 5000,
-    });
-  } catch {
-    /* already dead */
-  }
-}
-
-/**
- * Kill a spawned tree on Windows.
- *
- * `taskkill /T` has a race: when cmd.exe is killed, a child (node) that is
- * still starting up can survive as an orphan because it was never attached to
- * the tree at kill time. A single pass misses it. Running taskkill twice with
- * a settle gap catches those late starters on the second pass — the second
- * tree walk sees the child that was still being created during the first one.
- * This is much cheaper than enumerating processes (wmic/PowerShell), which
- * slows every kill down to seconds under parallel load.
- */
-export function killTree(child: ChildProcess): void {
-  const pid = child.pid;
-  if (!pid) return;
-  if (platform() === "win32") {
-    taskkillPid(pid);
-    sleepSync(150);
-    taskkillPid(pid);
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      /* already dead */
-    }
-  }
-}
+export { killTree } from "./kill-tree";
 
 interface ExitWaiter {
   promise: Promise<void>;

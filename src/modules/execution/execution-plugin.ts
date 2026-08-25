@@ -7,6 +7,7 @@ import type { PlanStore } from "./plan-store";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { toForwardSlash } from "../../tools/path-utils";
 import { platform } from "os";
 
 /**
@@ -94,7 +95,7 @@ export interface BrokenFile {
 }
 
 function normalizeBrokenPath(p: string): string {
-  return p.replace(/\\/g, "/").replace(/^\.\//, "");
+  return toForwardSlash(p).replace(/^\.\//, "");
 }
 
 /** Parse a tsc / bun build / node --check error line into its file path.

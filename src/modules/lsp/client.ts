@@ -4,6 +4,7 @@ import { platform } from "os";
 import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
 import { killTree } from "../processes/registry";
+import { toForwardSlash } from "../../tools/path-utils";
 import type { Logger } from "../../logger/app-logger";
 
 /**
@@ -381,7 +382,7 @@ export class LspClient {
   }
 
   private pathToUri(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, "/");
+    const normalized = toForwardSlash(filePath);
     return /^[a-zA-Z]:/.test(normalized) ? `file:///${normalized}` : `file://${normalized}`;
   }
 

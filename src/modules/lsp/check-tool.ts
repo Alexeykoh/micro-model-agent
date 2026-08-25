@@ -2,6 +2,7 @@ import { readdir, stat } from "fs/promises";
 import { resolve, relative } from "path";
 import type { LspDiagnostic, LspConfig } from "./types";
 import { getServerForFile } from "./config";
+import { toForwardSlash } from "../../tools/path-utils";
 
 /** lsp_check directory mode: walk depth and per-call file cap. */
 export const MAX_LSP_CHECK_FILES = 15;
@@ -56,7 +57,7 @@ export function formatCheckDiagnostics(
   return items
     .slice(0, 40)
     .map(({ file, diag }) => {
-      const rel = relative(baseDir, file).replace(/\\/g, "/");
+      const rel = toForwardSlash(relative(baseDir, file));
       const line = diag.range.start.line + 1;
       const col = diag.range.start.character + 1;
       const sev = severityLabels[diag.severity] ?? "unknown";

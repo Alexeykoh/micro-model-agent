@@ -4,6 +4,7 @@ import { resolve, join, basename } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { toForwardSlash } from "../../tools/path-utils";
 import {
   SKIP_DIRS,
   findTestFile,
@@ -41,7 +42,7 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
   if (existsSync(direct)) return direct;
 
   const name = basename(filePath).toLowerCase();
-  const suffix = filePath.replace(/\\/g, "/").toLowerCase();
+  const suffix = toForwardSlash(filePath).toLowerCase();
   let found: string | null = null;
 
   const walk = (dir: string, depth: number): void => {
@@ -60,8 +61,7 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
         walk(full, depth + 1);
       } else if (
         e.name.toLowerCase() === name ||
-        full
-          .replace(/\\/g, "/")
+        toForwardSlash(full)
           .toLowerCase()
           .endsWith("/" + suffix)
       ) {

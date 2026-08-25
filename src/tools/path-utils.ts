@@ -2,6 +2,14 @@ import { resolve, normalize, dirname, basename, sep, relative, isAbsolute } from
 import { existsSync } from "fs";
 
 /**
+ * Normalize backslashes to forward slashes for display and comparison.
+ * On POSIX this is a no-op; on Windows it converts `src\foo\bar.ts` → `src/foo/bar.ts`.
+ */
+export function toForwardSlash(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+/**
  * True when targetPath equals dirPath or lies inside it.
  *
  * Cross-platform notes:

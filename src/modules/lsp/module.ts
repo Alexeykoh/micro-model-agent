@@ -8,6 +8,7 @@ import { getServerForFile, DEFAULT_LSP_CONFIG } from "./config";
 import { findProjectRoot } from "./project-root";
 import { isPathInScope } from "../security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
+import { toForwardSlash } from "../../tools/path-utils";
 import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
 import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
@@ -219,7 +220,7 @@ export class LspModule implements AgentModule {
         const diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
         this.failuresByServer.set(key, 0);
         checked++;
-        checkedFiles.push(relative(ctx.baseDir, file).replace(/\\/g, "/"));
+        checkedFiles.push(toForwardSlash(relative(ctx.baseDir, file)));
         for (const d of diags) {
           if (d.severity === 1) errors.push({ file, diag: d });
           else if (d.severity === 2) warnings.push({ file, diag: d });
@@ -268,7 +269,7 @@ export class LspModule implements AgentModule {
 }
 
 function formatDiagnostics(diagnostics: LspDiagnostic[], filePath: string): string {
-  const filename = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+  const filename = toForwardSlash(filePath).split("/").pop() ?? filePath;
   return diagnostics
     .slice(0, 5)
     .map((d) => {

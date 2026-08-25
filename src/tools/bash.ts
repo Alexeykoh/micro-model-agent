@@ -87,13 +87,13 @@ function adaptCommandForWindows(command: string): string {
     command = command.replace(/\s*\|\|\s*true\b/g, "; exit 0");
   }
 
-  // Windows mkdir does not support -p flag, but creates intermediate dirs by default
+  // Windows mkdir does not support -p/--parents flag, but creates intermediate dirs by default
   const trimmed = command.trim();
-  if (trimmed.startsWith("mkdir -p ")) {
-    return trimmed.replace(/^mkdir -p /, "mkdir ");
+  if (/^mkdir\s+(-p|--parents)\b/.test(trimmed)) {
+    return trimmed.replace(/^mkdir\s+(-p|--parents)\s*/, "mkdir ");
   }
-  if (trimmed === "mkdir -p" || trimmed.startsWith("mkdir -p ")) {
-    return trimmed.replace(/mkdir -p/g, "mkdir");
+  if (/^mkdir\s+(-p|--parents)\s*$/.test(trimmed)) {
+    return "mkdir";
   }
 
   // Translate simple Unix commands to their cmd.exe equivalents. Only the

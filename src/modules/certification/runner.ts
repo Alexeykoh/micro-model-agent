@@ -1,10 +1,11 @@
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readdirSync, readFileSync, statSync } from "fs";
-import { platform } from "os";
 import { join, resolve, dirname, relative } from "path";
 import { checkSandbox } from "./fact-checker";
 import type { CertScenario, ScenarioResult } from "./types";
 import type { AppConfig } from "../../config/types";
+import { killTree } from "../processes/kill-tree";
+import { toForwardSlash } from "../../tools/path-utils";
 
 export interface SpawnResult {
   code: number | null;
@@ -185,7 +186,7 @@ function listFiles(dir: string, root: string): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (entry.name === ".mma") continue;
       const abs = join(dir, entry.name);
-      const rel = relative(root, abs).replace(/\\/g, "/");
+      const rel = toForwardSlash(relative(root, abs));
       if (entry.isDirectory()) {
         result.push(...listFiles(abs, root));
       } else {
@@ -245,27 +246,6 @@ export const defaultRunner: RepRunner = (env, cwd, args, timeoutMs) =>
       resolvePromise({ code: null, stdout, stderr, timedOut });
     });
   });
-
-function killTree(child: import("child_process").ChildProcess): void {
-  const pid = child.pid;
-  if (!pid) return;
-  if (platform() === "win32") {
-    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      stdio: "ignore",
-    });
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGTERM");
-  } catch {
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      /* already dead */
-    }
-  }
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMergeAny(target: any, source: any): any {

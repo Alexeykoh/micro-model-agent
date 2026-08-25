@@ -1,5 +1,5 @@
 import { resolve, normalize } from "path";
-import { isInsideDir, matchesScopeEntry } from "../../tools/path-utils";
+import { isInsideDir, matchesScopeEntry, toForwardSlash } from "../../tools/path-utils";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -248,7 +248,7 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
       .replace(/\./g, "\\.");
 
     const regex = new RegExp(`^${regexPattern}$`);
-    const relativePath = resolvedTargetPath.slice(resolvedBaseDir.length + 1).replace(/\\/g, "/");
+    const relativePath = toForwardSlash(resolvedTargetPath.slice(resolvedBaseDir.length + 1));
     return regex.test(relativePath);
   }
 

@@ -3,6 +3,7 @@ import { homedir } from "os";
 import { mkdirSync, existsSync } from "fs";
 import type { SecurityConfig, AppConfig } from "../../config/types";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
+import { isInsideDir } from "../../tools/path-utils";
 
 /**
  * Session isolation configuration
@@ -157,15 +158,5 @@ export function isPathInSessionScope(sessionContext: SessionContext, path: strin
   const workingDir = resolve(sessionContext.workingDir);
   const tempDir = resolve(sessionContext.tempDir);
 
-  // Check if path is within working directory
-  if (resolvedPath.startsWith(workingDir + "/") || resolvedPath.startsWith(workingDir + "\\")) {
-    return true;
-  }
-
-  // Check if path is within temp directory
-  if (resolvedPath.startsWith(tempDir + "/") || resolvedPath.startsWith(tempDir + "\\")) {
-    return true;
-  }
-
-  return false;
+  return isInsideDir(resolvedPath, workingDir) || isInsideDir(resolvedPath, tempDir);
 }
