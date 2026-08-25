@@ -18,6 +18,7 @@ function openaiCompat(opts: ProviderOptions) {
     contextWindow: opts.contextWindow,
     retry,
     rateLimits,
+    maxCompletionTokens: opts.maxCompletionTokens,
   });
 }
 

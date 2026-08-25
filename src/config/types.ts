@@ -9,6 +9,9 @@ export interface ProviderEntry {
   contextWindow?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
+  /** Completion token cap sent as max_tokens (default 4096). Raise for
+   *  reasoning-heavy models that truncate tool_call arguments. */
+  maxCompletionTokens?: number;
   /** Fallback order (lower = tried first). */
   priority?: number;
 }
@@ -28,6 +31,8 @@ export interface ProviderConfig {
   type: string;
   baseUrl: string;
   apiKey?: string;
+  /** Legacy flat completion cap (mirrored onto the normalized entry). */
+  maxCompletionTokens?: number;
 }
 
 /** Price of a model in USD per 1M tokens (input / output). */

@@ -423,6 +423,95 @@ describe("plan update deliverable gate", () => {
   });
 });
 
+describe("auto-advance after non-file tools", () => {
+  let tmpDir: string;
+  let execModule: ExecutionModule;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mma-auto-adv-"));
+    execModule = new ExecutionModule(tmpDir, 8);
+  });
+
+  afterEach(() => {
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function pluginCtx() {
+    return {
+      contextManager: { addMessage: () => {} },
+      sessionLog: { plan: () => {} },
+    } as any;
+  }
+
+  it("auto-advances the current step after a successful bash call created its file", async () => {
+    // Regression (certification 3.5/3.8): small models often create files
+    // via bash (echo/heredoc) instead of write_file. Auto-advance only
+    // fired after write_file/edit_file, so the plan stayed stuck at 1/4
+    // and 4/5 even though every deliverable existed on disk.
+    const plugin = execModule.getPlugin();
+    await planTool(execModule).handler({} as any, {
+      action: "create",
+      title: "T",
+      steps: ["Create data/output.json with results", "Run verification"],
+    });
+    mkdirSync(join(tmpDir, "data"), { recursive: true });
+    writeFileSync(join(tmpDir, "data", "output.json"), '{"filtered": [60, 70]}');
+
+    const bashCall: any = { name: "bash", arguments: { command: "echo done" } };
+    const okResult: any = { success: true, output: "done" };
+
+    plugin.onAfterTool(pluginCtx(), bashCall, okResult);
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
+    expect(execModule.getTracker()!.getCurrentStepIndex()).toBe(1);
+
+    // A FAILED bash call must not advance anything.
+    plugin.onAfterTool(
+      pluginCtx(),
+      { name: "bash", arguments: { command: "bun run process.ts" } } as any,
+      { success: false, output: "error" } as any,
+    );
+    expect(execModule.getTracker()!.getStep(2)!.status).not.toBe("done");
+  });
+
+  it("auto-advance after a non-file tool is a no-op when deliverables are missing", async () => {
+    const plugin = execModule.getPlugin();
+    await planTool(execModule).handler({} as any, {
+      action: "create",
+      title: "T",
+      steps: ["Create src/never-written.ts"],
+    });
+    plugin.onAfterTool(
+      pluginCtx(),
+      { name: "bash", arguments: { command: "ls" } } as any,
+      { success: true, output: "" } as any,
+    );
+    expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+  });
+
+  it("does NOT auto-advance from a read-only tool even when the target file exists", async () => {
+    // An "Update X" step whose file already exists from an earlier step must
+    // never be completed by a successful read/glob — only a mutating tool
+    // (write/edit/bash/…) may trigger the deliverable re-check.
+    const plugin = execModule.getPlugin();
+    await planTool(execModule).handler({} as any, {
+      action: "create",
+      title: "T",
+      steps: ["Update src/config.json with new settings"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "config.json"), '{"debug": false}');
+
+    for (const name of ["read_file", "glob", "grep", "list_dir"]) {
+      plugin.onAfterTool(
+        pluginCtx(),
+        { name, arguments: { path: "src/config.json" } } as any,
+        { success: true, output: "content" } as any,
+      );
+      expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+    }
+  });
+});
+
 describe("plan create guard", () => {
   let tmpDir: string;
   let execModule: ExecutionModule;

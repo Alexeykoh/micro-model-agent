@@ -140,6 +140,7 @@ export class ProviderManager {
         label: config.type ?? "openai-compat",
         baseUrl: config.baseUrl ?? "",
         apiKey: config.apiKey,
+        maxCompletionTokens: config.maxCompletionTokens,
       },
     ];
   }
@@ -167,6 +168,7 @@ export class ProviderManager {
       contextWindow: entry.contextWindow ?? this.opts.contextWindow,
       retry: entry.retry ?? this.opts.retry,
       rateLimits: entry.rateLimits ?? this.opts.rateLimits,
+      maxCompletionTokens: entry.maxCompletionTokens,
     }, this.registry);
     this.cache.set(key, provider);
     return provider;

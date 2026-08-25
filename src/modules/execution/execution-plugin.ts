@@ -27,6 +27,23 @@ export const STUCK_WARN_REPEAT_EVERY = 5;
  *  the agent is clearly working on files, so a plan is warranted. */
 const PLAN_NUDGE_THRESHOLD = 2;
 
+/** Tools whose success can have changed the filesystem — the plan auto-advance
+ *  re-checks the current step's deliverables after them. Read-only tools are
+ *  deliberately excluded (see the onAfterTool advance call below). */
+const FS_MUTATING_TOOLS = new Set([
+  "write_file",
+  "edit_file",
+  "delete_file",
+  "move_file",
+  "create_dir",
+  "bash",
+  "download_file",
+  "subagent",
+  "mcp_call",
+  "pipeline_run",
+  "browser",
+]);
+
 /**
  * Mutable state the plugin writes into. The module OWNS this object and passes
  * it by reference — every assignment here must be visible to the module.
@@ -468,6 +485,18 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             }
           }
         }
+      }
+
+      // Auto-advance fires after every successful FILESYSTEM-MUTATING tool —
+      // not just write_file/edit_file. Small models often create files through
+      // bash (`echo ... > f`, heredocs) or delete/move via shell instead of the
+      // dedicated tools, and the plan then never advances past the step even
+      // though its deliverables exist (certification 3.5/3.8: files on disk,
+      // plan stuck at 1/4 and 4/5). Read-only tools MUST stay excluded: a
+      // successful read/glob would otherwise complete an "Update X" step whose
+      // target file already exists from an earlier step — without any edit.
+      // advancePlanIfStepComplete is a no-op when tokens don't resolve.
+      if (result.success && FS_MUTATING_TOOLS.has(call.name)) {
         deps.advancePlanIfStepComplete(ctx.contextManager, ctx.sessionLog);
       }
 

@@ -1211,6 +1211,9 @@ export class Agent {
       contextWindow: config.contextWindow,
       retry: config.retry,
       rateLimits: config.security?.rateLimits,
+      maxCompletionTokens:
+        config.provider.entries?.find((e) => e.label === config.provider.active)?.maxCompletionTokens ??
+        config.provider.maxCompletionTokens,
     });
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
