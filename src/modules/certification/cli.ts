@@ -6,7 +6,12 @@ import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 import { loadScenarios, filterByTags } from "./loader";
 import { runScenario, findMmaRoot } from "./runner";
-import { readManifest, upsertCertification, removeCertification, isFullyPassed } from "./manifest";
+import {
+  readMergedManifest,
+  upsertCertification,
+  removeCertification,
+  isFullyPassed,
+} from "./manifest";
 import type { AppConfig } from "../../config/types";
 import type { CertTag, CertificationEntry, ScenarioResult, SuiteSummary } from "./types";
 
@@ -61,7 +66,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     return;
   }
 
-  const manifest = readManifest(opts.projectDir);
+  const manifest = readMergedManifest(opts.projectDir);
   const existing = manifest.certifications.find(
     (e) => e.model === opts.name && e.providerUrl === providerUrl,
   );
@@ -128,7 +133,10 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     suite,
     results,
   };
-  upsertCertification(entry, opts.projectDir);
+  // Certifications are per (model, providerUrl) — machine-scoped, not
+  // project-scoped: store them in the global manifest so marks follow the
+  // user into any directory.
+  upsertCertification(entry);
 
   console.log(
     t("cli.cert_done", {
@@ -151,7 +159,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
 }
 
 export async function certStatus(name: string, config: AppConfig, projectDir: string): Promise<void> {
-  const m = readManifest(projectDir);
+  const m = readMergedManifest(projectDir);
   const providerUrl = config.provider.baseUrl;
   const entry = m.certifications.find((e) => e.model === name && e.providerUrl === providerUrl);
   if (!entry) {
@@ -173,7 +181,7 @@ export async function certStatus(name: string, config: AppConfig, projectDir: st
 }
 
 export async function certList(projectDir: string): Promise<void> {
-  const m = readManifest(projectDir);
+  const m = readMergedManifest(projectDir);
   if (m.certifications.length === 0) {
     console.log(t("cli.cert_empty"));
     return;
@@ -187,8 +195,10 @@ export async function certList(projectDir: string): Promise<void> {
 }
 
 export async function uncertify(name: string, config: AppConfig, projectDir: string): Promise<void> {
-  const removed = removeCertification(name, config.provider.baseUrl, projectDir);
-  if (removed) console.log(t("cli.cert_uncertified", { model: name }));
+  const removed = removeCertification(name, config.provider.baseUrl, {
+    projectDir,
+  });
+  if (removed.global || removed.project) console.log(t("cli.cert_uncertified", { model: name }));
   else console.log(t("cli.cert_not_found", { model: name }));
 }
 

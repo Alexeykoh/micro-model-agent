@@ -14,3 +14,14 @@ const bridgeSrc = join(root, "src", "modules", "browser", "bridge-server.mjs");
 const bridgeDest = join(root, "dist", "modules", "browser");
 await mkdir(bridgeDest, { recursive: true });
 await cp(bridgeSrc, join(bridgeDest, "bridge-server.mjs"));
+
+// Shipped certification manifest — synced into ~/.mma/certifications.json on
+// startup so certified-model marks arrive with package updates.
+const certDir = join(root, "dist", "certification");
+const certSrc = join(root, "certification", "certifications.json");
+try {
+  await mkdir(certDir, { recursive: true });
+  await cp(certSrc, join(certDir, "certifications.json"));
+} catch {
+  // No manifest in the repo yet — skip silently.
+}

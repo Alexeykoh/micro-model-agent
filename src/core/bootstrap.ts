@@ -186,6 +186,19 @@ export async function bootstrap(
     model: config.model,
   });
 
+  // Sync the manifest bundled with this package version into
+  // ~/.mma/certifications.json (bundled entries overwrite their keys on
+  // update; user-local certifications are preserved). Best-effort, silent.
+  try {
+    const { syncGlobalManifest } = await import("../modules/certification/manifest");
+    const syncResult = syncGlobalManifest();
+    if (syncResult.synced) {
+      logger.debug("Certification manifest synced from package");
+    }
+  } catch {
+    // Certification marks are cosmetic — never block startup.
+  }
+
   if (config.modelLoad.autoLoad) {
     const modelLoader = new ModelLoader(config.provider.baseUrl, logger);
     const loadResult = await modelLoader.ensureModelLoaded({
