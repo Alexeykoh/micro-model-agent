@@ -232,8 +232,7 @@ describe("Agent", () => {
     expect(result.totalTokens).toBe(result.promptTokens! + result.completionTokens!);
   });
 
-  it("keeps the final text when exitOnComplete breaks on a retry-flagged response", async () => {
-    const mockProvider = {
+  it("keeps the final text when exitOnComplete breaks on a retry-flagged response", async () => {    const mockProvider = {
       model: "test-model",
       contextWindow: 4096,
       chat: vi
@@ -285,6 +284,74 @@ describe("Agent", () => {
     // The retry-flagged final response must still be surfaced as the result
     expect(result.success).toBe(true);
     expect(result.text).toBe("Done! check-env works");
+  });
+
+  it("exitOnComplete does not bypass the audit gate on a retry-flagged answer", async () => {
+    const bashCall = {
+      type: "tool_call" as const,
+      toolCall: { id: "t1", name: "bash", arguments: "{}" },
+    };
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield bashCall;
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        // Model answers "done" without finishing the plan — flagged retry.
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "Done!" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        )
+        // After the retry nudge the model does the real work and finishes.
+        .mockReturnValueOnce(
+          (async function* () {
+            yield bashCall;
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "Now actually complete" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider,
+      exitOnComplete: true,
+      // Active plan → the audit gate must not be bypassed by the fast-exit.
+      finalAudit: vi.fn().mockResolvedValue(null),
+      hallucinationDetector: {
+        // validate() runs only on text responses (tool-call responses skip it),
+        // so the first call corresponds to the premature "Done!".
+        validate: vi
+          .fn()
+          .mockReturnValueOnce({ status: "retry" as const, reason: "short" })
+          .mockReturnValue({ status: "pass" as const }),
+        getConfidenceCheck: vi.fn().mockReturnValue({
+          setPreviousResponse: vi.fn(),
+        }),
+        getConsistencyCheck: vi.fn().mockReturnValue({
+          trackDecision: vi.fn(),
+          trackCreatedFile: vi.fn(),
+          trackDeletedFile: vi.fn(),
+        }),
+      },
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("finish the plan");
+    // The premature "Done!" must NOT end the run: the model gets another
+    // chance and the later substantive answer becomes the result.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(4);
+    expect(result.text).toBe("Now actually complete");
   });
 
   it("gives the model a second chance after a repeated tool call under exitOnComplete", async () => {

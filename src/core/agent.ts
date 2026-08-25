@@ -1007,7 +1007,11 @@ export class Agent {
         }
       }
       if (hallucinationResult.status === "retry") {
-        if (this.deps.exitOnComplete && textContent?.trim()) {
+        // Exit-on-complete fast-exit must NOT bypass the final audit gate:
+        // when a plan is active the model may be answering "done" while steps
+        // are pending (cert regression: model replied without running its
+        // script). Only short-circuit when there is nothing to audit.
+        if (this.deps.exitOnComplete && textContent?.trim() && !this.deps.finalAudit) {
           logger.debug("Exit-on-complete: stopping on first response");
           // Save the response BEFORE breaking — lastText is still the
           // previous (tool-only) iteration's text, so without this the
