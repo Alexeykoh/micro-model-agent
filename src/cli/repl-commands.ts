@@ -398,7 +398,13 @@ function registerMmaCommands(ctx: ReplContext): void {
                   : mark === "stale"
                     ? pc.yellow("○")
                     : pc.dim("·");
-              console.log(` ${marker}${cert} ${m}`);
+              const label =
+                mark === "certified"
+                  ? `  ${pc.green(t("cli.cert_label"))}`
+                  : mark === "stale"
+                    ? `  ${pc.yellow(t("cli.cert_stale_label"))}`
+                    : "";
+              console.log(` ${marker}${cert} ${m}${label}`);
             }
           } else {
             console.log(t("cli.no_models_found"));

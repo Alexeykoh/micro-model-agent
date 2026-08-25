@@ -173,7 +173,13 @@ export function createProgram(): Command {
             const marker = m === config.model ? "* " : "  ";
             const mark = getCertMark(m, config.provider.baseUrl, version, process.cwd());
             const cert = mark === "certified" ? "✔" : mark === "stale" ? "○" : "·";
-            console.log(` ${marker}${cert} ${m}`);
+            const label =
+              mark === "certified"
+                ? `  ${pc.green(t("cli.cert_label"))}`
+                : mark === "stale"
+                  ? `  ${pc.yellow(t("cli.cert_stale_label"))}`
+                  : "";
+            console.log(` ${marker}${cert} ${m}${label}`);
           }
         } else {
           console.log(t("cli.no_models_found"));

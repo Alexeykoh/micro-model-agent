@@ -259,6 +259,8 @@
   "cli.model_hint": "(Use /model use <name> to change)",
   "cli.model_fetch_failed": "Failed to fetch models: {error}",
   "cli.available_models": "Available models:",
+  "cli.cert_label": "supported — certified on this provider",
+  "cli.cert_stale_label": "certified on an older MMA version — re-run certify --force",
   "cli.no_models_found": "No models found from provider",
   "cli.fetching_models": "Fetching model list...",
   "cli.manage_context": "Manage context window",
