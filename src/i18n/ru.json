@@ -258,7 +258,7 @@
   "cli.model_fetch_failed": "Не удалось получить модели: {error}",
   "cli.available_models": "Доступные модели:",
   "cli.cert_label": "поддерживается — сертифицирована на этом провайдере",
-  "cli.cert_stale_label": "сертифицирована на старой версии MMA — перезапустите certify --force",
+  "cli.cert_stale_label": "сертифицирована на старой версии MMA — рекомендуется",
   "cli.no_models_found": "Модели не найдены у провайдера",
   "cli.fetching_models": "Загрузка списка моделей...",
   "cli.manage_context": "Управление контекстным окном",

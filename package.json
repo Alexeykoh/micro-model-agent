@@ -44,7 +44,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "prettier": "^3.9.6",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }
 }
