@@ -103,6 +103,7 @@ export class MCPClient {
     try {
       const msg = JSON.parse(data);
       if (this.pendingResolve && msg.id) {
+        this.clearSseTimer();
         if (msg.error) {
           this.pendingReject?.(new Error(msg.error.message));
         } else {
@@ -111,11 +112,20 @@ export class MCPClient {
         this.pendingResolve = null;
         this.pendingReject = null;
       }
-    } catch {}
+    } catch (e) {
+      // Heartbeats/comments are not JSON — expected noise, but still logged
+      // so a genuinely broken stream is visible in diagnostics.
+      console.error(
+        "[MCPClient] Unparseable SSE message:",
+        String(data).slice(0, 120),
+        e instanceof Error ? e.message : e,
+      );
+    }
   }
 
   private handleSSEError(err: Error): void {
     if (this.pendingReject) {
+      this.clearSseTimer();
       this.pendingReject(err);
       this.pendingResolve = null;
       this.pendingReject = null;
@@ -149,9 +159,114 @@ export class MCPClient {
       child.on("spawn", () => {
         this._connected = true;
         this.process = child;
-        _resolved = true;
-        resolve();
+        // MCP handshake: real servers require `initialize` before any
+        // tools/list or tools/call request.
+        this.stdioRequest(
+          "initialize",
+          {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "mma", version: "1.0.0" },
+          },
+          10000,
+        )
+          .then(() => {
+            child.stdin?.write(
+              JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n",
+            );
+          })
+          .then(() => {
+            _resolved = true;
+            resolve();
+          })
+          .catch((err) => {
+            this._connected = false;
+            if (!_resolved) {
+              _resolved = true;
+              reject(err);
+            }
+          });
       });
+    });
+  }
+
+  /** Unparsed trailing bytes from stdio responses (partial line). */
+  private stdioBuffer = "";
+
+  /**
+   * JSON-RPC request over stdio with timeout, exit handling and
+   * buffer-aware line parsing (notifications and stale responses between
+   * our request and its response no longer break matching).
+   */
+  private stdioRequest<T>(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number,
+  ): Promise<T> {
+    const proc = this.process;
+    if (!proc || !proc.stdout || !proc.stdin) {
+      return Promise.reject(new Error("Not connected to MCP server"));
+    }
+    const stdout = proc.stdout;
+    const timeout = timeoutMs ?? this.config.timeout ?? 30000;
+
+    return new Promise<T>((resolve, reject) => {
+      const request = {
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method,
+        ...(params !== undefined ? { params } : {}),
+      };
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) clearTimeout(timer);
+        stdout.off("data", onData);
+        proc.off("exit", onExit);
+        fn();
+      };
+      const onData = (data: Buffer) => {
+        this.stdioBuffer += data.toString();
+        let idx: number;
+        while ((idx = this.stdioBuffer.indexOf("\n")) !== -1 && !settled) {
+          const line = this.stdioBuffer.slice(0, idx).trim();
+          this.stdioBuffer = this.stdioBuffer.slice(idx + 1);
+          if (!line) continue;
+          let msg: {
+            id?: number;
+            error?: { message: string };
+            result?: T;
+          };
+          try {
+            msg = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (msg.id !== request.id) continue; // notification or foreign response
+          finish(() => {
+            if (msg.error) {
+              reject(new Error(msg.error!.message));
+            } else {
+              resolve(msg.result as T);
+            }
+          });
+          return;
+        }
+      };
+      const onExit = () => {
+        finish(() => reject(new Error(`MCP server exited before responding to ${method}`)));
+      };
+
+      stdout.on("data", onData);
+      proc.once("exit", onExit);
+      timer = setTimeout(() => {
+        finish(() => reject(new Error(`MCP ${method} timeout`)));
+      }, timeout);
+
+      proc.stdin!.write(JSON.stringify(request) + "\n");
     });
   }
 
@@ -255,47 +370,13 @@ export class MCPClient {
       throw new Error("Not connected to MCP server");
     }
 
-    return new Promise((resolve, reject) => {
-      const request = {
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method: "tools/list",
-      };
+    const result = await this.stdioRequest<{ tools?: Array<{
+      name: string;
+      description?: string;
+      inputSchema?: Record<string, unknown>;
+    }> }>("tools/list");
 
-      const requestStr = JSON.stringify(request) + "\n";
-      this.process!.stdin!.write(requestStr);
-
-      let responseData = "";
-      const onData = (data: Buffer) => {
-        responseData += data.toString();
-        if (responseData.includes("\n")) {
-          this.process!.stdout!.off("data", onData);
-          try {
-            const lines = responseData.split("\n").filter((l) => l.trim());
-            for (const line of lines) {
-              const response = JSON.parse(line);
-              if (response.id === request.id) {
-                if (response.error) {
-                  reject(new Error(response.error.message));
-                } else {
-                  resolve(response.result?.tools || []);
-                }
-                return;
-              }
-            }
-            reject(new Error("No matching response found"));
-          } catch (e: any) {
-            reject(new Error(`Parse error: ${e.message}`));
-          }
-        }
-      };
-
-      this.process!.stdout!.on("data", onData);
-      setTimeout(() => {
-        this.process!.stdout!.off("data", onData);
-        reject(new Error("MCP listTools timeout"));
-      }, 30000);
-    });
+    return result?.tools || [];
   }
 
   async disconnect(): Promise<void> {
@@ -359,6 +440,9 @@ export class MCPClient {
     return result.result || result;
   }
 
+  /** Timer of the in-flight SSE request — cleared when the reply arrives via the stream. */
+  private sseTimer: ReturnType<typeof setTimeout> | undefined;
+
   private async callToolSSE(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const request = {
       jsonrpc: "2.0",
@@ -375,7 +459,7 @@ export class MCPClient {
       this.pendingReject = reject;
 
       const timeout = this.config.timeout || 30000;
-      const timer = setTimeout(() => {
+      this.sseTimer = setTimeout(() => {
         this.pendingResolve = null;
         this.pendingReject = null;
         reject(new Error("MCP call timeout"));
@@ -391,7 +475,7 @@ export class MCPClient {
         signal: this.abortController?.signal,
       })
         .then(async (response) => {
-          clearTimeout(timer);
+          this.clearSseTimer();
           if (!response.ok) {
             const text = await response.text().catch(() => "");
             reject(new Error(`MCP POST failed: ${response.status} ${text}`));
@@ -405,7 +489,7 @@ export class MCPClient {
           }
         })
         .catch((err) => {
-          clearTimeout(timer);
+          this.clearSseTimer();
           if (err.name !== "AbortError") {
             reject(err);
           }
@@ -413,60 +497,21 @@ export class MCPClient {
     });
   }
 
+  private clearSseTimer(): void {
+    if (this.sseTimer !== undefined) {
+      clearTimeout(this.sseTimer);
+      this.sseTimer = undefined;
+    }
+  }
+
   private callToolStdio(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.process) {
       throw new Error("Not connected to MCP server");
     }
 
-    return new Promise((resolve, reject) => {
-      const request = {
-        jsonrpc: "2.0",
-        id: Date.now(),
-        method: "tools/call",
-        params: {
-          name: toolName,
-          arguments: args,
-        },
-      };
-
-      const requestStr = JSON.stringify(request) + "\n";
-
-      this.process!.stdin!.write(requestStr);
-
-      let responseData = "";
-
-      const onData = (data: Buffer) => {
-        responseData += data.toString();
-
-        if (responseData.includes("\n")) {
-          this.process!.stdout!.off("data", onData);
-
-          try {
-            const lines = responseData.split("\n").filter((l) => l.trim());
-            for (const line of lines) {
-              const response = JSON.parse(line);
-              if (response.id === request.id) {
-                if (response.error) {
-                  reject(new Error(response.error.message));
-                } else {
-                  resolve(response.result);
-                }
-                return;
-              }
-            }
-            reject(new Error("No matching response found"));
-          } catch (e: any) {
-            reject(new Error(`Parse error: ${e.message}`));
-          }
-        }
-      };
-
-      this.process!.stdout!.on("data", onData);
-
-      setTimeout(() => {
-        this.process!.stdout!.off("data", onData);
-        reject(new Error("MCP call timeout"));
-      }, 30000);
+    return this.stdioRequest("tools/call", {
+      name: toolName,
+      arguments: args,
     });
   }
 }
