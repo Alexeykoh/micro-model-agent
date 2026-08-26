@@ -2,6 +2,37 @@
 
 ## Актуальное
 
+### Аудит агента + план исправлений — `docs/superpowers/plans/2026-08-26-model-control-fixes.md`
+
+Системный аудит «как агент управляет моделью» (2026-08-26). 4 раунда, **39 находок** (оценки 1–5),
+**35 задач в 9 волнах**, реестр находок с файлами/строками — всё в плане.
+
+**Пройдено:**
+- [x] Round 1 — ядро (`agent.ts`, `openai-compat.ts`, `context/manager.ts`, hallucination, reasoning):
+      15 находок. Критичные: аргументы тулов не обрезаются в summary (#1), мёртвый reasoning-полиси (#2),
+      set_thinking не влияет на запросы (#3), компакция рвёт tool-call пары (#4) → Wave 1–6
+- [x] Round 2 — executor/MoE/chunk-query: 6 находок. Таймер таймаута тула выполняет cleanup
+      ТЕКУЩЕГО вызова через 60s после успеха (R2-1); MoE теряет onTool и не пишет ответ в
+      контекст/историю (R2-2/3) → Wave 7 (Tasks 15–20)
+- [x] Round 3 — инициализация (`main.ts`, `bootstrap.ts`): 10 находок. Тулы читают протухший
+      toolCtx.config после reconfigure (B1); опечатка субкоманды уходит модели как промпт (M1);
+      --json нарушает контракт при throw (M2); кириллический AGENTS.md молча выпадает из
+      системного промпта из-за len/4 оценок (B3) → Wave 8 (Tasks 21–29)
+- [x] Round 4 — config-слой (`config.ts`, `providers/manager.ts`, `domains.ts`, migration):
+      8 находок. MMA_PROVIDER_* env-overrides игнорируются при entries[] → cert harness тестирует
+      не того провайдера (C1); миграция удаляет живой конфиг по эвристике «нет одного поля = v1»,
+      backupAll существует но не вызывается (C2); toConfig() затирает provider.fallback (C3);
+      env-значения персистятся навсегда (C4) → Wave 9 (Tasks 30–35)
+
+**Не пройдено (файловый обход продолжается):**
+- [ ] Wave B: tools/ (bash 603, write/edit/read-file, subagent, web-*, browser tool)
+- [ ] Wave C: execution module (module.ts 710, plan-tool 739, stuck-detector 845, auditor, verifier)
+- [ ] Wave D: session/logger/i18n/ui (repl.ts 856, repl-commands 891, renderer, line-editor 893)
+- [ ] Wave E: modules/security + processes + providers + mcp/pipelines/indexer/skills/plugins
+
+Порядок выполнения фиксов: Wave 1 (контекст) → Wave 7 Tasks 15–17 (executor/MoE) → далее по волнам.
+Релиз после всех волн: 0.56.0 (MINOR).
+
 ### MoE Completion — план `docs/superpowers/plans/2026-08-26-moe-completion.md`
 
 Цель: довести MoE из MVP до потенциально основного режима. Полный аудит дыр — в плане (§1).
