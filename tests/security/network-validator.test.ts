@@ -1,4 +1,4 @@
-import { isUrlAllowed, sanitizeUrl } from "../../src/modules/security/network-validator";
+import { isUrlAllowed, sanitizeUrl, isIpPrivate } from "../../src/modules/security/network-validator";
 import { describe, it, expect } from "vitest";
 
 describe("Network Validator", () => {
@@ -154,5 +154,28 @@ describe("Network Validator", () => {
       const sanitized = sanitizeUrl(url);
       expect(sanitized).not.toContain("secret");
     });
+  });
+});
+
+describe("SSRF bypass regressions (audit 2026-08-26)", () => {
+  it("blocks IPv6-mapped IPv4 in URL", () => {
+    expect(isUrlAllowed("http://[::ffff:127.0.0.1]/x", { enabled: true } as any).allowed).toBe(false);
+    expect(isUrlAllowed("http://[::ffff:7f00:1]/x", { enabled: true } as any).allowed).toBe(false);
+  });
+
+  it("blocks raw hostname forms passed directly to isIpPrivate", () => {
+    // isIpPrivate is exported — callers may pass un-normalized hostnames.
+    expect(isIpPrivate("2130706433")).toBe(true);   // decimal
+    expect(isIpPrivate("0x7f000001")).toBe(true);   // hex
+    expect(isIpPrivate("0177.0.0.1")).toBe(true);   // octal octet
+    expect(isIpPrivate("127.1")).toBe(true);        // shorthand quad
+    expect(isIpPrivate("0x7f.0.0.1")).toBe(true);   // mixed radix
+    expect(isIpPrivate("::ffff:127.0.0.1")).toBe(true);
+  });
+
+  it("does not block public domains or IPs", () => {
+    expect(isIpPrivate("example.com")).toBe(false);
+    expect(isIpPrivate("8.8.8.8")).toBe(false);
+    expect(isIpPrivate("2606:4700::6810:85e5")).toBe(false);
   });
 });

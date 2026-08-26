@@ -10,18 +10,81 @@ export interface NetworkValidationResult {
 }
 
 /**
+ * Parse a numeric IP component honoring decimal, hex (0x…) and octal (0…)
+ * notations. Returns null when the token is not purely numeric.
+ */
+function parseIpNumber(s: string): number | null {
+  if (/^0x[0-9a-f]+$/.test(s)) return parseInt(s.slice(2), 16);
+  if (/^0[0-7]+$/.test(s)) return parseInt(s.slice(1), 8);
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  return null;
+}
+
+/** Check whether four decoded octets form a private/reserved IPv4 address. */
+function isPrivateIpv4(o: number[]): boolean {
+  const [a, b = 0, c = 0, d = 0] = o;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+/**
  * Check if a hostname is a private/link-local address (SSRF protection).
+ *
+ * Handles more than just dotted quads: bare integer / hex / octal encodings
+ * (every HTTP client decodes them as a 32-bit IPv4), shorthand quads
+ * ("127.1" → 127.0.0.1) and IPv6-mapped IPv4 ("::ffff:7f00:1").
  */
 export function isIpPrivate(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    /^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(
-      h,
-    ) ||
-    h === "::1" ||
-    /^(fc|fd)/.test(h) ||
-    (h.includes(":") && h.startsWith("fe80"))
-  );
+  let h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");
+
+  if (h.includes(":")) {
+    // IPv6-mapped IPv4 (::ffff:127.0.0.1, ::ffff:7f00:1) — decode and fall
+    // through to the IPv4 checks below.
+    if (h.startsWith("::ffff:")) {
+      const mapped = h.slice(7);
+      if (!mapped.includes(":")) {
+        h = mapped; // dotted quad — fall through
+      } else {
+        // Hex-colon encoding of the low 32 bits, e.g. "7f00:1".
+        const segs = mapped.split(":");
+        const hi = parseInt(segs[0], 16);
+        const lo = parseInt(segs[1] ?? "", 16);
+        if (segs.length !== 2 || Number.isNaN(hi) || Number.isNaN(lo)) return false;
+        return isPrivateIpv4([(hi >> 8) & 255, hi & 255, (lo >> 8) & 255, lo & 255]);
+      }
+    } else {
+      return h === "::1" || /^(fc|fd)/.test(h) || h.startsWith("fe80");
+    }
+  }
+
+  if (h === "localhost") return true;
+
+  // Bare integer/hex/octal: interpreted as one 32-bit IPv4 word.
+  if (!h.includes(".")) {
+    const n = parseIpNumber(h);
+    if (n === null) return false; // a domain name, not an IP
+    if (n < 0 || n > 0xffffffff) return false;
+    return isPrivateIpv4([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+  }
+
+  // Dotted form: decode each part (hex/octal aware); shorthand like
+  // "127.1" pads the missing groups before the last.
+  const parts = h.split(".");
+  const nums: number[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const n = parseIpNumber(parts[i]);
+    if (n === null || n > 255) return false; // domain or malformed — not our concern
+    nums.push(n);
+  }
+  while (nums.length < 4) nums.splice(nums.length - 1, 0, 0);
+  if (nums.length !== 4) return false;
+  return isPrivateIpv4(nums);
 }
 
 /**
