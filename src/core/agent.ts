@@ -537,12 +537,6 @@ export class Agent {
       this._currentIteration = iteration;
       contextManager.noteIteration();
 
-      // Reset per-iteration reasoning signals
-      iterHallucinationRetry = false;
-      iterAuditRejection = false;
-      iterRecoverableLlmError = false;
-      iterPlanCreated = false;
-
       // Re-read the mutable tag set in case enable_tools was called.
       allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
       boundedToolNames = new Set(
@@ -638,11 +632,26 @@ export class Agent {
       const completionBefore = apiCompletionTokens;
       logger.logLLMRequest(config.model, history.length, input, "agent");
 
-      // Compute reasoning effort for this iteration
+      // Compute reasoning effort for this iteration. The signal flags describe
+      // events of the PREVIOUS iteration (they are set on the retry/audit
+      // paths right before `continue`), so evaluate the policy BEFORE
+      // clearing them — otherwise the raise branch is unreachable.
       const reasoningConfig = config.reasoning;
       let effectiveReasoningLevel: ReasoningLevel | undefined;
       let reasoningStrategy = this.deps.reasoningStrategy;
-      if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed) {
+      let reasoningSource = "policy";
+      const overrideCooldown = reasoningConfig?.overrideCooldown ?? 0;
+      const overrideAge = iteration - this.reasoningState.overrideIteration;
+      const overrideActive =
+        overrideCooldown > 0 &&
+        this.reasoningState.overrideIteration >= 0 &&
+        overrideAge > 0 &&
+        overrideAge <= overrideCooldown;
+      if (overrideActive) {
+        // A set_thinking override wins over both policy (auto) and fixed mode.
+        effectiveReasoningLevel = this.reasoningState.level;
+        reasoningSource = "agent_override";
+      } else if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed) {
         const policyResult = evaluateReasoningPolicy({
           hallucinationRetry: iterHallucinationRetry,
           auditRejection: iterAuditRejection,
@@ -653,9 +662,17 @@ export class Agent {
           baseline: "medium",
         }, this.policyState);
         effectiveReasoningLevel = policyResult.level;
+        reasoningSource = "policy";
       } else if (reasoningConfig && reasoningConfig.mode !== "auto") {
         effectiveReasoningLevel = reasoningConfig.mode;
+        reasoningSource = "fixed";
       }
+
+      // Clear per-iteration signals now that the policy has consumed them.
+      iterHallucinationRetry = false;
+      iterAuditRejection = false;
+      iterRecoverableLlmError = false;
+      iterPlanCreated = false;
 
       // Log reasoning control event
       if (effectiveReasoningLevel) {
@@ -664,7 +681,7 @@ export class Agent {
           level: effectiveReasoningLevel,
           strategy: reasoningStrategy,
           probePassed: this.deps.reasoningProbePassed,
-          source: this.reasoningState.overrideIteration === iteration ? "agent_override" : "policy",
+          source: reasoningSource,
         });
         contextManager.thinkingLevel = effectiveReasoningLevel;
       }
@@ -864,6 +881,27 @@ export class Agent {
             },
           })),
         });
+        const answeredToolCallIds = new Set<string>();
+        // OpenAI-compatible backends (llama.cpp Jinja templates) reject with
+        // HTTP 400 any history where an assistant(tool_calls) message is not
+        // followed by role:"tool" results for every call id — an interrupt
+        // mid-batch must not leave such a dangling pair behind.
+        const synthesizePendingToolResults = () => {
+          for (const call of toolCalls) {
+            if (answeredToolCallIds.has(call.id)) continue;
+            logger.debug(
+              `Interrupted before tool ${call.name} (${call.id}) returned a result — synthesizing tool message`,
+            );
+            contextManager.addMessage({
+              role: "tool",
+              content: "[interrupted]",
+              name: call.name,
+              tool_call_id: call.id,
+              success: false,
+              arguments: call.arguments,
+            });
+          }
+        };
         const summaries: string[] = [];
         let anyToolFailed = false;
         // Informational read-only tools whose "failure" is expected behavior
@@ -886,7 +924,16 @@ export class Agent {
           slog.logToolCall(call, iteration);
 
           const tokensBeforeTool = contextManager.getEstimatedTokens();
-          const result = await toolExecutor.execute(call, this.abortController?.signal);
+          let result;
+          try {
+            result = await toolExecutor.execute(call, this.abortController?.signal);
+          } catch (err) {
+            logger.warn(
+              `Tool ${call.name} threw: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            synthesizePendingToolResults();
+            throw err;
+          }
           // Interrupt during the tool call: the session is already shutting
           // down (Esc/Ctrl+C), so stop immediately — no rendering, no session
           // log writes, no context update for a result nobody will see. This
@@ -895,6 +942,10 @@ export class Agent {
           const duration = Date.now() - startTime;
           if (!result.success && !infoTools.has(call.name)) anyToolFailed = true;
 
+          if (result.success && call.name === "plan") {
+            const action = String(call.arguments.action ?? "");
+            if (action === "create" || action === "re-plan") iterPlanCreated = true;
+          }
           if (result.success && call.arguments.path) {
             const filePath = String(call.arguments.path);
             if (call.name === "write_file" || call.name === "edit_file") {
@@ -945,6 +996,7 @@ export class Agent {
             success: result.success,
             arguments: call.arguments,
           });
+          answeredToolCallIds.add(call.id);
 
           const tokensAfterTool = contextManager.getEstimatedTokens();
           onTool?.({
@@ -1002,7 +1054,10 @@ export class Agent {
             }
           }
         }
-        if (this.shutdownRequested) break;
+        if (this.shutdownRequested) {
+          synthesizePendingToolResults();
+          break;
+        }
         if (anyToolFailed) {
           consecutiveToolFailures++;
         } else {

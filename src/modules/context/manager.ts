@@ -400,7 +400,17 @@ export class ContextManager {
 
     this.compactionCount++;
 
-    const cutoff = this.messages.length - KEEP_LAST_N * 2;
+    let cutoff = this.messages.length - KEEP_LAST_N * 2;
+    // Never split an assistant(tool_calls) group across the cutoff: the kept
+    // history must not start with orphaned role:"tool" messages, and the
+    // assistant half must not stay in the compacted part (OpenAI-compatible
+    // backends reject such histories).
+    while (
+      cutoff > 0 &&
+      (this.messages[cutoff]?.role === "tool" || this.messages[cutoff - 1]?.tool_calls?.length)
+    ) {
+      cutoff--;
+    }
     const oldTurns = this.messages.slice(0, cutoff);
     const recentTurns = this.messages.slice(cutoff);
 

@@ -1578,7 +1578,106 @@ describe("Agent", () => {
         (c: any[]) => c[0]?.type === "tool_result",
       ),
     ).toBe(false);
-    // The discarded result must not enter the conversation context either.
-    expect(addMessage.mock.calls.some((c: any[]) => c[0]?.role === "tool")).toBe(false);
+    // The discarded result must not enter the conversation context, but a
+    // synthetic tool message must fill the dangling assistant(tool_calls) so
+    // OpenAI-compatible backends don't reject the history with HTTP 400.
+    const toolMessages = addMessage.mock.calls
+      .filter((c: any[]) => c[0]?.role === "tool")
+      .map((c: any[]) => c[0]);
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0]).toMatchObject({
+      role: "tool",
+      content: "[interrupted]",
+      name: "edit_file",
+      tool_call_id: "call-1",
+      success: false,
+    });
+    // The real (discarded) output must never leak into the history.
+    expect(
+      toolMessages.some((m: any) => String(m.content).includes("Replaced in")),
+    ).toBe(false);
+  });
+
+  it("interrupt between batch tools: synthesized stubs keep assistant(tool_calls) paired", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: "tool_call" as const,
+            toolCall: { id: "call-1", name: "read_file", arguments: "{}" },
+          };
+          yield {
+            type: "tool_call" as const,
+            toolCall: { id: "call-2", name: "write_file", arguments: "{}" },
+          };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        })(),
+      ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    let resolveSecondTool!: (r: { success: boolean; output: string }) => void;
+    const secondToolDone = new Promise<{ success: boolean; output: string }>((res) => {
+      resolveSecondTool = res;
+    });
+    let secondStarted!: () => void;
+    const secondToolStarted = new Promise<void>((res) => {
+      secondStarted = res;
+    });
+    const mockExecutor = {
+      execute: vi.fn().mockImplementation((call: { id?: string; name?: string }) => {
+        if (call.id === "call-1") {
+          return Promise.resolve({ success: true, output: "file contents" });
+        }
+        secondStarted();
+        return secondToolDone;
+      }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+
+    const sessionManagerMock = {
+      getActiveMeta: vi.fn().mockReturnValue({ id: "ses_test" }),
+      getSessionDirectory: vi.fn().mockReturnValue("/tmp"),
+      create: vi.fn(),
+      getActive: vi.fn().mockReturnValue("ses_test"),
+      appendLog: vi.fn(),
+      appendMessage: vi.fn(),
+      saveAssistantMessage: vi.fn(),
+      getActiveHistory: vi.fn().mockReturnValue([]),
+    };
+
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+      sessionManager: sessionManagerMock as any,
+      baseDir: "/tmp",
+    });
+    const agent = new Agent(deps as any);
+    const addMessage = deps.contextManager.addMessage;
+
+    const runPromise = agent.run("do two things");
+    await secondToolStarted;
+    agent.shutdown();
+    resolveSecondTool({ success: true, output: "written" });
+    await runPromise;
+
+    const assistantCalls = addMessage.mock.calls.filter(
+      (c: any[]) => c[0]?.role === "assistant" && c[0]?.tool_calls,
+    );
+    expect(assistantCalls).toHaveLength(1);
+
+    const toolMessages = addMessage.mock.calls
+      .filter((c: any[]) => c[0]?.role === "tool")
+      .map((c: any[]) => c[0]);
+    // call-1 keeps its real result; call-2 gets a synthesized stub.
+    expect(toolMessages.map((m: any) => m.tool_call_id)).toEqual(["call-1", "call-2"]);
+    expect(toolMessages[0].content).toBe("file contents");
+    expect(toolMessages[1].content).toBe("[interrupted]");
+    expect(
+      toolMessages.some((m: any) => String(m.content).includes("written")),
+    ).toBe(false);
   });
 });

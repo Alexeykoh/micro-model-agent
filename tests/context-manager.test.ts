@@ -3,6 +3,75 @@ import { ContextManager, extractTriedAndFailed } from "../src/modules/context/ma
 import type { Message } from "../src/modules/context/manager";
 
 describe("ContextManager", () => {
+  it("compaction cutoff keeps assistant(tool_calls) with its tool messages", () => {
+    const cm = new ContextManager(32768);
+    // 17 messages → initial cutoff = 17 - 12 = 5, which lands on the second
+    // tool message of the group at indices 3 (assistant) / 4,5 (tools).
+    cm.addMessage({ role: "user", content: "task" });
+    cm.addMessage({ role: "assistant", content: "working" });
+    cm.addMessage({ role: "user", content: "filler" });
+    cm.addMessage({
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "read_file", arguments: "{}" } },
+        { id: "c2", type: "function", function: { name: "list_dir", arguments: "{}" } },
+      ],
+    });
+    cm.addMessage({ role: "tool", content: "contents", name: "read_file", tool_call_id: "c1" });
+    cm.addMessage({ role: "tool", content: "a,b", name: "list_dir", tool_call_id: "c2" });
+    for (let i = 0; i < 5; i++) {
+      cm.addMessage({ role: "user", content: `filler ${i}` });
+      cm.addMessage({ role: "assistant", content: `reply ${i}` });
+    }
+    cm.addMessage({ role: "user", content: "final question" });
+    const result = cm.compact();
+    expect(result).not.toBeNull();
+
+    const history = cm.getActiveHistory();
+    const summaryIdx = history.findIndex(
+      (m) => m.role === "user" && String(m.content).startsWith("<system-summary>"),
+    );
+    const kept = history.slice(summaryIdx + 1);
+    // The first kept message is the assistant(tool_calls) — not an orphaned
+    // role:"tool" message split from its parent.
+    expect(kept[0].role).toBe("assistant");
+    expect(kept[0].tool_calls?.map((tc) => tc.id)).toEqual(["c1", "c2"]);
+    expect(kept[1]).toMatchObject({ role: "tool", tool_call_id: "c1" });
+    expect(kept[2]).toMatchObject({ role: "tool", tool_call_id: "c2" });
+  });
+
+  it("compaction cutoff moves a trailing dangling assistant(tool_calls) into the kept part", () => {
+    const cm = new ContextManager(32768);
+    // 16 messages → cutoff = 4, landing right AFTER an assistant(tool_calls)
+    // whose results are missing — the assistant must move into the kept part.
+    cm.addMessage({ role: "user", content: "task" });
+    cm.addMessage({ role: "assistant", content: "working" });
+    cm.addMessage({ role: "user", content: "filler" });
+    cm.addMessage({
+      role: "assistant",
+      content: "",
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "read_file", arguments: "{}" } },
+      ],
+    });
+    for (let i = 0; i < 6; i++) {
+      cm.addMessage({ role: "user", content: `filler ${i}` });
+      cm.addMessage({ role: "assistant", content: `reply ${i}` });
+    }
+    const result = cm.compact();
+    expect(result).not.toBeNull();
+
+    const history = cm.getActiveHistory();
+    const summaryIdx = history.findIndex(
+      (m) => m.role === "user" && String(m.content).startsWith("<system-summary>"),
+    );
+    const kept = history.slice(summaryIdx + 1);
+    expect(kept[0].role).toBe("assistant");
+    expect(kept[0].tool_calls?.map((tc) => tc.id)).toEqual(["c1"]);
+    expect(kept.some((m) => m.role === "tool")).toBe(false);
+  });
+
   it("caches per-message token counts across getEstimatedTokens calls", () => {
     let countCalls = 0;
     const counter = { count: (s: string) => { countCalls++; return Math.ceil(s.length / 2); } };
