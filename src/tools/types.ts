@@ -102,6 +102,8 @@ export interface ToolResult {
   toolCallId?: string;
   display?: string;
   diff?: string;
+  /** Absolute path of a persisted artifact (subagent result_mode:"file"). */
+  artifactPath?: string;
 }
 
 export interface ToolCall {

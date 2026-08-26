@@ -7,13 +7,13 @@ import type { MoEPlan } from "../../../src/modules/execution/types";
 import type { ToolRegistry } from "../../../src/tools/registry";
 import type { ToolDefinition } from "../../../src/tools/types";
 
-function fakeSubagent(output: string): ToolDefinition {
+function fakeSubagent(output: string, artifactPath?: string): ToolDefinition {
   return {
     name: "subagent",
     description: "fake",
     parameters: { type: "object", properties: {} },
     tags: ["file"],
-    handler: async () => ({ success: true, output }),
+    handler: async () => ({ success: true, output, artifactPath }),
   };
 }
 
@@ -31,7 +31,9 @@ describe("MoEExecutor with result_mode=file", () => {
         get: (name: string) =>
           name === "subagent"
             ? fakeSubagent(
-                `Sub-agent completed. Full result saved to artifact: ${artifactPath}\nIterations: 1\nSummary:\nsnip`,
+                // ru locale output — the executor must NOT parse this string
+                `Суб-агент завершён. Полный результат сохранён в артефакт: ${artifactPath}\nИтераций: 1\nСводка:\nsnip`,
+                artifactPath,
               )
             : undefined,
         getAll: () => [fakeSubagent("")],

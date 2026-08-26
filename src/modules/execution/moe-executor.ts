@@ -29,21 +29,18 @@ const TRANSIENT_ERROR_PATTERNS = [
   "timeout",
   "Timeout",
   "TIMEOUT",
-  "5xx",
-  "500",
-  "502",
-  "503",
+  /\b(429|500|502|503|504)\b/,
   "network",
   "Network",
   "ECONNREFUSED",
   "ECONNRESET",
   "fetch failed",
-  "abort",
-  "Abort",
 ];
 
 function isTransientError(error: string): boolean {
-  return TRANSIENT_ERROR_PATTERNS.some((p) => error.includes(p));
+  return TRANSIENT_ERROR_PATTERNS.some((p) =>
+    typeof p === "string" ? error.includes(p) : p.test(error),
+  );
 }
 
 function sleep(ms: number): Promise<void> {
@@ -178,8 +175,9 @@ async function executeSubtask(
 
       if (result.success) {
         if (deps.config.subagent?.resultMode === "file") {
-          const pathMatch = result.output.match(/saved to artifact: (.+)/);
-          const abs = pathMatch ? pathMatch[1].trim() : "";
+          // Structured field from the subagent tool — locale-independent
+          // (parsing the localized output string broke under ru).
+          const abs = result.artifactPath ?? "";
           if (abs) {
             const store = new ArtifactStore({
               baseDir: deps.baseDir,
@@ -254,6 +252,12 @@ async function executeSubtask(
     } catch (e: any) {
       lastError = e.message;
       stuckDetector.recordToolError("subagent", e.message);
+
+      // User interrupt (Esc) is NEVER transient — propagate immediately so
+      // the wave barrier and the agent loop see the abort instead of retrying.
+      if (e?.name === "AbortError") {
+        throw e;
+      }
 
       if (isTransientError(lastError) && attempt < maxAttempts) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);

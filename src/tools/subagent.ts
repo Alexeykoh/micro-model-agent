@@ -226,6 +226,9 @@ export const subagentTool: ToolDefinition = {
               iterations: String(result.iterationCount),
               summary,
             }),
+            // Structured path so callers (MoE executor) don't parse the
+            // localized `output` string.
+            artifactPath: abs,
           };
         }
 
