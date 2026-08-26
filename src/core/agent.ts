@@ -336,6 +336,9 @@ export class Agent {
   ): Promise<AgentResult> {
     // Reset shutdown flag from previous interrupt
     this.shutdownRequested = false;
+    // Fresh controller per turn — the MoE path relies on it for Esc handling
+    // (executeSingleAgentLoop re-creates it again for the single-agent path).
+    this.abortController = new AbortController();
     this.setScope();
     const {
       config,
@@ -436,7 +439,12 @@ export class Agent {
               },
               input,
               () => this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase),
-              { onMeta, onTool: countTool, onPhase },
+              {
+                onMeta,
+                onTool: countTool,
+                onPhase,
+                signal: this.abortController.signal,
+              },
             )
           : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
       emitTurnEnd(result);

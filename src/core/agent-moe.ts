@@ -8,6 +8,7 @@ import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validato
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
 import type { MoEPlan, SubtaskResult, PlanResult } from "../modules/execution/types";
+import { newAbortError } from "../modules/execution/moe-executor";
 import { t } from "../i18n/index";
 
 export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
@@ -64,10 +65,17 @@ export async function runWithMoE(
     onMeta?: (meta: string) => void;
     onTool?: (ev: ToolEvent) => void;
     onPhase?: (phase: AgentPhase) => void;
+    /** Abort signal (Esc / shutdown). AbortError propagates — no MoE fallback. */
+    signal?: AbortSignal;
   } = {},
 ): Promise<AgentResult> {
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
-  const { onMeta, onPhase } = opts;
+  const { onMeta, onPhase, signal } = opts;
+  const ensureNotAborted = () => {
+    if (signal?.aborted) throw newAbortError();
+  };
+
+  ensureNotAborted();
 
   let orchestrator: MoEOrchestratorLike = deps.orchestratorOverride as MoEOrchestratorLike;
   if (!orchestrator) {
@@ -103,6 +111,7 @@ export async function runWithMoE(
 
   let currentPlan: MoEPlan = planResult.plan;
   for (let cycle = 1; cycle <= maxCycles; cycle++) {
+    ensureNotAborted();
     if (cycle > 1) {
       onMeta?.(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
     }
@@ -156,6 +165,7 @@ export async function runWithMoE(
       t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
     );
     const planResults = await executor.executePlan(currentPlan);
+    ensureNotAborted();
     for (const r of planResults.results) {
       mergedResults.set(r.subtaskId, r);
     }
@@ -171,6 +181,7 @@ export async function runWithMoE(
     const verification = await verifier.verifyMoEManifest(currentPlan, config, knownTags);
 
     onPhase?.("thinking");
+    ensureNotAborted();
     let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
     try {
       verifyResult = await orchestrator.verifyAndMerge({
@@ -187,6 +198,7 @@ export async function runWithMoE(
       });
     } catch (err: any) {
       onPhase?.("done");
+      if (err?.name === "AbortError") throw err;
       return {
         success: false,
         text: `MoE verifyAndMerge crashed: ${err.message}`,

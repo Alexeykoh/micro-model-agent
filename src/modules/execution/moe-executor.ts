@@ -18,6 +18,13 @@ export type ScopeDecision =
   | { action: "approve"; write: string[]; read: string[] }
   | { action: "reject" };
 
+/** Uniform interrupt error recognized by the agent loop (err.name === "AbortError"). */
+export function newAbortError(): Error {
+  const e = new Error(t("tool.aborted", { name: "MoE execution" }));
+  e.name = "AbortError";
+  return e;
+}
+
 const TRANSIENT_ERROR_PATTERNS = [
   "timeout",
   "Timeout",
@@ -52,6 +59,8 @@ export interface MoEExecutorDeps {
   baseDir: string;
   /** Router callback for scope decisions; absent = scope requests are plain failures. */
   onScopeRequest?: (subtaskId: string, req: ScopeRequestBody) => Promise<ScopeDecision>;
+  /** Abort signal — queued subtasks are skipped, waves stop at the barrier. */
+  signal?: AbortSignal;
 }
 
 export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
@@ -353,6 +362,12 @@ export class MoEExecutor {
 
       const wavePromises = wave.map(async (subtask) => {
         await acquire();
+        if (this.deps.signal?.aborted) {
+          // Checked after acquiring so subtasks queued behind an in-flight one
+          // never start once Esc was pressed mid-wave.
+          release();
+          throw newAbortError();
+        }
         let result: SubtaskResult;
         try {
           result = await executeSubtask(subtask, this.deps, depResults);
@@ -360,6 +375,7 @@ export class MoEExecutor {
             result = await this.resolveScopeAndRetry(subtask, result, depResults);
           }
         } catch (e) {
+          if (e instanceof Error && e.name === "AbortError") throw e;
           result = {
             subtaskId: subtask.id,
             success: false,
@@ -376,6 +392,9 @@ export class MoEExecutor {
       });
 
       await Promise.all(wavePromises);
+      // Wave barrier: once interrupted, stop before the next wave instead of
+      // starting new sub-agents after Esc.
+      if (this.deps.signal?.aborted) throw newAbortError();
     }
 
     const failed = results.filter((r) => !r.success);
