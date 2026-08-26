@@ -188,22 +188,22 @@ describe("OrchestratorClient verifyAndMerge()", () => {
       ],
       shared_context: { rules: [], refs: [] },
     };
-    // Exhaust re-plan cycles
-    for (let i = 0; i < 3; i++) {
-      await orchestrator.verifyAndMerge({
-        plan,
-        results: [{ subtaskId: "t1", success: false, summary: "", result: "", error: "err" }],
-        verifierErrors: ["err"],
-        verifierWarnings: [],
-      });
-    }
-    const result = await orchestrator.verifyAndMerge({
+    // Re-plan cycle counting moved to the caller (runWithMoE enforces
+    // moe.maxReplanCycles). The client itself keeps parsing verifier output
+    // on every call — no internal cap, no forced partial result.
+    const first = await orchestrator.verifyAndMerge({
       plan,
       results: [{ subtaskId: "t1", success: false, summary: "", result: "", error: "err" }],
       verifierErrors: ["err"],
       verifierWarnings: [],
     });
-    expect(result.type).toBe("final");
-    expect(result.explanation).toContain("Max re-plan cycles");
+    expect(first.type).toBe("replan");
+    const second = await orchestrator.verifyAndMerge({
+      plan,
+      results: [{ subtaskId: "t1", success: false, summary: "", result: "", error: "err" }],
+      verifierErrors: ["err"],
+      verifierWarnings: [],
+    });
+    expect(second.type).toBe("final");
   });
 });

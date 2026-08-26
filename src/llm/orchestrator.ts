@@ -68,7 +68,6 @@ Max 3 re-plan cycles. After 3 cycles, return partial result.`;
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
-  private replanCycle = 0;
 
   constructor(config: OrchestratorConfig, defaultProvider?: LLMProvider) {
     this.config = config;
@@ -96,10 +95,6 @@ export class OrchestratorClient {
 
   isEnabled(): boolean {
     return this.provider !== null;
-  }
-
-  getReplanCycle(): number {
-    return this.replanCycle;
   }
 
   private async chat(messages: Message[]): Promise<string> {
@@ -161,17 +156,6 @@ export class OrchestratorClient {
   async verifyAndMerge(input: VerifyInput): Promise<OrchestratorResult> {
     if (!this.provider)
       return { type: "final", finalAnswer: input.results.map((r) => r.summary).join("\n") };
-
-    this.replanCycle++;
-    if (this.replanCycle > 3) {
-      return {
-        type: "final",
-        finalAnswer: input.results
-          .map((r) => `${r.subtaskId}: ${r.success ? "OK" : "FAIL"} — ${r.summary}`)
-          .join("\n"),
-        explanation: "Max re-plan cycles (3) reached. Returning partial results.",
-      };
-    }
 
     const context = JSON.stringify(input, null, 2);
     const messages: Message[] = [

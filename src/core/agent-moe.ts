@@ -7,6 +7,10 @@ import { OrchestratorClient } from "../llm/orchestrator";
 import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
+import type { MoEPlan, SubtaskResult } from "../modules/execution/types";
+import { t } from "../i18n/index";
+
+export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
 
 export interface MoEDeps {
   config: AppConfig;
@@ -17,7 +21,8 @@ export interface MoEDeps {
 }
 
 /**
- * Execute the MoE (Mixture of Experts) path: plan → validate → execute → verify.
+ * Execute the MoE (Mixture of Experts) path: plan → validate → execute → verify,
+ * with a re-plan loop driven by the orchestrator's verifyAndMerge decision.
  * Returns a fallback signal when MoE cannot proceed so the caller can fall
  * back to the single-agent loop.
  */
@@ -57,86 +62,147 @@ export async function runWithMoE(
     return fallback();
   }
 
-  const { plan } = planResult;
-  onMeta?.(`📋 Plan created: "${plan.title}" (${plan.subtasks.length} subtasks)\n`);
-
-  const validation = validatePlan(plan, config);
-  if (!validation.valid) {
-    const applied = applyAutoFixes(plan, validation.autoFixes);
-    const retry = validatePlan(applied, config);
-    if (!retry.valid) {
-      logger.warn(
-        `MoE plan validation failed: ${retry.errors.join("; ")} — falling back to single-agent`,
-      );
-      onMeta?.(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
-      return fallback();
-    }
-    Object.assign(plan, applied);
-    onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
-  }
-
-  const moeDeps = {
-    config,
-    toolRegistry: toolExecutor.getRegistry(),
-    toolExecutor,
-    llmProvider,
-    logger,
-    baseDir,
-  };
-
-  const executor = new MoEExecutor(moeDeps);
-  onMeta?.(`⚙️ Executing ${plan.subtasks.length} subtasks...\n`);
-  const planResults = await executor.executePlan(plan);
-  onMeta?.(
-    `✅ Execution complete: ${planResults.results.filter((r) => r.success).length}/${planResults.results.length} succeeded\n`,
+  const maxCycles = Math.max(
+    1,
+    config.moe?.maxReplanCycles ?? DEFAULT_MOE_MAX_REPLAN_CYCLES,
   );
+  const mergedResults = new Map<string, SubtaskResult>();
 
-  const verifier = new StepVerifier(baseDir);
-  const knownTags = ["file", "code", "shell", "research", "browser", "vision", "core"];
-  const verification = await verifier.verifyMoEManifest(plan, config, knownTags);
+  let currentPlan: MoEPlan = planResult.plan;
+  for (let cycle = 1; cycle <= maxCycles; cycle++) {
+    if (cycle > 1) {
+      onMeta?.(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
+    }
 
-  onPhase?.("thinking");
-  let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
-  try {
-    verifyResult = await orchestrator.verifyAndMerge({
-      plan,
-      results: planResults.results.map((r) => ({
-        subtaskId: r.subtaskId,
-        success: r.success,
-        summary: r.summary,
-        result: r.result,
-        error: r.error,
-      })),
-      verifierErrors: verification.errors,
-      verifierWarnings: verification.warnings,
+    // Validate every plan before executing it — never trust an LLM-produced
+    // plan, including re-plans produced by verifyAndMerge.
+    const validation = validatePlan(currentPlan, config);
+    if (!validation.valid) {
+      const applied = applyAutoFixes(currentPlan, validation.autoFixes);
+      const retry = validatePlan(applied, config);
+      if (!retry.valid) {
+        logger.warn(`MoE plan validation failed: ${retry.errors.join("; ")}`);
+        if (cycle === 1) {
+          onMeta?.(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
+          return fallback();
+        }
+        return partialFailure(mergedResults, retry.errors.join("; "));
+      }
+      currentPlan = applied;
+      if (validation.autoFixes.length > 0) {
+        onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
+      }
+    }
+
+    const executor = new MoEExecutor({
+      config,
+      toolRegistry: toolExecutor.getRegistry(),
+      toolExecutor,
+      llmProvider,
+      logger,
+      baseDir,
     });
-  } catch (err: any) {
-    onPhase?.("done");
-    return {
-      success: false,
-      text: `MoE verifyAndMerge crashed: ${err.message}`,
-      error: err.message,
-      iterationCount: 0,
-    };
-  }
-  onPhase?.("done");
 
+    onMeta?.(
+      t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
+    );
+    const planResults = await executor.executePlan(currentPlan);
+    for (const r of planResults.results) {
+      mergedResults.set(r.subtaskId, r);
+    }
+    const succeeded = [...mergedResults.values()].filter((r) => r.success).length;
+    onMeta?.(
+      `✅ ${t("moe.execution_complete", { succeeded: String(succeeded), total: String(mergedResults.size) })}\n`,
+    );
+
+    const verifier = new StepVerifier(baseDir);
+    const knownTags = collectKnownToolTags(toolExecutor);
+    const verification = await verifier.verifyMoEManifest(currentPlan, config, knownTags);
+
+    onPhase?.("thinking");
+    let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
+    try {
+      verifyResult = await orchestrator.verifyAndMerge({
+        plan: currentPlan,
+        results: [...mergedResults.values()].map((r) => ({
+          subtaskId: r.subtaskId,
+          success: r.success,
+          summary: r.summary,
+          result: r.result,
+          error: r.error,
+        })),
+        verifierErrors: verification.errors,
+        verifierWarnings: verification.warnings,
+      });
+    } catch (err: any) {
+      onPhase?.("done");
+      return {
+        success: false,
+        text: `MoE verifyAndMerge crashed: ${err.message}`,
+        error: err.message,
+        iterationCount: mergedResults.size,
+      };
+    }
+    onPhase?.("done");
+
+    if (verifyResult.type === "final") {
+      return buildFinalResult(mergedResults, verification.success, verifyResult);
+    }
+
+    if (!verifyResult.plan || !Array.isArray(verifyResult.plan.subtasks)) {
+      // Verifier asked for a re-plan but produced none usable — stop honestly.
+      return partialFailure(
+        mergedResults,
+        verifyResult.explanation || "re-plan requested but no plan returned",
+      );
+    }
+    currentPlan = verifyResult.plan;
+  }
+
+  return partialFailure(mergedResults, t("moe.cycles_exhausted", { max: String(maxCycles) }));
+}
+
+function collectKnownToolTags(toolExecutor: ToolExecutor): string[] {
+  const tags = new Set<string>();
+  for (const tool of toolExecutor.getRegistry().getAll()) {
+    for (const tag of tool.tags || []) tags.add(tag);
+  }
+  return Array.from(tags);
+}
+
+function buildFinalResult(
+  mergedResults: Map<string, SubtaskResult>,
+  verificationSuccess: boolean,
+  verifyResult: { finalAnswer?: string },
+): AgentResult {
   const outputLines: string[] = [`## MoE Execution Results\n`];
-  for (const r of planResults.results) {
+  for (const r of mergedResults.values()) {
     const icon = r.success ? "✅" : "❌";
     outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`);
   }
   outputLines.push("");
-  if (verifyResult.type === "final") {
-    outputLines.push(`**Result:** ${verifyResult.finalAnswer || "Complete"}`);
-  } else {
-    outputLines.push(`**Re-plan requested:** ${verifyResult.explanation || ""}`);
-  }
+  outputLines.push(`**Result:** ${verifyResult.finalAnswer || "Complete"}`);
 
-  const failedCount = planResults.results.filter((r) => !r.success).length;
+  const failedCount = [...mergedResults.values()].filter((r) => !r.success).length;
   return {
-    success: failedCount === 0 && verification.success,
+    success: failedCount === 0 && verificationSuccess,
     text: outputLines.join("\n"),
-    iterationCount: planResults.results.length,
+    iterationCount: mergedResults.size,
+  };
+}
+
+function partialFailure(mergedResults: Map<string, SubtaskResult>, reason: string): AgentResult {
+  const outputLines: string[] = [`## MoE Execution Results\n`];
+  for (const r of mergedResults.values()) {
+    const icon = r.success ? "✅" : "❌";
+    outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`);
+  }
+  outputLines.push("");
+  outputLines.push(`**${t("moe.partial_result")}:** ${reason}`);
+  return {
+    success: false,
+    text: outputLines.join("\n"),
+    error: reason,
+    iterationCount: mergedResults.size,
   };
 }

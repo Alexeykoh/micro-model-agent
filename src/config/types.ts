@@ -89,6 +89,8 @@ export interface RetryConfig {
 
 export interface MoeConfig {
   enabled: boolean;
+  /** Max plan→execute→verify cycles per MoE run (initial cycle + N-1 re-plans). */
+  maxReplanCycles?: number;
 }
 
 export interface ToolsConfig {

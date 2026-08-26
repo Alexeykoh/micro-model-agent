@@ -694,5 +694,10 @@
   "exec.hint_deploy": "Verify credentials and network access before deploying.",
   "exec.hint_repetitive": "You are calling the same tool repeatedly with the same arguments. Try a different approach.",
   "exec.hint_consecutive": "Multiple different tools are failing. Check if the environment is set up correctly.",
-  "exec.hint_read_only": "You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps."
+  "exec.hint_read_only": "You have made many read-only tool calls (read_file/glob/grep/browser) without writing anything. Stop exploring — make the edit/write the task needs, or use the plan tool to decide next steps.",
+  "moe.replan_started": "🔄 Re-plan {cycle}/{max}: executing updated plan...",
+  "moe.executing": "⚙️ Executing {count} subtasks (cycle {cycle})...",
+  "moe.execution_complete": "Execution complete: {succeeded}/{total} succeeded",
+  "moe.cycles_exhausted": "Max re-plan cycles ({max}) reached — returning partial results",
+  "moe.partial_result": "Partial result"
 }

@@ -16,6 +16,7 @@ export const DEFAULTS: AppConfig = {
   },
   moe: {
     enabled: false,
+    maxReplanCycles: 3,
   },
   tools: {
     defaultTags: ["file", "code"],
