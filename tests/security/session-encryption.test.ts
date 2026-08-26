@@ -310,3 +310,28 @@ describe("SessionFileEncryptor", () => {
     });
   });
 });
+
+describe("corruption resilience (audit 2026-08-26)", () => {
+  it("decryptJSONL skips a corrupted line instead of failing the whole history", () => {
+    const enc = new SessionFileEncryptor({ enabled: true } as any);
+    const good = enc.encryptFileContent('{"a":1}');
+    // Tamper with the ciphertext while keeping the salt:iv:tag:data base64
+    // shape — decryptString must fail authentication on exactly this line.
+    const parts = good.split(":");
+    parts[3] = ("A" === parts[3][0] ? "B" : "A") + parts[3].slice(1);
+    const corrupted = parts.join(":");
+    expect(corrupted).not.toBe(good);
+    const lines = [good, corrupted, enc.encryptFileContent('{"b":2}')];
+    const out = enc.decryptJSONL(lines);
+    expect(out).toHaveLength(2);
+    expect(JSON.parse(out[0])).toEqual({ a: 1 });
+    expect(JSON.parse(out[1])).toEqual({ b: 2 });
+  });
+
+  it("isEncryptedString rejects plaintext with four colon-separated words", () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isEncryptedString } = require("../../src/modules/security/encryption");
+    expect(isEncryptedString("foo:bar:baz:qux")).toBe(false);
+    expect(isEncryptedString("some log line: with colons: here: yes")).toBe(false);
+  });
+});

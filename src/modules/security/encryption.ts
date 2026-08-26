@@ -159,16 +159,11 @@ export function isEncryptedString(value: string): boolean {
   const parts = value.split(":");
   if (parts.length !== 4) return false;
 
-  // Check if all parts are valid base64
-  try {
-    Buffer.from(parts[0], "base64");
-    Buffer.from(parts[1], "base64");
-    Buffer.from(parts[2], "base64");
-    Buffer.from(parts[3], "base64");
-    return true;
-  } catch {
-    return false;
-  }
+  // Strict base64 shape check: Buffer.from(value, "base64") NEVER throws
+  // (lenient decode), so it cannot distinguish plaintext from base64.
+  const isB64 = (s: string) =>
+    s.length > 0 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+  return parts.every(isB64);
 }
 
 /**

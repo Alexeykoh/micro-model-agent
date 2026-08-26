@@ -2,6 +2,10 @@ import { pc } from "./colors";
 
 const CONTEXT_LINES = 3;
 const MAX_DIFF_LINES = 100;
+// LCS is O(m*n) in time and memory — cap the DP input so a huge edit_file
+// can't allocate hundreds of MB. Beyond the cap, diff degrades to a
+// "changed N lines" summary instead of a full LCS.
+const MAX_LCS_INPUT_LINES = 2000;
 
 interface DiffLine {
   type: "context" | "remove" | "add";
@@ -153,6 +157,17 @@ export function generateDiff(oldContent: string, newContent: string): string {
 
   const oldLines = oldContent.split("\n");
   const newLines = newContent.split("\n");
+
+  if (
+    oldLines.length > MAX_LCS_INPUT_LINES ||
+    newLines.length > MAX_LCS_INPUT_LINES
+  ) {
+    // Too large for the O(m*n) DP — show a bounded summary instead of
+    // allocating an m*n matrix.
+    return pc.dim(
+      `  ... (file too large for line diff: ${oldLines.length} -> ${newLines.length} lines)`,
+    );
+  }
 
   const diff = buildDiff(oldLines, newLines);
   if (diff.length === 0) return "";

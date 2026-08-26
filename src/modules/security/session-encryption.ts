@@ -113,11 +113,23 @@ export class SessionFileEncryptor {
   }
 
   /**
-   * Decrypt a JSONL file
+   * Decrypt a JSONL file. A line that fails to decrypt (corrupted, truncated
+   * by a crash, or foreign plaintext) is logged and SKIPPED — one bad line
+   * must not make the whole session history unreadable.
    */
   decryptJSONL(lines: string[]): string[] {
     if (!this.config.enabled) return lines;
-    return lines.map((line) => this.decryptFileContent(line));
+    return lines.flatMap((line) => {
+      try {
+        return [this.decryptFileContent(line)];
+      } catch (e) {
+        console.error(
+          "[session-encryption] failed to decrypt JSONL line — skipping it:",
+          e instanceof Error ? e.message : e,
+        );
+        return [];
+      }
+    });
   }
 
   /**
