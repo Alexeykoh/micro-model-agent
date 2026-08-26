@@ -182,7 +182,13 @@ function registerMmaCommands(ctx: ReplContext): void {
     name: "config",
     description: t("repl.config"),
     usage: t("repl.config_usage"),
-    action: () => {
+    action: (args: string[]) => {
+      // Subcommand routing: `/config migrate`. A separate registration with
+      // a space in the name was unreachable — the dispatcher splits input on
+      // whitespace, so "/config migrate" always resolved to plain "config".
+      if ((args[0] ?? "").trim().toLowerCase() === "migrate") {
+        return runConfigMigrate(ctx);
+      }
       const cfg = ctx.config;
       const ctxW = cfg.contextWindow;
       const sys = Math.floor(ctxW * cfg.contextBudget.systemPrompt);
@@ -213,37 +219,6 @@ function registerMmaCommands(ctx: ReplContext): void {
           `${t("repl.session_label")}     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`,
         );
       }
-    },
-  });
-  ctx.registerCommand({
-    name: "config migrate",
-    description: t("cli.migrate_config"),
-    action: async () => {
-      const { hasDomainFiles } = await import("../config/domains");
-      const { loadConfig: loadCfg } = await import("../config/config");
-      const configDir = ctx.configDir;
-      const configPath = join(configDir, "config.json");
-
-      if (hasDomainFiles(configDir)) {
-        console.log(pc.yellow(t("config.migrate_no_legacy")));
-        return;
-      }
-
-      if (!existsSync(configPath)) {
-        console.log(pc.yellow(t("config.migrate_no_legacy")));
-        return;
-      }
-
-      console.log(t("config.migrate_start"));
-
-      const { config } = loadCfg({ configDir, projectConfigPath: join(configDir, ".mmrc") });
-      saveConfig(config, configPath, configDir);
-
-      const { renameSync, readdirSync } = await import("fs");
-      renameSync(configPath, configPath + ".bak");
-
-      const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) => f.endsWith(".json"));
-      console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
     },
   });
   ctx.registerCommand({
@@ -888,4 +863,34 @@ function registerSkillCommands(ctx: ReplContext): void {
       console.log(t("repl.skill_usage"));
     },
   });
+}
+
+async function runConfigMigrate(ctx: ReplContext): Promise<void> {
+  const { hasDomainFiles } = await import("../config/domains");
+  const { loadConfig: loadCfg } = await import("../config/config");
+  const configDir = ctx.configDir;
+  const configPath = join(configDir, "config.json");
+
+  if (hasDomainFiles(configDir)) {
+    console.log(pc.yellow(t("config.migrate_no_legacy")));
+    return;
+  }
+
+  if (!existsSync(configPath)) {
+    console.log(pc.yellow(t("config.migrate_no_legacy")));
+    return;
+  }
+
+  console.log(t("config.migrate_start"));
+
+  const { config } = loadCfg({ configDir, projectConfigPath: join(configDir, ".mmrc") });
+  saveConfig(config, configPath, configDir);
+
+  const { renameSync, readdirSync } = await import("fs");
+  renameSync(configPath, configPath + ".bak");
+
+  const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) =>
+    f.endsWith(".json"),
+  );
+  console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
 }
