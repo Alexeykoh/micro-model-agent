@@ -17,6 +17,13 @@ export interface MoEOrchestratorLike {
   isEnabled(): boolean;
   plan(input: string): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
   verifyAndMerge(input: any): Promise<any>;
+  resolveScopeRequest(
+    subtaskId: string,
+    request: { files: string[]; read_only: boolean; reason: string },
+  ): Promise<
+    | { action: "approve"; write: string[]; read: string[] }
+    | { action: "reject"; explanation?: string }
+  >;
 }
 
 export interface MoEExecutorLike {
@@ -129,6 +136,20 @@ export async function runWithMoE(
         llmProvider,
         logger,
         baseDir,
+        onScopeRequest: async (subtaskId, req) => {
+          const decision = await orchestrator.resolveScopeRequest(subtaskId, req);
+          if (decision.action === "approve") {
+            onMeta?.(
+              t("moe.scope_approved", {
+                subtask: subtaskId,
+                files: [...decision.write, ...decision.read].join(", "),
+              }) + "\n",
+            );
+          } else {
+            onMeta?.(t("moe.scope_rejected", { subtask: subtaskId }) + "\n");
+          }
+          return decision;
+        },
       });
 
     onMeta?.(

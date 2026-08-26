@@ -65,6 +65,16 @@ Respond with JSON only:
 
 Max 3 re-plan cycles. After 3 cycles, return partial result.`;
 
+const SCOPE_DECISION_SYSTEM_PROMPT = `You are the router of a multi-expert agent system. A sub-agent could not finish its task because it lacked access to files outside its assigned scope.
+Decide what to do with its scope request:
+- "approve" — grant access ONLY to files it justifies; keep write grants minimal.
+- "reject" — when the request is unjustified, excessive, or another subtask owns those files.
+
+Respond with JSON only (no markdown fences):
+{"action": "approve", "write": ["file1"], "read": ["file2"]}
+or
+{"action": "reject", "explanation": "why"}`;
+
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
@@ -174,6 +184,54 @@ export class OrchestratorClient {
       type: "final",
       finalAnswer: input.results.map((r) => r.summary).join("\n"),
       explanation: "Failed to parse verifier output, returning collected results.",
+    };
+  }
+
+  /**
+   * Router decision on a sub-agent's scope request. Defaults to reject on any
+   * parse failure — scope must never expand silently.
+   */
+  async resolveScopeRequest(
+    subtaskId: string,
+    request: { files: string[]; read_only: boolean; reason: string },
+  ): Promise<
+    | { action: "approve"; write: string[]; read: string[] }
+    | { action: "reject"; explanation?: string }
+  > {
+    if (!this.provider) return { action: "reject", explanation: "orchestrator not enabled" };
+
+    const messages: Message[] = [
+      { role: "system", content: SCOPE_DECISION_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: JSON.stringify({ subtaskId, request }, null, 2),
+      },
+    ];
+
+    const text = await this.chat(messages);
+    const parsed = this.parseJSON<{
+      action?: string;
+      write?: unknown;
+      read?: unknown;
+      explanation?: string;
+    }>(text);
+
+    if (parsed && parsed.action === "approve") {
+      const write = Array.isArray(parsed.write) ? parsed.write.map(String) : [];
+      const read = Array.isArray(parsed.read) ? parsed.read.map(String) : [];
+      // An approve without any concrete files is meaningless — treat as reject.
+      if (write.length === 0 && read.length === 0) {
+        return { action: "reject", explanation: "approve carried no files" };
+      }
+      return { action: "approve", write, read };
+    }
+
+    return {
+      action: "reject",
+      explanation:
+        parsed?.action === "reject"
+          ? parsed.explanation
+          : `unparseable router decision: ${text.slice(0, 200)}`,
     };
   }
 

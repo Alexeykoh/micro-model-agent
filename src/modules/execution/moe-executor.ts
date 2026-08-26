@@ -1,4 +1,4 @@
-import type { MoEPlan, MoESubtask, SubtaskResult, PlanResult } from "./types";
+import type { MoEPlan, MoESubtask, SubtaskResult, PlanResult, ScopeRequestBody } from "./types";
 import type { AppConfig, ExpertConfig } from "../../config/types";
 import { getExpertConfig } from "../../config/experts";
 import { filterToolsByTags } from "../../tools/filter-tools";
@@ -9,6 +9,14 @@ import { StuckDetector } from "./stuck-detector";
 import { t } from "../../i18n/index";
 import { ArtifactStore } from "../artifacts/store";
 import { buildInputSection } from "./input-from";
+import { parseScopeRequest } from "../../tools/scope-request";
+
+export const MAX_SCOPE_EXPANSION_CYCLES = 2;
+
+/** Router decision on a sub-agent's scope request (see OrchestratorClient.resolveScopeRequest). */
+export type ScopeDecision =
+  | { action: "approve"; write: string[]; read: string[] }
+  | { action: "reject" };
 
 const TRANSIENT_ERROR_PATTERNS = [
   "timeout",
@@ -42,6 +50,8 @@ export interface MoEExecutorDeps {
   llmProvider: LLMProvider;
   logger: Logger;
   baseDir: string;
+  /** Router callback for scope decisions; absent = scope requests are plain failures. */
+  onScopeRequest?: (subtaskId: string, req: ScopeRequestBody) => Promise<ScopeDecision>;
 }
 
 export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
@@ -229,6 +239,7 @@ async function executeSubtask(
         summary: `Failed: ${subtask.id}`,
         result: result.output,
         error: errorDetail,
+        scopeRequest: parseScopeRequest(result.output) ?? undefined,
         durationMs: Date.now() - startTime,
       };
     } catch (e: any) {
@@ -345,6 +356,9 @@ export class MoEExecutor {
         let result: SubtaskResult;
         try {
           result = await executeSubtask(subtask, this.deps, depResults);
+          if (!result.success && this.deps.onScopeRequest) {
+            result = await this.resolveScopeAndRetry(subtask, result, depResults);
+          }
         } catch (e) {
           result = {
             subtaskId: subtask.id,
@@ -371,4 +385,53 @@ export class MoEExecutor {
 
     return { success: failed.length === 0, results, errors, warnings };
   }
+
+  /**
+   * Scope expansion protocol (spec §Post-MVP): a failed sub-agent's
+   * <scope-request> goes to the Router; approve extends the subtask scope and
+   * re-executes ONLY this subtask, reject fails it (it can still be fixed by
+   * a full re-plan). Expansion is capped — never automatic.
+   */
+  private async resolveScopeAndRetry(
+    subtask: MoESubtask,
+    failed: SubtaskResult,
+    depResults: Map<string, SubtaskResult>,
+  ): Promise<SubtaskResult> {
+    let current = failed;
+    for (let cycle = 0; cycle < MAX_SCOPE_EXPANSION_CYCLES; cycle++) {
+      const req = current.scopeRequest;
+      if (!req) return current;
+
+      const decision = await this.deps.onScopeRequest!(subtask.id, req);
+      if (decision.action !== "approve") {
+        this.deps.logger.info?.(
+          `MoE: router rejected scope request for "${subtask.id}" (${req.reason})`,
+        );
+        return {
+          ...current,
+          error: `${current.error}\nRouter rejected scope request for files: ${req.files.join(", ")}`,
+        };
+      }
+
+      subtask.allowed_files = uniq([...(subtask.allowed_files || []), ...decision.write]);
+      subtask.read_only_files = uniq([...(subtask.read_only_files || []), ...decision.read]);
+      this.deps.logger.info?.(
+        `MoE: approved scope expansion for "${subtask.id}": +write [${decision.write.join(", ")}] +read [${decision.read.join(", ")}]`,
+      );
+
+      const retry = await executeSubtask(subtask, this.deps, depResults);
+      if (retry.success || !retry.scopeRequest) return retry;
+      current = retry;
+    }
+
+    return {
+      ...current,
+      summary: `Failed after ${MAX_SCOPE_EXPANSION_CYCLES} scope expansions: ${subtask.id}`,
+      error: `${current.error}\nScope expansion limit (${MAX_SCOPE_EXPANSION_CYCLES}) reached`,
+    };
+  }
+}
+
+function uniq(arr: string[]): string[] {
+  return Array.from(new Set(arr));
 }

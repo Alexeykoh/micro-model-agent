@@ -26,6 +26,15 @@ export interface SubtaskResult {
   result: string;
   error?: string;
   durationMs: number;
+  /** Set when a failed sub-agent reported a structured scope-request block. */
+  scopeRequest?: ScopeRequestBody;
+}
+
+/** Machine-readable request from a sub-agent for access to out-of-scope files. */
+export interface ScopeRequestBody {
+  files: string[];
+  read_only: boolean;
+  reason: string;
 }
 
 export interface PlanResult {

@@ -8,6 +8,7 @@ import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { ArtifactStore } from "../modules/artifacts/store";
+import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 
 /** Fixed system prompt (KV-cache friendly when stableSystemPrompt is on). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
@@ -149,6 +150,11 @@ export const subagentTool: ToolDefinition = {
         ctx.config.contextBudget,
       );
       const subPluginManager = new PluginManager();
+      // Deterministic scope-denial tracking: when the child's file tools are
+      // blocked by the scope guard, the denial is surfaced as a machine-readable
+      // <scope-request> block in the result (see MoE executor / Router).
+      const scopeCollector = new ScopeDenialCollector();
+      subPluginManager.register(scopeCollector.plugin, "builtin");
       const hallucinationDetector = new HallucinationDetector(ctx.baseDir, ctx.llmProvider);
 
       // Save/restore the shared executor scope so the sub-agent doesn't
@@ -189,10 +195,10 @@ export const subagentTool: ToolDefinition = {
       try {
         const result = await subAgent.run(fullTask);
         if (!result.success) {
-          return {
-            success: false,
-            output: `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`,
-          };
+          let output = `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`;
+          const scopeReq = scopeCollector.toScopeRequest();
+          if (scopeReq) output += `\n${formatScopeRequest(scopeReq)}`;
+          return { success: false, output };
         }
 
         const resultMode =

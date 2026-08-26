@@ -699,5 +699,7 @@
   "moe.executing": "⚙️ Выполняю {count} подзадач (цикл {cycle})...",
   "moe.execution_complete": "Выполнение завершено: {succeeded}/{total} успешно",
   "moe.cycles_exhausted": "Достигнут лимит re-plan циклов ({max}) — возвращаю частичные результаты",
-  "moe.partial_result": "Частичный результат"
+  "moe.partial_result": "Частичный результат",
+  "moe.scope_approved": "🔓 Scope расширен для \"{subtask}\": {files}",
+  "moe.scope_rejected": "⛔ Запрос scope отклонён для \"{subtask}\""
 }

@@ -699,5 +699,7 @@
   "moe.executing": "⚙️ Executing {count} subtasks (cycle {cycle})...",
   "moe.execution_complete": "Execution complete: {succeeded}/{total} succeeded",
   "moe.cycles_exhausted": "Max re-plan cycles ({max}) reached — returning partial results",
-  "moe.partial_result": "Partial result"
+  "moe.partial_result": "Partial result",
+  "moe.scope_approved": "🔓 Scope expanded for \"{subtask}\": {files}",
+  "moe.scope_rejected": "⛔ Scope request rejected for \"{subtask}\""
 }
