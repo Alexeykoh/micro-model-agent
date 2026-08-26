@@ -23,7 +23,12 @@ export class SkillsLoader {
 
     for (const entry of entries) {
       const fullPath = join(dirPath, entry);
-      const stat = statSync(fullPath);
+      let stat;
+      try {
+        stat = statSync(fullPath);
+      } catch {
+        continue;
+      }
 
       if (stat.isDirectory()) {
         this.scanDir(fullPath, skills);

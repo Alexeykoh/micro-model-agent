@@ -30,19 +30,35 @@ export function wrapLine(line: string, width: number, firstRowWidth?: number): W
   const rows: WrappedRow[] = [];
   let start = 0;
   let cells = 0;
+  let lastSpaceIdx = -1;
+  let lastSpaceCells = 0;
   for (let i = 0; i < chars.length; i++) {
     const ch = chars[i];
     if (ch === "\n") {
       rows.push({ text: chars.slice(start, i).join(""), charStart: start });
       start = i + 1;
       cells = 0;
+      lastSpaceIdx = -1;
+      lastSpaceCells = 0;
       continue;
     }
     const cw = stringWidth(ch);
+    if (ch === " ") {
+      lastSpaceIdx = i;
+      lastSpaceCells = cells;
+    }
     if (cells + cw > limit && cells > 0) {
-      rows.push({ text: chars.slice(start, i).join(""), charStart: start });
-      start = i;
-      cells = cw;
+      if (lastSpaceIdx > start) {
+        rows.push({ text: chars.slice(start, lastSpaceIdx).join(""), charStart: start });
+        start = lastSpaceIdx + 1;
+        cells = Math.max(0, cells - lastSpaceCells - 1);
+      } else {
+        rows.push({ text: chars.slice(start, i).join(""), charStart: start });
+        start = i;
+        cells = cw;
+      }
+      lastSpaceIdx = -1;
+      lastSpaceCells = 0;
       limit = w;
     } else {
       cells += cw;

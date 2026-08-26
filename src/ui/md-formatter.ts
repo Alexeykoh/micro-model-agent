@@ -72,21 +72,22 @@ export class FormattingStream {
   }
 
   flush(): void {
-    if (this.inCodeBlock && this.codeLines.length > 0) {
-      this.emitCodeBlock();
-    }
     if (this.tableBuffer.length > 0) {
       this.flushTable();
+    }
+    if (this.inCodeBlock) {
+      if (this.buffer.length > 0) {
+        this.codeLines.push(this.buffer);
+        this.buffer = "";
+      }
+      if (this.codeLines.length > 0) {
+        this.emitCodeBlock();
+      }
+      return;
     }
     if (this.buffer.length > 0) {
       const line = this.buffer;
       this.buffer = "";
-      if (line.trim() === "```" || line.trim().startsWith("```")) {
-        if (this.codeLines.length > 0) {
-          this.emitCodeBlock();
-        }
-        return;
-      }
       this.onWrite(this.formatLine(line));
     }
   }

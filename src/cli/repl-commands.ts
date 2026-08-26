@@ -296,14 +296,14 @@ function registerMmaCommands(ctx: ReplContext): void {
     usage: t("repl.sysprompt_desc"),
     action: () => {
       const info = ctx.agent.getSystemPromptInfo();
-      console.log(pc.bold(`System prompt (${info.tokenCount} tokens):`));
+      console.log(pc.bold(t("repl.sysprompt_tokens", { count: String(info.tokenCount) })));
       console.log(pc.dim("─".repeat(60)));
       for (const line of info.text.split("\n")) {
         console.log(line);
       }
       console.log(pc.dim("─".repeat(60)));
       if (info.excluded.length > 0) {
-        console.log(pc.yellow(`\nExcluded blocks: ${info.excluded.length}`));
+        console.log(pc.yellow(t("repl.excluded_blocks", { count: String(info.excluded.length) })));
         for (const e of info.excluded) {
           console.log(pc.dim(`  - ${e.slice(0, 80)}${e.length > 80 ? "..." : ""}`));
         }
@@ -426,7 +426,7 @@ function registerMmaCommands(ctx: ReplContext): void {
     action: async (args: string[]) => {
       if (args.length === 0) {
         console.log(`/context ${t("repl.context")}  ${ctx.config.contextWindow}`);
-        console.log(`Usage: /context <size>  (min 1024)`);
+        console.log(t("repl.context_usage"));
         return;
       }
       const size = parseInt(args[0], 10);
@@ -699,7 +699,8 @@ function registerSessionCommands(ctx: ReplContext): void {
           pc.dim(`(${match.id.slice(0, 12)})`) +
           "  —  " +
           match.messageCount +
-          " msgs",
+          " " +
+          t("repl.msgs"),
       );
       console.log(pc.dim("─".repeat(50)));
       if (history.length === 0) {

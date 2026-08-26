@@ -671,6 +671,7 @@ export class OpenAICompatProvider implements LLMProvider {
     let lastRetryAfter = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      lastRetryAfter = 0;
       try {
         const response = await fetch(url, init);
         if (!this.isRetryable(response.status)) return response;

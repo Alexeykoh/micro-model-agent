@@ -81,10 +81,10 @@ describe("formatPlanChecklist", () => {
     expect(lines[2]).toContain("[*] 2.");
   });
 
-  it("falls back to step 1 when all steps are done", () => {
+  it("returns -1 when all steps are done", () => {
     const plan = makePlan();
     plan.steps.forEach((s) => (s.status = "done"));
-    expect(currentStepIndex(plan)).toBe(0);
+    expect(currentStepIndex(plan)).toBe(-1);
   });
 });
 

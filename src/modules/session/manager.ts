@@ -218,6 +218,7 @@ export class SessionManager {
 
   private enforceMaxSessions(): void {
     const max = this.options.maxSessions ?? 50;
+    if (max <= 0) return;
     const sessions = this.store.listSessions();
     if (sessions.length > max) {
       const toDelete = sessions.slice(max);

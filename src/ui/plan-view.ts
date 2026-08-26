@@ -27,8 +27,7 @@ export function readActivePlan(baseDir: string): Plan | null {
 }
 
 export function currentStepIndex(plan: Plan): number {
-  const idx = plan.steps.findIndex((s) => s.status !== "done" && s.status !== "skipped");
-  return idx === -1 ? 0 : idx;
+  return plan.steps.findIndex((s) => s.status !== "done" && s.status !== "skipped");
 }
 
 function stepMark(step: PlanStep): string {

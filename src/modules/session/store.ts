@@ -330,7 +330,7 @@ export class SessionStore {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const sessions = this.listSessions();
+    const sessions = this.listSessions().slice();
 
     for (const session of sessions) {
       const updatedAt = new Date(session.updatedAt);

@@ -228,7 +228,9 @@ export class ContextManager {
 
   getQuality(): number {
     const usedTokens = this.getEstimatedTokens();
-    const tokenLoad = Math.max(0, 1 - usedTokens / this.budget.history);
+    const tokenLoad = this.budget.history > 0
+      ? Math.max(0, 1 - usedTokens / this.budget.history)
+      : 0;
 
     // Recoverable penalty: each compaction loses some information, but the
     // penalty is CAPPED so cumulative compactions can never permanently pin
