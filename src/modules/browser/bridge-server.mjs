@@ -198,5 +198,22 @@ rl.on("line", async (line) => {
   process.stdout.write(JSON.stringify(resp) + "\n");
 });
 
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+let shuttingDown = false;
+async function shutdown() {
+  // Idempotent: signals, stdin close and the explicit close command may race.
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    await handleClose();
+  } catch (err) {
+    // Best-effort cleanup: never block process exit on a broken browser.
+    console.error("[bridge-server] cleanup during shutdown failed:", err);
+  }
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());
+// Parent died without sending "close" (crash, kill -9): stdin EOF is the
+// last signal we get — without this the bridge and its Chromium leak.
+rl.on("close", () => void shutdown());
