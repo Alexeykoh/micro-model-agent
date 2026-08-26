@@ -207,10 +207,16 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     console.log(t("migration.detected", { summary }));
     try {
       unlinkSync(globalPath);
-    } catch {}
+    } catch (e) {
+      // Best-effort removal: loadConfig falls back to defaults either way,
+      // but a leftover v1 file would re-trigger migration on every startup.
+      console.error("[config] failed to remove legacy config.json:", e);
+    }
   }
 
-  let config: AppConfig = { ...DEFAULTS };
+  // Deep clone: DEFAULTS holds singleton objects (security, lsp, tools…)
+  // that must never be mutated by runtime config changes.
+  let config: AppConfig = structuredClone(DEFAULTS);
   let legacyDetected = false;
 
   // Step 1: legacy config.json (fallback)

@@ -22,6 +22,7 @@ export interface ProviderManagerOptions {
  */
 export class ProviderManager {
   private entries: ProviderEntry[];
+  private lastKnownFallback?: boolean;
   private activeProviderName: string;
   private model: string;
   private opts: ProviderManagerOptions;
@@ -33,6 +34,7 @@ export class ProviderManager {
     this.registry = opts.registry ?? defaultRegistry();
     this.entries = this.normalizeEntries(config);
     this.activeProviderName = this.resolveActive(config);
+    this.lastKnownFallback = config.fallback;
     this.model = "";
   }
 
@@ -119,12 +121,14 @@ export class ProviderManager {
   }
 
   /** Serialize back to ProviderConfig (keeps active/entries in sync). */
-  toConfig(): ProviderConfig {
+  toConfig(fallback?: boolean): ProviderConfig {
     const active = this.activeEntry;
     return {
       active: this.activeProviderName,
       entries: this.entries,
-      fallback: false,
+      // Preserve the configured value — hardcoding false silently dropped
+      // the user's provider.fallback on every hot-swap.
+      fallback: fallback ?? this.lastKnownFallback ?? false,
       type: active.type,
       baseUrl: active.baseUrl,
       apiKey: active.apiKey,

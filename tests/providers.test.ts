@@ -307,3 +307,31 @@ describe("providers module", () => {
     });
   });
 });
+describe("ProviderManager fallback preservation (audit 2026-08-26)", () => {
+  const opts = { contextWindow: 32768 };
+  it("toConfig preserves fallback:true after construction and hot-swap", () => {
+    const m = new ProviderManager(
+      {
+        active: "a",
+        entries: [
+          { type: "openai-compat", label: "a", baseUrl: "http://localhost:1/v1" },
+          { type: "openai-compat", label: "b", baseUrl: "http://localhost:2/v1" },
+        ],
+        fallback: true,
+      } as any,
+      opts,
+    );
+    expect(m.toConfig().fallback).toBe(true);
+    m.switch("b");
+    expect(m.toConfig().fallback).toBe(true);
+  });
+
+  it("toConfig keeps explicit explicit override parameter", () => {
+    const m = new ProviderManager(
+      { active: "a", entries: [{ type: "openai-compat", label: "a", baseUrl: "http://x/v1" }] },
+      opts,
+    );
+    expect(m.toConfig(false).fallback).toBe(false);
+    expect(m.toConfig().fallback).toBe(false);
+  });
+});
