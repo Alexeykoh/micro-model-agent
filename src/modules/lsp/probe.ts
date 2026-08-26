@@ -1,6 +1,6 @@
 import type { LspConfig, LspServerConfig } from "./types";
 import { LspClient } from "./client";
-import { getLanguageForFile } from "./config";
+import { getServerKeyForFile } from "./config";
 import { collectCheckFiles } from "./check-tool";
 import { findProjectRoot } from "./project-root";
 
@@ -70,7 +70,7 @@ export async function probeLspServers(
   const seen = new Set<string>();
   const servers: Array<{ language: string; config: LspServerConfig }> = [];
   for (const file of files) {
-    const language = getLanguageForFile(file);
+    const language = getServerKeyForFile(file, config);
     if (!language) continue;
     const server = config.servers[language];
     if (!server || seen.has(language)) continue;

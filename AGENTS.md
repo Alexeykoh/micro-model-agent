@@ -427,13 +427,13 @@ src/
 │   │   ├── walker.ts   # Recursive walker, language detection, export extraction
 │   │   ├── cache.ts    # JSON cache of index results
 │   │   └── module.ts   # AgentModule — PromptBlock + project_map tool + watch plugin
-│   ├── lsp/            # LSP diagnostics (typescript/css), on-demand + write/edit plugin
+│   ├── lsp/            # LSP diagnostics (typescript/css/html/json/python/rust/go + angular), on-demand + write/edit plugin
 │   │   ├── module.ts   # AgentModule — lsp_check tool + onAfterTool plugin (per-server disable, cap 40)
 │   │   ├── check-tool.ts # lsp_check helpers: collectCheckFiles (dir walk, cap 15) + formatCheckDiagnostics
 │   │   ├── probe.ts    # probeLspServers — REPL banner: which servers apply to the project + do they start
 │   │   ├── client.ts   # LSP over stdio (spawn, initialize, didOpen, shutdown) + probe()
 │   │   ├── command.ts  # resolveSpawnCommand + buildWinCommandLine (win32 shell)
-│   │   ├── config.ts   # Per-language server config (command/args/workspaceMarkers)
+│   │   ├── config.ts   # Per-language server config (command/args/workspaceMarkers); `.html` routes to the `angular` server (`ngserver` from `@angular/language-server`, workspaceMarkers: `angular.json`) inside Angular workspaces, generic html server elsewhere
 │   │   └── project-root.ts # findProjectRoot via workspace markers
 │   ├── memory/         # Persistent markdown (conventions.md, decisions.md, errors.md)
 │   ├── context/        # ContextManager (budget calc, sliding window compaction)

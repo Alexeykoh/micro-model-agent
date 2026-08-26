@@ -412,20 +412,27 @@ export class LspClient {
   }
 
   /**
-   * Extract the actual binary name from npx args.
-   * For `npx --yes --package typescript-language-server --package typescript@5 typescript-language-server --stdio`
-   * returns `typescript-language-server` (the last non-flag arg before `--stdio`).
+   * Extract the actual binary name from npx args — only for the strict layout
+   * `[--yes] [--package X]... <binary> --stdio`. Servers with trailing server
+   * arguments (e.g. angular's `ngserver --stdio --tsProbeLocations …`) return
+   * null and always run through npx, so their flags are never mistaken for the
+   * binary or stripped.
    */
   private extractBinaryFromNpxArgs(args: string[]): string | null {
-    // Find the binary: last arg that doesn't start with -- and isn't a package version
-    for (let i = args.length - 1; i >= 0; i--) {
-      const arg = args[i];
-      if (arg === "--stdio") continue;
-      if (arg.startsWith("--")) return null; // unexpected format
-      if (this.isPackageVersion(arg)) continue;
-      return arg;
+    const stdioIdx = args.lastIndexOf("--stdio");
+    if (stdioIdx !== args.length - 1 || stdioIdx < 1) return null;
+    const binary = args[stdioIdx - 1];
+    if (!binary || binary.startsWith("-") || this.isPackageVersion(binary)) return null;
+    for (let i = 0; i < stdioIdx - 1; i++) {
+      const a = args[i];
+      if (a === "--yes") continue;
+      if (a === "--package") {
+        i++;
+        continue;
+      }
+      return null;
     }
-    return null;
+    return binary;
   }
 
   /** Check if a string looks like a package version specifier (e.g. "typescript@5"). */
