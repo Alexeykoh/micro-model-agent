@@ -29,3 +29,25 @@ describe("glob", () => {
     expect(result.output).toContain("c.ts");
   });
 });
+
+describe("glob security (audit 2026-08-26)", () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mma-test-"));
+  });
+  afterEach(() => {
+    if (existsSync(tmpDir)) rmdirSync(tmpDir, { recursive: true });
+  });
+
+  it("rejects absolute patterns", async () => {
+    const ctx = { baseDir: tmpDir, config: {}, logger: { info: () => {}, error: () => {} } };
+    const result = await globTool.handler(ctx, { pattern: "/etc/*" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects .. traversal patterns", async () => {
+    const ctx = { baseDir: tmpDir, config: {}, logger: { info: () => {}, error: () => {} } };
+    const result = await globTool.handler(ctx, { pattern: "../../*" });
+    expect(result.success).toBe(false);
+  });
+});

@@ -2,7 +2,9 @@ import { spawn, execFileSync } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { logBashCommand } from "../modules/security/audit-log";
+import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
+import { isPathInScope } from "../modules/security/path-validator";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
 
 function truncateLines(output: string): string {
@@ -81,6 +83,29 @@ export const grepTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const pattern = String(args.pattern);
     const searchPath = args.path ? resolve(ctx.baseDir, String(args.path)) : ctx.baseDir;
+
+    // Security: the search directory must stay inside baseDir / scope /
+    // allowed paths — `path: "../../.."` must not read outside the sandbox.
+    const scopeCheck = isPathInScope(
+      ctx.baseDir,
+      searchPath,
+      ctx.scope,
+      ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
+    );
+    if (!scopeCheck.allowed) {
+      logSecurityBlock(
+        ctx.sessionId || undefined,
+        "file_read",
+        scopeCheck.reason || "grep path not allowed",
+        String(args.path ?? ctx.baseDir),
+      );
+      return {
+        success: false,
+        output: t("file.path_not_allowed", {
+          path: `${args.path ?? "."} — ${scopeCheck.reason}`,
+        }),
+      };
+    }
 
     // Build rg arguments as an array to avoid shell interpretation of regex
     // metacharacters like |, (, ) — these are regex patterns, not shell operators.

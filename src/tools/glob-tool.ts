@@ -17,6 +17,13 @@ export const globTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const pattern = String(args.pattern);
+    // Security: absolute patterns (/etc/*) and ".." segments escape baseDir.
+    if (/^([a-zA-Z]:)?[\\/]/.test(pattern) || pattern.split(/[\\/]/).includes("..")) {
+      return {
+        success: false,
+        output: t("file.path_not_allowed", { path: pattern }),
+      };
+    }
     const results = globSync(pattern, { cwd: ctx.baseDir });
     if (results.length === 0) {
       return { success: true, output: t("file.no_matches") };

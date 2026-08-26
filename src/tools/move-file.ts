@@ -49,8 +49,9 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Check source path permissions
-    const fromCheck = isPathWritable(ctx.baseDir, fromPath, ctx.scope, ctx.config.security?.paths);
+    // Check source path permissions — against the RESOLVED path (the same
+    // one renameSync will act on), never the raw argument.
+    const fromCheck = isPathWritable(ctx.baseDir, fromResolved, ctx.scope, ctx.config.security?.paths);
     if (!fromCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,
@@ -66,8 +67,8 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Check destination path permissions
-    const toCheck = isPathWritable(ctx.baseDir, toPath, ctx.scope, ctx.config.security?.paths);
+    // Check destination path permissions — resolved, same as above.
+    const toCheck = isPathWritable(ctx.baseDir, toResolved, ctx.scope, ctx.config.security?.paths);
     if (!toCheck.allowed) {
       logSecurityBlock(
         ctx.sessionId,

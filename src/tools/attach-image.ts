@@ -76,22 +76,27 @@ export const attachImageTool: ToolDefinition = {
           };
         }
 
-        // Security: check path scope
-        if (ctx.scope) {
-          const { isPathInScope } = await import("../modules/security/path-validator");
-          const validation = isPathInScope(ctx.baseDir, absPath, ctx.scope);
-          if (!validation.allowed) {
-            logSecurityBlock(
-              ctx.sessionId,
-              "file_read",
-              validation.reason ?? "attach_image out of scope",
-              absPath,
-            );
-            return {
-              success: false,
-              output: t("file.path_not_allowed", { path: source }),
-            };
-          }
+        // Security: check global path policy AND subagent scope (same
+        // combination as read_file).
+        const { isPathInScope } = await import("../modules/security/path-validator");
+        const { DEFAULT_SECURITY_CONFIG } = await import("../config/security");
+        const validation = isPathInScope(
+          ctx.baseDir,
+          absPath,
+          ctx.scope,
+          ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
+        );
+        if (!validation.allowed) {
+          logSecurityBlock(
+            ctx.sessionId,
+            "file_read",
+            validation.reason ?? "attach_image out of scope",
+            absPath,
+          );
+          return {
+            success: false,
+            output: t("file.path_not_allowed", { path: source }),
+          };
         }
 
         const result = await loadFileAsDataUrl(absPath);

@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
-import { isPathInScope } from "./scope-check";
+import { isPathInScope } from "../modules/security/path-validator";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { runChunkQuery } from "../modules/context/chunk-query";
 
 export const chunkQueryTool: ToolDefinition = {
@@ -68,12 +69,20 @@ export const chunkQueryTool: ToolDefinition = {
 
     let content = text || "";
     if (inputPath) {
-      const check = isPathInScope(ctx.baseDir, inputPath, ctx.scope);
+      // Same policy as read_file: global security paths (denied patterns
+      // like .env/keys) + subagent scope.
+      const resolvedInput = resolve(ctx.baseDir, inputPath);
+      const check = isPathInScope(
+        ctx.baseDir,
+        resolvedInput,
+        ctx.scope,
+        ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
+      );
       if (!check.allowed) {
         return { success: false, output: `[SCOPE] ${check.reason || "Path not allowed"}` };
       }
       try {
-        content = readFileSync(resolve(ctx.baseDir, inputPath), "utf8");
+        content = readFileSync(resolvedInput, "utf8");
       } catch (e: any) {
         return { success: false, output: `Cannot read ${inputPath}: ${e.message}` };
       }
