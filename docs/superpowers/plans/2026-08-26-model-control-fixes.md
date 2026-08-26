@@ -68,6 +68,19 @@
 
 Паттерн Round 3: stale-capture (config захвачен один раз и расходится с жизнью объекта) и «тихие» деградации (AGENTS.md выпадает из бюджета молча, failover отключается без предупреждения).
 
+### Round 4 — config-слой (config.ts, providers/manager.ts, domains.ts, migration)
+
+| # | Оценка | Находка | Где | Task |
+|---|--------|---------|-----|------|
+| C1 | **4** | `MMA_PROVIDER_*`/`MMA_MODEL` env-overrides игнорируются при наличии `provider.entries` (normalizeEntries предпочитает entries, env пишет только flat-поля) → cert harness тестирует не того провайдера на multi-entry конфигах | `config.ts:144-148`, `manager.ts:134-137` | 30 |
+| C2 | **4** | Миграция удаляет живой конфиг: битый JSON или отсутствие одного из 3 полей = «v1» → unlink; backupAll существует, но НЕ вызывается (AGENTS.md обещает полный бэкап ~/.mma) | `detect.ts:27-34`, `config.ts:203-211` | 31 |
+| C3 | 3 | `toConfig()` хардкодит `fallback:false` → любой hot-swap затирает пользовательский failover | `manager.ts:127` | 32 |
+| C4 | 3 | Env-значения персистятся: applyEnvVars мутирует in-memory конфиг → следующий saveConfig записывает harness-baseUrl в домен-файлы навсегда | `config.ts:139-167` | 33 |
+| C5 | 3 | Битый config.json/domain файл глотается молча (`catch {}`) → юзер работает на дефолтах, считая что его настройки активны | `loadJSON`, `loadDomainFiles` | 34 |
+| C6 | 2 | deepMerge разрушает RegExp (spread) — restoreDangerousPatterns это заплатка над собственным багом | `config.ts:48` | 35 |
+| C7 | 2 | deepMerge/regexReplacer/reviver продублированы в config.ts ↔ domains.ts | оба | 35 |
+| C8 | 1 | DEFAULTS.experts: модель захардкожена 4 раза вместо ссылки на DEFAULTS.model | `defaults.ts:25-46` | 35 |
+
 ---
 
 ## Wave 1 — Context integrity (criticals #1, #4, #13)
@@ -461,7 +474,55 @@
 
 ---
 
-## Release
+## Wave 9 — Round-4 audit: config layer (config.ts, manager.ts, domains.ts, migration)
+
+### Task 30: Env provider overrides dead when `provider.entries` exist (#C1, 4/5)
+
+**Problem:** `applyEnvVars` (`config.ts:144-148`) writes only the legacy flat fields (`provider.baseUrl/apiKey/type`), but `ProviderManager.normalizeEntries` (`manager.ts:134-137`) prefers `entries[]` and ignores flat fields entirely. On any multi-entry setup the `MMA_MODEL` / `MMA_PROVIDER_BASEURL` / `MMA_PROVIDER_APIKEY` overrides — the exact mechanism the certification harness uses — silently do nothing.
+
+**Files:** `src/modules/providers/manager.ts`, `src/config/config.ts`; test `tests/providers.test.ts`
+
+- [ ] Manager accepts an optional override in opts (`envOverride?: {model?, baseUrl?, apiKey?}`) applied to the resolved active entry at build time; bootstrap passes parsed env vars. Alternatively: `applyEnvVars` patches `entries[active]` too. Assert with entries-configured fixture that env baseUrl reaches the built provider.
+
+### Task 31: Migration deletes a recoverable config (#C2, 4/5)
+
+**Problem:** `detect.needsMigration` treats ANY of (a) missing one of `provider/contextWindow/contextBudget`, (b) JSON parse error as v1 → `loadConfig` backs up ONLY config.json (`BackupManager.backupConfig`) then `unlinkSync`. AGENTS.md claims a full `~/.mma.bak/` copy — `backupAll()` exists but is never called from loadConfig. A truncated/hand-edited v2 config is destroyed instead of reported.
+
+**Files:** `src/config/config.ts`, `src/migration/detect.ts`; test `tests/config.test.ts`
+
+- [ ] Parse error ≠ migration: warn + fall back to defaults WITHOUT deleting. Missing-field heuristic only fires when `version` is absent or `1.x`. Call `backupAll()` before touching anything (matches documented behavior).
+
+### Task 32: `toConfig()` wipes `provider.fallback` (#C3, 3/5)
+
+**Problem:** `manager.ts:127` hardcodes `fallback: false` — every hot-swap round-trip (`Agent.setProvider` → `toConfig()` → save) erases the user's failover setting.
+
+**Files:** `src/modules/providers/manager.ts`; test `tests/providers.test.ts`
+
+- [ ] Preserve the source flag: constructor stores `config.fallback ?? false`; `toConfig` returns it verbatim.
+
+### Task 33: Env-var values leak into persisted config (#C4, 3/5)
+
+**Problem:** `applyEnvVars` mutates the in-memory config; any later `saveConfig` (REPL `/model use`, wizard) permanently persists session-scoped env values (e.g. harness baseUrl) into domain files.
+
+**Files:** `src/config/config.ts` (+ call sites that save)
+
+- [ ] Track env-overridden keys during load; `saveDomainFiles` strips them (or save the pre-env snapshot). Test: set MMA_PROVIDER_BASEURL, load, save, assert persisted file keeps original value.
+
+### Task 34: Silent swallow of malformed config files (#C5, 3/5)
+
+**Problem:** `loadJSON`/`loadDomainFiles` `catch {}` — a typo'd config.json silently yields pure defaults; user believes their settings are active.
+
+**Files:** `src/config/config.ts`, `src/config/domains.ts`
+
+- [ ] Warn via logger/console (i18n key `config.parse_failed`, en+ru) naming the offending path; continue with defaults. Not silent.
+
+### Task 35 (minor): DRY + smells (#C6–#C8, 1–2/5)
+
+- [ ] deepMerge destroys RegExp instances (object spread) — `restoreDangerousPatterns` is a patch over this own bug; make deepMerge pass non-plain-objects through by reference (`constructor !== Object` → assign).
+- [ ] Unify `deepMerge`/`regexReplacer`/`regexReviver` duplicated across `config.ts` ↔ `domains.ts`.
+- [ ] `DEFAULTS.experts` hardcodes `"qwen/qwen3.5-9b"` four times → derive from `DEFAULTS.model`.
+
+---
 
 - [ ] Full `bun test` + `bunx tsc --noEmit`
 - [ ] Live smoke on qwen3.5-9B (LM Studio): multi-file task — watch session.jsonl for (a) no orphan tool messages, (b) stable system prompt, (c) reasoning control transitions, (d) no duplicated big write payloads.
