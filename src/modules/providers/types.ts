@@ -31,6 +31,8 @@ export interface ProviderOptions {
   /** Per-call completion cap (max_tokens). Default 4096 in openai-compat. */
   maxCompletionTokens?: number;
   capabilities?: Partial<ProviderCapabilities>;
+  /** Optional logger for LLM request/response diagnostics. */
+  logger?: import("../../logger/app-logger").Logger;
 }
 
 /** A registered provider: metadata + a factory that builds the LLMProvider. */

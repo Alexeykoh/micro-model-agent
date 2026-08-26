@@ -1312,6 +1312,7 @@ export class Agent {
       contextWindow: this.deps.config.contextWindow,
       retry: this.deps.config.retry,
       rateLimits: this.deps.config.security?.rateLimits,
+      logger: this.deps.logger,
     });
     manager.switch(name, model);
     const providerCfg = manager.toConfig();
@@ -1341,6 +1342,7 @@ export class Agent {
         contextWindow: this.deps.config.contextWindow,
         retry: this.deps.config.retry,
         rateLimits: this.deps.config.security?.rateLimits,
+        logger: this.deps.logger,
       });
       manager.setModel(this.deps.config.model);
       manager.switch(name);

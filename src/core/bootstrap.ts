@@ -237,6 +237,7 @@ export async function bootstrap(
     contextWindow: config.contextWindow,
     retry: config.retry,
     rateLimits: config.security?.rateLimits,
+    logger,
   });
   providerManager.setModel(config.model);
   let llmProvider: LLMProvider = providerManager.active;

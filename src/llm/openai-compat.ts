@@ -24,6 +24,7 @@ export interface OpenAICompatConfig {
   maxCompletionTokens?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
+  logger?: import("../logger/app-logger").Logger;
 }
 
 interface ToolCallAcc {
@@ -84,6 +85,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private tokenCounter: TokenCounter;
   private retryConfig: RetryConfig;
   private rateLimiter: RateLimiter;
+  private debug: ((msg: string, meta?: Record<string, unknown>) => void) | null;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
@@ -98,6 +100,7 @@ export class OpenAICompatProvider implements LLMProvider {
       noDataTimeoutMs: 180000,
     };
     this.rateLimiter = createRateLimiter(config.rateLimits);
+    this.debug = config.logger ? config.logger.debug.bind(config.logger) : null;
   }
 
   async *chat(
@@ -134,7 +137,9 @@ export class OpenAICompatProvider implements LLMProvider {
     }
 
     if (!hasToolCall && !hasText) {
+      this.debug?.("LLM streaming produced no text/tool_call — falling back to non-streaming");
       const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
+      this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
       for (const chunk of fallback) {
         yield chunk;
       }
@@ -211,6 +216,16 @@ export class OpenAICompatProvider implements LLMProvider {
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
     });
+    this.debug?.("LLM stream request", {
+      baseUrl: this.config.baseUrl,
+      model: this.model,
+      stream: true,
+      maxTokens,
+      toolsCount: tools?.length ?? 0,
+      reasoningEffort: options?.reasoningEffort,
+      reasoningStrategy: options?.reasoningStrategy,
+      messagesCount: messages.length,
+    });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
       this.buildRequestSetup(signal);
 
@@ -245,6 +260,12 @@ export class OpenAICompatProvider implements LLMProvider {
       throw err;
     }
 
+    const contentType = response.headers?.get?.("content-type") ?? "";
+    this.debug?.("LLM stream response headers", {
+      status: response.status,
+      contentType,
+    });
+
     const reader = response.body?.getReader();
     if (!reader) {
       cleanup();
@@ -258,6 +279,11 @@ export class OpenAICompatProvider implements LLMProvider {
     // If the stream stalls after this, the provider most likely buffers SSE
     // instead of streaming argument deltas (seen with LM Studio).
     let sawToolCallStart = false;
+    // Format mismatch diagnostics (e.g. Ollama NDJSON without the "data: " prefix).
+    let nonDataLines = 0;
+    const nonDataSamples: string[] = [];
+    let parsedChunks = 0;
+    let midStreamError: string | null = null;
 
     let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
     let sawDone = false;
@@ -312,16 +338,27 @@ export class OpenAICompatProvider implements LLMProvider {
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data: ")) continue;
-
-          const data = trimmed.slice(6);
-          if (data === "[DONE]") {
-            sawDone = true;
-            continue;
+          if (!trimmed) continue;
+          let data: string;
+          if (trimmed.startsWith("data: ")) {
+            data = trimmed.slice(6);
+            if (data === "[DONE]") {
+              sawDone = true;
+              continue;
+            }
+          } else {
+            // Not SSE-framed — Ollama (and some other backends) may stream
+            // NDJSON or send mid-stream errors as bare JSON. Try to parse the
+            // raw line; unparseable noise (SSE comments, keep-alives) is
+            // counted and skipped.
+            nonDataLines++;
+            if (nonDataSamples.length < 5) nonDataSamples.push(trimmed.slice(0, 200));
+            data = trimmed;
           }
 
           try {
             const parsed = JSON.parse(data);
+            parsedChunks++;
             const choice = parsed.choices?.[0];
             if (!choice) {
               // Usage comes in the last chunk with empty choices
@@ -331,59 +368,83 @@ export class OpenAICompatProvider implements LLMProvider {
                   completionTokens: parsed.usage.completion_tokens ?? 0,
                   totalTokens: parsed.usage.total_tokens ?? 0,
                 };
+                this.debug?.("LLM stream usage", { ...usage });
+              } else if (parsed.error) {
+                // Mid-stream provider error (Ollama sends {"error": "..."} as
+                // bare JSON once generation already started). Surface it —
+                // swallowing it makes the response look silently empty.
+                // Thrown OUTSIDE the JSON-parse try/catch below.
+                midStreamError = String(parsed.error);
               }
-              continue;
-            }
-
-            const delta = choice.delta || {};
-            const finishReason = choice.finish_reason;
-            if (finishReason) lastFinishReason = finishReason;
-
-            if (delta.reasoning_content) {
-              onEmit();
-              yield { type: "reasoning", content: delta.reasoning_content };
-            }
-
-            if (delta.tool_calls) {
-              sawToolCallStart = true;
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!toolCallAccs.has(idx)) {
-                  toolCallAccs.set(idx, { id: "", name: "", arguments: "" });
-                }
-                const acc = toolCallAccs.get(idx)!;
-                if (tc.id) acc.id = tc.id;
-                if (tc.function?.name) acc.name = tc.function.name;
-                if (tc.function?.arguments) {
-                  acc.arguments += tc.function.arguments;
-                }
+              // NOTE: no `continue` here — it would skip the midStreamError
+              // throw below (which lives outside this try/catch).
+            } else {
+              if (parsedChunks <= 3 || parsedChunks % 50 === 0) {
+                const d = choice.delta ?? {};
+                this.debug?.("LLM stream chunk", {
+                  n: parsedChunks,
+                  finishReason: choice.finish_reason ?? null,
+                  deltaKeys: Object.keys(d),
+                });
               }
-            }
 
-            if (delta.content) {
-              onEmit();
-              sawText = true;
-              yield { type: "text", content: delta.content };
-            }
+              const delta = choice.delta || {};
+              const finishReason = choice.finish_reason;
+              if (finishReason) lastFinishReason = finishReason;
 
-            if (finishReason === "tool_calls" && toolCallAccs.size > 0) {
-              for (const [, acc] of toolCallAccs) {
-                if (acc.name) {
-                  onEmit();
-                  yield {
-                    type: "tool_call",
-                    toolCall: {
-                      id: acc.id,
-                      name: acc.name,
-                      arguments: acc.arguments || "{}",
-                    },
-                  };
+              // `reasoning` is the Ollama alias for OpenAI's `reasoning_content`.
+              const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
+              if (reasoningDelta) {
+                onEmit();
+                yield { type: "reasoning", content: reasoningDelta };
+              }
+
+              if (delta.tool_calls) {
+                sawToolCallStart = true;
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0;
+                  if (!toolCallAccs.has(idx)) {
+                    toolCallAccs.set(idx, { id: "", name: "", arguments: "" });
+                  }
+                  const acc = toolCallAccs.get(idx)!;
+                  if (tc.id) acc.id = tc.id;
+                  if (tc.function?.name) acc.name = tc.function.name;
+                  if (tc.function?.arguments) {
+                    acc.arguments += tc.function.arguments;
+                  }
                 }
               }
-              toolCallAccs.clear();
+
+              if (delta.content) {
+                onEmit();
+                sawText = true;
+                yield { type: "text", content: delta.content };
+              }
+
+              if (finishReason === "tool_calls" && toolCallAccs.size > 0) {
+                for (const [, acc] of toolCallAccs) {
+                  if (acc.name) {
+                    onEmit();
+                    yield {
+                      type: "tool_call",
+                      toolCall: {
+                        id: acc.id,
+                        name: acc.name,
+                        arguments: acc.arguments || "{}",
+                      },
+                    };
+                  }
+                }
+                toolCallAccs.clear();
+              }
             }
           } catch {
             // Skip malformed JSON lines
+          }
+          if (midStreamError) {
+            throw new Error(
+              t("error.llm_provider_stream_error", { error: midStreamError.slice(0, 300) }),
+            );
           }
         }
       }
@@ -415,6 +476,15 @@ export class OpenAICompatProvider implements LLMProvider {
     } finally {
       cleanup();
       reader.releaseLock();
+      this.debug?.("LLM stream finished", {
+        sawDone,
+        lastFinishReason: lastFinishReason ?? null,
+        sawText,
+        sawToolCallStart,
+        parsedChunks,
+        nonDataLines,
+        nonDataSamples: nonDataLines > 0 ? nonDataSamples : undefined,
+      });
     }
     return sawDone;
   }
@@ -501,6 +571,10 @@ export class OpenAICompatProvider implements LLMProvider {
       }
 
       const data = await response.json();
+      // Some backends (e.g. Ollama) return HTTP 200 with {"error": "..."}.
+      if (data.error && !data.choices) {
+        throw new Error(t("error.llm_provider_stream_error", { error: String(data.error).slice(0, 300) }));
+      }
       const choice = data.choices?.[0];
       if (!choice) {
         return [];
@@ -509,8 +583,9 @@ export class OpenAICompatProvider implements LLMProvider {
       const msg = choice.message || {};
       const chunks: Chunk[] = [];
 
-      if (msg.reasoning_content) {
-        chunks.push({ type: "reasoning", content: msg.reasoning_content });
+      const reasoning = msg.reasoning_content ?? msg.reasoning;
+      if (reasoning) {
+        chunks.push({ type: "reasoning", content: reasoning });
       }
       if (msg.content) {
         chunks.push({ type: "text", content: msg.content });

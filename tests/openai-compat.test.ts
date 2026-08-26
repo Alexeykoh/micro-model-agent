@@ -828,4 +828,88 @@ describe("OpenAICompatProvider", () => {
     }
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it("should parse NDJSON lines without the 'data: ' prefix (Ollama-style streams)", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const mockFetch = vi.fn();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"choices":[{"delta":{"content":"Hi"}}]}\n'));
+        controller.enqueue(encoder.encode('{"choices":[{"delta":{"content":" there"}}]}\n'));
+        controller.enqueue(encoder.encode('{"choices":[{"delta":{},"finish_reason":"stop"}]}\n'));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: stream, headers: new Map() });
+    global.fetch = mockFetch as any;
+
+    const chunks: string[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+    }
+    expect(chunks.join("")).toBe("Hi there");
+  });
+
+  it("should surface a mid-stream error object instead of returning an empty response", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const mockFetch = vi.fn();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+        controller.enqueue(encoder.encode('{"error":"an error was encountered while running the model"}\n'));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: stream, headers: new Map() });
+    global.fetch = mockFetch as any;
+
+    let gotText = "";
+    const consume = async () => {
+      for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+        if (chunk.type === "text" && chunk.content) gotText += chunk.content;
+      }
+    };
+    await expect(consume()).rejects.toThrow(/error was encountered/);
+    // Content delivered before the error is not lost.
+    expect(gotText).toBe("partial");
+  });
+
+  it("should treat delta.reasoning as reasoning content (Ollama alias)", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:11434/v1",
+    });
+
+    const mockFetch = vi.fn();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning":"thinking..."}}]}\n\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"answer"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: stream, headers: new Map() });
+    global.fetch = mockFetch as any;
+
+    let reasoning = "";
+    let text = "";
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "reasoning") reasoning += chunk.content;
+      if (chunk.type === "text") text += chunk.content;
+    }
+    expect(reasoning).toBe("thinking...");
+    expect(text).toBe("answer");
+  });
 });
