@@ -14,6 +14,45 @@
 
 ---
 
+## Findings register (audit 2026-08-26)
+
+Оценка: **5** = критично (ломает агента) … 1 = косметика.
+
+### Round 1 — ядро управления моделью
+
+| # | Оценка | Находка | Где | Task |
+|---|--------|---------|-----|------|
+| 1 | **5** | Аргументы тулов не обрезаются в `<system-summary>` → write_file дублирует файл в контексте целиком | `agent.ts:953` | 1 |
+| 2 | **5** | Reasoning-полиси мёртвая: iter-флаги сбрасываются ДО чтения полиси; `consecutiveSuccesses`/`isRepetitive` захардкожены | `agent.ts:532-536,637-647` | 3 |
+| 3 | **5** | `set_thinking`/`/thinking` не влияет на запросы: `reasoningState.level` никогда не читается при построении chat call | `agent.ts`, `set-thinking.ts` | 4 |
+| 4 | **5** | Компакция рвёт пары assistant(tool_calls)/tool по фиксированному cutoff → невалидная последовательность для API/Jinja | `manager.ts:403-405` | 2 |
+| 5 | 4 | Non-streaming fallback игнорирует reasoning-чанки → двойная генерация у thinking-моделей | `openai-compat.ts:130-146` | 5 |
+| 6 | 4 | Rate limiter кидает plain Error до fetch → ход умирает вместо паузы | `openai-compat.ts:113-117` | 6 |
+| 7 | 4 | Repetition overlap >0.5 ретраит короткие честные ответы («Готово.» ×2 = 100%) | `confidence.ts:35-44` | 7 |
+| 8 | 4 | Успех на последней итерации репортится как `success:false` max_iters | `agent.ts:1244` | 8 |
+| 9 | 4 | LLM-judge на том же слабом модели + regex keyword decisions (`plan\|decided\|решено`) — нарушение правила №10 | `llm-judge.ts`, `agent.ts:1167` | 10 |
+| 10 | 4 | Системный промпт мутирует каждый ход (план в dynamic blocks) → prefix KV-cache мёртв на локальных бэкендах | `agent.ts:604` | 11 |
+| 11 | 3 | Двойной empty-response механизм: hallucinationRetries(3) + почти недостижимый emptyResponseRetries(2) | `agent.ts:1184-1200`, `confidence.ts` | 9 |
+| 12 | 3 | FactualCheck: cooldown-ветка возвращает false без проверки тёплого кэша; синхронный обход 20k файлов на hot path | `factual.ts:116-121` | 12 |
+| 13 | 3 | Каждый tool result лежит в контексте дважды (role:"tool" + summary envelope) | `agent.ts:1025-1028` | 1 |
+| 14 | 3 | Три несовместимых token-эвристики (/2, /4, tiktoken) в одном бюджете | `agent.ts`, `manager.ts` | 13 |
+| 15 | 3 | Provenance/cost по `provider.type`, а не label entry → failover-entries неразличимы | `agent.ts:150-155` | 14 |
+
+### Round 2 — executor, MoE, chunk-query
+
+| # | Оценка | Находка | Где | Task |
+|---|--------|---------|-----|------|
+| R2-1 | **4** | Таймер таймаута тула никогда не очищается: стреляет через 60s после успеха и выполняет `ctx.cleanup()` ТЕКУЩЕГО вызова (clobber) + держит event loop | `executor.ts:88-105` | 15 |
+| R2-2 | **4** | MoE теряет `opts.onTool`: нет тул-событий → слепой UI, `TurnSummary.toolCalls=0`, REPL план-чеклист не обновляется | `agent-moe.ts:66,73` | 16 |
+| R2-3 | **4** | Ответ MoE не пишется в contextManager/session history (single-agent loop — единственный писатель assistant — не запускается) → история user→user | `agent.ts` run() MoE branch | 17 |
+| R2-4 | 3 | Утечка abort-listeners на общем AbortController (once-listener на каждый вызов, все срабатывают разом при abort) | `executor.ts:118-122` | 18 |
+| R2-5 | 3 | chunk_query: один failed chunk убивает весь запрос (нет catch); нет AbortSignal; синтез-промпт растёт без cap | `chunk-query.ts:119-131` | 19 |
+| R2-6 | 2 | Семантика buildFinalResult (упавший сабтаск = failed при компенсации оркестратором); executeByName ctx-swap non-reentrant | `agent-moe.ts:251`, `executor.ts:30` | 20 |
+
+Общий паттерн Round 1: управляющая логика рассыпалась на орфаненные механизмы (#2, #3), двойные счётчики (#11, #13) и лечение симптомов (#7). Round 2 добавляет класс «отложенные побочные эффекты» (R2-1, R2-4): таймеры/listeners переживают свой вызов и портят чужое состояние.
+
+---
+
 ## Wave 1 — Context integrity (criticals #1, #4, #13)
 
 ### Task 1: Truncate tool arguments in `<system-summary>` envelopes (#1, #13)
