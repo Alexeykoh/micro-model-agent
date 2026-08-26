@@ -51,6 +51,23 @@
 
 Общий паттерн Round 1: управляющая логика рассыпалась на орфаненные механизмы (#2, #3), двойные счётчики (#11, #13) и лечение симптомов (#7). Round 2 добавляет класс «отложенные побочные эффекты» (R2-1, R2-4): таймеры/listeners переживают свой вызов и портят чужое состояние.
 
+### Round 3 — инициализация (main.ts, bootstrap.ts)
+
+| # | Оценка | Находка | Где | Task |
+|---|--------|---------|-----|------|
+| M1 | **4** | Опечатка в субкоманде уходит модели как промпт (`mma sesion list` → LLM) | `main.ts:52-58` | 21 |
+| M2 | **4** | `--json` без try/catch: throw = стек вместо `{"success":false}`; shutdown/waitForIdle пропускаются | `main.ts:69` | 22 |
+| M3 | 3 | `--reasoning` парсится, но в REPL-ветке не передаётся в bootstrap | `main.ts:50,145` | 23 |
+| M4 | 3 | First-run wizard проверяет `~/.mma/config.json`, игнорируя `MMA_CONFIG_DIR`; может открыть stdin-визард при `--exit-on-complete` | `main.ts:125-127` | 24 |
+| B1 | **4** | Тулы читают устаревший конфиг: `toolCtx.config` захвачен раз и навсегда; reconfigure меняет только deps.config (хак с llmProvider в agent.ts:1322 — свидетельство того же класса бага) | `bootstrap.ts:370` | 25 |
+| B2 | 3 | Reasoning probe — блокирующий LLM-вызов на старте; кэш `${baseUrl}\|${model}` вечен (рестарт бэкенда с другим шаблоном = протухший вердикт) | `bootstrap.ts:266` | 26 |
+| B3 | 3 | Token-оценки len/4 занижают кириллицу ~×2 → ru AGENTS.md молча выпадает из системного промпта на 32K моделях | все `Math.ceil(len/4)` | 27 |
+| B4 | 3 | Hot-swap строит голый ProviderManager → FallbackProvider отброшен, failover мёртв после `/provider use` | `agent.ts:1310` | 28 |
+| B5 | 2 | MCP initialize без таймаута держит старт | `bootstrap.ts:447` | 29 |
+| B6 | 1 | Пустой `~/.mma/AGENTS.md` создаётся только чтобы существовать; тяжёлый последовательный bootstrap | `bootstrap.ts:330` | 29 |
+
+Паттерн Round 3: stale-capture (config захвачен один раз и расходится с жизнью объекта) и «тихие» деградации (AGENTS.md выпадает из бюджета молча, failover отключается без предупреждения).
+
 ---
 
 ## Wave 1 — Context integrity (criticals #1, #4, #13)
@@ -308,8 +325,6 @@
 
 ---
 
----
-
 ## Wave 7 — Round-2 audit findings (executor, MoE, chunk-query)
 
 ### Task 15: Executor timeout timer never cleared — stale cleanup clobbers the next call (#R2-1)
@@ -375,6 +390,77 @@
 
 ---
 
+## Wave 8 — Round-3 audit: initialization (main.ts, bootstrap.ts)
+
+### Task 21: Unknown subcommand typo is silently sent to the LLM as a prompt (#M1, 4/5)
+
+**Problem:** `main.ts:52-58` — if `program.args[0]` matches a command name, main returns (commander already handled it); ANY other first argument falls into the prompt branch. `mma sesion list` becomes a chat prompt "sesion list".
+
+**Files:** `src/cli/main.ts`; test `tests/cli/main-*`
+
+- [ ] Guard: when `program.args.length > 0` and args[0] is NOT a known command, check Levenshtein distance against command names (≤2) → print "unknown command, did you mean X?" + exit 2 instead of prompting. Genuinely free-form prompts never look like a single known word followed by more words... simplest safe rule: only warn when args[0] edit-distance-close to an existing command name; everything else stays a prompt.
+
+### Task 22: `--json` mode violates its contract on throw (#M2, 4/5)
+
+**Problem:** `main.ts:69` — `agent.run()` unguarded; MoE AbortError/plugin crashes produce a stack trace instead of JSON, skip `shutdown()`/`waitForIdle()`.
+
+**Files:** `src/cli/main.ts`; test optional (manual)
+
+- [ ] Wrap both run branches in try/catch; on catch emit `{"success":false,"error":message}` in jsonMode (or renderer error otherwise), still `agent.shutdown()` + `await updater?.waitForIdle()`, exit 1.
+
+### Task 23: `--reasoning` ignored in interactive mode (#M3, 3/5)
+
+**Files:** `src/cli/main.ts:145`
+
+- [ ] Pass `reasoningLevel` in the REPL bootstrap call too. One-line fix + smoke check that REPL honors it via `logReasoningControl`.
+
+### Task 24: First-run wizard checks the wrong config dir (#M4, 3/5)
+
+**Problem:** `main.ts:125-127` hardcodes `homedir()/.mma/config.json`; `MMA_CONFIG_DIR` (used by cert harness sandboxes) ignored → wizard can fire inside `--exit-on-complete` runs and block on stdin.
+
+**Files:** `src/cli/main.ts`
+
+- [ ] Resolve `dir = process.env.MMA_CONFIG_DIR || join(homedir(),".mma")` first; check `<dir>/config.json` (+ domain files there). Skip wizard entirely when `exitOnComplete` (a non-interactive run must never open the wizard).
+
+### Task 25: Tools read a stale config object after reconfigure (#B1, 4/5)
+
+**Problem:** `toolCtx.config` captured once at bootstrap (`bootstrap.ts:370`); `Agent.reconfigure()` swaps `deps.config` but not the executor context — security validators and tools keep enforcing the OLD settings after `/model use`, wizard, or any config change. Existing evidence of this bug class: `agent.ts:1322` hacks `(toolExecutor as any).ctx.llmProvider` — llmProvider was patched, config forgotten.
+
+**Files:**
+- Modify: `src/core/bootstrap.ts` (make `toolCtx.config` a live getter like sessionId)
+- Modify: `src/core/agent.ts` (`reconfigure` no longer needs the llmProvider hack if ctx gets getters too — keep scope minimal: config getter now, llmProvider getter optional cleanup)
+- Test: `tests/core/bootstrap.test.ts` extension
+
+- [ ] `Object.defineProperty(toolCtx, "config", { get: () => <shared ref> })`. Since `reconfigure` replaces `agent.deps.config`, the shared ref should live in ONE place — e.g. a `configRef = { current: config }` box created at bootstrap, used by both toolCtx getter and `reconfigure`. Assert: mutate config → `toolCtx.config.security.enabled` reflects it immediately.
+
+### Task 26: Reasoning probe blocks startup + immortal cache (#B2, 3/5)
+
+**Files:** `src/core/bootstrap.ts`, `src/modules/reasoning/probe.ts`
+
+- [ ] Move the probe into a background promise consumed lazily alongside `lazyPromptBlocks` (same pattern as the health check); until resolved treat as not-passed.
+- [ ] Cache entries gain a TTL (e.g. 24h, timestamped file under `~/.mma/cache/reasoning-probe.json`) so a restarted backend with a different template re-probes.
+
+### Task 27: Token estimates ignore script (len/4 vs Cyrillic ×2) (#B3, 3/5)
+
+**Problem:** every hand-built PromptBlock uses `Math.ceil(len/4)`; Cyrillic is ~1 token per 2 chars → budgets underestimate up to 2x → ru AGENTS.md silently excluded from the system prompt on 32K models.
+
+**Files:** `src/core/bootstrap.ts`, `src/tools/hidden-tools-block.ts` callers; helper in `src/llm/token-counter.ts` or `src/core/prompt-utils.ts`
+
+- [ ] Single `estimateTokens(text)` helper: script-aware heuristic — count CJK/Cyrillic chars separately (cyr ≈ /2, latin ≈ /4) or reuse the injected TokenCounter when available at block-build time (it is, in bootstrap). Replace all `length/4` sites. Add unit test with Russian text asserting estimate within ±30% of tiktoken.
+
+### Task 28: Hot-swap drops FallbackProvider (#B4, 3/5)
+
+**Files:** `src/core/agent.ts` (`setProvider`)
+
+- [ ] When `config.provider.fallback && entries > 1`, wrap the newly built provider manager in `FallbackProvider` same as bootstrap. Extract a shared factory `buildActiveProvider(config, logger)` used by BOTH bootstrap and `setProvider`/`reconfigure` (DRY — currently three construction sites drift).
+
+### Task 29 (minor): MCP init timeout + startup sequencing (#B5, #B6, 1–2/5)
+
+- [ ] Bound `mcpModule.initialize()` with a timeout (e.g. 10s, log-and-continue — MCP tools appear late rather than blocking boot).
+- [ ] Delete the pointless empty `~/.mma/AGENTS.md` creation or gate behind first-run wizard.
+
+---
+
 ## Release
 
 - [ ] Full `bun test` + `bunx tsc --noEmit`
@@ -404,3 +490,5 @@
 17. `fix(agent): write MoE results into context and session history`
 18. `fix(tools): remove abort listeners after each tool call`
 19. `fix(context): chunk_query survives per-chunk failures, supports abort`
+20. `fix(cli): unknown-command guard + json-mode error contract + wizard dir`
+21. `fix(bootstrap): live toolCtx.config, lazy reasoning probe, script-aware token estimates, failover-safe hot-swap`
