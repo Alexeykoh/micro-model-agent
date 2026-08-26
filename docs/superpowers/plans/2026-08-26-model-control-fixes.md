@@ -269,6 +269,73 @@
 
 ---
 
+---
+
+## Wave 7 — Round-2 audit findings (executor, MoE, chunk-query)
+
+### Task 15: Executor timeout timer never cleared — stale cleanup clobbers the next call (#R2-1)
+
+**Problem:** `executor.ts:88-105` — the timeout `setTimeout` is never stored/cleared. After every successful tool call a live 60s timer remains; when it fires it (a) keeps the event loop alive, (b) calls `killByCallId(old id)` (harmless), (c) runs `this.ctx.cleanup?.()` — which by then belongs to the CURRENT call — and sets it to `undefined`, so the running tool loses its cleanup. Rejecting an already-settled promise is a no-op, but the side effects are not.
+
+**Files:**
+- Modify: `src/tools/executor.ts`
+- Test: `tests/executor.test.ts`
+
+- [ ] **Step 1: Failing tests.**
+  - Tool completes fast; advance fake timers past the timeout → assert `ctx.cleanup` was NOT invoked and no kill happened.
+  - Tool times out → cleanup IS invoked (existing behavior preserved).
+- [ ] **Step 2: Implement.** Store the timer id; clear it when the race settles (`finally`). Alternative: `.unref()` the timer AND capture cleanup locally per call (`const cleanup = this.ctx.cleanup`) instead of reading `this.ctx.cleanup` at fire time — do both (unref prevents keep-alive; local capture prevents cross-call clobber).
+
+**Done when:** stale timer firing after a successful call has zero observable effects.
+
+### Task 16: MoE path drops `onTool` — blind UI, zero turn toolCalls (#R2-2)
+
+**Problem:** `agent-moe.ts:66` declares `opts.onTool`, line 73 never destructures it, nothing in the MoE pipeline emits tool events. Consequences in MoE mode: no tool cards/spinner detail in the renderer, `TurnSummary.toolCalls === 0`, REPL plan-checklist refresh (keyed on `plan`/`todo` tool-end) never fires.
+
+**Files:**
+- Modify: `src/modules/execution/moe-executor.ts` (accept + forward `onTool`)
+- Modify: `src/core/agent-moe.ts` (pass `opts.onTool` through)
+- Test: `tests/core/moe-abort.test.ts` extension or new `tests/core/moe-tool-events.test.ts`
+
+- [ ] **Step 1: Failing test.** Run runWithMoE with a stub executor whose subtask handler invokes the forwarded callback; assert `onTool` received start/end events.
+- [ ] **Step 2: Implement.** Thread `onTool` into `MoEExecutor` deps; emit `{type:"start"/"end", tool:"subagent", args:{subtask}}` around each subtask spawn (subagent tool already reports its own children via its own executor path — verify no double-emission when subtasks run the real `ToolExecutor`).
+
+### Task 17: MoE final answer never reaches context/session history (#R2-3)
+
+**Problem:** in the MoE branch of `Agent.run()`, `executeSingleAgentLoop` (the only writer of assistant messages to `contextManager` + `slog.logAssistant`) never runs. History ends `user → user` across turns; compaction task-tracking and the model's view of the dialogue are corrupted; session.jsonl lacks the assistant turn.
+
+**Files:**
+- Modify: `src/core/agent.ts` (`run()`, MoE branch)
+- Test: `tests/core/agent.test.ts`
+
+- [ ] **Step 1: Failing test.** Stub MoE deps returning a final result; after `run()` assert `contextManager.getActiveHistory()` contains an assistant message whose text matches the result, and the session log recorded it.
+- [ ] **Step 2: Implement.** After `runWithMoE` resolves successfully, write the assistant turn: `contextManager.addMessage({role:"assistant", content: result.text})` + `slog.logAssistant(...)` (mirror the single-agent acceptance path). Fallback path must stay single-write (it already goes through the loop).
+- [ ] **Step 3:** Also record failed/partial results as assistant messages so the next turn has continuity.
+
+### Task 18: Executor accumulates abort listeners on the shared controller (#R2-4)
+
+**Problem:** `executor.ts:118-122` adds a `once` listener to the long-lived agent AbortController per tool call; they pile up until abort, then all fire at once replaying `killByCallId`/cleanup for ancient calls. Hundreds of calls = hundreds of dead listeners.
+
+**Files:** `src/tools/executor.ts`; test in `tests/executor.test.ts`
+
+- [ ] Use `AbortSignal.any`-style composition or remove the listener in a `finally` (`signal.removeEventListener("abort", onAbort)` after the race settles). Assert listener count stability across 50 calls (spy on addEventListener/removeEventListener or check `signal.eventListenerList` where available; otherwise assert behaviorally: abort after 50 completed calls triggers exactly one cleanup).
+
+### Task 19: One failing chunk kills the whole chunk_query (#R2-5)
+
+**Problem:** `chunk-query.ts:119-131` — worker has `try/finally` but no `catch`: a single 429/timeout rejects `Promise.all`, discarding every completed answer. Also `chatText` gets no AbortSignal (Esc can't interrupt a 300s query) and the synthesis prompt grows unbounded with chunk count.
+
+**Files:** `src/modules/context/chunk-query.ts`; test `tests/chunk-query.test.ts`
+
+- [ ] **Step 1: Failing tests.** Provider fails on chunk 2 only → result contains answers for all other chunks + a `[FAILED]` marker for chunk 2; synthesis still runs.
+- [ ] **Step 2: Implement.** Per-chunk `catch` → `answers[idx] = "[FAILED] <error slice>"`; thread optional `signal` from the tool through `chatText`; cap synthesis input (join until N chars, note truncation).
+
+### Task 20 (minor): MoE result semantics (#R2-6) + ctx-swap reentrancy note
+
+- [ ] Decide & document: `buildFinalResult` returns `success:false` when any subtask failed even if the orchestrator compensated and declared `final`. Either trust the orchestrator verdict (`success: verificationSuccess && verifyResult.confident !== false`) or keep current behavior and surface it explicitly in the text (already shows ❌ lines — likely fine; just document).
+- [ ] `ToolExecutor.executeByName` swaps `this.ctx` non-reentrantly — fine today (sequential callers); add a comment warning against concurrent use.
+
+---
+
 ## Release
 
 - [ ] Full `bun test` + `bunx tsc --noEmit`
@@ -293,3 +360,8 @@
 12. `fix(hallucination): factual rescan consults warm cache`
 13. `refactor(llm): unified token estimation helpers`
 14. `fix(pricing): provenance by provider entry label`
+15. `fix(tools): clear tool timeout timer, capture cleanup per call`
+16. `feat(moe): emit tool events through the MoE pipeline`
+17. `fix(agent): write MoE results into context and session history`
+18. `fix(tools): remove abort listeners after each tool call`
+19. `fix(context): chunk_query survives per-chunk failures, supports abort`
