@@ -2,6 +2,59 @@
 
 ## Актуальное
 
+### MoE Completion — план `docs/superpowers/plans/2026-08-26-moe-completion.md`
+
+Цель: довести MoE из MVP до потенциально основного режима. Полный аудит дыр — в плане (§1).
+
+**Сделано (Wave 1 + Wave 2, коммиты на master):**
+- [x] **Plan 1.1** `47b00ae` — живой re-plan цикл в `runWithMoE` (`moe.maxReplanCycles`, default 3;
+      лимит переехал из OrchestratorClient в вызывающего; каждый план ревалидируется;
+      битый re-plan → честный partial failure; knownTags из реестра)
+- [x] **Plan 1.2** `d000fa2` — input_from cross-expert data flow (`src/modules/execution/input-from.ts`;
+      результаты зависимых сабтасков инжектятся в промпт, failed dep = `[FAILED]`;
+      валидатор: неизвестный id → error, нет depends_on → autofix;
+      DI-швы в runWithMoE вместо vi.mock — Bun-моки глобальны на процесс и ломают чужие тесты)
+- [x] **Plan 2.1** — scope_request протокол (`src/tools/scope-request.ts`;
+      ScopeDenialCollector в subagent детерминированно собирает path-denials →
+      `<scope-request>` блок; Router approve/reject через
+      `OrchestratorClient.resolveScopeRequest` (unparseable = reject);
+      переисполнение только этого сабтаска; лимит 2 цикла)
+- [x] **Plan 4.1** — Esc/interrupt в MoE (`AbortController` теперь создаётся в `run()`
+      и протягивается signal'ом в runWithMoE/MoEExecutor; AbortError летит наверх без fallback;
+      очередь сабтасков не стартует после прерывания)
+
+Верификация после каждой волны: новые сюиты зелёные, tsc чисто,
+полный прогон 1636 pass / 53 fail (= baseline flake, см. раздел ниже).
+
+**Осталось:**
+
+Wave 3:
+- [ ] **Plan 3.1** — динамические эксперты в Router: `ExpertConfig.description`,
+      список экспертов из `config.experts` рендерится в PLAN_SYSTEM_PROMPT вместо хардкода
+      code/research/browser/vision (`orchestrator.ts:21-25`); knownTags уже из реестра (сделано в 1.1)
+- [ ] **Plan 3.2** — оркестратор через ProviderManager: сейчас OrchestratorClient строит provider
+      напрямую с захардкоженным contextWindow 32768 и без retry/rateLimits/failover entry.
+      Legacy {type,baseUrl,apiKey} должен продолжать работать
+- [ ] **Plan 4.2** — observability: события moe_plan/moe_subtask/moe_replan/moe_verify в session.jsonl
+      (+ `session show`); sessionId реальный вместо хардкода "moe"; cost attribution per subtask
+      (CostTracker.record per-provider уже умеет; нужен breakdown по expert_tag)
+
+Wave 4:
+- [ ] **Plan 5.1 Task 1** — StepVerifier.verifySubtaskCriteria: машиночитаемые success_criteria
+      (file-exists, substring-in-file, command-exit-0) до merge; LLM-only критерии → warning
+      в контекст verifyAndMerge
+- [ ] **Plan 5.1 Task 2** — selective re-plan: executePlan(skipIds) — успешные сабтаски
+      переносятся как carried, переисполняются только упавшие
+
+Wave 5:
+- [ ] **Plan 5.2** — cert suite tag=moe: 2 сценария (параллельные волны; read-after-write
+      через input_from), config override moe.enabled+orchestrator, timeoutMs 600_000;
+      обновить спеку (Draft → Implemented) и AGENTS.md; наблюдения → docs/small-model-observations.md
+
+Definition of Done плана — в конце файла плана.
+
+---
+
 ### Фаза 2+3: Multi-provider + provenance ✅ ЗАКОММИЧЕНО
 - Ветка `providers`, коммит `2ed48c2`
 - ProviderManager, hot-swap, CLI/REPL, caller provenance
