@@ -2,6 +2,32 @@ import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import { semverGt } from "../updater/checker";
+import { Logger } from "../../logger/app-logger";
+
+const logger = new Logger("warn", "plugins");
+
+/**
+ * Run a (possibly async) plugin hook with error isolation. Sync throws and
+ * async rejections are both logged and swallowed — one broken plugin must
+ * never crash the agent or other plugins.
+ */
+function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): unknown {
+  try {
+    const out = fn();
+    if (out instanceof Promise) {
+      // The promise rejects AFTER this try/catch has exited — attach a catch
+      // now, otherwise isolation is broken by an unhandledRejection.
+      out.catch((e: unknown) => {
+        logger.warn(`plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
+      });
+      return undefined;
+    }
+    return out;
+  } catch (e) {
+    logger.warn(`plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
+    return undefined;
+  }
+}
 
 export type RegisterResult =
   | { status: "registered" }
@@ -75,13 +101,9 @@ export class PluginManager {
   }
 
   runOnBuildPrompt(): (string | null)[] {
-    return this.plugins.map((p) => {
-      try {
-        return p.onBuildPrompt?.() ?? null;
-      } catch {
-        return null;
-      }
-    });
+    return this.plugins.map(
+      (p) => (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
+    );
   }
 
   async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
@@ -91,8 +113,8 @@ export class PluginManager {
         try {
           const result = await plugin.onBeforeTool(ctx, call);
           if (result === false) return false;
-        } catch {
-          /* error isolation */
+        } catch (e) {
+          logger.warn(`plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
         }
       }
     }
@@ -105,8 +127,8 @@ export class PluginManager {
       if (plugin.onAfterTool) {
         try {
           await plugin.onAfterTool(ctx, call, result);
-        } catch {
-          /* error isolation */
+        } catch (e) {
+          logger.warn(`plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
         }
       }
     }
@@ -118,8 +140,8 @@ export class PluginManager {
       if (plugin.onError) {
         try {
           await plugin.onError(ctx, error);
-        } catch {
-          /* error isolation */
+        } catch (e) {
+          logger.warn(`plugin "${plugin.name}" onError failed`, { error: String(e) });
         }
       }
     }
@@ -129,11 +151,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onSessionStart) {
-        try {
-          plugin.onSessionStart(ctx);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onSessionStart", () => plugin.onSessionStart!(ctx));
       }
     }
   }
@@ -142,11 +160,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onBeforeThink) {
-        try {
-          plugin.onBeforeThink(ctx);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onBeforeThink", () => plugin.onBeforeThink!(ctx));
       }
     }
   }
@@ -155,11 +169,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onAfterThink) {
-        try {
-          plugin.onAfterThink(ctx, response);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onAfterThink", () => plugin.onAfterThink!(ctx, response));
       }
     }
   }
@@ -168,11 +178,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onSessionEnd) {
-        try {
-          plugin.onSessionEnd(ctx);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onSessionEnd", () => plugin.onSessionEnd!(ctx));
       }
     }
   }
@@ -181,11 +187,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolCall) {
-        try {
-          plugin.onToolCall(ctx);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onToolCall", () => plugin.onToolCall!(ctx));
       }
     }
   }
@@ -194,11 +196,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onPhase) {
-        try {
-          plugin.onPhase(ctx, phase);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onPhase", () => plugin.onPhase!(ctx, phase));
       }
     }
   }
@@ -207,11 +205,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolStart) {
-        try {
-          plugin.onToolStart(ctx, call);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onToolStart", () => plugin.onToolStart!(ctx, call));
       }
     }
   }
@@ -220,11 +214,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onToolEnd) {
-        try {
-          plugin.onToolEnd(ctx, call, result, durationMs);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onToolEnd", () => plugin.onToolEnd!(ctx, call, result, durationMs));
       }
     }
   }
@@ -234,12 +224,8 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onText) {
-        try {
-          const out = plugin.onText(ctx, chunk);
-          if (typeof out === "string") chunk = out;
-        } catch {
-          /* error isolation */
-        }
+        const out = safeInvoke(plugin, "onText", () => plugin.onText!(ctx, chunk));
+        if (typeof out === "string") chunk = out;
       }
     }
     return chunk;
@@ -250,12 +236,8 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onMeta) {
-        try {
-          const out = plugin.onMeta(ctx, chunk);
-          if (typeof out === "string") chunk = out;
-        } catch {
-          /* error isolation */
-        }
+        const out = safeInvoke(plugin, "onMeta", () => plugin.onMeta!(ctx, chunk));
+        if (typeof out === "string") chunk = out;
       }
     }
     return chunk;
@@ -266,11 +248,7 @@ export class PluginManager {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onTurnEnd) {
-        try {
-          plugin.onTurnEnd(ctx, summary);
-        } catch {
-          /* error isolation */
-        }
+        safeInvoke(plugin, "onTurnEnd", () => plugin.onTurnEnd!(ctx, summary));
       }
     }
   }

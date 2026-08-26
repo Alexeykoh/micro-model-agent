@@ -74,6 +74,12 @@ export class LineEditor implements LineInput {
   private questionCb: ((answer: string) => void) | null = null;
   private rawMode = false;
   private listeners: EditorListeners = {};
+  /** stdin handlers registered in the constructor — removed in close() so
+   *  re-creating the editor never accumulates stale listeners. */
+  private dsrDataHandler?: (buf: Buffer | string) => void;
+  private keypressHandler?: (str: string, key: unknown) => void;
+  private dataHandler?: (buf: Buffer) => void;
+  private endHandler?: () => void;
   /** Visual row (within the drawn frame) where the cursor was placed by the
    *  last render — fallback for moving back to the frame's first row before
    *  redrawing when no absolute anchor is known yet. Relative moves break
@@ -111,21 +117,24 @@ export class LineEditor implements LineInput {
       // Raw data listener for DSR cursor-position replies. Runs alongside
       // readline's keypress emitter (both receive every chunk); replies may
       // arrive merged with regular keystrokes, hence the global regex.
-      (this.input as any).on("data", (buf: Buffer | string) =>
-        this.consumeDsrReplies(buf.toString("utf-8")),
-      );
+      this.dsrDataHandler = (buf: Buffer | string) =>
+        this.consumeDsrReplies(buf.toString("utf-8"));
+      (this.input as any).on("data", this.dsrDataHandler);
       readline.emitKeypressEvents(this.input as never);
-      (this.input as any).on("keypress", (str: string, key: unknown) => this.onKey(str, key));
+      this.keypressHandler = (str: string, key: unknown) => this.onKey(str, key);
+      (this.input as any).on("keypress", this.keypressHandler);
     } else {
-      (this.input as any).on("data", (buf: Buffer) => this.onData(buf));
-      (this.input as any).on("end", () => {
+      this.dataHandler = (buf: Buffer) => this.onData(buf);
+      (this.input as any).on("data", this.dataHandler);
+      this.endHandler = () => {
         const last = this.lines.join("\n");
         this.lines = [""];
         this.row = 0;
         this.col = 0;
         if (last) this.emitLine(last);
         this.emitClose();
-      });
+      };
+      (this.input as any).on("end", this.endHandler);
     }
   }
 
@@ -177,6 +186,11 @@ export class LineEditor implements LineInput {
     if (this.isDone) return;
     this.isDone = true;
     this.disableTerminalProtocols();
+    const inp = this.input as any;
+    if (this.dsrDataHandler) inp.removeListener("data", this.dsrDataHandler);
+    if (this.keypressHandler) inp.removeListener("keypress", this.keypressHandler);
+    if (this.dataHandler) inp.removeListener("data", this.dataHandler);
+    if (this.endHandler) inp.removeListener("end", this.endHandler);
     if (this.rawMode && this.input.setRawMode) {
       this.input.setRawMode(false);
     }
@@ -728,7 +742,17 @@ export class LineEditor implements LineInput {
       return;
     }
     if (matches.length === 1) {
-      const from = line.lastIndexOf(partial);
+      // Complete the partial under the CURSOR, not the last occurrence in
+      // the whole line — with the cursor mid-line, lastIndexOf() inserted
+      // at the line's end instead.
+      const chars = Array.from(line);
+      const beforeCursor = chars.slice(0, this.col).join("");
+      let from = beforeCursor.lastIndexOf(partial);
+      if (from === -1) from = line.lastIndexOf(partial);
+      if (from === -1) {
+        this.output.write("\x07");
+        return;
+      }
       const head = line.slice(0, from);
       const tail = line.slice(from + partial.length);
       this.lines[this.row] = head + matches[0] + tail;
@@ -736,9 +760,13 @@ export class LineEditor implements LineInput {
       this.render();
       return;
     }
-    const lines = matches.map((m) => "  " + m);
-    this.output.write("\r\n" + lines.join("\r\n") + "\r\n");
-    this.output.write(`\x1b[${lines.length + 1}A`);
+    const rows = matches.map((m) => "  " + m);
+    this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
+    // The printed list moved the cursor (rows.length + 1) visual rows down
+    // from its frame position. Account for those rows so the next render
+    // redraws the frame in place — otherwise its relative up-move starts
+    // above the frame and paints garbage over the just-printed list.
+    this.prevCursorRow += rows.length + 1;
     this.render();
   }
 

@@ -729,8 +729,13 @@ export class Agent {
             });
           }
           if (chunk.type === "done" && chunk.usage) {
-            apiPromptTokens += chunk.usage.promptTokens;
-            apiCompletionTokens += chunk.usage.completionTokens;
+            // chat() is called ONCE per iteration — every `done` chunk here
+            // belongs to the same logical request (a usage-only stream chunk
+            // followed by the non-streaming fallback emits two done chunks).
+            // REPLACE the running totals instead of accumulating, otherwise
+            // one real request is counted twice.
+            apiPromptTokens = promptBefore + chunk.usage.promptTokens;
+            apiCompletionTokens = completionBefore + chunk.usage.completionTokens;
           }
         }
       } catch (err: any) {

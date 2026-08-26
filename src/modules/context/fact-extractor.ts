@@ -114,15 +114,20 @@ export class FactExtractor {
           content.includes("Ошибка:") ||
           content.includes("не удалось")
         ) {
-          const line = content
+          // A line like "3 passed, 0 failed" is a SUCCESSFUL test run, not an
+          // error — counting it degrades context quality for no reason.
+          const ZERO_FAILURES =
+            /\b0\s+(?:failed|failing|failures?)\b|(?:failed?|failures?|ошиб[а-я]*)\s*[:=]\s*0\b/i;
+          const candidates = content
             .split("\n")
-            .find(
+            .filter(
               (l) =>
                 l.includes("Error:") ||
                 l.includes("failed") ||
                 l.includes("Ошибка:") ||
                 l.includes("не удалось"),
             );
+          const line = candidates.find((l) => !ZERO_FAILURES.test(l));
           if (line) newErrors.push(line.trim().slice(0, 250));
         }
       }

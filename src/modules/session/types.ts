@@ -9,6 +9,8 @@ export interface SessionMeta {
   model: string;
   contextWindow: number;
   projectDir: string;
+  /** History archived to <id>.jsonl.gz by rotateOldSessions — no live messages. */
+  rotated?: boolean;
   /**
    * Session-specific security overrides
    * If present, these override the global security settings for this session

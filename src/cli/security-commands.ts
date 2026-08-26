@@ -13,6 +13,32 @@ import { globalAuditNotifier } from "../modules/security/audit-notifier";
 import { t } from "../i18n/index";
 
 /**
+ * Toggle session-file encryption in place: flips `enabled` (and the two
+ * per-file flags) while PRESERVING user-set fields already stored in the
+ * config (keyPath etc.). Mutates the passed security object.
+ */
+export function toggleSessionEncryption(
+  security: Record<string, any>,
+  enabled: boolean,
+): void {
+  const enc = (security.sessionEncryption ?? {}) as Record<string, any>;
+  enc.enabled = enabled;
+  enc.encryptHistory = enabled;
+  enc.encryptSessionLog = enabled;
+  security.sessionEncryption = enc;
+}
+
+/**
+ * Toggle audit notifications in place: flips `enabled` only, preserving
+ * webhookUrl / filePath / minSeverity / eventTypes set by the user.
+ */
+export function toggleAuditNotifier(security: Record<string, any>, enabled: boolean): void {
+  const notifier = (security.auditNotifier ?? {}) as Record<string, any>;
+  notifier.enabled = enabled;
+  security.auditNotifier = notifier;
+}
+
+/**
  * Create security subcommand
  */
 export function createSecurityCommand(program: Command): void {
@@ -114,12 +140,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
 
-      (appConfig as any).security = (appConfig as any).security || {};
-      (appConfig as any).security.sessionEncryption = {
-        enabled: true,
-        encryptHistory: true,
-        encryptSessionLog: true,
-      };
+      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      toggleSessionEncryption(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.encryption_enabled"));
@@ -133,12 +155,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
 
-      (appConfig as any).security = (appConfig as any).security || {};
-      (appConfig as any).security.sessionEncryption = {
-        enabled: false,
-        encryptHistory: false,
-        encryptSessionLog: false,
-      };
+      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      toggleSessionEncryption(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.encryption_disabled"));
@@ -152,14 +170,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
 
-      (appConfig as any).security = (appConfig as any).security || {};
-      (appConfig as any).security.auditNotifier = {
-        enabled: true,
-        minSeverity: "medium",
-        eventTypes: ["security_block", "bash_command", "file_operation", "network_request"],
-        maxRetries: 3,
-        webhookTimeout: 5000,
-      };
+      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      toggleAuditNotifier(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.audit_enabled"));
@@ -173,12 +185,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = join(homedir(), ".mma", "config.json");
       const { config: appConfig } = await bootstrap();
 
-      (appConfig as any).security = (appConfig as any).security || {};
-      (appConfig as any).security.auditNotifier = {
-        enabled: false,
-        maxRetries: 3,
-        webhookTimeout: 5000,
-      };
+      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      toggleAuditNotifier(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
       console.log(t("cli.security.audit_disabled"));

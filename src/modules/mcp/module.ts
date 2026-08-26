@@ -4,6 +4,9 @@ import type { ToolDefinition } from "../../tools/types";
 import type { AppConfig } from "../../config/types";
 import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
+import { Logger } from "../../logger/app-logger";
+
+const logger = new Logger("warn", "mcp");
 
 interface DiscoveredTool {
   serverName: string;
@@ -84,7 +87,9 @@ export class MCPModule implements AgentModule {
         }
       } catch (e: any) {
         this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
-        await client.disconnect().catch(() => {});
+        await client.disconnect().catch((err: unknown) => {
+          logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
+        });
       }
     }
   }
@@ -155,10 +160,14 @@ export class MCPModule implements AgentModule {
       name: "mcp_module",
       priority: 0,
       onSessionEnd: async () => {
-        for (const client of this.connections.values()) {
+        for (const [serverName, client] of this.connections) {
           try {
             await client.disconnect();
-          } catch {}
+          } catch (e: any) {
+            // Best-effort cleanup at session end — a failed disconnect must
+            // not crash the shutdown path, but must stay diagnosable.
+            logger.warn(`disconnect from "${serverName}" failed`, { error: String(e?.message ?? e) });
+          }
         }
       },
     };

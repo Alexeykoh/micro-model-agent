@@ -47,4 +47,14 @@ describe("findProjectRoot", () => {
     writeFileSync(file, "export const a = 1;\n");
     expect(findProjectRoot(file, join(tmp, "proj"), ["package.json"])).toBe(join(tmp, "proj"));
   });
+
+  it("does not climb above baseDir when baseDir itself is passed as filePath (probes)", () => {
+    mkdirSync(join(tmp, "base", "src"), { recursive: true });
+    writeFileSync(join(tmp, "base", "src", "a.ts"), "export const a = 1;\n");
+    // Marker sits NEXT TO baseDir (its parent) — must NOT be picked up.
+    writeFileSync(join(tmp, "package.json"), "{}");
+    expect(findProjectRoot(join(tmp, "base"), join(tmp, "base"), ["package.json"])).toBe(
+      join(tmp, "base"),
+    );
+  });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PlanStore } from "../src/modules/execution/plan-store";
 import { PlanCreator } from "../src/modules/execution/planner";
-import { existsSync, readFileSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync, rmSync, readdirSync } from "fs";
 import { join } from "path";
 
 const TEST_DIR = join(import.meta.dirname, "_test_plan_store");
@@ -154,5 +154,22 @@ describe("PlanStore", () => {
     const all = store.listAll();
     expect(all[0].doneCount).toBe(2);
     expect(all[0].stepCount).toBe(3);
+  });
+
+  it("should write atomically — no .tmp leftover after saveActive", () => {
+    const plan = mkPlan("Atomic Write", ["step A"]);
+    store.saveActive(plan);
+    expect(existsSync(join(TEST_DIR, ".mma", "plans", "active.json"))).toBe(true);
+    expect(existsSync(join(TEST_DIR, ".mma", "plans", "active.json.tmp"))).toBe(false);
+    // The written file must be valid JSON (renameSync never truncates)
+    const raw = readFileSync(join(TEST_DIR, ".mma", "plans", "active.json"), "utf-8");
+    expect(() => JSON.parse(raw)).not.toThrow();
+  });
+
+  it("should leave no .tmp files after draft/archive writes", () => {
+    const plan = mkPlan("Tmp Sweep", ["a"]);
+    store.saveDraft(plan);
+    store.archivePlan(plan);
+    expect(readdirSync(join(TEST_DIR, ".mma", "plans")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 });

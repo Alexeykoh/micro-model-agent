@@ -6,7 +6,6 @@ import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
 import { getMessageText } from "../llm/provider";
 import { join, dirname } from "path";
-import { homedir } from "os";
 import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import type { LineInput } from "../ui/line-editor";
@@ -42,6 +41,7 @@ export interface ReplContext {
   showHelp(): void;
   setupCompleter(): void;
   refreshModelCache(): void;
+  attachHostBridge(pluginManager?: PluginManager): void;
   stop(): void;
 }
 
@@ -276,7 +276,7 @@ function registerMmaCommands(ctx: ReplContext): void {
       console.log(pc.yellow(t("repl.wizard_running")));
       await ctx.withExclusiveInput(async () => {
         const answers = await runSetup(ctx.rl);
-        const configPath = join(homedir(), ".mma", "config.json");
+        const configPath = join(ctx.configDir, "config.json");
         ctx.config.provider.type = answers.provider;
         ctx.config.provider.baseUrl = answers.apiBase;
         ctx.config.provider.apiKey = answers.apiKey;
@@ -410,7 +410,7 @@ function registerMmaCommands(ctx: ReplContext): void {
           return;
         }
         ctx.config.model = name;
-        const configPath = join(homedir(), ".mma", "config.json");
+        const configPath = join(ctx.configDir, "config.json");
         saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
         console.log(pc.green(t("repl.model_set", { name })));
@@ -435,7 +435,7 @@ function registerMmaCommands(ctx: ReplContext): void {
         return;
       }
       ctx.config.contextWindow = size;
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = join(ctx.configDir, "config.json");
       saveConfig(ctx.config, configPath, dirname(configPath));
       await ctx.agent.reconfigure(ctx.config);
       console.log(pc.green(t("cli.context_set", { size })));
@@ -454,7 +454,6 @@ function registerMmaCommands(ctx: ReplContext): void {
       ctx.agent.shutdown();
 
       const { loadConfig } = await import("../config/config");
-      const { homedir } = await import("os");
       const { join } = await import("path");
       const configDir = ctx.configDir;
       const baseDir = ctx.baseDir;
@@ -471,6 +470,13 @@ function registerMmaCommands(ctx: ReplContext): void {
       (ctx as any).sessionManager = result.sessionManager;
       (ctx as any).skillsModule = result.skillsModule;
       (ctx as any).pluginManager = result.pluginManager;
+      if (result.execModule) {
+        (ctx as any).execModule = result.execModule;
+      }
+
+      // The fresh PluginManager has no bridge — re-register it, otherwise
+      // plugins like web-ui silently lose control of the agent.
+      ctx.attachHostBridge(result.pluginManager);
 
       ctx.setupCompleter();
 

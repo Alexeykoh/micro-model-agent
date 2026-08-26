@@ -1,4 +1,5 @@
 import { resolve, normalize } from "path";
+import { realpathSync } from "fs";
 import { isInsideDir, matchesScopeEntry, toForwardSlash } from "../../tools/path-utils";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
@@ -9,6 +10,29 @@ import type { ToolScope } from "../../tools/types";
 export interface PathValidationResult {
   allowed: boolean;
   reason?: string;
+}
+
+/**
+ * Symlink containment: resolve() does NOT follow symlinks, so a symlink
+ * inside baseDir can point outside it. When the target exists on disk its
+ * real path must also stay inside the (real) base directory. Returns true if
+ * the check cannot be performed (target missing) — creation is validated by
+ * the resolved path itself.
+ */
+function escapesViaSymlink(baseResolved: string, targetResolved: string): boolean {
+  try {
+    const realTarget = realpathSync(targetResolved);
+    let realBase = baseResolved;
+    try {
+      realBase = realpathSync(baseResolved);
+    } catch {
+      // Keep the resolved baseDir when it cannot be canonicalized.
+    }
+    return !isInsideDir(realTarget, realBase);
+  } catch {
+    // ENOENT etc — target does not exist yet, nothing to follow.
+    return false;
+  }
 }
 
 /**
@@ -30,6 +54,12 @@ export function isPathInScope(
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
+    };
+  }
+  if (escapesViaSymlink(baseResolved, targetResolved)) {
+    return {
+      allowed: false,
+      reason: "Path resolves outside the base working directory via symlink",
     };
   }
 
@@ -194,53 +224,54 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
   const resolvedBaseDir = resolve(baseDir);
   const resolvedTargetPath = resolve(targetPath);
 
-  // Handle directory patterns (ending with /)
+  // Relative target path used for segment matching
+  const relPath = resolvedTargetPath.startsWith(resolvedBaseDir)
+    ? resolvedTargetPath.slice(resolvedBaseDir.length).replace(/^\//, "")
+    : resolvedTargetPath;
+
+  // Handle patterns with ** (recursive directory matching)
+  if (pattern.includes("**")) {
+    // Split on ** to get prefix/suffix segments
+    const cleaned = pattern.replace(/\/$/, "");
+    const [rawPrefix, rawSuffix] = cleaned.split("**");
+    const prefix = rawPrefix.replace(/\/$/, "");
+    const suffix = rawSuffix.replace(/^\//, "");
+
+    // Check prefix: everything before ** must match the start of the path
+    if (prefix) {
+      const prefixParts = prefix.split("/").filter(Boolean);
+      const relParts = relPath.split("/");
+      for (let i = 0; i < prefixParts.length; i++) {
+        if (relParts[i] !== prefixParts[i]) return false;
+      }
+    }
+
+    // ** at the end matches everything
+    if (!suffix) return true;
+
+    // Check suffix against remaining path segments
+    const suffixParts = suffix.split("/").filter(Boolean);
+    const relParts = relPath.split("/");
+    // Search for suffix match anywhere in remaining path
+    for (let start = (prefix ? prefix.split("/").filter(Boolean).length : 0); start <= relParts.length - suffixParts.length; start++) {
+      let match = true;
+      for (let j = 0; j < suffixParts.length; j++) {
+        if (suffixParts[j] === "*") continue;
+        if (relParts[start + j] !== suffixParts[j]) { match = false; break; }
+      }
+      if (match) return true;
+    }
+    return false;
+  }
+
+  // Handle directory patterns (ending with /) without **
   if (pattern.endsWith("/")) {
     const dirPattern = pattern.slice(0, -1);
     const resolvedDirPattern = resolve(baseDir, dirPattern);
-
     return isInsideDir(resolvedTargetPath, resolvedDirPattern);
   }
 
-  // Handle **/* pattern (recursive)
-  if (pattern.includes("**/")) {
-    const parts = pattern.split("**/");
-    const prefix = parts[0];
-    const suffix = parts[1];
-
-    const resolvedPrefix = resolve(baseDir, prefix);
-    if (!isInsideDir(resolvedTargetPath, resolvedPrefix)) {
-      return false;
-    }
-
-    const remainingPath = resolvedTargetPath.slice(resolvedPrefix.length);
-    if (suffix === "*" || suffix === "") {
-      return true; // Any path after prefix
-    }
-
-    // Check if remaining path contains the suffix
-    return remainingPath.includes(suffix.replace(/\*/g, ""));
-  }
-
-  // Handle ** pattern (recursive any)
-  if (pattern.includes("**")) {
-    const parts = pattern.split("**");
-    const prefix = parts[0];
-    const suffix = parts[1];
-
-    const resolvedPrefix = resolve(baseDir, prefix);
-    if (!isInsideDir(resolvedTargetPath, resolvedPrefix)) {
-      return false;
-    }
-
-    if (!suffix) {
-      return true; // ** at the end matches anything after prefix
-    }
-
-    return resolvedTargetPath.includes(suffix.replace(/\//g, ""));
-  }
-
-  // Handle * pattern (single level)
+  // Handle * pattern (single level) without **
   if (pattern.includes("*")) {
     const regexPattern = pattern
       .replace(/\*/g, "[^/\\\\]*")

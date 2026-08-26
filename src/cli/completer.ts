@@ -199,6 +199,12 @@ export class Completer {
     this.providers.push(provider);
   }
 
+  /** Drop all registered providers — used before a rebuild (e.g. /reload)
+   *  so re-registering never accumulates duplicates. */
+  reset(): void {
+    this.providers = [];
+  }
+
   complete(line: string): [string[], string] {
     const cursor = line.length;
     const tokens = line.split(/\s+/);

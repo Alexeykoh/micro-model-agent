@@ -79,7 +79,11 @@ export async function certify(opts: CertifyOptions): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    selected = filterByScenarios(selected, opts.scenarios!);
+    // A targeted re-run selects from ALL loaded scenarios (union of their
+    // tags), not the tag-filtered subset — otherwise re-running a security
+    // scenario with default core-only tags silently produced an empty
+    // selection.
+    selected = filterByScenarios(scenarios, opts.scenarios!);
   }
   if (selected.length === 0) {
     console.error(pc.red(t("cli.cert_no_scenarios", { tags: opts.tags.join(",") })));
@@ -155,10 +159,14 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     : results;
 
   const suite = summarize(finalResults);
+  // Only a re-run that covers EVERY scenario in the suite may refresh
+  // mmaVersion — a partial re-run leaves most results from an older MMA, so
+  // stamping the current version would fake a fresh certification.
+  const ranEntireSuite = scenarios.every((s) => runIds.has(s.id));
   const entry: CertificationEntry = {
     model: opts.name,
     providerUrl,
-    mmaVersion: readVersion(),
+    mmaVersion: ranEntireSuite ? readVersion() : existing?.mmaVersion ?? readVersion(),
     certifiedAt: new Date().toISOString(),
     suite,
     results: finalResults,

@@ -70,7 +70,9 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    const updated = content.replace(oldStr, newStr);
+    // Replacement via function — otherwise newStr is treated as a template
+    // and `$&`, `$1` etc. would silently corrupt the file content.
+    const updated = content.replace(oldStr, () => newStr);
 
     // Check new content for dangerous patterns — only when security is enabled
     if (securityConfig?.enabled && securityConfig?.contentScan?.enabled) {

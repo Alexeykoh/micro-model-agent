@@ -52,7 +52,7 @@ export class LspClient {
   private process: ChildProcess | null = null;
   private requestId = 0;
   private pending = new Map<number, PendingRequest>();
-  private buffer = "";
+  private buffer: Buffer = Buffer.alloc(0);
   private contentLength = -1;
   private diagnostics: LspDiagnostic[] = [];
   private diagnosticsResolve: ((diags: LspDiagnostic[]) => void) | null = null;
@@ -237,7 +237,7 @@ export class LspClient {
   }
 
   private handleData(chunk: Buffer): void {
-    this.buffer += chunk.toString();
+    this.buffer = Buffer.concat([this.buffer, chunk]);
     this.parseMessages();
   }
 
@@ -247,28 +247,31 @@ export class LspClient {
         const headerEnd = this.buffer.indexOf("\r\n\r\n");
         if (headerEnd === -1) return;
 
-        const header = this.buffer.slice(0, headerEnd);
+        // Headers are ASCII — decode just the header slice.
+        const header = this.buffer.subarray(0, headerEnd).toString("utf8");
         const match = header.match(/Content-Length: (\d+)/i);
         if (!match) {
-          this.buffer = this.buffer.slice(headerEnd + 4);
-          this.contentLength = -1;
+          this.buffer = this.buffer.subarray(headerEnd + 4);
           continue;
         }
 
         this.contentLength = parseInt(match[1], 10);
         // Guard against malicious/buggy servers sending absurd Content-Length
         if (this.contentLength > 10 * 1024 * 1024) {
-          this.buffer = this.buffer.slice(headerEnd + 4);
+          this.buffer = this.buffer.subarray(headerEnd + 4);
           this.contentLength = -1;
           continue;
         }
-        this.buffer = this.buffer.slice(headerEnd + 4);
+        this.buffer = this.buffer.subarray(headerEnd + 4);
       }
 
+      // Content-Length counts BYTES, not JS characters. Slicing a decoded
+      // string by character count corrupts frames containing multi-byte
+      // UTF-8 (e.g. Cyrillic diagnostics) — keep the remainder as raw bytes.
       if (this.buffer.length < this.contentLength) return;
 
-      const body = this.buffer.slice(0, this.contentLength);
-      this.buffer = this.buffer.slice(this.contentLength);
+      const body = this.buffer.subarray(0, this.contentLength).toString("utf8");
+      this.buffer = this.buffer.subarray(this.contentLength);
       this.contentLength = -1;
 
       try {
@@ -377,7 +380,7 @@ export class LspClient {
         this.process = null;
       }
       this.initialized = false;
-      this.buffer = "";
+      this.buffer = Buffer.alloc(0);
       this.contentLength = -1;
       if (this.diagnosticsTimer) {
         clearTimeout(this.diagnosticsTimer);

@@ -35,12 +35,22 @@ export class PlanTracker {
   }
 
   advance(): boolean {
-    if (this.currentStepIndex < this.plan.steps.length - 1) {
-      this.currentStepIndex++;
-      this.plan.steps[this.currentStepIndex].status = "in_progress";
-      return true;
+    // Move past any already-settled (skipped/done) steps without mutating
+    // them — overwriting a "skipped" step with "in_progress" deadlocks the
+    // plan (the model will never work on a step it deliberately skipped).
+    let idx = this.currentStepIndex + 1;
+    while (
+      idx < this.plan.steps.length &&
+      (this.plan.steps[idx].status === "skipped" || this.plan.steps[idx].status === "done")
+    ) {
+      idx++;
     }
-    return false;
+    if (idx >= this.plan.steps.length) return false;
+    this.currentStepIndex = idx;
+    if (this.plan.steps[idx].status === "pending") {
+      this.plan.steps[idx].status = "in_progress";
+    }
+    return true;
   }
 
   /**

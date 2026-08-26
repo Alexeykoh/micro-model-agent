@@ -912,4 +912,38 @@ describe("OpenAICompatProvider", () => {
     expect(reasoning).toBe("thinking...");
     expect(text).toBe("answer");
   });
+
+  it("should NOT fall back to non-streaming when the stream delivered only reasoning", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50 },
+    });
+
+    const mockFetch = vi.fn();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"delta":{"reasoning_content":"thinking about it"}}]}\n\n',
+          ),
+        );
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValue({ ok: true, body: stream, headers: new Map() });
+    global.fetch = mockFetch as any;
+
+    let reasoning = "";
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "reasoning") reasoning += chunk.content;
+    }
+    // Exactly ONE request — the reasoning-only stream is content; the
+    // non-streaming fallback would emit a full duplicate answer.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(reasoning).toBe("thinking about it");
+  });
 });

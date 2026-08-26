@@ -1,6 +1,9 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, rmSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
+import { Logger } from "../../logger/app-logger";
 import type { Plan } from "./planner";
+
+const log = new Logger("info", "plan-store");
 
 export type PlanStatus = "active" | "draft" | "archived";
 
@@ -36,7 +39,11 @@ function readPlanFile(path: string, fallbackBaseDir: string): Plan | null {
 }
 
 function writePlanFile(path: string, plan: Plan): void {
-  writeFileSync(path, JSON.stringify(plan, null, 2), "utf-8");
+  // Atomic write: a crash mid-write must not leave a truncated plan file
+  // (readPlanFile silently returns null on broken JSON → active plan lost).
+  const tmpPath = `${path}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(plan, null, 2), "utf-8");
+  renameSync(tmpPath, path);
 }
 
 function listDir(dir: string, baseDir: string): Plan[] {
@@ -102,7 +109,12 @@ export class PlanStore {
         this.saveActive(legacy);
         try {
           rmSync(this.legacyPath, { force: true });
-        } catch {}
+        } catch (err) {
+          log.warn("Failed to remove migrated legacy plan.json", {
+            path: this.legacyPath,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         return legacy;
       }
     }

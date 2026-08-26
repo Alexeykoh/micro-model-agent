@@ -14,6 +14,9 @@ export class ConsistencyCheck {
 
   trackCreatedFile(path: string): void {
     this.createdFiles.add(path);
+    // A delete followed by a re-create un-deletes the file — otherwise
+    // wasFileDeleted() keeps reporting it as gone after delete+create.
+    this.deletedFiles.delete(path);
   }
 
   trackDeletedFile(path: string): void {

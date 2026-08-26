@@ -158,4 +158,71 @@ describe("SessionStore", () => {
     const meta = store.loadMeta("counter");
     expect(meta!.messageCount).toBe(5);
   });
+
+  it("appendMessage should re-read meta from disk, not the stale cache", () => {
+    // Simulate another process appending a message (meta.json on disk is
+    // ahead of our in-memory cache) — the increment must build on disk state.
+    const meta: SessionMeta = {
+      id: "ext-counter",
+      name: "",
+      createdAt: "",
+      updatedAt: "",
+      messageCount: 7,
+      model: "m1",
+      contextWindow: 1000,
+      projectDir: "",
+    };
+    store.saveMeta("ext-counter", meta);
+    // Corrupt the cache to a stale snapshot (as if another process advanced
+    // meta.json after we cached it).
+    (store as any)._metaCache.set("ext-counter", { ...meta, messageCount: 2 });
+    store.appendMessage("ext-counter", { role: "user", content: "x", timestamp: "" });
+    // Cache bypassed → counter continues from disk value 7, not 2.
+    const raw = JSON.parse(readFileSync(join(tmpDir, "ext-counter", "meta.json"), "utf-8"));
+    expect(raw.messageCount).toBe(8);
+  });
+
+  describe("rotateOldSessions", () => {
+    function saveOldSession(id: string): void {
+      const old = new Date();
+      old.setDate(old.getDate() - 40);
+      store.saveMeta(id, {
+        id,
+        name: id,
+        createdAt: old.toISOString(),
+        updatedAt: old.toISOString(),
+        messageCount: 12,
+        model: "m1",
+        contextWindow: 1000,
+        projectDir: "",
+      });
+      store.appendMessage(id, { role: "user", content: "old msg", timestamp: old.toISOString() });
+    }
+
+    it("marks rotated sessions in meta (messageCount zeroed)", () => {
+      saveOldSession("old-1");
+      // Fresh session with current date — should NOT be rotated
+      store.saveMeta("fresh-1", {
+        id: "fresh-1",
+        name: "fresh-1",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messageCount: 5,
+        model: "m1",
+        contextWindow: 1000,
+        projectDir: "",
+      });
+      store.appendMessage("fresh-1", { role: "user", content: "recent msg", timestamp: "" });
+      store.rotateOldSessions();
+      const rotated = store.loadMeta("old-1")!;
+      expect(existsSync(join(tmpDir, "old-1.jsonl.gz"))).toBe(true);
+      expect(existsSync(join(tmpDir, "old-1", "history.jsonl"))).toBe(false);
+      expect(rotated.rotated).toBe(true);
+      expect(rotated.messageCount).toBe(0);
+      // Fresh session untouched
+      const fresh = store.loadMeta("fresh-1")!;
+      expect(fresh.rotated).toBeUndefined();
+      expect(fresh.messageCount).toBeGreaterThan(0);
+    });
+  });
 });

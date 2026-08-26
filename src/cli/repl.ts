@@ -176,20 +176,29 @@ export class Repl implements ReplContext {
 
     // Expose the agent to plugins (web UI etc.) through a narrow bridge.
     if (pluginManager) {
-      pluginManager.setHostBridge(
-        createHostBridge({
-          isBusy: () => this.agentRunning,
-          addPendingImage: (url) => {
-            this.agent.contextManager?.addPendingImage?.({
-              type: "image_url",
-              image_url: { url },
-            });
-          },
-          runAgent: (text) => this.runAgent(text),
-          interruptRun: () => this.agent.shutdown(),
-        }),
-      );
+      this.attachHostBridge(pluginManager);
     }
+  }
+
+  /** (Re)attach the plugin HostBridge. Called at construction and after
+   *  /reload replaces the PluginManager — without this, a reloaded web-ui
+   *  plugin silently loses the ability to submit messages. */
+  public attachHostBridge(pm?: PluginManager): void {
+    const manager = pm ?? this.pluginManager;
+    if (!manager) return;
+    manager.setHostBridge(
+      createHostBridge({
+        isBusy: () => this.agentRunning,
+        addPendingImage: (url) => {
+          this.agent.contextManager?.addPendingImage?.({
+            type: "image_url",
+            image_url: { url },
+          });
+        },
+        runAgent: (text) => this.runAgent(text),
+        interruptRun: () => this.agent.shutdown(),
+      }),
+    );
   }
 
   private loadHistory(): void {
@@ -209,6 +218,9 @@ export class Repl implements ReplContext {
   }
 
   public setupCompleter(): void {
+    // Rebuild from scratch: /reload calls this again after bootstrap, and
+    // re-registering without a reset would duplicate every provider.
+    this.completer.reset();
     const slashCommands = Array.from(this.commands.keys());
     this.completer.registerProvider(new SlashCommandProvider(slashCommands));
     if (this.sessionManager) {

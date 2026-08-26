@@ -129,14 +129,18 @@ export class OpenAICompatProvider implements LLMProvider {
 
     let hasToolCall = false;
     let hasText = false;
+    let hasReasoning = false;
 
     for await (const chunk of streamResult) {
       if (chunk.type === "tool_call") hasToolCall = true;
       if (chunk.type === "text") hasText = true;
+      if (chunk.type === "reasoning") hasReasoning = true;
       yield chunk;
     }
 
-    if (!hasToolCall && !hasText) {
+    // Reasoning-only streams (thinking models) already delivered content to
+    // the consumer — a fallback would emit a FULL duplicate answer.
+    if (!hasToolCall && !hasText && !hasReasoning) {
       this.debug?.("LLM streaming produced no text/tool_call — falling back to non-streaming");
       const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
       this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });

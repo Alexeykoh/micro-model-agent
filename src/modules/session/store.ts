@@ -190,6 +190,20 @@ export class SessionStore {
     }
   }
 
+  /** Read meta straight from disk, bypassing _metaCache — used where counter
+   *  accuracy matters more than read speed (see appendMessage). */
+  private readMetaFromDisk(id: string): SessionMeta | null {
+    const path = this.metaPath(id);
+    if (!existsSync(path)) return null;
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
+      return JSON.parse(content) as SessionMeta;
+    } catch {
+      return null;
+    }
+  }
+
   appendMessage(id: string, msg: SessionMessage): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -199,7 +213,11 @@ export class SessionStore {
     } else {
       appendFileSync(this.historyPath(id), line + "\n", { encoding: "utf-8", mode: 0o600 });
     }
-    const meta = this.loadMeta(id);
+    // Re-read meta from disk (not the cache) right before the increment so
+    // counters appended by ANOTHER process are not clobbered by a stale
+    // in-memory snapshot (last-write-wins). Full cross-process locking is out
+    // of scope; this narrows the race window.
+    const meta = this.readMetaFromDisk(id) ?? this._metaCache.get(id) ?? null;
     if (meta) {
       meta.messageCount = (meta.messageCount || 0) + 1;
       meta.updatedAt = msg.timestamp || new Date().toISOString();
@@ -324,6 +342,14 @@ export class SessionStore {
           const gzPath = join(this.baseDir, `${session.id}.jsonl.gz`);
           writeFileSync(gzPath, compressed);
           rmSync(historyPath);
+          // Mark the meta so the session stops looking "live" in lists —
+          // otherwise a gzipped session still advertises messageCount > 0.
+          const meta = this.loadMeta(session.id);
+          if (meta) {
+            meta.messageCount = 0;
+            meta.rotated = true;
+            this.saveMeta(session.id, meta);
+          }
         }
       }
     }

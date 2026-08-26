@@ -207,7 +207,8 @@ export class StepVerifier {
 
     if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
       try {
-        await this.runAsync(`npx tsc --noEmit --skipLibCheck ${filePath}`, this.baseDir, 10000);
+        // Quote the path — commands run through a shell and break on spaces.
+        await this.runAsync(`npx tsc --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 10000);
         return true;
       } catch (err: any) {
         if (
@@ -227,7 +228,7 @@ export class StepVerifier {
 
     if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
       try {
-        await this.runAsync(`node --check ${filePath}`, this.baseDir, 5000);
+        await this.runAsync(`node --check "${filePath}"`, this.baseDir, 5000);
         return true;
       } catch {
         return false;

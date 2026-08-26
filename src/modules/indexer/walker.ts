@@ -1,5 +1,8 @@
-import { readdirSync, readFileSync, statSync, existsSync, watch, FSWatcher } from "fs";
+import { readdirSync, readFileSync, statSync, lstatSync, existsSync, watch, FSWatcher } from "fs";
 import { join, relative, extname } from "path";
+import { Logger } from "../../logger/app-logger";
+
+const logger = new Logger("warn", "indexer");
 
 const LANGUAGES: Record<string, string> = {
   ".ts": "typescript",
@@ -71,22 +74,33 @@ export class Indexer {
         if (count >= this.MAX_FILES) return;
         const fullPath = join(dir, entry);
         const relPath = relative(this.baseDir, fullPath);
-        const stat = statSync(fullPath);
+        // Per-entry isolation: a file deleted (or unreadable) between readdir
+        // and stat must not kill the whole walk. Symlinks are skipped — they
+        // can point outside the project or create directory cycles.
+        try {
+          const lst = lstatSync(fullPath, { throwIfNoEntry: false });
+          if (!lst || lst.isSymbolicLink()) continue;
+          const stat = statSync(fullPath);
 
-        if (stat.isDirectory()) {
-          if (!IGNORE_DIRS.has(entry)) {
-            walkDir(fullPath);
+          if (stat.isDirectory()) {
+            if (!IGNORE_DIRS.has(entry)) {
+              walkDir(fullPath);
+            }
+          } else if (stat.isFile()) {
+            const ext = extname(entry).toLowerCase();
+            const language = LANGUAGES[ext];
+            if (language) {
+              const content = readFileSync(fullPath, "utf-8");
+              const exports = this.extractExports(content, language);
+              files.push({ path: relPath, language, exports, size: stat.size });
+              totalSize += stat.size;
+              count++;
+            }
           }
-        } else if (stat.isFile()) {
-          const ext = extname(entry).toLowerCase();
-          const language = LANGUAGES[ext];
-          if (language) {
-            const content = readFileSync(fullPath, "utf-8");
-            const exports = this.extractExports(content, language);
-            files.push({ path: relPath, language, exports, size: stat.size });
-            totalSize += stat.size;
-            count++;
-          }
+        } catch (e) {
+          // Entry vanished or is unreadable — skip it, keep indexing the rest.
+          logger.warn(`indexer: skipping unreadable entry "${relPath}"`, { error: String(e) });
+          continue;
         }
       }
     };

@@ -1,5 +1,5 @@
 import { existsSync } from "fs";
-import { dirname, join } from "path";
+import { dirname, join, relative, isAbsolute } from "path";
 
 /**
  * Resolve the LSP workspace root for an edited file.
@@ -18,6 +18,11 @@ export function findProjectRoot(filePath: string, baseDir: string, markers: stri
   if (!markers || markers.length === 0) return baseDir;
   let dir = dirname(filePath);
   const root = baseDir.replace(/[\\/]+$/, "");
+  // Clamp the walk to baseDir: callers that pass baseDir itself as filePath
+  // (probes) start at dirname(baseDir) — ABOVE the sandbox — and would pick up
+  // a marker directory from the parent (e.g. a package.json next to it).
+  const rel = relative(root, dir);
+  if ((rel && rel.startsWith("..")) || isAbsolute(rel)) dir = root;
   while (true) {
     if (markers.some((m) => existsSync(join(dir, m)))) {
       return dir;
