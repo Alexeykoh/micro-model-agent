@@ -85,16 +85,25 @@ export class ToolExecutor {
         result = await tool.handler(this.ctx, call.arguments);
       } else {
         const timeoutMs = tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS;
+        const failFast = (message: string) => {
+          // Kill any long-running child process registered for this call.
+          killByCallId(call.id);
+          // Run tool-specific cleanup (e.g. subagent scope restore) before
+          // rejecting so shared state is restored even on abandonment.
+          const cleanup = this.ctx.cleanup;
+          if (cleanup) {
+            cleanup();
+            // Clear only if no newer call has replaced it meanwhile.
+            if (this.ctx.cleanup === cleanup) this.ctx.cleanup = undefined;
+          }
+          return new Error(message);
+        };
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let onAbort: (() => void) | undefined;
         const timeoutPromise = new Promise<ToolResult>((_, reject) => {
-          setTimeout(() => {
-            // Kill any long-running child process registered for this call.
-            killByCallId(call.id);
-            // Run tool-specific cleanup (e.g. subagent scope restore) before
-            // rejecting so shared state is restored even on abandonment.
-            this.ctx.cleanup?.();
-            this.ctx.cleanup = undefined;
+          timer = setTimeout(() => {
             reject(
-              new Error(
+              failFast(
                 t("tool.timeout", {
                   name: call.name,
                   seconds: Math.round(timeoutMs / 1000),
@@ -109,12 +118,7 @@ export class ToolExecutor {
         ];
         if (signal) {
           const abortPromise = new Promise<ToolResult>((_, reject) => {
-            const onAbort = () => {
-              killByCallId(call.id);
-              this.ctx.cleanup?.();
-              this.ctx.cleanup = undefined;
-              reject(new Error(t("tool.aborted", { name: call.name })));
-            };
+            onAbort = () => reject(failFast(t("tool.aborted", { name: call.name })));
             if (signal.aborted) {
               onAbort();
             } else {
@@ -123,7 +127,25 @@ export class ToolExecutor {
           });
           racePromises.push(abortPromise);
         }
-        result = await Promise.race(racePromises);
+        try {
+          result = await Promise.race(racePromises);
+        } finally {
+          // Stop the timer and detach the abort listener once settled so they
+          // never fire against a DIFFERENT call's context/cleanup later.
+          if (timer !== undefined) clearTimeout(timer);
+          if (onAbort && signal) signal.removeEventListener("abort", onAbort);
+          // Losing promises have no consumer after Promise.race settled
+          // (their kill/cleanup effects were already applied in failFast).
+          // Log the rejection, then detach it so it never surfaces as an
+          // unhandled rejection.
+          for (const p of racePromises.slice(1)) {
+            p.catch((e: Error) => {
+              this.ctx.logger.debug(
+                `Tool ${call.name}: discarded race loser: ${e.message}`,
+              );
+            });
+          }
+        }
       }
       result.toolCallId = call.id;
     } catch (e: any) {
