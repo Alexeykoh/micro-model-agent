@@ -21,7 +21,7 @@ const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
   whitelist: [],
   blockDangerousFlags: false,
   dangerousFlags: ["--force", "-rf", "--no-preserve-root"],
-  dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "`"],
+  dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "`", "$("],
   logCommands: true,
 };
 
@@ -69,8 +69,9 @@ function extractBaseCommand(trimmed: string): string {
 
   if (i >= tokens.length) return tokens[0] ?? "";
 
-  // Extract basename from path (e.g. /usr/bin/rm → rm)
-  const raw = tokens[i];
+  // Extract basename from path (e.g. /usr/bin/rm → rm). Strip surrounding
+  // quotes first — otherwise `'rm'` / `"rm"` evade the blacklist entirely.
+  const raw = tokens[i].replace(/^["']+|["']+$/g, "");
   const parts = raw.split(/[\\/]/);
   const basename = parts[parts.length - 1] || raw;
   // Strip .exe/.cmd/.bat extensions for blacklist matching (e.g. powershell.exe → powershell)
@@ -138,9 +139,12 @@ export function isCommandAllowed(
   }
 
   // Interpreters with -c/-e execute arbitrary code and bypass the blacklist.
+  // Quotes are stripped first (`'bash' -c`), and the name may follow a path
+  // separator (`/bin/bash -c`), so match those too.
+  const unquotedCommand = trimmedCommand.replace(/["']/g, "");
   const INTERPRETER_FLAGS =
-    /(?:^|\s)(?:bash|sh|zsh|dash|python|python3|node|bun|perl|ruby)\s+(?:-c|-e|--command|--eval)\b/;
-  if (INTERPRETER_FLAGS.test(trimmedCommand)) {
+    /(?:^|[\\/\s])(?:bash|sh|zsh|dash|python|python3|node|bun|perl|ruby)\s+(?:-c|-e|--command|--eval)\b/;
+  if (INTERPRETER_FLAGS.test(unquotedCommand)) {
     return { allowed: false, reason: "Interpreter -c/-e invocation is blocked" };
   }
 
@@ -175,9 +179,14 @@ export function isCommandAllowed(
   // Extract actual base command (handles paths, env vars, sudo)
   const baseCommand = extractBaseCommand(trimmedCommand);
 
+  // Case-insensitive matching: win32/macOS exec is case-insensitive, so
+  // `RM -rf x` must hit the blacklist just like `rm`.
+  const blacklistLower = new Set((config.blacklist || []).map((c) => c.toLowerCase()));
+  const whitelistLower = (config.whitelist || []).map((c) => c.toLowerCase());
+
   // Check whitelist first (if non-empty, only whitelisted commands are allowed)
-  if (config.whitelist.length > 0) {
-    if (!config.whitelist.includes(baseCommand)) {
+  if (whitelistLower.length > 0) {
+    if (!whitelistLower.includes(baseCommand.toLowerCase())) {
       return {
         allowed: false,
         reason: `Command "${baseCommand}" is not in the whitelist`,
@@ -186,7 +195,7 @@ export function isCommandAllowed(
   }
 
   // Check blacklist (against the extracted basename, not the raw token)
-  if (config.blacklist.includes(baseCommand)) {
+  if (blacklistLower.has(baseCommand.toLowerCase())) {
     return {
       allowed: false,
       reason: `Command "${baseCommand}" is blacklisted`,
@@ -194,8 +203,11 @@ export function isCommandAllowed(
   }
 
   // Also check the raw first token in case it's a simple name
-  const rawFirst = trimmedCommand.split(/\s+/)[0].replace(/\.(exe|cmd|bat)$/i, "");
-  if (rawFirst !== baseCommand && config.blacklist.includes(rawFirst)) {
+  const rawFirst = trimmedCommand
+    .split(/\s+/)[0]
+    .replace(/^["']+|["']+$/g, "")
+    .replace(/\.(exe|cmd|bat)$/i, "");
+  if (rawFirst !== baseCommand && blacklistLower.has(rawFirst.toLowerCase())) {
     return {
       allowed: false,
       reason: `Command "${rawFirst}" is blacklisted`,
@@ -242,15 +254,10 @@ export function sanitizeCommandForLog(command: string): string {
 
   let sanitized = command;
   for (const pattern of patterns) {
-    if (pattern.toString().includes("($1")) {
-      // For patterns with capture groups, use the group in replacement
-      sanitized = sanitized.replace(pattern, (match, p1) => {
-        return `${p1}=[REDACTED]`;
-      });
-    } else {
-      // For simple patterns, just replace with [REDACTED]
-      sanitized = sanitized.replace(pattern, "[REDACTED]");
-    }
+    // Whole-match replacement for every pattern: capture-group-aware
+    // replacement would re-emit the secret itself for patterns whose only
+    // group IS the value (e.g. "Bearer <token>", sk-...).
+    sanitized = sanitized.replace(pattern, "[REDACTED]");
   }
   return sanitized;
 }

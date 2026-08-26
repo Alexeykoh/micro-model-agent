@@ -250,3 +250,33 @@ describe("Command Validator", () => {
     });
   });
 });
+
+describe("Command Validator bypass regressions (audit 2026-08-26)", () => {
+  const cfg = () => ({ ...DEFAULT_SECURITY_CONFIG.bash, enabled: true });
+
+  it("blocks quoted blacklist command: 'rm' -rf /", () => {
+    const r = isCommandAllowed("'rm' -rf /", cfg());
+    expect(r.allowed).toBe(false);
+    expect(r.reason).toMatch(/blacklisted/i);
+  });
+
+  it('blocks double-quoted blacklist command: "rm" file', () => {
+    expect(isCommandAllowed('"rm" file', cfg()).allowed).toBe(false);
+  });
+
+  it("blocks case-mangled blacklist command: RM -rf x", () => {
+    expect(isCommandAllowed("RM -rf x", cfg()).allowed).toBe(false);
+  });
+
+  it("blocks full-path interpreter: /bin/bash -c 'anything'", () => {
+    expect(isCommandAllowed("/bin/bash -c 'rm -rf /'", cfg()).allowed).toBe(false);
+  });
+
+  it("blocks quoted interpreter: 'sh' -e evil", () => {
+    expect(isCommandAllowed("'sh' -e evil", cfg()).allowed).toBe(false);
+  });
+
+  it("blocks command substitution $( when blockDangerousFlags is on", () => {
+    expect(isCommandAllowed("echo $(rm -rf /)", cfg()).allowed).toBe(false);
+  });
+});

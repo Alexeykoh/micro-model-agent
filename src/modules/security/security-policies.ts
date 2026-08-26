@@ -103,7 +103,7 @@ export const STRICT_POLICY: SecurityPolicy = {
         "-R",
         "--no-clobber",
       ],
-      dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "&", "`"],
+      dangerousOperators: [">", ">>", "2>", "2>>", "|", "&&", "||", ";", "&", "`", "$("],
       logCommands: true,
     },
     paths: {
