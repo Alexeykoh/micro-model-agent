@@ -198,6 +198,11 @@ export class LspClient {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...config.env },
         cwd: projectRoot,
+        // POSIX: make the child a process-group leader so killTree()'s
+        // `kill(-pid)` reaches the whole chain (npx → node → tsserver).
+        // Without it the group kill fails with ESRCH and grandchildren
+        // survive as orphans. Windows relies on taskkill /T instead.
+        detached: !isWin,
       };
       if (isWin) {
         // A `.cmd` shim can't be spawned directly under Node (`spawn npx EINVAL`) — run via cmd.exe.
