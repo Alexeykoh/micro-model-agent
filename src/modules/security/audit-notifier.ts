@@ -202,7 +202,12 @@ export class AuditNotifier {
 
     // Send to webhook if configured
     if (this.config.webhookUrl) {
-      await this.sendToWebhook(notification);
+      try {
+        await this.sendToWebhook(notification);
+      } catch (error) {
+        console.error("[AuditNotifier] Webhook failed, adding to retry queue:", error);
+        this.addToRetryQueue(notification);
+      }
     }
 
     return notification;
@@ -257,15 +262,16 @@ export class AuditNotifier {
   }
 
   /**
-   * Send notification to webhook
+   * Send notification to webhook. Throws on failure — retry policy is the
+   * caller's decision (notify() queues; processRetryQueue() counts attempts).
    */
   private async sendToWebhook(notification: AuditNotification): Promise<void> {
     if (!this.config.webhookUrl) return;
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.webhookTimeout);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.webhookTimeout);
 
+    try {
       const response = await fetch(this.config.webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -273,14 +279,11 @@ export class AuditNotifier {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         throw new Error(`Webhook returned ${response.status}`);
       }
-    } catch (error) {
-      console.error("[AuditNotifier] Webhook failed, adding to retry queue:", error);
-      this.addToRetryQueue(notification);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -302,27 +305,35 @@ export class AuditNotifier {
 
     this.isProcessing = true;
 
-    while (this.retryQueue.length > 0) {
-      const item = this.retryQueue[0];
+    try {
+      while (this.retryQueue.length > 0) {
+        const item = this.retryQueue[0];
 
-      if (item.retries >= (this.config.maxRetries ?? 3)) {
-        console.error("[AuditNotifier] Max retries exceeded for notification:", item.entry);
-        this.retryQueue.shift();
-        continue;
-      }
+        if (item.retries >= (this.config.maxRetries ?? 3)) {
+          console.error("[AuditNotifier] Max retries exceeded for notification:", item.entry);
+          this.retryQueue.shift();
+          continue;
+        }
 
-      try {
-        await this.sendToWebhook(item.entry);
-        this.retryQueue.shift();
-      } catch (error) {
-        item.retries++;
-        // Exponential backoff
-        const delay = Math.pow(2, item.retries) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        try {
+          await this.sendToWebhook(item.entry);
+          this.retryQueue.shift();
+        } catch (error) {
+          // sendToWebhook no longer queues copies itself — the retry counter
+          // actually increments and maxRetries is reachable.
+          item.retries++;
+          console.error(
+            `[AuditNotifier] Webhook retry ${item.retries} failed:`,
+            error instanceof Error ? error.message : error,
+          );
+          // Exponential backoff before the next attempt on the same head item.
+          const delay = Math.pow(2, item.retries) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
+    } finally {
+      this.isProcessing = false;
     }
-
-    this.isProcessing = false;
   }
 
   /**
@@ -337,7 +348,8 @@ export class AuditNotifier {
       const content = readFileSync(this.config.filePath, "utf8");
       const lines = content.split("\n").filter(Boolean);
       return lines.slice(-limit).map((line) => JSON.parse(line) as AuditNotification);
-    } catch {
+    } catch (error) {
+      console.error("[AuditNotifier] Failed to read notifications:", error);
       return [];
     }
   }

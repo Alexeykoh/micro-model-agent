@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import {
@@ -185,6 +185,43 @@ describe("AuditNotifier", () => {
       expect(result?.severity).toBe("high");
       expect(result?.message).toBe("Blocked command");
       expect(result?.sessionId).toBe("ses-123");
+    });
+
+    it("should drain the retry queue after maxRetries (no infinite loop, no duplicates)", async () => {
+      let calls = 0;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async () => {
+        calls++;
+        return new Response("err", { status: 500 });
+      }) as typeof fetch;
+      vi.useFakeTimers();
+      try {
+        notifier.updateConfig({ webhookUrl: "http://localhost:1/hook", maxRetries: 2 });
+        const entry: AuditLogEntry = {
+          timestamp: new Date().toISOString(),
+          action: "security_block",
+          details: "Blocked command",
+          success: true,
+        };
+        await notifier.notify(entry);
+        // Flush the background retry processor through its exponential
+        // backoff sleeps: microtask flush + synchronous timer drain, until
+        // the queue gives up (bounded iterations guard against a regression
+        // to the infinite-loop bug).
+        for (let i = 0; i < 20 && calls < 3; i++) {
+          await Promise.resolve();
+          await Promise.resolve();
+          vi.runAllTimers();
+          await Promise.resolve();
+        }
+
+        // 1 initial attempt + maxRetries retries; a copy-with-reset-retries
+        // bug would loop forever and never settle.
+        expect(calls).toBe(3);
+      } finally {
+        vi.useRealTimers();
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 
