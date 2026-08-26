@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runWithMoE } from "../../src/core/agent-moe";
+import { describe, it, expect, beforeEach } from "vitest";
+import { runWithMoE, type MoEOrchestratorLike } from "../../src/core/agent-moe";
 import type { MoEPlan, SubtaskResult } from "../../src/modules/execution/types";
 import type { AppConfig } from "../../src/config/types";
 import { DEFAULTS } from "../../src/config/defaults";
@@ -11,52 +11,36 @@ const h = {
   execResults: [] as any[],
 };
 
-vi.mock("../../src/llm/orchestrator", () => {
+function fakeOrchestrator(): MoEOrchestratorLike {
   return {
-    OrchestratorClient: class {
-      constructor(public cfg: any) {}
-      isEnabled() {
-        return true;
-      }
-      async plan(_input: string) {
-        const next = h.planQueue.shift();
-        if (!next) return { error: "no plan scripted" };
-        return next;
-      }
-      async verifyAndMerge(_input: any) {
-        const next = h.verifyQueue.shift();
-        if (!next) throw new Error("no verify result scripted");
-        return next;
-      }
+    isEnabled: () => true,
+    async plan() {
+      const next = h.planQueue.shift();
+      if (!next) return { error: "no plan scripted" };
+      return next as any;
+    },
+    async verifyAndMerge() {
+      const next = h.verifyQueue.shift();
+      if (!next) throw new Error("no verify result scripted");
+      return next;
     },
   };
-});
+}
 
-vi.mock("../../src/modules/execution/moe-executor", () => {
-  return {
-    topologicalSort: (subtasks: any[]) => [subtasks],
-    MoEExecutor: class {
-      constructor(public deps: any) {}
-      async executePlan(plan: MoEPlan) {
-        h.execPlans.push(plan);
-        const next = h.execResults.shift();
-        if (!next) throw new Error("no exec result scripted");
-        return next;
-      }
-    },
-  };
-});
+const fakeExecutor = {
+  async executePlan(plan: MoEPlan) {
+    h.execPlans.push(plan);
+    const next = h.execResults.shift();
+    if (!next) throw new Error("no exec result scripted");
+    return next;
+  },
+};
 
-vi.mock("../../src/modules/execution/verifier", () => {
-  return {
-    StepVerifier: class {
-      constructor(public baseDir: string) {}
-      async verifyMoEManifest() {
-        return { success: true, errors: [], warnings: [], details: [] };
-      }
-    },
-  };
-});
+const fakeVerifier = {
+  async verifyMoEManifest() {
+    return { success: true, errors: [], warnings: [] };
+  },
+};
 
 function makeConfig(maxReplanCycles?: number): AppConfig {
   const config = JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
@@ -99,12 +83,18 @@ function okResult(id: string): SubtaskResult {
   };
 }
 
-const deps = {
-  llmProvider: {} as any,
-  toolExecutor: { getRegistry: () => ({ getAll: () => [] }) } as any,
-  logger: { debug: () => {}, warn: () => {}, info: () => {} } as any,
-  baseDir: "/tmp/moe-test",
-};
+function deps(config: AppConfig) {
+  return {
+    config,
+    llmProvider: {} as any,
+    toolExecutor: { getRegistry: () => ({ getAll: () => [] }) } as any,
+    logger: { debug: () => {}, warn: () => {}, info: () => {} } as any,
+    baseDir: "/tmp/moe-test",
+    orchestratorOverride: fakeOrchestrator(),
+    executorOverride: fakeExecutor,
+    verifierOverride: fakeVerifier,
+  };
+}
 
 describe("runWithMoE re-plan loop", () => {
   beforeEach(() => {
@@ -117,9 +107,9 @@ describe("runWithMoE re-plan loop", () => {
   it("executes the re-plan when verifier requests it and returns merged results", async () => {
     h.planQueue.push({ plan: plan("a") });
     h.execResults.push({
-      success: true,
+      success: false,
       results: [{ ...okResult("a"), success: false, summary: "fail a", error: "boom" }],
-      errors: [],
+      errors: ["[a] boom"],
       warnings: [],
     });
     h.verifyQueue.push({
@@ -127,7 +117,6 @@ describe("runWithMoE re-plan loop", () => {
       plan: plan("a", "fix"),
       explanation: "a failed",
     });
-    h.planQueue.push({ plan: plan("a", "fix") });
     h.execResults.push({
       success: true,
       results: [okResult("a"), okResult("fix")],
@@ -136,11 +125,8 @@ describe("runWithMoE re-plan loop", () => {
     });
     h.verifyQueue.push({ type: "final", finalAnswer: "all done" });
 
-    const result = await runWithMoE(
-      { ...deps, config: makeConfig() },
-      "do the thing",
-      async () => ({ success: false, text: "fallback", iterationCount: 0 }),
-    );
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(deps(makeConfig()), "do the thing", fallback);
 
     expect(h.execPlans).toHaveLength(2);
     expect(h.execPlans[1].subtasks.map((s) => s.id)).toEqual(["a", "fix"]);
@@ -166,11 +152,8 @@ describe("runWithMoE re-plan loop", () => {
     });
     h.verifyQueue.push({ type: "replan", plan: plan("a"), explanation: "retry 2" });
 
-    const result = await runWithMoE(
-      { ...deps, config: makeConfig(2) },
-      "do the thing",
-      async () => ({ success: false, text: "fallback", iterationCount: 0 }),
-    );
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(deps(makeConfig(2)), "do the thing", fallback);
 
     // initial cycle + 1 re-plan (maxReplanCycles=2 total cycles)
     expect(h.execPlans).toHaveLength(2);
@@ -208,11 +191,8 @@ describe("runWithMoE re-plan loop", () => {
       explanation: "try unknown expert",
     });
 
-    const result = await runWithMoE(
-      { ...deps, config: makeConfig(3) },
-      "do the thing",
-      async () => ({ success: false, text: "fallback", iterationCount: 0 }),
-    );
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(deps(makeConfig(3)), "do the thing", fallback);
 
     expect(h.execPlans).toHaveLength(1); // invalid re-plan never executed
     expect(result.success).toBe(false);
@@ -224,14 +204,21 @@ describe("runWithMoE re-plan loop", () => {
     h.execResults.push({ success: true, results: [okResult("a"), okResult("b")], errors: [], warnings: [] });
     h.verifyQueue.push({ type: "final", finalAnswer: "done" });
 
-    const result = await runWithMoE(
-      { ...deps, config: makeConfig() },
-      "easy task",
-      async () => ({ success: false, text: "fallback", iterationCount: 0 }),
-    );
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(deps(makeConfig()), "easy task", fallback);
 
     expect(h.execPlans).toHaveLength(1);
     expect(result.success).toBe(true);
     expect(result.text).toContain("done");
+  });
+
+  it("falls back when orchestrator is not configured", async () => {
+    const d = deps(makeConfig());
+    (d.orchestratorOverride as any).isEnabled = () => false;
+
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(d, "task", fallback);
+
+    expect(result.text).toBe("fallback");
   });
 });

@@ -1,5 +1,6 @@
 import type { MoEPlan, MoESubtask } from "./types";
 import type { AppConfig } from "../../config/types";
+import { normalizeInputFrom } from "./input-from";
 
 export interface ValidationResult {
   valid: boolean;
@@ -32,12 +33,43 @@ export function validatePlan(plan: MoEPlan, config: AppConfig): ValidationResult
     }
   }
 
+  const inputRefErrors = validateInputFromRefs(plan.subtasks);
+  errors.push(...inputRefErrors.errors);
+  autoFixes.push(...inputRefErrors.autoFixes);
+
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     autoFixes,
   };
+}
+
+/**
+ * Every input_from reference must point at an existing subtask and be backed
+ * by a depends_on edge — otherwise the reader may run before its producer.
+ */
+export function validateInputFromRefs(subtasks: MoESubtask[]): {
+  errors: string[];
+  autoFixes: Array<{ subtaskId: string; fix: string }>;
+} {
+  const errors: string[] = [];
+  const autoFixes: Array<{ subtaskId: string; fix: string }> = [];
+  const ids = new Set(subtasks.map((s) => s.id));
+
+  for (const s of subtasks) {
+    for (const ref of normalizeInputFrom(s.input_from)) {
+      if (!ids.has(ref.subtaskId)) {
+        errors.push(
+          `Subtask "${s.id}" input_from references unknown subtask "${ref.subtaskId}". Known subtasks: ${Array.from(ids).join(", ")}`,
+        );
+      } else if (!s.depends_on?.includes(ref.subtaskId)) {
+        autoFixes.push({ subtaskId: s.id, fix: `Add depends_on: ${ref.subtaskId}` });
+      }
+    }
+  }
+
+  return { errors, autoFixes };
 }
 
 export function expertTagsExist(subtasks: MoESubtask[], config: AppConfig): string[] {

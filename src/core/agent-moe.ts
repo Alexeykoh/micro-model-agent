@@ -7,10 +7,29 @@ import { OrchestratorClient } from "../llm/orchestrator";
 import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
-import type { MoEPlan, SubtaskResult } from "../modules/execution/types";
+import type { MoEPlan, SubtaskResult, PlanResult } from "../modules/execution/types";
 import { t } from "../i18n/index";
 
 export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
+
+/** Minimal structural surface of the collaborators, for test seam injection. */
+export interface MoEOrchestratorLike {
+  isEnabled(): boolean;
+  plan(input: string): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
+  verifyAndMerge(input: any): Promise<any>;
+}
+
+export interface MoEExecutorLike {
+  executePlan(plan: MoEPlan): Promise<PlanResult>;
+}
+
+export interface MoEVerifierLike {
+  verifyMoEManifest(
+    plan: MoEPlan,
+    config: AppConfig,
+    allToolTags: string[],
+  ): Promise<{ success: boolean; errors: string[]; warnings: string[] }>;
+}
 
 export interface MoEDeps {
   config: AppConfig;
@@ -18,6 +37,10 @@ export interface MoEDeps {
   toolExecutor: ToolExecutor;
   logger: Logger;
   baseDir: string;
+  /** Test seams — when set, replace the real collaborators. */
+  orchestratorOverride?: MoEOrchestratorLike;
+  executorOverride?: MoEExecutorLike;
+  verifierOverride?: MoEVerifierLike;
 }
 
 /**
@@ -39,13 +62,16 @@ export async function runWithMoE(
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
   const { onMeta, onPhase } = opts;
 
-  const orchestrator = new OrchestratorClient(
-    {
-      model: config.orchestrator.model,
-      provider: config.orchestrator.provider,
-    },
-    llmProvider,
-  );
+  let orchestrator: MoEOrchestratorLike = deps.orchestratorOverride as MoEOrchestratorLike;
+  if (!orchestrator) {
+    orchestrator = new OrchestratorClient(
+      {
+        model: config.orchestrator.model,
+        provider: config.orchestrator.provider,
+      },
+      llmProvider,
+    );
+  }
 
   if (!orchestrator.isEnabled()) {
     logger.debug("MoE enabled but no orchestrator model configured — falling back to single-agent");
@@ -94,14 +120,16 @@ export async function runWithMoE(
       }
     }
 
-    const executor = new MoEExecutor({
-      config,
-      toolRegistry: toolExecutor.getRegistry(),
-      toolExecutor,
-      llmProvider,
-      logger,
-      baseDir,
-    });
+    const executor: MoEExecutorLike =
+      deps.executorOverride ??
+      new MoEExecutor({
+        config,
+        toolRegistry: toolExecutor.getRegistry(),
+        toolExecutor,
+        llmProvider,
+        logger,
+        baseDir,
+      });
 
     onMeta?.(
       t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
@@ -115,7 +143,9 @@ export async function runWithMoE(
       `✅ ${t("moe.execution_complete", { succeeded: String(succeeded), total: String(mergedResults.size) })}\n`,
     );
 
-    const verifier = new StepVerifier(baseDir);
+    const verifier: MoEVerifierLike =
+      deps.verifierOverride ??
+      new StepVerifier(baseDir);
     const knownTags = collectKnownToolTags(toolExecutor);
     const verification = await verifier.verifyMoEManifest(currentPlan, config, knownTags);
 

@@ -8,6 +8,7 @@ import type { Logger } from "../../logger/app-logger";
 import { StuckDetector } from "./stuck-detector";
 import { t } from "../../i18n/index";
 import { ArtifactStore } from "../artifacts/store";
+import { buildInputSection } from "./input-from";
 
 const TRANSIENT_ERROR_PATTERNS = [
   "timeout",
@@ -74,7 +75,7 @@ export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
 async function executeSubtask(
   subtask: MoESubtask,
   deps: MoEExecutorDeps,
-  _sharedContext: MoEPlan["shared_context"],
+  depResults: Map<string, SubtaskResult>,
 ): Promise<SubtaskResult> {
   const startTime = Date.now();
   const expertConfig: ExpertConfig | undefined = getExpertConfig(deps.config, subtask.expert_tag);
@@ -131,7 +132,7 @@ async function executeSubtask(
           ? `\n\nAllowed files to write: ${allowedFiles.join(", ") || "(none)"}\nRead-only files: ${readOnlyFiles.join(", ") || "(none)"}`
           : "";
 
-      const taskPrompt = `${subtask.description}\n\nExpected output: ${subtask.expected_output}\nSuccess criteria:\n${(subtask.success_criteria || []).map((c: string) => `- ${c}`).join("\n")}${scopePrompt}`;
+      const taskPrompt = `${subtask.description}\n\nExpected output: ${subtask.expected_output}\nSuccess criteria:\n${(subtask.success_criteria || []).map((c: string) => `- ${c}`).join("\n")}${scopePrompt}${buildInputSection(subtask, depResults, deps.config.subagent?.maxSummaryChars ?? 2000)}`;
 
       const subagentArgs: Record<string, unknown> = {
         task: taskPrompt,
@@ -322,6 +323,7 @@ export class MoEExecutor {
 
     for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
       const wave = waves[waveIdx];
+      const depResults = new Map(results.map((r) => [r.subtaskId, r]));
 
       // Cap concurrent subtasks per wave (rateLimits.maxParallelTasks, default 5).
       const maxParallel =
@@ -342,7 +344,7 @@ export class MoEExecutor {
         await acquire();
         let result: SubtaskResult;
         try {
-          result = await executeSubtask(subtask, this.deps, plan.shared_context);
+          result = await executeSubtask(subtask, this.deps, depResults);
         } catch (e) {
           result = {
             subtaskId: subtask.id,
