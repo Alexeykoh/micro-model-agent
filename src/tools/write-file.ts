@@ -8,6 +8,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
@@ -84,6 +85,19 @@ export const writeFileTool: ToolDefinition = {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
+
+    // Pre-validate syntax BEFORE writing — prevents "file written" + syntax error loop
+    const validation = await preValidateSyntax(resolved, content, ctx.baseDir);
+    if (!validation.valid) {
+      return {
+        success: false,
+        output: t("file.syntax_error", { path, error: validation.error || "Unknown syntax error" }),
+      };
+    }
+
+    // Detect import/export conflicts — warning only (code may be valid)
+    const conflicts = detectImportConflicts(content);
+
     const fileExists = existsSync(resolved);
     let oldContent = "";
     if (fileExists) {
@@ -98,6 +112,12 @@ export const writeFileTool: ToolDefinition = {
     // Log successful file write
     logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? "updated" : "created"}`);
 
-    return { success: true, output: t("file.written", { path }), diff };
+    // Add conflict warning to output if any
+    let output = t("file.written", { path });
+    if (conflicts.length > 0) {
+      output += `\n[WARNING] Import/export conflicts: ${conflicts.join(", ")}`;
+    }
+
+    return { success: true, output, diff };
   },
 };

@@ -3,6 +3,7 @@
   "file.deleted": "Deleted {path}",
   "file.updated": "Updated {path}",
   "file.written": "Written {path}",
+  "file.syntax_error": "Syntax error in {path}:\n{error}\n\nFile was NOT written. Fix the syntax error and try again.",
   "file.notfound": "File not found: {path}\nThis does NOT mean the project is missing — the path may be wrong. Run list_dir on the working directory first; create files only after confirming what exists.",
   "file.dir_notfound": "Directory not found: {path}",
   "file.path_not_allowed": "Path not allowed: {path}",

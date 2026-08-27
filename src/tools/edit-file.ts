@@ -8,6 +8,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
@@ -91,6 +92,18 @@ export const editFileTool: ToolDefinition = {
       }
     }
 
+    // Pre-validate syntax BEFORE writing — prevents "file written" + syntax error loop
+    const validation = await preValidateSyntax(resolved, updated, ctx.baseDir);
+    if (!validation.valid) {
+      return {
+        success: false,
+        output: t("file.syntax_error", { path, error: validation.error || "Unknown syntax error" }),
+      };
+    }
+
+    // Detect import/export conflicts — warning only (code may be valid)
+    const conflicts = detectImportConflicts(updated);
+
     writeFileSync(resolved, updated, "utf-8");
     const diff = generateDiff(content, updated);
 
@@ -100,6 +113,12 @@ export const editFileTool: ToolDefinition = {
     // Log successful file edit
     logFileWrite(ctx.sessionId, path, true, "File edited");
 
-    return { success: true, output: t("file.replaced_in", { path }), diff };
+    // Add conflict warning to output if any
+    let output = t("file.replaced_in", { path });
+    if (conflicts.length > 0) {
+      output += `\n[WARNING] Import/export conflicts: ${conflicts.join(", ")}`;
+    }
+
+    return { success: true, output, diff };
   },
 };

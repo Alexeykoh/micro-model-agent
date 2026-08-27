@@ -1,10 +1,11 @@
 import type { AgentPlugin } from "../../types";
 import type { ToolContext, ToolCall, ToolResult } from "../../../tools/types";
 import { spawn, execSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve, extname, join } from "path";
 import { platform } from "os";
 import { findProjectRoot } from "../../lsp/project-root";
+import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
 
@@ -277,13 +278,49 @@ export class LintOnWritePlugin implements AgentPlugin {
     this._checkPromise = this.runTscCheck(projectRoot, signal);
     const error = await this._checkPromise;
     if (error) {
-      result.output += `\n\n[Project typecheck failed]: ${error}`;
+      // Try to auto-fix fixable errors
+      const { stdout, stderr } = await runAsync(
+        `npx tsc --noEmit --skipLibCheck 2>&1`,
+        projectRoot,
+        30000,
+        signal,
+      ).catch(() => ({ stdout: "", stderr: error }));
+
+      const output = stderr || stdout;
+      const errors = parseTscOutput(output);
+
+      if (errors.length > 0) {
+        const fixResult = autoFixErrors(filePath, readFileSync(filePath, "utf-8"), errors);
+
+        if (fixResult.fixed) {
+          // Write the fixed content
+          writeFileSync(filePath, fixResult.newContent, "utf-8");
+          result.output += `\n\n[Auto-fixed]: ${fixResult.applied.join("; ")}`;
+
+          // If there are remaining errors, show them
+          if (fixResult.remaining.length > 0) {
+            const remainingMsg = fixResult.remaining
+              .map((e) => `TS${e.code}: ${e.message}`)
+              .join("\n");
+            result.output += `\n\n[Remaining errors]: ${remainingMsg}`;
+          }
+        } else {
+          result.output += `\n\n[Project typecheck failed]: ${error}`;
+        }
+      } else {
+        result.output += `\n\n[Project typecheck failed]: ${error}`;
+      }
     }
   }
 
   private async runTscCheck(baseDir: string, signal?: AbortSignal): Promise<string | null> {
     try {
-      await runAsync(`npx tsc --noEmit --skipLibCheck`, baseDir, 30000, signal);
+      const { stdout, stderr } = await runAsync(
+        `npx tsc --noEmit --skipLibCheck`,
+        baseDir,
+        30000,
+        signal,
+      );
       return null;
     } catch (err: any) {
       if (
