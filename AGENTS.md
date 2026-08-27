@@ -1104,6 +1104,14 @@ MMA v2 auto-detects v1 config on first load. If `~/.mma/config.json` lacks `vers
 
 ## Versioning Rules (Semantic Versioning)
 
+### Changelog
+
+Все изменения документируются в `CHANGELOG.md` (формат [Keep a Changelog](https://keepachangelog.com/)).
+
+**Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
+
+При публикации (`npm publish`) changelog автоматически попадает в пакет и виден пользователям при установке (`npm info micro-models-agent`).
+
 ### When to bump which part
 
 | Version Part      | When to Bump                                                                                                                    | Examples                                                                               |
