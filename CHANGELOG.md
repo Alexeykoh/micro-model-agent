@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.56.1] - 2026-08-27
+
+### Added
+- **Docs**: `CHANGELOG.md` included in npm package (visible via `npm info micro-models-agent`)
+- **Docs**: rule to maintain changelog in `AGENTS.md`
+
 ## [0.56.0] - 2026-08-27
 
 ### Added
