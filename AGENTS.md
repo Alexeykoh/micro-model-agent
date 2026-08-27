@@ -75,7 +75,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 | 64K          | 6K          | 10K          | 48K           |
 | 128K         | 13K         | 19K          | 96K           |
 
-### Current Version: 0.56.1
+### Current Version: 0.56.4
 
 ### Changelog
 
