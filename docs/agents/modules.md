@@ -1,0 +1,210 @@
+# Modules
+
+## Session Management
+
+Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`, `history.jsonl`, and `session.jsonl`.
+
+### REPL slash commands
+
+| Command              | Aliases           | Description                  |
+| -------------------- | ----------------- | ---------------------------- |
+| `/sessions`          | `/ls`             | List all sessions (* active) |
+| `/new <name>`        | `/create`         | Create a new session         |
+| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session          |
+| `/rename <name>`     |                   | Rename current session       |
+| `/delete <id>`       | `/rm`             | Delete a session             |
+
+### REPL Keybindings
+
+| Key         | Context            | Action                                                    |
+| ----------- | ------------------ | --------------------------------------------------------- |
+| `Esc` `Esc` | Agent/tool running | Interrupt current operation, return to prompt             |
+| `Ctrl+C`    | Any                | Graceful shutdown (forces exit after 2s if agent running) |
+| `Ctrl+V`    | Idle (in prompt)   | Paste image from clipboard                                |
+
+### CLI subcommands
+
+```bash
+mma session list              # List all sessions
+mma session show <id>         # Show session details
+mma session delete <id>       # Delete a session
+```
+
+### Data layout
+
+```
+~/.mma/sessions/
+├── ses_abc123/
+│   ├── meta.json        # SessionMeta (name, model, counts, timestamps)
+│   ├── history.jsonl    # JSONL of SessionMessage[] (user/assistant/tool summaries)
+│   └── session.jsonl    # Detailed execution log: tool calls, args, results, timing, errors
+└── ses_def456/
+    ├── meta.json
+    ├── history.jsonl
+    └── session.jsonl
+```
+
+### Config
+
+In `config/defaults.ts` / `~/.mma/config.json`:
+
+```json
+{
+  "session": {
+    "autoSave": true,
+    "maxSessions": 50,
+    "isolateMemory": false
+  }
+}
+```
+
+Messages are persisted to `history.jsonl` on each iteration. `session.jsonl` records full tool call details (arguments, raw output, duration, success/failure) for debugging and post-mortem analysis. Context compaction no longer duplicates existing messages — it writes a single compacted summary to the session. The `search_history` tool searches across all `history.jsonl` files.
+
+**Context observability events** (in `session.jsonl`, added for post-mortem context analysis):
+
+- `context` (kind `start`, iteration 1): initial context structure — `window`, `systemBudget`/`reserveBudget`/`historyBudget`, `systemTokens`, `toolTokens`, `contextTokens`, `quality`, `messageCount`, plus `blocks[]` — per-block system-prompt breakdown (`label`, `priority`, `tokens`, `included`) and what the budget excluded.
+- `context` (kind `iteration`, every iteration): live context state before the LLM call — `contextTokens`, `quality`, `messageCount`, `compactionCount`, `iterationsSinceCompaction`. Lets you reconstruct exactly when/how the context filled up.
+- `compaction` (enriched): `reason` (`interval`/`quality-triggered (N% < 40%)`/`overflow (N > M)`/`after_tool`), `tokensBefore`/`tokensAfter`, `qualityBefore`/`qualityAfter`, `messagesBefore`/`messagesAfter`, `removedTurns`/`keptTurns`, and `summary` — the actual `[Compressed: …]` block (task/files/errors/tried-and-failed). Tokens before/after come from `ContextManager.compact()` (which now returns a `CompactResult | null`, null when there is nothing to compact).
+- `llm_usage` (per LLM call): `promptTokens`/`completionTokens`/`totalTokens`, `source` (`api` when the backend returned `usage`, else `estimate` — llama.cpp streaming often omits `usage`, so estimates are marked explicitly), `durationMs`.
+
+Source: `ContextManager.getSnapshot()`/`compact()` in `src/modules/context/manager.ts`, `PromptBuilder.build()` block breakdown in `src/core/prompt-builder.ts`, logging in `src/core/session-logger.ts` (`logContext`/`logLlmUsage`/`logCompaction`).
+
+## Project Map
+
+MMA automatically builds and maintains a map of the current workspace.
+
+- Triggered at agent startup; cached to `<project>/.mma/index-cache.json`.
+- Re-scans on file changes via a file watcher and exposes the result as a system prompt block.
+- `project_map` tool lets the model query the current map:
+
+| Action    | Parameters | Description                                          |
+| --------- | ---------- | ---------------------------------------------------- |
+| `summary` | —          | Languages, file counts, top directories, key exports |
+| `refresh` | —          | Force a full re-index                                |
+| `find`    | `query`    | Search files by path or exported symbol name         |
+
+- Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`).
+
+## UI Rendering
+
+Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatically: **rich** when `process.stdout.isTTY && !process.env.CI`, otherwise **plain**. Colors come from `src/ui/colors.ts` (`createColors`), enabled only on a TTY and disabled in CI / on `NO_COLOR` (overrides picocolors' win32 default-on).
+
+**Event flow:** `Agent.run()` takes `(onChunk, onMeta, onTool, onPhase)`. The renderer maps:
+
+- `text` → markdown-formatted streaming (via `FormattingStream`)
+- `meta` → raw status/output lines (reasoning, tool results, MoE status)
+- `onTool` `start`/`end` events → inline tool headers (rich, default) or `⚙ name` prefixes (plain)
+- `onPhase` `thinking`/`done` → thinking spinner (e.g. `⠋ Thinking…`) while the model loads and generates; auto-cleared on first chunk, tool card, or `done`
+
+**Rich mode extras:**
+
+- Spinner (`src/ui/spinner.ts`) on stderr during LLM wait and tool execution — single-line `\r` overwrite, cleared before any text write.
+- **Inline tool headers** (default, opencode-style): each tool call opens with a marker line — `← Editing path` (write/edit/create/move/delete), `→ Reading path` (read/list/file_info), `✱ Searching ...` (glob/grep), `$ Running command ...` (bash), `⚙ ...` (others). Tool output streams under a 2-space gutter (no box); `toolEnd` prints `✓ Nms` + a dim `divider()` + blank line to separate tool calls.
+- **Boxed tool cards** (`ui.toolStyle: "box"`): legacy `┌─ ✓ write_file ─┐` cards with args summary, wrapped body, duration.
+- Model commentary accompanying a tool call is shown by default (`ui.toolComments: true`), with a sanitizer that drops raw JSON payloads (`isToolCallJson` in `src/core/agent.ts`).
+- Markdown v2: aligned tables (`│` borders), blockquotes, checkboxes, hr, italic, links.
+- Diffs (`src/ui/diff.ts`) render the plain content with colored `+`/`-` markers only — no background color.
+
+**Config:** `ui.spinner`, `ui.toolStyle` (`"inline"` default, `"box"` legacy), and `ui.toolComments` in `config/defaults.ts`. Tool `friendly` labels come from i18n `tool.friendly.*`. All user-facing strings still go through `t()` (rule #8) — this includes REPL header, `/help` groups, setup wizard, and tool cards.
+
+## Plugins
+
+> **Guide:** [docs/plugins.md](./docs/plugins.md) — hooks, загрузка, примеры.
+
+Плагины перехватывают события агента. Интерфейс — `AgentPlugin` (`src/modules/types.ts`), диспетчер — `src/modules/plugins/manager.ts`. Изоляция ошибок: падение плагина не останавливает агента и других плагинов.
+
+**Загрузка:** встроенные (`src/modules/plugins/builtin/`), глобальные `~/.mma/plugins/`, проектные `<project>/.mma/plugins/` (`.ts` — только под Bun). Два варианта размещения: **отдельный файл** `*.{ts,js}` в корне каталога плагинов, либо **папка-плагин** с entry-файлом (`plugin.ts/js` → `index.ts/js`; остальные файлы папки подключаются entry-файлом через относительные импорты — см. `src/modules/plugins/loader.ts`). Экспорт `default` или `plugin`. Папки без entry пропускаются.
+
+**Хуки:**
+
+| Хук                               | Момент                            | Особенность                                                   |
+| --------------------------------- | --------------------------------- | ------------------------------------------------------------- |
+| `onBuildPrompt`                   | сборка системного промпта (1 раз) | строка добавляется блоком `low`-приоритета                    |
+| `onBeforeThink`                   | перед каждым LLM-вызовом          |                                                               |
+| `onAfterThink(ctx, response)`     | после ответа LLM                  | `response` = `LLMResponse` или `null`                         |
+| `onBeforeTool`                    | перед тулом                       | `false` = заблокировать (короткозамыкает)                     |
+| `onAfterTool`                     | после тула                        | может мутировать `result.output`                              |
+| `onToolCall`                      | LLM вернул тул-вызов              | `ctx.toolName`, `ctx.args`                                    |
+| `onToolStart` / `onToolEnd`       | тул-карточка открыта/закрыта      | `onToolEnd` даёт `result` + `durationMs`                      |
+| `onPhase`                         | спиннер: `thinking` / `done`      |                                                               |
+| `onText` / `onMeta`               | чанк стриминга                    | вернуть строку — заменить на экране, `undefined` — пропустить |
+| `onError`                         | ошибка LLM                        |                                                               |
+| `onSessionStart` / `onSessionEnd` | жизненный цикл сессии             |                                                               |
+| `onTurnEnd`                       | завершение `Agent.run()`          | один вызов на ход (ответ/ошибка/interrupt) + `TurnSummary`; сигнал «весь ход завершён» |
+| `ctx.hostBridge`                  | любой хук                         | `HostBridge {isBusy, submit(text,{images}), interrupt}` — управление агентом из плагина через тот же путь, что терминальный ввод (регистрирует REPL); отсутствует в single-run |
+
+**UI-хуки** (`onPhase`, `onToolStart`/`onToolEnd`, `onText`/`onMeta`) дают плагинам видимость и контроль над тем, что видит пользователь: спиннер, тул-карточки, стриминг. `onText`/`onMeta` влияют только на отображение, `result.text` не меняется.
+
+### Versioning & dedup
+
+- `AgentPlugin` supports optional `version` (semver) and `minMmaVersion` (minimum MMA version, semver).
+- **Dedup by name** in `PluginManager.register(plugin, source?)`: the higher `version` wins (unversioned = "0.0.0"); the loser is dropped and the caller is notified via the `RegisterResult` (`registered` / `skipped_older` / `duplicate`). Applies across global + project dirs.
+- **Compatibility gate** in `PluginLoader`: when `minMmaVersion` > current MMA version the plugin is skipped with a `plugin.incompatible` warning (reuses the existing `plugin.skipped` machinery). Bootstrap passes `mmaVersion` (from `readMmaVersion()` in `src/core/version.ts`) and `source` (`global` / `project`).
+- **Source tracking**: `PluginInfo { plugin, source }` via `PluginManager.getPluginInfos()`. `getAllPlugins()` stays backward-compatible.
+- **CLI:** `mma plugins list` (external plugins only; `--all` includes builtins) and `mma plugins list --all`; REPL `/status` shows version + `[source]` per non-builtin plugin.
+- `lint-on-write` and `notify` are marked `isBuiltin = true`.
+
+### Example plugin: `trace-server` (live browser trace)
+
+> **Source:** `examples/plugins/trace-server/` — zero-dependency example of every UI hook, split into a **folder plugin**: `plugin.ts` (entry) + `state.ts` (process-global shared state + SSE primitives) + `util.ts` (clip/scrub/summarize) + `context.ts` (snapshots + history text) + `plans.ts` (on-disk plan reading + poll) + `server.ts` (HTTP/SSE, serves the three frontend assets verbatim) + `page.html` + `styles.css` + `app.js` (frontend). All assets are read from disk at load time and served as-is — never template-processed (inlining the page into a template literal broke `'\n'` in the JS and killed the page).
+
+Starts a local HTTP server on `onSessionStart` and streams the whole agent loop to the browser over **SSE** (`node:http`, works under Bun and the Node dist — no `Bun.serve`/WebSocket dependency): phases, LLM calls, `tool_start`/`tool_end` with **full** args and results (paired client-side by `toolCallId`), errors, streamed text/meta (coalesced server-side, 350ms debounce), and **context tracking** — a live context bar (tokens/budget, quality %, compaction count, iterations since compaction, message count) fed by `context` events, plus `compaction` events rendered as CTX log entries (tokens before/after, quality before/after), a **side panel** with the full conversation history as text (`context_text` events, throttled + deduped) and the agent's **plans** (current, all, activity feed) read from `<project>/.mma/plans/` on disk. Live only — no session files are read. The frontend is split into three self-contained files (dark terminal, per-type color filters, search, pause/clear/auto-scroll, thinking indicator, elapsed timer, auto-reconnect): `page.html` (markup), `styles.css` (theme), `app.js` (SSE + rendering) — served from `/`, `/styles.css`, `/app.js` respectively.
+
+The context events need the `contextManager` in the plugin hook contexts — `agent.ts` passes it to `runOnPhase`, `runOnSessionStart`, `runOnBeforeThink`, `runOnAfterThink`, `runOnToolStart`, `runOnToolEnd`, `runOnError`, `runOnText`, `runOnMeta`, `runOnSessionEnd`. Dedup: both the global and project copies of the plugin load in one process, so a shared server lives on `Symbol.for("mma.trace-server")` (`globalThis`), `startServer()` dedupes concurrent starts with an in-flight promise (`state.starting`), and identical context snapshots are broadcast once.
+
+- Install: copy the whole `trace-server` folder to `~/.mma/plugins/` or `<project>/.mma/plugins/`; the URL is printed at session start ("live trace → …") and auto-opened.
+- Config via env: `MMA_TRACE_PORT` (default random), `MMA_TRACE_HOST` (default `127.0.0.1`), `MMA_TRACE_MAX_CLIENTS` (5), `MMA_TRACE_OPEN=0` (no browser auto-open).
+- Security: binds localhost only; payloads pass through a light scrub that masks credential-shaped values (`sk-…`, `Bearer …`, `api_key`/`token`/`password`/`secret` fields). Local-only, no auth.
+- Smoke test: `_testing/trace-server-smoke.ts`; e2e harness in `_testing/trace-live/` (real agent run with the plugin in the sandbox's `.mma/plugins/`, watcher over SSE).
+
+### Example plugin: `web-ui` (bidirectional chat in the browser)
+
+> **Source:** `examples/plugins/web-ui/` — folder plugin, sibling of trace-server: `plugin.ts` (entry) + `state.ts` (global state + SSE broadcast) + `util.ts` (clip/scrub/validation) + `history.ts` (history.jsonl tail backfill) + `plans-snap.ts` (on-disk plan snapshot + 2s change poll) + `server.ts` (HTTP/SSE/REST) + assets `page.html` / `styles.css` / `app.js`.
+
+Unlike trace-server (read-only), web-ui is **bidirectional**: the browser sends messages through `POST /api/message {text, images?}` → `ctx.hostBridge.submit()` → the same `Repl.runAgent` path as terminal input; `POST /api/interrupt` aborts the current turn. The page streams the whole loop over SSE (`/events`: session/state/phase/llm_start/llm_end/tool_start/tool_end/text/meta/error/plans/context/turn_end), renders collapsible tool cards and the plan checklist, backfills the last ~30 messages from `history.jsonl` on load (`GET /api/state`), supports image attach (drag-n-drop → client-side canvas downscale to 800px/JPEG60 → data URL → bridge → `addPendingImage`), and shows a busy-gated input with a Stop button.
+
+- Agent reworks this plugin rides on: **`HostBridge`** (`{isBusy, submit(text,{images}), interrupt}` — registered by the REPL via `pluginManager.setHostBridge()`, merged into every hook ctx as `ctx.hostBridge`) and the **`onTurnEnd(ctx, TurnSummary)`** plugin hook (dispatched once per completed `Agent.run()`, single + MoE paths — the only reliable "turn finished" signal).
+- Install/config: copy the folder to `~/.mma/plugins/`; env `MMA_WEBUI_PORT/HOST/TOKEN/MAX_CLIENTS/MIN_INTERVAL_MS/OPEN/CONFIG_DIR`. Token auth on `/api/*` is mandatory for non-loopback binds; POST bodies are size-capped (32KB text, ≤3 images × ~6MB data URLs), rate-limited, Origin-checked; payloads scrubbed like trace-server.
+- Smoke test: `_testing/web-ui-smoke.ts` (stub bridge + fixtures for plan/history, asserts the full POST→submit→turn_end loop). Unit tests: `tests/web-ui-server.test.ts` (9 — routing, caps, busy, auth, rate limit), `tests/modules/plugin-host-bridge.test.ts` (7), `tests/core/agent-turn-end.test.ts` (3), `tests/cli/repl-bridge.test.ts` (4).
+
+## Context Budget (dynamic, from model.contextWindow)
+
+| contextWindow | System (10%) | Reserve (15%) | History (75%) |
+| ------------- | ------------ | ------------- | ------------- |
+| 32K           | 3K           | 5K            | 24K           |
+| 64K           | 6K           | 10K           | 48K           |
+| 128K          | 13K          | 19K           | 96K           |
+
+Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
+
+## Cost Tracking (pricing / budget display)
+
+> **Source:** `src/modules/pricing/` (`prices.ts` — builtin price table + cost math; `index.ts` — `CostTracker`).
+
+When a model has a known price, MMA shows the session's running cost **together with token usage**:
+
+- **Inline tool footer** — each `toolEnd` appends `cost $X` next to `ctx ±N` (rich + plain modes).
+- **After calls** — REPL context bar (`repl.cost`) and the single-run result (`run-result.ts` / `--json` `totalCost`).
+- `AgentResult.totalCost` is set when pricing is enabled and the model's price is known; `ToolEvent.costUsd` carries the running total at each tool end.
+
+**How prices resolve** (`resolvePrice`): user `pricing.overrides` win → builtin table (`ZEN_PRICES`) → unknown = no cost shown. Model ids are normalized by stripping provider prefixes (`opencode/`, `opencode-go/`, `openai/`, `anthropic/`) and vendor paths, so one table serves Zen and Go.
+
+**Config** (`~/.mma/config.json`):
+```json
+{ "pricing": { "enabled": true, "overrides": { "opencode/gpt-5.5": { "input": 1, "output": 2 } } } }
+```
+
+**Hosted providers** with fixed base URLs are selectable via `mma provider use opencode-zen|opencode-go` and the setup wizard (`HOSTED_BASE_URLS` in `src/cli/setup.ts`): Zen → `https://opencode.ai/zen/v1`, Go → `https://opencode.ai/zen/go/v1`. Both are OpenAI-compatible (`/chat/completions`); model ids use the `opencode/…` / `opencode-go/…` prefix. Builtin pricing is maintained from https://opencode.ai/docs/zen/ and /docs/go/ — update `ZEN_PRICES` when those tables change.
+
+## Auto-Update
+
+Self-update is a fire-and-forget background check — it never blocks startup.
+
+- **Check:** `Updater.check()` fetches `https://registry.npmjs.org/micro-models-agent` (5s timeout); the current version comes from `package.json` (`readVersion()` in `main.ts`).
+- **Install:** when a newer version exists and `autoInstall: true`, runs `npm install -g micro-models-agent@<latest>` in the background (`Updater.install()`, injectable runner for tests). The running process keeps working on the old version; the update applies on next launch.
+- **Config** (`updater` in `~/.mma/config.json`):
+  - `enabled` (default `true`) — master switch
+  - `checkOnStart` (default `true`) — check at startup
+  - `autoInstall` (default `true`) — auto-run `npm install -g`; `false` → only notify
+  - `intervalMs` (default `0`) — `0` = single check per launch; `>0` = permanent background re-check loop
+- **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`). Fired from `main.ts` via `startAutoUpdate()`; all errors are swallowed (best-effort). Notifications go through i18n keys `updater.*`.
