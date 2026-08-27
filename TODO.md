@@ -196,6 +196,20 @@ Definition of Done плана — в конце файла плана.
 
 ---
 
+## System Prompt Optimization
+
+**План:** `docs/superpowers/plans/2026-08-27-system-prompt-optimization.md`
+
+Цель: перестроить `buildSystemInfo` для 9B моделей — уменьшить токены, улучшить читаемость, добавить недостающие директивы.
+
+**6 задач, 4 волны:**
+- Wave 1: Реструктуризация ядра + удаление дублирования
+- Wave 2: DONE CONDITIONS + STOP directives + Session start protocol
+- Wave 3: Failure classification в StuckDetector
+- Wave 4: FORBIDDEN patterns (autoPlan или always — решить)
+
+---
+
 ## Следующие шаги
 
 1. **Разобраться с 53 падениями** (пользователь просил)
