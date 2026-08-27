@@ -162,4 +162,39 @@ describe("FactualCheck", () => {
     const result = check.validate("Updated app/hidden/data.json");
     expect(result.status).toBe("pass");
   });
+
+  it("passes when a deleted file is mentioned in the response", () => {
+    const check = new FactualCheck(dir);
+    // Create a file, then delete it from disk — but tell FactualCheck it was deleted
+    const tmpFile = join(dir, "to-delete.txt");
+    writeFileSync(tmpFile, "temp");
+    rmSync(tmpFile);
+    const deletedFiles = new Set([tmpFile]);
+    const result = check.validate("Removed to-delete.txt successfully", deletedFiles);
+    expect(result.status).toBe("pass");
+  });
+
+  it("still warns for a file that was never on disk even with deletedFiles set", () => {
+    const check = new FactualCheck(dir);
+    // phantom.json was never on disk and is not in deletedFiles
+    const deletedFiles = new Set(["/some/other/deleted-file.txt"]);
+    const result = check.validate("Removed phantom.json", deletedFiles);
+    expect(result.status).toBe("warn");
+    expect(result.reason).toContain("phantom.json");
+  });
+
+  it("passes when a bare filename matches a deleted file's basename", () => {
+    const check = new FactualCheck(dir);
+    // Create a file in a subdirectory, then delete it
+    const nested = join(dir, "deep", "nested", "target.json");
+    mkdirSync(join(dir, "deep", "nested"), { recursive: true });
+    writeFileSync(nested, "{}");
+    rmSync(nested);
+    rmSync(join(dir, "deep", "nested"), { recursive: true });
+    rmSync(join(dir, "deep"), { recursive: true });
+    // The token regex extracts "target.json" — deletedFiles has the full path
+    const deletedFiles = new Set([nested]);
+    const result = check.validate("Cleaned up target.json", deletedFiles);
+    expect(result.status).toBe("pass");
+  });
 });

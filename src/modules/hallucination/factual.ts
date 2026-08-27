@@ -37,12 +37,17 @@ export class FactualCheck {
     for (const f of files) this.knownFiles.add(f);
   }
 
-  validate(response: string): HallucinationCheckResult {
+  validate(response: string, deletedFiles?: Set<string>): HallucinationCheckResult {
     const filePaths = this.extractFilePaths(response);
     if (filePaths.length === 0) return { status: "pass" };
 
+    const deletedBasenames = deletedFiles
+      ? new Set([...deletedFiles].map((p) => p.split(/[/\\]/).pop() ?? p))
+      : undefined;
+
     const nonExistent: string[] = [];
     for (const fp of filePaths) {
+      if (deletedBasenames?.has(fp)) continue;
       if (!this.pathExists(fp)) {
         nonExistent.push(fp);
       }

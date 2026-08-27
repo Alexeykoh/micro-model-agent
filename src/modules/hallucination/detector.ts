@@ -45,7 +45,8 @@ export class HallucinationDetector {
       return confidenceResult;
     }
 
-    const factualResult = this.factual?.validate(response);
+    const deletedFiles = new Set(this.consistency.getDeletedFiles());
+    const factualResult = this.factual?.validate(response, deletedFiles);
     if (factualResult && factualResult.status !== "pass") {
       return factualResult;
     }

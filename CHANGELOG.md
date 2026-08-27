@@ -4,6 +4,11 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.56.5] - 2026-08-27
+
+### Fixed
+- **Hallucination**: `FactualCheck` now receives deleted files from `ConsistencyCheck` — no longer false-positives on files that were intentionally deleted in the same session
+
 ## [0.56.4] - 2026-08-27
 
 ### Fixed
