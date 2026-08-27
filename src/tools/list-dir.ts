@@ -6,6 +6,9 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { safeResolvePath } from "./path-utils";
 import { MAX_PREVIEW_LINES } from "./preview";
 
+/** Directories hidden from list_dir output (consistent with indexer walker). */
+const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage", ".mma"]);
+
 export const listDirTool: ToolDefinition = {
   name: "list_dir",
   icon: "📂",
@@ -37,7 +40,7 @@ export const listDirTool: ToolDefinition = {
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.dir_notfound", { path }) };
     }
-    const entries = readdirSync(resolved);
+    const entries = readdirSync(resolved).filter((e) => !IGNORED_DIRS.has(e));
     const lines = entries.map((e) => {
       const full = resolve(resolved, e);
       return statSync(full).isDirectory() ? `${e}/` : e;

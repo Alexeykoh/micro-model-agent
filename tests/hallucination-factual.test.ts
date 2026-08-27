@@ -134,4 +134,32 @@ describe("FactualCheck", () => {
     const result = check.validate("Updated Component16.tsx");
     expect(result.status).toBe("pass");
   });
+
+  it("passes when a dot-prefixed directory component is mentioned without the dot", () => {
+    mkdirSync(join(dir, ".mma"), { recursive: true });
+    writeFileSync(join(dir, ".mma", "index-cache.json"), "{}");
+    const check = new FactualCheck(dir);
+    // The regex strips the leading dot from .mma/ → "mma/index-cache.json"
+    // dotfileVariants must try ".mma/index-cache.json" as a candidate.
+    const result = check.validate("Read mma/index-cache.json for cache data");
+    expect(result.status).toBe("pass");
+  });
+
+  it("passes when a nested dot-prefixed directory is mentioned", () => {
+    mkdirSync(join(dir, "src", ".config"), { recursive: true });
+    writeFileSync(join(dir, "src", ".config", "settings.json"), "{}");
+    const check = new FactualCheck(dir);
+    // "src/.config/settings.json" — dot already present, should pass directly
+    const result = check.validate("Read src/.config/settings.json");
+    expect(result.status).toBe("pass");
+  });
+
+  it("passes when a nested dot-prefixed directory is mentioned without dot", () => {
+    mkdirSync(join(dir, "app", ".hidden"), { recursive: true });
+    writeFileSync(join(dir, "app", ".hidden", "data.json"), "{}");
+    const check = new FactualCheck(dir);
+    // "app/hidden/data.json" → must try "app/.hidden/data.json"
+    const result = check.validate("Updated app/hidden/data.json");
+    expect(result.status).toBe("pass");
+  });
 });

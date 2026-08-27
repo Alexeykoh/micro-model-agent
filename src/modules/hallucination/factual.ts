@@ -90,13 +90,30 @@ export class FactualCheck {
    * non-word char and `.`), so dotfiles (.prettierrc.json, .env, …) are
    * extracted as "prettierrc.json". Try the dot-prefixed basename too before
    * declaring the file missing. "src/config.json" also yields
-   * "src/.config.json".
+   * "src/.config.json". For paths like "mma/index-cache.json", also try
+   * ".mma/index-cache.json" (dot-prefixed parent directories).
    */
   private dotfileVariants(fp: string): string[] {
-    const idx = Math.max(fp.lastIndexOf("/"), fp.lastIndexOf("\\"));
-    const base = idx >= 0 ? fp.slice(idx + 1) : fp;
-    if (base.startsWith(".")) return [fp];
-    return idx >= 0 ? [fp, `${fp.slice(0, idx + 1)}.${base}`] : [fp, `.${fp}`];
+    const variants = [fp];
+    const sep = fp.includes("\\") ? "\\" : "/";
+    const parts = fp.split(sep);
+
+    // Try dot-prefixing the basename (existing logic)
+    const base = parts[parts.length - 1];
+    if (!base.startsWith(".")) {
+      const withDotBase = [...parts.slice(0, -1), `.${base}`].join(sep);
+      variants.push(withDotBase);
+    }
+
+    // Try dot-prefixing each parent directory component
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!parts[i].startsWith(".")) {
+        const dotted = [...parts.slice(0, i), `.${parts[i]}`, ...parts.slice(i + 1)].join(sep);
+        if (!variants.includes(dotted)) variants.push(dotted);
+      }
+    }
+
+    return variants;
   }
 
   private bareNameExists(name: string): boolean {
