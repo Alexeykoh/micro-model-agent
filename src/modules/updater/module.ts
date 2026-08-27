@@ -1,5 +1,6 @@
 import type { UpdaterConfig } from "../../config/types";
 import { Updater, type InstallRunner } from "./checker";
+import { extractLatestChangelog, readChangelog } from "./changelog-reader";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 
@@ -117,8 +118,17 @@ export class UpdaterModule {
       );
       const install = await this.updater.install(result.latest);
       if (install.success) {
+        const changelog = readChangelog("micro-models-agent");
+        const latestEntry = changelog ? extractLatestChangelog(changelog) : null;
+        const changelogBlock = latestEntry
+          ? pc.cyan(`\n${t("cli.changelog_title", { version: result.latest })}\n`) + latestEntry
+          : "";
         this.logger.info(
-          t("updater.installed", { current: result.current, latest: result.latest }),
+          t("updater.installed", {
+            current: result.current,
+            latest: result.latest,
+            changelog: changelogBlock,
+          }),
         );
       } else {
         this.logger.warn(

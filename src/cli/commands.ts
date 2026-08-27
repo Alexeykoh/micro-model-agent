@@ -13,6 +13,7 @@ import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { fileURLToPath } from "url";
 import { readMmaVersion } from "../core/version";
+import { readChangelog, extractLatestChangelog, extractChangelogRange } from "../modules/updater/changelog-reader";
 
 const version = readMmaVersion();
 
@@ -489,6 +490,36 @@ export function createProgram(): Command {
 
   // Add plugin commands
   createPluginCommand(program);
+
+  // Changelog command
+  program
+    .command("changelog")
+    .description(t("cli.changelog_title", { version }))
+    .option("--from <version>", t("cli.changelog_range", { from: "..." }))
+    .action((opts: { from?: string }) => {
+      const changelog = readChangelog("micro-models-agent");
+      if (!changelog) {
+        console.log(pc.yellow(t("cli.changelog_not_found")));
+        return;
+      }
+      if (opts.from) {
+        const range = extractChangelogRange(changelog, opts.from, version);
+        if (!range) {
+          console.log(pc.yellow(t("cli.changelog_not_found")));
+          return;
+        }
+        console.log(pc.cyan(t("cli.changelog_range", { from: opts.from })));
+        console.log(range);
+      } else {
+        const latest = extractLatestChangelog(changelog);
+        if (!latest) {
+          console.log(pc.yellow(t("cli.changelog_not_found")));
+          return;
+        }
+        console.log(pc.cyan(t("cli.changelog_title", { version })));
+        console.log(latest);
+      }
+    });
 
   program
     .argument("[prompt...]", "Prompt to execute")

@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [0.56.1] - 2026-08-27
 
 ### Added
+- **CLI**: `mma changelog` command — show latest changelog entry or diff between versions (`--from <version>`)
+- **Updater**: show changelog after auto-update install (`updater.installed` message includes new version's changelog)
 - **Docs**: `CHANGELOG.md` included in npm package (visible via `npm info micro-models-agent`)
 - **Docs**: rule to maintain changelog in `AGENTS.md`
 
