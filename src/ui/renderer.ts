@@ -133,7 +133,11 @@ export class Renderer {
       stream: this.err,
       width: this.width,
     });
-    this.fmt = new FormattingStream((line) => this.out.write(`${line}\n`), this.width);
+    this.fmt = new FormattingStream(
+      (line) => this.out.write(`${line}\n`),
+      this.width,
+      (text) => this.out.write(text),
+    );
   }
 
   /** Show a thinking spinner while waiting for LLM response. */

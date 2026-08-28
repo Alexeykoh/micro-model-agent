@@ -54,10 +54,13 @@ export class FormattingStream {
   private codeLines: string[] = [];
   private tableBuffer: string[] = [];
   private onWrite: (text: string) => void;
+  private onRawWrite: (text: string) => void;
   private width: number;
+  private partialWritten = 0;
 
-  constructor(onWrite: (text: string) => void, width?: number) {
+  constructor(onWrite: (text: string) => void, width?: number, onRawWrite?: (text: string) => void) {
     this.onWrite = onWrite;
+    this.onRawWrite = onRawWrite ?? onWrite;
     this.width = width ?? getTerminalWidth();
   }
 
@@ -67,7 +70,22 @@ export class FormattingStream {
     while ((idx = this.buffer.indexOf("\n")) !== -1) {
       const line = this.buffer.slice(0, idx);
       this.buffer = this.buffer.slice(idx + 1);
+      this.emitPartialRewind();
       this.processLine(line);
+    }
+    // Stream partial line directly for real-time feedback
+    if (this.buffer.length > 0 && !this.inCodeBlock) {
+      this.onRawWrite(this.buffer);
+      this.partialWritten = this.buffer.length;
+      this.buffer = "";
+    }
+  }
+
+  private emitPartialRewind(): void {
+    if (this.partialWritten > 0) {
+      // Move cursor back to overwrite partial output
+      this.onRawWrite(`\x1b[${this.partialWritten}D`);
+      this.partialWritten = 0;
     }
   }
 
