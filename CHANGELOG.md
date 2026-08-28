@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.56.5] - 2026-08-28
+
+### Changed
+- **MCP**: lazy connect — server connections deferred to first tool call. Startup no longer blocks on unreachable MCP servers (e.g. context7 offline). Discovery runs in background with 5s timeout.
+- **Updater**: `checkOnStart` and `autoInstall` disabled by default. Reduced `waitForIdle` timeout from 130s to 10s.
+- **Config**: `updater.checkOnStart` default changed from `true` to `false`
+
+### Added
+- **MCP**: HTTP request timeouts (10s) on `connectSSE`, `listToolsHTTP`, `callToolHTTP`
+- **MCP**: `failedServers` tracking — servers that fail discovery are not retried
+- **MCP**: placeholder `connect` tool for not-yet-discovered servers (LLM can trigger lazy discovery)
+- **Reasoning**: persistent disk cache (`~/.mma/reasoning-cache.json`) with 24h TTL — avoids re-probing LLM on every restart
+
 ## [0.56.5] - 2026-08-27
 
 ### Fixed
