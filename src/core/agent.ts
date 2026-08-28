@@ -36,20 +36,6 @@ const QUALITY_TRIGGER_THRESHOLD = 40;
 const FORCED_COMPACTION_COOLDOWN = 3;
 const MAX_LLM_ERROR_RETRIES = 2;
 
-/** True when the text looks like a raw JSON tool payload (garbage to display). */
-function isToolCallJson(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      JSON.parse(trimmed);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
 /**
  * Max chars a tool result may occupy, given remaining budget and whether
  * the tool bounds its own output. Tools that declare `boundedOutput` (e.g.
@@ -447,6 +433,10 @@ export class Agent {
               },
             )
           : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
+      const provenance = this.callerProvenance();
+      result.provider = provenance.provider;
+      result.model = provenance.model;
+      result.durationMs = Date.now() - startedAt;
       emitTurnEnd(result);
       return result;
     } catch (err) {
@@ -503,6 +493,7 @@ export class Agent {
     let emptyResponseExhausted = false;
     let auditFailed = false;
     let lastAuditSummary = "";
+    let totalLlmDuration = 0;
     // Set when the audit gate rejects a final answer and re-prompts: the next
     // non-tool response is then a re-answer of an already-completed task, so
     // a repetition verdict is expected and must not burn a hallucination retry.
@@ -700,6 +691,8 @@ export class Agent {
             }
             textContent += chunk.content;
             textChunks.push(chunk.content);
+            const textOut = pluginManager.runOnText({ iteration, logger, contextManager }, chunk.content);
+            onChunk?.(textOut);
           }
           if (chunk.type === "reasoning" && chunk.content) {
             reasoningContent += chunk.content;
@@ -793,6 +786,7 @@ export class Agent {
         undefined,
         "agent",
       );
+      totalLlmDuration += Date.now() - llmStart;
 
       // Log per-call token usage. llama.cpp streaming often omits `usage`,
       // so fall back to local estimates (context tokens + chars/4) and
@@ -824,19 +818,6 @@ export class Agent {
 
       // Show the model's commentary text. When a tool call accompanies the
       // response, keep the text too (opencode-like narration), unless it is
-      // a raw JSON payload that small models sometimes emit instead of
-      // describing the call. `toolComments: false` restores the old behavior
-      // of suppressing text next to a tool call.
-      const toolComments = this.deps.config.ui?.toolComments ?? true;
-      const showText =
-        textChunks.length > 0 && (!sawToolCall || (toolComments && !isToolCallJson(textContent)));
-      if (showText) {
-        for (const chunk of textChunks) {
-          const textOut = pluginManager.runOnText({ iteration, logger, contextManager }, chunk);
-          onChunk?.(textOut);
-        }
-      }
-
       let llmResponse: LLMResponse | null = null;
       if (sawToolCall) {
         llmResponse = { type: "tool_call", calls: toolCalls };
@@ -1345,6 +1326,7 @@ export class Agent {
         costBreakdown: this.costTracker.breakdown(),
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
+      llmDurationMs: totalLlmDuration,
     };
   }
 

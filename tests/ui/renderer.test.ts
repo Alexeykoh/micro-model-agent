@@ -14,7 +14,7 @@ function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   return { text: () => parts.join(""), stream };
 }
 
-function makeRenderer(opts: { rich: boolean; toolStyle?: "box" | "inline" }): {
+function makeRenderer(opts: { rich: boolean }): {
   renderer: Renderer;
   text: () => string;
 } {
@@ -22,7 +22,6 @@ function makeRenderer(opts: { rich: boolean; toolStyle?: "box" | "inline" }): {
   const renderer = new Renderer({
     rich: opts.rich,
     spinner: false,
-    toolStyle: opts.toolStyle ?? "inline",
     out: out.stream,
     err: out.stream,
     width: 60,
@@ -47,31 +46,17 @@ describe("summarizeArgs", () => {
 });
 
 describe("Renderer", () => {
-  it("renders a boxed card in rich mode with box toolStyle", () => {
-    const { renderer, text } = makeRenderer({ rich: true, toolStyle: "box" });
-    renderer.toolStart("write_file", { path: "src/a.ts" });
+  it("renders a tool card with icon and footer", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" }, undefined, "📝");
     renderer.meta("\ncreated src/a.ts\n");
     renderer.toolEnd("write_file", 12, false);
     renderer.flush();
     const out = text();
-    expect(out).toContain("┌");
+    expect(out).toContain("📝");
+    expect(out).toContain("src/a.ts");
     expect(out).toContain("✓");
     expect(out).toContain("12ms");
-    expect(out).toContain("src/a.ts");
-  });
-
-  it("renders an inline header in rich mode by default (no box)", () => {
-    const { renderer, text } = makeRenderer({ rich: true });
-    renderer.toolStart("edit_file", { path: "src/a.ts" });
-    renderer.meta("\nupdated\n");
-    renderer.toolEnd("edit_file", 12, false);
-    renderer.flush();
-    const out = text();
-    expect(out).toContain("←");
-    expect(out).toContain("src/a.ts");
-    expect(out).toContain("12ms");
-    expect(out).not.toContain("┌");
-    expect(out).not.toContain("┐");
   });
 
   it("marks failed tools with an error marker", () => {
@@ -80,17 +65,6 @@ describe("Renderer", () => {
     renderer.toolEnd("bash", 5, true);
     renderer.flush();
     expect(text()).toContain("✗");
-  });
-
-  it("uses a plain prefix outside rich mode", () => {
-    const { renderer, text } = makeRenderer({ rich: false });
-    renderer.toolStart("write_file", { path: "src/a.ts" });
-    renderer.meta("created");
-    renderer.flush();
-    const out = text();
-    expect(out).not.toContain("┌");
-    expect(out).toContain("←");
-    expect(out).toContain("created");
   });
 
   it("formats streamed text as markdown", () => {
@@ -118,15 +92,27 @@ describe("Renderer", () => {
     expect(out).toContain("final answer");
   });
 
-  it("starts and stops the thinking spinner", () => {
+  it("renders thought block with timing", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.reasoning("analyzing the request...");
+    renderer.thinkingEnd();
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("→ Thought:");
+    expect(out).toContain("ms");
+    expect(out).toContain("analyzing the request...");
+  });
+
+  it("does not render empty thought block", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.thinkingStart();
     renderer.thinkingEnd();
     renderer.flush();
-    expect(text()).toBe("");
+    expect(text()).not.toContain("→ Thought:");
   });
 
-  it("thinking spinner is cleared by a tool start", () => {
+  it("thinking is cleared by a tool start", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.thinkingStart();
     renderer.toolStart("bash", { command: "ls" });
@@ -137,47 +123,14 @@ describe("Renderer", () => {
     expect(out).toContain("ls");
   });
 
-  it("appends a step context suffix to the inline header", () => {
+  it("shows step context above the tool", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");
     renderer.toolEnd("bash", 10, false);
     renderer.flush();
     const out = text();
-    expect(out).toContain("← step 2: run the build");
-  });
-
-  it("starts a busy spinner for lsp_check in inline mode", () => {
-    const out = makeOut();
-    const renderer = new Renderer({
-      rich: true,
-      spinner: true,
-      toolStyle: "inline",
-      out: out.stream,
-      err: out.stream,
-      width: 60,
-    });
-    renderer.toolStart("lsp_check", { path: "src" });
-    renderer.toolEnd("lsp_check", 10, false);
-    renderer.flush();
-    const textOut = out.text();
-    expect(textOut).toContain("⠋");
-    expect(textOut).toContain("Checking code");
-  });
-
-  it("does not start a busy spinner for other tools", () => {
-    const out = makeOut();
-    const renderer = new Renderer({
-      rich: true,
-      spinner: true,
-      toolStyle: "inline",
-      out: out.stream,
-      err: out.stream,
-      width: 60,
-    });
-    renderer.toolStart("bash", { command: "ls" });
-    renderer.toolEnd("bash", 1, false);
-    renderer.flush();
-    expect(out.text()).not.toContain("⠋");
+    expect(out).toContain("↓");
+    expect(out).toContain("step 2: run the build");
   });
 
   it("shows the session cost in the tool footer when pricing is known", () => {
@@ -199,23 +152,6 @@ describe("Renderer", () => {
     expect(text()).not.toContain("cost");
   });
 
-  it("shows the cost in plain (non-rich) mode", () => {
-    const { renderer, text } = makeRenderer({ rich: false });
-    renderer.toolStart("write_file", { path: "src/a.ts" });
-    renderer.toolEnd("write_file", 10, false, 5, 0.02);
-    renderer.flush();
-    const out = text();
-    expect(out).toContain("cost");
-    expect(out).toContain("$0.02");
-  });
-
-  it("appends a step context suffix in plain mode", () => {
-    const { renderer, text } = makeRenderer({ rich: false });
-    renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");
-    renderer.flush();
-    expect(text()).toContain("step 2: run the build");
-  });
-
   it("renders a plan checklist block verbatim", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.planBlock(["[plan_x] Check", "  [x] 1. done", "  [ ] 2. todo"]);
@@ -235,13 +171,32 @@ describe("Renderer", () => {
     expect(out).toContain("[plan_x] Check");
   });
 
+  it("renders footer with model info", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.footer("qwen3.5-9b", "ollama", 2800);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("▣");
+    expect(out).toContain("qwen3.5-9b");
+    expect(out).toContain("ollama");
+    expect(out).toContain("2800ms");
+  });
+
+  it("adds text prefix before first chunk", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.text("hello world");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("-");
+    expect(out).toContain("hello world");
+  });
+
   describe("relative paths in tool headers", () => {
     function makeBaseRenderer(baseDir?: string, width = 60) {
       const out = makeOut();
       const renderer = new Renderer({
         rich: true,
         spinner: false,
-        toolStyle: "inline",
         out: out.stream,
         err: out.stream,
         width,
@@ -251,8 +206,6 @@ describe("Renderer", () => {
     }
 
     it("shortens absolute paths inside the workspace", () => {
-      // Platform-neutral workspace root (win32 E:\ paths are not absolute
-      // on posix, so path.relative cannot shorten them there).
       const base = join(tmpdir(), `mma-renderer-${process.pid}`);
       const abs = join(base, "src", "a.ts");
       const { renderer, text } = makeBaseRenderer(base);
@@ -265,12 +218,9 @@ describe("Renderer", () => {
     it("keeps paths outside the workspace as-is", () => {
       const root = join(tmpdir(), `mma-renderer-out-${process.pid}`);
       const abs = join(root, "elsewhere", "b.ts");
-      // baseDir is a sibling — the path resolves outside it (../ prefix).
       const { renderer, text } = makeBaseRenderer(join(root, "workspace"));
       renderer.toolStart("read_file", { path: abs });
       renderer.flush();
-      // The absolute path is preserved verbatim (summarizeArgs may truncate
-      // its tail visually, hence matching only the leading part).
       expect(text()).toContain(abs.slice(0, 30));
     });
 

@@ -474,9 +474,9 @@ export class Repl implements ReplContext {
 
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
-        toolStyle: this.config.ui?.toolStyle ?? "inline",
         baseDir: this.baseDir,
       });
+      renderer.showLoader();
       const result = await this.agent.run(
         input,
         (c) => renderer.text(c),
@@ -496,8 +496,6 @@ export class Repl implements ReplContext {
               ev.error,
               ev.ctxDelta,
               ev.costUsd,
-              ev.provider,
-              ev.model,
             );
             if (ev.tool === "plan" || ev.tool === "todo") {
               this.renderPlan(renderer);
@@ -513,6 +511,9 @@ export class Repl implements ReplContext {
         },
       );
       renderer.flush();
+      if (result.provider && result.model) {
+        renderer.footer(result.model, result.provider, result.llmDurationMs ?? result.durationMs ?? 0);
+      }
       process.stdout.write("\n");
 
       this.logger?.logREPL(

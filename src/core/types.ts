@@ -88,4 +88,12 @@ export interface AgentResult {
   costBreakdown?: Array<{ provider: string; cost: number }>;
   compactionCount?: number;
   contextQuality?: number;
+  /** Provider name that serviced this run. */
+  provider?: string;
+  /** Model name used for this run. */
+  model?: string;
+  /** Total wall-clock duration in milliseconds. */
+  durationMs?: number;
+  /** Total LLM call duration in milliseconds (excludes tool execution). */
+  llmDurationMs?: number;
 }

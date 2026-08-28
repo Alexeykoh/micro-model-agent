@@ -1,7 +1,7 @@
 import { pc } from "./colors";
 import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
-import { box, divider } from "./box";
+
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
 import { formatCost } from "../modules/pricing/prices";
@@ -17,8 +17,6 @@ export interface RendererOptions {
   width?: number;
   out?: NodeJS.WritableStream;
   err?: NodeJS.WritableStream;
-  /** "box" keeps the legacy boxed tool cards; "inline" uses opencode-like headers. */
-  toolStyle?: "box" | "inline";
   /**
    * Workspace root — absolute paths inside it are shown as short relative
    * paths in tool headers (the agent already knows the root).
@@ -47,6 +45,7 @@ function toDisplayPath(baseDir: string | undefined, p: string): string {
 }
 
 const GUTTER = "  ";
+const MAX_OUTPUT_LINES = 50;
 
 /** Tools that show a busy spinner while running (inline mode). */
 const BUSY_TOOLS = new Set(["lsp_check"]);
@@ -99,8 +98,8 @@ function friendlyTool(tool: string): string {
 }
 
 /**
- * Streams agent events to the terminal. Rich mode (TTY) adds a spinner
- * and boxed tool cards; plain mode falls back to simple prefixed lines.
+ * Streams agent events to the terminal. Rich mode (TTY) adds a spinner;
+ * plain mode falls back to simple prefixed lines.
  * Colors come from `colors.ts`, disabled outside a TTY, in CI, or on NO_COLOR.
  */
 export class Renderer {
@@ -110,21 +109,24 @@ export class Renderer {
   private out: NodeJS.WritableStream;
   private err: NodeJS.WritableStream;
   private width: number;
-  private toolStyle: "box" | "inline";
   private baseDir?: string;
   private card: {
     tool: string;
     args: Record<string, unknown>;
-    body: string[];
     start: number;
   } | null = null;
+  private thoughtStarted = false;
+  private thoughtStartMs = 0;
+  private thoughtHeaderPrinted = false;
+  private textStarted = false;
+  private outputLineCount = 0;
+  private outputSuppressed = false;
 
   constructor(opts: RendererOptions = {}) {
     this.rich = opts.rich ?? isRichTerminal();
     this.out = opts.out ?? process.stdout;
     this.err = opts.err ?? process.stderr;
     this.width = opts.width ?? getTerminalWidth();
-    this.toolStyle = opts.toolStyle ?? "inline";
     this.baseDir = opts.baseDir;
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
@@ -134,22 +136,33 @@ export class Renderer {
     this.fmt = new FormattingStream((line) => this.out.write(`${line}\n`), this.width);
   }
 
+  /** Show a thinking spinner while waiting for LLM response. */
+  showLoader(): void {
+    this.spinner.start("thinking");
+  }
+
   /** Final answer streamed from the model (markdown-formatted). */
   text(chunk: string): void {
     this.endCard();
     this.spinner.stop();
+    if (!this.textStarted) {
+      this.textStarted = true;
+      this.out.write(`\n${pc.dim("-")} `);
+    }
     this.fmt.write(chunk);
   }
 
   /** Arbitrary status/meta text (tool output, reasoning, MoE status). */
   meta(chunk: string): void {
     this.spinner.stop();
-    if (this.card) {
-      if (this.toolStyle === "inline") {
-        this.writeInlineBody(chunk);
-      } else {
-        this.card.body.push(chunk);
+    if (this.thoughtStarted) {
+      if (!this.thoughtHeaderPrinted) {
+        this.out.write(`\n${pc.dim("→")} Thought: `);
+        this.thoughtHeaderPrinted = true;
       }
+      this.out.write(pc.dim(chunk));
+    } else if (this.card) {
+      this.writeInlineBody(chunk);
     } else {
       this.out.write(chunk);
     }
@@ -159,6 +172,11 @@ export class Renderer {
   private writeInlineBody(chunk: string): void {
     for (const line of chunk.split("\n")) {
       if (line.trim() === "") continue;
+      this.outputLineCount++;
+      if (this.outputLineCount > MAX_OUTPUT_LINES) {
+        this.outputSuppressed = true;
+        continue;
+      }
       this.out.write(`${GUTTER}${line}\n`);
     }
   }
@@ -166,17 +184,29 @@ export class Renderer {
   /** Dimmed reasoning stream (already colored by the agent). */
   reasoning(chunk: string): void {
     this.spinner.stop();
+    if (this.thoughtStarted && !this.thoughtHeaderPrinted) {
+      this.out.write(`\n${pc.dim("→")} Thought: `);
+      this.thoughtHeaderPrinted = true;
+    }
     this.out.write(pc.dim(chunk));
   }
 
-  /** Model is loading / generating — show the thinking spinner. */
+  /** Model is loading / generating — record start time. */
   thinkingStart(): void {
-    this.spinner.start(t("ui.thinking"));
+    this.thoughtStarted = true;
+    this.thoughtStartMs = Date.now();
+    this.thoughtHeaderPrinted = false;
   }
 
-  /** LLM call finished; clear the thinking spinner. */
+  /** LLM call finished; print duration and close the thought block. */
   thinkingEnd(): void {
     this.spinner.stop();
+    if (this.thoughtStarted && this.thoughtHeaderPrinted) {
+      const duration = Date.now() - this.thoughtStartMs;
+      this.out.write(pc.dim(` ${duration}ms\n`));
+    }
+    this.thoughtStarted = false;
+    this.thoughtHeaderPrinted = false;
   }
 
   toolStart(
@@ -187,31 +217,20 @@ export class Renderer {
   ): void {
     this.endCard();
     this.spinner.stop();
+    this.outputLineCount = 0;
+    this.outputSuppressed = false;
     const displayArgs =
       PATH_TOOLS.has(tool) && typeof args.path === "string"
         ? { ...args, path: toDisplayPath(this.baseDir, args.path) }
         : args;
     const summary = summarizeArgs(displayArgs);
-    const step = stepContext ? ` ${pc.cyan(`← ${stepContext}`)}` : "";
     const marker = icon || toolMarker(tool);
-    if (!this.rich) {
-      this.out.write(
-        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
-      );
-      return;
+    this.card = { tool, args, start: Date.now() };
+    if (stepContext) {
+      this.out.write(`\n${pc.dim("↓")} ${pc.cyan(stepContext)}\n`);
     }
-    this.card = { tool, args, body: [], start: Date.now() };
-    if (this.toolStyle === "inline") {
-      this.out.write(
-        `\n${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}\n`,
-      );
-      if (BUSY_TOOLS.has(tool)) {
-        this.spinner.start(t("ui.tool_running", { tool: friendlyTool(tool) }));
-      }
-      return;
-    }
-    this.spinner.start(
-      `${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}${step}`,
+    this.out.write(
+      `${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
     );
   }
 
@@ -230,29 +249,11 @@ export class Renderer {
     error?: boolean,
     ctxDelta?: number,
     costUsd?: number,
-    provider?: string,
-    model?: string,
   ): void {
     this.spinner.stop();
-    const prov =
-      provider && model ? `${pc.dim(`${provider}·${model}`)}` : undefined;
-    if (!this.rich) {
-      const parts: string[] = [];
-      if (ctxDelta !== undefined && ctxDelta !== 0) {
-        const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
-        parts.push(`${pc.dim("ctx")} ${deltaStr}`);
-      }
-      if (costUsd !== undefined && costUsd > 0) {
-        parts.push(`${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`);
-      }
-      if (prov) parts.push(prov);
-      if (parts.length > 0) this.out.write(`${parts.join("  ")}\n`);
-      return;
-    }
     if (!this.card) return;
-    const { tool, args, body } = this.card;
     const marker = error ? pc.red("✗") : pc.green("✓");
-    let footer = `${marker} ${pc.dim(`${duration}ms`)}`;
+    let footer = `${GUTTER}${marker} ${pc.dim(`${duration}ms`)}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {
       const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
       footer += `  ${pc.dim("ctx")} ${deltaStr}`;
@@ -260,27 +261,9 @@ export class Renderer {
     if (costUsd !== undefined && costUsd > 0) {
       footer += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
     }
-    if (prov) {
-      footer += `  ${pc.dim("via")} ${prov}`;
-    }
-    if (this.toolStyle === "inline") {
-      this.out.write(`${GUTTER}${footer}\n`);
-      this.out.write(`${divider(this.width)}\n`);
-      this.card = null;
-      return;
-    }
-    const lines: string[] = [];
-    const summary = summarizeArgs(args);
-    if (summary) lines.push(pc.dim(summary));
-    for (const chunk of body) {
-      for (const line of chunk.split("\n")) {
-        if (line.trim() !== "") lines.push(line);
-      }
-    }
-    lines.push(footer);
-    const title = `${marker} ${friendlyTool(tool)}`;
-    for (const line of box(lines, { title, width: this.width })) {
-      this.out.write(`${line}\n`);
+    this.out.write(`${footer}\n`);
+    if (this.outputSuppressed) {
+      this.out.write(`${GUTTER}${pc.dim(`... (${this.outputLineCount - MAX_OUTPUT_LINES} more lines)`)}\n`);
     }
     this.card = null;
   }
@@ -302,6 +285,12 @@ export class Renderer {
     this.endCard();
     this.spinner.stop();
     this.fmt.flush();
+    this.textStarted = false;
+  }
+
+  /** Footer with model, provider, and total duration. */
+  footer(model: string, provider: string, durationMs: number): void {
+    this.out.write(`\n${pc.dim("▣")} ${model} · ${provider} · ${pc.dim(`${durationMs}ms`)}\n`);
   }
 
   private endCard(): void {

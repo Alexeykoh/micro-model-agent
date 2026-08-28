@@ -107,10 +107,10 @@ describe("stepContextForTool", () => {
     expect(ctx).toContain("Fix src/app.tsx errors");
   });
 
-  it("falls back to the current step when args carry no files", () => {
+  it("returns null when args carry no files and no match", () => {
     const plan = makePlan();
     const ctx = stepContextForTool(plan, "bash", { command: "bun run build" });
-    expect(ctx).toContain("2");
+    expect(ctx).toBeNull();
   });
 
   it("ignores URLs that look like files", () => {
@@ -118,6 +118,6 @@ describe("stepContextForTool", () => {
     const ctx = stepContextForTool(plan, "web_fetch", {
       url: "https://example.com/page.html",
     });
-    expect(ctx).toContain("2");
+    expect(ctx).toBeNull();
   });
 });

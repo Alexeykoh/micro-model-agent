@@ -13,14 +13,13 @@ class Capture extends Writable {
   }
 }
 
-function makeRenderer(toolStyle: "box" | "inline"): {
+function makeRenderer(): {
   renderer: Renderer;
   capture: Capture;
 } {
   const capture = new Capture();
   const renderer = new Renderer({
     rich: true,
-    toolStyle,
     out: capture,
     err: capture,
     width: 60,
@@ -54,21 +53,17 @@ describe("toolMarker", () => {
   });
 });
 
-describe("Renderer inline mode", () => {
-  it("toolStart prints a header without box characters", () => {
-    const { renderer, capture } = makeRenderer("inline");
+describe("Renderer", () => {
+  it("toolStart prints a header with icon", () => {
+    const { renderer, capture } = makeRenderer();
     renderer.toolStart("edit_file", { path: "src/foo.ts" });
     const out = capture.text;
     expect(out).toContain("←");
     expect(out).toContain("src/foo.ts");
-    expect(out).not.toContain("┌");
-    expect(out).not.toContain("│");
-    expect(out).not.toContain("└");
-    expect(out).not.toContain("┐");
   });
 
   it("meta streams body lines with a gutter", () => {
-    const { renderer, capture } = makeRenderer("inline");
+    const { renderer, capture } = makeRenderer();
     renderer.toolStart("edit_file", { path: "src/foo.ts" });
     renderer.meta("line one\n\nline two");
     const out = capture.text;
@@ -77,40 +72,24 @@ describe("Renderer inline mode", () => {
     expect(out).not.toContain("\n  \n");
   });
 
-  it("toolEnd prints footer and divider, no box", () => {
-    const { renderer, capture } = makeRenderer("inline");
+  it("toolEnd prints footer without divider", () => {
+    const { renderer, capture } = makeRenderer();
     renderer.toolStart("bash", { command: "bun test" });
     renderer.meta("some output");
     renderer.toolEnd("bash", 370);
     const out = capture.text;
     expect(out).toContain("370ms");
-    expect(out).toContain("─");
-    expect(out).not.toContain("┌");
-    expect(out).not.toContain("┐");
+    expect(out).not.toContain("─");
   });
 
-  it("text() closes the inline card before streaming", () => {
-    const { renderer, capture } = makeRenderer("inline");
+  it("text() closes the card before streaming", () => {
+    const { renderer, capture } = makeRenderer();
     renderer.toolStart("read_file", { path: "src/foo.ts" });
     renderer.meta("file content");
     renderer.text("final answer");
     renderer.flush();
     const out = capture.text;
     expect(out).toContain("final answer");
-    expect(out).not.toContain("┌");
-  });
-});
-
-describe("Renderer box mode (legacy)", () => {
-  it("toolStart/toolEnd still render a box", () => {
-    const { renderer, capture } = makeRenderer("box");
-    renderer.toolStart("edit_file", { path: "src/foo.ts" });
-    renderer.meta("body");
-    renderer.toolEnd("edit_file", 10);
-    const out = capture.text;
-    expect(out).toContain("┌");
-    expect(out).toContain("┐");
-    expect(out).toContain("└");
   });
 });
 
@@ -119,7 +98,6 @@ describe("Renderer plain mode", () => {
     const capture = new Capture();
     const renderer = new Renderer({
       rich: false,
-      toolStyle: "inline",
       out: capture,
       err: capture,
       width: 60,

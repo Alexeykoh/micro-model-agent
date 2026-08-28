@@ -65,7 +65,7 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 1000,
   stuckThreshold: 6,
   autoPlan: true,
-  showReasoning: false,
+  showReasoning: true,
   logLevel: "info",
   locale: "en",
   session: {
@@ -101,7 +101,6 @@ export const DEFAULTS: AppConfig = {
   },
   ui: {
     spinner: true,
-    toolStyle: "inline",
     toolComments: true,
     showContextStats: false,
     showCompaction: true,

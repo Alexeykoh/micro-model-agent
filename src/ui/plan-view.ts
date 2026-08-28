@@ -104,8 +104,5 @@ export function stepContextForTool(
       }
     }
   }
-  const cur = currentStepIndex(plan);
-  const step = plan.steps[cur];
-  if (!step) return null;
-  return t("ui.step_context", { id: step.id, desc: truncate(step.description) });
+  return null;
 }

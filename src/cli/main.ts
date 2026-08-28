@@ -94,9 +94,9 @@ async function main(): Promise<void> {
 
     const renderer = new Renderer({
       spinner: config.ui?.spinner ?? true,
-      toolStyle: config.ui?.toolStyle ?? "inline",
       baseDir,
     });
+    renderer.showLoader();
     const result = await agent.run(
       prompt,
       (chunk) => renderer.text(chunk),
@@ -117,6 +117,9 @@ async function main(): Promise<void> {
       },
     );
     renderer.flush();
+    if (result.provider && result.model) {
+      renderer.footer(result.model, result.provider, result.llmDurationMs ?? result.durationMs ?? 0);
+    }
     const exitCode = printRunResult(result, () => renderer.flush());
     agent.shutdown();
     await updater?.waitForIdle();

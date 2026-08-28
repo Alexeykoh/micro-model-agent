@@ -145,8 +145,6 @@ export interface BrowserToolConfig {
 
 export interface UiConfig {
   spinner: boolean;
-  /** Tool display style: "inline" (opencode-like headers, no boxes) or "box". */
-  toolStyle: "box" | "inline";
   /** Show model commentary text that accompanies a tool call (sanitized). */
   toolComments: boolean;
   /** Show context usage bar after each tool cycle (ctx: N/M, compactions, quality). */
