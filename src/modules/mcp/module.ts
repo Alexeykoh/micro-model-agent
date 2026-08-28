@@ -33,16 +33,28 @@ function convertInputSchema(schema: Record<string, unknown>): Record<string, unk
   return { type: "object", properties: {} };
 }
 
+/** Timeout for the initial tool discovery call (avoids hanging startup). */
+const DISCOVERY_TIMEOUT_MS = 5_000;
+
 export class MCPModule implements AgentModule {
   readonly name = "mcp";
 
   private connections: Map<string, MCPClient> = new Map();
+  /** Server configs registered at init, not yet connected. */
+  private serverConfigs: Map<string, MCPServerConfig> = new Map();
   private discovered: DiscoveredTool[] = [];
   private initialized = false;
   private initError: string | null = null;
+  /** Servers that failed initial discovery — will not be retried. */
+  private failedServers: Set<string> = new Set();
 
   constructor(private config: AppConfig) {}
 
+  /**
+   * Register MCP server configs WITHOUT connecting. Actual connection and tool
+   * discovery happens lazily on first tool call — keeps startup fast and
+   * offline-safe.
+   */
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
@@ -68,24 +80,49 @@ export class MCPModule implements AgentModule {
       registry.register(serverConfig);
     }
 
+    // Store configs for lazy connection — no network calls here.
     for (const serverName of registry.list()) {
-      const serverConfig = registry.get(serverName)!;
+      this.serverConfigs.set(serverName, registry.get(serverName)!);
+    }
+
+    // Attempt fast discovery in background (best-effort, timeout-bounded).
+    // If it fails, tools are still registered — they'll connect on first call.
+    this.discoverAllTools();
+  }
+
+  /**
+   * Try to connect and discover tools for all registered servers.
+   * Runs in background, never blocks the caller. Failures are silent —
+   * tools still get registered and will retry connection on first call.
+   */
+  private async discoverAllTools(): Promise<void> {
+    for (const [serverName, serverConfig] of this.serverConfigs) {
+      if (this.failedServers.has(serverName)) continue;
+
       const client = new MCPClient(serverConfig);
 
       try {
-        await client.connect();
-        const tools = await client.listTools();
-        this.connections.set(serverName, client);
-
-        for (const tool of tools) {
-          this.discovered.push({
-            serverName,
-            toolName: tool.name,
-            description: tool.description || `Tool on MCP server "${serverName}"`,
-            inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
-          });
-        }
+        // Race discovery against timeout — never let a dead server block startup.
+        await Promise.race([
+          (async () => {
+            await client.connect();
+            const tools = await client.listTools();
+            this.connections.set(serverName, client);
+            for (const tool of tools) {
+              this.discovered.push({
+                serverName,
+                toolName: tool.name,
+                description: tool.description || `Tool on MCP server "${serverName}"`,
+                inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+              });
+            }
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("discovery timeout")), DISCOVERY_TIMEOUT_MS),
+          ),
+        ]);
       } catch (e: any) {
+        this.failedServers.add(serverName);
         this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
         await client.disconnect().catch((err: unknown) => {
           logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
@@ -94,8 +131,53 @@ export class MCPModule implements AgentModule {
     }
   }
 
+  /**
+   * Ensure a specific server is connected and its tools are discovered.
+   * Called lazily on first tool invocation for that server.
+   */
+  private async ensureConnected(serverName: string): Promise<MCPClient | null> {
+    // Already connected?
+    const existing = this.connections.get(serverName);
+    if (existing?.isConnected()) return existing;
+
+    // Failed during init — don't retry.
+    if (this.failedServers.has(serverName)) return null;
+
+    const serverConfig = this.serverConfigs.get(serverName);
+    if (!serverConfig) return null;
+
+    const client = new MCPClient(serverConfig);
+    try {
+      await client.connect();
+      const tools = await client.listTools();
+      this.connections.set(serverName, client);
+
+      // Add newly discovered tools (if not already present).
+      for (const tool of tools) {
+        const alreadyDiscovered = this.discovered.some(
+          (d) => d.serverName === serverName && d.toolName === tool.name,
+        );
+        if (!alreadyDiscovered) {
+          this.discovered.push({
+            serverName,
+            toolName: tool.name,
+            description: tool.description || `Tool on MCP server "${serverName}"`,
+            inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+          });
+        }
+      }
+      return client;
+    } catch (e: any) {
+      this.failedServers.add(serverName);
+      logger.warn(`MCP connect failed for "${serverName}": ${e.message}`);
+      await client.disconnect().catch(() => {});
+      return null;
+    }
+  }
+
   getSystemPromptBlock(): PromptBlock | null {
-    if (this.discovered.length === 0) return null;
+    const serverNames = [...this.serverConfigs.keys()];
+    if (serverNames.length === 0) return null;
 
     const lines: string[] = ["---", "MCP servers available:"];
 
@@ -106,11 +188,16 @@ export class MCPModule implements AgentModule {
       byServer.set(d.serverName, list);
     }
 
-    for (const [server, tools] of byServer) {
-      lines.push(`  [${server}]`);
-      for (const t of tools) {
-        const toolRef = sanitizeToolName(server, t.toolName);
-        lines.push(`    - ${toolRef}: ${t.description}`);
+    for (const serverName of serverNames) {
+      lines.push(`  [${serverName}]`);
+      const tools = byServer.get(serverName);
+      if (tools && tools.length > 0) {
+        for (const t of tools) {
+          const toolRef = sanitizeToolName(serverName, t.toolName);
+          lines.push(`    - ${toolRef}: ${t.description}`);
+        }
+      } else {
+        lines.push(`    (not yet connected — use mcp__${serverName}__connect to discover tools)`);
       }
     }
 
@@ -125,34 +212,70 @@ export class MCPModule implements AgentModule {
   }
 
   getToolDefinitions(): ToolDefinition[] {
-    return this.discovered.map((d) => ({
-      name: sanitizeToolName(d.serverName, d.toolName),
-      description: `${d.description} [MCP server: ${d.serverName}]`,
-      parameters: convertInputSchema(d.inputSchema),
-      tags: ["code", "research"],
-      handler: async (_ctx, args) => {
-        const client = this.connections.get(d.serverName);
-        if (!client) {
-          return {
-            success: false,
-            output: `MCP server "${d.serverName}" not connected`,
-          };
-        }
+    // Build definitions from discovered tools AND from registered-but-not-yet-discovered
+    // servers (so the LLM sees all configured MCP tools even if discovery failed at startup).
+    const defs: ToolDefinition[] = [];
 
-        try {
-          if (!client.isConnected()) {
-            await client.connect();
+    // Tools already discovered (connected at startup).
+    for (const d of this.discovered) {
+      defs.push({
+        name: sanitizeToolName(d.serverName, d.toolName),
+        description: `${d.description} [MCP server: ${d.serverName}]`,
+        parameters: convertInputSchema(d.inputSchema),
+        tags: ["code", "research"],
+        handler: async (_ctx, args) => {
+          const client = this.connections.get(d.serverName);
+          if (!client?.isConnected()) {
+            return {
+              success: false,
+              output: `MCP server "${d.serverName}" not connected`,
+            };
           }
-          const result = await client.callTool(d.toolName, args);
+          try {
+            const result = await client.callTool(d.toolName, args);
+            return {
+              success: true,
+              output: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+            };
+          } catch (e: any) {
+            return { success: false, output: `MCP call failed: ${e.message}` };
+          }
+        },
+      });
+    }
+
+    // Servers that haven't been discovered yet — register placeholder tools
+    // that will connect lazily on first call.
+    for (const [serverName] of this.serverConfigs) {
+      if (this.failedServers.has(serverName)) continue;
+      const alreadyDiscovered = this.discovered.some((d) => d.serverName === serverName);
+      if (alreadyDiscovered) continue;
+
+      // Register a single "connect" tool so the LLM can trigger discovery.
+      defs.push({
+        name: sanitizeToolName(serverName, "connect"),
+        description: `Connect to MCP server "${serverName}" and discover its tools`,
+        parameters: { type: "object", properties: {} },
+        tags: ["code", "research"],
+        handler: async (_ctx, _args) => {
+          const client = await this.ensureConnected(serverName);
+          if (!client) {
+            return { success: false, output: `MCP server "${serverName}" connection failed` };
+          }
+          const tools = this.discovered
+            .filter((d) => d.serverName === serverName)
+            .map((d) => `  - ${sanitizeToolName(serverName, d.toolName)}: ${d.description}`);
           return {
             success: true,
-            output: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+            output: tools.length > 0
+              ? `Connected to "${serverName}". Tools:\n${tools.join("\n")}`
+              : `Connected to "${serverName}" (no tools discovered)`,
           };
-        } catch (e: any) {
-          return { success: false, output: `MCP call failed: ${e.message}` };
-        }
-      },
-    }));
+        },
+      });
+    }
+
+    return defs;
   }
 
   getPlugin(): AgentPlugin {

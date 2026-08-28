@@ -88,7 +88,7 @@ async function main(): Promise<void> {
         ),
       );
       process.stdout.write("\n");
-      await updater?.waitForIdle();
+      await updater?.waitForIdle(10_000);
       process.exit(result.success ? 0 : 1);
     }
 

@@ -1,6 +1,9 @@
 import { spawn, ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
 
+/** Default timeout for MCP HTTP requests (connect + tool calls). */
+const HTTP_TIMEOUT_MS = 10_000;
+
 export class MCPClient {
   readonly serverName: string;
   private config: MCPServerConfig;
@@ -37,27 +40,35 @@ export class MCPClient {
     if (!url) throw new Error("SSE transport requires a url");
 
     this.abortController = new AbortController();
+    const timeout = setTimeout(() => this.abortController?.abort(), this.config.timeout || HTTP_TIMEOUT_MS);
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "text/event-stream",
-        ...this.config.headers,
-      },
-      signal: this.abortController.signal,
-    });
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "text/event-stream",
+          ...this.config.headers,
+        },
+        signal: this.abortController.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
+      }
+
+      this._connected = true;
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      this.readSSE(reader, decoder, buffer);
+    } catch (err) {
+      clearTimeout(timeout);
+      throw err;
     }
-
-    this._connected = true;
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    this.readSSE(reader, decoder, buffer);
   }
 
   private async readSSE(
@@ -310,6 +321,7 @@ export class MCPClient {
         ...this.config.headers,
       },
       body: JSON.stringify(request),
+      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -426,6 +438,7 @@ export class MCPClient {
         ...this.config.headers,
       },
       body: JSON.stringify(request),
+      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
     });
 
     if (!response.ok) {

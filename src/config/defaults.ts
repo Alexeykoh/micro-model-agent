@@ -135,8 +135,8 @@ export const DEFAULTS: AppConfig = {
   lsp: DEFAULT_LSP_CONFIG,
   updater: {
     enabled: true,
-    checkOnStart: true,
-    autoInstall: true,
+    checkOnStart: false,
+    autoInstall: false,
     intervalMs: 0,
   },
   reasoning: {
