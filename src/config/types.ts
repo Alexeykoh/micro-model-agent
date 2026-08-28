@@ -145,8 +145,6 @@ export interface BrowserToolConfig {
 
 export interface UiConfig {
   spinner: boolean;
-  /** Show model commentary text that accompanies a tool call (sanitized). */
-  toolComments: boolean;
   /** Show context usage bar after each tool cycle (ctx: N/M, compactions, quality). */
   showContextStats: boolean;
   /** Show a one-line indicator when context compaction happens. */

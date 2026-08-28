@@ -101,7 +101,6 @@ export const DEFAULTS: AppConfig = {
   },
   ui: {
     spinner: true,
-    toolComments: true,
     showContextStats: false,
     showCompaction: true,
   },
