@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { DEFAULTS } from "../src/config/defaults";
-import { loadConfig, deepMerge } from "../src/config/config";
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from "fs";
+import { loadConfig, deepMerge, saveConfig } from "../src/config/config";
+import { mkdtempSync, writeFileSync, existsSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -208,6 +208,51 @@ describe("loadConfig", () => {
     } finally {
       if (prev) process.env.MMA_PROVIDER_BASEURL = prev;
       else delete process.env.MMA_PROVIDER_BASEURL;
+    }
+  });
+
+  it("does NOT persist MMA_ env override values into domain files on save (C4)", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        model: "orig-model",
+        provider: {
+          type: "openai-compat",
+          baseUrl: "http://orig:1234/v1",
+          apiKey: "orig-key",
+        },
+      }),
+    );
+    const prev = process.env.MMA_PROVIDER_BASEURL;
+    const prevModel = process.env.MMA_MODEL;
+    process.env.MMA_PROVIDER_BASEURL = "http://env:8080/v1";
+    process.env.MMA_MODEL = "env-model";
+    try {
+      const { config: cfg } = loadConfig({
+        configDir: tmpDir,
+        projectConfigPath: join(tmpDir, ".mmrc"),
+      });
+      // Env override is active in memory…
+      expect(cfg.model).toBe("env-model");
+      expect(cfg.provider.baseUrl).toBe("http://env:8080/v1");
+
+      // …but a save persists the ORIGINAL user values.
+      saveConfig(cfg, join(tmpDir, "config.json"), tmpDir);
+      const persistedCore = JSON.parse(
+        readFileSync(join(tmpDir, "config", "core.json"), "utf-8"),
+      );
+      const persistedProvider = JSON.parse(
+        readFileSync(join(tmpDir, "config", "provider.json"), "utf-8"),
+      );
+      expect(persistedCore.model).toBe("orig-model");
+      expect(persistedProvider.provider.baseUrl).toBe("http://orig:1234/v1");
+    } finally {
+      if (prev) process.env.MMA_PROVIDER_BASEURL = prev;
+      else delete process.env.MMA_PROVIDER_BASEURL;
+      if (prevModel) process.env.MMA_MODEL = prevModel;
+      else delete process.env.MMA_MODEL;
     }
   });
 

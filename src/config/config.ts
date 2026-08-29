@@ -137,11 +137,32 @@ function loadJSON(path: string): Record<string, unknown> | null {
   return null;
 }
 
-function applyEnvVars(config: AppConfig): AppConfig {
+interface EnvOverride {
+  key: string;
+  envValue: unknown;
+  originalValue: unknown;
+}
+
+/**
+ * Apply MMA_* env overrides. Returns the overridden keys with their PRE-ENV
+ * values so `saveConfig` can avoid persisting session-scoped env values (C4).
+ */
+function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOverride[] } {
   const env = process.env;
+  const overrides: EnvOverride[] = [];
   const result = { ...config };
 
-  if (env.MMA_MODEL) result.model = env.MMA_MODEL;
+  const record = (key: string, envValue: unknown): void => {
+    const original = (result as any)[key];
+    if (original !== envValue) overrides.push({ key, envValue, originalValue: original });
+  };
+
+  if (env.MMA_MODEL) {
+    record("model", env.MMA_MODEL);
+    result.model = env.MMA_MODEL;
+  }
+
+  const originalProvider = result.provider;
 
   // normalizeEntries prefers entries[] and ignores the flat provider fields, so
   // a flat-only env override is a silent no-op on multi-provider configs (the
@@ -176,23 +197,72 @@ function applyEnvVars(config: AppConfig): AppConfig {
     result.provider = { ...result.provider, apiKey: env.MMA_PROVIDER_APIKEY };
     patchActiveEntry({ apiKey: env.MMA_PROVIDER_APIKEY });
   }
-  if (env.MMA_LOG_LEVEL) result.logLevel = env.MMA_LOG_LEVEL;
-  if (env.MMA_LOCALE) result.locale = env.MMA_LOCALE;
+  if (env.MMA_PROVIDER_TYPE || env.MMA_PROVIDER_BASEURL || env.MMA_PROVIDER_APIKEY) {
+    // Record once with the FINAL env-mutated provider object so the identity
+    // check in stripEnvOverrides matches what the loaded config holds.
+    overrides.push({ key: "provider", envValue: result.provider, originalValue: originalProvider });
+  }
+  if (env.MMA_LOG_LEVEL) {
+    record("logLevel", env.MMA_LOG_LEVEL);
+    result.logLevel = env.MMA_LOG_LEVEL;
+  }
+  if (env.MMA_LOCALE) {
+    record("locale", env.MMA_LOCALE);
+    result.locale = env.MMA_LOCALE;
+  }
   if (env.MMA_CONTEXT_WINDOW) {
     const v = parseInt(env.MMA_CONTEXT_WINDOW, 10);
-    if (!isNaN(v)) result.contextWindow = v;
+    if (!isNaN(v)) {
+      record("contextWindow", v);
+      result.contextWindow = v;
+    }
   }
   if (env.MMA_MAX_TOOL_ITERATIONS) {
     const v = parseInt(env.MMA_MAX_TOOL_ITERATIONS, 10);
-    if (!isNaN(v)) result.maxToolIterations = v;
+    if (!isNaN(v)) {
+      record("maxToolIterations", v);
+      result.maxToolIterations = v;
+    }
   }
   if (env.MMA_STUCK_THRESHOLD) {
     const v = parseInt(env.MMA_STUCK_THRESHOLD, 10);
-    if (!isNaN(v)) result.stuckThreshold = v;
+    if (!isNaN(v)) {
+      record("stuckThreshold", v);
+      result.stuckThreshold = v;
+    }
   }
-  if (env.MMA_AUTO_PLAN) result.autoPlan = env.MMA_AUTO_PLAN === "true";
-  if (env.MMA_MOE_ENABLED) result.moe = { ...result.moe, enabled: env.MMA_MOE_ENABLED === "true" };
+  if (env.MMA_AUTO_PLAN) {
+    const v = env.MMA_AUTO_PLAN === "true";
+    record("autoPlan", v);
+    result.autoPlan = v;
+  }
+  if (env.MMA_MOE_ENABLED) {
+    const next = { ...result.moe, enabled: env.MMA_MOE_ENABLED === "true" };
+    record("moe", next);
+    result.moe = next;
+  }
 
+  return { config: result, overrides };
+}
+
+/** Pre-env values for env-touched keys, keyed by the loaded config object. */
+const envOverrideMap = new WeakMap<AppConfig, EnvOverride[]>();
+
+/**
+ * Restore pre-env values before persisting — session-scoped env overrides
+ * (e.g. the cert harness baseUrl) must NOT leak into domain files. An explicit
+ * later change (setProvider/reconfigure replacing provider, /model use) shows
+ * up as a different object/value and is kept as-is.
+ */
+function stripEnvOverrides(config: AppConfig): AppConfig {
+  const overrides = envOverrideMap.get(config);
+  if (!overrides || overrides.length === 0) return config;
+  const result = { ...config };
+  for (const o of overrides) {
+    if ((result as any)[o.key] === o.envValue) {
+      (result as any)[o.key] = o.originalValue;
+    }
+  }
   return result;
 }
 
@@ -287,7 +357,8 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   normalizeLspServerArgs(config);
 
   // Step 6: env vars
-  config = applyEnvVars(config);
+  const { config: envConfig, overrides } = applyEnvVars(config);
+  config = envConfig;
 
   // Step 7: decrypt
   try {
@@ -296,9 +367,16 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     for (const key of Object.keys(decrypted)) {
       (config as any)[key] = decrypted[key];
     }
+    // Decrypt rebuilds the object tree (new identities). Re-point the provider
+    // override at the post-decrypt provider so the save-time identity check in
+    // stripEnvOverrides still matches the loaded config.
+    const providerOverride = overrides.find((o) => o.key === "provider");
+    if (providerOverride) providerOverride.envValue = (config as any).provider;
   } catch (e: any) {
     console.warn(t("config.decryption_warning", { error: e.message }));
   }
+
+  if (overrides.length > 0) envOverrideMap.set(config, overrides);
 
   return { config, legacyDetected };
 }
@@ -326,8 +404,10 @@ export function validateConfig(config: AppConfig, allToolTags: string[]): void {
  * @param configDir  Optional config directory (e.g. ~/.mma). When provided, writes domain files.
  */
 export function saveConfig(config: AppConfig, configPath: string, configDir?: string): void {
+  // Session-scoped MMA_* env overrides must not be persisted (C4).
+  const toWrite = stripEnvOverrides(config);
   if (configDir) {
-    saveDomainFiles(config, configDir);
+    saveDomainFiles(toWrite, configDir);
     return;
   }
 
@@ -338,11 +418,11 @@ export function saveConfig(config: AppConfig, configPath: string, configDir?: st
   try {
     const encryptor = new ConfigEncryptor();
     const encryptedConfig = encryptor.encrypt({
-      ...config,
+      ...toWrite,
     } as unknown as Record<string, unknown>);
     writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
   } catch (e: any) {
     console.warn(t("config.encryption_warning", { error: e.message }));
-    writeFileSync(configPath, JSON.stringify(config, regexReplacer, 2), "utf-8");
+    writeFileSync(configPath, JSON.stringify(toWrite, regexReplacer, 2), "utf-8");
   }
 }
