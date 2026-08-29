@@ -125,6 +125,11 @@ export const DEFAULTS: AppConfig = {
   skills: {
     budget: 0.15,
   },
+  hallucination: {
+    judge: {
+      enabled: false,
+    },
+  },
   subagent: {
     resultMode: "text",
     maxSummaryChars: 2000,

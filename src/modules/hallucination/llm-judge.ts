@@ -77,25 +77,35 @@ Reply with ONLY valid JSON, no other text:
 
   private async askJudge(messages: Message[]): Promise<string> {
     let text = "";
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const consume = (async () => {
-      for await (const chunk of this.provider.chat(messages, [])) {
+      for await (const chunk of this.provider.chat(messages, [], controller.signal)) {
         if (chunk.type === "text" && chunk.content) {
           text += chunk.content;
         }
       }
       return text;
     })();
+    // The timeout can settle the race while the background stream is still
+    // running; its later rejection must not surface as an unhandled rejection.
+    consume.catch(() => {});
 
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("LLM judge timed out")), JUDGE_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("LLM judge timed out"));
+      }, JUDGE_TIMEOUT_MS);
     });
 
     try {
       return await Promise.race([consume, timeout]);
     } finally {
       if (timer) clearTimeout(timer);
+      // Abort the background stream on the success path too, so a judge that
+      // resolved early never keeps streaming in the background.
+      controller.abort();
     }
   }
 

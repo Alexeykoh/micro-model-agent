@@ -226,6 +226,17 @@ export interface SkillsConfig {
   budget: number;
 }
 
+export interface HallucinationConfig {
+  judge: {
+    /**
+     * Run an LLM-as-judge consistency pass on the worker model. Disabled by
+     * default: on small models it adds up to 15s latency for a verdict that can
+     * only produce a cosmetic "warn", never a retry/block.
+     */
+    enabled: boolean;
+  };
+}
+
 export interface SubagentConfig {
   /**
    * "text" (default, backward compatible): sub-agent result text is returned
@@ -344,6 +355,7 @@ export interface AppConfig {
   sessionIsolation?: SessionIsolationConfig;
   skills: SkillsConfig;
   subagent: SubagentConfig;
+  hallucination?: HallucinationConfig;
   lsp?: LspConfig;
   updater: UpdaterConfig;
   reasoning?: ReasoningConfig;

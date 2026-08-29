@@ -20,6 +20,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "logLevel",
     "locale",
     "reasoning",
+    "hallucination",
   ],
   provider: ["provider", "orchestrator", "retry", "pricing"],
   moe: ["moe", "experts"],

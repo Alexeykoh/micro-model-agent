@@ -421,7 +421,9 @@ export async function bootstrap(
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 
-  const hallucinationDetector = new HallucinationDetector(baseDir, llmProvider);
+  const hallucinationDetector = new HallucinationDetector(baseDir, llmProvider, {
+    judgeEnabled: config.hallucination?.judge?.enabled ?? false,
+  });
 
   const moduleRegistry = new ModuleRegistry();
 

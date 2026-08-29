@@ -19,11 +19,19 @@ export class HallucinationDetector {
   private factual: FactualCheck | null;
   private judge: LLMJudge | null;
 
-  constructor(baseDir?: string, llmProvider?: LLMProvider) {
+  constructor(
+    baseDir?: string,
+    llmProvider?: LLMProvider,
+    options?: { judgeEnabled?: boolean },
+  ) {
     this.consistency = new ConsistencyCheck();
     this.confidence = new ConfidenceCheck();
     this.factual = baseDir ? new FactualCheck(baseDir) : null;
-    this.judge = llmProvider ? new LLMJudge(llmProvider) : null;
+    // The judge is opt-out: it only runs when a provider is supplied AND the
+    // caller did not explicitly disable it (the main agent disables it by
+    // default via config.hallucination.judge.enabled).
+    const judgeEnabled = options?.judgeEnabled ?? true;
+    this.judge = llmProvider && judgeEnabled ? new LLMJudge(llmProvider) : null;
   }
 
   getConsistencyCheck(): ConsistencyCheck {

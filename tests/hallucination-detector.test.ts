@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { HallucinationDetector } from "../src/modules/hallucination/detector";
 
 describe("HallucinationDetector", () => {
@@ -80,6 +80,28 @@ describe("HallucinationDetector", () => {
     const detector = new HallucinationDetector(undefined, mockProvider as any);
     detector.getConsistencyCheck().trackDecision("use postgres", "agent");
     const result = await detector.validate("I will use MySQL from now on");
+    expect(result.status).toBe("pass");
+  });
+
+  it("skips the judge entirely when judgeEnabled is false", async () => {
+    const mockProvider = {
+      model: "judge",
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue(
+        (async function* () {
+          yield { type: "text" as const, content: '{"contradicts": true}' };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        })(),
+      ),
+      countTokens: () => 10,
+    };
+    const detector = new HallucinationDetector(undefined, mockProvider as any, {
+      judgeEnabled: false,
+    });
+    detector.getConsistencyCheck().trackDecision("use postgres", "agent");
+    const result = await detector.validate("I will use MySQL from now on");
+    // No LLM call for the judge and no false contradiction warning.
+    expect(mockProvider.chat).not.toHaveBeenCalled();
     expect(result.status).toBe("pass");
   });
 });
