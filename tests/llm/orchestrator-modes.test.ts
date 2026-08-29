@@ -108,6 +108,16 @@ describe("OrchestratorClient plan()", () => {
     const result = await orchestrator.plan("task");
     expect(result).toHaveProperty("error");
   });
+
+  it("threads the abort signal into the provider chat call", async () => {
+    const provider = createMockProvider();
+    const orchestrator = new OrchestratorClient({ model: "test" }, provider);
+    const ac = new AbortController();
+    await orchestrator.plan("task", undefined, ac.signal);
+    // chat(messages, tools, signal) — the third argument must be the signal.
+    const call = (provider.chat as any).mock.calls[0];
+    expect(call[2]).toBe(ac.signal);
+  });
 });
 
 describe("OrchestratorClient verifyAndMerge()", () => {

@@ -16,11 +16,12 @@ export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
 /** Minimal structural surface of the collaborators, for test seam injection. */
 export interface MoEOrchestratorLike {
   isEnabled(): boolean;
-  plan(input: string): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
-  verifyAndMerge(input: any): Promise<any>;
+  plan(input: string, context?: string, signal?: AbortSignal): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
+  verifyAndMerge(input: any, signal?: AbortSignal): Promise<any>;
   resolveScopeRequest(
     subtaskId: string,
     request: { files: string[]; read_only: boolean; reason: string },
+    signal?: AbortSignal,
   ): Promise<
     | { action: "approve"; write: string[]; read: string[] }
     | { action: "reject"; explanation?: string }
@@ -95,7 +96,7 @@ export async function runWithMoE(
 
   onMeta?.("🤖 Planning with MoE mode...\n");
   onPhase?.("thinking");
-  const planResult = await orchestrator.plan(input);
+  const planResult = await orchestrator.plan(input, undefined, signal);
   onPhase?.("done");
 
   if ("error" in planResult) {
@@ -146,7 +147,7 @@ export async function runWithMoE(
         logger,
         baseDir,
         onScopeRequest: async (subtaskId, req) => {
-          const decision = await orchestrator.resolveScopeRequest(subtaskId, req);
+          const decision = await orchestrator.resolveScopeRequest(subtaskId, req, signal);
           if (decision.action === "approve") {
             onMeta?.(
               t("moe.scope_approved", {
@@ -195,7 +196,7 @@ export async function runWithMoE(
         })),
         verifierErrors: verification.errors,
         verifierWarnings: verification.warnings,
-      });
+      }, signal);
     } catch (err: any) {
       onPhase?.("done");
       if (err?.name === "AbortError") throw err;

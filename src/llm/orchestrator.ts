@@ -107,10 +107,10 @@ export class OrchestratorClient {
     return this.provider !== null;
   }
 
-  private async chat(messages: Message[]): Promise<string> {
+  private async chat(messages: Message[], signal?: AbortSignal): Promise<string> {
     if (!this.provider) throw new Error("Orchestrator not enabled");
     const chunks: any[] = [];
-    for await (const chunk of this.provider.chat(messages)) {
+    for await (const chunk of this.provider.chat(messages, undefined, signal)) {
       chunks.push(chunk);
     }
     return chunks
@@ -144,6 +144,7 @@ export class OrchestratorClient {
   async plan(
     userPrompt: string,
     _context?: string,
+    signal?: AbortSignal,
   ): Promise<{ plan: MoEPlan; raw: string } | { error: string }> {
     if (!this.provider)
       return { error: "Orchestrator not enabled — no orchestrator model configured" };
@@ -153,7 +154,7 @@ export class OrchestratorClient {
       { role: "user", content: userPrompt },
     ];
 
-    const text = await this.chat(messages);
+    const text = await this.chat(messages, signal);
     const parsed = this.parseJSON<MoEPlan>(text);
 
     if (parsed && parsed.subtasks && parsed.subtasks.length > 0) {
@@ -163,7 +164,7 @@ export class OrchestratorClient {
     return { error: `Failed to parse plan from LLM output. Raw: ${text.slice(0, 500)}` };
   }
 
-  async verifyAndMerge(input: VerifyInput): Promise<OrchestratorResult> {
+  async verifyAndMerge(input: VerifyInput, signal?: AbortSignal): Promise<OrchestratorResult> {
     if (!this.provider)
       return { type: "final", finalAnswer: input.results.map((r) => r.summary).join("\n") };
 
@@ -173,7 +174,7 @@ export class OrchestratorClient {
       { role: "user", content: context },
     ];
 
-    const text = await this.chat(messages);
+    const text = await this.chat(messages, signal);
     const parsed = this.parseJSON<OrchestratorResult>(text);
 
     if (parsed && parsed.type) {
@@ -194,6 +195,7 @@ export class OrchestratorClient {
   async resolveScopeRequest(
     subtaskId: string,
     request: { files: string[]; read_only: boolean; reason: string },
+    signal?: AbortSignal,
   ): Promise<
     | { action: "approve"; write: string[]; read: string[] }
     | { action: "reject"; explanation?: string }
@@ -208,7 +210,7 @@ export class OrchestratorClient {
       },
     ];
 
-    const text = await this.chat(messages);
+    const text = await this.chat(messages, signal);
     const parsed = this.parseJSON<{
       action?: string;
       write?: unknown;
