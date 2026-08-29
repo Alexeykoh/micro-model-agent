@@ -202,6 +202,14 @@ export class ToolExecutor {
     this.ctx.scope = scope;
   }
 
+  getRecursionDepth(): number {
+    return this.ctx.recursionDepth ?? 0;
+  }
+
+  setRecursionDepth(depth: number): void {
+    this.ctx.recursionDepth = depth;
+  }
+
   updateProvider(provider: import("../llm/provider").LLMProvider): void {
     this.ctx.llmProvider = provider;
   }

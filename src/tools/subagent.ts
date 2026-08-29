@@ -95,9 +95,15 @@ export const subagentTool: ToolDefinition = {
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Security check: limit recursion depth
+    // Security check: limit recursion depth. Read the depth from the SHARED
+    // executor ctx (which nested sub-agents actually see) — `ctx.recursionDepth`
+    // was captured once at bootstrap and never incremented, so the guard never
+    // fired and a sub-agent could spawn sub-agents unbounded.
+    const executor = ctx.toolExecutor;
+    const parentDepth =
+      executor?.getRecursionDepth?.() ?? (ctx.recursionDepth ?? 0);
     const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
-    const currentDepth = ctx.recursionDepth ?? 0;
+    const currentDepth = parentDepth;
 
     if (currentDepth >= maxDepth) {
       logSecurityBlock(
@@ -164,6 +170,10 @@ export const subagentTool: ToolDefinition = {
       // Register cleanup so the executor restores scope on timeout/abort
       // even when the agent's `finally` block never runs (abandoned promise).
       ctx.cleanup = () => ctx.toolExecutor?.setScope(parentScope);
+      // Increment recursion depth on the shared executor ctx so NESTED
+      // sub-agents see the deeper level (and the guard above can fire).
+      ctx.recursionDepth = currentDepth + 1;
+      executor?.setRecursionDepth?.(currentDepth + 1);
 
       const systemPrompt: PromptBlock = {
         content: buildSubagentSystemPrompt(
@@ -187,7 +197,6 @@ export const subagentTool: ToolDefinition = {
         scope,
         toolTags,
         promptBlocks: [systemPrompt],
-        recursionDepth: currentDepth + 1, // Increment recursion depth for sub-agent
       };
 
       const subAgent = new Agent(subDeps);
@@ -241,6 +250,8 @@ export const subagentTool: ToolDefinition = {
         // and must not become an empty scope (which denies everything).
         ctx.toolExecutor.setScope(parentScope);
         ctx.cleanup = undefined;
+        ctx.recursionDepth = currentDepth;
+        executor?.setRecursionDepth?.(currentDepth);
       }
     } catch (e: any) {
       return { success: false, output: `Sub-agent error: ${e.message}` };

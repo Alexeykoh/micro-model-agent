@@ -22,6 +22,57 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// A ctx whose ToolExecutor shares the SAME object, so recursion-depth writes
+// on the handler ctx are what nested sub-agents actually read (mirrors the
+// real bootstrap wiring, where toolCtx === executor.this.ctx).
+function makeFullCtx(recursionDepth: number) {
+  const registry = new ToolRegistry();
+  registerAllTools(registry);
+  const logger = {
+    info: () => {},
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+    logLLMRequest: () => {},
+    logLLMResponse: () => {},
+    logToolCall: () => {},
+    logToolOutput: () => {},
+    initSessionLog: () => {},
+    closeSessionLog: () => {},
+    setSessionDir: () => {},
+  };
+  const ctx: any = { logger, recursionDepth };
+  const executor = new ToolExecutor(registry, ctx);
+  ctx.baseDir = process.cwd();
+  ctx.config = {
+    model: "test-model",
+    contextWindow: 4096,
+    contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+    maxToolIterations: 3,
+    stuckThreshold: 8,
+    autoPlan: false,
+    showReasoning: false,
+    session: { autoSave: false },
+    moe: { enabled: false },
+    subagent: { resultMode: "text", maxSummaryChars: 2000, artifactsDir: ".mma/artifacts", stableSystemPrompt: true, maxParallelChunkQueries: 3 },
+    ui: { showContextStats: false, showCompaction: false },
+    security: { maxRecursionDepth: 3 },
+  };
+  ctx.toolExecutor = executor;
+  ctx.llmProvider = {
+    model: "test-model",
+    contextWindow: 4096,
+    chat: async function* () {
+      yield { type: "text", content: "done" };
+      yield { type: "done", finishReason: "stop" };
+    },
+    countTokens: () => 10,
+  };
+  ctx.sessionId = undefined;
+  ctx.sessionContext = undefined;
+  return ctx;
+}
+
 describe("subagent tool defensive guard", () => {
   it("should reject tool_tags that match no registered tools", async () => {
     const ctx = makeCtx();
@@ -42,5 +93,28 @@ describe("subagent tool defensive guard", () => {
     });
     expect(String(result.output)).not.toContain("SECURITY BLOCKED");
     expect(String(result.output)).not.toContain("No tools match");
+  });
+
+  it("increments recursion depth while the sub-agent runs and restores it after", async () => {
+    const ctx = makeFullCtx(0);
+    let observed: number | undefined;
+    (ctx.llmProvider as any).chat = async function* () {
+      observed = ctx.recursionDepth;
+      yield { type: "text", content: "done" };
+      yield { type: "done", finishReason: "stop" };
+    };
+    const result = await subagentTool.handler(ctx, { task: "hi" });
+    expect(result.success).toBe(true);
+    // Nested sub-agents (and any tool run during the sub-agent) see depth 1.
+    expect(observed).toBe(1);
+    expect(ctx.recursionDepth).toBe(0);
+    expect(ctx.toolExecutor.getRecursionDepth()).toBe(0);
+  });
+
+  it("blocks a sub-agent when the recursion depth limit is reached", async () => {
+    const ctx = makeFullCtx(3);
+    const result = await subagentTool.handler(ctx, { task: "hi" });
+    expect(result.success).toBe(false);
+    expect(String(result.output)).toContain("SECURITY BLOCKED");
   });
 });
