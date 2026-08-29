@@ -109,8 +109,18 @@ export interface AgentDeps {
   moduleRegistry?: ModuleRegistry;
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
-  /** Whether the reasoning effort mechanism was validated by probe. */
+  /**
+   * Whether the reasoning effort mechanism was validated by probe. Initial
+   * value only — the live result comes from `reasoningProbe` (B2), which the
+   * agent awaits lazily before the first LLM call.
+   */
   reasoningProbePassed?: boolean;
+  /**
+   * Resolves the background reasoning probe. Consumed lazily next to
+   * `lazyPromptBlocks` so bootstrap never blocks on the probe LLM round-trip;
+   * until resolved the mechanism is treated as NOT passed.
+   */
+  reasoningProbe?: () => Promise<boolean>;
   /** Strategy for expressing reasoning effort on this provider. */
   reasoningStrategy?: import("../config/types").ReasoningStrategy;
 }
@@ -123,6 +133,8 @@ export class Agent {
   private lastCompactionShown = 0;
   private costTracker: CostTracker;
   private policyState: PolicyState;
+  /** Reasoning probe result (B2): starts from deps, refreshed lazily in run(). */
+  private probePassed: boolean;
   /** Shared mutable reasoning state (owned by agent, shared with set_thinking tool). */
   readonly reasoningState: ReasoningState;
   /** Current iteration counter (exposed for tool cooldown checks). */
@@ -132,6 +144,7 @@ export class Agent {
     this.deps = deps;
     this.costTracker = new CostTracker(deps.config.model, deps.config.pricing);
     this.policyState = createPolicyState();
+    this.probePassed = deps.reasoningProbePassed ?? false;
     const initialLevel = (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ?? "medium";
     this.reasoningState = { level: initialLevel, overrideIteration: -100 };
   }
@@ -383,6 +396,12 @@ export class Agent {
       const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
       if (lazy.length > 0) {
         this.deps.promptBlocks.push(...lazy);
+      }
+      // B2: await the background reasoning probe next to the lazy prompt
+      // blocks so the FIRST LLM call already knows whether the backend
+      // respects the reasoning mechanism (bootstrap no longer blocks on it).
+      if (this.deps.reasoningProbe) {
+        this.probePassed = await this.deps.reasoningProbe();
       }
       const { prompt: systemPrompt, excluded } = this.buildSystemPrompt();
       contextManager.addMessage({ role: "system", content: systemPrompt });
@@ -693,7 +712,7 @@ export class Agent {
         // A set_thinking override wins over both policy (auto) and fixed mode.
         effectiveReasoningLevel = this.reasoningState.level;
         reasoningSource = "agent_override";
-      } else if (reasoningConfig && reasoningConfig.mode === "auto" && this.deps.reasoningProbePassed) {
+      } else if (reasoningConfig && reasoningConfig.mode === "auto" && this.probePassed) {
         const policyResult = evaluateReasoningPolicy({
           hallucinationRetry: iterHallucinationRetry,
           auditRejection: iterAuditRejection,
@@ -722,7 +741,7 @@ export class Agent {
           iteration,
           level: effectiveReasoningLevel,
           strategy: reasoningStrategy,
-          probePassed: this.deps.reasoningProbePassed,
+          probePassed: this.probePassed,
           source: reasoningSource,
         });
         contextManager.thinkingLevel = effectiveReasoningLevel;

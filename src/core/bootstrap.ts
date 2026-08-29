@@ -254,26 +254,27 @@ export async function bootstrap(
   // Resolve reasoning strategy from provider preset + probe
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
   const reasoningStrategy = providerSpec?.capabilities.reasoningStrategy ?? "none";
-  let reasoningProbePassed = false;
+
+  // Reasoning probe runs in the BACKGROUND (B2). It used to block bootstrap
+  // with an extra LLM round-trip on every launch; the agent now consumes it
+  // lazily before the first LLM call (same pattern as the startup health
+  // check) and treats the mechanism as NOT passed until it resolves. The 24h
+  // TTL disk cache in probe.ts already avoids re-probing a stable backend.
+  let reasoningProbePromise: Promise<boolean> = Promise.resolve(false);
   if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
-    try {
-      const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
-      const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
-      const cached = getCachedProbeResult(cacheK);
-      if (cached !== undefined) {
-        reasoningProbePassed = cached;
-      } else {
-        reasoningProbePassed = await probeReasoningSupport(llmProvider, reasoningStrategy);
-        setCachedProbeResult(cacheK, reasoningProbePassed);
+    reasoningProbePromise = (async () => {
+      try {
+        const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
+        const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
+        const cached = getCachedProbeResult(cacheK);
+        const passed = cached !== undefined ? cached : await probeReasoningSupport(llmProvider, reasoningStrategy);
+        if (cached === undefined) setCachedProbeResult(cacheK, passed);
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → ${passed ? "mechanism respected" : "mechanism IGNORED"}`);
+        return passed;
+      } catch {
+        return false;
       }
-      if (reasoningProbePassed) {
-        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism respected`);
-      } else {
-        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → mechanism IGNORED`);
-      }
-    } catch {
-        reasoningProbePassed = false;
-      }
+    })();
   }
 
   const baseDir = projectDir ? resolve(projectDir) : process.cwd();
@@ -631,7 +632,7 @@ export async function bootstrap(
     memoryStore,
     moduleRegistry,
     exitOnComplete,
-    reasoningProbePassed,
+    reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
   };
 
