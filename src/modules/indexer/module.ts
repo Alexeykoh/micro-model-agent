@@ -8,6 +8,7 @@ import { buildProjectProfileLine } from "./project-profile";
 import type { IndexResult, IndexedFile } from "./walker";
 import { t } from "../../i18n/index";
 import { toForwardSlash } from "../../tools/path-utils";
+import { estimateTokens } from "../../llm/token-counter";
 
 export interface IndexerModuleOptions {
   baseDir: string;
@@ -198,7 +199,7 @@ export class IndexerModule implements AgentModule {
   }
 
   private estimateTokens(content: string): number {
-    return Math.ceil(content.length / 4);
+    return estimateTokens(content);
   }
 
   private createProjectMapTool(): ToolDefinition {

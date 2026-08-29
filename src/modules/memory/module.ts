@@ -6,6 +6,7 @@ import type { ToolDefinition } from "../../tools/types";
 import { MemoryStore } from "./store";
 import { rememberTool } from "../../tools/remember";
 import { recallTool } from "../../tools/recall";
+import { estimateTokens } from "../../llm/token-counter";
 
 const MEMORY_MD_FILES = ["errors", "conventions", "decisions", "facts"];
 
@@ -43,7 +44,7 @@ export class MemoryModule implements AgentModule {
       content,
       priority: "normal",
       essential: false,
-      estimatedTokens: Math.ceil(content.length / 4) + 10,
+      estimatedTokens: estimateTokens(content) + 10,
     };
   }
 

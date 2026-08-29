@@ -1,6 +1,7 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import type { SkillsModule } from "../modules/skills/module";
+import { estimateTokens } from "../llm/token-counter";
 
 export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
@@ -38,7 +39,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
       }
 
       const budget = skillsModule.getBudget();
-      const tokens = result.skill ? Math.ceil(result.skill.content.length / 4) : 0;
+      const tokens = result.skill ? estimateTokens(result.skill.content) : 0;
       return {
         success: true,
         output: t("tool.skill_budget", {

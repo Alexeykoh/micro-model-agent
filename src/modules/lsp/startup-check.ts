@@ -8,6 +8,7 @@ import { LspClient } from "./client";
 import { collectCheckFiles } from "./check-tool";
 import { getServerForFile } from "./config";
 import { findProjectRoot } from "./project-root";
+import { estimateTokens } from "../../llm/token-counter";
 
 /** Startup check never examines more than this many files via LSP. */
 const STARTUP_CHECK_FILE_CAP = 5;
@@ -58,7 +59,7 @@ export async function runStartupHealthCheck(
       content,
       priority: "high" as const,
       essential: false,
-      estimatedTokens: Math.ceil(content.length / 4),
+      estimatedTokens: estimateTokens(content),
     };
   } catch {
     return null;

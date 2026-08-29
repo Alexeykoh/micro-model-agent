@@ -5,6 +5,7 @@ import { t } from "../i18n/index";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
 import { getMessageText } from "../llm/provider";
+import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
 import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -787,7 +788,7 @@ function registerSkillCommands(ctx: ReplContext): void {
         }
         console.log(pc.bold(t("repl.available_skills")));
         for (const skill of available) {
-          const tokens = Math.ceil(skill.content.length / 4);
+          const tokens = estimateTokens(skill.content);
           const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
           const marker = loaded ? pc.green(" [loaded]") : "";
           console.log(
@@ -806,7 +807,7 @@ function registerSkillCommands(ctx: ReplContext): void {
         }
         console.log(pc.bold(t("repl.loaded_skills")));
         for (const skill of loaded) {
-          const tokens = Math.ceil(skill.content.length / 4);
+          const tokens = estimateTokens(skill.content);
           console.log(
             `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
           );
@@ -858,7 +859,7 @@ function registerSkillCommands(ctx: ReplContext): void {
         }
         console.log(pc.bold(t("repl.skills_matching", { query: arg })));
         for (const skill of results) {
-          const tokens = Math.ceil(skill.content.length / 4);
+          const tokens = estimateTokens(skill.content);
           console.log(
             `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
           );

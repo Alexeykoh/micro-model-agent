@@ -2,6 +2,7 @@ import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { SkillMeta } from "./loader";
 import { t } from "../../i18n/index";
+import { estimateTokens } from "../../llm/token-counter";
 
 export interface LoadResult {
   success: boolean;
@@ -159,6 +160,6 @@ export class SkillsModule implements AgentModule {
   }
 
   private estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
+    return estimateTokens(text);
   }
 }

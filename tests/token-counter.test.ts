@@ -1,6 +1,37 @@
 // tests/token-counter.test.ts
 import { describe, it, expect } from "vitest";
-import { TokenCounter } from "../src/llm/token-counter";
+import { TokenCounter, estimateTokens } from "../src/llm/token-counter";
+
+describe("estimateTokens", () => {
+  it("returns 0 for empty text", () => {
+    expect(estimateTokens("")).toBe(0);
+  });
+
+  it("approximates Latin text at ~4 chars/token", () => {
+    const latin = "Implement a deep merge for the config objects and verify it";
+    const estimate = estimateTokens(latin);
+    expect(estimate).toBeGreaterThan(0);
+    expect(estimate).toBeLessThan(latin.length);
+  });
+
+  it("is within ±30% of tiktoken for Russian text", () => {
+    const counter = new TokenCounter();
+    const ru =
+      "Исправьте логику обработки ошибок в модуле конфигурации, добавьте предупреждения и сохраните пользовательские настройки при повреждённом файле. Проверьте, что все тесты проходят.";
+    const exact = counter.count(ru);
+    const estimate = estimateTokens(ru);
+    expect(estimate).toBeGreaterThanOrEqual(Math.round(exact * 0.7));
+    expect(estimate).toBeLessThanOrEqual(Math.round(exact * 1.3));
+  });
+
+  it("handles CJK without crashing and estimates higher density than Latin", () => {
+    const cjk = "中文测试文本需要更多令牌每个字符大约一个令牌";
+    const estimate = estimateTokens(cjk);
+    expect(estimate).toBeGreaterThan(0);
+    // CJK is much denser than Latin: per-char ratio should exceed /4.
+    expect(estimate).toBeGreaterThan(cjk.length / 3);
+  });
+});
 
 describe("TokenCounter", () => {
   it("should count tokens in a string", () => {

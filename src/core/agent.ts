@@ -24,6 +24,7 @@ import { evaluateReasoningPolicy, createPolicyState } from "../modules/reasoning
 import type { PolicyState } from "../modules/reasoning/policy";
 import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
+import { estimateTokens } from "../llm/token-counter";
 
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
@@ -871,7 +872,7 @@ export class Agent {
         const completion =
           source === "api"
             ? usageCompletion
-            : Math.ceil((textContent || reasoningContent).length / 4);
+            : estimateTokens(textContent || reasoningContent);
         slog.logLlmUsage(iteration, {
           promptTokens: prompt,
           completionTokens: completion,

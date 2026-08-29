@@ -14,7 +14,7 @@ import { PluginLoader } from "../modules/plugins/loader";
 import { plugin as lintOnWritePlugin } from "../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../modules/plugins/builtin/notify";
 import { ContextManager } from "../modules/context/manager";
-import { TokenCounter } from "../llm/token-counter";
+import { TokenCounter, estimateTokens } from "../llm/token-counter";
 import { HallucinationDetector } from "../modules/hallucination/detector";
 import { ExecutionModule } from "../modules/execution/module";
 import { SessionStore, SessionManager, SessionModule } from "../modules/session/index";
@@ -324,7 +324,7 @@ export async function bootstrap(
     content: systemInfoContent,
     priority: "critical",
     essential: true,
-    estimatedTokens: Math.ceil(systemInfoContent.length / 4),
+    estimatedTokens: estimateTokens(systemInfoContent),
   };
 
   const sessionDir = join(dir, "sessions");
@@ -577,7 +577,7 @@ export async function bootstrap(
             content,
             priority: "high",
             essential: false,
-            estimatedTokens: Math.ceil(content.length / 4),
+            estimatedTokens: estimateTokens(content),
           });
         }
       }
@@ -617,7 +617,7 @@ export async function bootstrap(
           content: hiddenToolsBlock,
           priority: "low",
           essential: false,
-          estimatedTokens: Math.ceil(hiddenToolsBlock.length / 4),
+          estimatedTokens: estimateTokens(hiddenToolsBlock),
         });
       }
       return blocks;
