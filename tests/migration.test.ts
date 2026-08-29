@@ -44,6 +44,24 @@ describe("MigrationDetector", () => {
     const detector = new MigrationDetector(tmpDir);
     expect(detector.needsMigration()).toBe(false);
   });
+
+  it("should NOT treat a corrupt config.json as needing migration (data-loss guard)", () => {
+    writeFileSync(join(tmpDir, "config.json"), "{ this is not valid json ");
+    const detector = new MigrationDetector(tmpDir);
+    // A corrupt/hand-edited v2 config must never be deleted as "v1".
+    expect(detector.needsMigration()).toBe(false);
+  });
+
+  it("should NOT migrate a versioned v2 config that is missing a v2 field", () => {
+    // version 2.x short-circuits the missing-field heuristic — a truncated
+    // v2 config is corrupt, not a v1 config to migrate away.
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({ version: "2.0.0", model: "qwen/qwen3.5-9b" }),
+    );
+    const detector = new MigrationDetector(tmpDir);
+    expect(detector.needsMigration()).toBe(false);
+  });
 });
 
 describe("BackupManager", () => {

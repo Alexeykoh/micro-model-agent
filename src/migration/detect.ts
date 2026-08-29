@@ -30,7 +30,9 @@ export class MigrationDetector {
 
       return false;
     } catch {
-      return true;
+      // A corrupt or hand-edited config must NOT be treated as v1 and deleted.
+      // loadConfig will warn and fall back to defaults instead.
+      return false;
     }
   }
 

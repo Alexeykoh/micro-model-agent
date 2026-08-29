@@ -634,6 +634,7 @@
   "config.migrate_no_legacy": "Legacy config.json не найден. Уже используется domain-формат.",
   "config.migrate_error": "Ошибка миграции: {error}",
   "config.legacy_hint": "Config: используется legacy config.json. Запустите \"mma config migrate\" для перехода к domain-формату.",
+  "config.parse_failed": "Предупреждение: не удалось разобрать {path} — используются значения по умолчанию. Исправьте или удалите файл, чтобы вернуть настройки.",
   "image.source_required": "Укажите источник изображения: путь к файлу, URL или \"clipboard\".",
   "image.clipboard_empty": "Буфер обмена не содержит изображение. Скопируйте изображение (например, скриншот через Win+Shift+S).",
   "image.not_found": "Файл изображения не найден: {path}",

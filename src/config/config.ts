@@ -45,21 +45,22 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
   });
 }
 
-function deepMerge<T>(target: T, source: Partial<T>): T {
+function isPlainObject(v: unknown): boolean {
+  if (typeof v !== "object" || v === null) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+export function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = { ...(target as any) };
   for (const key of Object.keys(source as object)) {
     const srcVal = (source as any)[key];
     const tgtVal = (target as any)[key];
-    if (
-      srcVal !== null &&
-      srcVal !== undefined &&
-      typeof srcVal === "object" &&
-      !Array.isArray(srcVal) &&
-      typeof tgtVal === "object" &&
-      !Array.isArray(tgtVal)
-    ) {
+    if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
       result[key] = deepMerge(tgtVal, srcVal);
     } else if (srcVal !== undefined) {
+      // Assign non-plain values (RegExp, Date, arrays, primitives) by
+      // reference — spreading a RegExp would silently destroy it to {}.
       result[key] = srcVal;
     }
   }
@@ -123,15 +124,15 @@ function normalizeLspServerArgs(config: AppConfig): void {
 }
 
 function loadJSON(path: string): Record<string, unknown> | null {
+  if (!existsSync(path)) return null;
   try {
-    if (existsSync(path)) {
-      return JSON.parse(
-        readFileSync(path, "utf-8"),
-        regexReviver as (key: string, value: unknown) => unknown,
-      ) as Record<string, unknown>;
-    }
+    return JSON.parse(
+      readFileSync(path, "utf-8"),
+      regexReviver as (key: string, value: unknown) => unknown,
+    ) as Record<string, unknown>;
   } catch {
-    /* ignore malformed files */
+    // Never silent: a typo'd config must not quietly wipe the user's settings.
+    console.warn(t("config.parse_failed", { path }));
   }
   return null;
 }
@@ -202,6 +203,9 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const detector = new MigrationDetector(options.configDir);
   if (detector.needsMigration()) {
     const backup = new BackupManager(options.configDir);
+    // Full-directory backup (documented behavior) + config.json snapshot
+    // before we touch anything.
+    backup.backupAll();
     backup.backupConfig();
     const summary = backup.getBackupSummary();
     console.log(t("migration.detected", { summary }));

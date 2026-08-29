@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
 import type { AppConfig } from "./types";
+import { t } from "../i18n/index";
 
 /**
  * Mapping: domain name → AppConfig keys that belong to it.
@@ -67,27 +68,27 @@ function regexReviver(_key: string, value: unknown): unknown {
 }
 
 /**
- * Deep merge two objects. Arrays and scalars in source replace target.
+ * Deep merge two objects. Arrays, scalars, and non-plain values (RegExp, Date)
+ * in source replace target by reference — spreading a RegExp would destroy it.
  */
 function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = { ...(target as any) };
   for (const key of Object.keys(source as object)) {
     const srcVal = (source as any)[key];
     const tgtVal = (target as any)[key];
-    if (
-      srcVal !== null &&
-      srcVal !== undefined &&
-      typeof srcVal === "object" &&
-      !Array.isArray(srcVal) &&
-      typeof tgtVal === "object" &&
-      !Array.isArray(tgtVal)
-    ) {
+    if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
       result[key] = deepMerge(tgtVal, srcVal);
     } else if (srcVal !== undefined) {
       result[key] = srcVal;
     }
   }
   return result as T;
+}
+
+function isPlainObject(v: unknown): boolean {
+  if (typeof v !== "object" || v === null) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
 }
 
 /**
@@ -153,7 +154,9 @@ export function loadDomainFiles(
       result = deepMerge(result, data);
       anyLoaded = true;
     } catch {
-      // Skip malformed domain files
+      // Never silent: surface the offending path instead of silently ignoring
+      // a domain the user believes is active.
+      console.warn(t("config.parse_failed", { path: filePath }));
     }
   }
 

@@ -636,6 +636,7 @@
   "config.migrate_no_legacy": "No legacy config.json found. Already using domain format.",
   "config.migrate_error": "Migration failed: {error}",
   "config.legacy_hint": "Config: using legacy config.json. Run \"mma config migrate\" to switch to domain format.",
+  "config.parse_failed": "Warning: failed to parse {path} — falling back to defaults. Fix or delete the file to restore your settings.",
   "image.source_required": "Image source is required. Provide a file path, URL, or \"clipboard\".",
   "image.clipboard_empty": "Clipboard does not contain an image. Copy an image first (e.g. screenshot with Win+Shift+S).",
   "image.not_found": "Image file not found: {path}",

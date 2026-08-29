@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { DEFAULTS } from "../src/config/defaults";
-import { loadConfig } from "../src/config/config";
+import { loadConfig, deepMerge } from "../src/config/config";
 import { mkdtempSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -386,5 +386,38 @@ describe("stale security config normalization", () => {
     });
     expect(cfg.security.enabled).toBe(false);
     expect(cfg.security.bash.blacklist).toContain("my-custom-cmd");
+  });
+
+  it("warns and falls back to defaults on a corrupt config.json (does not delete it)", () => {
+    const tmpDir = makeTempDir();
+    const corruptPath = join(tmpDir, "config.json");
+    writeFileSync(corruptPath, '{ "version": "2.0.0", "model": "broken", ');
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { config: cfg } = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+
+    // Falls back to defaults, keeps the file, and is no longer silent.
+    expect(cfg.model).toBe("qwen/qwen3.5-9b");
+    expect(existsSync(corruptPath)).toBe(true);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("deepMerge preserves RegExp values by reference instead of destroying them", () => {
+    const target = { nested: { pattern: /abc/gi } };
+    const source = { nested: { other: 1 } };
+    const merged = deepMerge(target, source);
+    // The RegExp from target survives (is not spread into {}).
+    expect((merged.nested as any).pattern).toBeInstanceOf(RegExp);
+    expect((merged.nested as any).pattern.source).toBe("abc");
+    expect((merged.nested as any).other).toBe(1);
+
+    // A RegExp in the SOURCE is also preserved by reference.
+    const re = /def/i;
+    const merged2 = deepMerge({}, { pattern: re });
+    expect((merged2 as any).pattern).toBe(re);
   });
 });
