@@ -151,13 +151,18 @@ export class OpenAICompatProvider implements LLMProvider {
       yield chunk;
     }
 
-    // Reasoning-only streams (thinking models) already delivered content to
-    // the consumer — a fallback would emit a FULL duplicate answer.
-    if (!hasToolCall && !hasText && !hasReasoning) {
+    // A stream that ended with reasoning but no text/tool_call means the model
+    // THOUGHT but never produced an answer (observed: qwen3.5-9b in LM Studio
+    // emits reasoning_content then stops). The streamed reasoning was already
+    // delivered; fetch the missing answer via non-streaming. The fallback's
+    // own reasoning chunk is dropped so thinking is not shown twice — no text
+    // was emitted, so there is no duplicate-answer risk.
+    if (!hasToolCall && !hasText) {
       this.debug?.("LLM streaming produced no text/tool_call — falling back to non-streaming");
       const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
       this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
       for (const chunk of fallback) {
+        if (hasReasoning && chunk.type === "reasoning") continue;
         yield chunk;
       }
     }

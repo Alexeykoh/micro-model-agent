@@ -982,7 +982,11 @@ describe("OpenAICompatProvider", () => {
     expect(text).toBe("answer");
   });
 
-  it("should NOT fall back to non-streaming when the stream delivered only reasoning", async () => {
+  it("falls back to non-streaming when the stream delivered only reasoning (no answer text)", async () => {
+    // Observed live: qwen3.5-9b in LM Studio emitted reasoning_content then
+    // STOPPED. The old code treated a reasoning-only stream as content and
+    // skipped the fallback, so the agent got textContent="" → a bogus
+    // "Hallucination retry: Response too short or empty" on a normal greeting.
     const provider = new OpenAICompatProvider({
       model: "test-model",
       baseUrl: "http://localhost:1234/v1",
@@ -1003,16 +1007,37 @@ describe("OpenAICompatProvider", () => {
         controller.close();
       },
     });
-    mockFetch.mockResolvedValue({ ok: true, body: stream, headers: new Map() });
+    // 1st call: the reasoning-only stream. 2nd call: non-streaming fallback.
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, body: stream, headers: new Map() })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [
+              { message: { content: "Вот ответ", reasoning_content: "thinking about it" } },
+            ],
+          }),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      });
     global.fetch = mockFetch as any;
 
     let reasoning = "";
+    let text = "";
     for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
       if (chunk.type === "reasoning") reasoning += chunk.content;
+      if (chunk.type === "text") text += chunk.content;
     }
-    // Exactly ONE request — the reasoning-only stream is content; the
-    // non-streaming fallback would emit a full duplicate answer.
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    // The fallback fetched the missing final answer…
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(text).toBe("Вот ответ");
+    // …and the reasoning was delivered exactly ONCE — the fallback's own
+    // reasoning chunk is dropped because the stream already delivered it.
     expect(reasoning).toBe("thinking about it");
   });
 });
