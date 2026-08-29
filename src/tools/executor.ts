@@ -21,6 +21,11 @@ export class ToolExecutor {
    * wiring). Used internally — e.g. bash redirects a mistaken tool-call-as-
    * command into the real tool. Runs through the same registry and plugin
    * hooks as a normal call.
+   *
+   * **Reentrancy warning:** swaps `this.ctx` temporarily (line 30-39). Safe
+   * for sequential callers but NOT for concurrent calls on the same executor
+   * instance — they would race on the ctx swap. Today all callers are
+   * sequential (bash redirect, single subagent tool); keep it that way.
    */
   async executeByName(
     name: string,

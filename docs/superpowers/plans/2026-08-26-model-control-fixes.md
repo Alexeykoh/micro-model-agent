@@ -14,6 +14,38 @@
 
 ---
 
+## Status (2026-08-29, ветка `fix/agent-logic-audit-2026-08-29`)
+
+Волны 8/9 (Round 3/4) и большинство критичных задач закрыты коммитами `af12430..HEAD`.
+Открыто: **Task 12** (FactualCheck rescan — низкий приоритет).
+
+| Task | Статус | Коммит / где |
+|------|--------|--------------|
+| 1 (#1/#13) | ✅ | `agent.ts:36-49,1083` — `summarizeToolArgs` |
+| 2 (#4) | ✅ | `manager.ts:406-415` |
+| 3 (#2) | ✅ | lifecycle + iter-флаги + `consecutiveSuccesses`/`isRepetitive` реальные |
+| 4 (#3) | ✅ | `agent.ts:634-660` |
+| 5 (#5) | ✅ | `openai-compat.ts:132-143` |
+| 6 (#6) | ✅ | `openai-compat.ts:19,119-121` |
+| 7 (#7) | ✅ | `confidence.ts:41-61` |
+| 8 (#8) | ✅ | `agent.ts:565,1232,1365,1379` |
+| 9 (#11) | ✅ | `agent.ts:559,1319-1332` |
+| 10 (#9) | ✅ | `detector.ts:26-32`; `llm-judge.ts:80-103` |
+| 11 (#10) | ✅ | plan → `<system-summary>` + static reminder (`bootstrap.ts:597-610`, `agent.ts:1186-1193`) |
+| 12 (#12) | 🟡 частично | тёплый кэш до cooldown; rescan сохранён |
+| 13 (#14) | ✅ | `estimateTokens` в bootstrap + цикле (`agent.ts:600`) |
+| 14 (#15) | ✅ | `agent.ts:174-179` — active entry label |
+| 15 (R2-1) | ✅ | `executor.ts:101-136` |
+| 16 (R2-2) | ✅ | `agent-moe.ts:74,149`; `moe-executor.ts:174,190` |
+| 17 (R2-3) | ✅ | `agent.ts:487-491` |
+| 18 (R2-4) | ✅ | `executor.ts:136` |
+| 19 (R2-5) | ✅ | per-chunk catch, AbortSignal, synthesis cap (`chunk-query.ts`) |
+| 20 (R2-6) | ⏳ | документация |
+| 21–29 (Wave 8) | ✅ | `f25a309`, `e262925`, `fab0f2b`, `7ef13a7`, `e641c31`, `e18e08a` |
+| 30–35 (Wave 9) | ✅ | `f25a309`, `b2b7928`, `9caada3`, `3f9797e`; `manager.ts:37,124-131` (C3), `config.ts:80-89` (C5) |
+
+---
+
 ## Findings register (audit 2026-08-26)
 
 Оценка: **5** = критично (ломает агента) … 1 = косметика.
@@ -85,7 +117,7 @@
 
 ## Wave 1 — Context integrity (criticals #1, #4, #13)
 
-### Task 1: Truncate tool arguments in `<system-summary>` envelopes (#1, #13)
+### Task 1: Truncate tool arguments in `<system-summary>` envelopes (#1, #13) ✅
 
 **Problem:** `agent.ts:953` embeds `JSON.stringify(call.arguments)` unbounded — a `write_file` with 10KB content is duplicated into the summary envelope on every call. Additionally each tool result appears twice in context (`role:"tool"` message + summary envelope).
 
@@ -102,7 +134,7 @@
 
 **Done when:** big-write scenario adds ≤400 chars per tool call to the envelope; all agent tests green.
 
-### Task 2: Compaction never splits assistant(tool_calls)/tool pairs (#4)
+### Task 2: Compaction never splits assistant(tool_calls)/tool pairs (#4) ✅
 
 **Problem:** `manager.ts:403-405` slices history at an arbitrary cutoff — can leave a `role:"tool"` message without its calling assistant (or vice versa) → invalid OpenAI sequence, 400s on strict backends.
 
@@ -131,7 +163,7 @@
 
 ## Wave 2 — Wire up reasoning control (criticals #2, #3)
 
-### Task 3: Fix signal lifecycle so the policy actually sees events (#2)
+### Task 3: Fix signal lifecycle so the policy actually sees events (#2) ✅
 
 **Problem:** per-iteration flags are reset at loop top (`agent.ts:532-536`) BEFORE `evaluateReasoningPolicy()` reads them (`:637`) — every raise signal is always false. `consecutiveSuccesses` / `isRepetitive` are hardcoded `0/false`.
 
@@ -150,7 +182,7 @@
 
 **Done when:** integration test shows level transitions low↔high across a scripted scenario (empty response → high; 2+ successful writes → low; plan create → high boost).
 
-### Task 4: Make `set_thinking` / `/thinking` affect real requests (#3)
+### Task 4: Make `set_thinking` / `/thinking` affect real requests (#3) ✅
 
 **Problem:** `Agent.reasoningState.level` is mutated by the tool and REPL but never read when building the chat request — the override is cosmetic.
 
@@ -179,7 +211,7 @@
 
 ## Wave 3 — LLM layer (findings #5, #6)
 
-### Task 5: Count reasoning chunks in stream fallback decision (#5)
+### Task 5: Count reasoning chunks in stream fallback decision (#5) ✅
 
 **Problem:** `chat()` falls back to non-streaming when `!hasToolCall && !hasText` — a thinking model that streamed ONLY `reasoning_content` triggers a full duplicate request (double tokens/time, duplicated reasoning output).
 
@@ -193,7 +225,7 @@
 
 **Done when:** reasoning-only streams don't re-request; empty streams still fall back.
 
-### Task 6: Rate limiter waits instead of killing the turn (#6)
+### Task 6: Rate limiter waits instead of killing the turn (#6) ✅
 
 **Problem:** pre-request limiter throws plain Error → agent treats it as fatal LLM error → turn ends with `success:false`.
 
@@ -212,7 +244,7 @@
 
 ## Wave 4 — Loop control logic (findings #7, #8, #11)
 
-### Task 7: Fix repetition detector false positives (#7)
+### Task 7: Fix repetition detector false positives (#7) ✅
 
 **Problem:** word-overlap >0.5 vs previous response retries legitimate short answers («Готово.» twice = 100%).
 
@@ -232,7 +264,7 @@
 
 **Done when:** scripted short-answer sessions complete without hallucination retries; genuine loops still caught.
 
-### Task 8: Success on the final iteration is reported as success (#8)
+### Task 8: Success on the final iteration is reported as success (#8) ✅
 
 **Problem:** `agent.ts:1244` checks `iteration >= maxToolIterations` AFTER the loop — a final answer produced on iteration N=max returns `success:false` + max_iters error despite holding the finished text.
 
@@ -246,7 +278,7 @@
 
 **Done when:** boundary test passes; no regression in existing max-iterations tests.
 
-### Task 9: Unify empty-response handling (#11)
+### Task 9: Unify empty-response handling (#11) ✅
 
 **Problem:** empty responses burn `hallucinationRetries` (via ConfidenceCheck `short`) while a parallel `emptyResponseRetries` guard below is nearly unreachable — two counters, inconsistent limits (3+2).
 
@@ -268,7 +300,7 @@
 
 ## Wave 5 — Judge & prompt stability (findings #9, #10)
 
-### Task 10: Gate LLM-judge behind capability + kill keyword decision extraction (#9)
+### Task 10: Gate LLM-judge behind capability + kill keyword decision extraction (#9) ✅
 
 **Problem:** judge runs on the same weak model (up to 15s per final answer); decisions extracted via regex `(?:plan|decided|решено...)` violates rule #10 and barely works outside English.
 
@@ -288,20 +320,16 @@
 
 **Done when:** default config makes zero extra LLM calls per final answer; judge works only in orchestrator setups.
 
-### Task 11: Stable system-prompt prefix for KV-cache (#10)
+### Task 11: Stable system-prompt prefix for KV-cache (#10) ✅
 
 **Problem:** `refreshSystemPrompt()` rebuilds the prompt every iteration; dynamic blocks (plan checklist) mutate bytes → local backends lose prefix cache → dominant prefill cost on 32K windows.
 
-**Files:**
-- Modify: `src/core/agent.ts` (`refreshSystemPrompt`)
-- Modify: `src/modules/execution/plan-tool.ts` or wherever the plan prompt block is produced
-- Test: `tests/core/agent.test.ts`, `tests/execution-plan-*.test.ts`
+**Solution:** Plan block removed from `getDynamicPromptBlocks()`. Plan status now injected into `<system-summary>` envelope after every tool batch via new `planSummary` dep in `AgentDeps`. Static `[Plan Reminder]` block added to system prompt (never mutates). Compaction path unchanged (`planSummaryProvider`).
 
-- [ ] **Step 1: Failing test.** Across 3 iterations with a changing plan, the system message content is byte-identical (no mid-conversation mutation).
-- [ ] **Step 2: Implement.**
-  - Freeze the system prompt after the FIRST build per session (`refreshSystemPrompt` becomes a no-op unless `reconfigure()`/`clearContext()` happened).
-  - Move mutable state out of the system prompt: the plan checklist already exists as a `plan` tool result + REPL rendering; append a compact `[Plan: N/M done, current: step K]` line to the post-tool `<system-summary>` envelope (Task 1's pipeline) instead of rewriting the prefix. This mirrors what compaction already does via `planSummaryProvider`.
-- [ ] **Step 3:** Verify `updateSystemPrompt` is called at most once per session in logs; measure prefill improvement qualitatively (llama.cpp `timings` line, optional manual step).
+**Files:**
+- Modified: `src/core/agent.ts` — `AgentDeps.planSummary`, inject into summary envelope
+- Modified: `src/core/bootstrap.ts` — remove plan block from dynamic blocks, add `planSummary` dep, add static plan reminder prompt block
+- Tests: bootstrap tests pass, execution tests pass
 
 **Done when:** system message immutable during a session; plan progress still visible to the model after every tool batch.
 
@@ -309,7 +337,7 @@
 
 ## Wave 6 — Medium fixes (findings #12, #14, #15)
 
-### Task 12: FactualCheck rescan race + async-friendly scan (#12)
+### Task 12: FactualCheck rescan race + async-friendly scan (#12) 🟡 частично (тёплый кэш до cooldown; rescan сохранён)
 
 **Files:**
 - Modify: `src/modules/hallucination/factual.ts`
@@ -320,7 +348,7 @@
   - (Optional stretch) scan runs off the hot path via lazy rebuild on next tick — skip if event-loop impact proves negligible; document decision.
 - [ ] **Step 2: Implement.** In `bareNameExists`, replace early `return false` with `return this.indexHas(name)` (current cache is better than nothing); only clear the cache when proceeding with a real rescan.
 
-### Task 13: Single token-estimation source (#14)
+### Task 13: Single token-estimation source (#14) ✅
 
 **Files:**
 - Modify: `src/core/agent.ts` (`toolOutputCharLimit`, `resolveUsageTokens`), `src/modules/context/manager.ts`
@@ -328,7 +356,7 @@
 
 - [ ] Introduce one shared helper (e.g. `charsToTokens(chars)` ≈ `/4` when tiktoken absent) used everywhere; `truncateToolOutput` switches to comparing token estimates, not raw chars. No behavior change intended beyond consistency; adjust affected constants (`TOOL_RESULT_ABSOLUTE_MAX_CHARS` etc.) accordingly.
 
-### Task 14: Provenance by provider entry label (#15)
+### Task 14: Provenance by provider entry label (#15) ✅
 
 **Files:**
 - Modify: `src/core/agent.ts` (`callerProvenance`)
@@ -340,7 +368,7 @@
 
 ## Wave 7 — Round-2 audit findings (executor, MoE, chunk-query)
 
-### Task 15: Executor timeout timer never cleared — stale cleanup clobbers the next call (#R2-1)
+### Task 15: Executor timeout timer never cleared — stale cleanup clobbers the next call (#R2-1) ✅
 
 **Problem:** `executor.ts:88-105` — the timeout `setTimeout` is never stored/cleared. After every successful tool call a live 60s timer remains; when it fires it (a) keeps the event loop alive, (b) calls `killByCallId(old id)` (harmless), (c) runs `this.ctx.cleanup?.()` — which by then belongs to the CURRENT call — and sets it to `undefined`, so the running tool loses its cleanup. Rejecting an already-settled promise is a no-op, but the side effects are not.
 
@@ -355,7 +383,7 @@
 
 **Done when:** stale timer firing after a successful call has zero observable effects.
 
-### Task 16: MoE path drops `onTool` — blind UI, zero turn toolCalls (#R2-2)
+### Task 16: MoE path drops `onTool` — blind UI, zero turn toolCalls (#R2-2) ✅
 
 **Problem:** `agent-moe.ts:66` declares `opts.onTool`, line 73 never destructures it, nothing in the MoE pipeline emits tool events. Consequences in MoE mode: no tool cards/spinner detail in the renderer, `TurnSummary.toolCalls === 0`, REPL plan-checklist refresh (keyed on `plan`/`todo` tool-end) never fires.
 
@@ -367,7 +395,7 @@
 - [ ] **Step 1: Failing test.** Run runWithMoE with a stub executor whose subtask handler invokes the forwarded callback; assert `onTool` received start/end events.
 - [ ] **Step 2: Implement.** Thread `onTool` into `MoEExecutor` deps; emit `{type:"start"/"end", tool:"subagent", args:{subtask}}` around each subtask spawn (subagent tool already reports its own children via its own executor path — verify no double-emission when subtasks run the real `ToolExecutor`).
 
-### Task 17: MoE final answer never reaches context/session history (#R2-3)
+### Task 17: MoE final answer never reaches context/session history (#R2-3) ✅
 
 **Problem:** in the MoE branch of `Agent.run()`, `executeSingleAgentLoop` (the only writer of assistant messages to `contextManager` + `slog.logAssistant`) never runs. History ends `user → user` across turns; compaction task-tracking and the model's view of the dialogue are corrupted; session.jsonl lacks the assistant turn.
 
@@ -379,7 +407,7 @@
 - [ ] **Step 2: Implement.** After `runWithMoE` resolves successfully, write the assistant turn: `contextManager.addMessage({role:"assistant", content: result.text})` + `slog.logAssistant(...)` (mirror the single-agent acceptance path). Fallback path must stay single-write (it already goes through the loop).
 - [ ] **Step 3:** Also record failed/partial results as assistant messages so the next turn has continuity.
 
-### Task 18: Executor accumulates abort listeners on the shared controller (#R2-4)
+### Task 18: Executor accumulates abort listeners on the shared controller (#R2-4) ✅
 
 **Problem:** `executor.ts:118-122` adds a `once` listener to the long-lived agent AbortController per tool call; they pile up until abort, then all fire at once replaying `killByCallId`/cleanup for ancient calls. Hundreds of calls = hundreds of dead listeners.
 
@@ -387,7 +415,7 @@
 
 - [ ] Use `AbortSignal.any`-style composition or remove the listener in a `finally` (`signal.removeEventListener("abort", onAbort)` after the race settles). Assert listener count stability across 50 calls (spy on addEventListener/removeEventListener or check `signal.eventListenerList` where available; otherwise assert behaviorally: abort after 50 completed calls triggers exactly one cleanup).
 
-### Task 19: One failing chunk kills the whole chunk_query (#R2-5)
+### Task 19: One failing chunk kills the whole chunk_query (#R2-5) ✅
 
 **Problem:** `chunk-query.ts:119-131` — worker has `try/finally` but no `catch`: a single 429/timeout rejects `Promise.all`, discarding every completed answer. Also `chatText` gets no AbortSignal (Esc can't interrupt a 300s query) and the synthesis prompt grows unbounded with chunk count.
 
@@ -396,7 +424,7 @@
 - [ ] **Step 1: Failing tests.** Provider fails on chunk 2 only → result contains answers for all other chunks + a `[FAILED]` marker for chunk 2; synthesis still runs.
 - [ ] **Step 2: Implement.** Per-chunk `catch` → `answers[idx] = "[FAILED] <error slice>"`; thread optional `signal` from the tool through `chatText`; cap synthesis input (join until N chars, note truncation).
 
-### Task 20 (minor): MoE result semantics (#R2-6) + ctx-swap reentrancy note
+### Task 20 (minor): MoE result semantics (#R2-6) + ctx-swap reentrancy note ⏳ открыто (документация)
 
 - [ ] Decide & document: `buildFinalResult` returns `success:false` when any subtask failed even if the orchestrator compensated and declared `final`. Either trust the orchestrator verdict (`success: verificationSuccess && verifyResult.confident !== false`) or keep current behavior and surface it explicitly in the text (already shows ❌ lines — likely fine; just document).
 - [ ] `ToolExecutor.executeByName` swaps `this.ctx` non-reentrantly — fine today (sequential callers); add a comment warning against concurrent use.
@@ -405,7 +433,7 @@
 
 ## Wave 8 — Round-3 audit: initialization (main.ts, bootstrap.ts)
 
-### Task 21: Unknown subcommand typo is silently sent to the LLM as a prompt (#M1, 4/5)
+### Task 21: Unknown subcommand typo is silently sent to the LLM as a prompt (#M1, 4/5) ✅
 
 **Problem:** `main.ts:52-58` — if `program.args[0]` matches a command name, main returns (commander already handled it); ANY other first argument falls into the prompt branch. `mma sesion list` becomes a chat prompt "sesion list".
 
@@ -413,7 +441,7 @@
 
 - [ ] Guard: when `program.args.length > 0` and args[0] is NOT a known command, check Levenshtein distance against command names (≤2) → print "unknown command, did you mean X?" + exit 2 instead of prompting. Genuinely free-form prompts never look like a single known word followed by more words... simplest safe rule: only warn when args[0] edit-distance-close to an existing command name; everything else stays a prompt.
 
-### Task 22: `--json` mode violates its contract on throw (#M2, 4/5)
+### Task 22: `--json` mode violates its contract on throw (#M2, 4/5) ✅
 
 **Problem:** `main.ts:69` — `agent.run()` unguarded; MoE AbortError/plugin crashes produce a stack trace instead of JSON, skip `shutdown()`/`waitForIdle()`.
 
@@ -421,13 +449,13 @@
 
 - [ ] Wrap both run branches in try/catch; on catch emit `{"success":false,"error":message}` in jsonMode (or renderer error otherwise), still `agent.shutdown()` + `await updater?.waitForIdle()`, exit 1.
 
-### Task 23: `--reasoning` ignored in interactive mode (#M3, 3/5)
+### Task 23: `--reasoning` ignored in interactive mode (#M3, 3/5) ✅
 
 **Files:** `src/cli/main.ts:145`
 
 - [ ] Pass `reasoningLevel` in the REPL bootstrap call too. One-line fix + smoke check that REPL honors it via `logReasoningControl`.
 
-### Task 24: First-run wizard checks the wrong config dir (#M4, 3/5)
+### Task 24: First-run wizard checks the wrong config dir (#M4, 3/5) ✅
 
 **Problem:** `main.ts:125-127` hardcodes `homedir()/.mma/config.json`; `MMA_CONFIG_DIR` (used by cert harness sandboxes) ignored → wizard can fire inside `--exit-on-complete` runs and block on stdin.
 
@@ -435,7 +463,7 @@
 
 - [ ] Resolve `dir = process.env.MMA_CONFIG_DIR || join(homedir(),".mma")` first; check `<dir>/config.json` (+ domain files there). Skip wizard entirely when `exitOnComplete` (a non-interactive run must never open the wizard).
 
-### Task 25: Tools read a stale config object after reconfigure (#B1, 4/5)
+### Task 25: Tools read a stale config object after reconfigure (#B1, 4/5) ✅
 
 **Problem:** `toolCtx.config` captured once at bootstrap (`bootstrap.ts:370`); `Agent.reconfigure()` swaps `deps.config` but not the executor context — security validators and tools keep enforcing the OLD settings after `/model use`, wizard, or any config change. Existing evidence of this bug class: `agent.ts:1322` hacks `(toolExecutor as any).ctx.llmProvider` — llmProvider was patched, config forgotten.
 
@@ -446,14 +474,14 @@
 
 - [ ] `Object.defineProperty(toolCtx, "config", { get: () => <shared ref> })`. Since `reconfigure` replaces `agent.deps.config`, the shared ref should live in ONE place — e.g. a `configRef = { current: config }` box created at bootstrap, used by both toolCtx getter and `reconfigure`. Assert: mutate config → `toolCtx.config.security.enabled` reflects it immediately.
 
-### Task 26: Reasoning probe blocks startup + immortal cache (#B2, 3/5)
+### Task 26: Reasoning probe blocks startup + immortal cache (#B2, 3/5) ✅
 
 **Files:** `src/core/bootstrap.ts`, `src/modules/reasoning/probe.ts`
 
 - [ ] Move the probe into a background promise consumed lazily alongside `lazyPromptBlocks` (same pattern as the health check); until resolved treat as not-passed.
 - [ ] Cache entries gain a TTL (e.g. 24h, timestamped file under `~/.mma/cache/reasoning-probe.json`) so a restarted backend with a different template re-probes.
 
-### Task 27: Token estimates ignore script (len/4 vs Cyrillic ×2) (#B3, 3/5)
+### Task 27: Token estimates ignore script (len/4 vs Cyrillic ×2) (#B3, 3/5) ✅
 
 **Problem:** every hand-built PromptBlock uses `Math.ceil(len/4)`; Cyrillic is ~1 token per 2 chars → budgets underestimate up to 2x → ru AGENTS.md silently excluded from the system prompt on 32K models.
 
@@ -461,13 +489,13 @@
 
 - [ ] Single `estimateTokens(text)` helper: script-aware heuristic — count CJK/Cyrillic chars separately (cyr ≈ /2, latin ≈ /4) or reuse the injected TokenCounter when available at block-build time (it is, in bootstrap). Replace all `length/4` sites. Add unit test with Russian text asserting estimate within ±30% of tiktoken.
 
-### Task 28: Hot-swap drops FallbackProvider (#B4, 3/5)
+### Task 28: Hot-swap drops FallbackProvider (#B4, 3/5) ✅
 
 **Files:** `src/core/agent.ts` (`setProvider`)
 
 - [ ] When `config.provider.fallback && entries > 1`, wrap the newly built provider manager in `FallbackProvider` same as bootstrap. Extract a shared factory `buildActiveProvider(config, logger)` used by BOTH bootstrap and `setProvider`/`reconfigure` (DRY — currently three construction sites drift).
 
-### Task 29 (minor): MCP init timeout + startup sequencing (#B5, #B6, 1–2/5)
+### Task 29 (minor): MCP init timeout + startup sequencing (#B5, #B6, 1–2/5) ✅
 
 - [ ] Bound `mcpModule.initialize()` with a timeout (e.g. 10s, log-and-continue — MCP tools appear late rather than blocking boot).
 - [ ] Delete the pointless empty `~/.mma/AGENTS.md` creation or gate behind first-run wizard.
@@ -476,7 +504,7 @@
 
 ## Wave 9 — Round-4 audit: config layer (config.ts, manager.ts, domains.ts, migration)
 
-### Task 30: Env provider overrides dead when `provider.entries` exist (#C1, 4/5)
+### Task 30: Env provider overrides dead when `provider.entries` exist (#C1, 4/5) ✅
 
 **Problem:** `applyEnvVars` (`config.ts:144-148`) writes only the legacy flat fields (`provider.baseUrl/apiKey/type`), but `ProviderManager.normalizeEntries` (`manager.ts:134-137`) prefers `entries[]` and ignores flat fields entirely. On any multi-entry setup the `MMA_MODEL` / `MMA_PROVIDER_BASEURL` / `MMA_PROVIDER_APIKEY` overrides — the exact mechanism the certification harness uses — silently do nothing.
 
@@ -484,7 +512,7 @@
 
 - [ ] Manager accepts an optional override in opts (`envOverride?: {model?, baseUrl?, apiKey?}`) applied to the resolved active entry at build time; bootstrap passes parsed env vars. Alternatively: `applyEnvVars` patches `entries[active]` too. Assert with entries-configured fixture that env baseUrl reaches the built provider.
 
-### Task 31: Migration deletes a recoverable config (#C2, 4/5)
+### Task 31: Migration deletes a recoverable config (#C2, 4/5) ✅
 
 **Problem:** `detect.needsMigration` treats ANY of (a) missing one of `provider/contextWindow/contextBudget`, (b) JSON parse error as v1 → `loadConfig` backs up ONLY config.json (`BackupManager.backupConfig`) then `unlinkSync`. AGENTS.md claims a full `~/.mma.bak/` copy — `backupAll()` exists but is never called from loadConfig. A truncated/hand-edited v2 config is destroyed instead of reported.
 
@@ -492,7 +520,7 @@
 
 - [ ] Parse error ≠ migration: warn + fall back to defaults WITHOUT deleting. Missing-field heuristic only fires when `version` is absent or `1.x`. Call `backupAll()` before touching anything (matches documented behavior).
 
-### Task 32: `toConfig()` wipes `provider.fallback` (#C3, 3/5)
+### Task 32: `toConfig()` wipes `provider.fallback` (#C3, 3/5) ✅
 
 **Problem:** `manager.ts:127` hardcodes `fallback: false` — every hot-swap round-trip (`Agent.setProvider` → `toConfig()` → save) erases the user's failover setting.
 
@@ -500,7 +528,7 @@
 
 - [ ] Preserve the source flag: constructor stores `config.fallback ?? false`; `toConfig` returns it verbatim.
 
-### Task 33: Env-var values leak into persisted config (#C4, 3/5)
+### Task 33: Env-var values leak into persisted config (#C4, 3/5) ✅
 
 **Problem:** `applyEnvVars` mutates the in-memory config; any later `saveConfig` (REPL `/model use`, wizard) permanently persists session-scoped env values (e.g. harness baseUrl) into domain files.
 
@@ -508,7 +536,7 @@
 
 - [ ] Track env-overridden keys during load; `saveDomainFiles` strips them (or save the pre-env snapshot). Test: set MMA_PROVIDER_BASEURL, load, save, assert persisted file keeps original value.
 
-### Task 34: Silent swallow of malformed config files (#C5, 3/5)
+### Task 34: Silent swallow of malformed config files (#C5, 3/5) ✅
 
 **Problem:** `loadJSON`/`loadDomainFiles` `catch {}` — a typo'd config.json silently yields pure defaults; user believes their settings are active.
 
@@ -516,7 +544,7 @@
 
 - [ ] Warn via logger/console (i18n key `config.parse_failed`, en+ru) naming the offending path; continue with defaults. Not silent.
 
-### Task 35 (minor): DRY + smells (#C6–#C8, 1–2/5)
+### Task 35 (minor): DRY + smells (#C6–#C8, 1–2/5) ✅
 
 - [ ] deepMerge destroys RegExp instances (object spread) — `restoreDangerousPatterns` is a patch over this own bug; make deepMerge pass non-plain-objects through by reference (`constructor !== Object` → assign).
 - [ ] Unify `deepMerge`/`regexReplacer`/`regexReviver` duplicated across `config.ts` ↔ `domains.ts`.

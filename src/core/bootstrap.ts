@@ -598,6 +598,16 @@ export async function bootstrap(
     systemInfoPrompt,
     ...moduleRegistry.collectPromptBlocks(["indexer"]),
     ...agentsMdBlocks,
+    // Static plan reminder: always present so the model knows to check for an
+    // active plan before creating a new one (even on the first iteration before
+    // the <system-summary> envelope appears).
+    {
+      content:
+        "[Plan Reminder] An active plan may exist for this session. Before creating a new plan, check with `plan show`. If a plan is active, continue it — do NOT create a new plan.",
+      priority: "high",
+      essential: false,
+      estimatedTokens: 50,
+    },
   ];
 
   const agentDeps: AgentDeps = {
@@ -615,8 +625,9 @@ export async function bootstrap(
     envReport,
     getDynamicPromptBlocks: () => {
       const blocks: PromptBlock[] = [];
-      const planBlock = execModule.getSystemPromptBlock();
-      if (planBlock) blocks.push(planBlock);
+      // Plan block removed: it mutates every iteration (step status changes),
+      // invalidating the local KV-cache. The plan status is now injected into
+      // the <system-summary> envelope after each tool batch instead.
       const skillsBlock = skillsModule.getSystemPromptBlock();
       if (skillsBlock) blocks.push(skillsBlock);
       const mapBlock = indexerModule.getSystemPromptBlock();
@@ -644,6 +655,7 @@ export async function bootstrap(
     exitOnComplete,
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
+    planSummary: () => execModule.getPlanSummary(),
   };
 
   const agent = new Agent(agentDeps);

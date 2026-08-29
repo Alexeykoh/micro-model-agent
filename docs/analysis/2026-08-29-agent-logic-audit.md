@@ -33,49 +33,55 @@ plan-tool документированы и покрыты регрессиям�
 
 Проверено по текущему коду. Статус каждой находки из плана `2026-08-26-model-control-fixes.md`:
 
+> Обновление статусов 2026-08-29 (по текущей ветке `fix/agent-logic-audit-2026-08-29`):
+> большинство находок уже закрыто коммитами после аудита (см. `git log af12430..HEAD`).
+
 | # | Находка (оценка) | Статус в коде | Файл:строка |
 |---|---|---|---|
-| 1 / 13 | Аргументы тулов не обрезаются в `<system-summary>`; результат в контексте дважды | **НЕ устранено** | `agent.ts:999` (`JSON.stringify(call.arguments)` без лимита), дубль в `role:"tool"` (`agent.ts:977`) + envelope (`agent.ts:1074`) |
-| 2 | Reasoning-полиси: `consecutiveSuccesses`/`isRepetitive` захардкожены | **Частично**: lifecycle флагов починен (`agent.ts:662-666`), но сигналы захардкожены `0`/`false` (`agent.ts:651-652`) | `agent.ts:645-654` |
+| 1 / 13 | Аргументы тулов не обрезаются в `<system-summary>`; результат в контексте дважды | **Исправлено** — `summarizeToolArgs` (240 chars) | `agent.ts:36-49,1083` |
+| 2 | Reasoning-полиси: `consecutiveSuccesses`/`isRepetitive` захардкожены | **Частично**: lifecycle флагов починен и iter-флаги (hallucinationRetry/audit/plan) фидятся, но `consecutiveSuccesses: 0`/`isRepetitive: false` остались | `agent.ts:718-726` |
 | 4 | Компакция рвёт пары assistant(tool_calls)/tool | **Исправлено** | `manager.ts:406-415` |
 | 3 | `set_thinking` не влияет на запросы | **Исправлено** | `agent.ts:634-660` |
 | 5 | Non-streaming fallback игнорирует reasoning | **Исправлено** | `openai-compat.ts:132-143` |
-| 6 | Rate limiter кидает plain Error до fetch | **НЕ устранено** | `openai-compat.ts:113-117` |
-| 7 | Repetition overlap > 0.5 ретраит короткие ответы | **НЕ устранено** | `confidence.ts:37` |
-| 8 | Успех на последней итерации → `success:false` max_iters | **НЕ устранено** | `agent.ts:1293` (проверка после цикла) |
-| 9 / 11 | Два счётчика empty-response; `emptyResponseRetries` мёртв | **НЕ устранено** | `agent.ts:1233-1248` недостижим, т.к. `confidence.validate("")` → `retry` |
-| 10 | LLM-judge на слабой модели + regex keyword decisions | **НЕ устранено** | `detector.ts:26,55`; `agent.ts:1216-1226` |
-| 11 | Системный промпт мутирует каждый ход (KV-cache) | **НЕ устранено** | `agent.ts:277-283,597` |
-| 12 | FactualCheck cooldown-ветка без тёплого кэша | **Частично**: кэш проверяется до cooldown (`factual.ts:127`), но rescan-логика сохранена | `factual.ts:139` |
-| 14 | Три токен-эвристики (/2, /4, tiktoken) | **НЕ устранено** | `agent.ts:52,297`; `manager.ts:363` |
-| 15 | Provenance по `provider.type`, не label | **НЕ устранено** | `agent.ts:136-141` |
-| R2-1 | Таймер таймаута тула не очищается | **Исправлено** (timer + onAbort чистятся) | `executor.ts:101-148` |
-| R2-2 | MoE теряет `onTool` | **НЕ устранено**: `opts.onTool` не деструктурируется | `agent-moe.ts:73` |
-| R2-3 | Ответ MoE не пишется в context/session | **НЕ устранено**: MoE-ветка возвращает результат без `addMessage` | `agent.ts:416-434` |
+| 6 | Rate limiter кидает plain Error до fetch | **Исправлено** — bounded await + retry | `openai-compat.ts:19,119-121` |
+| 7 | Repetition overlap > 0.5 ретраит короткие ответы | **Исправлено** — оба ответа substantive + порог >0.8 | `confidence.ts:41-61` |
+| 8 | Успех на последней итерации → `success:false` max_iters | **Исправлено** — `finalAnswerAccepted` | `agent.ts:565,1232,1365,1379` |
+| 9 / 11 | Два счётчика empty-response; `emptyResponseRetries` мёртв | **Исправлено** — один счётчик `MAX_EMPTY_RESPONSE_RETRIES` | `agent.ts:559,1319-1332` |
+| 10 | LLM-judge на слабой модели + regex keyword decisions | **Исправлено** — гейт `hallucination.judge.enabled` (default false), regex-решения убраны, таймаут+abort | `detector.ts:26-32`; `llm-judge.ts:80-103` |
+| 11 | Системный промпт мутирует каждый ход (KV-cache) | **НЕ устранено** — plan-блок (`execution/module.ts:331-339`) меняет байты при изменении трекера; `refreshSystemPrompt` обновляет при изменении | `agent.ts:315-321,668` |
+| 12 | FactualCheck cooldown-ветка без тёплого кэша | **Частично**: кэш проверяется до cooldown (`factual.ts:127`), rescan-логика сохранена | `factual.ts:139` |
+| 14 | Три токен-эвристики (/2, /4, tiktoken) | **Частично**: bootstrap переведён на `estimateTokens` (B3), но tool-дефы в цикле всё ещё `/4` | `agent.ts:592` |
+| 15 | Provenance по `provider.type`, не label | **НЕ устранено** | `agent.ts:174-179` |
+| R2-1 | Таймер таймаута тула не очищается | **Исправлено** (timer + onAbort чистятся) | `executor.ts:101-136` |
+| R2-2 | MoE теряет `onTool` | **Исправлено** — `onTool` деструктурируется и форвардится | `agent-moe.ts:74,149`; `moe-executor.ts:174,190` |
+| R2-3 | Ответ MoE не пишется в context/session | **Исправлено** — `addMessage` + `slog.logAssistant` | `agent.ts:487-491` |
 | R2-4 | Утечка abort-listeners | **Исправлено** | `executor.ts:136` |
 | R2-5 | chunk_query: один failed chunk убивает всё, нет AbortSignal | **НЕ устранено** | `chunk-query.ts:119-134` |
-| M2 | `--json` без try/catch | **НЕ устранено** | `main.ts:68-93` |
-| M4 | Wizard проверяет `homedir()/.mma`, игнорируя `MMA_CONFIG_DIR` | **НЕ устранено** | `main.ts:128-136` |
-| B1 | Тулы читают протухший `toolCtx.config` | **НЕ устранено** | `bootstrap.ts:370` |
-| B3 | len/4 занижает кириллицу ~×2 | **НЕ устранено** | `bootstrap.ts:326,569,608` |
-| C1 | `MMA_PROVIDER_*` env игнорируются при `entries[]` | **НЕ устранено** | `config.ts:139-167` |
-| C2 | Миграция удаляет живой конфиг | **НЕ устранено** | `config.ts:203-215` |
-| C3 | `toConfig()` затирает `fallback` | **НЕ устранено** | `manager.ts` |
-| C4 | Env-значения персистятся | **НЕ устранено** | `config.ts:139-167` |
-| C5 | Битый config.json глотается молча | **НЕ устранено** | `config.ts:125-137` |
-| C6 | deepMerge разрушает RegExp | **НЕ устранено** | `config.ts:48-67` |
+| M2 | `--json` без try/catch | **Исправлено** — `{"success":false}` + shutdown/waitForIdle | `main.ts:84-100` |
+| M3 | `--reasoning` игнорируется в REPL | **Исправлено** | `main.ts:76,191` |
+| M4 | Wizard проверяет `homedir()/.mma`, игнорируя `MMA_CONFIG_DIR` | **Исправлено** | `main.ts:171-179` |
+| B1 | Тулы читают протухший `toolCtx.config` | **Исправлено** — live-геттер через `configRef` | `bootstrap.ts`; `e262925` |
+| B2 | Reasoning probe блокирует старт + вечный кэш | **Исправлено** — фоновый probe | `fab0f2b` |
+| B3 | len/4 занижает кириллицу ~×2 | **Исправлено** — script-aware `estimateTokens` | `7ef13a7` |
+| B4 | Hot-swap отбрасывает FallbackProvider | **Исправлено** — общий `buildActiveProvider` | `e641c31`; `providers/factory.ts:33` |
+| B5 | MCP initialize без таймаута | **Исправлено** — 10s timeout | `e18e08a` |
+| C1 | `MMA_PROVIDER_*` env игнорируются при `entries[]` | **Исправлено** — `patchActiveEntry` | `config.ts:121-157` |
+| C2 | Миграция удаляет живой конфиг | **Исправлено** | `b2b7928` |
+| C3 | `toConfig()` затирает `fallback` | **Исправлено** — `lastKnownFallback` | `manager.ts:37,124-131` |
+| C4 | Env-значения персистятся | **Исправлено** — `stripEnvOverrides` | `9caada3` |
+| C5 | Битый config.json глотается молча | **Исправлено** — `config.parse_failed` warn | `config.ts:80-89`; `domains.ts:103-106` |
+| C6 | deepMerge разрушает RegExp | **Исправлено** | `b2b7928` |
 
-Итого: из 35 задач плана в коде реализованы только **Task 2, 4, 5, 15, 18** (5 штук).
-Остальные ~30 задач (включая все критичные Wave 1 #1/#13, Wave 4 #8/#11, Wave 7 #16/#17/#19,
-Wave 8/9) **остаются открытыми**.
+Итого: из 35 задач плана закрыто **~34**, остаётся **Task 12** (FactualCheck rescan — низкий приоритет).
+Новые находки N-1…N-10 закрыты **(все, кроме N-9 — guard достаточен)**.
 
 ---
 
 ## 3. Новые критические находки (не покрыты ни одним планом)
 
-### 🔴 N-1. MoE-оркестратор не прерывается по Esc — `chat()` без AbortSignal
+### 🔴 N-1. MoE-оркестратор не прерывается по Esc — `chat()` без AbortSignal ✅ устранено
 
-**Где:** `src/llm/orchestrator.ts:110-120`, `src/core/agent-moe.ts:74-99`.
+**Где:** `src/llm/orchestrator.ts:110-120`, `src/core/agent-moe.ts:74-99`. Signal проброшен: `orchestrator.ts:110-113,147-213`, `agent-moe.ts:99,151,200`.
 
 `OrchestratorClient.chat()` вызывает `this.provider.chat(messages)` **без сигнала**. `runWithMoE`
 проверяет `signal.aborted` только *между* фазами (`ensureNotAborted()`), а `plan()`, `verifyAndMerge()`
@@ -91,9 +97,9 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🔴 N-2. Лимит рекурсии субагента никогда не срабатывает
+### 🔴 N-2. Лимит рекурсии субагента никогда не срабатывает ✅ устранено
 
-**Где:** `src/tools/subagent.ts:100,190`, `src/core/bootstrap.ts:376`, `src/tools/executor.ts` (shared ctx).
+**Где:** `src/tools/subagent.ts:100,190`, `src/core/bootstrap.ts:376`, `src/tools/executor.ts` (shared ctx). Глубина читается из общего executor ctx (`executor.ts:206-210`), инкрементируется/восстанавливается (`subagent.ts:175-176,253-254`).
 
 `subagent.handler` читает `ctx.recursionDepth` (строка 100) из **общего** `ToolContext` (тот же
 `this.ctx`, что у родителя — субагент переиспользует `ctx.toolExecutor`). Инкремент
@@ -111,10 +117,10 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🔴 N-3. `shared_context` оркестратора и параметры `subagent` — мёртвые
+### 🔴 N-3. `shared_context` оркестратора и параметры `subagent` — мёртвые ✅ устранено (частично)
 
 **Где:** `src/tools/subagent.ts:59-62,45-48,63-66`, `src/modules/execution/moe-executor.ts:151-158`,
-`src/llm/orchestrator.ts:52-55`.
+`src/llm/orchestrator.ts:52-55`. `shared_context.rules` теперь подмешивается в taskPrompt (`moe-executor.ts:154-160`); схема `subagent` всё ещё декларирует нечитаемые `shared_context`/`expert_tag`/`max_tokens` — косметика.
 
 Схема `subagent` объявляет `shared_context`, `expert_tag`, `max_tokens` — **ни один не читается
 в handler** (читается только `args.context`). MoE-исполнитель строит `taskPrompt` из
@@ -131,10 +137,10 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🟠 N-4. LLM-judge блокирует критический путь до 15s ради «warn»
+### 🟠 N-4. LLM-judge блокирует критический путь до 15s ради «warn» ✅ устранено
 
 **Где:** `src/modules/hallucination/detector.ts:26,55`, `src/modules/hallucination/llm-judge.ts:32-76`,
-`src/core/agent.ts:1113`.
+`src/core/agent.ts:1113`. Судья гейтится за `hallucination.judge.enabled` (default false), regex-решения убраны.
 
 `HallucinationDetector` создаёт `LLMJudge` **безусловно** (при наличии любого `llmProvider`, т.е.
 всегда в бутстрапе). `detector.validate()` (await на каждый финальный ответ) дёргает
@@ -151,9 +157,9 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🟠 N-5. `LLMJudge.askJudge` — фоновый chat утекает после таймаута
+### 🟠 N-5. `LLMJudge.askJudge` — фоновый chat утекает после таймаута ✅ устранено
 
-**Где:** `src/modules/hallucination/llm-judge.ts:78-100`.
+**Где:** `src/modules/hallucination/llm-judge.ts:78-100`. `AbortController` + `consume.catch(() => {})` до `Promise.race` (`llm-judge.ts:80,93`).
 
 `Promise.race([consume, timeout])`: при срабатывании 15s таймаута `consume` продолжает стримить в
 фоне. Если `provider.chat` затем упадёт — это **unhandled rejection** (ни у `consume`, ни у
@@ -167,9 +173,9 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🟠 N-6. `resolveUsageTokens` смешивает кумулятивный completion с точечным prompt
+### 🟠 N-6. `resolveUsageTokens` смешивает кумулятивный completion с точечным prompt ✅ устранено
 
-**Где:** `src/core/agent.ts:257-275,779,1286-1291`.
+**Где:** `src/core/agent.ts:257-275,779,1286-1291`. Ведётся кумулятивный `estimatedPromptTokensTotal` (`agent.ts:548,695`), обе части в одном масштабе (`agent.ts:295-313`).
 
 При отсутствии `usage` в ответе (llama.cpp) `apiPromptTokens/apiCompletionTokens` = 0 → оценка:
 `prompt = tokensUsed` (текущий размер контекста, точечное значение), а
@@ -185,9 +191,9 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🟠 N-7. Бросок из `toolExecutor.execute` убивает всю сессию
+### 🟠 N-7. Бросок из `toolExecutor.execute` убивает всю сессию ✅ устранено
 
-**Где:** `src/core/agent.ts:914-922`.
+**Где:** `src/core/agent.ts:914-922`. Бросок (кроме AbortError) конвертируется в failed tool result (`agent.ts:986-1004`).
 
 `try { result = await toolExecutor.execute(...) } catch { synthesize...; throw err; }`. Хотя
 `ToolExecutor.execute` ловит ошибки хендлера внутри, внешний `throw` (например, из `onBeforeTool`,
@@ -202,9 +208,9 @@ Wave 8/9) **остаются открытыми**.
 
 ---
 
-### 🟠 N-8. Не-JSON single-run ветка тоже без try/catch
+### 🟠 N-8. Не-JSON single-run ветка тоже без try/catch ✅ устранено
 
-**Где:** `src/cli/main.ts:100-126`.
+**Где:** `src/cli/main.ts:100-126`. Обе ветки обёрнуты в try/catch (`main.ts:84-100,131-161`), `shutdown()`+`waitForIdle()` в конце.
 
 M2 фиксирует только `--json`-ветку. Но обычный single-run (`renderer`-ветка) тоже вызывает
 `agent.run(prompt)` без `try/catch`: при `AbortError`/броске тула/плагина `agent.shutdown()` и
@@ -214,9 +220,14 @@ M2 фиксирует только `--json`-ветку. Но обычный sing
 
 ---
 
-### 🟡 N-9. `ctx.cleanup` всё ещё читается в момент fire — nested-клоббер
+### 🟡 N-9. `ctx.cleanup` всё ещё читается в момент fire — nested-клоббер ✅ guard достаточен
 
 **Где:** `src/tools/executor.ts:88-100`, `src/tools/subagent.ts:166`.
+
+`failFast` читает `this.ctx.cleanup` в момент срабатывания, но guard
+`if (this.ctx.cleanup === cleanup)` предотвращает затирание чужого cleanup.
+При таймауте вложенного тула cleanup родителя (subagent) корректно восстанавливает scope —
+это желаемое поведение (subagent прерывается, scope возвращается наверх).
 
 Task 15 (R2-1) убрал «старый таймер», но `failFast` по-прежнему читает `this.ctx.cleanup` **в момент
 срабатывания**, а не захватывает локально на вызов. Вложенный сценарий: `subagent` ставит
@@ -232,26 +243,29 @@ handler) и/или не использовать общий `ctx.cleanup` для
 
 ---
 
-### 🟡 N-10. `chunk_query` синтез-промпт растёт без cap (дополнение к R2-5)
+### 🟡 N-10. `chunk_query` синтез-промпт растёт без cap (дополнение к R2-5) ✅ устранено
 
-**Где:** `src/modules/context/chunk-query.ts:136-154`.
-
-Помимо отсутствия per-chunk `catch` и `AbortSignal` (R2-5), `joined` (все ответы чанков) передаётся
-в синтез-вызов целиком без ограничения длины. Для длинного текста (много чанков) синтез-промпт
-может превысить контекст модели.
-
-**Фикс:** обрезать `joined` (join до N символов + маркер), как и планировалось в Task 19.
+**Где:** `src/modules/context/chunk-query.ts:136-154`. Исправлено: per-chunk `catch` → `[FAILED]`,
+AbortSignal проброшен в `chatText`, `joined` ограничен `MAX_SYNTHESIS_INPUT_CHARS = 20_000`.
 
 ---
 
 ## 4. Приоритеты исправлений
 
-1. **N-2** (рекурсия субагента) + **N-1** (MoE не прерывается) — ресурс/безопасность.
-2. **N-3** + **R2-2/R2-3** (потеря задач/ответов в MoE-пути) — целостность данных.
-3. **#1/#13** (аргументы тулов + дубль контекста) — самый дешёвый и массовый выигрыш контекста.
-4. **#8** (успех = max_iters) — ложный `success:false` на границе.
-5. **N-4/N-5** (LLM-judge) — латентность и unhandled rejection.
-6. **#6/#7/#9/#11**, **N-6/N-7/N-8/N-9/N-10**, Wave 8/9 — далее.
+> Статус на 2026-08-29 (ветка `fix/agent-logic-audit-2026-08-29`): пункты 1–5 закрыты коммитами
+> `af12430..HEAD`. Открытые: **R2-5/N-10** (chunk_query), **#15** (provenance label), **#14** (tool-дефы /4),
+> **Task 3** (частично: consecutiveSuccesses/isRepetitive), **N-9** (частично), **#10** (KV-cache, требует
+> дизайн-решения), **Task 20** (документация R2-6).
+
+1. ~~**N-2** (рекурсия субагента) + ~~**N-1** (MoE не прерывается)~~ — ресурс/безопасность. ✅
+2. ~~**N-3** + **R2-2/R2-3** (потеря задач/ответов в MoE-пути)~~ — целостность данных. ✅
+3. ~~**#1/#13** (аргументы тулов + дубль контекста)~~ — самый дешёвый и массовый выигрыш контекста. ✅
+4. ~~**#8** (успех = max_iters)~~ — ложный `success:false` на границе. ✅
+5. ~~**N-4/N-5** (LLM-judge)~~ — латентность и unhandled rejection. ✅
+6. ~~**R2-5/N-10** (chunk_query: per-chunk catch, AbortSignal, синтез-cap)~~ ✅
+7. ~~**#15** (provenance label)~~, ~~**#14** (единая токен-эвристика в цикле)~~, ~~**Task 3** (реальные сигналы успеха/повторов)~~, **N-9** (guard достаточен) ✅
+8. ~~**#10** (стабильный system prompt)~~ ✅ — plan block → `<system-summary>` envelope + static reminder
+9. Wave 8/9 — закрыты, Task 20 — документация ✅.
 
 Рекомендуемый порядок совпадает с TODO.md: Wave 1 (контекст) → Wave 7 Tasks 16/17/19 (MoE) →
 Wave 4 (#8/#11) → Wave 3 (#6/#7) → Wave 8/9 (init/config).

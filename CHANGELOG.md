@@ -4,6 +4,24 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.57.2] - 2026-08-29
+
+### Changed
+- **KV-cache**: plan block removed from system prompt; plan status now injected into `<system-summary>` envelope after every tool batch. System prompt is immutable per session — local backends retain prefix cache.
+- **Provenance**: provider entry resolution uses active entry label, not bare `provider.type`
+- **Reasoning signals**: `consecutiveToolSuccesses` and `isRepetitive` now feed real values to the reasoning policy (were hardcoded)
+- **Token estimation**: tool-def token estimate in agent loop uses `estimateTokens()` instead of flat `/4`
+
+### Fixed
+- **chunk_query**: one failing chunk no longer kills the entire query; per-chunk `catch` → `[FAILED]`
+- **chunk_query**: synthesis prompt capped at 20K chars with `[TRUNCATED]` marker
+- **chunk_query**: `AbortSignal` propagated to `chatText` for cancellation support
+- **Executor**: `failFast` cleanup guard prevents nested scope clobbering
+
+### Added
+- **Plan Reminder**: static `[Plan Reminder]` block in system prompt (never mutates)
+- **Documentation**: reentrancy warning on `executeByName()`, `PlanResult` JSDoc
+
 ## [0.57.1] - 2026-08-28
 
 ### Fixed

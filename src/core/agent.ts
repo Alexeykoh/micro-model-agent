@@ -125,6 +125,12 @@ export interface AgentDeps {
   reasoningProbe?: () => Promise<boolean>;
   /** Strategy for expressing reasoning effort on this provider. */
   reasoningStrategy?: import("../config/types").ReasoningStrategy;
+  /**
+   * Compact plan status line for the <system-summary> envelope. Replaces the
+   * dynamic plan block in the system prompt so the prompt stays immutable
+   * (KV-cache friendly). Returns null when no plan is active.
+   */
+  planSummary?: () => string | null;
 }
 
 export class Agent {
@@ -172,10 +178,17 @@ export class Agent {
   }
 
   callerProvenance(): { provider: string; model: string } {
-    return {
-      provider: this.deps.config.provider?.type || "unknown",
-      model: this.deps.config.model,
-    };
+    const p = this.deps.config.provider;
+    let providerName = p?.type || "unknown";
+    // When provider.entries exist, use the active entry's label for
+    // distinguishable cost provenance (e.g. "lmstudio" vs "ollama").
+    if (p?.entries && p.entries.length > 0) {
+      const entry = p.active
+        ? p.entries.find((e) => e.label === p.active || e.type === p.active)
+        : p.entries[0];
+      if (entry) providerName = entry.label || entry.type || providerName;
+    }
+    return { provider: providerName, model: this.deps.config.model };
   }
 
   /** Typed module accessor for CLI/REPL commands (e.g. /lsp). */
@@ -549,6 +562,7 @@ export class Agent {
     const MAX_HALLUCINATION_RETRIES = 3;
     let consecutiveToolFailures = 0;
     const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
+    let consecutiveToolSuccesses = 0;
     // Per-tool failure counts and which tools already produced a memory rule.
     const toolFailureCounts = new Map<string, { count: number; error: string }>();
     const memoryRuleRecorded = new Set<string>();
@@ -578,6 +592,7 @@ export class Agent {
     let iterAuditRejection = false;
     let iterRecoverableLlmError = false;
     let iterPlanCreated = false;
+    let iterRepetitive = false;
 
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
@@ -589,7 +604,7 @@ export class Agent {
       allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
     );
     let toolTokenEstimate = allToolsForBudget.reduce(
-      (sum, t) => sum + Math.ceil((t.description.length + JSON.stringify(t.parameters).length) / 4),
+      (sum, t) => sum + estimateTokens(t.description + JSON.stringify(t.parameters)),
       0,
     );
     contextManager.setToolTokens(toolTokenEstimate);
@@ -720,8 +735,8 @@ export class Agent {
           auditRejection: iterAuditRejection,
           recoverableLlmError: iterRecoverableLlmError,
           planCreated: iterPlanCreated,
-          consecutiveSuccesses: 0,
-          isRepetitive: false,
+          consecutiveSuccesses: consecutiveToolSuccesses,
+          isRepetitive: iterRepetitive,
           baseline: "medium",
         }, this.policyState);
         effectiveReasoningLevel = policyResult.level;
@@ -736,6 +751,7 @@ export class Agent {
       iterAuditRejection = false;
       iterRecoverableLlmError = false;
       iterPlanCreated = false;
+      iterRepetitive = false;
 
       // Log reasoning control event
       if (effectiveReasoningLevel) {
@@ -900,24 +916,27 @@ export class Agent {
       }
       pluginManager.runOnAfterThink({ iteration, logger, contextManager }, llmResponse);
 
-      if (this.deps.exitOnComplete && sawToolCall) {
+      // Detect repeated identical tool calls (structural, not keyword-based).
+      // The signal feeds the reasoning policy to lower effort during routine work.
+      if (sawToolCall) {
         const signature = toolCalls
           .map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`)
           .join("|");
         if (signature && signature === lastToolSignature) {
-          // A repeated identical tool call is often the model re-running
-          // a command after a confusing result. Give it one more chance
-          // to produce a final text answer instead of stopping with
-          // text: "" (observed on 08-r4: bash re-run → empty result).
-          repeatedToolCount++;
-          if (repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
-            logger.debug("Exit-on-complete: repeated identical tool call, stopping");
-            break;
+          iterRepetitive = true;
+          if (this.deps.exitOnComplete) {
+            repeatedToolCount++;
+            if (repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
+              logger.debug("Exit-on-complete: repeated identical tool call, stopping");
+              break;
+            }
+            contextManager.addMessage({
+              role: "user",
+              content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
+            });
           }
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
-          });
+        } else {
+          repeatedToolCount = 0;
         }
         lastToolSignature = signature;
       }
@@ -1133,6 +1152,15 @@ export class Agent {
         } else {
           consecutiveToolFailures = 0;
         }
+        // Track consecutive successful tool batches for the reasoning policy.
+        // Only count iterations where tools were actually called.
+        if (sawToolCall) {
+          if (anyToolFailed) {
+            consecutiveToolSuccesses = 0;
+          } else {
+            consecutiveToolSuccesses++;
+          }
+        }
         if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
           const recoveryMsg = t("exec.consecutive_failures_recovery", {
             count: consecutiveToolFailures,
@@ -1155,6 +1183,12 @@ export class Agent {
             );
           }
         }
+        // Append active plan status so the model sees it after every tool batch.
+        // This replaces the dynamic plan block that used to live in the system
+        // prompt (removed to preserve KV-cache — plan changes every iteration).
+        const planLine = this.deps.planSummary?.();
+        if (planLine) summaries.push(planLine);
+
         contextManager.addMessage({
           role: "user",
           content: `<system-summary>${summaries.join("\n")}</system-summary>`,

@@ -37,6 +37,14 @@ export interface ScopeRequestBody {
   reason: string;
 }
 
+/**
+ * Result of executing a MoE plan. `success` is `true` only when ALL
+ * subtasks succeed. If ANY subtask fails — even when the orchestrator's
+ * verification step compensates and produces a final answer — `success`
+ * is `false` and the caller (agent-moe) should surface the partial
+ * results in the final response text. The orchestrator's verdict does
+ * NOT override individual subtask failure.
+ */
 export interface PlanResult {
   success: boolean;
   results: SubtaskResult[];

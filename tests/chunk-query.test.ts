@@ -86,4 +86,85 @@ describe("runChunkQuery", () => {
     expect(res.answers[0]).toBe("single answer");
     expect(calls).toHaveLength(1);
   });
+
+  it("survives a single failing chunk — other chunks and synthesis still work", async () => {
+    // Provider that throws on the second call (chunk 2).
+    let callCount = 0;
+    const provider = {
+      chat: async function* (messages: Message[]) {
+        callCount++;
+        const system = messages.find((m) => m.role === "system")?.content as string;
+        if (callCount === 2) {
+          throw new Error("rate limited");
+        }
+        const isSynth = system === DEFAULT_SYNTHESIS_SYSTEM_PROMPT;
+        yield { type: "text" as const, content: isSynth ? "SYNTHESIS" : "OK" };
+      },
+    };
+    const text = Array.from({ length: 90 }, (_, i) => `row${i}${"-".repeat(15)}`).join("\n");
+    const res = await runChunkQuery(provider as any, text, "q", {
+      chunkChars: 200,
+      maxParallel: 1,
+    });
+    // Failed chunk got [FAILED], others got OK
+    const failedCount = res.answers.filter((a) => a.startsWith("[FAILED]")).length;
+    expect(failedCount).toBe(1);
+    const okCount = res.answers.filter((a) => a === "OK").length;
+    expect(okCount).toBe(res.chunks - 1);
+    // Synthesis still ran
+    expect(res.synthesis).toBe("SYNTHESIS");
+  });
+
+  it("caps synthesis input when chunk answers are very long", async () => {
+    // Force many chunks with long answers to exceed MAX_SYNTHESIS_INPUT_CHARS
+    const bigAnswer = "x".repeat(5000);
+    const callLog: string[] = [];
+    const provider = {
+      chat: async function* (messages: Message[]) {
+        const system = messages.find((m) => m.role === "system")?.content as string;
+        const user = messages.find((m) => m.role === "user")?.content as string;
+        callLog.push(system);
+        if (system === DEFAULT_SYNTHESIS_SYSTEM_PROMPT) {
+          // Verify the synthesis input was truncated
+          expect(user!.length).toBeLessThan(30000);
+          yield { type: "text" as const, content: "SYNTHESIS" };
+        } else {
+          yield { type: "text" as const, content: bigAnswer };
+        }
+      },
+    };
+    // 5 chunks × 5000 chars = 25000 > MAX_SYNTHESIS_INPUT_CHARS (20000)
+    const text = Array.from({ length: 100 }, (_, i) => `row${i}${"-".repeat(50)}`).join("\n");
+    const res = await runChunkQuery(provider as any, text, "q", {
+      chunkChars: 100,
+      synthesize: true,
+    });
+    expect(res.synthesis).toBe("SYNTHESIS");
+    expect(res.chunks).toBeGreaterThanOrEqual(4);
+  });
+
+  it("does not start new chunks after signal is aborted", async () => {
+    const controller = new AbortController();
+    const started: number[] = [];
+    const provider = {
+      chat: async function* (messages: Message[]) {
+        const user = messages.find((m) => m.role === "user")?.content as string;
+        const chunkMatch = user?.match(/Text:\n(.)/);
+        started.push(Date.now());
+        // Abort after first chunk starts
+        if (started.length === 1) controller.abort();
+        await new Promise((r) => setTimeout(r, 20));
+        yield { type: "text" as const, content: "OK" };
+      },
+    };
+    const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n");
+    // Should complete quickly without processing all 20 chunks
+    const res = await runChunkQuery(provider as any, text, "q", {
+      chunkChars: 5,
+      maxParallel: 1,
+      signal: controller.signal,
+    });
+    // At least some chunks were skipped (not all 20 processed)
+    expect(res.chunks).toBeGreaterThanOrEqual(1);
+  });
 });

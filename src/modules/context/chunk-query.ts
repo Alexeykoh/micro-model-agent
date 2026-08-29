@@ -2,6 +2,10 @@ import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningLevel } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 
+/** Max chars of joined chunk answers sent to the synthesis call. Prevents the
+ * synthesis prompt from exceeding the model's context window on large inputs. */
+const MAX_SYNTHESIS_INPUT_CHARS = 20_000;
+
 export interface ChunkQueryOptions {
   /** Approx chunk size in chars. Default: 12000. */
   chunkChars?: number;
@@ -24,6 +28,8 @@ export interface ChunkQueryOptions {
   synthesisSystemPrompt?: string;
   /** Optional logger for chunking/parallelism diagnostics. */
   logger?: Logger;
+  /** Abort signal — when fired, in-flight chunk calls abort promptly. */
+  signal?: AbortSignal;
 }
 
 export interface ChunkQueryResult {
@@ -67,9 +73,10 @@ async function chatText(
   messages: Message[],
   maxTokens?: number,
   reasoningEffort?: ReasoningLevel,
+  signal?: AbortSignal,
 ): Promise<string> {
   let out = "";
-  for await (const chunk of provider.chat(messages, undefined, undefined, {
+  for await (const chunk of provider.chat(messages, undefined, signal, {
     maxTokens,
     reasoningEffort,
   })) {
@@ -111,8 +118,11 @@ export async function runChunkQuery(
   let inFlight = 0;
   let maxParallelObserved = 0;
 
+  const signal = opts.signal;
+
   const workers = Array.from({ length: Math.min(maxParallel, chunks.length) }, async () => {
     while (cursor < chunks.length) {
+      if (signal?.aborted) break;
       const idx = cursor++;
       inFlight++;
       maxParallelObserved = Math.max(maxParallelObserved, inFlight);
@@ -125,7 +135,14 @@ export async function runChunkQuery(
           ],
           maxChunkTokens,
           reasoningEffort,
+          signal,
         );
+      } catch (err: any) {
+        // A single failing chunk must not kill the entire query. Store the
+        // error and let the remaining chunks + synthesis proceed.
+        const msg = err instanceof Error ? err.message : String(err);
+        answers[idx] = `[FAILED] ${msg.slice(0, 200)}`;
+        logger?.debug(`runChunkQuery: chunk ${idx + 1}/${chunks.length} failed: ${msg}`);
       } finally {
         inFlight--;
       }
@@ -135,9 +152,17 @@ export async function runChunkQuery(
 
   let synthesis = "";
   if (opts.synthesize !== false && chunks.length > 0) {
-    const joined = answers
+    let joined = answers
       .map((a, i) => `--- Chunk ${i + 1}/${chunks.length} ---\n${a}`)
       .join("\n\n");
+    // Cap synthesis input to prevent context overflow on large texts.
+    if (joined.length > MAX_SYNTHESIS_INPUT_CHARS) {
+      const truncated = joined.slice(0, MAX_SYNTHESIS_INPUT_CHARS);
+      joined = `${truncated}\n\n[TRUNCATED — synthesis input exceeded ${MAX_SYNTHESIS_INPUT_CHARS} chars]`;
+      logger?.debug(
+        `runChunkQuery: synthesis input truncated from ${answers.join("").length} to ${MAX_SYNTHESIS_INPUT_CHARS} chars`,
+      );
+    }
     logger?.debug(`runChunkQuery: synthesis pass over ${chunks.length} answers`);
     synthesis = await chatText(
       provider,
@@ -150,6 +175,7 @@ export async function runChunkQuery(
       ],
       maxSynthesisTokens,
       reasoningEffort,
+      signal,
     );
   }
 
