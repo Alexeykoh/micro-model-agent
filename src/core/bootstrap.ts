@@ -1,6 +1,5 @@
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
-import { ProviderManager } from "../modules/providers/index";
 import { buildActiveProvider } from "../modules/providers/factory";
 import { BUILTIN_PROVIDERS } from "../modules/providers/presets";
 import type { LLMProvider } from "../llm/provider";
@@ -38,6 +37,23 @@ import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
+
+/** Reject `promise` after `ms`; the winner's timer is cleared. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 
 export function buildSystemInfo(
   config: AppConfig,
@@ -440,7 +456,16 @@ export async function bootstrap(
   moduleRegistry.register(indexerModule);
 
   const mcpModule = new MCPModule(config);
-  await mcpModule.initialize();
+  try {
+    // Bound the MCP init so one slow/hung MCP server can't block boot forever
+    // (B5): on timeout, log-and-continue — MCP tools appear late or not at all
+    // instead of stalling startup.
+    await withTimeout(mcpModule.initialize(), 10_000);
+  } catch (err) {
+    logger.warn(
+      `MCP init failed or timed out (${err instanceof Error ? err.message.slice(0, 120) : String(err)}) — continuing without MCP tools.`,
+    );
+  }
   moduleRegistry.register(mcpModule);
 
   const memoryStore = new MemoryStore(join(dir, "memory"));
