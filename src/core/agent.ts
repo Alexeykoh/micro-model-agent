@@ -1,5 +1,6 @@
 import type { LLMProvider, ContentPart } from "../llm/provider";
 import { ProviderManager } from "../modules/providers/manager";
+import { buildActiveProvider } from "../modules/providers/factory";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../modules/context/manager";
@@ -1421,21 +1422,11 @@ export class Agent {
   }
 
   async reconfigure(config: AppConfig): Promise<void> {
-    const { OpenAICompatProvider } = await import("../llm/openai-compat");
     const { TokenCounter } = await import("../llm/token-counter");
-    const newProvider = new OpenAICompatProvider({
-      model: config.model,
-      baseUrl: config.provider.baseUrl,
-      apiKey: config.provider.apiKey,
-      contextWindow: config.contextWindow,
-      retry: config.retry,
-      rateLimits: config.security?.rateLimits,
-      maxCompletionTokens:
-        config.provider.entries?.find((e) => e.label === config.provider.active)?.maxCompletionTokens ??
-        config.provider.maxCompletionTokens,
-    });
+    const { provider: newProvider } = buildActiveProvider(config, this.deps.logger);
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
+    (this.deps.toolExecutor as any).ctx.llmProvider = newProvider;
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
@@ -1444,18 +1435,13 @@ export class Agent {
   }
 
   setProvider(name: string, model?: string): void {
-    const manager = new ProviderManager(this.deps.config.provider, {
-      contextWindow: this.deps.config.contextWindow,
-      retry: this.deps.config.retry,
-      rateLimits: this.deps.config.security?.rateLimits,
-      logger: this.deps.logger,
-    });
+    const { manager, provider } = buildActiveProvider(this.deps.config, this.deps.logger);
     manager.switch(name, model);
     const providerCfg = manager.toConfig();
     this.deps.config.provider = providerCfg;
-    this.deps.llmProvider = manager.active;
-    this.deps.toolExecutor.updateProvider(manager.active);
-    (this.deps.toolExecutor as any).ctx.llmProvider = manager.active;
+    this.deps.llmProvider = provider;
+    this.deps.toolExecutor.updateProvider(provider);
+    (this.deps.toolExecutor as any).ctx.llmProvider = provider;
   }
 
   listProviders(): Array<ProviderEntry & { label: string; active: boolean }> {

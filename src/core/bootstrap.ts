@@ -1,7 +1,7 @@
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
 import { ProviderManager } from "../modules/providers/index";
-import { FallbackProvider } from "../modules/providers/fallback";
+import { buildActiveProvider } from "../modules/providers/factory";
 import { BUILTIN_PROVIDERS } from "../modules/providers/presets";
 import type { LLMProvider } from "../llm/provider";
 import { ModelLoader } from "../llm/model-loader";
@@ -230,26 +230,11 @@ export async function bootstrap(
   profile.load() || profile.collect();
   profile.save();
 
-  // Multi-provider manager (Phase 2). Built from the (possibly legacy flat)
-  // config; the active provider is resolved through it. The initial provider
-  // comes from the manager so the active entry is honored on startup.
-  const providerManager = new ProviderManager(config.provider, {
-    contextWindow: config.contextWindow,
-    retry: config.retry,
-    rateLimits: config.security?.rateLimits,
-    logger,
-  });
-  providerManager.setModel(config.model);
-  let llmProvider: LLMProvider = providerManager.active;
-  // Phase 4.2: transparent failover to the next configured provider on
-  // 429/5xx/network errors (only with multiple entries + fallback: true).
-  if (config.provider.fallback && providerManager.listNames().length > 1) {
-    llmProvider = new FallbackProvider(providerManager, (from, to, error) => {
-      logger.warn(
-        `provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
-      );
-    });
-  }
+  // Multi-provider manager (Phase 2) + optional transparent failover wrapper
+  // (Phase 4.2). Built through the shared factory so a hot-swap via
+  // Agent.setProvider gets the SAME fallback behavior as startup instead of
+  // rebuilding a bare manager that silently drops failover (B4).
+  const llmProvider = buildActiveProvider(config, logger).provider;
 
   // Resolve reasoning strategy from provider preset + probe
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
