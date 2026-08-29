@@ -326,11 +326,6 @@ export async function bootstrap(
     estimatedTokens: Math.ceil(systemInfoContent.length / 4),
   };
 
-  const agentsMdGlobal = join(dir, "AGENTS.md");
-  if (!existsSync(agentsMdGlobal)) {
-    writeFileSync(agentsMdGlobal, "", "utf-8");
-  }
-
   const sessionDir = join(dir, "sessions");
   const sessionStore = new SessionStore(sessionDir);
   sessionStore.init();

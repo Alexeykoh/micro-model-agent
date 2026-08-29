@@ -5,7 +5,7 @@ import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
-import type { AppConfig } from "./types";
+import type { AppConfig, ProviderEntry } from "./types";
 import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
@@ -142,11 +142,40 @@ function applyEnvVars(config: AppConfig): AppConfig {
   const result = { ...config };
 
   if (env.MMA_MODEL) result.model = env.MMA_MODEL;
-  if (env.MMA_PROVIDER_TYPE) result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE };
-  if (env.MMA_PROVIDER_BASEURL)
+
+  // normalizeEntries prefers entries[] and ignores the flat provider fields, so
+  // a flat-only env override is a silent no-op on multi-provider configs (the
+  // certification harness depends on these vars working). Resolve the active
+  // entry and patch it too.
+  const activeEntryIndex = ((): number => {
+    const entries = result.provider.entries;
+    if (!entries || entries.length === 0) return -1;
+    const active = result.provider.active;
+    if (!active) return 0;
+    const i = entries.findIndex((e) => e.label === active || e.type === active);
+    return i >= 0 ? i : 0;
+  })();
+
+  const patchActiveEntry = (patch: Partial<ProviderEntry>): void => {
+    if (activeEntryIndex < 0) return;
+    const entries = result.provider.entries!;
+    const next = [...entries];
+    next[activeEntryIndex] = { ...next[activeEntryIndex], ...patch };
+    result.provider = { ...result.provider, entries: next };
+  };
+
+  if (env.MMA_PROVIDER_TYPE) {
+    result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE };
+    patchActiveEntry({ type: env.MMA_PROVIDER_TYPE });
+  }
+  if (env.MMA_PROVIDER_BASEURL) {
     result.provider = { ...result.provider, baseUrl: env.MMA_PROVIDER_BASEURL };
-  if (env.MMA_PROVIDER_APIKEY)
+    patchActiveEntry({ baseUrl: env.MMA_PROVIDER_BASEURL });
+  }
+  if (env.MMA_PROVIDER_APIKEY) {
     result.provider = { ...result.provider, apiKey: env.MMA_PROVIDER_APIKEY };
+    patchActiveEntry({ apiKey: env.MMA_PROVIDER_APIKEY });
+  }
   if (env.MMA_LOG_LEVEL) result.logLevel = env.MMA_LOG_LEVEL;
   if (env.MMA_LOCALE) result.locale = env.MMA_LOCALE;
   if (env.MMA_CONTEXT_WINDOW) {

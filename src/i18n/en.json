@@ -322,6 +322,7 @@
   "cli.delete_session": "Delete a session",
   "cli.first_run": "First run detected. Running setup wizard...",
   "cli.unknown_cmd": "Unknown command: {name}.",
+  "cli.unknown_command": "Unknown command \"{input}\". Did you mean \"{suggestion}\"?",
   "cli.help_hint": "Type /help for available commands.",
   "cli.available_cmds": "\nAvailable commands:",
   "cli.no_output": "The agent finished but produced no output. The task may be incomplete.",

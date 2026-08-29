@@ -177,6 +177,40 @@ describe("loadConfig", () => {
     }
   });
 
+  it("should apply MMA_PROVIDER_BASEURL to the ACTIVE entry when entries exist", () => {
+    const tmpDir = makeTempDir();
+    writeFileSync(
+      join(tmpDir, "config.json"),
+      JSON.stringify({
+        version: "2.0.0",
+        provider: {
+          active: "main",
+          entries: [
+            { type: "openai-compat", label: "main", baseUrl: "http://main:8000/v1" },
+            { type: "openrouter", label: "fallback", baseUrl: "http://secondary:9000/v1" },
+          ],
+        },
+      }),
+    );
+    const prev = process.env.MMA_PROVIDER_BASEURL;
+    process.env.MMA_PROVIDER_BASEURL = "http://env:8080/v1";
+    try {
+      const { config: cfg } = loadConfig({
+        configDir: tmpDir,
+        projectConfigPath: join(tmpDir, ".mmrc"),
+      });
+      // Flat field is set AND the active entry is patched — the flat field alone
+      // is ignored by normalizeEntries, so without this the override is a no-op.
+      expect(cfg.provider.baseUrl).toBe("http://env:8080/v1");
+      expect(cfg.provider.entries![0].baseUrl).toBe("http://env:8080/v1");
+      // The fallback entry is left untouched.
+      expect(cfg.provider.entries![1].baseUrl).toBe("http://secondary:9000/v1");
+    } finally {
+      if (prev) process.env.MMA_PROVIDER_BASEURL = prev;
+      else delete process.env.MMA_PROVIDER_BASEURL;
+    }
+  });
+
   it("should migrate v1 config on load", () => {
     const tmpDir = makeTempDir();
     writeFileSync(

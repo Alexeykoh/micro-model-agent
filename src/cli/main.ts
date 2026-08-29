@@ -14,6 +14,7 @@ import { fileURLToPath } from "url";
 import { UpdaterModule } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
 import { readMmaVersion } from "../core/version";
+import { closestCommand } from "./command-suggest";
 
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
@@ -55,6 +56,21 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Typo guard: a misspelled subcommand must not be silently sent to the LLM
+  // as a prompt ("mma sesion list" → chat). Warn and exit when args[0] is a
+  // near-miss of a known command; free-form prompts never look like that.
+  if (program.args.length > 0) {
+    const suggestion = closestCommand(program.args[0], [...cmdNames]);
+    if (suggestion && suggestion !== program.args[0]) {
+      console.error(
+        pc.yellow(
+          `${t("cli.unknown_command", { input: program.args[0], suggestion })}`,
+        ),
+      );
+      process.exit(2);
+    }
+  }
+
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
     const { agent, config, baseDir, legacyDetected } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
@@ -66,7 +82,22 @@ async function main(): Promise<void> {
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
     if (jsonMode) {
-      const result = await agent.run(prompt);
+      let result;
+      try {
+        result = await agent.run(prompt);
+      } catch (err) {
+        // --json must never emit a raw stack trace: an AbortError or a
+        // crashing tool/plugin still yields a valid machine-readable result,
+        // and shutdown/waitForIdle still run.
+        const message = err instanceof Error ? err.message : String(err);
+        process.stdout.write(
+          JSON.stringify({ success: false, text: "", error: message, iterationCount: 0 }, null, 2),
+        );
+        process.stdout.write("\n");
+        agent.shutdown();
+        await updater?.waitForIdle(10_000);
+        process.exit(1);
+      }
       agent.shutdown();
       process.stdout.write(
         JSON.stringify(
@@ -97,25 +128,37 @@ async function main(): Promise<void> {
       baseDir,
     });
     renderer.showLoader();
-    const result = await agent.run(
-      prompt,
-      (chunk) => renderer.text(chunk),
-      (meta) => renderer.meta(meta),
-      (ev) => {
-        if (ev.type === "start") {
-          renderer.toolStart(ev.tool, ev.args, undefined, ev.icon);
-        } else {
-          renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
-        }
-      },
-      (phase) => {
-        if (phase === "thinking") {
-          renderer.thinkingStart();
-        } else {
-          renderer.thinkingEnd();
-        }
-      },
-    );
+    let result;
+    try {
+      result = await agent.run(
+        prompt,
+        (chunk) => renderer.text(chunk),
+        (meta) => renderer.meta(meta),
+        (ev) => {
+          if (ev.type === "start") {
+            renderer.toolStart(ev.tool, ev.args, undefined, ev.icon);
+          } else {
+            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
+          }
+        },
+        (phase) => {
+          if (phase === "thinking") {
+            renderer.thinkingStart();
+          } else {
+            renderer.thinkingEnd();
+          }
+        },
+      );
+    } catch (err) {
+      // A throw from the agent loop must not skip shutdown/updater or dump a
+      // bare stack — surface it as a clean error result.
+      result = {
+        success: false,
+        text: "",
+        error: err instanceof Error ? err.message : String(err),
+        iterationCount: 0,
+      };
+    }
     renderer.flush();
     if (result.provider && result.model) {
       renderer.footer(result.model, result.provider, result.llmDurationMs ?? result.durationMs ?? 0);
@@ -125,7 +168,7 @@ async function main(): Promise<void> {
     await updater?.waitForIdle();
     process.exit(exitCode);
   } else {
-    const mmaDir = join(homedir(), ".mma");
+    const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
     const legacyConfigPath = join(mmaDir, "config.json");
     let hasAnyConfig = existsSync(legacyConfigPath);
     if (!hasAnyConfig) {
@@ -145,7 +188,7 @@ async function main(): Promise<void> {
       baseDir,
       logger,
       envReport,
-    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete);
+    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
 
     const repl = new Repl(
       agent,
@@ -163,9 +206,10 @@ async function main(): Promise<void> {
       execModule,
     );
 
-    if (!hasAnyConfig) {
+    if (!hasAnyConfig && !exitOnComplete) {
       // First run: wizard via the REPL's LineEditor (avoids Bun stdin conflict
-      // from creating a second readline on process.stdin).
+      // from creating a second readline on process.stdin). A non-interactive
+      // run (--exit-on-complete) must never open the wizard and block on stdin.
       console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
       const answers = await runSetup(repl.rl);
       config.provider.type = answers.provider;
