@@ -2,9 +2,12 @@ import type { AppConfig } from "./types";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
+/** Single source of truth for the default model (experts inherit it, C8). */
+const DEFAULT_MODEL = "qwen/qwen3.5-9b";
+
 export const DEFAULTS: AppConfig = {
   version: "2.0.0",
-  model: "qwen/qwen3.5-9b",
+  model: DEFAULT_MODEL,
   provider: {
     type: "openai-compat",
     baseUrl: "http://localhost:1234/v1",
@@ -24,22 +27,22 @@ export const DEFAULTS: AppConfig = {
   },
   experts: {
     code: {
-      model: "qwen/qwen3.5-9b",
+      model: DEFAULT_MODEL,
       tool_tags: ["file", "code", "shell"],
       max_attempts: 3,
     },
     research: {
-      model: "qwen/qwen3.5-9b",
+      model: DEFAULT_MODEL,
       tool_tags: ["research"],
       max_attempts: 3,
     },
     browser: {
-      model: "qwen/qwen3.5-9b",
+      model: DEFAULT_MODEL,
       tool_tags: ["browser", "vision"],
       max_attempts: 3,
     },
     vision: {
-      model: "qwen/qwen3.5-9b",
+      model: DEFAULT_MODEL,
       tool_tags: ["browser", "vision", "file"],
       max_attempts: 2,
     },

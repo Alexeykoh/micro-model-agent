@@ -6,6 +6,8 @@ import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
 import type { AppConfig, ProviderEntry } from "./types";
+import { deepMerge, regexReplacer, regexReviver } from "./utils";
+export { deepMerge };
 import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
@@ -43,54 +45,6 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
     }
     return fallback[i] || fallback[0] || (p as RegExp);
   });
-}
-
-function isPlainObject(v: unknown): boolean {
-  if (typeof v !== "object" || v === null) return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-
-export function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result: Record<string, unknown> = { ...(target as any) };
-  for (const key of Object.keys(source as object)) {
-    const srcVal = (source as any)[key];
-    const tgtVal = (target as any)[key];
-    if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
-      result[key] = deepMerge(tgtVal, srcVal);
-    } else if (srcVal !== undefined) {
-      // Assign non-plain values (RegExp, Date, arrays, primitives) by
-      // reference — spreading a RegExp would silently destroy it to {}.
-      result[key] = srcVal;
-    }
-  }
-  return result as T;
-}
-
-/**
- * JSON replacer that serializes RegExp objects as {__regex, source, flags}
- * so they survive JSON.stringify/parse round-trips.
- */
-function regexReplacer(_key: string, value: unknown): unknown {
-  if (value instanceof RegExp) {
-    return { __regex: true, source: value.source, flags: value.flags };
-  }
-  return value;
-}
-
-/**
- * JSON reviver that restores RegExp objects serialized by regexReplacer.
- */
-function regexReviver(_key: string, value: unknown): unknown {
-  if (value && typeof value === "object" && (value as Record<string, unknown>).__regex === true) {
-    const { source, flags } = value as { source: string; flags: string };
-    try {
-      return new RegExp(source, flags);
-    } catch {
-      return value;
-    }
-  }
-  return value;
 }
 
 /**
