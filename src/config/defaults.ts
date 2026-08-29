@@ -22,8 +22,14 @@ export const DEFAULTS: AppConfig = {
     maxReplanCycles: 3,
   },
   tools: {
+    // TODO(2026-08-29): revisit tool-set visibility. enableOnDemand:false
+    // restores the full ~28-tool set (legacy behavior) — safe for small
+    // models but costs schema tokens per call. The on-demand narrowing
+    // (defaultTags + enable_tools) kept the footprint small but made the 9B
+    // model call hidden tools as shell commands / drift to MCP. Decide the
+    // right trade-off for small models and pick one mode.
     defaultTags: ["file", "code"],
-    enableOnDemand: true,
+    enableOnDemand: false,
   },
   experts: {
     code: {

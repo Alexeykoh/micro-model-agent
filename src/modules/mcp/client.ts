@@ -4,6 +4,12 @@ import type { MCPServerConfig } from "./registry";
 /** Default timeout for MCP HTTP requests (connect + tool calls). */
 const HTTP_TIMEOUT_MS = 10_000;
 
+/**
+ * Accept header required by the MCP Streamable HTTP transport — the server
+ * responds with 406 if the client doesn't accept both media types.
+ */
+const MCP_ACCEPT_HEADER = "application/json, text/event-stream";
+
 export class MCPClient {
   readonly serverName: string;
   private config: MCPServerConfig;
@@ -317,6 +323,7 @@ export class MCPClient {
     const response = await fetch(this.config.url!, {
       method: "POST",
       headers: {
+        Accept: MCP_ACCEPT_HEADER,
         "Content-Type": "application/json",
         ...this.config.headers,
       },
@@ -352,6 +359,7 @@ export class MCPClient {
     const response = await fetch(this.config.url!, {
       method: "POST",
       headers: {
+        Accept: MCP_ACCEPT_HEADER,
         "Content-Type": "application/json",
         ...this.config.headers,
       },
@@ -434,6 +442,7 @@ export class MCPClient {
     const response = await fetch(this.config.url!, {
       method: "POST",
       headers: {
+        Accept: MCP_ACCEPT_HEADER,
         "Content-Type": "application/json",
         ...this.config.headers,
       },
@@ -481,6 +490,7 @@ export class MCPClient {
       fetch(this.config.url!, {
         method: "POST",
         headers: {
+          Accept: MCP_ACCEPT_HEADER,
           "Content-Type": "application/json",
           ...this.config.headers,
         },
