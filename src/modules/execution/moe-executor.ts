@@ -58,6 +58,8 @@ export interface MoEExecutorDeps {
   onScopeRequest?: (subtaskId: string, req: ScopeRequestBody) => Promise<ScopeDecision>;
   /** Abort signal — queued subtasks are skipped, waves stop at the barrier. */
   signal?: AbortSignal;
+  /** Tool events (start/end) forwarded to the renderer around each subtask. */
+  onTool?: (ev: import("../../core/types").ToolEvent) => void;
 }
 
 export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
@@ -92,6 +94,7 @@ async function executeSubtask(
   subtask: MoESubtask,
   deps: MoEExecutorDeps,
   depResults: Map<string, SubtaskResult>,
+  sharedContext?: { rules: string[]; refs: string[] },
 ): Promise<SubtaskResult> {
   const startTime = Date.now();
   const expertConfig: ExpertConfig | undefined = getExpertConfig(deps.config, subtask.expert_tag);
@@ -148,7 +151,13 @@ async function executeSubtask(
           ? `\n\nAllowed files to write: ${allowedFiles.join(", ") || "(none)"}\nRead-only files: ${readOnlyFiles.join(", ") || "(none)"}`
           : "";
 
-      const taskPrompt = `${subtask.description}\n\nExpected output: ${subtask.expected_output}\nSuccess criteria:\n${(subtask.success_criteria || []).map((c: string) => `- ${c}`).join("\n")}${scopePrompt}${buildInputSection(subtask, depResults, deps.config.subagent?.maxSummaryChars ?? 2000)}`;
+      const sharedRules = sharedContext?.rules;
+      const sharedContextPrompt =
+        sharedRules && sharedRules.length > 0
+          ? `\n\nShared rules:\n${sharedRules.map((r) => `- ${r}`).join("\n")}`
+          : "";
+
+      const taskPrompt = `${subtask.description}\n\nExpected output: ${subtask.expected_output}\nSuccess criteria:\n${(subtask.success_criteria || []).map((c: string) => `- ${c}`).join("\n")}${scopePrompt}${sharedContextPrompt}${buildInputSection(subtask, depResults, deps.config.subagent?.maxSummaryChars ?? 2000)}`;
 
       const subagentArgs: Record<string, unknown> = {
         task: taskPrompt,
@@ -161,6 +170,12 @@ async function executeSubtask(
         subagentArgs.artifact_name = subtask.id;
       }
 
+      const subagentStart = Date.now();
+      deps.onTool?.({
+        type: "start",
+        tool: "subagent",
+        args: { subtask: subtask.id, description: subtask.description },
+      });
       const result = await subagentTool.handler(
         {
           config: deps.config,
@@ -172,6 +187,13 @@ async function executeSubtask(
         },
         subagentArgs,
       );
+      deps.onTool?.({
+        type: "end",
+        tool: "subagent",
+        args: { subtask: subtask.id, description: subtask.description },
+        duration: Date.now() - subagentStart,
+        error: !result.success,
+      });
 
       if (result.success) {
         if (deps.config.subagent?.resultMode === "file") {
@@ -374,9 +396,9 @@ export class MoEExecutor {
         }
         let result: SubtaskResult;
         try {
-          result = await executeSubtask(subtask, this.deps, depResults);
+          result = await executeSubtask(subtask, this.deps, depResults, plan.shared_context);
           if (!result.success && this.deps.onScopeRequest) {
-            result = await this.resolveScopeAndRetry(subtask, result, depResults);
+            result = await this.resolveScopeAndRetry(subtask, result, depResults, plan.shared_context);
           }
         } catch (e) {
           if (e instanceof Error && e.name === "AbortError") throw e;
@@ -419,6 +441,7 @@ export class MoEExecutor {
     subtask: MoESubtask,
     failed: SubtaskResult,
     depResults: Map<string, SubtaskResult>,
+    sharedContext?: { rules: string[]; refs: string[] },
   ): Promise<SubtaskResult> {
     let current = failed;
     for (let cycle = 0; cycle < MAX_SCOPE_EXPANSION_CYCLES; cycle++) {
@@ -442,7 +465,7 @@ export class MoEExecutor {
         `MoE: approved scope expansion for "${subtask.id}": +write [${decision.write.join(", ")}] +read [${decision.read.join(", ")}]`,
       );
 
-      const retry = await executeSubtask(subtask, this.deps, depResults);
+      const retry = await executeSubtask(subtask, this.deps, depResults, sharedContext);
       if (retry.success || !retry.scopeRequest) return retry;
       current = retry;
     }

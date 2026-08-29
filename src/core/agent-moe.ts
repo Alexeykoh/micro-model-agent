@@ -71,7 +71,7 @@ export async function runWithMoE(
   } = {},
 ): Promise<AgentResult> {
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
-  const { onMeta, onPhase, signal } = opts;
+  const { onMeta, onPhase, onTool, signal } = opts;
   const ensureNotAborted = () => {
     if (signal?.aborted) throw newAbortError();
   };
@@ -146,6 +146,7 @@ export async function runWithMoE(
         llmProvider,
         logger,
         baseDir,
+        onTool,
         onScopeRequest: async (subtaskId, req) => {
           const decision = await orchestrator.resolveScopeRequest(subtaskId, req, signal);
           if (decision.action === "approve") {
@@ -252,6 +253,7 @@ function buildFinalResult(
     success: failedCount === 0 && verificationSuccess,
     text: outputLines.join("\n"),
     iterationCount: mergedResults.size,
+    moeHandled: true,
   };
 }
 
@@ -268,5 +270,6 @@ function partialFailure(mergedResults: Map<string, SubtaskResult>, reason: strin
     text: outputLines.join("\n"),
     error: reason,
     iterationCount: mergedResults.size,
+    moeHandled: true,
   };
 }

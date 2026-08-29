@@ -221,4 +221,25 @@ describe("runWithMoE re-plan loop", () => {
 
     expect(result.text).toBe("fallback");
   });
+
+  it("marks moeHandled when MoE executes instead of falling back", async () => {
+    h.planQueue.push({ plan: plan("a") });
+    h.execResults.push({ success: true, results: [okResult("a")], errors: [], warnings: [] });
+    h.verifyQueue.push({ type: "final", finalAnswer: "done" });
+
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(deps(makeConfig()), "task", fallback);
+
+    expect(result.moeHandled).toBe(true);
+  });
+
+  it("does not mark moeHandled when MoE falls back to the single-agent loop", async () => {
+    const d = deps(makeConfig());
+    (d.orchestratorOverride as any).isEnabled = () => false;
+
+    const fallback = async () => ({ success: false, text: "fallback", iterationCount: 0 });
+    const result = await runWithMoE(d, "task", fallback);
+
+    expect(result.moeHandled).toBeUndefined();
+  });
 });

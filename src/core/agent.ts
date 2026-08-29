@@ -430,26 +430,44 @@ export class Agent {
     };
 
     try {
-      const result =
-        config.moe?.enabled === true
-          ? await runWithMoE(
-              {
-                config,
-                llmProvider,
-                toolExecutor,
-                logger,
-                baseDir: this.deps.baseDir,
-              },
-              input,
-              () => this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase),
-              {
-                onMeta,
-                onTool: countTool,
-                onPhase,
-                signal: this.abortController.signal,
-              },
-            )
-          : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
+      const moeEnabled = config.moe?.enabled === true;
+      const result = moeEnabled
+        ? await runWithMoE(
+            {
+              config,
+              llmProvider,
+              toolExecutor,
+              logger,
+              baseDir: this.deps.baseDir,
+            },
+            input,
+            () => this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase),
+            {
+              onMeta,
+              onTool: countTool,
+              onPhase,
+              signal: this.abortController.signal,
+            },
+          )
+        : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
+
+      // In MoE mode the single-agent loop (the only writer of assistant turns)
+      // never runs — without this the history ends user→user across turns and
+      // session.jsonl is missing the assistant answer. Write the result once,
+      // only when MoE actually handled the turn (a fallback already wrote it).
+      if (moeEnabled && result.moeHandled) {
+        if (result.text) {
+          contextManager.addMessage({ role: "assistant", content: result.text });
+          if (config.session.autoSave) {
+            slog.saveAssistantMessage(result.text);
+          }
+          slog.logAssistant(result.text, "", undefined, 0);
+        }
+        if (!result.success && result.error) {
+          slog.logError(result.error);
+        }
+      }
+
       const provenance = this.callerProvenance();
       result.provider = provenance.provider;
       result.model = provenance.model;

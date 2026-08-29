@@ -116,6 +116,7 @@ function sub(id: string, extra: Partial<MoEPlan["subtasks"][number]> = {}): MoEP
 function makeExecutor(
   subagentHandler: any,
   onScopeRequest?: any,
+  onTool?: any,
 ): MoEExecutor {
   const registry = new ToolRegistry();
   const mockSubagentTool: ToolDefinition = {
@@ -134,6 +135,7 @@ function makeExecutor(
     logger: { debug: () => {}, warn: () => {}, info: () => {} } as any,
     baseDir: "/tmp/moe-scope-test",
     onScopeRequest,
+    onTool,
   });
 }
 
@@ -233,6 +235,44 @@ describe("MoEExecutor scope_request handling", () => {
 
     expect(calls).toHaveLength(1);
     expect(result.success).toBe(false);
+  });
+
+  it("injects plan shared_context rules into the subtask prompt", async () => {
+    const executor = makeExecutor(handlerScript([{ success: true, output: "done" }]));
+    const result = await executor.executePlan({
+      title: "t",
+      subtasks: [sub("a")],
+      shared_context: {
+        rules: ["always use write_file", "verify with lsp_check"],
+        refs: [],
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].task).toContain("always use write_file");
+    expect(calls[0].task).toContain("verify with lsp_check");
+    expect(result.success).toBe(true);
+  });
+
+  it("emits start/end tool events around each subtask", async () => {
+    const events: any[] = [];
+    const executor = makeExecutor(
+      handlerScript([{ success: true, output: "done" }]),
+      undefined,
+      (ev: any) => events.push(ev),
+    );
+    await executor.executePlan({
+      title: "t",
+      subtasks: [sub("a")],
+      shared_context: { rules: [], refs: [] },
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0].type).toBe("start");
+    expect(events[0].tool).toBe("subagent");
+    expect(events[1].type).toBe("end");
+    expect(events[1].tool).toBe("subagent");
+    expect(events[1].error).toBe(false);
   });
 });
 

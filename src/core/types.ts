@@ -96,4 +96,10 @@ export interface AgentResult {
   durationMs?: number;
   /** Total LLM call duration in milliseconds (excludes tool execution). */
   llmDurationMs?: number;
+  /**
+   * True when the MoE path actually executed (not fell back to the
+   * single-agent loop). Used by Agent.run to know whether it must write the
+   * assistant turn into context/session (the single-agent loop writes its own).
+   */
+  moeHandled?: boolean;
 }
