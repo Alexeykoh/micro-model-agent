@@ -72,6 +72,12 @@ export function toolOutputCharLimit(
 
 export interface AgentDeps {
   config: AppConfig;
+  /**
+   * Shared live-config box. `reconfigure` swaps both `config` and
+   * `configRef.current` so bootstrap-captured references (toolCtx.config,
+   * security validators) keep seeing the current settings.
+   */
+  configRef?: { current: AppConfig };
   llmProvider: LLMProvider;
   toolExecutor: ToolExecutor;
   pluginManager: PluginManager;
@@ -1413,6 +1419,7 @@ export class Agent {
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
+    if (this.deps.configRef) this.deps.configRef.current = config;
     this.costTracker.setModel(config.model);
   }
 

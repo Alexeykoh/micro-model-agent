@@ -55,6 +55,25 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
+  it("exposes a LIVE config that follows reconfigure (B1)", async () => {
+    // toolCtx.config was captured once at bootstrap; Agent.reconfigure()
+    // replaced deps.config but not the executor context, so security
+    // validators and tools kept enforcing the OLD settings after a /model
+    // use or wizard. The getter must read the shared ref.
+    const dir = tempDir();
+    try {
+      const { toolCtx, agent, config } = await bootstrap(dir, dir);
+      expect(toolCtx.config).toBe(config);
+
+      const swapped = { ...config, model: "test/swapped-model" };
+      await agent.reconfigure(swapped);
+      expect(toolCtx.config).toBe(swapped);
+      expect(toolCtx.config.model).toBe("test/swapped-model");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("restores a disk-resident plan in a fresh session (project state)", async () => {
     // A plan in .mma/plans/active.json belongs to the PROJECT, not to a
     // session — bootstrap must restore the tracker so `plan show` works

@@ -361,8 +361,14 @@ export async function bootstrap(
     tokenCounter,
   );
 
-  const toolCtx: ToolContext = {
-    config,
+  // Shared box for the LIVE config. `Agent.reconfigure` replaces deps.config
+  // AND this box, so anything that captured the reference at bootstrap —
+  // toolCtx.config, security validators, tool rules — keeps seeing the CURRENT
+  // settings after /model use or the wizard. Pinning the value once meant
+  // tools enforced the pre-reconfigure security/maxTool settings all session.
+  const configRef: { current: AppConfig } = { current: config };
+
+  const toolCtx = {
     baseDir,
     logger,
     exitOnComplete,
@@ -393,7 +399,14 @@ export async function bootstrap(
         });
       },
     },
-  };
+  } as ToolContext;
+
+  // `config` is exposed as a LIVE getter over the shared configRef so tools
+  // and security validators see the CURRENT settings after a reconfigure.
+  Object.defineProperty(toolCtx, "config", {
+    get: () => configRef.current,
+    configurable: true,
+  });
 
   // `sessionId`/`sessionContext` are exposed as LIVE getters over the session
   // manager instead of being captured once at bootstrap. Capturing the values
@@ -578,6 +591,7 @@ export async function bootstrap(
 
   const agentDeps: AgentDeps = {
     config,
+    configRef,
     llmProvider,
     toolExecutor,
     pluginManager,
