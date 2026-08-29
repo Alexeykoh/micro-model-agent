@@ -16,11 +16,27 @@ describe("ConfidenceCheck", () => {
 
   it("should retry on repetitive response", () => {
     const check = new ConfidenceCheck();
-    check.setPreviousResponse("I think we should use TypeScript");
-    const result = check.validate(
-      "I think we should use TypeScript and I think we should use TypeScript",
-    );
+    const sentence =
+      "The system should use TypeScript for this project because it provides strong typing better tooling and reliable refactoring support across the entire codebase for long term maintainability";
+    check.setPreviousResponse(sentence);
+    const result = check.validate(sentence + " as we already decided earlier in this session");
     expect(result.status).toBe("retry");
+  });
+
+  it("does not flag repeated short answers as repetition", () => {
+    const check = new ConfidenceCheck();
+    check.setPreviousResponse("The build passes and all tests are green.");
+    const result = check.validate("The build passes and all tests are green.");
+    expect(result.status).not.toBe("retry");
+  });
+
+  it("does not flag a long answer as repetition after a short previous answer", () => {
+    const check = new ConfidenceCheck();
+    check.setPreviousResponse("Done.");
+    const result = check.validate(
+      "Done. The refactoring is complete and all of the requested changes have been applied to every file in the project with full coverage",
+    );
+    expect(result.status).not.toBe("retry");
   });
 
   it("should warn on low word diversity", () => {

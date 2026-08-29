@@ -581,6 +581,195 @@ describe("Agent", () => {
     expect(result.error).toContain("iteration");
   });
 
+  it("reports success when the final answer lands on the last allowed iteration", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "call-x", name: "test_tool", arguments: "{}" },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "Final answer on last iteration" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({
+        success: true,
+        output: "tool ok",
+        toolCallId: "call-x",
+      }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+      config: { ...createMockDeps().config, maxToolIterations: 2 },
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("do it");
+    expect(result.success).toBe(true);
+    expect(result.text).toBe("Final answer on last iteration");
+    expect(result.error).toBeUndefined();
+  });
+
+  it("truncates tool arguments in the <system-summary> envelope", async () => {
+    const bigContent = "x".repeat(5000);
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: {
+                id: "call-1",
+                name: "write_file",
+                arguments: JSON.stringify({ path: "a.ts", content: bigContent }),
+              },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "done" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, output: "ok", toolCallId: "call-1" }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+    });
+    const agent = new Agent(deps as any);
+    await agent.run("write big file");
+
+    const addMessage = deps.contextManager.addMessage as any;
+    const summaryText = addMessage.mock.calls
+      .filter(
+        (c: any[]) =>
+          c[0]?.role === "user" &&
+          typeof c[0]?.content === "string" &&
+          c[0].content.startsWith("<system-summary>"),
+      )
+      .map((c: any[]) => c[0].content)
+      .join("\n");
+    // The full 5000-char content must NOT be duplicated into the envelope.
+    expect(summaryText).not.toContain(bigContent);
+    // The args summary is bounded (~240 chars + marker).
+    expect(summaryText.length).toBeLessThan(1000);
+  });
+
+  it("converts a throwing tool into a failed result instead of killing the session", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "call-1", name: "bash", arguments: "{}" },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "recovered after tool throw" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const mockExecutor = {
+      execute: vi.fn().mockRejectedValue(new Error("internal tool bug")),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("do something");
+
+    // The session survives: the thrown tool became a failed result and the
+    // model answered on the next iteration.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(2);
+    expect(result.success).toBe(true);
+    expect(result.text).toBe("recovered after tool throw");
+
+    const toolMsg = (deps.contextManager.addMessage as any).mock.calls.find(
+      (c: any[]) => c[0]?.role === "tool" && c[0]?.tool_call_id === "call-1",
+    );
+    expect(toolMsg).toBeDefined();
+    expect(toolMsg[0].success).toBe(false);
+  });
+
+  it("reports a cumulative prompt-token estimate when the backend omits usage", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "c1", name: "test_tool", arguments: "{}" },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "answer" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, output: "ok", toolCallId: "c1" }),
+      getToolDefinitions: vi.fn().mockReturnValue([]),
+      getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider as any,
+      toolExecutor: mockExecutor as any,
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("two iterations");
+    // Two LLM calls with no usage → the prompt estimate must be the SUM of the
+    // per-iteration context sizes (50 + 50), not just the last snapshot.
+    expect(result.promptTokens).toBe(100);
+  });
+
   it("hallucination block prevents tool execution", async () => {
     const mockProvider = {
       model: "test-model",

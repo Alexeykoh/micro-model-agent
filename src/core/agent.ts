@@ -28,6 +28,23 @@ import type { ReasoningState } from "../tools/set-thinking";
 const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
 const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
 const QUALITY_TRIGGER_THRESHOLD = 40;
+/** Max chars of a tool's arguments shown in the <system-summary> envelope.
+ * A write_file's `content` (or any large arg) must not be duplicated into the
+ * summary on top of the role:"tool" message that already carries the result. */
+const TOOL_ARGS_SUMMARY_MAX_CHARS = 240;
+
+/** JSON-stringify tool args, truncated to a bounded size for the summary envelope. */
+function summarizeToolArgs(args: unknown): string {
+  let s: string;
+  try {
+    s = JSON.stringify(args);
+  } catch {
+    s = String(args);
+  }
+  if (!s || s === "{}") return "";
+  if (s.length <= TOOL_ARGS_SUMMARY_MAX_CHARS) return ` (${s})`;
+  return ` (${s.slice(0, TOOL_ARGS_SUMMARY_MAX_CHARS)}…(${s.length} chars total))`;
+}
 
 /** Minimum iterations between quality-triggered forced compactions. Without
  * this, a low-quality context re-triggers compaction on EVERY iteration
@@ -479,6 +496,11 @@ export class Agent {
     let apiPromptTokens = 0;
     let apiCompletionTokens = 0;
     let apiCompletionChars = 0;
+    // Cumulative estimated prompt tokens across iterations. When the backend
+    // omits `usage`, the completion side (apiCompletionChars) is already
+    // cumulative, so the prompt side must be too — otherwise the final token
+    // metrics mix a point-in-time prompt with an all-session completion.
+    let estimatedPromptTokensTotal = 0;
     const MAX_HALLUCINATION_RETRIES = 3;
     let consecutiveToolFailures = 0;
     const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
@@ -492,6 +514,10 @@ export class Agent {
     const MAX_EMPTY_RESPONSE_RETRIES = 2;
     let emptyResponseExhausted = false;
     let auditFailed = false;
+    // Set true right before the loop terminates with an accepted final answer.
+    // Gates the max_iters error below: an answer produced on the LAST allowed
+    // iteration is a success, not a "ran out of iterations" failure.
+    let finalAnswerAccepted = false;
     let lastAuditSummary = "";
     let totalLlmDuration = 0;
     // Set when the audit gate rejects a final answer and re-prompts: the next
@@ -621,6 +647,7 @@ export class Agent {
       const llmStart = Date.now();
       const promptBefore = apiPromptTokens;
       const completionBefore = apiCompletionTokens;
+      estimatedPromptTokensTotal += contextManager.getEstimatedTokens();
       logger.logLLMRequest(config.model, history.length, input, "agent");
 
       // Compute reasoning effort for this iteration. The signal flags describe
@@ -914,11 +941,23 @@ export class Agent {
           try {
             result = await toolExecutor.execute(call, this.abortController?.signal);
           } catch (err) {
+            // An abort during the tool must still propagate so the session
+            // shuts down cleanly. Any OTHER throw (a bug in a tool or plugin
+            // that escapes the executor's own catch) must NOT kill the whole
+            // session — degrade it to a failed tool result the model can react
+            // to, exactly like a tool returning success:false.
+            if (err instanceof Error && err.name === "AbortError") {
+              synthesizePendingToolResults();
+              throw err;
+            }
             logger.warn(
               `Tool ${call.name} threw: ${err instanceof Error ? err.message : String(err)}`,
             );
-            synthesizePendingToolResults();
-            throw err;
+            result = {
+              success: false,
+              output: `${t("error.prefix")}${err instanceof Error ? err.message : String(err)}`,
+              toolCallId: call.id,
+            };
           }
           // Interrupt during the tool call: the session is already shutting
           // down (Esc/Ctrl+C), so stop immediately — no rendering, no session
@@ -996,7 +1035,7 @@ export class Agent {
           });
 
           summaries.push(
-            `[Tool: ${call.name} (${JSON.stringify(call.arguments)}) → ${truncatedOutput.slice(0, 200)}]`,
+            `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
           );
 
           if (config.session.autoSave) {
@@ -1145,6 +1184,7 @@ export class Agent {
           // previous (tool-only) iteration's text, so without this the
           // final answer is lost (reported text: "").
           lastText = textContent;
+          finalAnswerAccepted = true;
           break;
         }
         if (suppressRepetitionRetry && hallucinationResult.kind === "repetition") {
@@ -1277,6 +1317,7 @@ export class Agent {
             continue;
           }
         }
+        finalAnswerAccepted = true;
         break;
       }
     }
@@ -1286,11 +1327,11 @@ export class Agent {
     const usageTokens = this.resolveUsageTokens(
       apiPromptTokens,
       apiCompletionTokens,
-      tokensUsed,
+      estimatedPromptTokensTotal,
       apiCompletionChars,
     );
 
-    if (iteration >= config.maxToolIterations) {
+    if (iteration >= config.maxToolIterations && !finalAnswerAccepted) {
       return {
         success: false,
         text: lastText,

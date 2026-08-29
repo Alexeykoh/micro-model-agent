@@ -199,6 +199,75 @@ describe("OpenAICompatProvider", () => {
     expect(requestBody.tools).toBeUndefined();
   });
 
+  it("should wait for a rate-limit slot instead of failing the turn", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      rateLimits: { maxRequestsPerMinute: 1 },
+    });
+
+    // Exhaust the limiter with a request that will expire within the wait window.
+    (provider as any).rateLimiter.state.requests = [Date.now() - 45_000];
+    // Simulate the passage of time: once the wait resolves, the old request
+    // has aged out of the window and a slot is free again.
+    const sleepSpy = vi
+      .spyOn(provider as any, "sleep")
+      .mockImplementation(async () => {
+        (provider as any).rateLimiter.state.requests = [];
+      });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Map(),
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      }),
+    });
+    global.fetch = mockFetch as any;
+
+    const chunks: string[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "text" && chunk.content) chunks.push(chunk.content);
+    }
+
+    // It waited for the slot (bounded) and still made the request.
+    expect(sleepSpy).toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(chunks.join("")).toBe("ok");
+    sleepSpy.mockRestore();
+  });
+
+  it("marks the rate-limit error recoverable when no slot frees within the wait", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      rateLimits: { maxRequestsPerMinute: 1 },
+    });
+
+    // Exhaust the limiter with a FRESH request — it cannot expire within the wait.
+    (provider as any).rateLimiter.state.requests = [Date.now()];
+    const sleepSpy = vi.spyOn(provider as any, "sleep").mockResolvedValue(undefined);
+    const mockFetch = vi.fn();
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.recoverableLlm).toBe(true);
+      expect(e.message).toContain("Rate limit");
+    }
+    // fetch must never have been called.
+    expect(mockFetch).not.toHaveBeenCalled();
+    sleepSpy.mockRestore();
+  });
+
   it("should handle API errors", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",

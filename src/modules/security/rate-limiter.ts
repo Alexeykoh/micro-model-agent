@@ -96,6 +96,17 @@ export class RateLimiter {
   }
 
   /**
+   * Milliseconds until a request slot frees up (the oldest request ages out of
+   * the 1-minute window). Returns 0 when a request can be made immediately.
+   */
+  msUntilRequest(): number {
+    this.cleanupOldRequests();
+    if (this.state.requests.length < this.config.maxRequestsPerMinute) return 0;
+    const oldest = this.state.requests[0];
+    return Math.max(0, 60_000 - (Date.now() - oldest));
+  }
+
+  /**
    * Clean up old requests (older than 1 minute)
    */
   private cleanupOldRequests(): void {

@@ -15,6 +15,8 @@ export interface RetryConfig {
 }
 
 const REQUEST_TIMEOUT_MS = 120000;
+/** Max wait (ms) for a self-inflicted rate-limit slot before giving up. */
+const MAX_RATE_WAIT_MS = 30_000;
 
 export interface OpenAICompatConfig {
   model: string;
@@ -109,11 +111,22 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
-    // Check rate limit before making request
+    // Check rate limit before making request. A self-inflicted limit should
+    // wait for a slot (bounded) instead of aborting a healthy turn; only if
+    // no slot frees within the window do we surface a recoverable error the
+    // agent loop can feed back (rather than dying).
     if (!this.rateLimiter.canMakeRequest()) {
-      throw new Error(
-        `Rate limit exceeded: ${this.rateLimiter.getConfig().maxRequestsPerMinute} requests per minute`,
-      );
+      const waitMs = Math.min(this.rateLimiter.msUntilRequest(), MAX_RATE_WAIT_MS);
+      if (waitMs > 0) {
+        await this.sleep(waitMs, signal);
+      }
+      if (!this.rateLimiter.canMakeRequest()) {
+        const err = new Error(
+          `Rate limit exceeded: ${this.rateLimiter.getConfig().maxRequestsPerMinute} requests per minute`,
+        );
+        (err as any).recoverableLlm = true;
+        throw err;
+      }
     }
 
     // Record this request
