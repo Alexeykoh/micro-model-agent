@@ -37,6 +37,63 @@ import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
+import type { AgentPlugin } from "../modules/types";
+import type { ReasoningLevel } from "../config/types";
+
+/**
+ * CLI --reasoning переопределяет конфигурационный режим
+ * (приоритет: CLI > config > default). "auto" пропускается — полагаемся
+ * на конфиг. Строка CLI приводится к типизированному ReasoningLevel.
+ */
+function applyReasoningCliOverride(config: AppConfig, reasoningLevel: string | undefined): void {
+  if (!reasoningLevel || reasoningLevel === "auto") return;
+  if (!config.reasoning) {
+    config.reasoning = {
+      mode: reasoningLevel as ReasoningLevel,
+      min: "low",
+      max: "high",
+      overrideCooldown: 3,
+    };
+  } else {
+    config.reasoning.mode = reasoningLevel as ReasoningLevel;
+  }
+}
+
+/** Регистрация встроенного плагина модуля: пометка + регистрация. */
+function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefined): void {
+  if (!plugin) return;
+  plugin.isBuiltin = true;
+  pm.register(plugin);
+}
+
+/**
+ * Загрузка AGENTS.md из базового каталога проекта и конфиг-каталога
+ * (в порядке приоритета). Каждый найденный непустой файл — prompt-блок
+ * высокого приоритета.
+ */
+function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): PromptBlock[] {
+  if (skip) return [];
+  const blocks: PromptBlock[] = [];
+  const candidates = [
+    join(baseDir, "AGENTS.md"),
+    join(baseDir, ".mma", "AGENTS.md"),
+    join(dir, "AGENTS.md"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      const content = readFileSync(p, "utf-8").trim();
+      if (content) {
+        blocks.push({
+          content,
+          priority: "high",
+          essential: false,
+          estimatedTokens: estimateTokens(content),
+        });
+      }
+    }
+  }
+  return blocks;
+}
 
 /** Reject `promise` after `ms`; the winner's timer is cleared. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -186,10 +243,7 @@ export async function bootstrap(
   setLocale(config.locale);
 
   // CLI --reasoning overrides config mode (priority: CLI > config > default)
-  if (reasoningLevel && reasoningLevel !== "auto") {
-    if (!config.reasoning) config.reasoning = { mode: reasoningLevel as any, min: "low", max: "high", overrideCooldown: 3 };
-    else config.reasoning.mode = reasoningLevel as any;
-  }
+  applyReasoningCliOverride(config, reasoningLevel);
 
   // Update global audit notifier with config
   try {
@@ -475,21 +529,13 @@ export async function bootstrap(
   if (config.browser.enabled) {
     const browserModule = new BrowserModule();
     moduleRegistry.register(browserModule);
-    const browserPlugin = browserModule.getPlugin();
-    if (browserPlugin) {
-      browserPlugin.isBuiltin = true;
-      pluginManager.register(browserPlugin);
-    }
+    registerBuiltinPlugin(pluginManager, browserModule.getPlugin());
   }
 
   const lspLogger = new FileOnlyLogger(logger);
   const lspModule = new LspModule(config.lsp, undefined, lspLogger);
   moduleRegistry.register(lspModule);
-  const lspPlugin = lspModule.getPlugin();
-  if (lspPlugin) {
-    lspPlugin.isBuiltin = true;
-    pluginManager.register(lspPlugin);
-  }
+  registerBuiltinPlugin(pluginManager, lspModule.getPlugin());
 
   // Startup health check: scan project for existing errors so the model
   // knows the baseline before it starts working. Skip for one-shot runs and
@@ -509,34 +555,15 @@ export async function bootstrap(
   }
 
   const plugin = execModule.getPlugin();
-  if (plugin) {
-    plugin.isBuiltin = true;
-    pluginManager.register(plugin);
-  }
+  registerBuiltinPlugin(pluginManager, plugin);
 
-  const sessionPlugin = sessionModule.getPlugin();
-  if (sessionPlugin) {
-    sessionPlugin.isBuiltin = true;
-    pluginManager.register(sessionPlugin);
-  }
+  registerBuiltinPlugin(pluginManager, sessionModule.getPlugin());
 
-  const skillsPlugin = skillsModule.getPlugin();
-  if (skillsPlugin) {
-    skillsPlugin.isBuiltin = true;
-    pluginManager.register(skillsPlugin);
-  }
+  registerBuiltinPlugin(pluginManager, skillsModule.getPlugin());
 
-  const indexerPlugin = indexerModule.getPlugin();
-  if (indexerPlugin) {
-    indexerPlugin.isBuiltin = true;
-    pluginManager.register(indexerPlugin);
-  }
+  registerBuiltinPlugin(pluginManager, indexerModule.getPlugin());
 
-  const mcpPlugin = mcpModule.getPlugin();
-  if (mcpPlugin) {
-    mcpPlugin.isBuiltin = true;
-    pluginManager.register(mcpPlugin);
-  }
+  registerBuiltinPlugin(pluginManager, mcpModule.getPlugin());
 
   pluginManager.register(lintOnWritePlugin);
   pluginManager.register(notifyPlugin);
@@ -571,28 +598,7 @@ export async function bootstrap(
   // fresh plan_xzq9xe the same iteration the old plan was still visible).
   contextManager.setPlanSummaryProvider(() => execModule.getPlanSummary());
 
-  const agentsMdBlocks: PromptBlock[] = [];
-  const skipAgentsMd = noAgentsMd === true;
-  if (!skipAgentsMd) {
-    const agentsMdCandidates = [
-      join(baseDir, "AGENTS.md"),
-      join(baseDir, ".mma", "AGENTS.md"),
-      join(dir, "AGENTS.md"),
-    ];
-    for (const p of agentsMdCandidates) {
-      if (existsSync(p)) {
-        const content = readFileSync(p, "utf-8").trim();
-        if (content) {
-          agentsMdBlocks.push({
-            content,
-            priority: "high",
-            essential: false,
-            estimatedTokens: estimateTokens(content),
-          });
-        }
-      }
-    }
-  }
+  const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
 
   const promptBlocks: PromptBlock[] = [
     systemInfoPrompt,
@@ -682,7 +688,7 @@ export async function bootstrap(
     toolCtx,
     configDir: dir,
     baseDir,
-    noAgentsMd: skipAgentsMd,
+    noAgentsMd: noAgentsMd === true,
     envReport,
     legacyDetected,
   };
