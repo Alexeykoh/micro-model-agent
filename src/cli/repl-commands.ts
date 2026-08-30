@@ -104,7 +104,7 @@ function registerBuiltinCommands(ctx: ReplContext): void {
   });
 }
 
-function registerMmaCommands(ctx: ReplContext): void {
+function registerRunCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "run",
     description: t("repl.run"),
@@ -181,6 +181,9 @@ function registerMmaCommands(ctx: ReplContext): void {
       }
     },
   });
+}
+
+function registerConfigCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "config",
     description: t("repl.config"),
@@ -313,6 +316,9 @@ function registerMmaCommands(ctx: ReplContext): void {
       }
     },
   });
+}
+
+function registerProviderCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "provider",
     description: t("repl.provider_list"),
@@ -444,6 +450,9 @@ function registerMmaCommands(ctx: ReplContext): void {
       console.log(pc.green(t("cli.context_set", { size })));
     },
   });
+}
+
+function registerAgentCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "reload",
     description: t("repl.reload"),
@@ -496,6 +505,9 @@ function registerMmaCommands(ctx: ReplContext): void {
       }
     },
   });
+}
+
+function registerLspCommands(ctx: ReplContext): void {
 
   ctx.registerCommand({
     name: "lsp",
@@ -573,6 +585,14 @@ function registerMmaCommands(ctx: ReplContext): void {
       }
     },
   });
+}
+
+function registerMmaCommands(ctx: ReplContext): void {
+  registerRunCommands(ctx);
+  registerConfigCommands(ctx);
+  registerProviderCommands(ctx);
+  registerAgentCommands(ctx);
+  registerLspCommands(ctx);
 }
 
 function registerSessionCommands(ctx: ReplContext): void {
