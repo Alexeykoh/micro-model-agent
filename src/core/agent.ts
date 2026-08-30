@@ -21,56 +21,26 @@ import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
 import { MemoryStore } from "../modules/memory/store";
 import { CostTracker } from "../modules/pricing/index";
-import { evaluateReasoningPolicy, createPolicyState } from "../modules/reasoning/policy";
+import { createPolicyState } from "../modules/reasoning/policy";
 import type { PolicyState } from "../modules/reasoning/policy";
 import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
+import { createLoopState, clearIterationSignals } from "./agent/loop-state";
+import { CompactionService } from "./agent/compaction";
+import { TokenTracker } from "./agent/token-tracker";
+import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
+import { ContextRenderer } from "./agent/context-renderer";
+import { ToolBatchExecutor } from "./agent/tool-batch";
+import { HallucinationGate } from "./agent/hallucination-gate";
+import { AuditGate } from "./agent/audit-gate";
+import {
+  MAX_EMPTY_RESPONSE_RETRIES,
+  MAX_LLM_ERROR_RETRIES,
+  MAX_REPEATED_TOOL_CALLS,
+} from "./agent/constants";
 
-const TOOL_RESULT_MAX_TOKENS_RATIO = 0.3;
-const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
-const QUALITY_TRIGGER_THRESHOLD = 40;
-/** Max chars of a tool's arguments shown in the <system-summary> envelope.
- * A write_file's `content` (or any large arg) must not be duplicated into the
- * summary on top of the role:"tool" message that already carries the result. */
-const TOOL_ARGS_SUMMARY_MAX_CHARS = 240;
-
-/** JSON-stringify tool args, truncated to a bounded size for the summary envelope. */
-function summarizeToolArgs(args: unknown): string {
-  let s: string;
-  try {
-    s = JSON.stringify(args);
-  } catch {
-    s = String(args);
-  }
-  if (!s || s === "{}") return "";
-  if (s.length <= TOOL_ARGS_SUMMARY_MAX_CHARS) return ` (${s})`;
-  return ` (${s.slice(0, TOOL_ARGS_SUMMARY_MAX_CHARS)}…(${s.length} chars total))`;
-}
-
-/** Minimum iterations between quality-triggered forced compactions. Without
- * this, a low-quality context re-triggers compaction on EVERY iteration
- * (observed: 56 compactions in ~28 min) and the compaction itself can't
- * restore quality, so the agent burns the whole budget compacting. */
-const FORCED_COMPACTION_COOLDOWN = 3;
-const MAX_LLM_ERROR_RETRIES = 2;
-
-/**
- * Max chars a tool result may occupy, given remaining budget and whether
- * the tool bounds its own output. Tools that declare `boundedOutput` (e.g.
- * read_file with its line limit) are never truncated by the budget — a
- * near-full context used to cut them to ~2K chars, making the model believe
- * files were truncated and re-read them forever.
- */
-export function toolOutputCharLimit(
-  remainingBudget: number,
-  historyBudget: number,
-  bounded: boolean,
-): number {
-  if (bounded) return Number.MAX_SAFE_INTEGER;
-  const maxCharsByRatio = Math.floor(historyBudget * TOOL_RESULT_MAX_TOKENS_RATIO * 2);
-  return Math.min(remainingBudget, maxCharsByRatio, TOOL_RESULT_ABSOLUTE_MAX_CHARS);
-}
+export { toolOutputCharLimit } from "./agent/tool-output";
 
 export interface AgentDeps {
   config: AppConfig;
@@ -138,8 +108,10 @@ export class Agent {
   private systemPromptAdded = false;
   private shutdownRequested = false;
   private abortController: AbortController | null = null;
-  private lastCompactionShown = 0;
   private costTracker: CostTracker;
+  /** Рендер UI-индикаторов контекста (stats-бар/компакция). Экземпляр
+   * переживает несколько запусков цикла — хранит lastCompactionShown. */
+  private contextRenderer: ContextRenderer;
   private policyState: PolicyState;
   /** Reasoning probe result (B2): starts from deps, refreshed lazily in run(). */
   private probePassed: boolean;
@@ -151,6 +123,7 @@ export class Agent {
   constructor(deps: AgentDeps) {
     this.deps = deps;
     this.costTracker = new CostTracker(deps.config.model, deps.config.pricing);
+    this.contextRenderer = new ContextRenderer();
     this.policyState = createPolicyState();
     this.probePassed = deps.reasoningProbePassed ?? false;
     const initialLevel = (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ?? "medium";
@@ -300,52 +273,12 @@ export class Agent {
     return { text: prompt, tokenCount, excluded };
   }
 
-  /**
-   * Some OpenAI-compatible backends (llama.cpp) omit `usage` from responses,
-   * leaving apiPromptTokens/apiCompletionTokens at 0. Fall back to local
-   * estimates so JSON results still carry meaningful token metrics.
-   */
-  private resolveUsageTokens(
-    apiPromptTokens: number,
-    apiCompletionTokens: number,
-    estimatedPromptTokens: number,
-    completionChars: number,
-  ): { prompt: number; completion: number; total: number } {
-    if (apiPromptTokens > 0 || apiCompletionTokens > 0) {
-      return {
-        prompt: apiPromptTokens,
-        completion: apiCompletionTokens,
-        total: apiPromptTokens + apiCompletionTokens,
-      };
-    }
-    // ~4 chars per token is a reasonable heuristic when the backend gives
-    // us nothing (matches the pre-tiktoken fallback elsewhere in the code).
-    const prompt = Math.max(1, estimatedPromptTokens);
-    const completion = Math.max(0, Math.ceil(completionChars / 4));
-    return { prompt, completion, total: prompt + completion };
-  }
-
   private refreshSystemPrompt(): void {
     const { prompt } = this.buildSystemPrompt();
     const current = this.deps.contextManager.getActiveHistory().find((m) => m.role === "system");
     if (!current || current.content !== prompt) {
       this.deps.contextManager.updateSystemPrompt?.(prompt);
     }
-  }
-
-  private truncateToolOutput(
-    output: string,
-    budget: { history: number },
-    currentTokens: number,
-    bounded: boolean,
-  ): string {
-    const remainingBudget = Math.max(0, budget.history - currentTokens);
-    const maxChars = toolOutputCharLimit(remainingBudget, budget.history, bounded);
-    if (output.length <= maxChars) return output;
-
-    const truncated = output.slice(0, maxChars);
-    const removedChars = output.length - maxChars;
-    return truncated + `\n\n${t("tool.truncated", { tokens: Math.ceil(removedChars / 2) })}`;
   }
 
   private emitPhase(
@@ -481,7 +414,7 @@ export class Agent {
               baseDir: this.deps.baseDir,
             },
             input,
-            () => this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase),
+            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase),
             {
               onMeta,
               onTool: countTool,
@@ -489,7 +422,7 @@ export class Agent {
               signal: this.abortController.signal,
             },
           )
-        : await this.executeSingleAgentLoop(input, onChunk, onMeta, countTool, onPhase);
+        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase);
 
       // In MoE mode the single-agent loop (the only writer of assistant turns)
       // never runs — without this the history ends user→user across turns and
@@ -522,6 +455,7 @@ export class Agent {
 
   private async executeSingleAgentLoop(
     input: string,
+    slog: SessionLogger,
     onChunk?: (chunk: string) => void,
     onMeta?: (meta: string) => void,
     onTool?: (ev: ToolEvent) => void,
@@ -535,64 +469,39 @@ export class Agent {
       contextManager,
       hallucinationDetector,
       logger,
-      sessionManager,
-      baseDir,
     } = this.deps;
 
-    const slog = new SessionLogger(sessionManager, logger, () => this.callerProvenance());
     this.abortController = new AbortController();
-    let iteration = 0;
-    let lastText = "";
-    // The actual most-recent model output (tool commentary, retried answers
-    // included). Repetition is compared against THIS, not the last *accepted*
-    // text — a frozen accepted answer made consecutive retries compare
-    // against a stale baseline and flag every re-answer as repetitive.
-    let lastModelText = "";
-    let lastForcedCompactionIteration = -FORCED_COMPACTION_COOLDOWN;
-    let hallucinationRetries = 0;
-    let lastToolSignature = "";
-    let apiPromptTokens = 0;
-    let apiCompletionTokens = 0;
-    let apiCompletionChars = 0;
-    // Cumulative estimated prompt tokens across iterations. When the backend
-    // omits `usage`, the completion side (apiCompletionChars) is already
-    // cumulative, so the prompt side must be too — otherwise the final token
-    // metrics mix a point-in-time prompt with an all-session completion.
-    let estimatedPromptTokensTotal = 0;
-    const MAX_HALLUCINATION_RETRIES = 3;
-    let consecutiveToolFailures = 0;
-    const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
-    let consecutiveToolSuccesses = 0;
-    // Per-tool failure counts and which tools already produced a memory rule.
-    const toolFailureCounts = new Map<string, { count: number; error: string }>();
-    const memoryRuleRecorded = new Set<string>();
-    const MIN_REPEATED_TOOL_FAILURES = 3;
-    let auditRetries = 0;
-    const MAX_AUDIT_RETRIES = 3;
-    let emptyResponseRetries = 0;
-    const MAX_EMPTY_RESPONSE_RETRIES = 2;
-    let emptyResponseExhausted = false;
-    let auditFailed = false;
-    // Set true right before the loop terminates with an accepted final answer.
-    // Gates the max_iters error below: an answer produced on the LAST allowed
-    // iteration is a success, not a "ran out of iterations" failure.
-    let finalAnswerAccepted = false;
-    let lastAuditSummary = "";
-    let totalLlmDuration = 0;
-    // Set when the audit gate rejects a final answer and re-prompts: the next
-    // non-tool response is then a re-answer of an already-completed task, so
-    // a repetition verdict is expected and must not burn a hallucination retry.
-    let suppressRepetitionRetry = false;
-    let repeatedToolCount = 0;
-    const MAX_REPEATED_TOOL_CALLS = 2;
-    let llmErrorRetries = 0;
+    // Единый контейнер состояния цикла — заменяет ~24 разрозненных `let`.
+    const state = createLoopState();
 
-    // Per-iteration reasoning signal flags (reset each iteration)
-    let iterHallucinationRetry = false;
-    let iterAuditRejection = false;
-    let iterRecoverableLlmError = false;
-    let iterPlanCreated = false;
-    let iterRepetitive = false;
+    // Модули цикла: каждый инкапсулирует одну ответственность и получает
+    // зависимости через конструктор (никаких глобальных синглтонов).
+    const compactionService = new CompactionService({
+      contextManager,
+      logger,
+      slog,
+      hallucinationDetector,
+    });
+    const tokenTracker = new TokenTracker(this.costTracker, () => this.callerProvenance().provider);
+    const reasoningResolver = new ReasoningEffortResolver();
+    const toolBatch = new ToolBatchExecutor({
+      config,
+      toolExecutor,
+      pluginManager,
+      contextManager,
+      hallucinationDetector,
+      compactionService,
+      logger,
+      memoryStore: this.deps.memoryStore,
+      costTracker: this.costTracker,
+      planSummary: this.deps.planSummary,
+      getAbortSignal: () => this.abortController?.signal,
+      isShutdownRequested: () => this.shutdownRequested,
+      setScope: () => this.setScope(),
+    });
+    const hallucinationGate = new HallucinationGate(hallucinationDetector);
+    const auditGate = new AuditGate(this.deps.finalAudit);
 
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
@@ -609,9 +518,9 @@ export class Agent {
     );
     contextManager.setToolTokens(toolTokenEstimate);
 
-    while (iteration < config.maxToolIterations && !this.shutdownRequested) {
-      iteration++;
-      this._currentIteration = iteration;
+    while (state.iteration < config.maxToolIterations && !this.shutdownRequested) {
+      state.iteration++;
+      this._currentIteration = state.iteration;
       contextManager.noteIteration();
 
       // Re-read the mutable tag set in case enable_tools was called.
@@ -627,7 +536,7 @@ export class Agent {
       contextManager.setToolTokens(toolTokenEstimate);
 
       pluginManager.runOnBeforeThink({
-        iteration,
+        iteration: state.iteration,
         logger,
         lastUserMessage: input,
         contextManager,
@@ -637,48 +546,8 @@ export class Agent {
         },
       });
 
-      if (contextManager.needsCompaction()) {
-        const result = contextManager.compact();
-        if (result) {
-          logger.debug("Context compacted");
-          slog.logCompaction({ reason: "interval", iteration, ...result });
-          // Seed hallucination checker with files from compaction summary
-          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
-        }
-      }
-
-      const currentTokens = contextManager.getEstimatedTokens();
-      const budget = contextManager.getBudget();
-      const quality = contextManager.getQuality();
-      if (
-        quality < QUALITY_TRIGGER_THRESHOLD &&
-        contextManager.getCompactionCount() > 0 &&
-        iteration - lastForcedCompactionIteration >= FORCED_COMPACTION_COOLDOWN
-      ) {
-        lastForcedCompactionIteration = iteration;
-        const result = contextManager.compact();
-        logger.warn(`Low context quality (${quality}%) — forced compaction`);
-        if (result) {
-          slog.logCompaction({
-            reason: `quality-triggered (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%)`,
-            iteration,
-            ...result,
-          });
-          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
-        }
-      }
-      if (currentTokens > budget.history) {
-        const result = contextManager.compact();
-        logger.warn(`Context overflow (${currentTokens} > ${budget.history}), forced compaction`);
-        if (result) {
-          slog.logCompaction({
-            reason: `overflow (${currentTokens} > ${budget.history})`,
-            iteration,
-            ...result,
-          });
-          hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
-        }
-      }
+      // Единая точка компакции: интервал → качество (с cooldown) → переполнение.
+      compactionService.compactIfNeeded(state);
 
       this.refreshSystemPrompt();
       const history = contextManager.getActiveHistory();
@@ -686,14 +555,14 @@ export class Agent {
       slog.logToolDefs(
         allToolsForBudget.length,
         allToolsForBudget.map((t) => t.name),
-        iteration,
+        state.iteration,
       );
 
-      if (iteration === 1) {
+      if (state.iteration === 1) {
         const { blocks } = this.buildSystemPrompt();
-        this.logContextStat("start", iteration, slog, blocks);
+        this.logContextStat("start", state.iteration, slog, blocks);
       } else {
-        this.logContextStat("iteration", iteration, slog);
+        this.logContextStat("iteration", state.iteration, slog);
       }
 
       let textContent = "";
@@ -701,68 +570,37 @@ export class Agent {
       const toolCalls: ToolCall[] = [];
       let sawToolCall = false;
       let emittedReasoning = false;
-      const textChunks: string[] = [];
 
-      this.emitPhase(iteration, "thinking", onPhase);
+      this.emitPhase(state.iteration, "thinking", onPhase);
       const llmStart = Date.now();
-      const promptBefore = apiPromptTokens;
-      const completionBefore = apiCompletionTokens;
-      estimatedPromptTokensTotal += contextManager.getEstimatedTokens();
+      const baseline = tokenTracker.beginIteration(state, contextManager.getEstimatedTokens());
       logger.logLLMRequest(config.model, history.length, input, "agent");
 
-      // Compute reasoning effort for this iteration. The signal flags describe
-      // events of the PREVIOUS iteration (they are set on the retry/audit
-      // paths right before `continue`), so evaluate the policy BEFORE
-      // clearing them — otherwise the raise branch is unreachable.
-      const reasoningConfig = config.reasoning;
-      let effectiveReasoningLevel: ReasoningLevel | undefined;
-      let reasoningStrategy = this.deps.reasoningStrategy;
-      let reasoningSource = "policy";
-      const overrideCooldown = reasoningConfig?.overrideCooldown ?? 0;
-      const overrideAge = iteration - this.reasoningState.overrideIteration;
-      const overrideActive =
-        overrideCooldown > 0 &&
-        this.reasoningState.overrideIteration >= 0 &&
-        overrideAge > 0 &&
-        overrideAge <= overrideCooldown;
-      if (overrideActive) {
-        // A set_thinking override wins over both policy (auto) and fixed mode.
-        effectiveReasoningLevel = this.reasoningState.level;
-        reasoningSource = "agent_override";
-      } else if (reasoningConfig && reasoningConfig.mode === "auto" && this.probePassed) {
-        const policyResult = evaluateReasoningPolicy({
-          hallucinationRetry: iterHallucinationRetry,
-          auditRejection: iterAuditRejection,
-          recoverableLlmError: iterRecoverableLlmError,
-          planCreated: iterPlanCreated,
-          consecutiveSuccesses: consecutiveToolSuccesses,
-          isRepetitive: iterRepetitive,
-          baseline: "medium",
-        }, this.policyState);
-        effectiveReasoningLevel = policyResult.level;
-        reasoningSource = "policy";
-      } else if (reasoningConfig && reasoningConfig.mode !== "auto") {
-        effectiveReasoningLevel = reasoningConfig.mode;
-        reasoningSource = "fixed";
-      }
+      // Оценка reasoning-effort на итерацию. Сигналы описывают события
+      // ПРЕДЫДУЩЕЙ итерации (выставляются на retry-путях перед continue),
+      // поэтому политика оценивается ДО очистки сигналов — иначе raise-ветка
+      // недостижима.
+      const reasoning = reasoningResolver.resolve({
+        state,
+        policyState: this.policyState,
+        reasoningConfig: config.reasoning,
+        probePassed: this.probePassed,
+        reasoningStrategy: this.deps.reasoningStrategy,
+        reasoningState: this.reasoningState,
+      });
 
-      // Clear per-iteration signals now that the policy has consumed them.
-      iterHallucinationRetry = false;
-      iterAuditRejection = false;
-      iterRecoverableLlmError = false;
-      iterPlanCreated = false;
-      iterRepetitive = false;
+      // Очистка per-итерационных сигналов после потребления политикой.
+      clearIterationSignals(state);
 
-      // Log reasoning control event
-      if (effectiveReasoningLevel) {
+      if (reasoning.level) {
         slog.logReasoningControl({
-          iteration,
-          level: effectiveReasoningLevel,
-          strategy: reasoningStrategy,
+          iteration: state.iteration,
+          level: reasoning.level,
+          strategy: reasoning.strategy,
           probePassed: this.probePassed,
-          source: reasoningSource,
+          source: reasoning.source,
         });
-        contextManager.thinkingLevel = effectiveReasoningLevel;
+        contextManager.thinkingLevel = reasoning.level;
       }
 
       try {
@@ -770,7 +608,7 @@ export class Agent {
           history,
           allToolsForBudget as ToolDefinition[],
           this.abortController?.signal,
-          effectiveReasoningLevel ? { reasoningEffort: effectiveReasoningLevel, reasoningStrategy } : undefined,
+          reasoning.level ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy } : undefined,
         )) {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
@@ -778,15 +616,14 @@ export class Agent {
               onMeta?.("\n\n");
             }
             textContent += chunk.content;
-            textChunks.push(chunk.content);
-            const textOut = pluginManager.runOnText({ iteration, logger, contextManager }, chunk.content);
+            const textOut = pluginManager.runOnText({ iteration: state.iteration, logger, contextManager }, chunk.content);
             onChunk?.(textOut);
           }
           if (chunk.type === "reasoning" && chunk.content) {
             reasoningContent += chunk.content;
             if (config.showReasoning) {
               const metaOut = pluginManager.runOnMeta(
-                { iteration, logger, contextManager },
+                { iteration: state.iteration, logger, contextManager },
                 chunk.content,
               );
               if (metaOut) {
@@ -810,13 +647,11 @@ export class Agent {
             });
           }
           if (chunk.type === "done" && chunk.usage) {
-            // chat() is called ONCE per iteration — every `done` chunk here
-            // belongs to the same logical request (a usage-only stream chunk
-            // followed by the non-streaming fallback emits two done chunks).
-            // REPLACE the running totals instead of accumulating, otherwise
-            // one real request is counted twice.
-            apiPromptTokens = promptBefore + chunk.usage.promptTokens;
-            apiCompletionTokens = completionBefore + chunk.usage.completionTokens;
+            // chat() вызывается ОДИН раз за итерацию — каждый `done` здесь
+            // относится к тому же логическому запросу (usage-only чанк +
+            // non-streaming fallback дают два done). ЗАМЕНЯЕМ running-суммы
+            // вместо аккумуляции, иначе один реальный запрос посчитается дважды.
+            tokenTracker.recordApiUsage(state, baseline, chunk.usage);
           }
         }
       } catch (err: any) {
@@ -824,18 +659,18 @@ export class Agent {
           logger.info("LLM call aborted (interrupt)");
           break;
         }
-        // Recoverable LLM errors (e.g. the completion hit the token limit
-        // mid-tool_call): feed the localized reason back into context so the
-        // model can adapt (split the write into smaller chunks) instead of
-        // the whole session dying. Bounded to avoid infinite loops.
-        if (err?.recoverableLlm && llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
-          iterRecoverableLlmError = true;
-          llmErrorRetries++;
+        // Восстановимые ошибки LLM (например, токен-лимит на середине
+        // tool_call): отдаём локализованную причину обратно в контекст, чтобы
+        // модель адаптировалась (разбить запись на куски) вместо смерти всей
+        // сессии. Ограничено во избежание бесконечного цикла.
+        if (err?.recoverableLlm && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
+          state.iterRecoverableLlmError = true;
+          state.llmErrorRetries++;
           logger.warn(
-            `Recoverable LLM error, feeding back (${llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
+            `Recoverable LLM error, feeding back (${state.llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
           );
           slog.logError(err.message);
-          pluginManager.runOnError({ iteration, logger, contextManager }, err);
+          pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
           contextManager.addMessage({
             role: "user",
             content: `<system-summary>${err.message}</system-summary>`,
@@ -851,61 +686,47 @@ export class Agent {
         );
         logger.error(`LLM call failed: ${err.message}`);
         slog.logError(err.message);
-        pluginManager.runOnError({ iteration, logger, contextManager }, err);
+        pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
         return {
           success: false,
-          text: lastText,
+          text: state.lastText,
           error: t("error.llm", { message: err.message }),
-          iterationCount: iteration,
+          iterationCount: state.iteration,
         };
       } finally {
-        this.emitPhase(iteration, "done", onPhase);
+        this.emitPhase(state.iteration, "done", onPhase);
       }
 
-      // Track response length so token metrics stay meaningful even when
-      // the backend omits `usage` from the response.
-      apiCompletionChars += (textContent || reasoningContent).length;
+      // Совокупная длина ответа — метрики токенов остаются валидными, даже
+      // когда бэкенд опускает `usage`.
+      tokenTracker.addCompletionChars(state, (textContent || reasoningContent).length);
 
       logger.logLLMResponse(
         config.model,
         (textContent || reasoningContent).length,
-
         Date.now() - llmStart,
         undefined,
         "agent",
       );
-      totalLlmDuration += Date.now() - llmStart;
+      state.totalLlmDuration += Date.now() - llmStart;
 
-      // Log per-call token usage. llama.cpp streaming often omits `usage`,
-      // so fall back to local estimates (context tokens + chars/4) and
-      // mark the source — the log must distinguish real API numbers from
-      // heuristics.
-      {
-        const usagePrompt = apiPromptTokens - promptBefore;
-        const usageCompletion = apiCompletionTokens - completionBefore;
-        const source: "api" | "estimate" =
-          usagePrompt > 0 || usageCompletion > 0 ? "api" : "estimate";
-        const prompt = source === "api" ? usagePrompt : contextManager.getEstimatedTokens();
-        const completion =
-          source === "api"
-            ? usageCompletion
-            : estimateTokens(textContent || reasoningContent);
-        slog.logLlmUsage(iteration, {
-          promptTokens: prompt,
-          completionTokens: completion,
-          totalTokens: prompt + completion,
-          source,
-          durationMs: Date.now() - llmStart,
-        });
-        this.costTracker.record(prompt, completion, this.callerProvenance().provider);
-      }
+      // Per-call лог usage + стоимость. llama.cpp в стриминге часто опускает
+      // `usage` — фолбэк на локальные оценки (контекст + chars/4) с пометкой
+      // источника: лог должен отличать реальные API-цифры от эвристики.
+      tokenTracker.logUsage(
+        state,
+        baseline,
+        textContent || reasoningContent,
+        contextManager.getEstimatedTokens(),
+        state.iteration,
+        Date.now() - llmStart,
+        slog,
+      );
 
       if (this.shutdownRequested) {
         break;
       }
 
-      // Show the model's commentary text. When a tool call accompanies the
-      // response, keep the text too (opencode-like narration), unless it is
       let llmResponse: LLMResponse | null = null;
       if (sawToolCall) {
         llmResponse = { type: "tool_call", calls: toolCalls };
@@ -914,19 +735,19 @@ export class Agent {
       } else if (reasoningContent) {
         llmResponse = { type: "reasoning", content: reasoningContent };
       }
-      pluginManager.runOnAfterThink({ iteration, logger, contextManager }, llmResponse);
+      pluginManager.runOnAfterThink({ iteration: state.iteration, logger, contextManager }, llmResponse);
 
-      // Detect repeated identical tool calls (structural, not keyword-based).
-      // The signal feeds the reasoning policy to lower effort during routine work.
+      // Детекция повторных одинаковых тулов (структурная, не по ключевым
+      // словам). Сигнал питает reasoning policy для понижения effort на рутине.
       if (sawToolCall) {
         const signature = toolCalls
           .map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`)
           .join("|");
-        if (signature && signature === lastToolSignature) {
-          iterRepetitive = true;
+        if (signature && signature === state.lastToolSignature) {
+          state.iterRepetitive = true;
           if (this.deps.exitOnComplete) {
-            repeatedToolCount++;
-            if (repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
+            state.repeatedToolCount++;
+            if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
               logger.debug("Exit-on-complete: repeated identical tool call, stopping");
               break;
             }
@@ -936,400 +757,72 @@ export class Agent {
             });
           }
         } else {
-          repeatedToolCount = 0;
+          state.repeatedToolCount = 0;
         }
-        lastToolSignature = signature;
+        state.lastToolSignature = signature;
       }
 
       if (sawToolCall) {
-        slog.logAssistant(textContent || "", reasoningContent, toolCalls, iteration);
-      }
-
-      if (sawToolCall) {
-        contextManager.addMessage({
-          role: "assistant",
-          content: textContent || "",
-          tool_calls: toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function" as const,
-            function: {
-              name: tc.name,
-              arguments: JSON.stringify(tc.arguments),
-            },
-          })),
-        });
-        const answeredToolCallIds = new Set<string>();
-        // OpenAI-compatible backends (llama.cpp Jinja templates) reject with
-        // HTTP 400 any history where an assistant(tool_calls) message is not
-        // followed by role:"tool" results for every call id — an interrupt
-        // mid-batch must not leave such a dangling pair behind.
-        const synthesizePendingToolResults = () => {
-          for (const call of toolCalls) {
-            if (answeredToolCallIds.has(call.id)) continue;
-            logger.debug(
-              `Interrupted before tool ${call.name} (${call.id}) returned a result — synthesizing tool message`,
-            );
-            contextManager.addMessage({
-              role: "tool",
-              content: "[interrupted]",
-              name: call.name,
-              tool_call_id: call.id,
-              success: false,
-              arguments: call.arguments,
-            });
-          }
-        };
-        const summaries: string[] = [];
-        let anyToolFailed = false;
-        // Informational read-only tools whose "failure" is expected behavior
-        // (e.g. file_info "Not found" after delete_file) — excluded from
-        // per-tool failure counting and consecutive failure tracking.
-        const infoTools = new Set(["file_info"]);
-        for (const call of toolCalls) {
-          this.setScope();
-          const startTime = Date.now();
-          pluginManager.runOnToolCall({
-            toolName: call.name,
-            args: call.arguments,
-          });
-          pluginManager.runOnToolStart(
-            { iteration, logger, contextManager },
-            { id: call.id, name: call.name, arguments: call.arguments },
-          );
-          const toolIcon = this.deps.toolExecutor.getRegistry().get(call.name)?.icon;
-          onTool?.({ type: "start", tool: call.name, args: call.arguments, icon: toolIcon });
-          slog.logToolCall(call, iteration);
-
-          const tokensBeforeTool = contextManager.getEstimatedTokens();
-          let result;
-          try {
-            result = await toolExecutor.execute(call, this.abortController?.signal);
-          } catch (err) {
-            // An abort during the tool must still propagate so the session
-            // shuts down cleanly. Any OTHER throw (a bug in a tool or plugin
-            // that escapes the executor's own catch) must NOT kill the whole
-            // session — degrade it to a failed tool result the model can react
-            // to, exactly like a tool returning success:false.
-            if (err instanceof Error && err.name === "AbortError") {
-              synthesizePendingToolResults();
-              throw err;
-            }
-            logger.warn(
-              `Tool ${call.name} threw: ${err instanceof Error ? err.message : String(err)}`,
-            );
-            result = {
-              success: false,
-              output: `${t("error.prefix")}${err instanceof Error ? err.message : String(err)}`,
-              toolCallId: call.id,
-            };
-          }
-          // Interrupt during the tool call: the session is already shutting
-          // down (Esc/Ctrl+C), so stop immediately — no rendering, no session
-          // log writes, no context update for a result nobody will see. This
-          // fixes the "Replaced in ..." lines appearing AFTER "Session ended".
-          if (this.shutdownRequested) break;
-          const duration = Date.now() - startTime;
-          if (!result.success && !infoTools.has(call.name)) anyToolFailed = true;
-
-          if (result.success && call.name === "plan") {
-            const action = String(call.arguments.action ?? "");
-            if (action === "create" || action === "re-plan") iterPlanCreated = true;
-          }
-          if (result.success && call.arguments.path) {
-            const filePath = String(call.arguments.path);
-            if (call.name === "write_file" || call.name === "edit_file") {
-              hallucinationDetector.getConsistencyCheck().trackCreatedFile(filePath);
-            } else if (call.name === "delete_file") {
-              hallucinationDetector.getConsistencyCheck().trackDeletedFile(filePath);
-            }
-          }
-
-          pluginManager.runOnToolEnd(
-            { iteration, logger, contextManager },
-            { id: call.id, name: call.name, arguments: call.arguments },
-            result,
-            duration,
-          );
-          // Presence check, not truthiness: read_file returns display ""
-          // on a full read to suppress output entirely (the tool header
-          // already shows the path) — falling back on empty string would
-          // dump the whole file content into the REPL.
-          if (result.display !== undefined) {
-            if (result.display.length > 0) {
-              onMeta?.("\n" + result.display + "\n");
-            }
-          } else {
-            const metaOut = pluginManager.runOnMeta(
-              { iteration, logger, contextManager },
-              result.output,
-            );
-            onMeta?.("\n" + pc.dim(metaOut) + "\n");
-          }
-          if (result.diff) {
-            onMeta?.("\n" + result.diff + "\n");
-          }
-
-          const currentTokens = contextManager.getEstimatedTokens();
-          const budget = contextManager.getBudget();
-          const truncatedOutput = this.truncateToolOutput(
-            result.output,
-            budget,
-            currentTokens,
-            boundedToolNames.has(call.name),
-          );
-          contextManager.addMessage({
-            role: "tool",
-            content: truncatedOutput,
-            name: call.name,
-            tool_call_id: call.id,
-            success: result.success,
-            arguments: call.arguments,
-          });
-          answeredToolCallIds.add(call.id);
-
-          const tokensAfterTool = contextManager.getEstimatedTokens();
-          onTool?.({
-            type: "end",
-            tool: call.name,
-            args: call.arguments,
-            duration,
-            error: !result.success,
-            ctxDelta: tokensAfterTool - tokensBeforeTool,
-            costUsd: this.costTracker.total,
-          });
-
-          summaries.push(
-            `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
-          );
-
-          if (config.session.autoSave) {
-            slog.logToolResult(call, result, duration, iteration);
-          }
-          if (contextManager.needsCompaction()) {
-            const result = contextManager.compact();
-            if (result) {
-              logger.debug("Context compacted after tool result");
-              slog.logCompaction({
-                reason: "after_tool",
-                iteration,
-                ...result,
-              });
-              hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
-            }
-          }
-          // Track per-tool failure counts (NOT just consecutive) so a tool
-          // that keeps failing while other tools succeed between attempts
-          // is still learned from (observed: LSP spawn npx ENOENT failed
-          // 8x in one session, never consecutively, so it never reached
-          // memory via the 5-consecutive-failures path).
-          if (!result.success && !infoTools.has(call.name)) {
-            const key = call.name;
-            const prev = toolFailureCounts.get(key) ?? { count: 0, error: "" };
-            prev.count++;
-            prev.error = String(result.output ?? "").slice(0, 200);
-            toolFailureCounts.set(key, prev);
-            if (prev.count >= MIN_REPEATED_TOOL_FAILURES && !memoryRuleRecorded.has(key)) {
-              memoryRuleRecorded.add(key);
-              const memStore = this.deps.memoryStore;
-              if (memStore) {
-                memStore.appendRule(
-                  "errors",
-                  `Tool ${key} failed ${prev.count}x (${prev.error})`,
-                  `Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
-                  "Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
-                );
-                logger.warn(`Recorded repeated ${key} failures to memory (${prev.count}x)`);
-              }
-            }
-          }
-        }
-        if (this.shutdownRequested) {
-          synthesizePendingToolResults();
+        const batch = await toolBatch.execute(
+          state,
+          toolCalls,
+          boundedToolNames,
+          textContent,
+          reasoningContent,
+          input,
+          onTool,
+          onMeta,
+          slog,
+        );
+        if (batch.interrupted) {
           break;
         }
-        if (anyToolFailed) {
-          consecutiveToolFailures++;
-        } else {
-          consecutiveToolFailures = 0;
-        }
-        // Track consecutive successful tool batches for the reasoning policy.
-        // Only count iterations where tools were actually called.
-        if (sawToolCall) {
-          if (anyToolFailed) {
-            consecutiveToolSuccesses = 0;
-          } else {
-            consecutiveToolSuccesses++;
-          }
-        }
-        if (consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
-          const recoveryMsg = t("exec.consecutive_failures_recovery", {
-            count: consecutiveToolFailures,
-          });
-          logger.warn(`Consecutive tool failures: ${consecutiveToolFailures}`);
-          const taskSnippet = input.length > 200 ? input.slice(0, 200) + "..." : input;
-          const taskReminder = t("exec.task_reminder", { task: taskSnippet });
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
-          });
 
-          const memStore = this.deps.memoryStore;
-          if (memStore) {
-            memStore.appendRule(
-              "errors",
-              `${consecutiveToolFailures} consecutive tool failures`,
-              "Multiple tools failing suggests environment or configuration issue",
-              "Check dependencies, verify file paths, try write_file directly instead of shell commands",
-            );
-          }
-        }
-        // Append active plan status so the model sees it after every tool batch.
-        // This replaces the dynamic plan block that used to live in the system
-        // prompt (removed to preserve KV-cache — plan changes every iteration).
-        const planLine = this.deps.planSummary?.();
-        if (planLine) summaries.push(planLine);
+        this.contextRenderer.render(this.deps.config.ui, contextManager, onMeta);
 
-        contextManager.addMessage({
-          role: "user",
-          content: `<system-summary>${summaries.join("\n")}</system-summary>`,
-        });
-
-        const ui = this.deps.config.ui;
-        if (ui?.showContextStats) {
-          const ctxTokens = contextManager.getEstimatedTokens();
-          const ctxBudget = contextManager.getBudget();
-          const ctxPct = Math.min(100, Math.round((ctxTokens / ctxBudget.history) * 100));
-          const barLen = 10;
-          const filled = Math.round((ctxPct / 100) * barLen);
-          const ctxBar = pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
-          const pctColor = ctxPct >= 75 ? pc.yellow : pc.dim;
-          const compCount = contextManager.getCompactionCount();
-          const quality = contextManager.getQuality();
-          const qualityColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
-          onMeta?.(
-            `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
-          );
-        } else if (ui?.showCompaction) {
-          const compCount = contextManager.getCompactionCount();
-          if (compCount > this.lastCompactionShown) {
-            this.lastCompactionShown = compCount;
-            onMeta?.(pc.dim(`\n  ⟳ Context compacted (${compCount})\n`));
-          }
-        }
-
-        // A tool call means the model kept working instead of just
-        // re-answering — the audit-re-answer leniency no longer applies.
-        suppressRepetitionRetry = false;
+        // Тулы означают, что модель продолжила работать, а не переотвечает —
+        // послабление на повтор после аудита больше не действует.
+        state.suppressRepetitionRetry = false;
         continue;
       }
 
-      hallucinationDetector.getConfidenceCheck().setPreviousResponse(lastModelText);
-      // Update AFTER setPreviousResponse so the comparison uses the
-      // previous iteration's output, not this one (which would otherwise
-      // always overlap with itself).
-      if (textContent) lastModelText = textContent;
-      const hallucinationResult = await hallucinationDetector.validate(textContent);
-      if (hallucinationResult.status === "block") {
-        logger.warn(`Response blocked: ${hallucinationResult.reason}`);
+      const verdict = await hallucinationGate.evaluate({
+        state,
+        textContent,
+        input,
+        exitOnComplete: this.deps.exitOnComplete ?? false,
+        hasFinalAudit: !!this.deps.finalAudit,
+        logger,
+        contextManager,
+        onMeta,
+        onChunk,
+      });
+      if (verdict.action === "block") {
         return {
           success: false,
-          text: lastText,
-          error: t("error.response_blocked", {
-            reason: hallucinationResult.reason || "",
-          }),
-          iterationCount: iteration,
+          text: state.lastText,
+          error: t("error.response_blocked", { reason: verdict.reason }),
+          iterationCount: state.iteration,
         };
       }
-      if (hallucinationResult.status === "warn") {
-        logger.warn(`Hallucination warning: ${hallucinationResult.reason}`);
-        const warnLine = `${t("hall.uncertainty_prefix").trim()} ${
-          hallucinationResult.reason ?? ""
-        }`;
-        if (onMeta) {
-          onMeta(`\n${pc.yellow(warnLine)}\n`);
-        } else if (onChunk) {
-          onChunk(`\n${warnLine}\n`);
-        }
+      if (verdict.action === "retry") {
+        continue;
       }
-      if (hallucinationResult.status === "retry") {
-        iterHallucinationRetry = true;
-        // Exit-on-complete fast-exit must NOT bypass the final audit gate:
-        // when a plan is active the model may be answering "done" while steps
-        // are pending (cert regression: model replied without running its
-        // script). Only short-circuit when there is nothing to audit.
-        if (this.deps.exitOnComplete && textContent?.trim() && !this.deps.finalAudit) {
-          logger.debug("Exit-on-complete: stopping on first response");
-          // Save the response BEFORE breaking — lastText is still the
-          // previous (tool-only) iteration's text, so without this the
-          // final answer is lost (reported text: "").
-          lastText = textContent;
-          finalAnswerAccepted = true;
-          break;
-        }
-        if (suppressRepetitionRetry && hallucinationResult.kind === "repetition") {
-          // The audit gate rejected the previous final answer and
-          // re-prompted the model. Its re-answer restating the completed
-          // task is naturally "repetitive" — that is expected, not
-          // degeneration. Downgrade to a warning and let the response
-          // flow through to the final audit gate again (which is itself
-          // bounded by MAX_AUDIT_RETRIES).
-          suppressRepetitionRetry = false;
-          logger.warn(`Audit-triggered re-answer repetition — not counted as hallucination retry`);
-          const warnLine = `${t("hall.uncertainty_prefix").trim()} ${
-            hallucinationResult.reason ?? ""
-          }`;
-          if (onMeta) {
-            onMeta(`\n${pc.yellow(warnLine)}\n`);
-          } else if (onChunk) {
-            onChunk(`\n${warnLine}\n`);
-          }
-          // fall through to the acceptance path below (assistant message,
-          // lastText, final audit gate).
-        } else {
-          // NOTE: with exitOnComplete and an EMPTY text we deliberately
-          // do NOT break — the model produced no usable answer yet (same
-          // case as the empty-response guard below). Falling through to
-          // the retry path keeps us from finishing with text: "".
-          if (hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
-            logger.warn(
-              `Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
-            );
-            return {
-              success: false,
-              text: lastText,
-              error: t("error.response_blocked", {
-                reason: t("hall.max_retries_exhausted"),
-              }),
-              iterationCount: iteration,
-            };
-          }
-          hallucinationRetries++;
-          logger.warn(
-            `Hallucination retry (${hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${hallucinationResult.reason}`,
-          );
-          if (textContent) {
-            contextManager.addMessage({
-              role: "assistant",
-              content: textContent,
-            });
-          }
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>[Retry context: ${hallucinationResult.reason}. Original task: "${input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]</system-summary>`,
-          });
-          continue;
-        }
+      if (verdict.action === "exit") {
+        // lastText/finalAnswerAccepted уже выставлены вентилем.
+        break;
       }
+      // warn/accept → принятие ответа
 
       if (textContent) {
         contextManager.addMessage({ role: "assistant", content: textContent });
         if (config.session.autoSave) {
           slog.saveAssistantMessage(textContent);
         }
-        slog.logAssistant(textContent, reasoningContent, undefined, iteration);
+        slog.logAssistant(textContent, reasoningContent, undefined, state.iteration);
       }
 
-      lastText = textContent;
+      state.lastText = textContent;
 
       {
         const decisionPatterns = [
@@ -1344,109 +837,88 @@ export class Agent {
         }
       }
 
-      if (!sawToolCall) {
-        // Guard: the model returned an EMPTY final response (no text, no
-        // tool calls — often just reasoning content after context
-        // compaction). Nudge it to produce a real answer instead of
-        // silently finishing with text: "".
-        if (!textContent?.trim()) {
-          if (emptyResponseRetries < MAX_EMPTY_RESPONSE_RETRIES) {
-            emptyResponseRetries++;
-            logger.warn(
-              `Empty response on iteration ${iteration} (retry ${emptyResponseRetries}/${MAX_EMPTY_RESPONSE_RETRIES})`,
-            );
-            contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>Your previous response was empty. Answer the user's task now with a final text response or call a tool. Do not reply with reasoning only.</system-summary>`,
-            });
-            continue;
-          }
-          emptyResponseExhausted = true;
+      // Guard: пустой финальный ответ (текста нет, тулов нет — часто только
+      // reasoning после компакции). Подталкиваем к реальному ответу вместо
+      // молчаливого завершения с text: "".
+      if (!textContent?.trim()) {
+        if (state.emptyResponseRetries < MAX_EMPTY_RESPONSE_RETRIES) {
+          state.emptyResponseRetries++;
           logger.warn(
-            `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
+            `Empty response on iteration ${state.iteration} (retry ${state.emptyResponseRetries}/${MAX_EMPTY_RESPONSE_RETRIES})`,
           );
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>Your previous response was empty. Answer the user's task now with a final text response or call a tool. Do not reply with reasoning only.</system-summary>`,
+          });
+          continue;
         }
-        if (this.deps.finalAudit) {
-          const audit = await this.deps.finalAudit();
-          if (audit && !audit.passed) {
-            iterAuditRejection = true;
-            logger.warn(`Final audit incomplete: ${audit.summary}`);
-            const steps = audit.pendingSteps.slice(0, 5).join("; ") || "—";
-            contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>${t("exec.audit_incomplete", {
-                summary: audit.summary,
-                steps,
-              })}</system-summary>`,
-            });
-            slog.logAudit(audit.summary, iteration);
-            auditRetries++;
-            lastAuditSummary = audit.summary;
-            if (auditRetries >= MAX_AUDIT_RETRIES || iteration >= config.maxToolIterations - 1) {
-              logger.warn(
-                `Final audit still incomplete after ${auditRetries} retries — reporting failure`,
-              );
-              auditFailed = true;
-              break;
-            }
-            // The next non-tool response is a forced re-answer of an
-            // already-completed task — allow one repetition without
-            // burning the hallucination budget (see retry branch).
-            suppressRepetitionRetry = true;
-            continue;
-          }
-        }
-        finalAnswerAccepted = true;
+        state.emptyResponseExhausted = true;
+        logger.warn(
+          `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
+        );
+      }
+
+      const auditVerdict = await auditGate.evaluate({
+        state,
+        iteration: state.iteration,
+        maxIterations: config.maxToolIterations,
+        logger,
+        contextManager,
+        slog,
+      });
+      if (auditVerdict === null || auditVerdict.action === "pass") {
+        state.finalAnswerAccepted = true;
         break;
       }
+      if (auditVerdict.action === "exhausted") {
+        // auditFailed уже выставлен вентилем.
+        break;
+      }
+      // reject → continue: аудит уже добавил контекст и взвёл suppressRepetitionRetry.
+      continue;
     }
 
     const tokensUsed = contextManager.getEstimatedTokens();
     const budget = contextManager.getBudget();
-    const usageTokens = this.resolveUsageTokens(
-      apiPromptTokens,
-      apiCompletionTokens,
-      estimatedPromptTokensTotal,
-      apiCompletionChars,
-    );
+    const usageTokens = tokenTracker.resolveFinal(state);
 
-    if (iteration >= config.maxToolIterations && !finalAnswerAccepted) {
+    if (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted) {
       return {
         success: false,
-        text: lastText,
+        text: state.lastText,
         error: t("error.max_iters", { max: config.maxToolIterations }),
-        iterationCount: iteration,
+        iterationCount: state.iteration,
         contextUsed: tokensUsed,
         contextLimit: budget.history,
         promptTokens: usageTokens.prompt,
         completionTokens: usageTokens.completion,
         totalTokens: usageTokens.total,
-      totalCost: this.costTracker.total,
-      costBreakdown: this.costTracker.breakdown(),
+        totalCost: this.costTracker.total,
+        costBreakdown: this.costTracker.breakdown(),
         compactionCount: contextManager.getCompactionCount(),
         contextQuality: contextManager.getQuality(),
       };
     }
 
     return {
-      success: emptyResponseExhausted || auditFailed ? false : true,
-      text: lastText,
-      error: emptyResponseExhausted
+      success: state.emptyResponseExhausted || state.auditFailed ? false : true,
+      text: state.lastText,
+      error: state.emptyResponseExhausted
         ? t("error.empty_response")
-        : auditFailed
-          ? t("error.audit_failed", { summary: lastAuditSummary })
+        : state.auditFailed
+          ? t("error.audit_failed", { summary: state.lastAuditSummary })
           : undefined,
-      iterationCount: iteration,
+      iterationCount: state.iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,
       promptTokens: usageTokens.prompt,
       completionTokens: usageTokens.completion,
       totalTokens: usageTokens.total,
       totalCost: this.costTracker.total,
-        costBreakdown: this.costTracker.breakdown(),
+      costBreakdown: this.costTracker.breakdown(),
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
-      llmDurationMs: totalLlmDuration,
+      llmDurationMs: state.totalLlmDuration,
     };
   }
 
@@ -1460,7 +932,6 @@ export class Agent {
     const { provider: newProvider } = buildActiveProvider(config, this.deps.logger);
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
-    (this.deps.toolExecutor as any).ctx.llmProvider = newProvider;
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
@@ -1475,7 +946,6 @@ export class Agent {
     this.deps.config.provider = providerCfg;
     this.deps.llmProvider = provider;
     this.deps.toolExecutor.updateProvider(provider);
-    (this.deps.toolExecutor as any).ctx.llmProvider = provider;
   }
 
   listProviders(): Array<ProviderEntry & { label: string; active: boolean }> {

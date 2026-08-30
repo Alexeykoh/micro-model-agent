@@ -3,6 +3,7 @@ import { mkdtempSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { Agent } from "../../src/core/agent";
+import { truncateToolOutput } from "../../src/core/agent/tool-output";
 import { ModuleRegistry } from "../../src/modules/registry";
 import { MemoryStore } from "../../src/modules/memory/store";
 import type { AppConfig } from "../../src/config/types";
@@ -1211,36 +1212,30 @@ describe("Agent", () => {
   });
 
   it("truncateToolOutput respects absolute max chars limit", () => {
-    const deps = createMockDeps();
-    const agent = new Agent(deps as any);
     const longOutput = "x".repeat(20000);
     const budget = { history: 20480 };
     const currentTokens = 5000;
 
-    const result = (agent as any).truncateToolOutput(longOutput, budget, currentTokens);
+    const result = truncateToolOutput(longOutput, budget, currentTokens, false);
     expect(result.length).toBeLessThanOrEqual(15100);
     expect(result).toContain("Truncated");
   });
 
   it("truncateToolOutput does not truncate short output", () => {
-    const deps = createMockDeps();
-    const agent = new Agent(deps as any);
     const shortOutput = "Hello world";
     const budget = { history: 20480 };
     const currentTokens = 5000;
 
-    const result = (agent as any).truncateToolOutput(shortOutput, budget, currentTokens);
+    const result = truncateToolOutput(shortOutput, budget, currentTokens, false);
     expect(result).toBe(shortOutput);
   });
 
   it("truncateToolOutput respects remaining budget", () => {
-    const deps = createMockDeps();
-    const agent = new Agent(deps as any);
     const longOutput = "x".repeat(10000);
     const budget = { history: 20480 };
     const currentTokens = 19000;
 
-    const result = (agent as any).truncateToolOutput(longOutput, budget, currentTokens);
+    const result = truncateToolOutput(longOutput, budget, currentTokens, false);
     expect(result.length).toBeLessThan(longOutput.length);
     expect(result).toContain("Truncated");
   });
