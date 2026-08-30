@@ -12,6 +12,7 @@ import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { LoopState } from "./loop-state";
 import { summarizeToolArgs, truncateToolOutput } from "./tool-output";
+import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import {
   MAX_CONSECUTIVE_TOOL_FAILURES,
@@ -146,10 +147,10 @@ export class ToolBatchExecutor {
           synthesizePendingToolResults();
           throw err;
         }
-        logger.warn(`Tool ${call.name} threw: ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn(`Tool ${call.name} threw: ${errMsg(err)}`);
         result = {
           success: false,
-          output: `${t("error.prefix")}${err instanceof Error ? err.message : String(err)}`,
+          output: `${t("error.prefix")}${errMsg(err)}`,
           toolCallId: call.id,
         };
       }

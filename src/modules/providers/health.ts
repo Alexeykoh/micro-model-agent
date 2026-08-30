@@ -1,5 +1,6 @@
 // src/modules/providers/health.ts
 import type { LLMProvider } from "../../llm/provider";
+import { errMsg } from "../../utils";
 
 /** One probe target: a named provider with a (usually free) listModels call. */
 export interface ProbeTarget {
@@ -41,7 +42,7 @@ async function probeOne(target: ProbeTarget, timeoutMs: number): Promise<Provide
     const models = await withTimeout(target.listModels(), timeoutMs);
     return { name: target.name, ok: true, ms: Date.now() - start, models: models.length };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errMsg(err);
     return {
       name: target.name,
       ok: false,

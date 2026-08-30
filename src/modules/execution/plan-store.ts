@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, readdir
 import { join } from "path";
 import { Logger } from "../../logger/app-logger";
 import type { Plan } from "./planner";
+import { errMsg } from "../../utils";
 
 const log = new Logger("info", "plan-store");
 
@@ -112,7 +113,7 @@ export class PlanStore {
         } catch (err) {
           log.warn("Failed to remove migrated legacy plan.json", {
             path: this.legacyPath,
-            error: err instanceof Error ? err.message : String(err),
+            error: errMsg(err),
           });
         }
         return legacy;

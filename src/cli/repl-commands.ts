@@ -16,6 +16,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { LspModule } from "../modules/lsp/module";
+import { errMsg } from "../utils";
 
 const version = readMmaVersion();
 
@@ -572,7 +573,7 @@ function registerLspCommands(ctx: ReplContext): void {
             }
           } catch (e) {
             console.log(pc.red(t("repl.lsp_check_error", {
-              error: e instanceof Error ? e.message : String(e),
+              error: errMsg(e),
             })));
           }
           break;

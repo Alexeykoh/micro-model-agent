@@ -1,9 +1,10 @@
 import { createProvider } from "../modules/providers/create";
-import type { LLMProvider, Message } from "./provider";
+import type { LLMProvider, Message, Chunk } from "./provider";
 import type { RetryConfig } from "../config/types";
 import type { MoEPlan } from "../modules/execution/types";
 import type { OrchestratorResult, VerifyInput } from "./types";
 import { jsonrepair } from "jsonrepair";
+import { parseChunks } from "./response";
 
 export interface OrchestratorConfig {
   model?: string;
@@ -75,6 +76,8 @@ Respond with JSON only (no markdown fences):
 or
 {"action": "reject", "explanation": "why"}`;
 
+const DEFAULT_BASE_URL = "http://localhost:1234/v1";
+
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
@@ -83,24 +86,35 @@ export class OrchestratorClient {
     this.config = config;
     if (config.model) {
       if (config.provider) {
-        this.provider = createProvider(config.provider.type ?? "openai-compat", {
-          model: config.model,
-          baseUrl: config.provider.baseUrl || "http://localhost:1234/v1",
-          apiKey: config.provider.apiKey,
-          contextWindow: 32768,
-          retry: config.retry,
-        });
+        this.provider = this.createProviderInstance(
+          config.provider.type ?? "openai-compat",
+          config.model,
+          config.provider.baseUrl || DEFAULT_BASE_URL,
+          config.provider.apiKey,
+          config.retry,
+        );
       } else if (defaultProvider) {
         this.provider = defaultProvider;
       } else {
-        this.provider = createProvider("openai-compat", {
-          model: config.model,
-          baseUrl: "http://localhost:1234/v1",
-          contextWindow: 32768,
-          retry: config.retry,
-        });
+        this.provider = this.createProviderInstance(
+          "openai-compat",
+          config.model,
+          DEFAULT_BASE_URL,
+          undefined,
+          config.retry,
+        );
       }
     }
+  }
+
+  private createProviderInstance(
+    type: string,
+    model: string,
+    baseUrl: string,
+    apiKey?: string,
+    retry?: RetryConfig,
+  ): LLMProvider {
+    return createProvider(type, { model, baseUrl, apiKey, contextWindow: 32768, retry });
   }
 
   isEnabled(): boolean {
@@ -109,14 +123,12 @@ export class OrchestratorClient {
 
   private async chat(messages: Message[], signal?: AbortSignal): Promise<string> {
     if (!this.provider) throw new Error("Orchestrator not enabled");
-    const chunks: any[] = [];
+    const chunks: Chunk[] = [];
     for await (const chunk of this.provider.chat(messages, undefined, signal)) {
       chunks.push(chunk);
     }
-    return chunks
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.content)
-      .join("");
+    const parsed = parseChunks(chunks);
+    return parsed.type === "text" ? parsed.content : "";
   }
 
   private parseJSON<T>(text: string): T | null {
@@ -251,11 +263,9 @@ export class OrchestratorClient {
 
     const text = await this.chat(messages);
 
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { steps: [task] };
-    }
+    const parsed = this.parseJSON<{ steps: string[] }>(text);
+    if (parsed) return parsed;
+    return { steps: [task] };
   }
 
   async resolveConflict(context: string): Promise<string> {
@@ -270,11 +280,11 @@ export class OrchestratorClient {
       { role: "user", content: context },
     ];
 
-    let result = "";
+    const chunks: Chunk[] = [];
     for await (const chunk of this.provider.chat(messages)) {
-      if (chunk.type === "text" && chunk.content) result += chunk.content;
+      chunks.push(chunk);
     }
-
-    return result;
+    const parsed = parseChunks(chunks);
+    return parsed.type === "text" ? parsed.content : "";
   }
 }

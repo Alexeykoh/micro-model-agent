@@ -9,6 +9,7 @@ import { collectCheckFiles } from "./check-tool";
 import { getServerForFile } from "./config";
 import { findProjectRoot } from "./project-root";
 import { estimateTokens } from "../../llm/token-counter";
+import { errMsg } from "../../utils";
 
 /** Startup check never examines more than this many files via LSP. */
 const STARTUP_CHECK_FILE_CAP = 5;
@@ -99,7 +100,7 @@ async function runCheck(
       }
     } catch (e) {
       // Per-file LSP failure → log and skip (fail-open).
-      deps.logger?.debug(`Startup LSP check failed for ${file}: ${e instanceof Error ? e.message : String(e)}`);
+      deps.logger?.debug(`Startup LSP check failed for ${file}: ${errMsg(e)}`);
     }
   }
   if (checked === 0 || lines.length === 0) return null;

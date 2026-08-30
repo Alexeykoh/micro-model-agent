@@ -323,9 +323,12 @@ export async function bootstrap(
         const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
         const cached = getCachedProbeResult(cacheK);
         const passed = cached !== undefined ? cached : await probeReasoningSupport(llmProvider, reasoningStrategy);
-        if (cached === undefined) setCachedProbeResult(cacheK, passed);
-        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → ${passed ? "mechanism respected" : "mechanism IGNORED"}`);
-        return passed;
+        // Only cache a definitive result — a transient probe error (null) must
+        // NOT pin "reasoning not supported" for the 24h TTL.
+        if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
+        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → ${passed === true ? "mechanism respected" : "mechanism IGNORED"}`);
+        // null (transient error) falls back to "not passed" for this session.
+        return passed === true;
       } catch {
         return false;
       }

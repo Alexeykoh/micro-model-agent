@@ -13,6 +13,7 @@ import { parseScopeRequest } from "../../tools/scope-request";
 import { isTransientError } from "./transient-error";
 import { sleep } from "../../utils/sleep";
 import { backoffDelay } from "../../utils/retry";
+import { errMsg } from "../../utils";
 
 export const MAX_SCOPE_EXPANSION_CYCLES = 2;
 
@@ -389,7 +390,7 @@ export class MoEExecutor {
             success: false,
             summary: `Unhandled error: ${subtask.id}`,
             result: "",
-            error: e instanceof Error ? e.message : String(e),
+            error: errMsg(e),
             durationMs: 0,
           };
         } finally {

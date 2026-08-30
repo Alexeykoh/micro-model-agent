@@ -13,6 +13,7 @@ import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
 import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
 import { severityLabels, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
+import { errMsg } from "../../utils";
 
 /**
  * Consecutive LSP failures before a server is disabled for the session. A dead
@@ -127,7 +128,7 @@ export class LspModule implements AgentModule {
           // Surface failures instead of silently returning [] — a dead LSP
           // previously produced ZERO diagnostics across whole sessions and the
           // model only found type errors reactively via `bun run build`.
-          const msg = e instanceof Error ? e.message : String(e);
+          const msg = errMsg(e);
           const failures = (self.failuresByServer.get(key) ?? 0) + 1;
           self.failuresByServer.set(key, failures);
           try {
@@ -226,7 +227,7 @@ export class LspModule implements AgentModule {
           else if (d.severity === 2) warnings.push({ file, diag: d });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = errMsg(e);
         const failures = (this.failuresByServer.get(key) ?? 0) + 1;
         this.failuresByServer.set(key, failures);
         try {

@@ -29,6 +29,7 @@ import type { ReplContext, SlashCommand } from "./repl-commands";
 import { probeLspServers } from "../modules/lsp/probe";
 import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { errMsg } from "../utils";
 import { SessionLogger } from "../core/session-logger";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
@@ -611,7 +612,7 @@ export class Repl implements ReplContext {
       console.error(
         pc.red(
           t("error.command_error", {
-            message: err instanceof Error ? err.message : String(err),
+            message: errMsg(err),
           }),
         ),
       );

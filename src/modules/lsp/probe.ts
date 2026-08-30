@@ -3,6 +3,7 @@ import { LspClient } from "./client";
 import { getServerKeyForFile } from "./config";
 import { collectCheckFiles } from "./check-tool";
 import { findProjectRoot } from "./project-root";
+import { errMsg } from "../../utils";
 
 /**
  * Probe result for one server: which language it covers and whether the
@@ -103,7 +104,7 @@ export async function probeLspServers(
       await probeClient.probe(server, projectRoot, serverTimeout);
       ok.push({ language, ok: true, durationMs: Date.now() - started });
     } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
+      const errorMsg = errMsg(e);
       deps.logger?.warn(`LSP probe failed for ${language}: ${errorMsg}`, {
         command: server.command,
         timeout: serverTimeout,

@@ -14,7 +14,14 @@ interface BridgeResponse {
   id: number;
   ok: boolean;
   error?: string;
-  data?: any;
+  data?: {
+    result?: unknown;
+    html?: string;
+    title?: string;
+    base64?: string;
+    cookies?: StoredCookie[];
+    url?: string;
+  };
   console?: ConsoleEntry[];
   network?: NetworkErrorEntry[];
 }

@@ -32,11 +32,16 @@ const memCache = new Map<string, { result: boolean; ts: number }>();
  * Sends a trivial non-streaming request with level forced to "none" via the
  * mapped strategy. If reasoning_content still appears, the mechanism is ignored.
  */
+/**
+ * Probe whether the backend actually respects the reasoning effort mechanism.
+ * @returns `true` = mechanism respected, `false` = mechanism ignored,
+ *          `null` = transient error (caller must NOT cache this).
+ */
 export async function probeReasoningSupport(
   provider: LLMProvider,
   strategy: ReasoningStrategy,
   signal?: AbortSignal,
-): Promise<boolean> {
+): Promise<boolean | null> {
   if (strategy === "none") return false;
 
   try {
@@ -51,7 +56,10 @@ export async function probeReasoningSupport(
     // If reasoning content appeared despite "none", the mechanism is ignored
     return !hasReasoning;
   } catch {
-    return false;
+    // Transient error (network/auth/stream) — do NOT report "not supported".
+    // Returning null signals the caller to skip caching, so a one-off failure
+    // does not disable the reasoning mechanism for the 24h TTL.
+    return null;
   }
 }
 

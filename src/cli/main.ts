@@ -15,6 +15,7 @@ import { UpdaterModule } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
 import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
+import { errMsg } from "../utils";
 
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
         // --json must never emit a raw stack trace: an AbortError or a
         // crashing tool/plugin still yields a valid machine-readable result,
         // and shutdown/waitForIdle still run.
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errMsg(err);
         process.stdout.write(
           JSON.stringify({ success: false, text: "", error: message, iterationCount: 0 }, null, 2),
         );
@@ -155,7 +156,7 @@ async function main(): Promise<void> {
       result = {
         success: false,
         text: "",
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg(err),
         iterationCount: 0,
       };
     }

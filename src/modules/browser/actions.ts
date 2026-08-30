@@ -32,10 +32,6 @@ export function buildScrollScript(direction: "up" | "down" | "top" | "bottom"): 
   }
 }
 
-export function buildWaitScript(timeoutMs: number): string {
-  return `await new Promise(r => setTimeout(r, ${timeoutMs}))`;
-}
-
 export function buildIndexInjectionScript(): string {
   return `
     const selectors = 'a[href], button, input, textarea, select, [role="button"], [role="link"], [role="textbox"], [role="checkbox"], [role="radio"], [contenteditable="true"]';

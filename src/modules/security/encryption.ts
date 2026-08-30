@@ -58,7 +58,7 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
       // If we can't persist the key, encrypted data would be unrecoverable
       // on the next run — fail loudly instead of silently degrading.
       throw new Error(
-        `Cannot write encryption key to ${keyPath}: ${e instanceof Error ? e.message : String(e)}`,
+        `Cannot write encryption key to ${keyPath}: ${errMsg(e)}`,
       );
     }
   }
@@ -149,6 +149,7 @@ export function decryptString(encryptedText: string, key: Buffer): string {
 }
 
 import { createHmac } from "node:crypto";
+import { errMsg } from "../../utils";
 
 /**
  * Check if a string looks like it's encrypted

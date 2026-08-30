@@ -1,6 +1,7 @@
 import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningLevel } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
+import { errMsg } from "../../utils";
 
 /** Max chars of joined chunk answers sent to the synthesis call. Prevents the
  * synthesis prompt from exceeding the model's context window on large inputs. */
@@ -140,7 +141,7 @@ export async function runChunkQuery(
       } catch (err: any) {
         // A single failing chunk must not kill the entire query. Store the
         // error and let the remaining chunks + synthesis proceed.
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errMsg(err);
         answers[idx] = `[FAILED] ${msg.slice(0, 200)}`;
         logger?.debug(`runChunkQuery: chunk ${idx + 1}/${chunks.length} failed: ${msg}`);
       } finally {

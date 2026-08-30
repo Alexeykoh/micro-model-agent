@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { collectEnvironment, type EnvironmentReport } from "./environment";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { t } from "../i18n/index";
+import { errMsg } from "../utils";
 
 export type CrashType = "uncaughtException" | "unhandledRejection";
 
@@ -20,7 +21,7 @@ export const CRASH_LOG_FILE = "crash.jsonl";
 
 /** Build a sanitized crash entry. Environment is captured at crash time (no tool scan). */
 export function formatCrashEntry(type: CrashType, err: unknown): CrashEntry {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = errMsg(err);
   const stack = err instanceof Error && err.stack ? err.stack : message;
   return {
     ts: new Date().toISOString(),
