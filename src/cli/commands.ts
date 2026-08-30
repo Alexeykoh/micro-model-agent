@@ -6,28 +6,17 @@ import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { join, dirname } from "path";
 import { homedir } from "os";
-import { existsSync, readFileSync } from "fs";
+import { existsSync } from "fs";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
-import { fileURLToPath } from "url";
 import { readMmaVersion } from "../core/version";
 import { readChangelog, extractLatestChangelog, extractChangelogRange } from "../modules/updater/changelog-reader";
 
 const version = readMmaVersion();
 
-export function createProgram(): Command {
-  const program = new Command()
-    .name("mma")
-    .description(t("cli.description"))
-    .version(version)
-    .option("--no-agents-md", t("cli.no_agents_md"))
-    .option("-d, --dir <path>", t("cli.dir"))
-    .option("-e, --exit-on-complete", t("cli.exit_on_complete"))
-    .option("-j, --json", t("cli.json"))
-    .option("--reasoning <level>", t("cli.reasoning_level"), "auto");
-
+function buildInitCommand(program: Command): void {
   program
     .command("init")
     .description(t("cli.init"))
@@ -79,7 +68,9 @@ export function createProgram(): Command {
       saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.config_saved"));
     });
+}
 
+function buildConfigCommands(program: Command): void {
   const configCmd = program.command("config").description(t("cli.manage_config"));
   configCmd
     .command("set")
@@ -144,7 +135,9 @@ export function createProgram(): Command {
       const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) => f.endsWith(".json"));
       console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
     });
+}
 
+function buildModelCommands(program: Command): void {
   const model = program.command("model").description(t("cli.manage_models"));
   model
     .command("list")
@@ -265,8 +258,9 @@ export function createProgram(): Command {
       const { uncertify } = await import("../modules/certification/cli");
       await uncertify(name, config, process.cwd());
     });
+}
 
-  // Context window command
+function buildContextCommand(program: Command): void {
   program
     .command("context")
     .description(t("cli.manage_context"))
@@ -283,7 +277,9 @@ export function createProgram(): Command {
       saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.context_set", { size: contextWindow }));
     });
+}
 
+function buildProviderCommands(program: Command): void {
   const provider = program.command("provider").description(t("cli.manage_providers"));
   provider
     .command("check")
@@ -435,7 +431,9 @@ export function createProgram(): Command {
       console.log(t("cli.provider_switch_hint"));
       },
     );
+}
 
+function buildSessionCommands(program: Command): void {
   const session = program.command("session").description(t("cli.manage_sessions"));
   session
     .command("list")
@@ -484,14 +482,9 @@ export function createProgram(): Command {
       sessionManager.delete(id);
       console.log(t("session.deleted", { id }));
     });
+}
 
-  // Add security commands
-  createSecurityCommand(program);
-
-  // Add plugin commands
-  createPluginCommand(program);
-
-  // Changelog command
+function buildChangelogCommand(program: Command): void {
   program
     .command("changelog")
     .description(t("cli.changelog_title", { version }))
@@ -520,6 +513,34 @@ export function createProgram(): Command {
         console.log(latest);
       }
     });
+}
+
+/** Тонкий оркестратор: собирает CLI из per-domain builder-функций. */
+export function createProgram(): Command {
+  const program = new Command()
+    .name("mma")
+    .description(t("cli.description"))
+    .version(version)
+    .option("--no-agents-md", t("cli.no_agents_md"))
+    .option("-d, --dir <path>", t("cli.dir"))
+    .option("-e, --exit-on-complete", t("cli.exit_on_complete"))
+    .option("-j, --json", t("cli.json"))
+    .option("--reasoning <level>", t("cli.reasoning_level"), "auto");
+
+  buildInitCommand(program);
+  buildConfigCommands(program);
+  buildModelCommands(program);
+  buildContextCommand(program);
+  buildProviderCommands(program);
+  buildSessionCommands(program);
+
+  // Add security commands
+  createSecurityCommand(program);
+
+  // Add plugin commands
+  createPluginCommand(program);
+
+  buildChangelogCommand(program);
 
   program
     .argument("[prompt...]", "Prompt to execute")

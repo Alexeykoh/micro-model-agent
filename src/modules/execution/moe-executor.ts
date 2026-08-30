@@ -28,6 +28,23 @@ export function newAbortError(): Error {
   return e;
 }
 
+/**
+ * Сборка детального сообщения об ошибке подзадачи: базовый текст + подсказки
+ * stuck-детектора + совет про load_skill. Дублировался 2× в executeSubtask.
+ */
+function buildErrorDetail(stuckDetector: StuckDetector, baseError: string, lastError: string): string {
+  const hints = stuckDetector.getActionableHints();
+  let errorDetail = baseError;
+  if (hints.length > 0) {
+    errorDetail += `\n\n${t("exec.hints", { hints: hints.map((h) => `- ${h}`).join("\n") })}`;
+  }
+  if (lastError) {
+    errorDetail +=
+      "\n\nIf relevant skills are available, consider loading one with load_skill for expert guidance.";
+  }
+  return errorDetail;
+}
+
 export interface MoEExecutorDeps {
   config: AppConfig;
   toolRegistry: ToolRegistry;
@@ -233,15 +250,7 @@ async function executeSubtask(
       }
 
       // Non-transient failure — build detailed error with hints
-      const hints = stuckDetector.getActionableHints();
-      let errorDetail = result.output;
-      if (hints.length > 0) {
-        errorDetail += `\n\n${t("exec.hints", { hints: hints.map((h) => `- ${h}`).join("\n") })}`;
-      }
-      if (lastError) {
-        errorDetail +=
-          "\n\nIf relevant skills are available, consider loading one with load_skill for expert guidance.";
-      }
+      const errorDetail = buildErrorDetail(stuckDetector, result.output, lastError);
 
       return {
         subtaskId: subtask.id,
@@ -271,15 +280,7 @@ async function executeSubtask(
         continue;
       }
 
-      const hints = stuckDetector.getActionableHints();
-      let errorDetail = e.message;
-      if (hints.length > 0) {
-        errorDetail += `\n\n${t("exec.hints", { hints: hints.map((h) => `- ${h}`).join("\n") })}`;
-      }
-      if (lastError) {
-        errorDetail +=
-          "\n\nIf relevant skills are available, consider loading one with load_skill for expert guidance.";
-      }
+      const errorDetail = buildErrorDetail(stuckDetector, e.message, lastError);
 
       return {
         subtaskId: subtask.id,
