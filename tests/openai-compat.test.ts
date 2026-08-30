@@ -260,7 +260,7 @@ describe("OpenAICompatProvider", () => {
       }
       expect.unreachable("Should have thrown");
     } catch (e: any) {
-      expect(e.recoverableLlm).toBe(true);
+      expect(e.recoverable).toBe(true);
       expect(e.message).toContain("Rate limit");
     }
     // fetch must never have been called.

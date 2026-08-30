@@ -2,6 +2,7 @@ import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import type { AuditLogEntry } from "./audit-log";
+import { backoffDelay } from "../../utils/retry";
 
 // Use global fetch (available in Bun)
 declare const fetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -327,7 +328,7 @@ export class AuditNotifier {
             error instanceof Error ? error.message : error,
           );
           // Exponential backoff before the next attempt on the same head item.
-          const delay = Math.pow(2, item.retries) * 1000;
+          const delay = backoffDelay(item.retries, 1000);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }

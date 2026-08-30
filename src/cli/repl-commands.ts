@@ -43,6 +43,8 @@ export interface ReplContext {
   setupCompleter(): void;
   refreshModelCache(): void;
   attachHostBridge(pluginManager?: PluginManager): void;
+  /** Перезагрузка агента и модулей (команда /reload). */
+  reload(): Promise<void>;
   stop(): void;
 }
 
@@ -448,39 +450,7 @@ function registerMmaCommands(ctx: ReplContext): void {
     usage: t("repl.reload_usage"),
     action: async () => {
       console.log(pc.yellow(t("repl.reloading")));
-
-      if (ctx.sessionManager && ctx.config.session.autoSave) {
-      }
-
-      ctx.agent.shutdown();
-
-      const { loadConfig } = await import("../config/config");
-      const { join } = await import("path");
-      const configDir = ctx.configDir;
-      const baseDir = ctx.baseDir;
-      const projectConfigPath = join(baseDir, ".mmrc");
-
-      const { config: freshConfig } = loadConfig({ configDir, projectConfigPath });
-
-      Object.assign(ctx.config, freshConfig);
-
-      const { bootstrap } = await import("../core/bootstrap");
-      const result = await bootstrap(configDir, baseDir, false, false);
-
-      (ctx as any).agent = result.agent;
-      (ctx as any).sessionManager = result.sessionManager;
-      (ctx as any).skillsModule = result.skillsModule;
-      (ctx as any).pluginManager = result.pluginManager;
-      if (result.execModule) {
-        (ctx as any).execModule = result.execModule;
-      }
-
-      // The fresh PluginManager has no bridge — re-register it, otherwise
-      // plugins like web-ui silently lose control of the agent.
-      ctx.attachHostBridge(result.pluginManager);
-
-      ctx.setupCompleter();
-
+      await ctx.reload();
       console.log(pc.green(t("repl.reloaded")));
       console.log(`${t("repl.model")}       ${ctx.config.model}`);
       console.log(`${t("repl.context")}     ${ctx.config.contextWindow}`);
@@ -582,13 +552,9 @@ function registerMmaCommands(ctx: ReplContext): void {
             return;
           }
           console.log(pc.dim(t("repl.lsp_checking", { path })));
-          // Run lsp_check tool via the agent's tool executor
+          // Запуск тула lsp_check через публичный API агента (не через приватные deps)
           try {
-            const result = await (ctx.agent as any).deps?.toolExecutor?.execute(
-              "lsp_check",
-              { path },
-              (ctx.agent as any).deps?.toolCtx,
-            );
+            const result = await ctx.agent.runTool("lsp_check", { path });
             if (result?.output) {
               console.log(result.output);
             }

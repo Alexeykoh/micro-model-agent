@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { Agent } from "../../src/core/agent";
 import { truncateToolOutput } from "../../src/core/agent/tool-output";
+import { LlmError } from "../../src/llm/llm-errors";
 import { ModuleRegistry } from "../../src/modules/registry";
 import { MemoryStore } from "../../src/modules/memory/store";
 import type { AppConfig } from "../../src/config/types";
@@ -865,8 +866,10 @@ describe("Agent", () => {
       chat: vi.fn().mockImplementation(() => {
         call++;
         if (call === 1) {
-          const err = new Error("Response hit the completion token limit (4096) mid tool_call");
-          (err as any).recoverableLlm = true;
+          const err = new LlmError(
+            "Response hit the completion token limit (4096) mid tool_call",
+            { recoverable: true },
+          );
           throw err;
         }
         return (async function* () {
@@ -899,8 +902,9 @@ describe("Agent", () => {
       model: "test-model",
       contextWindow: 4096,
       chat: vi.fn().mockImplementation(() => {
-        const err = new Error("Response hit the completion token limit (4096)");
-        (err as any).recoverableLlm = true;
+        const err = new LlmError("Response hit the completion token limit (4096)", {
+          recoverable: true,
+        });
         throw err;
       }),
       countTokens: vi.fn().mockReturnValue(10),

@@ -5,6 +5,7 @@ import type {
   Message,
   ToolDefinition,
 } from "../../llm/provider";
+import { LlmError } from "../../llm/llm-errors";
 
 /**
  * Minimal surface of ProviderManager the failover wrapper needs. Structural
@@ -21,17 +22,14 @@ export type FailoverListener = (from: string, to: string, error: Error) => void;
 
 /** True when the error is worth failing over to another provider. */
 export function isFailoverError(err: unknown): boolean {
-  const e = err as {
-    name?: string;
-    llmStatus?: number;
-    message?: string;
-    code?: string;
-  };
-  if (e?.name === "AbortError") return false;
-  // HTTP status attached by openai-compat: retryable statuses only.
-  if (typeof e?.llmStatus === "number") return e.llmStatus === 429 || e.llmStatus >= 500;
+  if (err instanceof Error && err.name === "AbortError") return false;
+  // HTTP status, attached by openai-compat as a typed LlmError: retryable only.
+  if (err instanceof LlmError && typeof err.llmStatus === "number") {
+    return err.llmStatus === 429 || err.llmStatus >= 500;
+  }
   // Network-level failures by errno-style code (Bun: "ConnectionRefused",
   // Node: "ECONNREFUSED", DNS: "ENOTFOUND"/"EAI_AGAIN", etc).
+  const e = err as { code?: string; message?: string };
   const normCode = (e?.code ?? "").replace(/[-_]/g, "").toLowerCase();
   if (/^abort/.test(normCode)) return false;
   if (

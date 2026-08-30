@@ -3,6 +3,9 @@ import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
 import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
 import type { RateLimitConfig } from "../config/types";
+import { LlmError } from "./llm-errors";
+import { backoffDelay } from "../utils/retry";
+import { StreamState } from "./stream-state";
 
 export interface RetryConfig {
   maxRetries: number;
@@ -121,11 +124,10 @@ export class OpenAICompatProvider implements LLMProvider {
         await this.sleep(waitMs, signal);
       }
       if (!this.rateLimiter.canMakeRequest()) {
-        const err = new Error(
+        throw new LlmError(
           `Rate limit exceeded: ${this.rateLimiter.getConfig().maxRequestsPerMinute} requests per minute`,
+          { recoverable: true },
         );
-        (err as any).recoverableLlm = true;
-        throw err;
       }
     }
 
@@ -209,14 +211,13 @@ export class OpenAICompatProvider implements LLMProvider {
         // Stream closed before [DONE] with zero content → retryable truncation.
         if (attempt >= streamRetries) return;
       } catch (err: any) {
-        if (err?.name === "AbortError" || err?.llmTerminal || signal?.aborted) throw err;
+        if (err?.name === "AbortError" || (err instanceof LlmError && err.terminal) || signal?.aborted) throw err;
         // Content was already delivered — a re-stream would duplicate chunks.
         if (emitted || attempt >= streamRetries) throw err;
         // Connection dropped before any content → retry the whole request.
       }
-      const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-      const jitter = Math.random() * baseDelay * 0.1;
-      await this.sleep(delay + jitter, signal);
+      // Экспоненциальный backoff с джиттером (общий хелпер из src/utils).
+      await this.sleep(backoffDelay(attempt, baseDelay, maxDelay, 0.1), signal);
     }
   }
 
@@ -264,22 +265,24 @@ export class OpenAICompatProvider implements LLMProvider {
       // don't double-retry them at the stream level.
       if (err?.name === "AbortError") throw err;
       const wrapped = err instanceof Error ? err : new Error(String(err));
-      (wrapped as any).llmTerminal = true;
-      throw wrapped;
+      if (wrapped instanceof LlmError) {
+        wrapped.markTerminal();
+        throw wrapped;
+      }
+      throw new LlmError(wrapped.message).markTerminal();
     }
 
     if (!response.ok) {
       cleanup();
       const errorText = await response.text();
-      const err = new Error(
+      throw new LlmError(
         t("error.llm_api", {
           status: response.status,
           statusText: response.statusText,
           errorText,
         }),
+        { terminal: true },
       );
-      (err as any).llmTerminal = true;
-      throw err;
     }
 
     const contentType = response.headers?.get?.("content-type") ?? "";
@@ -297,20 +300,8 @@ export class OpenAICompatProvider implements LLMProvider {
     const decoder = new TextDecoder();
     let buffer = "";
     const toolCallAccs = new Map<number, ToolCallAcc>();
-    // A tool_call started accumulating — the server committed to a response.
-    // If the stream stalls after this, the provider most likely buffers SSE
-    // instead of streaming argument deltas (seen with LM Studio).
-    let sawToolCallStart = false;
-    // Format mismatch diagnostics (e.g. Ollama NDJSON without the "data: " prefix).
-    let nonDataLines = 0;
-    const nonDataSamples: string[] = [];
-    let parsedChunks = 0;
-    let midStreamError: string | null = null;
-
-    let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
-    let sawDone = false;
-    let lastFinishReason: string | undefined;
-    let sawText = false;
+    // Единый контейнер состояния стрима (вместо 9 разрозненных флагов).
+    const st = new StreamState();
 
     type ReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
     const readIdle = (): Promise<ReadResult> =>
@@ -326,7 +317,7 @@ export class OpenAICompatProvider implements LLMProvider {
               reject(
                 new Error(
                   t(
-                    sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
+                    st.sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
                     { timeout: idleTimeoutMs },
                   ),
                 ),
@@ -339,7 +330,7 @@ export class OpenAICompatProvider implements LLMProvider {
               reject(
                 new Error(
                   t(
-                    sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
+                    st.sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
                     { timeout: idleTimeoutMs },
                   ),
                 ),
@@ -365,7 +356,7 @@ export class OpenAICompatProvider implements LLMProvider {
           if (trimmed.startsWith("data: ")) {
             data = trimmed.slice(6);
             if (data === "[DONE]") {
-              sawDone = true;
+              st.sawDone = true;
               continue;
             }
           } else {
@@ -373,38 +364,38 @@ export class OpenAICompatProvider implements LLMProvider {
             // NDJSON or send mid-stream errors as bare JSON. Try to parse the
             // raw line; unparseable noise (SSE comments, keep-alives) is
             // counted and skipped.
-            nonDataLines++;
-            if (nonDataSamples.length < 5) nonDataSamples.push(trimmed.slice(0, 200));
+            st.nonDataLines++;
+            if (st.nonDataSamples.length < 5) st.nonDataSamples.push(trimmed.slice(0, 200));
             data = trimmed;
           }
 
           try {
             const parsed = JSON.parse(data);
-            parsedChunks++;
+            st.parsedChunks++;
             const choice = parsed.choices?.[0];
             if (!choice) {
               // Usage comes in the last chunk with empty choices
               if (parsed.usage) {
-                usage = {
+                st.usage = {
                   promptTokens: parsed.usage.prompt_tokens ?? 0,
                   completionTokens: parsed.usage.completion_tokens ?? 0,
                   totalTokens: parsed.usage.total_tokens ?? 0,
                 };
-                this.debug?.("LLM stream usage", { ...usage });
+                this.debug?.("LLM stream usage", { ...st.usage });
               } else if (parsed.error) {
                 // Mid-stream provider error (Ollama sends {"error": "..."} as
                 // bare JSON once generation already started). Surface it —
                 // swallowing it makes the response look silently empty.
                 // Thrown OUTSIDE the JSON-parse try/catch below.
-                midStreamError = String(parsed.error);
+                st.midStreamError = String(parsed.error);
               }
               // NOTE: no `continue` here — it would skip the midStreamError
               // throw below (which lives outside this try/catch).
             } else {
-              if (parsedChunks <= 3 || parsedChunks % 50 === 0) {
+              if (st.parsedChunks <= 3 || st.parsedChunks % 50 === 0) {
                 const d = choice.delta ?? {};
                 this.debug?.("LLM stream chunk", {
-                  n: parsedChunks,
+                  n: st.parsedChunks,
                   finishReason: choice.finish_reason ?? null,
                   deltaKeys: Object.keys(d),
                 });
@@ -412,7 +403,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
               const delta = choice.delta || {};
               const finishReason = choice.finish_reason;
-              if (finishReason) lastFinishReason = finishReason;
+              if (finishReason) st.lastFinishReason = finishReason;
 
               // `reasoning` is the Ollama alias for OpenAI's `reasoning_content`.
               const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
@@ -422,7 +413,7 @@ export class OpenAICompatProvider implements LLMProvider {
               }
 
               if (delta.tool_calls) {
-                sawToolCallStart = true;
+                st.sawToolCallStart = true;
                 for (const tc of delta.tool_calls) {
                   const idx = tc.index ?? 0;
                   if (!toolCallAccs.has(idx)) {
@@ -439,7 +430,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
               if (delta.content) {
                 onEmit();
-                sawText = true;
+                st.sawText = true;
                 yield { type: "text", content: delta.content };
               }
 
@@ -463,52 +454,43 @@ export class OpenAICompatProvider implements LLMProvider {
           } catch {
             // Skip malformed JSON lines
           }
-          if (midStreamError) {
+          if (st.midStreamError) {
             throw new Error(
-              t("error.llm_provider_stream_error", { error: midStreamError.slice(0, 300) }),
+              t("error.llm_provider_stream_error", { error: st.midStreamError.slice(0, 300) }),
             );
           }
         }
       }
-      if (usage) {
+      if (st.usage) {
         onEmit();
-        yield { type: "done", usage };
+        yield { type: "done", usage: st.usage };
       }
 
       // finish_reason "length": the completion hit the token limit. An
       // unfinished tool_call would otherwise be silently swallowed (tool_calls
       // are only yielded on finish_reason "tool_calls") and surface as an
       // empty response → blind hallucination retries. Surface the real cause.
-      if (lastFinishReason === "length") {
-        const truncatedToolCall = sawToolCallStart && toolCallAccs.size > 0;
-        if (truncatedToolCall || !sawText) {
-          const err = new Error(
+      if (st.lastFinishReason === "length") {
+        const truncatedToolCall = st.sawToolCallStart && toolCallAccs.size > 0;
+        if (truncatedToolCall || !st.sawText) {
+          // Провайдер в порядке — модель просто превысила completion-лимит.
+          // terminal: стрим не ретраим (он завершился корректно); recoverable:
+          // агентный цикл вернёт причину модели, чтобы она адаптировалась
+          // (разбила вывод) вместо смерти сессии.
+          throw new LlmError(
             t(truncatedToolCall ? "error.llm_truncated_toolcall" : "error.llm_truncated", {
               tokens: maxTokens,
             }),
+            { terminal: true, recoverable: true },
           );
-          (err as any).llmTerminal = true;
-          // The provider is fine — the model just overran the completion
-          // limit. The agent loop feeds this back so the model can adapt
-          // (split the output) instead of the session dying.
-          (err as any).recoverableLlm = true;
-          throw err;
         }
       }
     } finally {
       cleanup();
       reader.releaseLock();
-      this.debug?.("LLM stream finished", {
-        sawDone,
-        lastFinishReason: lastFinishReason ?? null,
-        sawText,
-        sawToolCallStart,
-        parsedChunks,
-        nonDataLines,
-        nonDataSamples: nonDataLines > 0 ? nonDataSamples : undefined,
-      });
+      this.debug?.("LLM stream finished", st.snapshot());
     }
-    return sawDone;
+    return st.sawDone;
   }
 
   /** Shared request setup: auth headers + timeout/abort controller wiring. */
@@ -708,25 +690,21 @@ export class OpenAICompatProvider implements LLMProvider {
         // otherwise exponential backoff. 429s from free tiers need a real wait.
         const delay = lastRetryAfter > 0
           ? Math.min(lastRetryAfter, maxDelay)
-          : Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-        const jitter = Math.random() * baseDelay * 0.1;
-        await this.sleep(delay + jitter, init.signal ?? undefined);
+          : backoffDelay(attempt, baseDelay, maxDelay, 0.1);
+        await this.sleep(delay, init.signal ?? undefined);
       }
     }
 
     if (lastStatus === 429) {
-      const e429 = new Error(
+      throw new LlmError(
         t("error.llm_429", {
           model: this.model,
           baseUrl: this.config.baseUrl,
         }),
+        { llmStatus: lastStatus },
       );
-      (e429 as any).llmStatus = lastStatus;
-      throw e429;
     }
-    const eRetry = new Error(t("error.llm_retries"));
-    (eRetry as any).llmStatus = lastStatus;
-    throw eRetry;
+    throw new LlmError(t("error.llm_retries"), { llmStatus: lastStatus });
   }
 
   private isRetryable(status: number): boolean {

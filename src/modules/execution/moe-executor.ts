@@ -10,6 +10,9 @@ import { t } from "../../i18n/index";
 import { ArtifactStore } from "../artifacts/store";
 import { buildInputSection } from "./input-from";
 import { parseScopeRequest } from "../../tools/scope-request";
+import { isTransientError } from "./transient-error";
+import { sleep } from "../../utils/sleep";
+import { backoffDelay } from "../../utils/retry";
 
 export const MAX_SCOPE_EXPANSION_CYCLES = 2;
 
@@ -23,28 +26,6 @@ export function newAbortError(): Error {
   const e = new Error(t("tool.aborted", { name: "MoE execution" }));
   e.name = "AbortError";
   return e;
-}
-
-const TRANSIENT_ERROR_PATTERNS = [
-  "timeout",
-  "Timeout",
-  "TIMEOUT",
-  /\b(429|500|502|503|504)\b/,
-  "network",
-  "Network",
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "fetch failed",
-];
-
-function isTransientError(error: string): boolean {
-  return TRANSIENT_ERROR_PATTERNS.some((p) =>
-    typeof p === "string" ? error.includes(p) : p.test(error),
-  );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 export interface MoEExecutorDeps {
@@ -243,7 +224,7 @@ async function executeSubtask(
       }
 
       if (isTransientError(lastError) && attempt < maxAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+        const delay = backoffDelay(attempt - 1, 1000, 8000);
         deps.logger.debug(
           `Retrying subtask "${subtask.id}" (attempt ${attempt}/${maxAttempts}) after ${delay}ms: transient error`,
         );
@@ -282,7 +263,7 @@ async function executeSubtask(
       }
 
       if (isTransientError(lastError) && attempt < maxAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+        const delay = backoffDelay(attempt - 1, 1000, 8000);
         deps.logger.debug(
           `Retrying subtask "${subtask.id}" (attempt ${attempt}/${maxAttempts}) after ${delay}ms: ${lastError}`,
         );

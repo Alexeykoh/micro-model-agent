@@ -6,6 +6,7 @@ import { PlanStore } from "./plan-store";
 import { StepVerifier } from "./verifier";
 import { checkPlanCoverage } from "./plan-coverage";
 import { stepTypecheckGate } from "./execution-plugin";
+import { switchStepToDelete } from "./plan-steps";
 
 export interface PlanToolDeps {
   store: PlanStore;
@@ -371,8 +372,9 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
                   ? missing.every((f) => deps.wasFileDeleted!(f))
                   : false;
                 if (wasDeleted) {
-                  target.kind = "delete";
-                  deps.store.saveActive(tracker.getPlan());
+                  switchStepToDelete(tracker.getPlan(), target, (p) =>
+                    deps.store.saveActive(p),
+                  );
                 }
               }
             }

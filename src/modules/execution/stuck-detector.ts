@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index";
+import { isTransientError } from "./transient-error";
 
 interface ToolCallRecord {
   name: string;
@@ -6,21 +7,6 @@ interface ToolCallRecord {
 }
 
 export type ErrorClassification = "transient" | "systematic" | "blocking";
-
-const TRANSIENT_PATTERNS = [
-  /timeout/i,
-  /timed out/i,
-  /ECONNREFUSED/i,
-  /ETIMEDOUT/i,
-  /ECONNRESET/i,
-  /killed/i,
-  /SIGTERM/i,
-  /SIGKILL/i,
-  /rate limit/i,
-  /429/i,
-  /503/i,
-  /502/i,
-];
 
 const BLOCKING_PATTERNS = [
   /EACCES/i,
@@ -35,9 +21,7 @@ const BLOCKING_PATTERNS = [
 ];
 
 export function classifyError(output: string): ErrorClassification {
-  for (const p of TRANSIENT_PATTERNS) {
-    if (p.test(output)) return "transient";
-  }
+  if (isTransientError(output)) return "transient";
   for (const p of BLOCKING_PATTERNS) {
     if (p.test(output)) return "blocking";
   }

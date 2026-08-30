@@ -7,7 +7,7 @@ import type { ContextManager, Message } from "../modules/context/manager";
 import type { HallucinationDetector } from "../modules/hallucination/detector";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig, ProviderEntry } from "../config/types";
-import type { ToolScope, ToolDefinition } from "../tools/types";
+import type { ToolScope, ToolDefinition, ToolResult } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
 import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
@@ -26,6 +26,7 @@ import type { PolicyState } from "../modules/reasoning/policy";
 import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
+import { LlmError } from "../llm/llm-errors";
 import { createLoopState, clearIterationSignals } from "./agent/loop-state";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
@@ -167,6 +168,14 @@ export class Agent {
   /** Typed module accessor for CLI/REPL commands (e.g. /lsp). */
   getModule<T>(name: string): T | undefined {
     return this.deps.moduleRegistry?.get(name) as T | undefined;
+  }
+
+  /**
+   * Запуск тула по имени из CLI/REPL (например, lsp_check). Обходит
+   * инкапсуляцию: команды не должны лезть в приватные `deps`.
+   */
+  runTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    return this.deps.toolExecutor.executeByName(name, args);
   }
 
   private setScope(): void {
@@ -663,7 +672,7 @@ export class Agent {
         // tool_call): отдаём локализованную причину обратно в контекст, чтобы
         // модель адаптировалась (разбить запись на куски) вместо смерти всей
         // сессии. Ограничено во избежание бесконечного цикла.
-        if (err?.recoverableLlm && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
+        if (err instanceof LlmError && err.recoverable && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
           state.iterRecoverableLlmError = true;
           state.llmErrorRetries++;
           logger.warn(

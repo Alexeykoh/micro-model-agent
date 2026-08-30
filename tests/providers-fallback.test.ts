@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { FallbackProvider, type FallbackSource } from "../src/modules/providers/fallback";
 import type { LLMProvider, Message } from "../src/llm/provider";
+import { LlmError } from "../src/llm/llm-errors";
 
 function makeProvider(name: string, behavior: () => AsyncIterable<any> | never): LLMProvider {
   return {
@@ -15,9 +16,7 @@ function makeProvider(name: string, behavior: () => AsyncIterable<any> | never):
 }
 
 function err(status?: number, msg = "boom"): Error {
-  const e = new Error(msg);
-  if (status !== undefined) (e as any).llmStatus = status;
-  return e;
+  return new LlmError(msg, status !== undefined ? { llmStatus: status } : undefined);
 }
 
 function makeSource(order: string[], providers: Map<string, LLMProvider>): FallbackSource {

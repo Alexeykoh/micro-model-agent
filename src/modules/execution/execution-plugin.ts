@@ -9,6 +9,7 @@ import { forbiddenWindowsCommand } from "./windows-commands";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
 import { platform } from "os";
+import { switchStepToDelete } from "./plan-steps";
 
 /**
  * Cooldown (in iterations) between stuck-recovery injections. Exported so the
@@ -375,9 +376,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             const overlap = tokens.some((t) =>
               stepTokens.some((st) => t.endsWith(st) || st.endsWith(t)),
             );
-            if (overlap && step.kind !== "delete") {
-              step.kind = "delete";
-              deps.store.saveActive(plan);
+            if (overlap) {
+              switchStepToDelete(plan, step, (p) => deps.store.saveActive(p));
               break;
             }
           }

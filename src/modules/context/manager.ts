@@ -1,6 +1,7 @@
 import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
+import { truncate } from "../../utils/truncate";
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
@@ -71,11 +72,6 @@ function summarizeArgs(args: unknown): string {
   } catch {
     return String(args).slice(0, 80);
   }
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 3) + "...";
 }
 
 function looksLikeErrorPaste(text: string): boolean {

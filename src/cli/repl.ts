@@ -201,6 +201,38 @@ export class Repl implements ReplContext {
     );
   }
 
+  /**
+   * Перезагрузка агента и модулей (команда /reload). Живёт здесь, а не в
+   * repl-commands, потому что меняет mutable-поля класса — команда через
+   * интерфейс только вызывает `ctx.reload()`, не ломая readonly-контракт.
+   */
+  public async reload(): Promise<void> {
+    const { loadConfig } = await import("../config/config");
+    const { bootstrap } = await import("../core/bootstrap");
+
+    this.agent.shutdown();
+
+    const projectConfigPath = join(this.baseDir, ".mmrc");
+    const { config: freshConfig } = loadConfig({
+      configDir: this.configDir,
+      projectConfigPath,
+    });
+    Object.assign(this.config, freshConfig);
+
+    const result = await bootstrap(this.configDir, this.baseDir, false, false);
+    this.agent = result.agent;
+    this.sessionManager = result.sessionManager;
+    this.skillsModule = result.skillsModule;
+    this.pluginManager = result.pluginManager;
+    this.execModule = result.execModule;
+
+    // Fresh PluginManager has no bridge — re-register it, otherwise plugins
+    // like web-ui silently lose control of the agent.
+    this.attachHostBridge(result.pluginManager);
+
+    this.setupCompleter();
+  }
+
   private loadHistory(): void {
     if (existsSync(this.historyPath)) {
       try {
