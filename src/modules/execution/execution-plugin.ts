@@ -127,6 +127,22 @@ export function extractBrokenFiles(output: string): BrokenFile[] {
   return out;
 }
 
+/** Сброс пер-шаговых флагов при смене активного шага (или его отсутствии: -1). */
+function resetStepFlags(state: ExecutionPluginState, stepId: number): void {
+  state.consecutivePlanWarnings = 0;
+  state.lastStepId = stepId;
+  state.stuckNotified = false;
+}
+
+/** Полный сброс состояния плана (завершён или его нет). */
+function resetPlanState(state: ExecutionPluginState): void {
+  state.consecutivePlanWarnings = 0;
+  state.lastStepId = -1;
+  state.stuckNotified = false;
+  state.mutationsWithoutPlan = 0;
+  state.planNudgeSent = false;
+}
+
 /**
  * Gate for `plan update status=done`: refuse while the last write/edit still
  * reports a compile error. A failure with no file anchor blocks the whole
@@ -177,18 +193,12 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         // audit → the model re-read files for 50+ iterations with zero
         // writes and no recovery hint).
         deps.stuckDetector.resetStepProgress();
-        deps.state.consecutivePlanWarnings = 0;
-        deps.state.lastStepId = -1;
-        deps.state.stuckNotified = false;
-        deps.state.mutationsWithoutPlan = 0;
-        deps.state.planNudgeSent = false;
+        resetPlanState(deps.state);
       } else {
         const step = deps.trackerRef.current?.getCurrentStep();
         if (deps.trackerRef.current && step) {
           if (step.id !== deps.state.lastStepId) {
-            deps.state.consecutivePlanWarnings = 0;
-            deps.state.lastStepId = step.id;
-            deps.state.stuckNotified = false;
+            resetStepFlags(deps.state, step.id);
           }
           deps.stuckDetector.setCurrentStep(step.id, step.description);
           deps.stuckDetector.recordIteration(step.id);
@@ -197,9 +207,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.state.planNudgeSent = false;
         } else {
           deps.stuckDetector.reset();
-          deps.state.consecutivePlanWarnings = 0;
-          deps.state.lastStepId = -1;
-          deps.state.stuckNotified = false;
+          resetStepFlags(deps.state, -1);
 
           // Evidence-based plan nudge (rule #10 — no bare iteration counter,
           // no keyword task classification): only after the agent actually

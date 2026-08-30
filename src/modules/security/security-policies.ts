@@ -562,8 +562,8 @@ export class SecurityPolicyManager {
     const keys = new Set([...Object.keys(config1), ...Object.keys(config2)]);
     for (const key of keys) {
       comparison[key] = {
-        policy1: (config1 as any)[key],
-        policy2: (config2 as any)[key],
+        policy1: config1[key as keyof SecurityConfig],
+        policy2: config2[key as keyof SecurityConfig],
       };
     }
 
