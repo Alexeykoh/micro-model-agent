@@ -1,8 +1,9 @@
-import type { ToolDefinition } from "./types";
+import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
+import type { BashSecurityConfig } from "../config/types";
 import { processRegistry, registerKillable, unregisterKillable } from "../modules/processes";
 import { t } from "../i18n/index";
 import { platform } from "os";
@@ -335,6 +336,122 @@ const NPM_EXEC_RE = /could not determine executable to run/i;
 /** process-management tools hidden behind enable_tools (tag "shell"). */
 const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill"];
 
+/**
+ * Разрешение bash-security-конфига: session-изоляция поверх глобального,
+ * мастер-выключатель `enabled: false` гасит все под-модули.
+ */
+function resolveBashSecurityConfig(ctx: ToolContext): BashSecurityConfig {
+  const appConfig = ctx.config || {};
+  const fullSecurityConfig = ctx.sessionContext
+    ? getSessionSecurityConfig(appConfig, ctx.sessionContext)
+    : appConfig.security || DEFAULT_SECURITY_CONFIG;
+  return fullSecurityConfig.enabled === false
+    ? { ...(fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash), enabled: false }
+    : fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash;
+}
+
+/**
+ * Декорация вывода завершённой команды: подсказки (пустой прогон скрипта,
+ * упавшие тесты, npm-без-bin, Unix-команды в cmd.exe), audit-лог и обрезка.
+ * Вынесена из god-handler'а bash — инкапсулирует всю пост-обработку вывода.
+ */
+function decorateCommandOutput(opts: {
+  ctx: ToolContext;
+  command: string;
+  originalCommand: string;
+  code: number | null;
+  output: string;
+  testRun: TestRunSummary | null;
+  workdir: string;
+  securityConfig: BashSecurityConfig;
+}): string {
+  let output = opts.output;
+  const { ctx, command, originalCommand, code, testRun, workdir, securityConfig } = opts;
+
+  // R5: script file ran with exit 0 but empty output — likely a missing
+  // entry point (main is never called with argv).
+  const cliHint = emptyCliRunHint(command, output, code);
+  if (cliHint) {
+    output = `(exit code 0, no output)\n\nHint: ${cliHint}`;
+  }
+
+  // Auto-verify test runs: a failing suite must not be reported as a clean
+  // success. Inject a prominent marker the model cannot miss (the typical
+  // failure: tests fail but the CLI exit code is 0).
+  if (testRun && testRun.failed > 0) {
+    output =
+      t("exec.test_runner_fail", {
+        framework: testRun.framework,
+        failed: String(testRun.failed),
+        passed: String(testRun.passed),
+      }) +
+      `\n\n${output}`;
+  } else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
+    output = `${t("exec.test_runner_pass", { framework: testRun.framework, passed: String(testRun.passed) })}\n\n${output}`;
+  }
+
+  if (!output && code !== 0) {
+    output = `(exit code ${code})`;
+  }
+
+  // npm/npx/bunx: "could not determine executable to run" — the package has
+  // no `bin` entry (or the script does not exist). Cross-platform, so it runs
+  // before the win32 hint block.
+  output = npmExecHint(output);
+
+  // On Windows, hint about Unix commands that don't work, and hard-stop a
+  // command that keeps failing the same way. The hint keys on the ORIGINAL
+  // command word (before adaptCommandForWindows translated cat→type): the
+  // translation is only for execution, but the model wrote `cat`, and that is
+  // what UNIX_TO_WIN_HINTS knows about. Keying on the translated word left
+  // `cat` invisible to the hint/block (observed: model ran cat 4+ times).
+  if (platform() === "win32") {
+    const originalFirstWord = originalCommand.trim().split(/\s+/)[0]?.split(/[\\/]/).pop();
+    if (originalFirstWord && originalFirstWord in UNIX_TO_WIN_HINTS) {
+      if (code === 0) {
+        FAILING_FIRST_WORDS.delete(originalFirstWord);
+      } else {
+        const failures = (FAILING_FIRST_WORDS.get(originalFirstWord) || 0) + 1;
+        FAILING_FIRST_WORDS.set(originalFirstWord, failures);
+        if (failures >= HARD_BLOCK_THRESHOLD) {
+          output = `STOP using "${originalFirstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
+        } else {
+          output = `${output}\n\nHint: "${originalFirstWord}" may not work on Windows. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
+        }
+      }
+    }
+  }
+
+  // Update audit log with result
+  if (securityConfig?.logCommands) {
+    logBashCommand(
+      ctx.sessionId,
+      sanitizeCommandForLog(command),
+      code === 0,
+      `Working directory: ${workdir}, Output length: ${output.length}`,
+    );
+  }
+
+  const lines = output.split("\n");
+  if (testRun && testRun.failed > 0) {
+    // Keep the failure details: test runners print passing markers first and
+    // the errors + summary at the very end. A short head preview hides exactly
+    // what the model needs to fix the failures.
+    const TEST_TAIL_LINES = 400;
+    const kept = lines.slice(-TEST_TAIL_LINES);
+    const skipped = lines.length - kept.length;
+    output =
+      (skipped > 0 ? `[... ${skipped} earlier lines omitted — failing tests below]\n` : "") +
+      kept.join("\n");
+  } else if (lines.length > MAX_PREVIEW_LINES) {
+    output =
+      lines.slice(0, MAX_PREVIEW_LINES).join("\n") +
+      `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`;
+  }
+
+  return output;
+}
+
 export function npmExecHint(output: string): string {
   if (NPM_EXEC_RE.test(output)) {
     return `${output}\n\nHint: ${t("exec.npm_exec_hint")}`;
@@ -421,16 +538,8 @@ export const bashTool: ToolDefinition = {
     }
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir;
 
-    // Get session-specific security config with defaults
-    const appConfig = ctx.config || {};
-    const fullSecurityConfig = ctx.sessionContext
-      ? getSessionSecurityConfig(appConfig, ctx.sessionContext)
-      : appConfig.security || DEFAULT_SECURITY_CONFIG;
-    // Master switch off → all sub-modules off, even when defaults are enabled.
-    const securityConfig =
-      fullSecurityConfig.enabled === false
-        ? { ...(fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash), enabled: false }
-        : fullSecurityConfig.bash || DEFAULT_SECURITY_CONFIG.bash;
+    // Session-specific security config (мастер-выключатель учтён внутри).
+    const securityConfig = resolveBashSecurityConfig(ctx);
     const validation = isCommandAllowed(command, securityConfig);
 
     if (!validation.allowed) {
@@ -481,89 +590,18 @@ export const bashTool: ToolDefinition = {
         let output = entry.log.join("\n");
         processRegistry.remove(entry.id);
 
-        // R5: script file ran with exit 0 but empty output — likely a
-        // missing entry point (main is never called with argv).
-        const cliHint = emptyCliRunHint(command, output, code);
-        if (cliHint) {
-          output = `(exit code 0, no output)\n\nHint: ${cliHint}`;
-        }
-
-        // Auto-verify test runs: a failing suite must not be reported as a
-        // clean success. Inject a prominent marker the model cannot miss
-        // (the tpical failure: tests fail but the CLI exit code is 0).
+        // Подсказки, аудит и обрезка вывода — единая точка (decorateCommandOutput).
         const testRun = detectTestResults(output);
-        if (testRun && testRun.failed > 0) {
-          output =
-            t("exec.test_runner_fail", {
-              framework: testRun.framework,
-              failed: String(testRun.failed),
-              passed: String(testRun.passed),
-            }) +
-            `\n\n${output}`;
-        } else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
-          output = `${t("exec.test_runner_pass", { framework: testRun.framework, passed: String(testRun.passed) })}\n\n${output}`;
-        }
-
-        if (!output && code !== 0) {
-          output = `(exit code ${code})`;
-        }
-
-        // npm/npx/bunx: "could not determine executable to run" — the
-        // package has no `bin` entry (or the script does not exist).
-        // This is cross-platform, so it runs before the win32 hint block.
-        output = npmExecHint(output);
-
-        // On Windows, hint about Unix commands that don't work, and
-        // hard-stop a command that keeps failing the same way. The
-        // hint keys on the ORIGINAL command word (before
-        // adaptCommandForWindows translated cat→type): the translation
-        // is only for execution, but the model wrote `cat`, and that is
-        // what UNIX_TO_WIN_HINTS knows about. Keying on the translated
-        // word left `cat` invisible to the hint/block (observed: model
-        // ran cat 4+ times in one session with no guidance).
-        if (platform() === "win32") {
-          const originalFirstWord = originalCommand.trim().split(/\s+/)[0]?.split(/[\\/]/).pop();
-          if (originalFirstWord && originalFirstWord in UNIX_TO_WIN_HINTS) {
-            if (code === 0) {
-              FAILING_FIRST_WORDS.delete(originalFirstWord);
-            } else {
-              const failures = (FAILING_FIRST_WORDS.get(originalFirstWord) || 0) + 1;
-              FAILING_FIRST_WORDS.set(originalFirstWord, failures);
-              if (failures >= HARD_BLOCK_THRESHOLD) {
-                output = `STOP using "${originalFirstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
-              } else {
-                output = `${output}\n\nHint: "${originalFirstWord}" may not work on Windows. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
-              }
-            }
-          }
-        }
-
-        // Update audit log with result
-        if (securityConfig?.logCommands) {
-          logBashCommand(
-            ctx.sessionId,
-            sanitizeCommandForLog(command),
-            code === 0,
-            `Working directory: ${workdir}, Output length: ${output.length}`,
-          );
-        }
-
-        const lines = output.split("\n");
-        if (testRun && testRun.failed > 0) {
-          // Keep the failure details: test runners print passing markers
-          // first and the errors + summary at the very end. A short head
-          // preview hides exactly what the model needs to fix the failures.
-          const TEST_TAIL_LINES = 400;
-          const kept = lines.slice(-TEST_TAIL_LINES);
-          const skipped = lines.length - kept.length;
-          output =
-            (skipped > 0 ? `[... ${skipped} earlier lines omitted — failing tests below]\n` : "") +
-            kept.join("\n");
-        } else if (lines.length > MAX_PREVIEW_LINES) {
-          output =
-            lines.slice(0, MAX_PREVIEW_LINES).join("\n") +
-            `\n... (${lines.length - MAX_PREVIEW_LINES} more lines)`;
-        }
+        output = decorateCommandOutput({
+          ctx,
+          command,
+          originalCommand,
+          code,
+          output,
+          testRun,
+          workdir,
+          securityConfig,
+        });
 
         return { success: code === 0, output };
       }
