@@ -4,23 +4,42 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.57.2] - 2026-08-29
+## [0.57.2] - 2026-08-30
 
 ### Changed
 - **KV-cache**: plan block removed from system prompt; plan status now injected into `<system-summary>` envelope after every tool batch. System prompt is immutable per session — local backends retain prefix cache.
 - **Provenance**: provider entry resolution uses active entry label, not bare `provider.type`
 - **Reasoning signals**: `consecutiveToolSuccesses` and `isRepetitive` now feed real values to the reasoning policy (were hardcoded)
 - **Token estimation**: tool-def token estimate in agent loop uses `estimateTokens()` instead of flat `/4`
+- **Agent split**: `agent.ts` 1550→950 lines; 10 extracted modules (`loop-state`, `compaction`, `tool-batch`, `hallucination-gate`, `audit-gate`, `reasoning-resolver`, `token-tracker`, `context-renderer`, `tool-output`, `constants`)
+- **Plan-tool**: `plan-tool.ts` 741→232 lines; per-action handlers in `plan-actions.ts`
+- **CLI**: `createProgram` 513→thin orchestrator; `registerMmaCommands` 470→8 lines (5 per-domain registers)
+- **Bash handler**: `bash.ts` 236→~100 lines (`resolveBashSecurityConfig`, `decorateCommandOutput`)
+- **Orchestrator**: reuse `parseChunks` instead of hand-rolled `any[]` aggregation; `createPlan` uses own `parseJSON`; constructor deduplicated via `createProviderInstance`
+- **Shared utils**: `src/utils/` with `errMsg()`, `sleep()`, `truncate()`, `backoffDelay()`
+- **errMsg**: replaces 23 occurrences of `e instanceof Error ? e.message : String(e)` across 12 files
 
 ### Fixed
 - **chunk_query**: one failing chunk no longer kills the entire query; per-chunk `catch` → `[FAILED]`
 - **chunk_query**: synthesis prompt capped at 20K chars with `[TRUNCATED]` marker
 - **chunk_query**: `AbortSignal` propagated to `chatText` for cancellation support
 - **Executor**: `failFast` cleanup guard prevents nested scope clobbering
+- **probe.ts**: transient errors (network/auth) no longer cached as "reasoning not supported" for 24h; returns `null` → caller skips cache
+- **LSP**: startup timeout unified on `DEFAULT_TIMEOUT` (15000) instead of conflicting hardcoded 10000
+- **Browser**: `BridgeResponse.data` typed (was `any`)
+- **Agent**: `Agent.runTool()` public API replaces `(ctx.agent as any).deps` reach-in; `/reload` no longer mutates readonly context
+- **LSP /lsp check**: fixed latent bug where `.execute()` was called with `.executeByName` signature
 
 ### Added
 - **Plan Reminder**: static `[Plan Reminder]` block in system prompt (never mutates)
 - **Documentation**: reentrancy warning on `executeByName()`, `PlanResult` JSDoc
+- **Tests**: `probe.test.ts` (6 cases), `command-suggest.test.ts`, `providers-factory.test.ts`, `subagent-tool.test.ts`, `agent-moe-write.test.ts`, `chunk-query.test.ts`
+- **probe.ts**: `null` return for transient errors; bootstrap skips cache on `null`
+- **Execution-plugin**: `resetStepFlags`/`resetPlanState` helpers (dedup 3 inline reset blocks)
+- **Security-policies**: `comparePolicies` typed (`keyof SecurityConfig` replaces `as any`)
+
+### Removed
+- **Browser**: dead `buildWaitScript` export (never imported)
 
 ## [0.57.1] - 2026-08-28
 
