@@ -17,20 +17,23 @@
    - [x] Bridge/read_file/plan-guard и прочие — уже закрыты предыдущими фиксами
 3. [ ] **Git push** master на origin (HEAD `a82d115`)
 
-## Волна 1 — MoE Completion (Wave 3–5) → релиз 0.58.0 (MINOR)
+## Волна 1 — MoE Completion (Wave 3–5) → релиз 0.58.0 (MINOR) ✅ ЗАКРЫТО
 
-1. [ ] **Plan 3.2** — OrchestratorClient через ProviderManager (убрать хардкод
-       `contextWindow: 32768` в `src/llm/orchestrator.ts:117`; legacy {type,baseUrl,apiKey} работает)
-2. [ ] **Plan 3.1** — динамические эксперты из `config.experts` в PLAN_SYSTEM_PROMPT
-       (сейчас хардкод в `orchestrator.ts:22-29`)
-3. [ ] **Plan 4.2** — observability: moe_plan/moe_subtask/moe_replan/moe_verify в session.jsonl
-       (+ `session show`), cost breakdown по expert_tag
-4. [ ] **Plan 5.1 Task 1** — StepVerifier.verifySubtaskCriteria (file-exists, substring-in-file,
-       command-exit-0); LLM-only критерии → warning в verifyAndMerge
-5. [ ] **Plan 5.1 Task 2** — selective re-plan: `executePlan(skipIds)`, успешные → carried
-6. [ ] **Plan 5.2** — cert suite tag=moe (2 сценария: параллельные волны; read-after-write
-       через input_from), обновить спеку (Draft → Implemented) и AGENTS.md
-7. [ ] Релиз 0.58.0 + CHANGELOG
+Релиз 0.58.0, коммит `f069fba` (2026-08-31).
+
+1. [x] **Plan 3.2** — OrchestratorClient через ProviderManager (per-entry
+       contextWindow/retry/rateLimits + failover; legacy {type,baseUrl,apiKey} работает;
+       `orchestrator.contextWindow` — глобальный фолбэк)
+2. [x] **Plan 3.1** — динамические эксперты из `config.experts` в PLAN_SYSTEM_PROMPT
+       (`ExpertConfig.description`, фолбэк — tool_tags)
+3. [x] **Plan 4.2** — observability: moe_plan/moe_subtask/moe_replan/moe_verify в session.jsonl
+       (+ `session show`), usage breakdown по expert_tag, реальный sessionId
+4. [x] **Plan 5.1 Task 1** — StepVerifier.verifySubtaskCriteria (file-exists,
+       substring-in-file, command-exit-0); LLM-only критерии → warning
+5. [x] **Plan 5.1 Task 2** — selective re-plan: `executePlan({skipIds, carriedResults})`
+6. [x] **Plan 5.2** — cert suite tag=moe (5.1-moe-basic, 5.2-moe-parallel-waves,
+       5.3-moe-read-after-write), спека Draft → Implemented, раздел MoE в AGENTS.md
+7. [x] Релиз 0.58.0 + CHANGELOG
 
 ## Волна 2 — Аудит: Waves B–E (файловый обход)
 
