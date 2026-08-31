@@ -759,16 +759,24 @@ export class Agent {
           .join("|");
         if (signature && signature === state.lastToolSignature) {
           state.iterRepetitive = true;
+          // Nudge fires in ALL modes: an identical (tool,args) repeat is a
+          // wasted iteration — observed with qwen3.5-9b re-running the same
+          // verification command back-to-back after the answer was already
+          // in the result. The hard stop below stays exitOnComplete-only so
+          // interactive sessions keep user control.
+          logger.info(
+            `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
+          );
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
+          });
           if (this.deps.exitOnComplete) {
             state.repeatedToolCount++;
             if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
               logger.debug("Exit-on-complete: repeated identical tool call, stopping");
               break;
             }
-            contextManager.addMessage({
-              role: "user",
-              content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
-            });
           }
         } else {
           state.repeatedToolCount = 0;

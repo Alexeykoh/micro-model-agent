@@ -432,6 +432,75 @@ describe("Agent", () => {
     expect(result.text).toBe("All done now");
   });
 
+  it("nudges the model after a repeated tool call even without exitOnComplete", async () => {
+    const bashCall = {
+      type: "tool_call" as const,
+      toolCall: { id: "t1", name: "bash", arguments: "{}" },
+    };
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield bashCall;
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            // identical tool call again
+            yield bashCall;
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "Done with a different approach" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const addMessage = vi.fn();
+    const deps = createMockDeps({
+      llmProvider: mockProvider,
+      contextManager: {
+        addMessage,
+        getMessageCount: vi.fn().mockReturnValue(0),
+        needsCompaction: vi.fn().mockReturnValue(false),
+        compact: vi.fn(),
+        getActiveHistory: vi.fn().mockReturnValue([]),
+        getEstimatedTokens: vi.fn().mockReturnValue(50),
+        getBudget: vi.fn().mockReturnValue({
+          systemPrompt: 1024,
+          responseReserve: 512,
+          history: 2560,
+        }),
+        updateSystemPrompt: vi.fn(),
+        getCompactionCount: vi.fn().mockReturnValue(0),
+        getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
+        getQuality: vi.fn().mockReturnValue(100),
+        noteIteration: vi.fn(),
+        setToolTokens: vi.fn(),
+      },
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("run twice");
+    // Without exitOnComplete the run must not be aborted, but the model
+    // still gets the nudge so it stops burning iterations on identical calls.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(3);
+    expect(
+      addMessage.mock.calls.some(
+        (c: any) =>
+          typeof c[0]?.content === "string" &&
+          c[0].content.includes("same tool with identical arguments"),
+      ),
+    ).toBe(true);
+    expect(result.text).toBe("Done with a different approach");
+  });
+
   it("retries empty (reasoning-only) responses and returns the final text", async () => {
     const mockProvider = {
       model: "test-model",

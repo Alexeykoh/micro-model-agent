@@ -583,5 +583,18 @@ export function createProgram(): Command {
       /* Handled by main.ts after program.parse() */
     });
 
+  // Subcommand actions run full bootstrap() (reasoning-probe fetch, indexer,
+  // plugins…), which leaves open handles — without an explicit exit the
+  // process hangs after printing its result ("config set" printed, never
+  // exited). The prompt/REPL paths exit explicitly in main.ts; every
+  // SUBCOMMAND is one-shot, so exit as soon as its action resolves. Hooks are
+  // attached to subcommand roots only — NOT to program, whose own action is
+  // the prompt path handled by main.ts.
+  for (const cmd of program.commands) {
+    cmd.hook("postAction", () => {
+      process.exit(0);
+    });
+  }
+
   return program;
 }
