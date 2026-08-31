@@ -246,7 +246,7 @@
   "lsp.check_unsupported": "No LSP server configured for: {path}",
   "lsp.check_clean": "No errors or warnings detected ({count} file(s) checked).",
   "lsp.checked_files": "Checked {count} file(s):",
-  "lsp.startup_header": "[Existing project errors (checked at session start) — fix these before continuing]:",
+  "lsp.startup_header": "[Existing project errors (baseline, checked at session start) — informational. Do NOT fix them unless the current request is about these errors; otherwise ignore them and work only on what the user asked.]:",
   "cli.description": "Micro Models Agent — AI coding agent for small models",
   "cli.init": "Run interactive setup wizard",
   "cli.config_saved": "Configuration saved to ~/.mma/config.json",

@@ -89,7 +89,7 @@ src/a.ts(3,1): error TS2304: Cannot find name 'x'.`;
       });
       expect(result).not.toBeNull();
       expect(result!.content).toContain(
-        "[Existing project errors (checked at session start) — fix these before continuing]:",
+        "[Existing project errors (baseline, checked at session start) — informational. Do NOT fix them unless the current request is about these errors; otherwise ignore them and work only on what the user asked.]:",
       );
       expect(result!.content).toContain("src/a.ts(3,1): error TS2304");
       expect(result!.content).toContain("src/b.ts(5,2): error TS2322");
