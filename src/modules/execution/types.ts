@@ -50,4 +50,6 @@ export interface PlanResult {
   results: SubtaskResult[];
   errors: string[];
   warnings: string[];
+  /** Selective re-plan (Plan 5.1): subtasks carried over from a previous cycle. */
+  carriedSubtaskIds?: string[];
 }

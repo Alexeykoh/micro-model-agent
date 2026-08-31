@@ -2,7 +2,12 @@
 
 ## Статус
 
-Draft. Решения из этой версии зафиксированы после обсуждения и готовы к implementation planning.
+Implemented. MVP (планирование, эксперты, сабтаски, verifier) реализован; из Post-MVP
+сделаны scope expansion (`src/tools/scope-request.ts`, лимит 2 цикла), re-plan цикл в
+`runWithMoE` (`moe.maxReplanCycles`, default 3), input_from cross-expert data flow,
+selective re-plan (carried subtasks), машиночитаемые success_criteria в StepVerifier и
+observability-события moe_plan/moe_subtask/moe_replan/moe_verify в session.jsonl.
+Cert-тег `moe` покрывает базовый параллелизм, параллельные волны и read-after-write.
 
 ## Цель
 
@@ -257,21 +262,18 @@ experts: {
 
 ## Post-MVP enhancements
 
-### Scope expansion
+### Scope expansion — ✅ Реализовано
 
-В MVP subagent не может расширять свой scope. Если нужен файл вне `allowed_files`/`read_only_files`, subagent возвращает ошибку, а Router делает re-plan.
+Механизм scope expansion реализован (spec §Post-MVP → `src/tools/scope-request.ts`):
 
-После MVP можно добавить надёжный механизм scope expansion:
-
-1. Subagent обнаруживает, что для выполнения задачи нужен файл вне scope.
-2. Вместо попытки доступа subagent возвращает special result: `scope_request: { files: string[], reason: string, read_only: boolean }`.
-3. Router получает scope request и решает:
-   - **approve** — добавить файлы в `read_only_files` (или `allowed_files`, если subagent доказал необходимость write) и перезапустить subtask;
-   - **redirect** — создать новый subtask для работы с этими файлами;
-   - **reject** — оставить текущий scope; subtask считается failed.
-4. Scope expansion не разрешается автоматически — только через явное решение Router. Это сохраняет isolation и predictability.
-
-Этот механизм не входит в MVP.
+1. Subagent обнаруживает, что для выполнения задачи нужен файл вне scope. Когда файловый
+   тул заблокирован scope-гвардом, детерминированный `ScopeDenialCollector` (плагин субагента)
+   собирает denials и возвращает машиночитаемый `<scope-request>` блок.
+2. MoE executor парсит блок (`parseScopeRequest`) и передаёт Router'у
+   (`OrchestratorClient.resolveScopeRequest`): approve добавляет файлы в scope и
+   переисполняет ТОЛЬКО этот сабтаск (лимит 2 цикла); reject фиксирует неудачу сабтаска.
+3. Не approve без конкретных файлов, ни unparseable ответ Router'а не расширяют scope —
+   по умолчанию reject.
 
 ## Интеграция с MMA v2
 

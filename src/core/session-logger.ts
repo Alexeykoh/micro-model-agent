@@ -356,4 +356,20 @@ export class SessionLogger {
       source: data.source,
     });
   }
+
+  /**
+   * Log a MoE observability event (moe_plan / moe_subtask / moe_replan /
+   * moe_verify). Emitted by runWithMoE and MoEExecutor (Plan 4.2).
+   */
+  logMoE(
+    event: "moe_plan" | "moe_subtask" | "moe_replan" | "moe_verify",
+    data: Record<string, unknown>,
+  ): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: event,
+      content: (data.detail as string) ?? (data.explanation as string) ?? event,
+      ...data,
+    });
+  }
 }

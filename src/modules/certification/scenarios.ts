@@ -561,6 +561,52 @@ const SCENARIO_DEFS: ScenarioDef[] = [
       { type: "fileContent", path: "file-b.txt", contains: "beta" },
     ],
   },
+  {
+    id: "5.2-moe-parallel-waves",
+    title: "MoE parallel waves with distinct deliverables",
+    tags: ["moe"],
+    mode: "run",
+    timeoutMs: 600_000,
+    prompt:
+      "Create three files. These are independent tasks that must run in parallel: wave-one.txt containing 'w1-done', wave-two.txt containing 'w2-done', and wave-three.txt containing 'w3-done'. After all three exist, report completion.",
+    config: {
+      moe: { enabled: true },
+      orchestrator: { model: "" },
+      experts: {
+        code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
+      },
+    },
+    checks: [
+      { type: "fileExists", path: "wave-one.txt" },
+      { type: "fileExists", path: "wave-two.txt" },
+      { type: "fileExists", path: "wave-three.txt" },
+      { type: "fileContent", path: "wave-one.txt", contains: "w1-done" },
+      { type: "fileContent", path: "wave-two.txt", contains: "w2-done" },
+      { type: "fileContent", path: "wave-three.txt", contains: "w3-done" },
+    ],
+  },
+  {
+    id: "5.3-moe-read-after-write",
+    title: "MoE read-after-write via input_from dependency",
+    tags: ["moe"],
+    mode: "run",
+    timeoutMs: 600_000,
+    prompt:
+      "Two sequential steps. Step 1: create data.txt containing the exact token DATA_TOKEN_XYZ. Step 2 (depends on step 1 — it reads data.txt): create summary.txt that contains the exact token DATA_TOKEN_XYZ copied from data.txt. Step 2 must only run after data.txt exists.",
+    config: {
+      moe: { enabled: true },
+      orchestrator: { model: "" },
+      experts: {
+        code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
+      },
+    },
+    checks: [
+      { type: "fileExists", path: "data.txt" },
+      { type: "fileExists", path: "summary.txt" },
+      { type: "fileContent", path: "data.txt", contains: "DATA_TOKEN_XYZ" },
+      { type: "fileContent", path: "summary.txt", contains: "DATA_TOKEN_XYZ" },
+    ],
+  },
 
   // ─── Research ────────────────────────────────────────────────────────
   {

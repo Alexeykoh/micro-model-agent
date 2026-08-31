@@ -146,6 +146,15 @@ export class SessionManager {
     this.store.appendSessionLog(this.activeId, entry);
   }
 
+  /** Read the full session.jsonl of any session (used by `session show`). */
+  loadSessionLog(id: string): SessionLogEntry[] {
+    try {
+      return this.store.loadSessionLog(id);
+    } catch {
+      return [];
+    }
+  }
+
   loadHistory(): SessionMessage[] {
     if (!this.activeId) return [];
     return this.store.loadHistory(this.activeId);

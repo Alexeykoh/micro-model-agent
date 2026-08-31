@@ -8,10 +8,18 @@ import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validato
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
 import type { MoEPlan, SubtaskResult, PlanResult } from "../modules/execution/types";
-import { newAbortError } from "../modules/execution/moe-executor";
+import { newAbortError, type TagUsage } from "../modules/execution/moe-executor";
 import { t } from "../i18n/index";
 
 export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
+
+/** MoE observability event types written to session.jsonl (Plan 4.2). */
+export type MoEEventType = "moe_plan" | "moe_subtask" | "moe_replan" | "moe_verify";
+
+export interface MoEEvent {
+  type: MoEEventType;
+  data: Record<string, unknown>;
+}
 
 /** Minimal structural surface of the collaborators, for test seam injection. */
 export interface MoEOrchestratorLike {
@@ -29,7 +37,10 @@ export interface MoEOrchestratorLike {
 }
 
 export interface MoEExecutorLike {
-  executePlan(plan: MoEPlan): Promise<PlanResult>;
+  executePlan(
+    plan: MoEPlan,
+    opts?: { skipIds?: ReadonlySet<string>; carriedResults?: SubtaskResult[] },
+  ): Promise<PlanResult>;
 }
 
 export interface MoEVerifierLike {
@@ -68,10 +79,16 @@ export async function runWithMoE(
     onPhase?: (phase: AgentPhase) => void;
     /** Abort signal (Esc / shutdown). AbortError propagates — no MoE fallback. */
     signal?: AbortSignal;
+    /** Observability sink — wired to SessionLogger.logMoE by Agent.run. */
+    onEvent?: (event: MoEEvent) => void;
+    /** Real session id, propagated to sub-agents for audit/artifacts. */
+    sessionId?: string;
   } = {},
 ): Promise<AgentResult> {
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
-  const { onMeta, onPhase, onTool, signal } = opts;
+  const { onMeta, onPhase, onTool, signal, onEvent, sessionId } = opts;
+  const emit = (type: MoEEventType, data: Record<string, unknown>) =>
+    onEvent?.({ type, data });
   const ensureNotAborted = () => {
     if (signal?.aborted) throw newAbortError();
   };
@@ -84,6 +101,11 @@ export async function runWithMoE(
       {
         model: config.orchestrator.model,
         provider: config.orchestrator.provider,
+        contextWindow: config.orchestrator.contextWindow,
+        retry: config.retry,
+        rateLimits: config.security?.rateLimits,
+        logger,
+        experts: config.experts,
       },
       llmProvider,
     );
@@ -101,8 +123,14 @@ export async function runWithMoE(
 
   if ("error" in planResult) {
     logger.warn(`MoE plan failed: ${planResult.error} — falling back to single-agent`);
+    emit("moe_plan", { status: "error", error: planResult.error });
     return fallback();
   }
+  emit("moe_plan", {
+    status: "ok",
+    title: planResult.plan.title,
+    subtaskIds: planResult.plan.subtasks.map((s) => s.id),
+  });
 
   const maxCycles = Math.max(
     1,
@@ -111,10 +139,16 @@ export async function runWithMoE(
   const mergedResults = new Map<string, SubtaskResult>();
 
   let currentPlan: MoEPlan = planResult.plan;
+  const usageByTag: Record<string, TagUsage> = {};
   for (let cycle = 1; cycle <= maxCycles; cycle++) {
     ensureNotAborted();
     if (cycle > 1) {
       onMeta?.(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
+      emit("moe_replan", {
+        cycle,
+        title: currentPlan.title,
+        subtaskIds: currentPlan.subtasks.map((s) => s.id),
+      });
     }
 
     // Validate every plan before executing it — never trust an LLM-produced
@@ -147,6 +181,8 @@ export async function runWithMoE(
         logger,
         baseDir,
         onTool,
+        sessionId,
+        onEvent: (e) => emit(e.type, e.data),
         onScopeRequest: async (subtaskId, req) => {
           const decision = await orchestrator.resolveScopeRequest(subtaskId, req, signal);
           if (decision.action === "approve") {
@@ -166,8 +202,42 @@ export async function runWithMoE(
     onMeta?.(
       t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
     );
-    const planResults = await executor.executePlan(currentPlan);
+
+    // Selective re-plan (Plan 5.1): subtasks already successfully executed in
+    // an earlier cycle are carried over — only failed/new ones re-execute.
+    const skipIds = new Set<string>();
+    const carriedResults: SubtaskResult[] = [];
+    for (const s of currentPlan.subtasks) {
+      const prev = mergedResults.get(s.id);
+      if (prev?.success) {
+        skipIds.add(s.id);
+        carriedResults.push(prev);
+      }
+    }
+    for (const id of skipIds) {
+      emit("moe_subtask", { subtaskId: id, status: "carried", cycle });
+    }
+
+    const planResults = await executor.executePlan(currentPlan, { skipIds, carriedResults });
     ensureNotAborted();
+    const cycleUsage = (
+      executor as { getUsageByTag?: () => Record<string, TagUsage> }
+    ).getUsageByTag?.();
+    if (cycleUsage) {
+      for (const [tag, usage] of Object.entries(cycleUsage)) {
+        const agg = usageByTag[tag] ?? {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          subtasks: 0,
+        };
+        agg.promptTokens += usage.promptTokens;
+        agg.completionTokens += usage.completionTokens;
+        agg.totalTokens += usage.totalTokens;
+        agg.subtasks += usage.subtasks;
+        usageByTag[tag] = agg;
+      }
+    }
     for (const r of planResults.results) {
       mergedResults.set(r.subtaskId, r);
     }
@@ -201,6 +271,7 @@ export async function runWithMoE(
     } catch (err: any) {
       onPhase?.("done");
       if (err?.name === "AbortError") throw err;
+      emit("moe_verify", { status: "error", error: err.message });
       return {
         success: false,
         text: `MoE verifyAndMerge crashed: ${err.message}`,
@@ -209,6 +280,11 @@ export async function runWithMoE(
       };
     }
     onPhase?.("done");
+    emit("moe_verify", {
+      decision: verifyResult.type,
+      explanation: verifyResult.explanation,
+      usageByTag: Object.keys(usageByTag).length > 0 ? usageByTag : undefined,
+    });
 
     if (verifyResult.type === "final") {
       return buildFinalResult(mergedResults, verification.success, verifyResult);

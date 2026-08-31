@@ -75,6 +75,30 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 | 64K          | 6K          | 10K          | 48K           |
 | 128K         | 13K         | 19K          | 96K           |
 
+### Agent-Level MoE (moe.enabled)
+
+Путь: `runWithMoE` (`src/core/agent-moe.ts`) → OrchestratorClient (план) → MoEExecutor → StepVerifier → verifyAndMerge.
+
+- **Re-plan цикл:** `moe.maxReplanCycles` (default 3); каждый re-plan ревалидируется (`plan-validator`);
+  битый re-plan → честный partial failure; knownTags — из реестра тулов.
+- **Эксперты:** `config.experts` рендерится в PLAN_SYSTEM_PROMPT (`ExpertConfig.description`,
+  фолбэк — tool_tags). OrchestratorClient строит provider через ProviderManager
+  (entries → per-entry contextWindow/retry/rateLimits, legacy `{type,baseUrl,apiKey}` работает,
+  `orchestrator.contextWindow` — глобальный фолбэк).
+- **input_from:** результаты зависимых сабтасков инжектятся в промпт (`src/modules/execution/input-from.ts`).
+- **scope_request:** rejeceted/approved Router'ом (`src/tools/scope-request.ts`), лимит 2 цикла, default reject.
+- **Selective re-plan:** `executePlan(plan, {skipIds, carriedResults})` — успешные сабтаски
+  переносятся как carried, переисполняются только упавшие.
+- **success_criteria:** машиночитаемые (`file-exists:`, `substring-in-file:`, `command-exit-0:`)
+  проверяет StepVerifier до merge; остальные — LLM-only warning.
+- **Observability:** события `moe_plan/moe_subtask/moe_replan/moe_verify` пишутся в session.jsonl
+  (`SessionLogger.logMoE`), видны в `session show`; usage аккумулируется по expert_tag
+  (`MoEExecutor.getUsageByTag`). SessionId реальный (не "moe").
+- **Abort:** Esc прерывает MoE без fallback (AbortError летит наверх, очередь сабтасков не стартует).
+- **Cert:** тег `moe` — сценарии 5.1-moe-basic, 5.2-moe-parallel-waves, 5.3-moe-read-after-write (timeoutMs 600_000).
+- **Test seams:** `orchestratorOverride/executorOverride/verifierOverride` (MoEDeps),
+  `AgentDeps.runWithMoEOverride`, `ToolContext.agentFactory` — vi.mock в Bun глобален на процесс, не использовать.
+
 ### Current Version: 0.56.4
 
 ### Changelog

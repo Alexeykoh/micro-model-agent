@@ -1,8 +1,8 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve, extname, dirname, join } from "path";
 import { spawn } from "child_process";
 import { t } from "../../i18n/index";
-import type { MoEPlan } from "./types";
+import type { MoEPlan, MoESubtask } from "./types";
 import type { StepKind } from "./planner";
 import type { AppConfig } from "../../config/types";
 import { validateExpertConfig } from "../../config/experts";
@@ -13,6 +13,14 @@ import { findExistingFile } from "./auditor";
 export interface VerificationItem {
   passed: boolean;
   message: string;
+}
+
+/** Result of checking one subtask's machine-readable success_criteria. */
+export interface SubtaskCriteriaResult {
+  errors: string[];
+  /** LLM-only criteria (not machine-checkable) — surfaced as warnings. */
+  warnings: string[];
+  details: VerificationItem[];
 }
 
 export interface StepVerificationResult {
@@ -113,6 +121,81 @@ export class StepVerifier {
     return Promise.all(files.map((f) => this.checkFileExists(f)));
   }
 
+  /**
+   * Check a subtask's machine-readable success_criteria BEFORE the merge
+   * decision (Plan 5.1). Supported forms:
+   * - `file-exists:<path>`
+   * - `substring-in-file:<path>:<text>`
+   * - `command-exit-0:<command>`
+   * Anything else is treated as an LLM-only criterion and reported as a
+   * warning (never an error) so the Router still sees it in context.
+   */
+  async verifySubtaskCriteria(subtask: MoESubtask): Promise<SubtaskCriteriaResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const details: VerificationItem[] = [];
+
+    for (const criterion of subtask.success_criteria || []) {
+      const sep = criterion.indexOf(":");
+      if (sep <= 0) {
+        warnings.push(`Subtask "${subtask.id}": non-machine criterion "${criterion}" (LLM-only)`);
+        continue;
+      }
+      const kind = criterion.slice(0, sep);
+      const rest = criterion.slice(sep + 1);
+
+      if (kind === "file-exists") {
+        const check = await this.checkFileExists(rest);
+        details.push(check);
+        if (!check.passed) errors.push(`[${subtask.id}] ${check.message}`);
+        continue;
+      }
+
+      if (kind === "substring-in-file") {
+        const colon = rest.indexOf(":");
+        if (colon <= 0) {
+          warnings.push(
+            `Subtask "${subtask.id}": malformed substring-in-file criterion "${criterion}"`,
+          );
+          continue;
+        }
+        const path = rest.slice(0, colon);
+        const needle = rest.slice(colon + 1);
+        const resolved = resolve(this.baseDir, path);
+        if (!existsSync(resolved)) {
+          const item = { passed: false, message: t("verify.file_not_found", { path }) };
+          details.push(item);
+          errors.push(`[${subtask.id}] ${item.message}`);
+          continue;
+        }
+        const content = readFileSync(resolved, "utf-8");
+        const passed = content.includes(needle);
+        details.push({ passed, message: `substring "${needle}" in ${path}: ${passed}` });
+        if (!passed) errors.push(`[${subtask.id}] "${needle}" not found in ${path}`);
+        continue;
+      }
+
+      if (kind === "command-exit-0") {
+        try {
+          await this.runAsync(rest, this.baseDir, 30_000);
+          details.push({ passed: true, message: `command ok: ${rest}` });
+        } catch (e: any) {
+          const item = {
+            passed: false,
+            message: `command failed: ${rest} (${String(e.message).slice(0, 200)})`,
+          };
+          details.push(item);
+          errors.push(`[${subtask.id}] ${item.message}`);
+        }
+        continue;
+      }
+
+      warnings.push(`Subtask "${subtask.id}": unknown criterion kind "${kind}" (LLM-only)`);
+    }
+
+    return { errors, warnings, details };
+  }
+
   async verifyMoEManifest(
     plan: MoEPlan,
     config: AppConfig,
@@ -142,6 +225,12 @@ export class StepVerifier {
           errors.push(check.message);
         }
       }
+
+      // Machine-readable success_criteria (Plan 5.1) — checked before merge.
+      const criteria = await this.verifySubtaskCriteria(sub);
+      errors.push(...criteria.errors);
+      warnings.push(...criteria.warnings);
+      details.push(...criteria.details);
     }
 
     return {

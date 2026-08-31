@@ -203,6 +203,14 @@ export const subagentTool: ToolDefinition = {
       const fullTask = context ? `${task}\n\nContext: ${context}` : task;
       try {
         const result = await subAgent.run(fullTask);
+        const pickUsage = () =>
+          result.promptTokens !== undefined || result.totalTokens !== undefined
+            ? {
+                promptTokens: result.promptTokens ?? 0,
+                completionTokens: result.completionTokens ?? 0,
+                totalTokens: result.totalTokens ?? 0,
+              }
+            : undefined;
         if (!result.success) {
           let output = `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`;
           const scopeReq = scopeCollector.toScopeRequest();
@@ -238,12 +246,14 @@ export const subagentTool: ToolDefinition = {
             // Structured path so callers (MoE executor) don't parse the
             // localized `output` string.
             artifactPath: abs,
+            usage: pickUsage(),
           };
         }
 
         return {
           success: true,
           output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
+          usage: pickUsage(),
         };
       } finally {
         // Restore the parent's exact scope: undefined means "no restrictions"

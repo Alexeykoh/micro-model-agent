@@ -56,6 +56,8 @@ export interface PricingConfig {
 export interface OrchestratorConfig {
   model?: string;
   provider?: ProviderConfig;
+  /** Context window for the orchestrator model (default 32768; entry overrides). */
+  contextWindow?: number;
 }
 
 export interface ContextBudget {
@@ -113,6 +115,8 @@ export interface ExpertConfig {
   model: string;
   tool_tags: string[];
   max_attempts?: number;
+  /** One-line capability summary rendered into the MoE planner prompt. */
+  description?: string;
 }
 
 export interface MCPHeader {

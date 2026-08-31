@@ -59,6 +59,18 @@ export interface MoEExecutorDeps {
   signal?: AbortSignal;
   /** Tool events (start/end) forwarded to the renderer around each subtask. */
   onTool?: (ev: import("../../core/types").ToolEvent) => void;
+  /** Observability event sink (moe_subtask) — wired to session.jsonl by runWithMoE. */
+  onEvent?: (event: { type: "moe_subtask"; data: Record<string, unknown> }) => void;
+  /** Real session id for audit log / artifacts (was hardcoded "moe"). */
+  sessionId?: string;
+}
+
+/** Aggregated token usage per expert_tag (cost attribution, Plan 4.2). */
+export interface TagUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  subtasks: number;
 }
 
 export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
@@ -94,6 +106,7 @@ async function executeSubtask(
   deps: MoEExecutorDeps,
   depResults: Map<string, SubtaskResult>,
   sharedContext?: { rules: string[]; refs: string[] },
+  onUsage?: (expertTag: string, usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void,
 ): Promise<SubtaskResult> {
   const startTime = Date.now();
   const expertConfig: ExpertConfig | undefined = getExpertConfig(deps.config, subtask.expert_tag);
@@ -182,10 +195,13 @@ async function executeSubtask(
           logger: deps.logger,
           llmProvider: deps.llmProvider,
           toolExecutor: deps.toolExecutor,
-          sessionId: "moe",
+          sessionId: deps.sessionId || "moe",
         },
         subagentArgs,
       );
+      if (result.usage) {
+        onUsage?.(subtask.expert_tag, result.usage);
+      }
       deps.onTool?.({
         type: "end",
         tool: "subagent",
@@ -202,7 +218,7 @@ async function executeSubtask(
           if (abs) {
             const store = new ArtifactStore({
               baseDir: deps.baseDir,
-              sessionId: "moe",
+              sessionId: deps.sessionId || "moe",
             });
             const full = store.read(abs.split(/[\\/]/).pop() || ""); // file name only, scoped to root
             deps.logger.debug(
@@ -313,17 +329,53 @@ async function executeSubtask(
 
 export class MoEExecutor {
   private deps: MoEExecutorDeps;
+  private usageByTag = new Map<string, TagUsage>();
 
   constructor(deps: MoEExecutorDeps) {
     this.deps = deps;
   }
 
-  async executePlan(plan: MoEPlan): Promise<PlanResult> {
-    const results: SubtaskResult[] = [];
+  /** Aggregated token usage per expert_tag across all executed subtasks. */
+  getUsageByTag(): Record<string, TagUsage> {
+    return Object.fromEntries(this.usageByTag);
+  }
+
+  private recordUsage(
+    expertTag: string,
+    usage: { promptTokens: number; completionTokens: number; totalTokens: number },
+  ): void {
+    const entry = this.usageByTag.get(expertTag) ?? {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      subtasks: 0,
+    };
+    entry.promptTokens += usage.promptTokens;
+    entry.completionTokens += usage.completionTokens;
+    entry.totalTokens += usage.totalTokens;
+    entry.subtasks += 1;
+    this.usageByTag.set(expertTag, entry);
+  }
+
+  async executePlan(
+    plan: MoEPlan,
+    opts?: {
+      /** Selective re-plan (Plan 5.1): subtasks whose ids are listed here are
+       * NOT re-executed — their previous successful results are injected as
+       * `carriedResults` so dependencies of re-executed subtasks resolve. */
+      skipIds?: ReadonlySet<string>;
+      carriedResults?: SubtaskResult[];
+    },
+  ): Promise<PlanResult> {
+    const skipIds = opts?.skipIds;
+    const carried = opts?.carriedResults ?? [];
+    const results: SubtaskResult[] = carried.map((r) => ({ ...r }));
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const waves = topologicalSort(plan.subtasks);
+    const subtasks =
+      skipIds && skipIds.size > 0 ? plan.subtasks.filter((s) => !skipIds.has(s.id)) : plan.subtasks;
+    const waves = topologicalSort(subtasks);
 
     if (waves.length === 0) {
       return {
@@ -336,8 +388,8 @@ export class MoEExecutor {
 
     // Verify all subtasks are included — catch silent drops from unresolved dependencies
     const sortedCount = waves.flat().length;
-    if (sortedCount < plan.subtasks.length) {
-      const missing = plan.subtasks
+    if (sortedCount < subtasks.length) {
+      const missing = subtasks
         .filter((s) => !waves.flat().some((w) => w.id === s.id))
         .map((s) => s.id);
       return {
@@ -377,9 +429,19 @@ export class MoEExecutor {
           release();
           throw newAbortError();
         }
+        this.deps.onEvent?.({
+          type: "moe_subtask",
+          data: { subtaskId: subtask.id, expertTag: subtask.expert_tag, status: "start" },
+        });
         let result: SubtaskResult;
         try {
-          result = await executeSubtask(subtask, this.deps, depResults, plan.shared_context);
+          result = await executeSubtask(
+            subtask,
+            this.deps,
+            depResults,
+            plan.shared_context,
+            (tag, usage) => this.recordUsage(tag, usage),
+          );
           if (!result.success && this.deps.onScopeRequest) {
             result = await this.resolveScopeAndRetry(subtask, result, depResults, plan.shared_context);
           }
@@ -396,6 +458,16 @@ export class MoEExecutor {
         } finally {
           release();
         }
+        this.deps.onEvent?.({
+          type: "moe_subtask",
+          data: {
+            subtaskId: subtask.id,
+            expertTag: subtask.expert_tag,
+            status: result.success ? "done" : "failed",
+            durationMs: result.durationMs,
+            summary: result.summary,
+          },
+        });
         results.push(result);
         return result;
       });
@@ -411,7 +483,13 @@ export class MoEExecutor {
       errors.push(...failed.map((f) => `[${f.subtaskId}] ${f.error || f.summary}`));
     }
 
-    return { success: failed.length === 0, results, errors, warnings };
+    return {
+      success: failed.length === 0,
+      results,
+      errors,
+      warnings,
+      ...(carried.length > 0 ? { carriedSubtaskIds: carried.map((r) => r.subtaskId) } : {}),
+    };
   }
 
   /**
@@ -448,7 +526,13 @@ export class MoEExecutor {
         `MoE: approved scope expansion for "${subtask.id}": +write [${decision.write.join(", ")}] +read [${decision.read.join(", ")}]`,
       );
 
-      const retry = await executeSubtask(subtask, this.deps, depResults, sharedContext);
+      const retry = await executeSubtask(
+        subtask,
+        this.deps,
+        depResults,
+        sharedContext,
+        (tag, usage) => this.recordUsage(tag, usage),
+      );
       if (retry.success || !retry.scopeRequest) return retry;
       current = retry;
     }

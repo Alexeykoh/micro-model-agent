@@ -31,7 +31,11 @@ export interface SessionLogEntry {
     | "llm_usage"
     | "session_start"
     | "baseline_typecheck"
-    | "reasoning_control";
+    | "reasoning_control"
+    | "moe_plan"
+    | "moe_subtask"
+    | "moe_replan"
+    | "moe_verify";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -101,6 +105,19 @@ export interface SessionLogEntry {
   level?: string;
   strategy?: string;
   probePassed?: boolean;
+  // moe_* event fields (Plan 4.2 observability)
+  title?: string;
+  subtaskId?: string;
+  expertTag?: string;
+  status?: string;
+  subtaskIds?: string[];
+  cycle?: number;
+  explanation?: string;
+  decision?: string;
+  usageByTag?: Record<
+    string,
+    { promptTokens: number; completionTokens: number; totalTokens: number; subtasks: number }
+  >;
 }
 
 export class SessionStore {

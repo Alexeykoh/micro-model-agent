@@ -432,6 +432,8 @@ export class Agent {
               onTool: countTool,
               onPhase,
               signal: this.abortController.signal,
+              onEvent: (event) => slog.logMoE(event.type, event.data),
+              sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
             },
           )
         : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase);

@@ -1,31 +1,27 @@
-import { createProvider } from "../modules/providers/create";
 import type { LLMProvider, Message, Chunk } from "./provider";
-import type { RetryConfig } from "../config/types";
+import type { ProviderConfig, RateLimitConfig, RetryConfig } from "../config/types";
+import type { Logger } from "../logger/app-logger";
 import type { MoEPlan } from "../modules/execution/types";
 import type { OrchestratorResult, VerifyInput } from "./types";
+import { ProviderManager } from "../modules/providers/manager";
+import { FallbackProvider } from "../modules/providers/fallback";
 import { jsonrepair } from "jsonrepair";
 import { parseChunks } from "./response";
 
 export interface OrchestratorConfig {
   model?: string;
-  provider?: {
-    type?: string;
-    baseUrl?: string;
-    apiKey?: string;
-  };
+  /** Full provider config — entries[] or legacy {type,baseUrl,apiKey}. */
+  provider?: ProviderConfig;
   retry?: RetryConfig;
+  rateLimits?: RateLimitConfig;
+  /** Fallback context window when the provider entry does not specify one. */
+  contextWindow?: number;
+  logger?: Logger;
+  /** Expert registry rendered into the planner prompt (Plan 3.1). */
+  experts?: Record<string, { description?: string; tool_tags?: string[] }>;
 }
 
-const PLAN_SYSTEM_PROMPT = `You are a planning assistant for an agent system with multiple expert sub-agents.
-Break down the user's task into subtasks that can be executed by different expert agents.
-
-Available experts and their tool tags:
-- code: file operations, code editing, shell commands
-- research: web search, web fetch, web browse, history search
-- browser: browser automation, screenshots
-- vision: browser + file reading for visual tasks
-
-Rules:
+const PLAN_SYSTEM_PROMPT_RULES = `Rules:
 1. Each subtask must have an expert_tag from the available experts.
 2. Use depends_on for ordering when subtask B reads what subtask A writes.
 3. Independent subtasks should NOT depend on each other (they run in parallel).
@@ -56,6 +52,45 @@ Respond with a JSON object only (no markdown fences):
   }
 }`;
 
+const PLAN_SYSTEM_PROMPT = `You are a planning assistant for an agent system with multiple expert sub-agents.
+Break down the user's task into subtasks that can be executed by different expert agents.
+
+Available experts and their tool tags:
+- code: file operations, code editing, shell commands
+- research: web search, web fetch, web browse, history search
+- browser: browser automation, screenshots
+- vision: browser + file reading for visual tasks
+
+${PLAN_SYSTEM_PROMPT_RULES}`;
+
+/**
+ * Render the planner system prompt from the configured experts instead of the
+ * hardcoded code/research/browser/vision list, so user-defined experts
+ * (config.experts) are visible to the Router. Experts without a description
+ * fall back to their tool_tags. Empty/missing registry → legacy hardcoded
+ * prompt (back-compat for direct OrchestratorClient usage in tests).
+ */
+export function buildPlanSystemPrompt(
+  experts?: Record<string, { description?: string; tool_tags?: string[] }>,
+): string {
+  if (!experts || Object.keys(experts).length === 0) {
+    return PLAN_SYSTEM_PROMPT;
+  }
+  const lines = Object.entries(experts).map(([tag, cfg]) => {
+    const desc =
+      cfg.description ||
+      (cfg.tool_tags?.length ? `tools: ${cfg.tool_tags.join(", ")}` : "general purpose");
+    return `- ${tag}: ${desc}`;
+  });
+  return `You are a planning assistant for an agent system with multiple expert sub-agents.
+Break down the user's task into subtasks that can be executed by different expert agents.
+
+Available experts and their tool tags:
+${lines.join("\n")}
+
+${PLAN_SYSTEM_PROMPT_RULES}`;
+}
+
 const VERIFY_SYSTEM_PROMPT = `You are a verification and merge assistant for an agent system with multiple expert sub-agents.
 You receive the original plan, the results from each subtask, and any verification errors.
 Your job is to determine if the overall task was completed successfully or if re-planning is needed.
@@ -78,43 +113,58 @@ or
 
 const DEFAULT_BASE_URL = "http://localhost:1234/v1";
 
+/** Fallback context window when neither the provider entry nor the config sets one. */
+const DEFAULT_ORCH_CONTEXT_WINDOW = 32768;
+
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
 
   constructor(config: OrchestratorConfig, defaultProvider?: LLMProvider) {
     this.config = config;
-    if (config.model) {
-      if (config.provider) {
-        this.provider = this.createProviderInstance(
-          config.provider.type ?? "openai-compat",
-          config.model,
-          config.provider.baseUrl || DEFAULT_BASE_URL,
-          config.provider.apiKey,
-          config.retry,
-        );
-      } else if (defaultProvider) {
-        this.provider = defaultProvider;
-      } else {
-        this.provider = this.createProviderInstance(
-          "openai-compat",
-          config.model,
-          DEFAULT_BASE_URL,
-          undefined,
-          config.retry,
-        );
-      }
+    if (!config.model) return;
+
+    if (config.provider) {
+      this.provider = this.buildManagedProvider(config);
+    } else if (defaultProvider) {
+      this.provider = defaultProvider;
+    } else {
+      this.provider = this.buildManagedProvider({
+        ...config,
+        provider: { type: "openai-compat", baseUrl: DEFAULT_BASE_URL },
+      });
     }
   }
 
-  private createProviderInstance(
-    type: string,
-    model: string,
-    baseUrl: string,
-    apiKey?: string,
-    retry?: RetryConfig,
-  ): LLMProvider {
-    return createProvider(type, { model, baseUrl, apiKey, contextWindow: 32768, retry });
+  /**
+   * Build the orchestrator provider through ProviderManager so per-entry
+   * contextWindow/retry/rateLimits and failover entries are honored
+   * (legacy {type,baseUrl,apiKey} configs are normalized by the manager).
+   * Previously the provider was built directly with a hardcoded 32768 window
+   * and no retry/rate-limit/failover support at all.
+   */
+  private buildManagedProvider(config: OrchestratorConfig): LLMProvider {
+    const providerCfg = config.provider!;
+    const manager = new ProviderManager(
+      { ...providerCfg, baseUrl: providerCfg.baseUrl || DEFAULT_BASE_URL },
+      {
+        contextWindow: config.contextWindow ?? DEFAULT_ORCH_CONTEXT_WINDOW,
+        retry: config.retry,
+        rateLimits: config.rateLimits,
+        logger: config.logger,
+      },
+    );
+    manager.setModel(config.model!);
+
+    let provider: LLMProvider = manager.active;
+    if (providerCfg.fallback && manager.listNames().length > 1) {
+      provider = new FallbackProvider(manager, (from, to, error) => {
+        config.logger?.warn(
+          `orchestrator provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
+        );
+      });
+    }
+    return provider;
   }
 
   isEnabled(): boolean {
@@ -162,7 +212,7 @@ export class OrchestratorClient {
       return { error: "Orchestrator not enabled — no orchestrator model configured" };
 
     const messages: Message[] = [
-      { role: "system", content: PLAN_SYSTEM_PROMPT },
+      { role: "system", content: buildPlanSystemPrompt(this.config.experts) },
       { role: "user", content: userPrompt },
     ];
 

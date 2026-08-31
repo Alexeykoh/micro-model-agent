@@ -109,6 +109,8 @@ export interface ToolResult {
   diff?: string;
   /** Absolute path of a persisted artifact (subagent result_mode:"file"). */
   artifactPath?: string;
+  /** Token usage of the sub-agent run (MoE cost attribution per expert_tag). */
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
 export interface ToolCall {
