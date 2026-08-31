@@ -112,7 +112,11 @@ export async function runWithMoE(
   }
 
   if (!orchestrator.isEnabled()) {
-    logger.debug("MoE enabled but no orchestrator model configured — falling back to single-agent");
+    // Visible at default log level: a user who enabled moe.enabled must be
+    // able to tell why MoE never kicked in (missing orchestrator.model).
+    logger.warn(
+      "MoE enabled but no orchestrator model configured — falling back to single-agent. Set orchestrator.model to activate MoE.",
+    );
     return fallback();
   }
 

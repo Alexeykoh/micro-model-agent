@@ -185,8 +185,16 @@ export const subagentTool: ToolDefinition = {
         estimatedTokens: 150,
       };
 
+      // MoE is a TOP-LEVEL orchestration mode: a sub-agent spawned by the
+      // subagent tool must always run the plain single-agent loop. Sharing the
+      // parent's config here made every MoE sub-agent re-enter runWithMoE —
+      // planning its own subtasks and spawning nested sub-agents recursively
+      // (bounded only by maxRecursionDepth), which hung execution for many
+      // minutes with zero progress events.
+      const subConfig = { ...ctx.config, moe: { ...ctx.config.moe, enabled: false } };
+
       const subDeps = {
-        config: ctx.config,
+        config: subConfig,
         llmProvider: ctx.llmProvider,
         toolExecutor: ctx.toolExecutor,
         pluginManager: subPluginManager,
