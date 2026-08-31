@@ -39,6 +39,7 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
   MAX_LLM_ERROR_RETRIES,
   MAX_REPEATED_TOOL_CALLS,
+  MUTATION_CYCLE_NUDGE_THRESHOLD,
 } from "./agent/constants";
 
 export { toolOutputCharLimit } from "./agent/tool-output";
@@ -104,6 +105,43 @@ export interface AgentDeps {
   planSummary?: () => string | null;
   /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
   runWithMoEOverride?: typeof runWithMoE;
+}
+
+/**
+ * Ключ целевого объекта мутации для детекции «перфекционизм-цикла».
+ * edit_file/write_file → путь файла; bash → нормализованная команда.
+ * Остальные тула (read-only, bookkeeping) не считаются мутациями.
+ * Внимание: в цикле toolCall.arguments — сырая JSON-строка от провайдера.
+ */
+export function mutationTargetKey(
+  name: string,
+  rawArgs: unknown,
+): string | null {
+  let a: Record<string, unknown> | null = null;
+  if (typeof rawArgs === "string") {
+    try {
+      a = JSON.parse(rawArgs) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else if (rawArgs && typeof rawArgs === "object") {
+    a = rawArgs as Record<string, unknown>;
+  }
+  if (!a) return null;
+  if ((name === "edit_file" || name === "write_file") && typeof a.path === "string") {
+    return `write:${a.path.replace(/\\/g, "/").toLowerCase()}`;
+  }
+  if (name === "bash" && typeof a.command === "string") {
+    const cmd = a.command.replace(/\s+/g, " ").trim().slice(0, 80).toLowerCase();
+    return cmd ? `bash:${cmd}` : null;
+  }
+  // Bookkeeping churn: plan/todo repeated over the same action with slightly
+  // different args burned 10+ iterations in ses_mthn3c2a after an audit
+  // rejection (the model "fixed" the plan instead of the work).
+  if ((name === "plan" || name === "todo") && typeof a.action === "string") {
+    return `book:${name}:${a.action.toLowerCase()}`;
+  }
+  return null;
 }
 
 export class Agent {
@@ -784,6 +822,28 @@ export class Agent {
         state.lastToolSignature = signature;
       }
 
+      // Детекция «перфекционизм-цикла»: многократные правки ОДНОГО файла или
+      // запуски одной команды через не-подряд итерации (edit → build → read →
+      // edit…). Аргументы каждый раз новые, поэтому подряд-детекция дубликатов
+      // выше этот паттерн не видит. Nudge уходит ПОСЛЕ tool-результатов, чтобы
+      // не ломать парность assistant(tool_calls) → tool(results).
+      const cycleNudges: string[] = [];
+      if (sawToolCall) {
+        for (const tc of toolCalls) {
+          const target = mutationTargetKey(tc.name, tc.arguments);
+          if (!target) continue;
+          const count = (state.toolTargetCounts.get(target) ?? 0) + 1;
+          state.toolTargetCounts.set(target, count);
+          if (
+            count >= MUTATION_CYCLE_NUDGE_THRESHOLD &&
+            !state.cycleNudgedKeys.has(target)
+          ) {
+            state.cycleNudgedKeys.add(target);
+            cycleNudges.push(target);
+          }
+        }
+      }
+
       if (sawToolCall) {
         const batch = await toolBatch.execute(
           state,
@@ -798,6 +858,16 @@ export class Agent {
         );
         if (batch.interrupted) {
           break;
+        }
+
+        if (cycleNudges.length > 0) {
+          logger.info(
+            `Perfectionism cycle detected (${cycleNudges.length} target(s) at ${MUTATION_CYCLE_NUDGE_THRESHOLD}+ mutations) — nudging model to finalize`,
+          );
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.</system-summary>`,
+          });
         }
 
         this.contextRenderer.render(this.deps.config.ui, contextManager, onMeta);

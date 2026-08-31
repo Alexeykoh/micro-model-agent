@@ -396,7 +396,7 @@ describe("Agent", () => {
     const addMessage = vi.fn();
     const deps = createMockDeps({
       llmProvider: mockProvider,
-      exitOnComplete: true,
+      config: { ...createMockDeps().config, maxToolIterations: 20 },
       contextManager: {
         addMessage,
         getMessageCount: vi.fn().mockReturnValue(0),
@@ -499,6 +499,91 @@ describe("Agent", () => {
       ),
     ).toBe(true);
     expect(result.text).toBe("Done with a different approach");
+  });
+
+  it("nudges the model when one target is mutated repeatedly (perfectionism cycle)", async () => {
+    // Alternating identical bash builds and distinct other-tool calls — the
+    // consecutive-duplicate guard must NOT fire, but after the 5th mutation
+    // of the same target the cycle guard injects a finalize-nudge.
+    const stream = (chunk: object) =>
+      (async function* () {
+        yield chunk;
+        yield { type: "done" as const, finishReason: "tool_calls" as const };
+      })();
+    const calls: object[] = [];
+    for (let i = 0; i < 5; i++) {
+      // Real providers deliver arguments as a raw JSON string — the loop
+      // parses them into objects (chunk.toolCall.arguments → JSON.parse).
+      calls.push(stream({
+        type: "tool_call" as const,
+        toolCall: { id: `b${i}`, name: "bash", arguments: JSON.stringify({ command: "node build.js" }) },
+      }));
+      calls.push(stream({
+        type: "tool_call" as const,
+        toolCall: { id: `r${i}`, name: "test_tool", arguments: JSON.stringify({ n: i }) },
+      }));
+    }
+    calls.push(
+      (async function* () {
+        yield { type: "text" as const, content: "Finished polishing" };
+        yield { type: "done" as const, finishReason: "stop" as const };
+      })(),
+    );
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockImplementation(() => calls.shift()!),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const addMessage = vi.fn();
+    const deps = createMockDeps({
+      llmProvider: mockProvider,
+      config: { ...createMockDeps().config, maxToolIterations: 20 },
+      contextManager: {
+        addMessage,
+        getMessageCount: vi.fn().mockReturnValue(0),
+        needsCompaction: vi.fn().mockReturnValue(false),
+        compact: vi.fn(),
+        getActiveHistory: vi.fn().mockReturnValue([]),
+        getEstimatedTokens: vi.fn().mockReturnValue(50),
+        getBudget: vi.fn().mockReturnValue({
+          systemPrompt: 1024,
+          responseReserve: 512,
+          history: 2560,
+        }),
+        updateSystemPrompt: vi.fn(),
+        getCompactionCount: vi.fn().mockReturnValue(0),
+        getIterationsSinceCompaction: vi.fn().mockReturnValue(0),
+        getQuality: vi.fn().mockReturnValue(100),
+        noteIteration: vi.fn(),
+        setToolTokens: vi.fn(),
+      },
+      toolExecutor: {
+        execute: vi.fn(async (call: any) => ({
+          success: true,
+          output: "ok",
+          toolCallId: call.id,
+        })),
+        getToolDefinitions: vi.fn().mockReturnValue([]),
+        getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as any,
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("build repeatedly");
+
+    // 10 tool iterations + final answer — the run is NOT hard-stopped.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(11);
+    expect(
+      addMessage.mock.calls.some(
+        (c: any) =>
+          typeof c[0]?.content === "string" &&
+          c[0].content.includes("same target many times"),
+      ),
+    ).toBe(true);
+    expect(result.text).toBe("Finished polishing");
   });
 
   it("retries empty (reasoning-only) responses and returns the final text", async () => {

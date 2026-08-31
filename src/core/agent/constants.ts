@@ -45,3 +45,10 @@ export const MAX_AUDIT_RETRIES = 3;
 export const MAX_EMPTY_RESPONSE_RETRIES = 2;
 /** Макс. повторных одинаковых тулов в режиме exit-on-complete. */
 export const MAX_REPEATED_TOOL_CALLS = 2;
+/**
+ * Порог цикла «перфекционизм»: столько правок одного файла (или запусков
+ * одной команды) за прогон, после которых цикл подталкивает модель закрыть
+ * задачу. Наблюдение ses_mthn3c2a: задача готова на итерации 13, модель ещё
+ * 20+ итераций микроредактировала один файл (edit → build → read → edit…).
+ */
+export const MUTATION_CYCLE_NUDGE_THRESHOLD = 5;

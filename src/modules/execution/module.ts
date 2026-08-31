@@ -278,6 +278,32 @@ export class ExecutionModule implements AgentModule {
    * Final audit before the agent may declare the task done. Returns null when
    * no plan is active; otherwise checks plan completion + artifact existence.
    */
+  /**
+   * Evidence-based auto-close of pending plan steps whose deliverables exist
+   * on disk. Small models routinely finish the actual work but forget the
+   * `plan update` bookkeeping (observed ses_mthn3c2a: 2/5 steps marked done
+   * while every artifact existed — the audit gate then rejected a correct
+   * final answer and burned all retry budget on bookkeeping, not on work).
+   *
+   * Standard is the SAME one the auditor already applies to done steps: every
+   * file-like token in the step description resolves to an existing file.
+   * Steps without any file token stay pending (nothing to verify).
+   */
+  private autoCloseEvidenceSteps(plan: Plan): number {
+    let closed = 0;
+    for (const step of plan.steps) {
+      if (step.status === "done" || step.status === "skipped") continue;
+      const tokens = extractFileLikeTokens(stripUrls(step.description));
+      if (tokens.length === 0) continue;
+      const allExist = tokens.every((f) => findExistingFile(this.baseDir, f) !== null);
+      if (!allExist) continue;
+      step.status = "done";
+      step.note = `auto-closed by final audit: all named files exist (${tokens.join(", ")})`;
+      closed++;
+    }
+    return closed;
+  }
+
   async runFinalAudit(): Promise<{
     passed: boolean;
     done: number;
@@ -293,11 +319,15 @@ export class ExecutionModule implements AgentModule {
     if (!this.tracker) {
       if (!this.completedPlan) return null;
       const plan = this.completedPlan;
+      const autoClosed = this.autoCloseEvidenceSteps(plan);
       const audit = await this.auditor.audit(plan);
       const pendingSteps = plan.steps.flatMap((s) =>
         s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
       );
       const done = plan.steps.filter((s) => s.status === "done").length;
+      if (autoClosed > 0) {
+        this.store.saveActive(plan);
+      }
       return {
         passed: audit.passed && pendingSteps.length === 0,
         done,
@@ -312,6 +342,10 @@ export class ExecutionModule implements AgentModule {
       return null;
     }
     const plan = this.tracker.getPlan();
+    const autoClosed = this.autoCloseEvidenceSteps(plan);
+    if (autoClosed > 0) {
+      this.store.saveActive(plan);
+    }
     const audit = await this.auditor.audit(plan);
     const pendingSteps = plan.steps.flatMap((s) =>
       s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],

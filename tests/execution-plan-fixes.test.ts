@@ -258,6 +258,50 @@ describe("final audit still runs for a completed plan", () => {
     expect(audit!.missingFiles).toContain("src/a.ts");
   });
 
+  it("auto-closes pending steps whose named files all exist (evidence-based)", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Create src/a.ts with content", "Create src/b.ts with content"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeFileSync(join(tmpDir, "src", "b.ts"), "export const b = 2;\n");
+
+    // The model never called plan update — the audit itself must recognize
+    // the deliverables and close the steps instead of rejecting the answer.
+    const audit = await execModule.runFinalAudit();
+    expect(audit).not.toBeNull();
+    expect(audit!.passed).toBe(true);
+    expect(audit!.done).toBe(2);
+    const steps = execModule.getTracker()!.getPlan().steps;
+    for (const s of steps) {
+      expect(s.status).toBe("done");
+      expect(s.note).toContain("auto-closed");
+    }
+  });
+
+  it("keeps pending steps with no evidence (file missing or no file token)", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Create src/missing.ts with content", "Review the overall approach"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+
+    const audit = await execModule.runFinalAudit();
+    expect(audit).not.toBeNull();
+    expect(audit!.passed).toBe(false);
+    // src/missing.ts does not exist → step stays pending; the file-less step
+    // stays pending too (nothing to verify against).
+    expect(audit!.done).toBe(0);
+    expect(audit!.pendingSteps).toHaveLength(2);
+  });
+
   it("records the completed plan on the auto-advance path too", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};

@@ -48,6 +48,17 @@ export interface LoopState {
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
 
+  /**
+   * Сколько раз за прогон мутировался один и тот же целевой объект
+   * (файл для edit_file/write_file, нормализованная команда для bash).
+   * Детектирует «перфекционизм-цикл» — многократный edit→build→read по
+   * одному файлу, который подряд-детекция дубликатов не видит (аргументы
+   * каждый раз новые).
+   */
+  toolTargetCounts: Map<string, number>;
+  /** Ключи-цели, по которым nudge «закрывай задачу» уже отправлен (1 раз на цель). */
+  cycleNudgedKeys: Set<string>;
+
   /** Совокупные prompt-токены от API (заменяются per-итерацию). */
   apiPromptTokens: number;
   /** Совокупные completion-токены от API (заменяются per-итерацию). */
@@ -111,6 +122,8 @@ export function createLoopState(): LoopState {
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
     memoryRuleRecorded: new Set(),
+    toolTargetCounts: new Map(),
+    cycleNudgedKeys: new Set(),
     apiPromptTokens: 0,
     apiCompletionTokens: 0,
     apiCompletionChars: 0,
