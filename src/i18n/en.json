@@ -552,7 +552,7 @@
   "exec.audit_leftovers": "[✗] Task incomplete: {done}/{total} steps done, {files} files from delete-steps still exist",
   "exec.audit_fail_tests": "[✗] Task incomplete: {done}/{total} steps done, tests FAILING: {failed} failed / {passed} passed — {detail}",
   "exec.audit_fail_typecheck": "[✗] Task incomplete: {done}/{total} steps done, {missing} files missing, typecheck error: {typeError}",
-  "exec.audit_incomplete": "[⚠ Final audit incomplete: {summary}. Task is NOT finished — continue working. Remaining steps: {steps}]",
+  "exec.audit_incomplete": "❗ Final audit incomplete: {summary}. Task is NOT finished. Remaining steps: {steps}. Resolve them - pick ONE path: (a) if the step's deliverable already exists on disk, mark it done (plan update step=N status=done); (b) if the step is no longer needed, mark it skipped; (c) if the plan drifted from reality (wrong file names, changed approach), re-plan to align it. Do NOT retry plan update repeatedly without changing anything.",
   "exec.mass_edit_warning": "⚠️ Plan affects {count} files — review the full list before proceeding.",
   "exec.escalation": "\n\n⚠️ Agent stuck on step {stepId} ({description}). Escalating to user — please provide guidance.",
   "exec.hints": "\n[Hints]\n{hints}",

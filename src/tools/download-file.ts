@@ -18,7 +18,7 @@ export const downloadFileTool: ToolDefinition = {
   icon: "⬇️",
   description:
     "Download a file (image, archive, binary, font, etc.) from a URL and save it to disk. Returns only the path, size and content type — read the saved file with read_file/attach_image afterwards. Use this for binary files; web_fetch/web_browse return text only and cannot save bytes.",
-  tags: ["file", "research"],
+  tags: ["research"],
   parameters: {
     type: "object",
     properties: {

@@ -550,7 +550,7 @@
   "exec.audit_leftovers": "[✗] Задача не выполнена: {done}/{total} шагов, {files} файлов из delete-шагов всё ещё существуют",
   "exec.audit_fail_tests": "[✗] Задача не выполнена: {done}/{total} шагов, тесты ПАДАЮТ: {failed} failed / {passed} passed — {detail}",
   "exec.audit_fail_typecheck": "[✗] Задача не выполнена: {done}/{total} шагов, {missing} файлов отсутствует, ошибка typecheck: {typeError}",
-  "exec.audit_incomplete": "[⚠ Финальная проверка не пройдена: {summary}. Задача НЕ завершена — продолжайте работу. Оставшиеся шаги: {steps}]",
+  "exec.audit_incomplete": "❗ Финальная проверка не пройдена: {summary}. Задача НЕ завершена. Незакрытые шаги: {steps}. Устрани одним путём: (a) если результат шага уже существует на диске — закрой шаг (plan update step=N status=done); (b) если шаг больше не нужен — status=skipped; (c) если план разошёлся с реальностью (другие имена файлов, сменился подход) — сделай re-plan. Не повторяй plan update без изменений.",
   "exec.mass_edit_warning": "⚠️ План затрагивает {count} файлов — проверьте полный список перед продолжением.",
   "exec.escalation": "\n\n⚠️ Агент застрял на шаге {stepId} ({description}). Эскалация к пользователю — пожалуйста, подскажите как действовать.",
   "exec.hints": "\n[Подсказки]\n{hints}",

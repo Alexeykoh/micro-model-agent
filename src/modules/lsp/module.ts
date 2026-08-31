@@ -14,6 +14,7 @@ import { t } from "../../i18n/index";
 import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
 import { severityLabels, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
 import { errMsg } from "../../utils";
+import { join } from "path";
 
 /**
  * Consecutive LSP failures before a server is disabled for the session. A dead
@@ -24,6 +25,27 @@ import { errMsg } from "../../utils";
  * for that server — a CSS timeout must not take TypeScript checks down too.
  */
 const MAX_CONSECUTIVE_LSP_FAILURES = 3;
+
+/**
+ * Module-resolution diagnostics that are meaningless without a type
+ * environment. In a bare directory (no tsconfig.json / node_modules) the
+ * TypeScript server reports `Cannot find module 'fs'` and
+ * `Cannot find name '__dirname'` for perfectly valid Node code — the model
+ * then abandons a working approach because of phantom errors (observed
+ * ses_mtho2oab: LSP "errors" pushed the model off a planned .ts file to .js
+ * and into a plan-drift spiral). Suppressed with an explicit inconclusive
+ * note when no type env exists near the project root.
+ */
+const TYPE_ENV_DIAG_PATTERN =
+  /Cannot find module ['"][^'"]+['"] or its corresponding type declarations|Cannot find name '(__dirname|__filename|require|process|Buffer|console)'|Do you need to install type definitions/;
+
+function hasTypeEnvironment(projectRoot: string): boolean {
+  return (
+    existsSync(join(projectRoot, "tsconfig.json")) ||
+    existsSync(join(projectRoot, "jsconfig.json")) ||
+    existsSync(join(projectRoot, "node_modules"))
+  );
+}
 
 export class LspModule implements AgentModule {
   name = "lsp";
@@ -210,6 +232,7 @@ export class LspModule implements AgentModule {
     const notes: string[] = [];
     const checkedFiles: string[] = [];
     let checked = 0;
+    let suppressedTypeEnvDiags = 0;
 
     for (const file of files) {
       const serverConfig = getServerForFile(file, this.config);
@@ -218,10 +241,20 @@ export class LspModule implements AgentModule {
       if (this.disabledServers.has(key)) continue;
       const projectRoot = findProjectRoot(file, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
       try {
-        const diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
+        let diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
         this.failuresByServer.set(key, 0);
         checked++;
         checkedFiles.push(toForwardSlash(relative(ctx.baseDir, file)));
+        if (!hasTypeEnvironment(projectRoot)) {
+          const kept = diags.filter((d) => {
+            if (TYPE_ENV_DIAG_PATTERN.test(d.message)) {
+              suppressedTypeEnvDiags++;
+              return false;
+            }
+            return true;
+          });
+          diags = kept;
+        }
         for (const d of diags) {
           if (d.severity === 1) errors.push({ file, diag: d });
           else if (d.severity === 2) warnings.push({ file, diag: d });
@@ -257,6 +290,11 @@ export class LspModule implements AgentModule {
     }
     if (checked > 0 && errors.length === 0 && warnings.length === 0) {
       lines.push(t("lsp.check_clean", { count: String(checked) }));
+    }
+    if (suppressedTypeEnvDiags > 0) {
+      lines.push(
+        `[lsp_check inconclusive: no tsconfig.json / node_modules near project root — ${suppressedTypeEnvDiags} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]`,
+      );
     }
     lines.push(...notes);
     if (lines.length === 0) {

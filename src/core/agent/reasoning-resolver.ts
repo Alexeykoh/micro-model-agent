@@ -65,7 +65,7 @@ export class ReasoningEffortResolver {
           planCreated: state.iterPlanCreated,
           consecutiveSuccesses: state.consecutiveToolSuccesses,
           isRepetitive: state.iterRepetitive,
-          baseline: "medium",
+          baseline: reasoningConfig?.baseline ?? "medium",
         },
         deps.policyState,
       );

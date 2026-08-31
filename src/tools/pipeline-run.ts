@@ -69,7 +69,7 @@ export const pipelineRunTool: ToolDefinition = {
   icon: "▶️",
   description:
     "Run a named pipeline with YAML definition. Creates a DAG of sub-agents that execute in dependency order.",
-  tags: ["shell", "code"],
+  tags: ["shell"],
   parameters: {
     type: "object",
     properties: {

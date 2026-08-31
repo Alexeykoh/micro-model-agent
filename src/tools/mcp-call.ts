@@ -32,7 +32,7 @@ export const mcpCallTool: ToolDefinition = {
   icon: "🔗",
   description:
     "Call a tool on an MCP (Model Context Protocol) server. MCP servers provide external capabilities like databases, APIs, or specialized tools.",
-  tags: ["code", "research"],
+  tags: ["research"],
   parameters: {
     type: "object",
     properties: {

@@ -44,7 +44,7 @@ afterEach(() => {
 describe("download_file tool", () => {
   it("should have correct tool definition", () => {
     expect(downloadFileTool.name).toBe("download_file");
-    expect(downloadFileTool.tags).toContain("file");
+    expect(downloadFileTool.tags).toContain("research");
     expect(downloadFileTool.parameters.required).toEqual(["url", "path"]);
   });
 
