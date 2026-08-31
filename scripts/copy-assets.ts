@@ -10,6 +10,13 @@ await rm(dest, { recursive: true, force: true });
 await mkdir(dirname(dest), { recursive: true });
 await cp(src, dest, { recursive: true });
 
+// i18n dictionaries — shipped so the compiled JS (which imports the JSON) can
+// resolve them from the package even if the bundle was built without inlining.
+const i18nDir = join(root, "dist", "i18n");
+await mkdir(i18nDir, { recursive: true });
+await cp(join(root, "src", "i18n", "en.json"), join(i18nDir, "en.json"));
+await cp(join(root, "src", "i18n", "ru.json"), join(i18nDir, "ru.json"));
+
 const bridgeSrc = join(root, "src", "modules", "browser", "bridge-server.mjs");
 const bridgeDest = join(root, "dist", "modules", "browser");
 await mkdir(bridgeDest, { recursive: true });
