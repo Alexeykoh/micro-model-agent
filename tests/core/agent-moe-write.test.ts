@@ -2,13 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Agent } from "../../src/core/agent";
 import type { AppConfig } from "../../src/config/types";
 
-vi.mock("../../src/core/agent-moe", () => ({
-  runWithMoE: vi.fn(),
-}));
-
-import { runWithMoE } from "../../src/core/agent-moe";
-
-const mockRunWithMoE = runWithMoE as unknown as ReturnType<typeof vi.fn>;
+const mockRunWithMoE = vi.fn();
 
 function createMockDeps(overrides?: Record<string, unknown>) {
   const mockProvider = {
@@ -144,6 +138,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     toolExecutor: mockToolExecutor,
     pluginManager: mockPluginManager,
     contextManager: mockContextManager,
+    runWithMoEOverride: mockRunWithMoE,
     hallucinationDetector: {
       validate: vi.fn().mockReturnValue({ status: "pass" as const }),
       getConfidenceCheck: vi.fn().mockReturnValue({ setPreviousResponse: vi.fn() }),

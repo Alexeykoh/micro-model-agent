@@ -199,7 +199,7 @@ export const subagentTool: ToolDefinition = {
         promptBlocks: [systemPrompt],
       };
 
-      const subAgent = new Agent(subDeps);
+      const subAgent = (ctx.agentFactory ?? ((d: unknown) => new Agent(d as never)))(subDeps);
       const fullTask = context ? `${task}\n\nContext: ${context}` : task;
       try {
         const result = await subAgent.run(fullTask);

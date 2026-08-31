@@ -104,30 +104,18 @@ Definition of Done плана — в конце файла плана.
 
 ---
 
-### 53 падения в полном тест-сьюте (1403 pass / 53 fail / 1 skip)
-Все предсуществующие. Не связаны с Phase 2+3.
+### 53 падения в полном тест-сьюте ✅ ЗАКРЫТО (2026-08-31)
 
-#### Agent-тесты (36 fail) — КЛЮЧЕВАЯ ПРОБЛЕМА
-- `tests/core/agent.test.ts` падает ТОЛЬКО в параллельном режиме `bun test`
-- При `--parallel=1` или `--parallel=2/4/8` — ВСЕ agent-тесты проходят
-- При `bun test` (без флагов) — 36 agent-тестов падают с `text:"done"` вместо预期
-- Причина: `config.maxToolIterations=undefined` в параллельном воркере
-- `createMockDeps()` создаёт объект локально, но `this.deps.config` оказывается другим объектом
-- **Не воспроизводится** при запуске agent+любой другой файл по одному
-- **Не воспроизводится** при `--parallel=N` (любое N)
-- **Воспроизводится** только при `bun test` без флагов (дефолтный runner)
-- **Гипотеза**: bun test runner при дефолтном запуске группирует файлы в воркеры иначе, чем при `--parallel=N`
+**Результат:** 1782 pass / 0 fail / 1 skip — полный suite зелёный в дефолтном `bun test`.
 
-#### Другие падения (17 fail)
-- FactualCheck (1) — Windows path test
-- grep alternation (1) — shell interference
-- forbidden Windows command (1)
-- BridgeDriver (3) — Playwright не установлен
-- nested typecheck (2) — tsconfig в подпапке
-- plan create guard (3)
-- read_file (4) — path formatting
-- Path Validator glob (1) — `**` pattern
-- read_file output header (1)
+Root cause параллельных падений: `vi.mock` в Bun **глобален на процесс** — мок модуля
+в одном тест-файле подменял импорты во всех остальных файлах воркера. Большинство
+старых падений закрыли предыдущие фиксы (DI-швы, agent-тесты); последние 8
+(moe-replan/moe-abort) — из `agent-moe-write.test.ts` (vi.mock agent-moe) и
+`subagent.test.ts` (vi.mock Agent).
+
+Фикс: DI-швы вместо vi.mock — `AgentDeps.runWithMoEOverride` (src/core/agent.ts),
+`ToolContext.agentFactory` (src/tools/types.ts → src/tools/subagent.ts).
 
 ---
 
@@ -169,12 +157,16 @@ Definition of Done плана — в конце файла плана.
 | `src/modules/execution/plan-tool.ts` | 722 | `handler` — 517 |
 | `src/modules/execution/module.ts` | 665 | — |
 
-- [ ] Порядок: сначала `agent.ts` (главный hotspot, fan-in 14), затем execution-модуль, потом CLI.
+- [x] Порядок: сначала `agent.ts` (главный hotspot, fan-in 14), затем execution-модуль, потом CLI.
+      Выполнено: `d137280` (agent loop → модули), `788aea2` (plan handler → per-action),
+      `8d1adb7` (registerMmaCommands → per-domain), `c5b4274` (createProgram + moe-executor dedup),
+      `603db6c` (bash handler 236→~100). Остались: repl.ts, line-editor.ts, stuck-detector.ts, module.ts
 - [ ] Часть исключений задокументирована в AGENTS.md — не трогать без явного решения.
 
 ### Этап 3. Антипаттерны и дублирование
 - [ ] Извлечь общий test-harness из интеграционных тестов (~1000 строк экономии, 26 копий scaffolding).
-- [ ] Рефакторинг hotspot-функций: `createPlanToolDefinitions` (695), `bootstrap()` (438), `createProgram` (467).
+- [~] Рефакторинг hotspot-функций: `createPlanToolDefinitions` (695), `bootstrap()` (438), `createProgram` (467)
+      — частично: createProgram разбит (`c5b4274`), plan-definitions разбиты (`788aea2`); bootstrap() не тронут.
 - [ ] `console.*` в `repl-commands.ts` (126 вхождений) — консистентность с renderer/logger.
 
 ### Этап 4. Хардкод → абстракция
@@ -222,14 +214,11 @@ Definition of Done плана — в конце файла плана.
 
 ## Следующие шаги
 
-1. **Разобраться с 53 падениями** (пользователь просил)
-   - Agent-тесты: найти root cause конфликта bun parallel runners
-   - bridge-тесты: установить Playwright или пропустить на CI
-   - Остальные: по одному разобрать
+1. ~~**Разобраться с 53 падениями**~~ ✅ ЗАКРЫТО 2026-08-31 (см. выше)
 
 2. **Git push**: нужен remote `master`, пока только `providers` ветка
 
-3. **npm publish** — 0.46.0/0.47.0/0.56.0/0.57.0/0.57.1 уже выпущены (см. CHANGELOG). Следующий — после закрытия открытых пунктов аудита 2026-08-29.
+3. **npm publish** — 0.46.0/0.47.0/0.56.0/0.57.0/0.57.1/0.57.2 выпущены (см. CHANGELOG, HEAD `a82d115`). Следующий — после закрытия открытых пунктов аудита 2026-08-29.
 
 ---
 

@@ -94,6 +94,11 @@ export interface ToolContext {
    * when the agent's `finally` block never runs (abandoned promise).
    */
   cleanup?: () => void;
+  /**
+   * Test seam — factory for the sub-agent instance (Bun module mocks are
+   * process-global, so vi.mock cannot be used for the Agent class).
+   */
+  agentFactory?: (deps: unknown) => { run(task: string): Promise<import("../core/types").AgentResult> };
 }
 
 export interface ToolResult {

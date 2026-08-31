@@ -102,6 +102,8 @@ export interface AgentDeps {
    * (KV-cache friendly). Returns null when no plan is active.
    */
   planSummary?: () => string | null;
+  /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
+  runWithMoEOverride?: typeof runWithMoE;
 }
 
 export class Agent {
@@ -413,8 +415,9 @@ export class Agent {
 
     try {
       const moeEnabled = config.moe?.enabled === true;
+      const moeRunner = this.deps.runWithMoEOverride ?? runWithMoE;
       const result = moeEnabled
-        ? await runWithMoE(
+        ? await moeRunner(
             {
               config,
               llmProvider,

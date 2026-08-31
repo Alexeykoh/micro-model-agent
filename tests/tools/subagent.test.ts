@@ -7,9 +7,12 @@ import { join } from "node:path";
 const mockAgentRun = vi.fn().mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
 const mockAgent = vi.fn().mockReturnValue({ run: mockAgentRun });
 
-vi.mock("../../src/core/agent", () => ({
-  Agent: mockAgent,
-}));
+// Bun module mocks are process-global (vi.mock leaks into every other test
+// file in the worker), so the Agent is injected via the ctx.agentFactory seam.
+const withAgentFactory = (ctx: any) => ({
+  ...ctx,
+  agentFactory: (deps: unknown) => mockAgent(deps),
+});
 
 describe("subagentTool", () => {
   it("has correct definition", () => {
@@ -100,7 +103,7 @@ describe("subagentTool", () => {
     });
 
     const result = await subagentTool.handler(
-      {
+      withAgentFactory({
         config: {
           contextWindow: 32768,
           contextBudget: {
@@ -144,7 +147,7 @@ describe("subagentTool", () => {
           }),
           setScope: () => {},
         } as any,
-      } as any,
+      }) as any,
       {
         task: "do something",
         allowed_files: ["src/file.ts"],
@@ -171,7 +174,7 @@ describe("subagentTool", () => {
         iterationCount: 3,
       });
       const result = await subagentTool.handler(
-        {
+        withAgentFactory({
           config: {
             contextWindow: 32768,
             contextBudget: {
@@ -203,7 +206,7 @@ describe("subagentTool", () => {
             }),
             setScope: () => {},
           },
-        } as any,
+        }) as any,
         { task: "do something", result_mode: "file" },
       );
 
@@ -231,7 +234,7 @@ describe("subagentTool", () => {
     mockAgentRun.mockClear();
     mockAgentRun.mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
     await subagentTool.handler(
-      {
+      withAgentFactory({
         config: {
           contextWindow: 32768,
           contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
@@ -271,7 +274,7 @@ describe("subagentTool", () => {
           }),
           setScope: () => {},
         },
-      } as any,
+      }) as any,
       { task: "do task", context: "VARIABLE_CONTEXT_XYZ", tool_tags: ["file"] },
     );
 
@@ -285,7 +288,7 @@ describe("subagentTool", () => {
     mockAgentRun.mockClear();
     mockAgentRun.mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
     await subagentTool.handler(
-      {
+      withAgentFactory({
         config: {
           contextWindow: 32768,
           contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
@@ -325,7 +328,7 @@ describe("subagentTool", () => {
           }),
           setScope: () => {},
         },
-      } as any,
+      }) as any,
       { task: "t", tool_tags: ["file"] },
     );
 
@@ -347,6 +350,7 @@ describe("subagent scope restore", () => {
       sessionId: "t",
       scope: undefined,
       toolExecutor: { setScope, getRegistry: () => ({ getByTags: () => [] }) },
+      agentFactory: () => ({ run: mockAgentRun }),
       llmProvider: {
         chat: async () => ({
           content: "done",
