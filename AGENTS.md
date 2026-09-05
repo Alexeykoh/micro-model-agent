@@ -101,7 +101,22 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Test seams:** `orchestratorOverride/executorOverride/verifierOverride` (MoEDeps),
   `AgentDeps.runWithMoEOverride`, `ToolContext.agentFactory` — vi.mock в Bun глобален на процесс, не использовать.
 
-### Current Version: 0.56.4
+### Instructions Overflow & Context Probe (0.59.0)
+
+- **Overflow:** AGENTS.md (`kind: "instructions"`) и project map (`kind: "project-map"`) — PromptBlock с `kind`
+  (`src/core/types.ts`). Если блок не влезает в системный бюджет (10% contextWindow):
+  bootstrap dry-run (`dryRunOverflow`) предупреждает юзера с конкретным фиксом
+  (`mma context <N>` или правка `provider.entries[].contextWindow` в `config/provider.json`),
+  Agent (`resolvePromptOverflowOnce`, до первого LLM-вызова) суммаризирует блок провайдером
+  (кэш `<project>/.mma/cache/prompt-summaries`, инвалидируется правкой файла/бюджетом) или
+  трекает с маркером; hint-блок (`essential`) говорит модели прочитать полный AGENTS.md через read_file.
+  Конфиг: `instructions.summarize` (default true).
+- **Context probe:** на старте `getLoadedContextLength` (`src/llm/model-loader.ts`) спрашивает LM Studio
+  (`/api/v1/models`, `loaded_instances[].config.context_length`) о фактическом контексте модели;
+  меньше настроенного → warn (без auto-clamp), больше → подсказка `mma context`. Не-LM-Studio → тихий null.
+  Результат пишется в session.jsonl как `context_probe` entry.
+
+### Current Version: 0.59.0
 
 ### Changelog
 

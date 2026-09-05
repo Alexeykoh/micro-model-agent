@@ -66,6 +66,17 @@ export interface ContextBudget {
   compactionThreshold: number;
 }
 
+/**
+ * Handling of prompt blocks (AGENTS.md, project map) that exceed the
+ * system-prompt budget. When `summarize` is on, the overflowing block is
+ * summarized by the LLM into the remaining budget (cached in
+ * `<project>/.mma/cache/prompt-summaries`); on failure the block is
+ * truncated with a marker and the model is hinted to read the full file.
+ */
+export interface InstructionsConfig {
+  summarize: boolean;
+}
+
 export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
@@ -348,6 +359,7 @@ export interface AppConfig {
   tools: ToolsConfig;
   contextWindow: number;
   contextBudget: ContextBudget;
+  instructions: InstructionsConfig;
   modelLoad: ModelLoadConfig;
   retry: RetryConfig;
   maxToolIterations: number;

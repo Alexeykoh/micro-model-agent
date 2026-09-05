@@ -177,6 +177,32 @@ Unlike trace-server (read-only), web-ui is **bidirectional**: the browser sends 
 
 Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
 
+### Instructions overflow (AGENTS.md / project map exceeding the system budget)
+
+> **Source:** `src/core/prompt-overflow.ts`, integration in `Agent.resolvePromptOverflowOnce` (`src/core/agent.ts`), startup dry-run in `bootstrap.ts`.
+
+Prompt blocks carrying a semantic `kind` (`PromptBlockKind`: `"instructions"` for AGENTS.md, `"project-map"` for the indexer map) are overflow-aware. When such a block does not fit the system-prompt budget:
+
+1. **Startup dry-run** (bootstrap, banner): `dryRunOverflow` reproduces the first build with the same block set and warns the user with a concrete fix — `mma context <N>` for a global `contextWindow`, or an edit of `provider.entries[].contextWindow` in `config/provider.json` when the active provider entry overrides it (`contextWindowHint`).
+2. **Resolution** (Agent, once before the first LLM call): `resolvePromptOverflow` compresses the block into the remaining budget:
+   - LLM summarization via the active provider (prompt preserves paths/commands/rules), cached in `<project>/.mma/cache/prompt-summaries/<sha256(kind|budget|content)>.md` — cache is invalidated by file edits or budget changes;
+   - fallback on failure / `instructions.summarize: false`: hard truncation with a `[...truncated...]` marker.
+3. **Model hint**: a small `essential` block tells the model which blocks were compressed (and which did not fit at all) and points to `read_file AGENTS.md` for the full text.
+
+Config: `instructions.summarize` (default `true`) — `~/.mma/config/core.json`.
+
+### Context probe (actually loaded model context)
+
+> **Source:** `getLoadedContextLength` (`src/llm/model-loader.ts`), background promise in `bootstrap.ts`, banner + `context_probe` session entry in `repl.ts`.
+
+At startup MMA asks LM Studio's native API (`/api/v1/models`) for the context length the model is ACTUALLY loaded with (`loaded_instances[].config.context_length`, fallback `max_context_length`) and compares it with the configured `contextWindow`:
+
+- loaded < configured → warning (overflow/429 risk; per design NO auto-clamp — the user decides);
+- loaded > configured → info suggesting `mma context <actual>`;
+- probe result is logged to `session.jsonl` as a `context_probe` entry (visible in `session show`).
+
+Non-LM-Studio providers degrade silently (probe returns null).
+
 ## Cost Tracking (pricing / budget display)
 
 > **Source:** `src/modules/pricing/` (`prices.ts` — builtin price table + cost math; `index.ts` — `CostTracker`).

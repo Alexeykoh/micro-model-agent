@@ -32,6 +32,7 @@ export interface SessionLogEntry {
     | "session_start"
     | "baseline_typecheck"
     | "reasoning_control"
+    | "context_probe"
     | "moe_plan"
     | "moe_subtask"
     | "moe_replan"

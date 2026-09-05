@@ -36,6 +36,7 @@ import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { writeWarning } from "../ui/output";
+import type { ContextProbeResult } from "../llm/model-loader";
 
 function formatContextBar(
   used: number,
@@ -112,6 +113,8 @@ export class Repl implements ReplContext {
   public logger?: Logger;
   private slog: SessionLogger;
   private envReport?: EnvironmentReport;
+  /** Background probe of the actually loaded model context (bootstrap). */
+  private contextProbe?: Promise<ContextProbeResult | null>;
 
   constructor(
     agent: Agent,
@@ -127,6 +130,7 @@ export class Repl implements ReplContext {
     envReport?: EnvironmentReport,
     historyPath?: string,
     execModule?: ExecutionModule,
+    contextProbe?: Promise<ContextProbeResult | null>,
   ) {
     this.agent = agent;
     this.config = config;
@@ -136,6 +140,7 @@ export class Repl implements ReplContext {
     this.pluginManager = pluginManager;
     this.logger = logger;
     this.envReport = envReport;
+    this.contextProbe = contextProbe;
     this.execModule = execModule;
     this.slog = new SessionLogger(sessionManager, logger);
     this.configDir = configDir || join(homedir(), ".mma");
@@ -847,6 +852,32 @@ export class Repl implements ReplContext {
             if (!r.ok && r.name !== this.config.provider.active) {
               writeWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" }));
             }
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Context probe (background): compare the context length the model is
+    // actually loaded with against the configured window. Same non-blocking
+    // banner pattern as the LSP probe above.
+    if (this.contextProbe) {
+      void this.contextProbe
+        .then((probe) => {
+          if (!probe) return;
+          this.sessionManager?.appendLog({
+            ts: new Date().toISOString(),
+            type: "context_probe",
+            content: `model=${probe.model} actual=${probe.actual} configured=${this.config.contextWindow}`,
+          });
+          const line =
+            probe.actual < this.config.contextWindow
+              ? `${pc.yellow("⚠")} ${t("repl.context_probe_small", { model: probe.model, actual: probe.actual, configured: this.config.contextWindow })}`
+              : probe.actual > this.config.contextWindow
+                ? `${pc.dim(t("repl.context_probe_big", { model: probe.model, actual: probe.actual }))}`
+                : null;
+          if (line) {
+            process.stdout.write(`\x1b[2K\r${divider()}\n${line}\n`);
+            this.rl.prompt();
           }
         })
         .catch(() => {});

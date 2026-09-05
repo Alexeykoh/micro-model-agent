@@ -464,6 +464,8 @@
   "repl.agents_label": "Instructions:",
   "repl.not_found": "not found",
   "repl.disabled": "disabled (--no-agents-md)",
+  "repl.context_probe_small": "Context probe: model \"{model}\" is loaded with {actual} tokens, configured {configured} — overflow risk",
+  "repl.context_probe_big": "Context probe: model \"{model}\" supports {actual} tokens — consider \"mma context {actual}\"",
   "repl.show": "show",
   "repl.hide": "hide",
   "repl.resume_hint": "Use /resume <id> or /resume <name> to switch between sessions",

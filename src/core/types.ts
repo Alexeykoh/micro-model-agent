@@ -1,10 +1,15 @@
 export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERROR";
 
+/** Semantic class of a prompt block — lets the overflow resolver treat
+ *  instructions / project map specially when they exceed the system budget. */
+export type PromptBlockKind = "instructions" | "project-map";
+
 export interface PromptBlock {
   content: string;
   priority: "critical" | "high" | "normal" | "low";
   essential: boolean;
   estimatedTokens: number;
+  kind?: PromptBlockKind;
 }
 
 export type ToolCallStatus = "done" | "failed" | "skipped";

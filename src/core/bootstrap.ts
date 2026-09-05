@@ -37,6 +37,8 @@ import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
+import { dryRunOverflow, contextWindowHint, recommendContextSize } from "./prompt-overflow";
+import { getLoadedContextLength, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
 import type { ReasoningLevel } from "../config/types";
 
@@ -88,6 +90,7 @@ function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): Prompt
           priority: "high",
           essential: false,
           estimatedTokens: estimateTokens(content),
+          kind: "instructions",
         });
       }
     }
@@ -227,6 +230,9 @@ export interface BootstrapResult {
   envReport: ReturnType<typeof collectEnvironment>;
   /** true when legacy config.json was used (no domain files found). */
   legacyDetected: boolean;
+  /** Background probe of the context length the model is ACTUALLY loaded
+   *  with (LM Studio native API). Resolves to null when not applicable. */
+  contextProbe: Promise<ContextProbeResult | null>;
 }
 
 export async function bootstrap(
@@ -295,6 +301,31 @@ export async function bootstrap(
       logger.info(`Model ${config.model} loaded in ${loadResult.loadTime}s`);
     }
   }
+
+  // Context probe (background): ask the provider (LM Studio native API) for
+  // the context length the model is ACTUALLY loaded with and compare it with
+  // the configured contextWindow. Never blocks the banner; null = probe not
+  // applicable (not LM Studio / model not loaded / transient error).
+  const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
+    try {
+      const probe = await getLoadedContextLength(config.provider.baseUrl, config.model);
+      if (!probe) return null;
+      if (probe.actual < config.contextWindow) {
+        logger.warn(
+          `Context probe: model "${probe.model}" is loaded with ${probe.actual} tokens, but contextWindow is configured as ${config.contextWindow} — overflow/429 risk. Lower contextWindow or reload the model with a larger context.`,
+        );
+      } else if (probe.actual > config.contextWindow) {
+        logger.info(
+          `Context probe: model "${probe.model}" supports ${probe.actual} tokens — consider "mma context ${probe.actual}" to use the full window.`,
+        );
+      } else {
+        logger.debug(`Context probe: configured contextWindow matches loaded context (${probe.actual})`);
+      }
+      return probe;
+    } catch {
+      return null;
+    }
+  })();
 
   const profile = new UserProfile(join(dir));
   profile.load() || profile.collect();
@@ -603,8 +634,7 @@ export async function bootstrap(
 
   const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
 
-  const promptBlocks: PromptBlock[] = [
-    systemInfoPrompt,
+  const promptBlocks: PromptBlock[] = [    systemInfoPrompt,
     ...moduleRegistry.collectPromptBlocks(["indexer"]),
     ...agentsMdBlocks,
     // Static plan reminder: always present so the model knows to check for an
@@ -619,6 +649,40 @@ export async function bootstrap(
     },
   ];
 
+  // Startup overflow warning (banner, A3): dry-run the system-prompt budget
+  // with the same block set the Agent's first build will use (static + skills
+  // + project map + hidden tools) and surface instructions/project-map blocks
+  // that will not fit. The Agent compresses them before the first LLM call;
+  // this warning tells the USER why and how to get the full text included.
+  {
+    const dynamicBlocks: PromptBlock[] = [];
+    const skillsBlock = skillsModule.getSystemPromptBlock();
+    if (skillsBlock) dynamicBlocks.push(skillsBlock);
+    const mapBlock = indexerModule.getSystemPromptBlock();
+    if (mapBlock) dynamicBlocks.push(mapBlock);
+    const hiddenToolsBlock = buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
+    if (hiddenToolsBlock) {
+      dynamicBlocks.push({
+        content: hiddenToolsBlock,
+        priority: "low",
+        essential: false,
+        estimatedTokens: estimateTokens(hiddenToolsBlock),
+      });
+    }
+    const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
+    const dry = dryRunOverflow([...promptBlocks, ...dynamicBlocks], systemBudget);
+    if (dry.overflow.length > 0) {
+      const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
+      const recommended = recommendContextSize(dry.includedTokens + overflowTokens);
+      const hint = contextWindowHint(config, dir, recommended);
+      for (const b of dry.overflow) {
+        logger.warn(
+          `Startup check: ${b.kind === "instructions" ? "AGENTS.md" : "project map"} (${b.estimatedTokens} tok) exceeds the system-prompt budget (${systemBudget} tok) — it will be summarized/truncated before the first run. To include it fully, ${hint}.`,
+        );
+      }
+    }
+  }
+
   const agentDeps: AgentDeps = {
     config,
     configRef,
@@ -629,6 +693,7 @@ export async function bootstrap(
     hallucinationDetector,
     logger,
     baseDir,
+    configDir: dir,
     toolTags: activeToolTags,
     promptBlocks,
     envReport,
@@ -694,5 +759,6 @@ export async function bootstrap(
     noAgentsMd: noAgentsMd === true,
     envReport,
     legacyDetected,
+    contextProbe: contextProbePromise,
   };
 }

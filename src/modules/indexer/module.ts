@@ -95,6 +95,7 @@ export class IndexerModule implements AgentModule {
       priority: "normal",
       essential: false,
       estimatedTokens: this.estimateTokens(content),
+      kind: "project-map",
     };
   }
 

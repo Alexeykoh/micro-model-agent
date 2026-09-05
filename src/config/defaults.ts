@@ -63,6 +63,9 @@ export const DEFAULTS: AppConfig = {
     responseReserve: 0.15,
     compactionThreshold: 0.75,
   },
+  instructions: {
+    summarize: true,
+  },
   modelLoad: {
     autoLoad: false,
     flashAttention: true,

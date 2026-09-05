@@ -16,6 +16,44 @@ export interface LoadResult {
   error?: string;
 }
 
+/** Result of the startup context probe: what the model is ACTUALLY loaded with. */
+export interface ContextProbeResult {
+  model: string;
+  /** Context length of the loaded instance (tokens). */
+  actual: number;
+}
+
+/**
+ * Ask LM Studio's native API which context length the model is currently
+ * loaded with. Prefers the running instance (`loaded_instances[].config.
+ * context_length`), falls back to the model's `max_context_length`. Returns
+ * null when the endpoint is unavailable (not LM Studio), the model is not
+ * found/loaded, or the request fails — the caller must degrade silently.
+ */
+export async function getLoadedContextLength(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+): Promise<ContextProbeResult | null> {
+  const base = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  try {
+    const response = await fetch(`${base}/api/v1/models`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as any;
+    const models: any[] = data.models || [];
+    const found = models.find((m) => m.key === model || m.name === model || model.includes(m.key));
+    if (!found) return null;
+    const loadedInstance = (found.loaded_instances ?? [])[0];
+    const actual = loadedInstance?.config?.context_length ?? found.max_context_length;
+    if (typeof actual !== "number" || actual <= 0) return null;
+    return { model: found.key ?? found.name ?? model, actual };
+  } catch {
+    return null;
+  }
+}
+
 export class ModelLoader {
   private baseUrl: string;
   private logger: Logger;

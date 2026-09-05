@@ -15,6 +15,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
+import { join } from "path";
 import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
@@ -35,6 +36,13 @@ import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
+import {
+  resolvePromptOverflow,
+  contextWindowHint,
+  recommendContextSize,
+  HINT_BLOCK_TOKENS,
+} from "./prompt-overflow";
+import type { PromptBlockKind } from "./types";
 import {
   MAX_EMPTY_RESPONSE_RETRIES,
   MAX_LLM_ERROR_RETRIES,
@@ -97,6 +105,8 @@ export interface AgentDeps {
   reasoningProbe?: () => Promise<boolean>;
   /** Strategy for expressing reasoning effort on this provider. */
   reasoningStrategy?: import("../config/types").ReasoningStrategy;
+  /** Config directory — used for the "raise context window" hint in overflow warnings. */
+  configDir?: string;
   /**
    * Compact plan status line for the <system-summary> envelope. Replaces the
    * dynamic plan block in the system prompt so the prompt stays immutable
@@ -160,6 +170,13 @@ export class Agent {
   readonly reasoningState: ReasoningState;
   /** Current iteration counter (exposed for tool cooldown checks). */
   private _currentIteration = 0;
+  /** Kind → replacement block for instructions/project-map blocks that
+   *  exceeded the system budget (resolved once before the first LLM call). */
+  private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
+  /** Small always-included block explaining the compressed instructions. */
+  private overflowHintBlock: PromptBlock | null = null;
+  /** Guards the one-time async overflow resolution in run(). */
+  private overflowResolved = false;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
@@ -227,6 +244,7 @@ export class Agent {
   private buildSystemPrompt(): {
     prompt: string;
     excluded: string[];
+    excludedBlocks: PromptBlock[];
     blocks: Array<{
       label: string;
       priority: string;
@@ -238,10 +256,14 @@ export class Agent {
       this.deps.config.contextWindow * this.deps.config.contextBudget.systemPrompt,
     );
     const builder = new PromptBuilder(systemBudget);
-    builder.addBlocks(this.deps.promptBlocks);
+    // Overflow replacements (compressed instructions / project map) take
+    // precedence over the original oversized blocks.
+    const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
+      blocks.map((b) => (b.kind && this.promptOverrides.has(b.kind) ? this.promptOverrides.get(b.kind)! : b));
+    builder.addBlocks(applyOverrides(this.deps.promptBlocks));
     const dynamic = this.deps.getDynamicPromptBlocks?.() ?? [];
     if (dynamic.length > 0) {
-      builder.addBlocks(dynamic);
+      builder.addBlocks(applyOverrides(dynamic));
     }
     const pluginBlocks: PromptBlock[] = (
       this.deps.pluginManager.runOnBuildPrompt?.() ?? []
@@ -260,10 +282,14 @@ export class Agent {
     if (pluginBlocks.length > 0) {
       builder.addBlocks(pluginBlocks);
     }
+    if (this.overflowHintBlock) {
+      builder.addBlock(this.overflowHintBlock);
+    }
     const result = builder.build();
     return {
       prompt: result.prompt,
       excluded: result.excluded,
+      excludedBlocks: result.excludedBlocks,
       blocks: result.blocks,
     };
   }
@@ -320,6 +346,47 @@ export class Agent {
     const { prompt, excluded } = this.buildSystemPrompt();
     const tokenCount = this.deps.llmProvider.countTokens(prompt);
     return { text: prompt, tokenCount, excluded };
+  }
+
+  /**
+   * One-time (first run) handling of instructions/project-map blocks that did
+   * not fit the system-prompt budget: they are summarized by the LLM into the
+   * remaining budget (disk-cached) or truncated, and a small hint block tells
+   * the model what happened and how to read the full source.
+   */
+  private async resolvePromptOverflowOnce(): Promise<void> {
+    const cfg = this.deps.config;
+    const dry = this.buildSystemPrompt();
+    const overflow = dry.excludedBlocks.filter((b) => Boolean(b.kind));
+    if (overflow.length === 0) return;
+
+    const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+    const res = await resolvePromptOverflow({
+      overflow,
+      includedTokens: dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0),
+      systemBudget,
+      provider: cfg.instructions?.summarize === false ? null : this.deps.llmProvider,
+      cacheDir: join(this.deps.baseDir, ".mma", "cache", "prompt-summaries"),
+      logger: this.deps.logger,
+    });
+    for (const r of res.replacements) {
+      if (r.kind) this.promptOverrides.set(r.kind, r);
+    }
+    this.overflowHintBlock = res.hintBlock;
+
+    const recommended = recommendContextSize(
+      dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
+        overflow.reduce((s, b) => s + b.estimatedTokens, 0) +
+        HINT_BLOCK_TOKENS,
+    );
+    const hint = this.deps.configDir
+      ? contextWindowHint(cfg, this.deps.configDir, recommended)
+      : `increase contextWindow (e.g. to ${recommended})`;
+    for (const w of res.warnings) {
+      this.deps.logger.warn(
+        `Prompt overflow: "${w.label}" (${w.originalTokens} tok) exceeded the system-prompt budget (${systemBudget} tok) — ${w.mode === "summary" ? "summarized" : "truncated"} to ${w.resolvedTokens} tok. To fit fully, ${hint}.`,
+      );
+    }
   }
 
   private refreshSystemPrompt(): void {
@@ -393,6 +460,19 @@ export class Agent {
       const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
       if (lazy.length > 0) {
         this.deps.promptBlocks.push(...lazy);
+      }
+      // One-time resolution of instructions/project-map blocks that exceed
+      // the system-prompt budget: summarize (cached) or truncate them BEFORE
+      // the first real build so the model still receives the instructions.
+      if (!this.overflowResolved) {
+        this.overflowResolved = true;
+        try {
+          await this.resolvePromptOverflowOnce();
+        } catch (err: any) {
+          this.deps.logger.warn(
+            `Prompt overflow resolution failed: ${err?.message ?? err} — oversized blocks will be dropped.`,
+          );
+        }
       }
       // B2: await the background reasoning probe next to the lazy prompt
       // blocks so the FIRST LLM call already knows whether the backend

@@ -189,6 +189,7 @@ async function main(): Promise<void> {
       baseDir,
       logger,
       envReport,
+      contextProbe,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
 
     const repl = new Repl(
@@ -205,6 +206,7 @@ async function main(): Promise<void> {
       envReport,
       undefined,
       execModule,
+      contextProbe,
     );
 
     if (!hasAnyConfig && !exitOnComplete) {

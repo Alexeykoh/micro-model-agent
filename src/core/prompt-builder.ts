@@ -11,6 +11,9 @@ export interface BlockBuildInfo {
 export interface BuildResult {
   prompt: string;
   excluded: string[];
+  /** Full block objects that did not fit the budget — used by the overflow
+   *  resolver to summarize instructions/project-map blocks (agent.ts). */
+  excludedBlocks: PromptBlock[];
   /** Per-block breakdown — used to log what the system prompt actually consists of. */
   blocks: BlockBuildInfo[];
 }
@@ -62,6 +65,7 @@ export class PromptBuilder {
     let usedTokens = 0;
     const included: string[] = [];
     const excluded: string[] = [];
+    const excludedBlocks: PromptBlock[] = [];
     const blocks: BlockBuildInfo[] = [];
 
     for (const block of essential) {
@@ -84,6 +88,7 @@ export class PromptBuilder {
         usedTokens += tokens;
       } else {
         excluded.push(block.content);
+        excludedBlocks.push(block);
       }
       blocks.push({
         label: blockLabel(block.content),
@@ -97,6 +102,7 @@ export class PromptBuilder {
     return {
       prompt: included.join("\n\n"),
       excluded,
+      excludedBlocks,
       blocks,
     };
   }

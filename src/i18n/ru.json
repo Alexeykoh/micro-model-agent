@@ -458,6 +458,8 @@
   "repl.agents_label": "Инструкции:",
   "repl.not_found": "не найден",
   "repl.disabled": "отключено (--no-agents-md)",
+  "repl.context_probe_small": "Context-проб: модель \"{model}\" загружена с контекстом {actual} токенов, настроено {configured} — риск переполнения",
+  "repl.context_probe_big": "Context-проб: модель \"{model}\" поддерживает {actual} токенов — рассмотрите \"mma context {actual}\"",
   "repl.show": "показ",
   "repl.hide": "скрыть",
   "repl.resume_hint": "Используйте /resume <id> или /resume <имя> для переключения между сессиями",
