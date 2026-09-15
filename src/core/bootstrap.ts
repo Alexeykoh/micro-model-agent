@@ -37,7 +37,7 @@ import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
-import { dryRunOverflow, contextWindowHint, recommendContextSize } from "./prompt-overflow";
+import { dryRunOverflow, overflowHint } from "./prompt-overflow";
 import { getLoadedContextLength, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
 import type { ReasoningLevel } from "../config/types";
@@ -691,8 +691,7 @@ export async function bootstrap(
     const dry = dryRunOverflow([...promptBlocks, ...dynamicBlocks], systemBudget);
     if (dry.overflow.length > 0) {
       const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
-      const recommended = recommendContextSize(dry.includedTokens + overflowTokens);
-      const hint = contextWindowHint(config, dir, recommended);
+      const hint = overflowHint(config, dir, dry.includedTokens + overflowTokens);
       for (const b of dry.overflow) {
         logger.warn(
           t("prompt.overflow.startup", {

@@ -351,3 +351,46 @@ export function recommendContextSize(neededSystemTokens: number): number {
     sizes.find((s) => Math.floor(s * 0.1) >= neededSystemTokens) ?? sizes[sizes.length - 1]
   );
 }
+
+/** Context window needed so that `systemFraction` of it covers `neededTokens`. */
+export function requiredContextWindow(neededTokens: number, systemFraction: number): number {
+  const fraction = systemFraction > 0 ? systemFraction : 0.1;
+  return Math.ceil(neededTokens / fraction);
+}
+
+/** System-prompt share of the CURRENT window needed to cover `neededTokens`. */
+export function requiredSystemFraction(neededTokens: number, contextWindow: number): number {
+  if (contextWindow <= 0) return 1;
+  return Math.min(1, Math.ceil((neededTokens / contextWindow) * 100) / 100);
+}
+
+/**
+ * Localized, concrete fix for an oversized system prompt. Instead of only
+ * snapping to a coarse standard size (which makes a 32K project jump straight
+ * to 131072), it states the raw requirement and both levers: a bigger window
+ * or a bigger share of the current window.
+ */
+export function overflowHint(
+  config: AppConfig,
+  configDir: string | undefined,
+  neededTokens: number,
+): string {
+  const fraction = config.contextBudget?.systemPrompt ?? 0.1;
+  const budget = Math.floor(config.contextWindow * fraction);
+  const recommended = recommendContextSize(neededTokens);
+  const requiredWindow = requiredContextWindow(neededTokens, fraction);
+  const requiredFraction = requiredSystemFraction(neededTokens, config.contextWindow);
+  const how = configDir
+    ? contextWindowHint(config, configDir, recommended)
+    : `increase contextWindow (e.g. to ${recommended})`;
+  return [
+    t("prompt.overflow.hint_needed", {
+      needed: neededTokens,
+      window: config.contextWindow,
+      fraction,
+      budget,
+    }),
+    t("prompt.overflow.hint_window", { required: requiredWindow, recommended, how }),
+    t("prompt.overflow.hint_fraction", { fraction: requiredFraction }),
+  ].join(" ");
+}

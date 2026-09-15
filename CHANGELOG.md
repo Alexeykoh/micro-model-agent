@@ -4,6 +4,17 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.61.0] - 2026-09-15
+
+### Added
+- **Budget share controls**: `mma context --system <f>` / `--reserve <f>` and REPL `/context system <f>` / `reserve <f>` set `contextBudget.systemPrompt` / `responseReserve` (validated 0.05–0.9, system + reserve < 0.95). `mma context` and `/context` with no argument now print the budget breakdown (system / reserve / history in tokens and %). `mma config set contextBudget.systemPrompt <f>` keeps working.
+
+### Changed
+- **Overflow fix advice**: the "system prompt exceeds budget" warning no longer only snaps to a coarse standard context size — a 32K project was jumping straight to `131072`, which looked arbitrary and was often unusable on a local model. The hint (`prompt.overflow.hint_*`, en+ru) now states the raw requirement (`needs ~N system tokens; current budget: W × f = B`) and both levers: raise `contextWindow` to the exact minimum (with the standard size) **or** keep the window and raise `contextBudget.systemPrompt` to the required share (`mma context --system <f>`).
+
+### Fixed
+- **`mma context` ignored `MMA_CONFIG_DIR`**: it saved to a hardcoded `~/.mma/config.json`; it now writes to the config dir resolved by bootstrap.
+
 ## [0.60.1] - 2026-09-15
 
 ### Fixed

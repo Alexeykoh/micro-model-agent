@@ -4,6 +4,7 @@ import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
+import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
 import { getMessageText } from "../llm/provider";
 import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
@@ -451,22 +452,39 @@ function registerProviderCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "context",
     description: t("cli.manage_context"),
-    usage: "/context <size>",
+    usage: t("repl.context_usage"),
     action: async (args: string[]) => {
+      const save = async () => {
+        const configPath = join(ctx.configDir, "config.json");
+        saveConfig(ctx.config, configPath, dirname(configPath));
+        await ctx.agent.reconfigure(ctx.config);
+      };
+
       if (args.length === 0) {
-        console.log(`/context ${t("repl.context")}  ${ctx.config.contextWindow}`);
-        console.log(t("repl.context_usage"));
+        for (const line of budgetBreakdownLines(ctx.config)) console.log(line);
+        console.log(pc.dim(t("repl.context_usage")));
         return;
       }
+
+      if (args[0] === "system" || args[0] === "reserve") {
+        const key = args[0] as "system" | "reserve";
+        const value = Number(args[1]);
+        if (setBudgetShare(ctx.config, key, value) !== null) {
+          console.log(pc.yellow(t("cli.context_invalid_fraction")));
+          return;
+        }
+        await save();
+        console.log(pc.green(t("cli.context_fraction_set", { key, value })));
+        return;
+      }
+
       const size = parseInt(args[0], 10);
       if (isNaN(size) || size < 1024) {
         console.log(t("cli.invalid_context_size"));
         return;
       }
       ctx.config.contextWindow = size;
-      const configPath = join(ctx.configDir, "config.json");
-      saveConfig(ctx.config, configPath, dirname(configPath));
-      await ctx.agent.reconfigure(ctx.config);
+      await save();
       console.log(pc.green(t("cli.context_set", { size })));
     },
   });

@@ -116,7 +116,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   меньше настроенного → warn (без auto-clamp), больше → подсказка `mma context`. Не-LM-Studio → тихий null.
   Результат пишется в session.jsonl как `context_probe` entry.
 
-### Current Version: 0.60.1
+### Current Version: 0.61.0
 
 ### Changelog
 

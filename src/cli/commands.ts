@@ -14,6 +14,7 @@ import { probeProviders, targetsFromProviders } from "../modules/providers/healt
 import { readMmaVersion } from "../core/version";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
+import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
 import { readChangelog, extractLatestChangelog, extractChangelogRange } from "../modules/updater/changelog-reader";
 
 const version = readMmaVersion();
@@ -266,10 +267,30 @@ function buildContextCommand(program: Command): void {
   program
     .command("context")
     .description(t("cli.manage_context"))
-    .argument("<size>", "Context window size in tokens")
-    .action(async (size: string) => {
-      const configPath = join(homedir(), ".mma", "config.json");
-      const { config } = await bootstrap();
+    .argument("[size]", "Context window size in tokens (omit to show the budget breakdown)")
+    .option("--system <fraction>", t("cli.context_system_fraction"))
+    .option("--reserve <fraction>", t("cli.context_reserve_fraction"))
+    .action(async (size: string | undefined, opts: { system?: string; reserve?: string }) => {
+      const { config, configDir } = await bootstrap();
+      const configPath = join(configDir, "config.json");
+
+      if (opts.system !== undefined || opts.reserve !== undefined) {
+        const key = opts.system !== undefined ? "system" : "reserve";
+        const value = Number(opts.system ?? opts.reserve);
+        if (setBudgetShare(config, key, value) !== null) {
+          console.log(t("cli.context_invalid_fraction"));
+          return;
+        }
+        saveConfig(config, configPath, dirname(configPath));
+        console.log(t("cli.context_fraction_set", { key, value }));
+        return;
+      }
+
+      if (size === undefined) {
+        for (const line of budgetBreakdownLines(config)) console.log(line);
+        return;
+      }
+
       const contextWindow = parseInt(size, 10);
       if (isNaN(contextWindow) || contextWindow < 1024) {
         console.log(t("cli.invalid_context_size"));

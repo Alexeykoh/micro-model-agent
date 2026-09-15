@@ -8,6 +8,9 @@ import {
   resolveContextWindowSource,
   contextWindowHint,
   recommendContextSize,
+  requiredContextWindow,
+  requiredSystemFraction,
+  overflowHint,
   HINT_BLOCK_TOKENS,
 } from "../../src/core/prompt-overflow";
 import type { PromptBlock } from "../../src/core/types";
@@ -72,6 +75,33 @@ describe("dryRunOverflow", () => {
     const big = block({ content: "Y".repeat(4000), estimatedTokens: 500 });
     const dry = dryRunOverflow([base, big], 400);
     expect(dry.overflow).toHaveLength(0);
+  });
+});
+
+describe("budget requirement helpers", () => {
+  it("computes the window needed for a system-token requirement", () => {
+    expect(requiredContextWindow(9079, 0.1)).toBe(90790);
+    expect(requiredContextWindow(3200, 0.2)).toBe(16000);
+  });
+
+  it("computes the share needed at a given window", () => {
+    expect(requiredSystemFraction(9079, 32000)).toBe(0.29);
+    expect(requiredSystemFraction(100, 32000)).toBe(0.01);
+    expect(requiredSystemFraction(40000, 32000)).toBe(1);
+  });
+
+  it("states the raw need and both levers in the hint", () => {
+    setLocale("en");
+    const config = {
+      contextWindow: 32000,
+      contextBudget: { systemPrompt: 0.1, responseReserve: 0.15, compactionThreshold: 0.75 },
+      provider: {},
+    } as any;
+    const hint = overflowHint(config, undefined, 9079);
+    expect(hint).toContain("9079");
+    expect(hint).toContain("90790");
+    expect(hint).toContain("131072");
+    expect(hint).toContain("contextBudget.systemPrompt");
   });
 });
 

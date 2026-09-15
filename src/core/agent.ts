@@ -38,8 +38,7 @@ import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
 import {
   resolvePromptOverflow,
-  contextWindowHint,
-  recommendContextSize,
+  overflowHint,
   HINT_BLOCK_TOKENS,
 } from "./prompt-overflow";
 import type { PromptBlockKind } from "./types";
@@ -374,14 +373,11 @@ export class Agent {
     }
     this.overflowHintBlock = res.hintBlock;
 
-    const recommended = recommendContextSize(
+    const needed =
       dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
-        overflow.reduce((s, b) => s + b.estimatedTokens, 0) +
-        HINT_BLOCK_TOKENS,
-    );
-    const hint = this.deps.configDir
-      ? contextWindowHint(cfg, this.deps.configDir, recommended)
-      : `increase contextWindow (e.g. to ${recommended})`;
+      overflow.reduce((s, b) => s + b.estimatedTokens, 0) +
+      HINT_BLOCK_TOKENS;
+    const hint = overflowHint(cfg, this.deps.configDir, needed);
     for (const w of res.warnings) {
       this.deps.logger.warn(
         t("prompt.overflow.exceeded", {
