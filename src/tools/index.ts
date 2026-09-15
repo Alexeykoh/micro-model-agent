@@ -41,6 +41,7 @@ import { recallTool } from "./recall";
 import { createBrowserTool } from "./browser";
 import { attachImageTool } from "./attach-image";
 import { enableToolsTool } from "./enable-tools";
+import { sessionInfoTool } from "./session-info";
 import type { SkillsModule } from "../modules/skills/module";
 
 export { ToolRegistry, ToolExecutor };
@@ -76,6 +77,7 @@ export {
   createBrowserTool,
   attachImageTool,
   enableToolsTool,
+  sessionInfoTool,
 };
 
 export function registerAllTools(
@@ -108,6 +110,7 @@ export function registerAllTools(
     mcpCallTool,
     searchHistoryTool,
     attachImageTool,
+    sessionInfoTool,
   ];
 
   // On-demand tool activation is the default. When explicitly disabled

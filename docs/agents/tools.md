@@ -245,10 +245,17 @@ No configuration needed — Bun.Image is built into Bun 1.3.14+.
 > **Status:** implemented (v0.40.0). The main agent loop exposes only a small default tool set instead of all ~28 — fewer schema tokens in every LLM call (~2100 vs ~3500).
 
 - **Config `tools`** (`src/config/types.ts` `ToolsConfig`): `defaultTags` (default `["file","code"]`) + `enableOnDemand` (default `true`).
-- **`alwaysOn` flag** on `ToolDefinition` (`src/tools/types.ts`) — tools that survive any tag filter; `getAllForLLM()`/`getByTags()`/`filterToolsByTags()` all keep them. Structural tools `plan`/`todo`/`verify`/`project_map`/`lsp_check` are `alwaysOn`, so plan enforcement and LSP checks survive narrowing.
+- **`alwaysOn` flag** on `ToolDefinition` (`src/tools/types.ts`) — tools that survive any tag filter; `getAllForLLM()`/`getByTags()`/`filterToolsByTags()` all keep them. Structural tools `plan`/`todo`/`verify`/`project_map`/`lsp_check`/`session_info` are `alwaysOn`, so plan enforcement, LSP checks and session self-inspection survive narrowing.
 - **`enable_tools` tool** (`src/tools/enable-tools.ts`, `alwaysOn`) — the model pushes tags (e.g. `["research"]`) into the shared mutable `activeToolTags` array; the agent loop recomputes the LLM tool set **every iteration** (`agent.ts`), so enabled tools appear next turn.
 - **Hidden-tools prompt block** (`src/tools/hidden-tools-block.ts`, wired via `getDynamicPromptBlocks` in `bootstrap.ts`) — lists tag-grouped hidden tools so the model knows they exist and can call `enable_tools` or route via `subagent tool_tags`.
-- **Default set (17):** file tools, bash (code), subagent, chunk_query, download_file, mcp_call, pipeline_run + alwaysOn (plan/todo/verify/project_map/lsp_check/enable_tools). **Hidden (11):** web_search/web_fetch/web_browse (research), browser, attach_image, process_list/process_log/process_kill, remember/recall, search_history.
+- **Default set (18):** file tools, bash (code), subagent, chunk_query, download_file, mcp_call, pipeline_run + alwaysOn (plan/todo/verify/project_map/lsp_check/session_info/enable_tools). **Hidden (11):** web_search/web_fetch/web_browse (research), browser, attach_image, process_list/process_log/process_kill, remember/recall, search_history.
+
+## Session Self-Inspection
+
+The model can answer questions about the session it is running in without shelling out:
+
+- **`session_info` tool** (`src/tools/session-info.ts`, `alwaysOn`) — returns id, name, model, provider, context window, message count, created/updated timestamps, plus **live context usage** (`tokens / history budget (percent)`) from `ContextManager.getSnapshot()`. Reads live metadata through a `sessionManager` getter on `ToolContext` (wired in `bootstrap.ts`, like `sessionId`/`sessionContext`), so a REPL `/new` or `/resume` is reflected immediately. Added because the model otherwise reported having "no access to session metadata".
+- **System-prompt block** (`SessionModule.getSystemPromptBlock`, collected via `getDynamicPromptBlocks` in `bootstrap.ts`) — a compact `[Session: "name" (id) | model: … | context: … tokens]` line. Deliberately carries **stable per-session fields only** (no message count) so the system prompt does not mutate every turn and the prefix KV-cache survives (rule #10). Live values are served by the `session_info` tool. It is collected dynamically, not at bootstrap: the session is created during bootstrap with `messageCount === 0`, so a static collect always yielded `null` (the previous silent bug).
 - `enableOnDemand: false` restores legacy all-tools behavior (no `enable_tools` registered, empty tags → `getAllForLLM` returns everything).
 - Subagent guard (`src/tools/subagent.ts`) uses `getByTags` for unknown-tag detection (alwaysOn tools otherwise masked it).
 

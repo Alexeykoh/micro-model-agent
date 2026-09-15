@@ -514,6 +514,10 @@ export async function bootstrap(
     get: () => sessionManager.getSessionContext() ?? undefined,
     configurable: true,
   });
+  Object.defineProperty(toolCtx, "sessionManager", {
+    get: () => sessionManager,
+    configurable: true,
+  });
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;
@@ -635,7 +639,7 @@ export async function bootstrap(
   const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
 
   const promptBlocks: PromptBlock[] = [    systemInfoPrompt,
-    ...moduleRegistry.collectPromptBlocks(["indexer"]),
+    ...moduleRegistry.collectPromptBlocks(["indexer", "session"]),
     ...agentsMdBlocks,
     // Static plan reminder: always present so the model knows to check for an
     // active plan before creating a new one (even on the first iteration before
@@ -709,6 +713,12 @@ export async function bootstrap(
       // the <system-summary> envelope after each tool batch instead.
       const skillsBlock = skillsModule.getSystemPromptBlock();
       if (skillsBlock) blocks.push(skillsBlock);
+      // Session metadata (id/name/model/context) is collected here, not at
+      // bootstrap: the session is created during bootstrap with messageCount 0,
+      // so a static collect would always yield null. Content is stable per
+      // session (no per-turn fields) to preserve prefix KV-cache.
+      const sessionBlock = sessionModule.getSystemPromptBlock();
+      if (sessionBlock) blocks.push(sessionBlock);
       const mapBlock = indexerModule.getSystemPromptBlock();
       if (mapBlock) blocks.push(mapBlock);
       const hiddenToolsBlock = buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);

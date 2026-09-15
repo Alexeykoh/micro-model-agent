@@ -99,6 +99,13 @@ export interface ToolContext {
    * process-global, so vi.mock cannot be used for the Agent class).
    */
   agentFactory?: (deps: unknown) => { run(task: string): Promise<import("../core/types").AgentResult> };
+  /**
+   * Session manager — exposes active session metadata to tools.
+   * Added for session_info tool; kept minimal to avoid circular deps.
+   */
+  sessionManager?: {
+    getActiveMeta(): { id: string; name: string; model?: string; contextWindow?: number; messageCount: number; createdAt: string; updatedAt: string } | null;
+  };
 }
 
 export interface ToolResult {

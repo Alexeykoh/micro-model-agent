@@ -14,12 +14,20 @@ export class SessionModule implements AgentModule {
 
   getSystemPromptBlock(): PromptBlock | null {
     const meta = this.manager.getActiveMeta();
-    if (!meta || meta.messageCount === 0) return null;
+    if (!meta) return null;
+    // Stable per session: id/name/model/contextWindow do not change between
+    // turns, so the system prompt is not mutated (KV-cache, rule #10). Live
+    // values (message count) are exposed through the session_info tool.
     return {
-      content: t("session.info", { name: meta.name, id: meta.id, count: meta.messageCount }),
+      content: t("session.info_full", {
+        name: meta.name,
+        id: meta.id,
+        model: meta.model,
+        contextWindow: meta.contextWindow,
+      }),
       priority: "low",
       essential: false,
-      estimatedTokens: 20,
+      estimatedTokens: 30,
     };
   }
 

@@ -71,7 +71,7 @@
   "session.available": "Available sessions:",
   "session.no_match": "No session matching \"{query}\"",
   "session.default_name": "Session {date}",
-  "session.info": "[Session: \"{name}\" ({id}) — {count} messages so far]",
+  "session.info_full": "[Session: \"{name}\" ({id}) | model: {model} | context: {contextWindow} tokens]",
   "session.col_active": "",
   "session.col_id": "ID",
   "session.col_name": "Name",
@@ -717,5 +717,9 @@
   "moe.scope_rejected": "⛔ Scope request rejected for \"{subtask}\"",
   "prompt.overflow.exceeded": "Prompt overflow: \"{label}\" ({original} tok) exceeded the system-prompt budget ({budget} tok) — {mode} to {resolved} tok. To fit fully, {hint}.",
   "prompt.overflow.failed": "Prompt overflow resolution failed: {error} — oversized blocks will be dropped.",
-  "prompt.overflow.startup": "Startup check: {block} ({original} tok) exceeds the system-prompt budget ({budget} tok) — it will be summarized/truncated before the first run. To include it fully, {hint}."
+  "prompt.overflow.startup": "Startup check: {block} ({original} tok) exceeds the system-prompt budget ({budget} tok) — it will be summarized/truncated before the first run. To include it fully, {hint}.",
+  "tool.session_info.no_active": "No active session",
+  "tool.session_info.result": "Session: \"{name}\" ({id})\nModel: {model}\nProvider: {provider}\nContext window: {contextWindow} tokens\nMessages: {messages}\nCreated: {createdAt}\nUpdated: {updatedAt}",
+  "tool.session_info.context": "Context used: {used} / {budget} tokens ({percent}%)",
+  "tool.friendly.session_info": "Session info"
 }

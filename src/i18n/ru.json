@@ -70,7 +70,7 @@
   "session.available": "Доступные сессии:",
   "session.no_match": "Нет сессии подходящей по \"{query}\"",
   "session.default_name": "Сессия {date}",
-  "session.info": "[Сессия: \"{name}\" ({id}) — {count} сообщений]",
+  "session.info_full": "[Сессия: \"{name}\" ({id}) | модель: {model} | контекст: {contextWindow} токенов]",
   "session.col_active": "",
   "session.col_id": "ID",
   "session.col_name": "Имя",
@@ -717,5 +717,9 @@
   "moe.scope_rejected": "⛔ Запрос scope отклонён для \"{subtask}\"",
   "prompt.overflow.exceeded": "Промпт переполнен: \"{label}\" ({original} токенов) превысил бюджет системного промпта ({budget} токенов) — {mode} до {resolved} токенов. Чтобы включить полностью, {hint}.",
   "prompt.overflow.failed": "Не удалось разрешить переполнение промпта: {error} — слишком большие блоки будут отброшены.",
-  "prompt.overflow.startup": "Проверка при старте: {block} ({original} токенов) превышает бюджет системного промпта ({budget} токенов) — будет суммаризован/обрезан перед первым запуском. Чтобы включить полностью, {hint}."
+  "prompt.overflow.startup": "Проверка при старте: {block} ({original} токенов) превышает бюджет системного промпта ({budget} токенов) — будет суммаризован/обрезан перед первым запуском. Чтобы включить полностью, {hint}.",
+  "tool.session_info.no_active": "Нет активной сессии",
+  "tool.session_info.result": "Сессия: \"{name}\" ({id})\nМодель: {model}\nПровайдер: {provider}\nКонтекстное окно: {contextWindow} токенов\nСообщений: {messages}\nСоздана: {createdAt}\nОбновлена: {updatedAt}",
+  "tool.session_info.context": "Использовано контекста: {used} / {budget} токенов ({percent}%)",
+  "tool.friendly.session_info": "Информация о сессии"
 }
