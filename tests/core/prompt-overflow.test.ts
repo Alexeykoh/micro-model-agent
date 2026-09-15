@@ -12,6 +12,20 @@ import {
 } from "../../src/core/prompt-overflow";
 import type { PromptBlock } from "../../src/core/types";
 import type { Chunk, LLMProvider } from "../../src/llm/provider";
+import { setLocale } from "../../src/i18n/index";
+
+interface CapturingLogger {
+  warns: string[];
+  warn(msg: string): void;
+  info(): void;
+  debug(): void;
+  error(): void;
+}
+
+function capturingLogger(): CapturingLogger {
+  const warns: string[] = [];
+  return { warns, warn: (m: string) => warns.push(m), info: () => {}, debug: () => {}, error: () => {} };
+}
 
 function block(partial: Partial<PromptBlock> & { content: string }): PromptBlock {
   return {
@@ -107,6 +121,39 @@ describe("resolvePromptOverflow", () => {
     expect(res.warnings[0].mode).toBe("truncate");
     expect(res.replacements[0].content).toContain("truncated");
     expect(res.replacements[0].estimatedTokens).toBeLessThanOrEqual(3276 - 1000);
+  });
+
+  it("notifies when compression starts and before summarizing", async () => {
+    setLocale("en");
+    const logger = capturingLogger();
+    const provider = fakeProvider(() => "SUMMARY: keep rules");
+    await resolvePromptOverflow({
+      overflow: [block({ content: "LONG".repeat(1000), kind: "instructions", estimatedTokens: 3000 })],
+      includedTokens: 1500,
+      systemBudget: 3276,
+      provider,
+      cacheDir,
+      logger: logger as unknown as Parameters<typeof resolvePromptOverflow>[0]["logger"],
+    });
+    expect(logger.warns.some((m) => m.includes("compressing"))).toBe(true);
+    expect(logger.warns.some((m) => m.includes("summarizing"))).toBe(true);
+  });
+
+  it("notifies on truncation fallback", async () => {
+    setLocale("en");
+    const logger = capturingLogger();
+    const provider = fakeProvider(() => {
+      throw new Error("backend down");
+    });
+    await resolvePromptOverflow({
+      overflow: [block({ content: "DATA".repeat(6000), kind: "instructions", estimatedTokens: 3000 })],
+      includedTokens: 1000,
+      systemBudget: 3276,
+      provider,
+      cacheDir,
+      logger: logger as unknown as Parameters<typeof resolvePromptOverflow>[0]["logger"],
+    });
+    expect(logger.warns.some((m) => m.includes("truncating"))).toBe(true);
   });
 
   it("truncates when no provider is available (summarize disabled)", async () => {

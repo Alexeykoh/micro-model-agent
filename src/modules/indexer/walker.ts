@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync, lstatSync, existsSync, watch, FSWa
 import { join, relative, extname } from "path";
 import { Logger } from "../../logger/app-logger";
 import { languageIdForExt, extractSymbols } from "./symbols";
+import { t } from "../../i18n/index";
 
 const logger = new Logger("warn", "indexer");
 
@@ -150,7 +151,7 @@ export class Indexer {
           }
         } catch (e) {
           // Entry vanished or is unreadable — skip it, keep indexing the rest.
-          logger.warn(`indexer: skipping unreadable entry "${relPath}"`, { error: String(e) });
+          logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
           continue;
         }
       }

@@ -8,6 +8,7 @@ import type { LLMProvider } from "../llm/provider";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import { estimateTokens } from "../llm/token-counter";
+import { t } from "../i18n/index";
 
 /** How many tokens the model-facing hint block costs (upper bound for allocation). */
 export const HINT_BLOCK_TOKENS = 60;
@@ -164,6 +165,13 @@ export async function resolvePromptOverflow(opts: {
   let used = includedTokens;
   let unresolved: PromptBlockKind[] = [];
 
+  // The bootstrap dry-run only warns that blocks "will be summarized before the
+  // first run". Without a notice here the first prompt appears to hang while
+  // the model rewrites AGENTS.md / the project map — surface it.
+  if (sorted.length > 0) {
+    logger?.warn(t("prompt.overflow.compressing", { count: String(sorted.length) }));
+  }
+
   for (const block of sorted) {
     const kind = block.kind as PromptBlockKind;
     const maxTokens = systemBudget - used - HINT_BLOCK_TOKENS;
@@ -183,6 +191,13 @@ export async function resolvePromptOverflow(opts: {
       logger?.debug(`Prompt overflow: cache hit for ${kind} (${key}, ${mode})`);
     } else if (provider) {
       const targetChars = Math.floor(maxTokens * (CHARS_PER_TOKEN - 1));
+      logger?.warn(
+        t("prompt.overflow.summarizing", {
+          label: blockLabel(block.content),
+          original: String(block.estimatedTokens),
+          budget: String(maxTokens),
+        }),
+      );
       try {
         const prompt = [
           `Summarize the following ${KIND_LABEL[kind]} document.`,
@@ -220,7 +235,12 @@ export async function resolvePromptOverflow(opts: {
           );
         }
       } catch (err: any) {
-        logger?.warn(`Prompt overflow: summarization failed for ${kind}: ${err?.message ?? err}`);
+        logger?.warn(
+          t("prompt.overflow.summarize_failed", {
+            label: blockLabel(block.content),
+            error: String(err?.message ?? err),
+          }),
+        );
         text = "";
       }
     }
@@ -228,6 +248,12 @@ export async function resolvePromptOverflow(opts: {
     if (!text) {
       // No provider or summarization failed — hard truncation fallback.
       mode = "truncate";
+      logger?.warn(
+        t("prompt.overflow.truncating", {
+          label: blockLabel(block.content),
+          original: String(block.estimatedTokens),
+        }),
+      );
       text = truncateToTokens(block.content, maxTokens);
     }
 

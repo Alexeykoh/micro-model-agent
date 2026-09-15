@@ -1186,7 +1186,7 @@ export class Agent {
     contextManager.onCompact = null;
     const killed = processRegistry.killAll();
     if (killed > 0) {
-      logger.info(`Killed ${killed} background process(es) on shutdown`);
+      logger.info(t("env.killed_processes", { count: String(killed) }));
     }
     // Note: do NOT close session log here — the session is still active.
     // Session log is closed only when the session actually ends (exit, session delete).

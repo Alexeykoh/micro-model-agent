@@ -294,11 +294,11 @@ export async function bootstrap(
     });
 
     if (!loadResult.success) {
-      logger.warn(`Model auto-load failed: ${loadResult.error}. Continuing with manual load.`);
+      logger.warn(t("env.model_autoload_failed", { error: String(loadResult.error ?? "") }));
     } else if (loadResult.alreadyLoaded) {
       logger.debug(`Model ${config.model} already loaded`);
     } else {
-      logger.info(`Model ${config.model} loaded in ${loadResult.loadTime}s`);
+      logger.info(t("env.model_loaded", { model: config.model, seconds: String(loadResult.loadTime) }));
     }
   }
 
@@ -357,7 +357,12 @@ export async function bootstrap(
         // Only cache a definitive result — a transient probe error (null) must
         // NOT pin "reasoning not supported" for the 24h TTL.
         if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
-        logger.info(`Reasoning probe: strategy=${reasoningStrategy} → ${passed === true ? "mechanism respected" : "mechanism IGNORED"}`);
+        logger.info(
+          t("env.reasoning_probe", {
+            strategy: reasoningStrategy,
+            result: passed === true ? t("env.reasoning_respected") : t("env.reasoning_ignored"),
+          }),
+        );
         // null (transient error) falls back to "not passed" for this session.
         return passed === true;
       } catch {
@@ -387,9 +392,18 @@ export async function bootstrap(
     cacheDir: projectMapCacheDir,
   });
   try {
-    await indexerModule.buildIndex();
+    // Build (or load from cache) the project index. On a large workspace the
+    // first walk can pause startup with no other output — announce both ends
+    // so the silence is explained.
+    logger.info(t("env.indexing"));
+    const index = await indexerModule.buildIndex();
+    if (index) {
+      logger.info(t("env.indexed", { files: String(index.files.length) }));
+    } else {
+      logger.warn(t("env.indexing_failed", { error: "no index produced" }));
+    }
   } catch (err: any) {
-    logger.warn(`Project indexing failed: ${err.message}`);
+    logger.warn(t("env.indexing_failed", { error: String(err?.message ?? err) }));
   }
 
   const skillsLoader = new SkillsLoader();

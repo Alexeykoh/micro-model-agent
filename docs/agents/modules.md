@@ -221,6 +221,9 @@ Prompt blocks carrying a semantic `kind` (`PromptBlockKind`: `"instructions"` fo
    - LLM summarization via the active provider (prompt preserves paths/commands/rules), cached in `<project>/.mma/cache/prompt-summaries/<sha256(kind|budget|content)>.md` — cache is invalidated by file edits or budget changes;
    - fallback on failure / `instructions.summarize: false`: hard truncation with a `[...truncated...]` marker.
 3. **Model hint**: a small `essential` block tells the model which blocks were compressed (and which did not fit at all) and points to `read_file AGENTS.md` for the full text.
+4. **User notifications**: the startup dry-run only says the block "will be summarized before the first run"; without a notice the first prompt looks hung while a local model rewrites a large AGENTS.md. `resolvePromptOverflow` now logs (en+ru, `prompt.overflow.*`): a "compressing N block(s)…" line before it starts, a per-block "summarizing \"label\" (N → M tok)…" line right before the model call, a "truncating …" line on the fallback, and a failure line when summarization throws before falling back to truncation.
+
+Related startup notices localized under `env.*`: model auto-load success/failure, reasoning probe result, project indexing start/finish/failure, unreadable index entries, and background-processes-killed-on-shutdown.
 
 Config: `instructions.summarize` (default `true`) — `~/.mma/config/core.json`.
 
