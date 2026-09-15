@@ -104,6 +104,10 @@ The walker indexes files in arbitrary `readdir` order, so a naive `slice(0, N)` 
 
 The index itself still contains every file (so `project_map find` is unaffected); only the prompt listing is ranked and capped.
 
+### Ignored directories (`walker.ts`)
+
+`IGNORE_DIRS` skips directories that never hold project source but would flood the index. It is ecosystem-wide, not Node-only: Node/JS (`node_modules`, `dist`, `build`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `.parcel-cache`), Python (`venv`, `.venv`, `env`, `virtualenv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.tox`, `site-packages`), Rust (`target`), Go/PHP/Ruby (`vendor`, `.bundle`), JVM (`.gradle`, `out`), .NET (`obj`), Apple (`pods`, `deriveddata`), VCS/IDE (`.git`, `.hg`, `.svn`, `.mma`, `.idea`, `.vscode`). Matching is case-insensitive; the file watcher matches whole path **segments** (not substrings) so short names like `env`/`out`/`obj` do not black out `environment.ts` or `about/`.
+
 ## UI Rendering
 
 Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatically: **rich** when `process.stdout.isTTY && !process.env.CI`, otherwise **plain**. Colors come from `src/ui/colors.ts` (`createColors`), enabled only on a TTY and disabled in CI / on `NO_COLOR` (overrides picocolors' win32 default-on).

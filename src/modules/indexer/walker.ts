@@ -18,7 +18,71 @@ const LANGUAGES: Record<string, string> = {
   ".go": "go",
 };
 
-const IGNORE_DIRS = new Set(["node_modules", ".git", "dist", "build", ".mma", "coverage"]);
+/**
+ * Directories that never hold project source but would flood the index:
+ * VCS/build output, package caches and virtual environments across
+ * ecosystems (Node, Python, Rust, Go/PHP/Ruby, JVM, .NET, Apple, IDE).
+ * Stored lowercase — matching is case-insensitive (Windows/macOS).
+ */
+const IGNORE_DIRS = new Set([
+  // VCS / MMA
+  ".git",
+  ".hg",
+  ".svn",
+  ".mma",
+  // Node / JS bundlers
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".turbo",
+  ".parcel-cache",
+  ".cache",
+  // Python
+  "venv",
+  ".venv",
+  "env",
+  "virtualenv",
+  "__pycache__",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".tox",
+  "site-packages",
+  // Rust
+  "target",
+  // Go / PHP / Ruby
+  "vendor",
+  ".bundle",
+  // JVM
+  ".gradle",
+  "out",
+  // .NET
+  "obj",
+  // Apple
+  "pods",
+  "deriveddata",
+  // IDE / editor
+  ".idea",
+  ".vscode",
+]);
+
+/** True when a directory name is ignored (case-insensitive). */
+export function isIgnoredDirName(name: string): boolean {
+  return IGNORE_DIRS.has(name.toLowerCase());
+}
+
+/**
+ * True when any path SEGMENT is an ignored directory. Segment-based (not a
+ * substring) so short names like `env`/`out`/`obj` do not black out
+ * `environment.ts` or `about/`.
+ */
+function isIgnoredPath(filename: string): boolean {
+  return filename.split(/[\\/]/).some((segment) => isIgnoredDirName(segment));
+}
 
 export interface IndexedFile {
   path: string;
@@ -43,7 +107,7 @@ export class Indexer {
 
   watch(callback: (event: string, filename: string | null) => void): void {
     this.watcher = watch(this.baseDir, { recursive: true }, (event, filename) => {
-      if (filename && !Array.from(IGNORE_DIRS).some((dir) => filename.includes(dir))) {
+      if (filename && !isIgnoredPath(filename)) {
         callback(event, filename);
       }
     });
@@ -83,7 +147,7 @@ export class Indexer {
           const stat = statSync(fullPath);
 
           if (stat.isDirectory()) {
-            if (!IGNORE_DIRS.has(entry)) {
+            if (!isIgnoredDirName(entry)) {
               walkDir(fullPath);
             }
           } else if (stat.isFile()) {
