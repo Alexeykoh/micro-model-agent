@@ -2,6 +2,19 @@
 
 ## Актуальное
 
+### Session self-inspection + project map/indexing — 0.60.0 (2026-09-15)
+
+Реализовано (коммиты `ebbb70b..29818ef`):
+- **`session_info`** (alwaysOn) — id/имя/модель/провайдер/контекст/сообщения + живое использование контекста; `SessionModule` prompt-блок починен (собирался при bootstrap с `messageCount === 0` → всегда `null`; теперь через `getDynamicPromptBlocks`, стабильный per-session).
+- **i18n** для `prompt.overflow.*` (en+ru).
+- **Карта проекта**: `selectMapFiles` (source > tests > docs/config, плотнейший code-каталог первым, детерминированно, cap 80) — раньше `slice(0,100)` в порядке обхода давал 0 файлов из `src/`.
+- **Команда**: `mma map` / `/map` (summary|refresh|find).
+- **Индексатор**: мультиязычный `IGNORE_DIRS` (venv/`.venv`/target/vendor/__pycache__/…), сегментный матчинг в watcher; реестр языков `symbols.ts` (TS/JS, Python, Rust, Go, Java, Kotlin, C#, Ruby, PHP, Swift, Scala, C/C++, Shell, Lua).
+
+**Открытые хвосты по индексации:**
+- [ ] Валидация кэша индекса (mtime/hash) — `index-cache.json` не проверяется на свежесть
+- [ ] Watcher на Linux не рекурсивный (`fs.watch recursive`) — автообновление только ручное
+
 ### Аудит логики агента — `docs/analysis/2026-08-29-agent-logic-audit.md`
 
 Системный аудит (2026-08-29) поверх `model-control-fixes`: подтвердил статус 39 находок по текущему
@@ -178,7 +191,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 2. **Git push**: нужен remote `master`, пока только `providers` ветка
 
-3. **npm publish** — 0.46.0/0.47.0/0.56.0/0.57.0/0.57.1/0.57.2 выпущены (см. CHANGELOG, HEAD `a82d115`). Следующий — после закрытия открытых пунктов аудита 2026-08-29.
+3. **npm publish** — 0.46.0/0.47.0/0.56.0/0.57.0/0.57.1/0.57.2 выпущены. **0.60.0** — выпускается (session self-inspection + project map/indexing, см. выше).
 
 4. **Качество агентных прогонов — P5/P6 из аудита 2026-08-31** (`_testing/agent-quality-review-2026-08-31.md`; P0–P4 из того же аудита закрыты коммитами `7ff98dc`, `98dc7a2`):
    - [ ] **P5 — авто-сужение набора тулов**: тривиальный вопрос тянет все 23 схемы тулов (~3.1K токенов, ~9% окна 32K); tool narrowing (`enable_tools`) есть, но не применяется автоматически — сужать по типу задачи до первого LLM-вызова
