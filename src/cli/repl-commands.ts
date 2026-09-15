@@ -16,6 +16,8 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { LspModule } from "../modules/lsp/module";
+import type { IndexerModule } from "../modules/indexer/module";
+import { runMapAction } from "../modules/indexer/map-command";
 import { errMsg } from "../utils";
 
 const version = readMmaVersion();
@@ -64,6 +66,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   reload: "agent",
   wizard: "agent",
   sysprompt: "agent",
+  map: "agent",
   lsp: "agent",
   sessions: "session",
   new: "session",
@@ -315,6 +318,22 @@ function registerConfigCommands(ctx: ReplContext): void {
           console.log(pc.dim(`  - ${e.slice(0, 80)}${e.length > 80 ? "..." : ""}`));
         }
       }
+    },
+  });
+  ctx.registerCommand({
+    name: "map",
+    description: t("repl.map"),
+    usage: t("repl.map_usage"),
+    action: async (args: string[]) => {
+      const indexer = ctx.agent.getModule<IndexerModule>("indexer");
+      if (!indexer) {
+        console.log(pc.yellow(t("indexer.not_indexed")));
+        return;
+      }
+      const action = args[0] || "summary";
+      const query = args.slice(1).join(" ");
+      const result = await runMapAction(indexer, action, query);
+      console.log(result.output);
     },
   });
 }

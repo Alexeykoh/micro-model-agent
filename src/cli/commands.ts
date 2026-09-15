@@ -12,6 +12,8 @@ import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { readMmaVersion } from "../core/version";
+import type { IndexerModule } from "../modules/indexer/module";
+import { runMapAction } from "../modules/indexer/map-command";
 import { readChangelog, extractLatestChangelog, extractChangelogRange } from "../modules/updater/changelog-reader";
 
 const version = readMmaVersion();
@@ -276,6 +278,24 @@ function buildContextCommand(program: Command): void {
       config.contextWindow = contextWindow;
       saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.context_set", { size: contextWindow }));
+    });
+}
+
+function buildMapCommand(program: Command): void {
+  program
+    .command("map")
+    .description(t("cli.map.description"))
+    .argument("[action]", t("cli.map.action"), "summary")
+    .argument("[query]", t("cli.map.query"))
+    .action(async (action: string, query?: string) => {
+      const { agent } = await bootstrap();
+      const indexer = agent.getModule<IndexerModule>("indexer");
+      if (!indexer) {
+        console.log(t("indexer.not_indexed"));
+        return;
+      }
+      const result = await runMapAction(indexer, action, query);
+      console.log(result.output);
     });
 }
 
@@ -565,6 +585,7 @@ export function createProgram(): Command {
   buildConfigCommands(program);
   buildModelCommands(program);
   buildContextCommand(program);
+  buildMapCommand(program);
   buildProviderCommands(program);
   buildSessionCommands(program);
 

@@ -721,5 +721,12 @@
   "tool.session_info.no_active": "Нет активной сессии",
   "tool.session_info.result": "Сессия: \"{name}\" ({id})\nМодель: {model}\nПровайдер: {provider}\nКонтекстное окно: {contextWindow} токенов\nСообщений: {messages}\nСоздана: {createdAt}\nОбновлена: {updatedAt}",
   "tool.session_info.context": "Использовано контекста: {used} / {budget} токенов ({percent}%)",
-  "tool.friendly.session_info": "Информация о сессии"
+  "tool.friendly.session_info": "Информация о сессии",
+  "cli.map.description": "Работа с индексом / картой проекта",
+  "cli.map.action": "Действие: summary (по умолчанию), refresh, find",
+  "cli.map.query": "Поисковый запрос для действия find",
+  "repl.map": "Показать карту проекта / индекс (summary, refresh, find)",
+  "repl.map_usage": "Использование: /map [summary|refresh|find <запрос>]",
+  "map.refreshed": "Карта проекта обновлена",
+  "map.find_usage": "Использование: map find <запрос>"
 }

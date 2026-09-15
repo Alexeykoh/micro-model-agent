@@ -83,7 +83,26 @@ MMA automatically builds and maintains a map of the current workspace.
 | `refresh` | —          | Force a full re-index                                |
 | `find`    | `query`    | Search files by path or exported symbol name         |
 
-- Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`).
+- Source: `src/modules/indexer/` (`walker.ts`, `cache.ts`, `module.ts`, `map-select.ts`, `map-command.ts`).
+
+The same actions are available to the user (not only to the model):
+
+| CLI               | REPL    | Action                                                             |
+| ----------------- | ------- | ----------------------------------------------------------------- |
+| `mma map`         | `/map`  | Print the project map (the exact text injected into the prompt)   |
+| `mma map refresh` | `/map refresh` | Force a full re-index, then print the map                  |
+| `mma map find <q>`| `/map find <q>` | Search files by path or exported symbol name              |
+
+### Map file selection (`map-select.ts`)
+
+The walker indexes files in arbitrary `readdir` order, so a naive `slice(0, N)` could list only docs/config/tests and **no source files at all** (observed on this repo: the first 100 walked files contained zero `src/` entries) — the model then received a "project map" with no code in it. `selectMapFiles(files, 80)` now:
+
+1. drops lockfile noise (`package-lock.json`, `bun.lockb`, `yarn.lock`, …);
+2. ranks source before test files, tests before docs/config;
+3. within a rank, puts the top-level directory with the most source files first — the densest code root is almost always the real source tree, so no directory names are hardcoded;
+4. then shallower paths, then alphabetical — deterministic, so the block does not change between turns (prefix KV-cache).
+
+The index itself still contains every file (so `project_map find` is unaffected); only the prompt listing is ranked and capped.
 
 ## UI Rendering
 

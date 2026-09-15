@@ -721,5 +721,12 @@
   "tool.session_info.no_active": "No active session",
   "tool.session_info.result": "Session: \"{name}\" ({id})\nModel: {model}\nProvider: {provider}\nContext window: {contextWindow} tokens\nMessages: {messages}\nCreated: {createdAt}\nUpdated: {updatedAt}",
   "tool.session_info.context": "Context used: {used} / {budget} tokens ({percent}%)",
-  "tool.friendly.session_info": "Session info"
+  "tool.friendly.session_info": "Session info",
+  "cli.map.description": "Work with the project index / map",
+  "cli.map.action": "Action: summary (default), refresh, find",
+  "cli.map.query": "Search query for the find action",
+  "repl.map": "Show the project map / index (summary, refresh, find)",
+  "repl.map_usage": "Usage: /map [summary|refresh|find <query>]",
+  "map.refreshed": "Project map refreshed",
+  "map.find_usage": "Usage: map find <query>"
 }

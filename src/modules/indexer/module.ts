@@ -4,6 +4,7 @@ import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition, ToolContext, ToolResult } from "../../tools/types";
 import { Indexer } from "./walker";
 import { IndexCache } from "./cache";
+import { selectMapFiles } from "./map-select";
 import { buildProjectProfileLine } from "./project-profile";
 import type { IndexResult, IndexedFile } from "./walker";
 import { t } from "../../i18n/index";
@@ -14,6 +15,9 @@ export interface IndexerModuleOptions {
   baseDir: string;
   cacheDir: string;
 }
+
+/** Max files listed in the project-map prompt block (code first; see map-select). */
+const MAP_FILE_LIMIT = 80;
 
 export class IndexerModule implements AgentModule {
   name = "indexer";
@@ -62,6 +66,27 @@ export class IndexerModule implements AgentModule {
       const path = f.path.toLowerCase();
       return path.includes(q) || f.exports.some((e) => e.toLowerCase().includes(q));
     });
+  }
+
+  /** Human/model-readable result of a `find` query (shared by the tool and `mma map`). */
+  formatFind(query: string): string {
+    const matches = this.find(query);
+    if (matches.length === 0) {
+      return t("indexer.no_matches", { query });
+    }
+    const lines = matches
+      .map((f) => {
+        const path = toForwardSlash(f.path);
+        const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
+        return `- ${path}${exports}`;
+      })
+      .join("\n");
+    return t("indexer.find_results", { count: matches.length, results: lines });
+  }
+
+  /** The exact project-map text injected into the system prompt (null if not indexed). */
+  getPromptMap(): string | null {
+    return this.index ? this.formatMap(this.index) : null;
   }
 
   watch(): void {
@@ -127,15 +152,16 @@ export class IndexerModule implements AgentModule {
         .map(([dir, count]) => `${dir} (${count})`)
         .join(", ") || "-";
 
-    const fileLines = result.files.slice(0, 100).map((f) => {
+    const listed = selectMapFiles(result.files, MAP_FILE_LIMIT);
+    const fileLines = listed.map((f) => {
       const path = toForwardSlash(f.path);
       const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
       return `- ${path}${exports}`;
     });
 
     const more =
-      result.files.length > 100
-        ? `\n${t("indexer.and_more", { count: result.files.length - 100 })}`
+      result.files.length > listed.length
+        ? `\n${t("indexer.and_more", { count: result.files.length - listed.length })}`
         : "";
 
     const duplicates = this.findDuplicateBasenames(result);
@@ -238,23 +264,7 @@ export class IndexerModule implements AgentModule {
         if (action === "find") {
           const query = String(args.query || "").toLowerCase();
           if (!query) return { success: false, output: t("tool.invalid_params") };
-          const matches = this.find(query);
-          if (matches.length === 0) {
-            return this.makeResult(t("indexer.no_matches", { query }));
-          }
-          const lines = matches
-            .map((f) => {
-              const path = toForwardSlash(f.path);
-              const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
-              return `- ${path}${exports}`;
-            })
-            .join("\n");
-          return this.makeResult(
-            t("indexer.find_results", {
-              count: matches.length,
-              results: lines,
-            }),
-          );
+          return this.makeResult(this.formatFind(query));
         }
 
         if (!this.index) {
