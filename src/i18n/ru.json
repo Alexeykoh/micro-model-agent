@@ -714,5 +714,8 @@
   "moe.cycles_exhausted": "Достигнут лимит re-plan циклов ({max}) — возвращаю частичные результаты",
   "moe.partial_result": "Частичный результат",
   "moe.scope_approved": "🔓 Scope расширен для \"{subtask}\": {files}",
-  "moe.scope_rejected": "⛔ Запрос scope отклонён для \"{subtask}\""
+  "moe.scope_rejected": "⛔ Запрос scope отклонён для \"{subtask}\"",
+  "prompt.overflow.exceeded": "Промпт переполнен: \"{label}\" ({original} токенов) превысил бюджет системного промпта ({budget} токенов) — {mode} до {resolved} токенов. Чтобы включить полностью, {hint}.",
+  "prompt.overflow.failed": "Не удалось разрешить переполнение промпта: {error} — слишком большие блоки будут отброшены.",
+  "prompt.overflow.startup": "Проверка при старте: {block} ({original} токенов) превышает бюджет системного промпта ({budget} токенов) — будет суммаризован/обрезан перед первым запуском. Чтобы включить полностью, {hint}."
 }

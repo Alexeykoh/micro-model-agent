@@ -26,7 +26,7 @@ import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
 import { MemoryModule } from "../modules/memory/module";
 import { MemoryStore } from "../modules/memory/store";
-import { setLocale } from "../i18n/index";
+import { t, setLocale } from "../i18n/index";
 import { Agent } from "./agent";
 import { homedir } from "os";
 import { join, resolve } from "path";
@@ -677,7 +677,12 @@ export async function bootstrap(
       const hint = contextWindowHint(config, dir, recommended);
       for (const b of dry.overflow) {
         logger.warn(
-          `Startup check: ${b.kind === "instructions" ? "AGENTS.md" : "project map"} (${b.estimatedTokens} tok) exceeds the system-prompt budget (${systemBudget} tok) — it will be summarized/truncated before the first run. To include it fully, ${hint}.`,
+          t("prompt.overflow.startup", {
+            block: b.kind === "instructions" ? "AGENTS.md" : "project map",
+            original: String(b.estimatedTokens),
+            budget: String(systemBudget),
+            hint,
+          }),
         );
       }
     }

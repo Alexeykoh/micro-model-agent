@@ -714,5 +714,8 @@
   "moe.cycles_exhausted": "Max re-plan cycles ({max}) reached — returning partial results",
   "moe.partial_result": "Partial result",
   "moe.scope_approved": "🔓 Scope expanded for \"{subtask}\": {files}",
-  "moe.scope_rejected": "⛔ Scope request rejected for \"{subtask}\""
+  "moe.scope_rejected": "⛔ Scope request rejected for \"{subtask}\"",
+  "prompt.overflow.exceeded": "Prompt overflow: \"{label}\" ({original} tok) exceeded the system-prompt budget ({budget} tok) — {mode} to {resolved} tok. To fit fully, {hint}.",
+  "prompt.overflow.failed": "Prompt overflow resolution failed: {error} — oversized blocks will be dropped.",
+  "prompt.overflow.startup": "Startup check: {block} ({original} tok) exceeds the system-prompt budget ({budget} tok) — it will be summarized/truncated before the first run. To include it fully, {hint}."
 }

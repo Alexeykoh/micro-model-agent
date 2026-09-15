@@ -384,7 +384,14 @@ export class Agent {
       : `increase contextWindow (e.g. to ${recommended})`;
     for (const w of res.warnings) {
       this.deps.logger.warn(
-        `Prompt overflow: "${w.label}" (${w.originalTokens} tok) exceeded the system-prompt budget (${systemBudget} tok) — ${w.mode === "summary" ? "summarized" : "truncated"} to ${w.resolvedTokens} tok. To fit fully, ${hint}.`,
+        t("prompt.overflow.exceeded", {
+          label: w.label,
+          original: String(w.originalTokens),
+          budget: String(systemBudget),
+          mode: w.mode === "summary" ? "summarized" : "truncated",
+          resolved: String(w.resolvedTokens),
+          hint,
+        }),
       );
     }
   }
@@ -470,7 +477,7 @@ export class Agent {
           await this.resolvePromptOverflowOnce();
         } catch (err: any) {
           this.deps.logger.warn(
-            `Prompt overflow resolution failed: ${err?.message ?? err} — oversized blocks will be dropped.`,
+            t("prompt.overflow.failed", { error: String(err?.message ?? err) }),
           );
         }
       }
