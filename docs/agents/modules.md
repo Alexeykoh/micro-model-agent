@@ -104,6 +104,16 @@ The walker indexes files in arbitrary `readdir` order, so a naive `slice(0, N)` 
 
 The index itself still contains every file (so `project_map find` is unaffected); only the prompt listing is ranked and capped.
 
+### Language registry & symbols (`symbols.ts`)
+
+Indexing and symbol extraction are data-driven in `symbols.ts`:
+
+- `EXT_TO_LANGUAGE` — extension → language id; a single place to add a language. Indexed extensions now cover TypeScript/JavaScript (`.ts/.mts/.cts/.tsx/.js/.mjs/.cjs/.jsx`), Python (`.py/.pyi`), Rust, Go, Java, Kotlin, C#, Ruby, PHP, Swift, Scala, C/C++ (`.c/.h/.cpp/.cc/.cxx/.hpp/.hxx`), Shell (`.sh/.bash/.zsh`), Lua, plus data formats (JSON, Markdown, YAML, TOML, XML, HTML/CSS).
+- `RULES` — per language: a `code` flag (used for map ranking) and an `extract()` function returning public/exported symbol names. Extraction is regex-based by design (no parser dependency, cheap enough to run on every file): TS/JS handles `export const|function|class|interface|type|enum`, `export default` and `export { a, b as c }`; Python takes top-level `def`/`class`; Rust `pub fn/struct/enum/trait/const/type/mod` + macros; Go `func`/methods/`type`; Java/Kotlin/C#/Swift/Scala type+method keywords; Ruby/PHP declarations; C/C++ `class/struct/enum/union/namespace`; Shell and Lua functions.
+- Symbols are deduped and capped (`MAX_SYMBOLS_PER_FILE = 40`) so a generated file cannot bloat the map.
+
+Adding a language is one `RULES` entry plus one or more `EXT_TO_LANGUAGE` lines. `isCodeLanguage()` is consumed by `map-select.ts` (single source of truth for what counts as source).
+
 ### Ignored directories (`walker.ts`)
 
 `IGNORE_DIRS` skips directories that never hold project source but would flood the index. It is ecosystem-wide, not Node-only: Node/JS (`node_modules`, `dist`, `build`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `.parcel-cache`), Python (`venv`, `.venv`, `env`, `virtualenv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.tox`, `site-packages`), Rust (`target`), Go/PHP/Ruby (`vendor`, `.bundle`), JVM (`.gradle`, `out`), .NET (`obj`), Apple (`pods`, `deriveddata`), VCS/IDE (`.git`, `.hg`, `.svn`, `.mma`, `.idea`, `.vscode`). Matching is case-insensitive; the file watcher matches whole path **segments** (not substrings) so short names like `env`/`out`/`obj` do not black out `environment.ts` or `about/`.

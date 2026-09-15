@@ -1,22 +1,9 @@
 import { readdirSync, readFileSync, statSync, lstatSync, existsSync, watch, FSWatcher } from "fs";
 import { join, relative, extname } from "path";
 import { Logger } from "../../logger/app-logger";
+import { languageIdForExt, extractSymbols } from "./symbols";
 
 const logger = new Logger("warn", "indexer");
-
-const LANGUAGES: Record<string, string> = {
-  ".ts": "typescript",
-  ".tsx": "typescript-react",
-  ".js": "javascript",
-  ".jsx": "javascript-react",
-  ".json": "json",
-  ".md": "markdown",
-  ".yaml": "yaml",
-  ".yml": "yaml",
-  ".py": "python",
-  ".rs": "rust",
-  ".go": "go",
-};
 
 /**
  * Directories that never hold project source but would flood the index:
@@ -152,10 +139,10 @@ export class Indexer {
             }
           } else if (stat.isFile()) {
             const ext = extname(entry).toLowerCase();
-            const language = LANGUAGES[ext];
+            const language = languageIdForExt(ext);
             if (language) {
               const content = readFileSync(fullPath, "utf-8");
-              const exports = this.extractExports(content, language);
+              const exports = extractSymbols(content, language);
               files.push({ path: relPath, language, exports, size: stat.size });
               totalSize += stat.size;
               count++;
@@ -171,20 +158,6 @@ export class Indexer {
 
     walkDir(this.baseDir);
     return { files, totalSize };
-  }
-
-  private extractExports(content: string, language: string): string[] {
-    if (language === "typescript" || language === "javascript") {
-      const exports: string[] = [];
-      const exportRegex =
-        /export\s+(?:const|function|class|interface|type|enum|default\s+(?:class|function))\s+(\w+)/g;
-      let match: RegExpExecArray | null;
-      while ((match = exportRegex.exec(content)) !== null) {
-        exports.push(match[1]);
-      }
-      return exports;
-    }
-    return [];
   }
 
   summarize(result: IndexResult): string {

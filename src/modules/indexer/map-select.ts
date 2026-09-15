@@ -1,15 +1,6 @@
 import type { IndexedFile } from "./walker";
 import { toForwardSlash } from "../../tools/path-utils";
-
-const CODE_LANGUAGES = new Set([
-  "typescript",
-  "typescript-react",
-  "javascript",
-  "javascript-react",
-  "python",
-  "rust",
-  "go",
-]);
+import { isCodeLanguage } from "./symbols";
 
 /** Lockfiles and generated manifests: no structural value in the map. */
 const NOISE_BASENAMES = new Set([
@@ -44,7 +35,7 @@ function isTestFile(path: string): boolean {
 function rank(file: IndexedFile): number {
   const path = toForwardSlash(file.path).toLowerCase();
   if (isTestFile(path)) return 1;
-  if (CODE_LANGUAGES.has(file.language)) return 0;
+  if (isCodeLanguage(file.language)) return 0;
   return 2;
 }
 
