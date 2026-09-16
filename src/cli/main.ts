@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
-import { UpdaterModule } from "../modules/updater/index";
+import { UpdaterModule, isDevEntryPath } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
 import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
@@ -21,6 +21,10 @@ import { errMsg } from "../utils";
 function startAutoUpdate(config: {
   updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
 }): UpdaterModule | undefined {
+  // Dev runs load TypeScript sources; the published bundle runs dist/main.js.
+  // Never auto-update from a checkout — its package.json version may trail npm
+  // and global-installing over the user's install is destructive.
+  if (isDevEntryPath(fileURLToPath(import.meta.url))) return undefined;
   try {
     const module = new UpdaterModule(config.updater, readMmaVersion(), "micro-models-agent", {
       info: (m) => process.stderr.write(pc.dim(m) + "\n"),
