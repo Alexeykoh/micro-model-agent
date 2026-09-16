@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.61.1] - 2026-09-16
+
+### Fixed
+- **OpenCode Go rejected every request**: `/chat/completions` returned `400 MissingSessionID` because the OpenAI-compatible provider sent no `x-opencode-session` header. The provider now sends the live session id (threaded through `ProviderOptions` → `ProviderManager` → `Agent`/`bootstrap`, plus the MoE orchestrator) and a `micro-models-agent/<version>` User-Agent on every chat and `listModels` request.
+- **Dev runs self-updated the global install**: running from TypeScript sources (`bun run mma`, `bun --watch src/cli/main.ts`) read the checkout's `package.json` version and `npm install -g`'d the published one over the user's install. The background updater is now skipped when the entry is a TS source; real installs (`dist/main.js` via `bin/mma.mjs`) still update.
+
 ## [0.61.0] - 2026-09-15
 
 ### Added
