@@ -31,7 +31,7 @@ export class MemoryModule implements AgentModule {
       const prefStr = Object.entries(prefs)
         .map(([k, v]) => `${k}=${v}`)
         .join(", ");
-      parts.push(`User preferences: ${prefStr}`);
+      parts.push(`User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`);
     }
 
     const memoryTail = this.getMemoryTail();
@@ -91,7 +91,7 @@ export class MemoryModule implements AgentModule {
           const prefStr = Object.entries(prefs)
             .map(([k, v]) => `${k}=${v}`)
             .join(", ");
-          parts.push(`User preferences: ${prefStr}`);
+          parts.push(`User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`);
         }
         const memoryTail = this.getMemoryTail();
         if (memoryTail) parts.push(memoryTail);
