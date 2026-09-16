@@ -224,6 +224,41 @@ describe("providers module", () => {
       expect(captured[1].contextWindow).toBe(opts.contextWindow);
     });
 
+    it("forwards getSessionId to every built entry", () => {
+      const registry = new ProviderRegistry();
+      const captured: any[] = [];
+      registry.register({
+        type: "capturing",
+        label: "Capturing",
+        baseUrl: "",
+        capabilities: {
+          streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+          listModels: false, requiresKey: false,
+        },
+        create: (o) => {
+          captured.push(o);
+          return { model: o.model, contextWindow: o.contextWindow } as any;
+        },
+      });
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            { type: "capturing", label: "a", baseUrl: "http://a/v1" },
+            { type: "capturing", label: "b", baseUrl: "http://b/v1" },
+          ],
+        },
+        { ...opts, registry, getSessionId: () => "ses_x" },
+      );
+      void m.switch("a");
+      void m.active;
+      void m.switch("b");
+      void m.active;
+      expect(captured).toHaveLength(2);
+      expect(captured[0].getSessionId()).toBe("ses_x");
+      expect(captured[1].getSessionId()).toBe("ses_x");
+    });
+
     it("listNames orders entries by priority ascending (undefined last, stable)", () => {
       const m = new ProviderManager(
         {

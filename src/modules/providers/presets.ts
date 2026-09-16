@@ -19,6 +19,7 @@ function openaiCompat(opts: ProviderOptions) {
     retry,
     rateLimits,
     maxCompletionTokens: opts.maxCompletionTokens,
+    getSessionId: opts.getSessionId,
     logger: opts.logger,
   });
 }

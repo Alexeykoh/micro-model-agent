@@ -108,6 +108,7 @@ export async function runWithMoE(
         experts: config.experts,
       },
       llmProvider,
+      { getSessionId: () => sessionId },
     );
   }
 

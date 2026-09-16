@@ -31,6 +31,8 @@ export interface ProviderOptions {
   /** Per-call completion cap (max_tokens). Default 4096 in openai-compat. */
   maxCompletionTokens?: number;
   capabilities?: Partial<ProviderCapabilities>;
+  /** Live conversation id, sent as `x-opencode-session` when present. */
+  getSessionId?: () => string | undefined;
   /** Optional logger for LLM request/response diagnostics. */
   logger?: import("../../logger/app-logger").Logger;
 }

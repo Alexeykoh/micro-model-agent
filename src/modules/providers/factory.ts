@@ -20,11 +20,16 @@ export interface BuiltProvider {
  * The wrapper reads `manager.active` live, so switching the manager after
  * build keeps the failover active.
  */
-export function buildActiveProvider(config: AppConfig, logger?: Logger): BuiltProvider {
+export function buildActiveProvider(
+  config: AppConfig,
+  logger?: Logger,
+  opts?: { getSessionId?: () => string | undefined },
+): BuiltProvider {
   const manager = new ProviderManager(config.provider, {
     contextWindow: config.contextWindow,
     retry: config.retry,
     rateLimits: config.security?.rateLimits,
+    getSessionId: opts?.getSessionId,
     logger,
   });
   manager.setModel(config.model);

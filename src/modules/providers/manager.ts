@@ -10,6 +10,8 @@ export interface ProviderManagerOptions {
   retry?: import("../../config/types").RetryConfig;
   rateLimits?: import("../../config/types").RateLimitConfig;
   registry?: ProviderRegistry;
+  /** Live conversation id, forwarded to providers (`x-opencode-session`). */
+  getSessionId?: () => string | undefined;
   /** Optional logger for LLM request/response diagnostics. */
   logger?: import("../../logger/app-logger").Logger;
 }
@@ -175,6 +177,7 @@ export class ProviderManager {
       retry: entry.retry ?? this.opts.retry,
       rateLimits: entry.rateLimits ?? this.opts.rateLimits,
       maxCompletionTokens: entry.maxCompletionTokens,
+      getSessionId: this.opts.getSessionId,
       logger: this.opts.logger,
     }, this.registry);
     this.cache.set(key, provider);

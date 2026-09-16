@@ -25,6 +25,69 @@ describe("OpenAICompatProvider", () => {
     expect(provider.contextWindow).toBe(64000);
   });
 
+  it("sends x-opencode-session and a client User-Agent when a session id is available", async () => {
+    // OpenCode Go returns 400 MissingSessionID without the header.
+    const provider = new OpenAICompatProvider({
+      model: "deepseek-v4.1-flash",
+      baseUrl: "https://opencode.ai/zen/go/v1",
+      getSessionId: () => "ses_abc123",
+    });
+
+    let headers: Record<string, string> = {};
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      headers = init.headers as Record<string, string>;
+      return Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      });
+    });
+    global.fetch = mockFetch as any;
+
+    for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+    }
+
+    expect(headers["x-opencode-session"]).toBe("ses_abc123");
+    expect(headers["User-Agent"]).toMatch(/^micro-models-agent\//);
+  });
+
+  it("omits x-opencode-session when no session id is available", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+    });
+
+    let headers: Record<string, string> = {};
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      headers = init.headers as Record<string, string>;
+      return Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      });
+    });
+    global.fetch = mockFetch as any;
+
+    for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+    }
+
+    expect(headers["x-opencode-session"]).toBeUndefined();
+  });
+
   it("should stream text chunks", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",

@@ -119,9 +119,15 @@ const DEFAULT_ORCH_CONTEXT_WINDOW = 32768;
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
+  private getSessionId?: () => string | undefined;
 
-  constructor(config: OrchestratorConfig, defaultProvider?: LLMProvider) {
+  constructor(
+    config: OrchestratorConfig,
+    defaultProvider?: LLMProvider,
+    opts?: { getSessionId?: () => string | undefined },
+  ) {
     this.config = config;
+    this.getSessionId = opts?.getSessionId;
     if (!config.model) return;
 
     if (config.provider) {
@@ -151,6 +157,7 @@ export class OrchestratorClient {
         contextWindow: config.contextWindow ?? DEFAULT_ORCH_CONTEXT_WINDOW,
         retry: config.retry,
         rateLimits: config.rateLimits,
+        getSessionId: this.getSessionId,
         logger: config.logger,
       },
     );

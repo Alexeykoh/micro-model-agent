@@ -336,7 +336,13 @@ export async function bootstrap(
   // (Phase 4.2). Built through the shared factory so a hot-swap via
   // Agent.setProvider gets the SAME fallback behavior as startup instead of
   // rebuilding a bare manager that silently drops failover (B4).
-  const llmProvider = buildActiveProvider(config, logger).provider;
+  //
+  // Session id is resolved lazily: the session manager is created further down,
+  // and providers must read the CURRENT session at request time (hot-swap,
+  // session switch). OpenCode Go rejects requests without `x-opencode-session`.
+  let activeSessionManager: SessionManager | undefined;
+  const getSessionId = (): string | undefined => activeSessionManager?.getActiveMeta()?.id;
+  const llmProvider = buildActiveProvider(config, logger, { getSessionId }).provider;
 
   // Resolve reasoning strategy from provider preset + probe
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
@@ -441,6 +447,7 @@ export async function bootstrap(
     maxSessions: config.session.maxSessions,
     isolation: config.sessionIsolation,
   });
+  activeSessionManager = sessionManager;
 
   if (config.session.autoSave && !sessionManager.getActive()) {
     sessionManager.create();

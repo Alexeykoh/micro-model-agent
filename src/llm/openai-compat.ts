@@ -1,6 +1,7 @@
 import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
+import { readMmaVersion } from "../core/version";
 import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
 import type { RateLimitConfig } from "../config/types";
 import { LlmError } from "./llm-errors";
@@ -21,6 +22,18 @@ const REQUEST_TIMEOUT_MS = 120000;
 /** Max wait (ms) for a self-inflicted rate-limit slot before giving up. */
 const MAX_RATE_WAIT_MS = 30_000;
 
+/**
+ * Client identity header. OpenCode Go asks clients to identify themselves with
+ * their own user agent (not a generic SDK/HTTP-library name) so requests route
+ * to coding-agent traffic. `readMmaVersion()` is memoized — every provider
+ * construction would otherwise re-read package.json.
+ */
+let cachedUserAgent: string | null = null;
+function defaultUserAgent(): string {
+  if (cachedUserAgent === null) cachedUserAgent = `micro-models-agent/${readMmaVersion()}`;
+  return cachedUserAgent;
+}
+
 export interface OpenAICompatConfig {
   model: string;
   baseUrl: string;
@@ -29,6 +42,14 @@ export interface OpenAICompatConfig {
   maxCompletionTokens?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
+  /**
+   * Live getter for the current conversation id. When it returns a value it is
+   * sent as `x-opencode-session` — required by OpenCode Go (400
+   * MissingSessionID otherwise) and used for routing/prompt-cache affinity.
+   */
+  getSessionId?: () => string | undefined;
+  /** Override the User-Agent (defaults to `micro-models-agent/<version>`). */
+  userAgent?: string;
   logger?: import("../logger/app-logger").Logger;
 }
 
@@ -91,6 +112,8 @@ export class OpenAICompatProvider implements LLMProvider {
   private retryConfig: RetryConfig;
   private rateLimiter: RateLimiter;
   private debug: ((msg: string, meta?: Record<string, unknown>) => void) | null;
+  private getSessionId?: () => string | undefined;
+  private userAgent: string;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
@@ -105,6 +128,8 @@ export class OpenAICompatProvider implements LLMProvider {
       noDataTimeoutMs: 180000,
     };
     this.rateLimiter = createRateLimiter(config.rateLimits);
+    this.getSessionId = config.getSessionId;
+    this.userAgent = config.userAgent ?? defaultUserAgent();
     this.debug = config.logger ? config.logger.debug.bind(config.logger) : null;
   }
 
@@ -504,10 +529,13 @@ export class OpenAICompatProvider implements LLMProvider {
   } {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "User-Agent": this.userAgent,
     };
     if (this.config.apiKey && this.config.apiKey !== "not-needed") {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     }
+    const sessionId = this.getSessionId?.();
+    if (sessionId) headers["x-opencode-session"] = sessionId;
     const controller = new AbortController();
     let timedOut = false;
     const timeoutId = setTimeout(() => {
@@ -639,6 +667,7 @@ export class OpenAICompatProvider implements LLMProvider {
       const url = `${this.config.baseUrl.replace(/\/+$/, "")}/models`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        "User-Agent": this.userAgent,
       };
       if (this.config.apiKey && this.config.apiKey !== "not-needed") {
         headers["Authorization"] = `Bearer ${this.config.apiKey}`;

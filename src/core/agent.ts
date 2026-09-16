@@ -1104,7 +1104,9 @@ export class Agent {
 
   async reconfigure(config: AppConfig): Promise<void> {
     const { TokenCounter } = await import("../llm/token-counter");
-    const { provider: newProvider } = buildActiveProvider(config, this.deps.logger);
+    const { provider: newProvider } = buildActiveProvider(config, this.deps.logger, {
+      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
+    });
     this.deps.llmProvider = newProvider;
     this.deps.toolExecutor.updateProvider(newProvider);
     const newTokenCounter = new TokenCounter(config.model);
@@ -1115,7 +1117,9 @@ export class Agent {
   }
 
   setProvider(name: string, model?: string): void {
-    const { manager, provider } = buildActiveProvider(this.deps.config, this.deps.logger);
+    const { manager, provider } = buildActiveProvider(this.deps.config, this.deps.logger, {
+      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
+    });
     manager.switch(name, model);
     const providerCfg = manager.toConfig();
     this.deps.config.provider = providerCfg;
@@ -1128,6 +1132,7 @@ export class Agent {
       contextWindow: this.deps.config.contextWindow,
       retry: this.deps.config.retry,
       rateLimits: this.deps.config.security?.rateLimits,
+      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
     });
     const activeName = this.deps.config.provider.active;
     return manager.list().map((e) => ({
@@ -1143,6 +1148,7 @@ export class Agent {
         contextWindow: this.deps.config.contextWindow,
         retry: this.deps.config.retry,
         rateLimits: this.deps.config.security?.rateLimits,
+        getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
         logger: this.deps.logger,
       });
       manager.setModel(this.deps.config.model);
