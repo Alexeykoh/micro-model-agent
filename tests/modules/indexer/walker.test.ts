@@ -36,7 +36,7 @@ describe("Indexer.walk", () => {
   it("indexes source files including non-JS languages", async () => {
     const dir = makeProject();
     const result = await new Indexer(dir).walk();
-    const paths = result.files.map((f) => f.path).sort();
+    const paths = result.files.map((f) => f.path.replace(/\\/g, "/")).sort();
     expect(paths).toContain("src/app.ts");
     expect(paths).toContain("src/main.py");
     expect(paths).toContain("src/lib.rs");
@@ -46,7 +46,7 @@ describe("Indexer.walk", () => {
   it("skips virtualenv, vendor, build and cache directories", async () => {
     const dir = makeProject();
     const result = await new Indexer(dir).walk();
-    const paths = result.files.map((f) => f.path);
+    const paths = result.files.map((f) => f.path.replace(/\\/g, "/"));
     for (const ignored of ["venv/", ".venv/", "node_modules/", "target/", "__pycache__/", "vendor/"]) {
       expect(paths.some((p) => p.startsWith(ignored))).toBe(false);
     }
