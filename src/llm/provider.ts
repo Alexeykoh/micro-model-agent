@@ -1,5 +1,6 @@
 // src/llm/provider
 import type { ReasoningLevel, ReasoningStrategy } from "../config/types";
+import type { CacheUsage } from "./cache-usage";
 
 export interface TextPart {
   type: "text";
@@ -48,6 +49,8 @@ export interface Chunk {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Статистика кеша промпта, если провайдер её сообщил. */
+    cache?: CacheUsage;
   };
 }
 

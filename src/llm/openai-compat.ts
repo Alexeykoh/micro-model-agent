@@ -3,10 +3,11 @@ import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
 import { readMmaVersion } from "../core/version";
 import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
-import type { CacheCapability, RateLimitConfig } from "../config/types";
+import type { CacheCapability, CacheReportFormat, RateLimitConfig } from "../config/types";
 import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
+import { parseCacheUsage } from "./cache-usage";
 
 export interface RetryConfig {
   maxRetries: number;
@@ -130,12 +131,16 @@ export class OpenAICompatProvider implements LLMProvider {
   private getSessionId?: () => string | undefined;
   private userAgent: string;
   private cache?: CacheCapability;
+  private cacheReport: CacheReportFormat;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
     this.model = config.model;
     this.contextWindow = config.contextWindow ?? 32768;
     this.cache = config.cache;
+    // Без capability всё равно читаем OpenAI-совместимые поля: это не меняет
+    // запрос и работает для локальных/кастомных серверов.
+    this.cacheReport = config.cache?.report ?? "openai";
     this.tokenCounter = new TokenCounter();
     this.retryConfig = config.retry ?? {
       maxRetries: 3,
@@ -423,6 +428,7 @@ export class OpenAICompatProvider implements LLMProvider {
                   promptTokens: parsed.usage.prompt_tokens ?? 0,
                   completionTokens: parsed.usage.completion_tokens ?? 0,
                   totalTokens: parsed.usage.total_tokens ?? 0,
+                  cache: parseCacheUsage(parsed.usage, this.cacheReport),
                 };
                 this.debug?.("LLM stream usage", { ...st.usage });
               } else if (parsed.error) {
@@ -678,6 +684,7 @@ export class OpenAICompatProvider implements LLMProvider {
             promptTokens: data.usage.prompt_tokens ?? 0,
             completionTokens: data.usage.completion_tokens ?? 0,
             totalTokens: data.usage.total_tokens ?? 0,
+            cache: parseCacheUsage(data.usage, this.cacheReport),
           },
         });
       }

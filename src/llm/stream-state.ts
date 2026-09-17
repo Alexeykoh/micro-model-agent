@@ -8,6 +8,8 @@
  * сгруппированы в один объект (зеркало loop-state.ts в агентном цикле),
  * а итог стрима отдаётся единым снимком для debug-лога.
  */
+import type { CacheUsage } from "./cache-usage";
+
 export class StreamState {
   sawDone = false;
   sawText = false;
@@ -19,7 +21,14 @@ export class StreamState {
   nonDataSamples: string[] = [];
   /** Провайдер прислал {"error": ...} уже после старта генерации. */
   midStreamError: string | null = null;
-  usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+  usage:
+    | {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        cache?: CacheUsage;
+      }
+    | undefined;
   lastFinishReason: string | undefined;
 
   /** Снимок для debug-лога по завершении стрима. */
