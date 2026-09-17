@@ -4,7 +4,7 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.62.0] - 2026-09-17
 
 ### Added
 - **Prompt-cache awareness (cloud + local)**: every provider declares its cache behavior via a new `CacheCapability` (`ProviderCapabilities.cache`, overridable per entry with `provider.entries[].cache`). The OpenAI-compatible provider now sends the right request hints per backend — `cache_prompt` (llama.cpp), `prompt_cache_key` (OpenAI), `session_id` (OpenRouter sticky routing) — while `x-opencode-session` is gated by `sessionHeader` (legacy behavior preserved when no capability is set). `parseCacheUsage` (`src/llm/cache-usage.ts`) normalizes response formats (OpenAI/LM Studio/llama.cpp/vLLM/OpenRouter/Zen/Go, DeepSeek, Anthropic, Ollama) into `Chunk.usage.cache`.
