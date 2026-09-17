@@ -14,14 +14,14 @@ const ZEN_PRICES: Record<string, ModelPrice> = {
   "nemotron-3-ultra-free": { input: 0, output: 0 },
   "nemotron-3.5-lightning-free": { input: 0, output: 0 },
   "muse-spark-1.2-contributor-free": { input: 0, output: 0 },
-  // MiniMax
-  "minimax-m3": { input: 0.3, output: 1.2 },
-  "minimax-m2.7": { input: 0.3, output: 1.2 },
-  "minimax-m2.5": { input: 0.3, output: 1.2 },
-  // GLM
-  "glm-5.2": { input: 1.4, output: 4.4 },
-  "glm-5.1": { input: 1.4, output: 4.4 },
-  "glm-5": { input: 1.0, output: 3.2 },
+  // MiniMax (Cached Read по прайсу Zen)
+  "minimax-m3": { input: 0.3, output: 1.2, cachedInput: 0.06 },
+  "minimax-m2.7": { input: 0.3, output: 1.2, cachedInput: 0.06 },
+  "minimax-m2.5": { input: 0.3, output: 1.2, cachedInput: 0.06 },
+  // GLM (Cached Read по прайсу Zen)
+  "glm-5.2": { input: 1.4, output: 4.4, cachedInput: 0.26 },
+  "glm-5.1": { input: 1.4, output: 4.4, cachedInput: 0.26 },
+  "glm-5": { input: 1.0, output: 3.2, cachedInput: 0.2 },
   "glm-5.3": { input: 1.4, output: 4.4 },
   // Kimi
   "kimi-k2.7-code": { input: 0.95, output: 4.0 },
@@ -114,19 +114,60 @@ export function resolvePrice(
   return ZEN_PRICES[bare];
 }
 
+/** Кеш-часть usage для расчёта стоимости (cached/uncached уже разделены). */
+export interface CacheCostInput {
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
+}
+
+export interface CostResult {
+  /** Стоимость вызова в USD с учётом кеша. */
+  cost: number;
+  /** Сколько сэкономлено на cache read относительно полной input-цены. */
+  saved: number;
+}
+
 /**
- * Compute the cost in USD of a single call given its token usage and the
- * model price. Returns undefined when the model has no known price.
+ * Считает стоимость и экономию вызова. `promptTokens` — суммарные prompt-токены
+ * (cached + uncached); кешированная часть тарифицируется по `cachedInput`, а
+ * запись в кеш — по `cacheWrite`. Возвращает undefined без известной цены.
+ */
+export function calculateCostDetailed(
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+  config?: PricingConfig,
+  cache?: CacheCostInput,
+): CostResult | undefined {
+  const price = resolvePrice(model, config);
+  if (!price) return undefined;
+  const cached = Math.max(0, cache?.cachedTokens ?? 0);
+  const write = Math.max(0, cache?.cacheWriteTokens ?? 0);
+  const uncached = Math.max(0, promptTokens - cached);
+  const cachedRate = price.cachedInput ?? price.input;
+  const writeRate = price.cacheWrite ?? 0;
+
+  const cost =
+    (uncached / 1_000_000) * price.input +
+    (cached / 1_000_000) * cachedRate +
+    (write / 1_000_000) * writeRate +
+    (completionTokens / 1_000_000) * price.output;
+  const saved = (cached / 1_000_000) * (price.input - cachedRate);
+  return { cost, saved };
+}
+
+/**
+ * Стоимость вызова в USD (обёртка над `calculateCostDetailed`). Возвращает
+ * undefined, когда цена модели неизвестна.
  */
 export function calculateCost(
   model: string,
   promptTokens: number,
   completionTokens: number,
   config?: PricingConfig,
+  cache?: CacheCostInput,
 ): number | undefined {
-  const price = resolvePrice(model, config);
-  if (!price) return undefined;
-  return (promptTokens / 1_000_000) * price.input + (completionTokens / 1_000_000) * price.output;
+  return calculateCostDetailed(model, promptTokens, completionTokens, config, cache)?.cost;
 }
 
 /** Format a USD cost for display. Zero and very small amounts stay readable. */

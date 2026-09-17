@@ -1,5 +1,5 @@
 import type { PricingConfig } from "../../config/types";
-import { calculateCost, formatCost } from "./prices";
+import { calculateCostDetailed, formatCost, type CacheCostInput } from "./prices";
 
 export interface CostBreakdownEntry {
   provider: string;
@@ -17,6 +17,7 @@ export class CostTracker {
   private config?: PricingConfig;
   private model: string;
   private _total = 0;
+  private _saved = 0;
   private _known = false;
   private byProvider = new Map<string, { total: number; known: boolean }>();
 
@@ -30,25 +31,46 @@ export class CostTracker {
     this.model = model;
   }
 
-  /** Record a single LLM call's token usage, attributed to `provider`. */
-  record(promptTokens: number, completionTokens: number, provider?: string): void {
+  /**
+   * Записывает usage одного LLM-вызова с атрибуцией провайдеру. `cache`
+   * разделяет prompt-токены на кешированные/некешированные и накапливает
+   * экономию.
+   */
+  record(
+    promptTokens: number,
+    completionTokens: number,
+    provider?: string,
+    cache?: CacheCostInput,
+  ): void {
     const key = provider || "unknown";
-    const cost = calculateCost(this.model, promptTokens, completionTokens, this.config);
-    if (cost === undefined) return;
+    const result = calculateCostDetailed(
+      this.model,
+      promptTokens,
+      completionTokens,
+      this.config,
+      cache,
+    );
+    if (!result) return;
     this._known = true;
-    this._total += cost;
+    this._total += result.cost;
+    this._saved += result.saved;
     let entry = this.byProvider.get(key);
     if (!entry) {
       entry = { total: 0, known: false };
       this.byProvider.set(key, entry);
     }
     entry.known = true;
-    entry.total += cost;
+    entry.total += result.cost;
   }
 
   /** Running total cost in USD, or undefined if no model price is known. */
   get total(): number | undefined {
     return this._known ? this._total : undefined;
+  }
+
+  /** Накопленная экономия на cache read (USD), undefined без известной цены. */
+  get saved(): number | undefined {
+    return this._known ? this._saved : undefined;
   }
 
   /** Total for one provider, or undefined when nothing was priced for it. */

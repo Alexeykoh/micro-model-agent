@@ -1,6 +1,7 @@
 import type { CostTracker } from "../../modules/pricing/index";
 import type { SessionLogger } from "../session-logger";
 import { estimateTokens } from "../../llm/token-counter";
+import type { CacheUsage } from "../../llm/cache-usage";
 import type { LoopState } from "./loop-state";
 
 /**
@@ -44,10 +45,11 @@ export class TokenTracker {
   recordApiUsage(
     state: LoopState,
     baseline: { promptBefore: number; completionBefore: number },
-    usage: { promptTokens: number; completionTokens: number },
+    usage: { promptTokens: number; completionTokens: number; cache?: CacheUsage },
   ): void {
     state.apiPromptTokens = baseline.promptBefore + usage.promptTokens;
     state.apiCompletionTokens = baseline.completionBefore + usage.completionTokens;
+    state.cacheUsage = usage.cache;
   }
 
   /** Аккумулирует символы ответа — fallback-оценка completion-токенов. */
@@ -83,7 +85,14 @@ export class TokenTracker {
       durationMs,
       prefix: state.prefixDelta,
     });
-    this.costTracker.record(prompt, completion, this.getProviderName());
+    // Кеш учитываем только когда цифры пришли от API: оценка chars/4 о кеше
+    // ничего не знает и не должна менять тарификацию.
+    this.costTracker.record(
+      prompt,
+      completion,
+      this.getProviderName(),
+      source === "api" ? state.cacheUsage : undefined,
+    );
   }
 
   /**

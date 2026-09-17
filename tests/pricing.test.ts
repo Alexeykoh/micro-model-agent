@@ -3,6 +3,7 @@ import {
   normalizeModelId,
   resolvePrice,
   calculateCost,
+  calculateCostDetailed,
   formatCost,
 } from "../src/modules/pricing/prices";
 import { CostTracker } from "../src/modules/pricing/index";
@@ -64,6 +65,36 @@ describe("pricing module", () => {
 
     it("returns zero for free models", () => {
       expect(calculateCost("big-pickle", 1_000_000, 1_000_000, config)).toBe(0);
+    });
+
+    it("bills cached tokens at the cached rate and reports savings", () => {
+      // minimax-m3: input $0.30, cached read $0.06, output $1.20.
+      const r = calculateCostDetailed(
+        "minimax-m3",
+        1_000_000,
+        100_000,
+        config,
+        { cachedTokens: 800_000 },
+      )!;
+      expect(r.cost).toBeCloseTo(0.2 * 0.3 + 0.8 * 0.06 + 0.1 * 1.2, 6);
+      expect(r.saved).toBeCloseTo(0.8 * (0.3 - 0.06), 6);
+    });
+
+    it("keeps the full input rate when the model has no cached price", () => {
+      const r = calculateCostDetailed("gpt-5.5", 1_000_000, 0, config, {
+        cachedTokens: 500_000,
+      })!;
+      expect(r.cost).toBeCloseTo(5, 6);
+      expect(r.saved).toBe(0);
+    });
+
+    it("charges cache writes when a write rate is configured", () => {
+      const cfg = {
+        enabled: true,
+        overrides: { custom: { input: 1, output: 2, cachedInput: 0.1, cacheWrite: 1.25 } },
+      };
+      const r = calculateCostDetailed("custom", 0, 0, cfg, { cacheWriteTokens: 1_000_000 })!;
+      expect(r.cost).toBeCloseTo(1.25, 6);
     });
   });
 
@@ -136,6 +167,20 @@ describe("pricing module", () => {
       tracker.record(1000, 1000, "zen");
       expect(tracker.totalFor("zen")).toBeUndefined();
       expect(tracker.breakdown()).toEqual([]);
+    });
+
+    it("accumulates cache savings from cached usage", () => {
+      const tracker = new CostTracker("minimax-m3", config);
+      tracker.record(1_000_000, 0, "zen", { cachedTokens: 800_000 });
+      expect(tracker.saved).toBeCloseTo(0.8 * (0.3 - 0.06), 6);
+      tracker.record(1_000_000, 0, "zen", { cachedTokens: 1_000_000 });
+      expect(tracker.saved).toBeCloseTo(0.192 + 0.24, 6);
+    });
+
+    it("leaves savings undefined when no price is known", () => {
+      const tracker = new CostTracker("unknown-model", config);
+      tracker.record(1000, 0, "zen", { cachedTokens: 500 });
+      expect(tracker.saved).toBeUndefined();
     });
   });
 });

@@ -74,10 +74,14 @@ export interface ProviderConfig {
   maxCompletionTokens?: number;
 }
 
-/** Price of a model in USD per 1M tokens (input / output). */
+/** Цена модели в USD за 1M токенов. */
 export interface ModelPrice {
   input: number;
   output: number;
+  /** Цена чтения из кеша (cache read). По умолчанию равна input. */
+  cachedInput?: number;
+  /** Цена записи в кеш (cache write). По умолчанию 0 (бесплатно). */
+  cacheWrite?: number;
 }
 
 /**

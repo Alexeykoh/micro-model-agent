@@ -1,5 +1,6 @@
 import { FORCED_COMPACTION_COOLDOWN } from "./constants";
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
+import type { CacheUsage } from "../../llm/cache-usage";
 
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
@@ -68,6 +69,8 @@ export interface LoopState {
   apiCompletionChars: number;
   /** Совокупная оценка prompt-токенов по итерациям — парный fallback к completion-символам. */
   estimatedPromptTokensTotal: number;
+  /** Кеш-статистика последнего API-usage (заменяется per-итерацию). */
+  cacheUsage?: CacheUsage;
   /** Суммарная длительность LLM-вызовов (мс) — выставляется в AgentResult. */
   totalLlmDuration: number;
 
