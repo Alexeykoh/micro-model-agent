@@ -3,7 +3,7 @@ import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
 import { readMmaVersion } from "../core/version";
 import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
-import type { RateLimitConfig } from "../config/types";
+import type { CacheCapability, RateLimitConfig } from "../config/types";
 import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
@@ -48,6 +48,12 @@ export interface OpenAICompatConfig {
    * MissingSessionID otherwise) and used for routing/prompt-cache affinity.
    */
   getSessionId?: () => string | undefined;
+  /**
+   * Cache-возможность провайдера. Когда задана, управляет запросными
+   * подсказками кеша и гейтингом `x-opencode-session`. Когда отсутствует —
+   * сохраняется легаси-поведение (заголовок шлётся при наличии sessionId).
+   */
+  cache?: CacheCapability;
   /** Override the User-Agent (defaults to `micro-models-agent/<version>`). */
   userAgent?: string;
   logger?: import("../logger/app-logger").Logger;
@@ -67,6 +73,12 @@ function buildRequestBody(opts: {
   maxTokens?: number;
   reasoningEffort?: string;
   reasoningStrategy?: string;
+  /** Подсказки кеша (llama.cpp `cache_prompt`). */
+  cachePrompt?: boolean;
+  /** Ключ кеша для OpenAI (`prompt_cache_key`). */
+  promptCacheKey?: string;
+  /** Идентификатор для sticky-маршрутизации OpenRouter (`session_id`). */
+  sessionId?: string;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -74,6 +86,9 @@ function buildRequestBody(opts: {
     stream: opts.stream,
   };
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
+  if (opts.cachePrompt) body.cache_prompt = true;
+  if (opts.promptCacheKey) body.prompt_cache_key = opts.promptCacheKey;
+  if (opts.sessionId) body.session_id = opts.sessionId;
 
   // Apply reasoning effort via the provider's strategy
   const strategy = opts.reasoningStrategy ?? "openai-effort";
@@ -114,11 +129,13 @@ export class OpenAICompatProvider implements LLMProvider {
   private debug: ((msg: string, meta?: Record<string, unknown>) => void) | null;
   private getSessionId?: () => string | undefined;
   private userAgent: string;
+  private cache?: CacheCapability;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
     this.model = config.model;
     this.contextWindow = config.contextWindow ?? 32768;
+    this.cache = config.cache;
     this.tokenCounter = new TokenCounter();
     this.retryConfig = config.retry ?? {
       maxRetries: 3,
@@ -263,6 +280,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
+      ...this.cacheHints(),
     });
     this.debug?.("LLM stream request", {
       baseUrl: this.config.baseUrl,
@@ -518,6 +536,19 @@ export class OpenAICompatProvider implements LLMProvider {
     return st.sawDone;
   }
 
+  /**
+   * Вычисляет запросные подсказки кеша из возможностей провайдера и текущего
+   * session id. Без capability возвращает «ничего», сохраняя прежнее тело.
+   */
+  private cacheHints(): { cachePrompt: boolean; promptCacheKey?: string; sessionId?: string } {
+    const sessionId = this.getSessionId?.();
+    return {
+      cachePrompt: this.cache?.requestCachePrompt === true,
+      promptCacheKey: this.cache?.requestPromptCacheKey ? sessionId : undefined,
+      sessionId: this.cache?.requestSessionId ? sessionId : undefined,
+    };
+  }
+
   /** Shared request setup: auth headers + timeout/abort controller wiring. */
   private buildRequestSetup(signal?: AbortSignal): {
     headers: Record<string, string>;
@@ -535,7 +566,10 @@ export class OpenAICompatProvider implements LLMProvider {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     }
     const sessionId = this.getSessionId?.();
-    if (sessionId) headers["x-opencode-session"] = sessionId;
+    // Когда capability задана — шлём заголовок только тем, кому он нужен
+    // (Zen/Go). Без capability сохраняем легаси-поведение.
+    const sendSessionHeader = this.cache ? this.cache.sessionHeader : true;
+    if (sessionId && sendSessionHeader) headers["x-opencode-session"] = sessionId;
     const controller = new AbortController();
     let timedOut = false;
     const timeoutId = setTimeout(() => {
@@ -579,6 +613,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
+      ...this.cacheHints(),
     });
 
     const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(signal);

@@ -2,7 +2,9 @@
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderConfig, ProviderEntry } from "../../config/types";
 import type { ProviderRegistry } from "./registry";
+import type { ProviderCapabilities } from "./types";
 import { createProvider, defaultRegistry } from "./create";
+import { resolveCacheCapability } from "./cache";
 import { BUILTIN_PROVIDERS } from "./presets";
 
 export interface ProviderManagerOptions {
@@ -178,10 +180,18 @@ export class ProviderManager {
       rateLimits: entry.rateLimits ?? this.opts.rateLimits,
       maxCompletionTokens: entry.maxCompletionTokens,
       getSessionId: this.opts.getSessionId,
+      capabilities: this.resolveCapabilities(entry),
       logger: this.opts.logger,
     }, this.registry);
     this.cache.set(key, provider);
     return provider;
+  }
+
+  /** Возможности пресета с наложенным переопределением кеша из записи. */
+  private resolveCapabilities(entry: ProviderEntry): Partial<ProviderCapabilities> {
+    const spec = this.registry.get(entry.type);
+    if (!spec) return { cache: resolveCacheCapability(undefined, entry.cache) };
+    return { ...spec.capabilities, cache: resolveCacheCapability(spec, entry.cache) };
   }
 
   /** Clear the build cache (on config change). */

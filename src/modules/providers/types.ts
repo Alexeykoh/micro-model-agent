@@ -3,6 +3,7 @@ import type { LLMProvider } from "../../llm/provider";
 import type { RetryConfig } from "../../config/types";
 import type { RateLimitConfig } from "../../config/types";
 import type { ReasoningStrategy } from "../../config/types";
+import type { CacheCapability } from "../../config/types";
 
 /**
  * What a provider advertises it supports. The agent loop uses these to adapt
@@ -18,6 +19,8 @@ export interface ProviderCapabilities {
   listModels: boolean;
   requiresKey: boolean;
   auth?: "bearer" | "header";
+  /** Поведение кеша промпта; отсутствует = "none" (нет отчёта и подсказок запроса). */
+  cache?: CacheCapability;
 }
 
 /** Options passed to a provider factory. */

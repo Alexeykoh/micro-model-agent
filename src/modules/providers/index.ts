@@ -7,6 +7,8 @@ export type {
 export { ProviderRegistry } from "./registry";
 export { createProvider, defaultRegistry } from "./create";
 export { ProviderManager, presetOf } from "./manager";
+export { resolveCacheCapability, NO_CACHE_CAPABILITY } from "./cache";
+export type { CacheCapability, CacheMechanism, CacheReportFormat } from "../../config/types";
 export {
   probeProviders,
   targetsFromProviders,

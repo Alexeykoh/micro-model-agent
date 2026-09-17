@@ -1,3 +1,40 @@
+/** Как провайдер предоставляет кеширование промпта. */
+export type CacheMechanism = "auto" | "explicit" | "local" | "none";
+
+/**
+ * Формат ответа, которым провайдер сообщает о попадании в кеш.
+ * `openai` покрывает OpenAI, LM Studio, llama.cpp, vLLM, OpenRouter, Zen/Go и
+ * Gemini/xAI — все через OpenAI-совместимую форму.
+ */
+export type CacheReportFormat =
+  | "openai"
+  | "deepseek"
+  | "anthropic"
+  | "ollama"
+  | "none";
+
+/**
+ * Возможность кеширования промпта у провайдера. Описывает, КАК работает кеш и
+ * что клиент обязан отправить, чтобы агент адаптировался под провайдера (см.
+ * docs/specs/2026-09-17-prompt-caching-budget.md). Запросные флаги по
+ * умолчанию false: включение — опция, потому что часть бэкендов (llama.cpp
+ * `cache_prompt`) обменивает детерминизм на переиспользование.
+ */
+export interface CacheCapability {
+  mechanism: CacheMechanism;
+  report: CacheReportFormat;
+  /** Слать `x-opencode-session` для кеш/sticky-маршрутизации (OpenCode Zen/Go). */
+  sessionHeader: boolean;
+  /** Слать `cache_prompt: true` в теле (llama.cpp). */
+  requestCachePrompt: boolean;
+  /** Слать `prompt_cache_key` в теле (OpenAI). */
+  requestPromptCacheKey: boolean;
+  /** Слать `session_id` в теле для sticky-маршрутизации (OpenRouter). */
+  requestSessionId: boolean;
+  /** Помечать блоки контента `cache_control` (Anthropic). */
+  requestCacheControl: boolean;
+}
+
 /** A single configured provider (one of possibly many). */
 export interface ProviderEntry {
   /** Registry type: "openai-compat" | "openrouter" | "openai" | "opencode-zen" | ... */
@@ -14,6 +51,8 @@ export interface ProviderEntry {
   maxCompletionTokens?: number;
   /** Fallback order (lower = tried first). */
   priority?: number;
+  /** Переопределения кеша для записи, накладываются на пресет провайдера. */
+  cache?: Partial<CacheCapability>;
 }
 
 export interface ProviderConfig {

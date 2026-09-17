@@ -20,6 +20,7 @@ function openaiCompat(opts: ProviderOptions) {
     rateLimits,
     maxCompletionTokens: opts.maxCompletionTokens,
     getSessionId: opts.getSessionId,
+    cache: opts.capabilities?.cache,
     logger: opts.logger,
   });
 }
@@ -36,6 +37,17 @@ const OPENAI_COMPAT: ProviderSpec = {
     listModels: true,
     requiresKey: false,
     auth: "bearer",
+    // Локальные серверы (LM Studio, llama.cpp, vLLM) кешируют KV-префикс на
+    // сервере и отдают его в usage-полях OpenAI-формы.
+    cache: {
+      mechanism: "local",
+      report: "openai",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: false,
+    },
   },
   create: openaiCompat,
 };
@@ -52,6 +64,17 @@ const OPENROUTER: ProviderSpec = {
     listModels: true,
     requiresKey: true,
     auth: "bearer",
+    // OpenRouter проксирует кеши провайдеров и сообщает cached/cache_write
+    // токены. `session_id` прибивает последующие запросы к провайдеру с тёплым кешем.
+    cache: {
+      mechanism: "auto",
+      report: "openai",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: true,
+      requestCacheControl: false,
+    },
   },
   create: openaiCompat,
 };
@@ -68,6 +91,17 @@ const OPENAI: ProviderSpec = {
     listModels: true,
     requiresKey: true,
     auth: "bearer",
+    // Автоматический prefix caching. `prompt_cache_key` держит запросы с общим
+    // префиксом на одном бэкенде ради более высокого hit-rate.
+    cache: {
+      mechanism: "auto",
+      report: "openai",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: true,
+      requestSessionId: false,
+      requestCacheControl: false,
+    },
   },
   create: openaiCompat,
 };
@@ -84,6 +118,17 @@ const ANTHROPIC: ProviderSpec = {
     listModels: false,
     requiresKey: true,
     auth: "header",
+    // Явные cache-брейкпоинты; отчёт идёт через собственные usage-поля Anthropic.
+    // Неактивно, пока не появится настоящий AnthropicProvider на /v1/messages.
+    cache: {
+      mechanism: "explicit",
+      report: "anthropic",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: true,
+    },
   },
   // The Anthropic messages API is NOT OpenAI-compatible. This preset is a
   // placeholder until a real AnthropicProvider lands; the factory still uses
@@ -103,6 +148,17 @@ const OPENCODE_ZEN: ProviderSpec = {
     listModels: true,
     requiresKey: false,
     auth: "bearer",
+    // Серверный кеш с ценой Cached Read; для sticky-маршрутизации нужен
+    // заголовок сессии (`x-opencode-session`).
+    cache: {
+      mechanism: "auto",
+      report: "openai",
+      sessionHeader: true,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: false,
+    },
   },
   create: openaiCompat,
 };
@@ -119,6 +175,15 @@ const OPENCODE_GO: ProviderSpec = {
     listModels: true,
     requiresKey: false,
     auth: "bearer",
+    cache: {
+      mechanism: "auto",
+      report: "openai",
+      sessionHeader: true,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: false,
+    },
   },
   create: openaiCompat,
 };
