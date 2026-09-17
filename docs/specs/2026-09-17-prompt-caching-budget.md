@@ -21,7 +21,7 @@
 2. **Корректная стоимость** — cache read/write учитываются по своим ценам; для локальных моделей деньги не считаются, показываются латентность и hit-rate.
 3. **Максимизация hit-rate** — per-provider запросные подсказки (headers/body) под контролем capability-дескриптора; стабильный префикс как инвариант.
 4. **Бюджет провайдера** — там, где API его отдаёт (OpenRouter); честная деградация там, где нет (Zen/Go).
-5. **Наблюдаемость** — `cache %`, `saved $` (облако) / `TTFT`, hit% (локаль) / `prefix stable %` (фолбэк) в REPL, `--json` и `session.jsonl`.
+5. **Наблюдаемость** — `cache %` + `saved $` (облако) / `cache %` (локаль) / `prefix stable %` + причина (фолбэк без телеметрии) в REPL, `--json` и `session.jsonl`.
 6. **Ничего не ломать** — все запросные изменения строго за флагами провайдера; неподдерживающие бэкенды не получают новых полей.
 
 ### Не-цели
@@ -144,7 +144,7 @@ export interface CacheCapability {
 
 ### 5.2 Нормализованный `CacheUsage`
 
-`src/llm/provider.ts`:
+`src/llm/cache-usage.ts` (тип), подключается в `Chunk` из `src/llm/provider.ts`:
 
 ```ts
 export interface CacheUsage {
@@ -152,7 +152,8 @@ export interface CacheUsage {
   cacheWriteTokens: number;  // записано в кеш
   /** Сколько prompt-токенов НЕ из кеша (для стоимости). */
   uncachedTokens: number;
-  source: "api" | "derived" | "none";
+  /** "api" — цифры от провайдера; "derived" — оценка клиента. */
+  source: "api" | "derived";
 }
 
 export interface Chunk {
@@ -165,6 +166,8 @@ export interface Chunk {
   };
 }
 ```
+
+> Отсутствие `cache` означает «провайдер не сообщил» (unknown), а не промах кеша.
 
 ### 5.3 Адаптеры форматов
 
@@ -254,11 +257,13 @@ export async function fetchBudget(
 
 ### 5.7 Показ
 
-- Облако: `cache 87% · saved $0.42` (`cli/run-result.ts:27`, `cli/repl.ts:692`, `cli/main.ts:119` — добавить `cache` и `saved` в JSON).
-- Локаль (`mechanism: "local"` или нет цены): `cache 91% · TTFT 0.4s`.
-- Нет телеметрии: `prefix stable 93%` (+ `cause: tools changed` при промахе).
-- `session.jsonl`: событие `llm_usage` дополняется `cachedTokens`, `cacheWriteTokens`, `cacheSource`, `stableRatio`, `cause`.
-- `session show` (`cli/commands.ts:497`): агрегировать `llm_usage` — суммарные prompt/completion/cached, hit-rate, стоимость, savings.
+- Облако (цена известна): `Cache: 87% hit · saved $0.42` (`src/cli/cache-line.ts` `formatCacheLine`; показывается в `run-result.ts`, `repl.ts` context bar, `main.ts` `--json` поле `cache`).
+- Локаль / нет цены: `Cache: 91% hit` (без долларов).
+- Нет телеметрии от провайдера: `Prefix stable: 93% · broke: tool set` (при `stableRatio < 0.98`).
+- `session.jsonl`: событие `llm_usage` дополняется `cachedTokens`, `cacheWriteTokens`, `cacheSource`, `cacheStable`, `cacheCause`.
+- `session show` (`cli/commands.ts`): агрегирует `llm_usage` — суммарные prompt/completion и cache hit-rate.
+
+> **Отклонения от плана:** TTFT не показывается (латентность не трекается — выводится hit-rate); `session show` не считает стоимость/savings (в логлах нет цены на событие); `calculateCost` остаётся обратно совместимой обёрткой над `calculateCostDetailed`; `parseCacheUsage` по умолчанию применяет формат `openai`, даже если capability не задана (запрос не меняется — работает для локальных/кастомных серверов).
 
 ## 6. Фазы и план работ
 
