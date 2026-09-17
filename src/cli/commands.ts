@@ -15,6 +15,8 @@ import { readMmaVersion } from "../core/version";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
+import { fetchProviderBudget } from "../llm/provider-budget";
+import { formatCost } from "../modules/pricing/prices";
 import { readChangelog, extractLatestChangelog, extractChangelogRange } from "../modules/updater/changelog-reader";
 
 const version = readMmaVersion();
@@ -299,6 +301,63 @@ function buildContextCommand(program: Command): void {
       config.contextWindow = contextWindow;
       saveConfig(config, configPath, dirname(configPath));
       console.log(t("cli.context_set", { size: contextWindow }));
+    });
+}
+
+function buildUsageCommand(program: Command): void {
+  program
+    .command("usage")
+    .description(t("cli.usage"))
+    .action(async () => {
+      const { config, logger } = await bootstrap();
+      const { type: provider, baseUrl, apiKey } = config.provider;
+      const result = await fetchProviderBudget(provider, baseUrl, apiKey, {
+        log: (level, message) =>
+          level === "warn" ? logger.warn(message) : logger.debug(message),
+      });
+
+      if (result.reason === "unsupported") {
+        console.log(t("cli.usage_unsupported", { provider }));
+        return;
+      }
+      if (result.reason === "no-key") {
+        console.log(t("cli.usage_no_key"));
+        return;
+      }
+      if (result.reason === "error" || !result.budget) {
+        console.log(t("cli.usage_error", { error: result.error ?? "" }));
+        return;
+      }
+
+      const b = result.budget;
+      let printed = false;
+      if (b.keyUsageUsd !== undefined) {
+        console.log(t("cli.usage_key_usage", { usage: formatCost(b.keyUsageUsd) }));
+        printed = true;
+      }
+      if (b.keyLimitUsd !== undefined && b.keyRemainingUsd !== undefined) {
+        console.log(
+          t("cli.usage_key_limit", {
+            limit: formatCost(b.keyLimitUsd),
+            remaining: formatCost(b.keyRemainingUsd),
+          }),
+        );
+        printed = true;
+      }
+      if (b.balanceUsd !== undefined) {
+        console.log(t("cli.usage_balance", { balance: formatCost(b.balanceUsd) }));
+        printed = true;
+      }
+      if (b.totalCreditsUsd !== undefined && b.totalUsageUsd !== undefined) {
+        console.log(
+          t("cli.usage_account", {
+            credits: formatCost(b.totalCreditsUsd),
+            used: formatCost(b.totalUsageUsd),
+          }),
+        );
+        printed = true;
+      }
+      if (!printed) console.log(t("cli.usage_empty"));
     });
 }
 
@@ -640,6 +699,7 @@ export function createProgram(): Command {
   buildConfigCommands(program);
   buildModelCommands(program);
   buildContextCommand(program);
+  buildUsageCommand(program);
   buildMapCommand(program);
   buildProviderCommands(program);
   buildSessionCommands(program);

@@ -231,29 +231,40 @@ export function diffPrefix(prev: Message[], curr: Message[]): PrefixDelta;
 
 Важно: `TokenTracker.logUsage` (`token-tracker.ts:63`) сейчас получает только prompt/completion. Пробрасываем `CacheUsage` из состояния цикла (новое поле `LoopState.cacheUsage`).
 
-### 5.6 Бюджет провайдера (опционально)
+### 5.6 Бюджет провайдера
 
-Новый `src/llm/provider-budget.ts`:
+`src/llm/provider-budget.ts`:
 
 ```ts
 export interface ProviderBudget {
   provider: string;
-  balanceUsd?: number;      // remaining
-  totalCredits?: number;
-  totalUsage?: number;
-  keyLimitUsd?: number;     // per-key cap
+  source: "openrouter";
+  keyLabel?: string;
+  keyUsageUsd?: number;
+  keyLimitUsd?: number;
   keyRemainingUsd?: number;
-  source: "openrouter" | "none";
+  isFreeTier?: boolean;
+  totalCreditsUsd?: number;
+  totalUsageUsd?: number;
+  balanceUsd?: number;
 }
 
-export async function fetchBudget(
-  provider: string, baseUrl: string, apiKey: string, timeoutMs?,
-): Promise<ProviderBudget | null>;
+export interface ProviderBudgetResult {
+  budget: ProviderBudget | null;
+  reason: "ok" | "unsupported" | "no-key" | "error";
+  error?: string;
+}
+
+export async function fetchProviderBudget(
+  provider: string, baseUrl: string, apiKey: string | undefined,
+  options: { timeoutMs?: number; log: (level, message) => void },
+): Promise<ProviderBudgetResult>;
 ```
 
-- OpenRouter: `GET /api/v1/key` (per-key `limit`/`limit_remaining`/`usage`); если доступен management key — `GET /api/v1/credits`.
-- Zen/Go: возвращаем `null` и документируем «API-ключ не отдаёт баланс».
-- Вызывается только по явной команде/флагу (`mma usage`, конфиг `provider.budgetProbe: false` по умолчанию), не в горячем цикле.
+- OpenRouter: `GET /key` (per-key `usage`/`limit`/`limit_remaining`/`is_free_tier`); если доступен management key — `GET /credits` (`total_credits`/`total_usage`, отсюда `balanceUsd`).
+- Zen/Go и прочие: `reason: "unsupported"`, запрос не делается.
+- Функция не бросает: сбои возвращаются как `reason: "error"` + `error` (и логируются через `options.log`).
+- Команда: `mma usage` (только явный вызов — автоматического зондирования на старте нет).
 
 ### 5.7 Показ
 
@@ -377,7 +388,7 @@ export async function fetchBudget(
 - [x] Фаза 3 — prefix monitor: `src/core/agent/prefix-monitor.ts` (`buildPromptSnapshot`, `diffPrompt`, классификация `cause` system/tools/history/volatile/none/unknown). Агент считает дельту на каждой итерации (оценка chars/4), `LoopState.prevPrompt/prefixDelta`, поля `cacheStable`/`cacheCause` в `llm_usage`. Тесты: `tests/prefix-monitor.test.ts`.
 - [x] Фаза 4 — стоимость: `ModelPrice.cachedInput/cacheWrite`, `calculateCostDetailed` (+ обратно совместимая `calculateCost`), cached-read цены MiniMax/GLM в `ZEN_PRICES`, `CostTracker.saved` и учёт кеша в `record()`, `LoopState.cacheUsage` из API-usage. Кеш учитывается только при `source: "api"`. Тесты: `tests/pricing.test.ts`.
 - [x] Фаза 5 — показ: `AgentResult.cache` (cached/uncached/write/hitRate/saved/prefix), `src/cli/cache-line.ts` (`formatCacheLine`), строка кеша в `run-result` и `repl` (`showContextBar`), `cache` в `--json`, агрегация `llm_usage` в `session show` (токены + hit-rate). i18n-ключи `repl.cache/repl.cache_nosave/repl.prefix/cache.cause.*/cli.session_*`, поля `cachedTokens`/`cacheWriteTokens`/`cacheSource` в `llm_usage`. Тесты: `tests/cache-line.test.ts`.
-- [ ] Фаза 6 — бюджет провайдера (OpenRouter). **Не реализовано** — оставлено опциональным: только OpenRouter отдаёт баланс по API-ключу, Zen/Go — нет.
+- [x] Фаза 6 — бюджет провайдера: `src/llm/provider-budget.ts` (`fetchProviderBudget` для OpenRouter `/key` + `/credits`), команда `mma usage`, i18n `cli.usage*`. Zen/Go → `unsupported` с пояснением. Без авто-зондирования. Тесты: `tests/provider-budget.test.ts`.
 - [x] Фаза 7 — документация: `docs/agents/modules.md` (Prompt Caching & Cache Metrics), `AGENTS.md` (Quick Reference), `CHANGELOG.md` (`## [Unreleased]`), правило #15 в `architecture.md`.
 
 ## 11. Приложение — источники

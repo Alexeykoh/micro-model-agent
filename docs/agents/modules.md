@@ -259,6 +259,8 @@ When a model has a known price, MMA shows the session's running cost **together 
 
 **Hosted providers** with fixed base URLs are selectable via `mma provider use opencode-zen|opencode-go` and the setup wizard (`HOSTED_BASE_URLS` in `src/cli/setup.ts`): Zen → `https://opencode.ai/zen/v1`, Go → `https://opencode.ai/zen/go/v1`. Both are OpenAI-compatible (`/chat/completions`); model ids use the `opencode/…` / `opencode-go/…` prefix. Builtin pricing is maintained from https://opencode.ai/docs/zen/ and /docs/go/ — update `ZEN_PRICES` when those tables change.
 
+**Provider budget** — `mma usage` (`src/llm/provider-budget.ts`) queries the active provider's balance. **OpenRouter only**: `GET /key` for per-key `usage`/`limit`/`limit_remaining` and, with a management key, `GET /credits` for the account balance (`total_credits - total_usage`). Other providers return `unsupported` (OpenCode Zen/Go do not expose balance via API key). The fetch is explicit (no startup probing), never throws, and logs suppressed `/credits` failures.
+
 ## Prompt Caching & Cache Metrics
 
 > **Source:** `src/llm/cache-usage.ts`, `src/core/agent/prefix-monitor.ts`, `src/cli/cache-line.ts`, `src/modules/providers/cache.ts`. Design: [docs/specs/2026-09-17-prompt-caching-budget.md](../specs/2026-09-17-prompt-caching-budget.md).

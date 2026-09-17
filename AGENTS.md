@@ -133,6 +133,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   на цену только при `source: "api"`.
 - **Показ:** `formatCacheLine` (`src/cli/cache-line.ts`) → REPL/`run-result`/`--json` (`cache`); `session show`
   агрегирует `llm_usage` (токены + hit-rate). i18n: `repl.cache*`, `repl.prefix`, `cache.cause.*`, `cli.session_*`.
+- **Бюджет:** `mma usage` (`src/llm/provider-budget.ts`) — баланс только OpenRouter (`/key`, `/credits`); Zen/Go → `unsupported`. Только явный вызов.
 
 ### Current Version: 0.61.1
 
