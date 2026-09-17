@@ -40,8 +40,16 @@ describe("formatCacheLine", () => {
     expect(line).toContain("tool set");
   });
 
+  it("shows a real prefix break with its cause", () => {
+    const line = formatCacheLine(report({ prefixStable: 0.5, prefixCause: "system" }));
+    expect(line).toContain("50%");
+    expect(line).toContain("system prompt");
+  });
+
   it("returns undefined when there is nothing to show", () => {
     expect(formatCacheLine(undefined)).toBeUndefined();
+    // Нормальная дописка и первая итерация — не промах.
     expect(formatCacheLine(report({ prefixStable: 0.99, prefixCause: "none" }))).toBeUndefined();
+    expect(formatCacheLine(report({ prefixStable: 0, prefixCause: "unknown" }))).toBeUndefined();
   });
 });

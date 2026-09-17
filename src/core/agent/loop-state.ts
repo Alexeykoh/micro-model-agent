@@ -84,6 +84,8 @@ export interface LoopState {
   prevPrompt?: PromptSnapshot;
   /** Дельта префикса текущей итерации — пишется в llm_usage. */
   prefixDelta?: PrefixDelta;
+  /** Последний РЕАЛЬНЫЙ разрыв префикса (system/tools/history/volatile). */
+  lastPrefixBreak?: PrefixDelta;
 
   /** Счётчик отклонений финального аудита. */
   auditRetries: number;

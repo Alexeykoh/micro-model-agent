@@ -695,6 +695,14 @@ export class Agent {
       const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
       state.prefixDelta = diffPrompt(state.prevPrompt, promptSnapshot, estimateTokens);
       state.prevPrompt = promptSnapshot;
+      if (
+        state.prefixDelta.cause === "system" ||
+        state.prefixDelta.cause === "tools" ||
+        state.prefixDelta.cause === "history" ||
+        state.prefixDelta.cause === "volatile"
+      ) {
+        state.lastPrefixBreak = state.prefixDelta;
+      }
 
       slog.logToolDefs(
         allToolsForBudget.length,
@@ -1117,8 +1125,10 @@ export class Agent {
   private buildCacheStats(state: LoopState): AgentResult["cache"] {
     const hasTokens =
       state.cacheCachedTotal > 0 || state.cacheUncachedTotal > 0 || state.cacheWriteTotal > 0;
-    const prefixStable = state.prefixDelta?.stableRatio;
-    if (!hasTokens && prefixStable === undefined) return undefined;
+    // Приоритет — последнему реальному разрыву, иначе состояние текущей
+    // итерации (нормальная дописка / первая итерация).
+    const prefix = state.lastPrefixBreak ?? state.prefixDelta;
+    if (!hasTokens && prefix?.stableRatio === undefined) return undefined;
     const denom = state.cacheCachedTotal + state.cacheUncachedTotal;
     return {
       cachedTokens: state.cacheCachedTotal,
@@ -1126,8 +1136,8 @@ export class Agent {
       cacheWriteTokens: state.cacheWriteTotal,
       hitRate: denom > 0 ? state.cacheCachedTotal / denom : 0,
       saved: this.costTracker.saved,
-      prefixStable,
-      prefixCause: state.prefixDelta?.cause,
+      prefixStable: prefix?.stableRatio,
+      prefixCause: prefix?.cause,
       source: state.cacheSource,
     };
   }

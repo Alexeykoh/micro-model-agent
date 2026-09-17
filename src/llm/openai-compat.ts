@@ -80,6 +80,8 @@ function buildRequestBody(opts: {
   promptCacheKey?: string;
   /** Идентификатор для sticky-маршрутизации OpenRouter (`session_id`). */
   sessionId?: string;
+  /** Запросить финальный usage-чанк в стриме (`stream_options.include_usage`). */
+  streamUsage?: boolean;
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -90,6 +92,7 @@ function buildRequestBody(opts: {
   if (opts.cachePrompt) body.cache_prompt = true;
   if (opts.promptCacheKey) body.prompt_cache_key = opts.promptCacheKey;
   if (opts.sessionId) body.session_id = opts.sessionId;
+  if (opts.stream && opts.streamUsage) body.stream_options = { include_usage: true };
 
   // Apply reasoning effort via the provider's strategy
   const strategy = opts.reasoningStrategy ?? "openai-effort";
@@ -546,12 +549,18 @@ export class OpenAICompatProvider implements LLMProvider {
    * Вычисляет запросные подсказки кеша из возможностей провайдера и текущего
    * session id. Без capability возвращает «ничего», сохраняя прежнее тело.
    */
-  private cacheHints(): { cachePrompt: boolean; promptCacheKey?: string; sessionId?: string } {
+  private cacheHints(): {
+    cachePrompt: boolean;
+    promptCacheKey?: string;
+    sessionId?: string;
+    streamUsage: boolean;
+  } {
     const sessionId = this.getSessionId?.();
     return {
       cachePrompt: this.cache?.requestCachePrompt === true,
       promptCacheKey: this.cache?.requestPromptCacheKey ? sessionId : undefined,
       sessionId: this.cache?.requestSessionId ? sessionId : undefined,
+      streamUsage: this.cache?.requestStreamUsage === true,
     };
   }
 

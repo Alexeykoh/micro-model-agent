@@ -16,6 +16,7 @@ function cache(over: Partial<CacheCapability>): CacheCapability {
     requestPromptCacheKey: false,
     requestSessionId: false,
     requestCacheControl: false,
+    requestStreamUsage: false,
     ...over,
   };
 }
@@ -106,6 +107,26 @@ describe("cache request hints", () => {
     for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
     }
     expect(capture.body.session_id).toBe("ses_xyz");
+  });
+
+  it("requests stream usage when requestStreamUsage is on", async () => {
+    const capture: Capture = {};
+    mockStream(capture);
+    const provider = makeProvider(cache({ requestStreamUsage: true }), "ses_1");
+
+    for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+    }
+    expect(capture.body.stream_options).toEqual({ include_usage: true });
+  });
+
+  it("omits stream_options by default", async () => {
+    const capture: Capture = {};
+    mockStream(capture);
+    const provider = makeProvider(cache({}), "ses_1");
+
+    for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+    }
+    expect(capture.body.stream_options).toBeUndefined();
   });
 
   it("also applies cache hints on the non-streaming path", async () => {

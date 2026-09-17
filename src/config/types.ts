@@ -33,6 +33,12 @@ export interface CacheCapability {
   requestSessionId: boolean;
   /** Помечать блоки контента `cache_control` (Anthropic). */
   requestCacheControl: boolean;
+  /**
+   * Слать `stream_options: { include_usage: true }` в стриминге, чтобы бэкенд
+   * вернул финальный usage-чанк (иначе многие OpenAI-совместимые серверы,
+   * включая LM Studio, не отдают usage/`cached_tokens` в стриме).
+   */
+  requestStreamUsage: boolean;
 }
 
 /** A single configured provider (one of possibly many). */

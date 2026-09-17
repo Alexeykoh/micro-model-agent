@@ -283,6 +283,8 @@ Agent loops resend the whole context every iteration; providers reuse the KV cac
 
 **Prefix monitor** (`diffPrompt`) is client-side and provider-agnostic: it compares consecutive prompts and classifies why the prefix broke (`system` / `tools` / `history` / `volatile`), logged as `cacheStable` + `cacheCause` in `llm_usage`. It works even when the provider reports nothing.
 
+**LM Studio caveat:** its OpenAI-compatible `/v1/chat/completions` returns no `prompt_tokens_details` (and `stats` is empty), so `cached_tokens` is unavailable there — only the prefix monitor reports. `/v1/responses` does expose `input_tokens_details.cached_tokens` (with a known accounting bug), and the native `/api/v1/chat` exposes TTFT; neither is used by the OpenAI-compatible path. To let any OpenAI-shaped backend report usage (and cache fields where supported) in streaming, requests send `stream_options: { include_usage: true }` (`requestStreamUsage`). For local single-agent runs, prefer loading the model with `parallel: 1` — LM Studio's parallel slots contend for the KV cache and can defeat reuse.
+
 **Cost** — `ModelPrice.cachedInput`/`cacheWrite`; cached reads are billed at the cached rate and savings tracked (`CostTracker.saved`). Only API-sourced cache usage affects pricing. Zen/Go cached-read prices live in `ZEN_PRICES`.
 
 **Display** — `formatCacheLine` renders one footer line: `Cache: 87% hit · saved $0.42` (cloud), `Cache: 91% hit` (local, no price) or `Prefix stable: 93% · broke: tool set` (no telemetry). Shown in the REPL context bar, single-run result and `--json` (`cache`); `mma session show <id>` aggregates `llm_usage` into tokens + cache hit rate.

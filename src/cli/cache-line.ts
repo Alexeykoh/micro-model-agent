@@ -30,11 +30,16 @@ export function formatCacheLine(cache?: CacheReport): string | undefined {
     return t("repl.cache_nosave", { hit });
   }
 
-  // Нет провайдерских токенов — показываем только сломанный префикс.
-  if (cache.prefixStable !== undefined && cache.prefixStable < 0.98) {
+  // Нет провайдерских токенов — показываем только РЕАЛЬНЫЙ разрыв префикса.
+  // `none` (нормальная дописка истории) и `unknown` (нет предыдущего промпта —
+  // первая итерация) не являются промахом и не должны пугать.
+  const broken =
+    cache.prefixCause !== undefined &&
+    cache.prefixCause !== "none" &&
+    cache.prefixCause !== "unknown";
+  if (broken && cache.prefixStable !== undefined && cache.prefixStable < 0.98) {
     const stable = Math.round(cache.prefixStable * 100);
-    const causeKey = `cache.cause.${cache.prefixCause ?? "unknown"}`;
-    return t("repl.prefix", { stable, cause: t(causeKey) });
+    return t("repl.prefix", { stable, cause: t(`cache.cause.${cache.prefixCause}`) });
   }
   return undefined;
 }

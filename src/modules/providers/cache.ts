@@ -14,6 +14,7 @@ export const NO_CACHE_CAPABILITY: CacheCapability = {
   requestPromptCacheKey: false,
   requestSessionId: false,
   requestCacheControl: false,
+  requestStreamUsage: false,
 };
 
 /**

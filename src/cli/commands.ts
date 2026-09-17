@@ -723,14 +723,20 @@ export function createProgram(): Command {
   // plugins…), which leaves open handles — without an explicit exit the
   // process hangs after printing its result ("config set" printed, never
   // exited). The prompt/REPL paths exit explicitly in main.ts; every
-  // SUBCOMMAND is one-shot, so exit as soon as its action resolves. Hooks are
-  // attached to subcommand roots only — NOT to program, whose own action is
-  // the prompt path handled by main.ts.
-  for (const cmd of program.commands) {
+  // SUBCOMMAND is one-shot, so exit as soon as its action resolves.
+  //
+  // Хук навешиваем РЕКУРСИВНО на все подкоманды (не только верхнего уровня):
+  // у вложенных (`session show`, `model certify`, `provider use` …) родитель
+  // без action, поэтому postAction родителя не срабатывает, и фоновые хендлы
+  // bootstrap держат процесс — команда «виснет» после вывода. На `program`
+  // хук не вешаем: его action — prompt/REPL, которым управляет main.ts.
+  const attachOneShotExit = (cmd: Command): void => {
     cmd.hook("postAction", () => {
       process.exit(0);
     });
-  }
+    for (const sub of cmd.commands) attachOneShotExit(sub);
+  };
+  for (const cmd of program.commands) attachOneShotExit(cmd);
 
   return program;
 }

@@ -16,6 +16,7 @@ function cache(over: Partial<CacheCapability>): CacheCapability {
     requestPromptCacheKey: false,
     requestSessionId: false,
     requestCacheControl: false,
+    requestStreamUsage: false,
     ...over,
   };
 }
