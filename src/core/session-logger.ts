@@ -1,6 +1,7 @@
 import type { SessionManager } from "../modules/session/manager";
 import type { ToolCall } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
+import type { CacheUsage } from "../llm/cache-usage";
 import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
@@ -256,6 +257,8 @@ export class SessionLogger {
       durationMs: number;
       /** Стабильность префикса промпта (client-side монитор кеша). */
       prefix?: PrefixDelta;
+      /** Кеш-статистика вызова от провайдера. */
+      cache?: CacheUsage;
     },
   ): void {
     this.session?.appendLog({
@@ -271,6 +274,9 @@ export class SessionLogger {
       durationMs: usage.durationMs,
       cacheStable: usage.prefix ? Number(usage.prefix.stableRatio.toFixed(4)) : undefined,
       cacheCause: usage.prefix?.cause,
+      cachedTokens: usage.cache?.cachedTokens,
+      cacheWriteTokens: usage.cache?.cacheWriteTokens,
+      cacheSource: usage.cache?.source,
     });
   }
 

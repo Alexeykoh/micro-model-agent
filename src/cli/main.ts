@@ -118,6 +118,7 @@ async function main(): Promise<void> {
             totalTokens: result.totalTokens ?? null,
             totalCost: result.totalCost ?? null,
             costBreakdown: result.costBreakdown ?? [],
+            cache: result.cache ?? null,
           },
           null,
           2,

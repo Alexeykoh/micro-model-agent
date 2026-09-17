@@ -91,6 +91,22 @@ export interface AgentResult {
   totalCost?: number;
   /** Per-provider cost attribution (priced providers only, cost desc). */
   costBreakdown?: Array<{ provider: string; cost: number }>;
+  /** Статистика кеша промпта за прогон (провайдерская или client-side). */
+  cache?: {
+    cachedTokens: number;
+    uncachedTokens: number;
+    cacheWriteTokens: number;
+    /** cached / (cached + uncached), 0..1. */
+    hitRate: number;
+    /** Экономия в USD относительно полной input-цены (если цена известна). */
+    saved?: number;
+    /** Стабильность префикса последней итерации (0..1), client-side. */
+    prefixStable?: number;
+    /** Причина расхождения префикса. */
+    prefixCause?: string;
+    /** Источник кеш-данных. */
+    source: "api" | "derived" | "none";
+  };
   compactionCount?: number;
   contextQuality?: number;
   /** Provider name that serviced this run. */

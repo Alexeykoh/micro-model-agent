@@ -1,6 +1,7 @@
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { formatCost } from "../modules/pricing/prices";
+import { formatCacheLine, type CacheReport } from "./cache-line";
 
 /**
  * Render a single-run AgentResult to the terminal (non-JSON mode) and return
@@ -19,6 +20,7 @@ export function printRunResult(
     totalCost?: number;
     costBreakdown?: Array<{ provider: string; cost: number }>;
     totalTokens?: number;
+    cache?: CacheReport;
   },
   flush: () => void,
 ): number {
@@ -34,6 +36,10 @@ export function printRunResult(
       }
     } else if (result.totalTokens !== undefined && result.totalTokens > 0) {
       console.log(pc.dim(`${t("repl.tokens", { tokens: result.totalTokens })}`));
+    }
+    const cacheLine = formatCacheLine(result.cache);
+    if (cacheLine) {
+      console.log(pc.dim(`  ${cacheLine}`));
     }
     if (!result.text) {
       console.log(pc.yellow(t("cli.no_output")));

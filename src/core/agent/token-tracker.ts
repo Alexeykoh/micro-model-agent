@@ -32,6 +32,9 @@ export class TokenTracker {
     estimatedPromptTokens: number,
   ): { promptBefore: number; completionBefore: number } {
     state.estimatedPromptTokensTotal += estimatedPromptTokens;
+    // Кеш-данные относятся к одной итерации; сбрасываем, чтобы отсутствие
+    // usage в следующем ходе не приписало старые цифры.
+    state.cacheUsage = undefined;
     return {
       promptBefore: state.apiPromptTokens,
       completionBefore: state.apiCompletionTokens,
@@ -77,6 +80,15 @@ export class TokenTracker {
       usagePrompt > 0 || usageCompletion > 0 ? "api" : "estimate";
     const prompt = source === "api" ? usagePrompt : contextTokens;
     const completion = source === "api" ? usageCompletion : estimateTokens(textContent);
+
+    // Накопление кеш-токенов за прогон (для AgentResult.cache).
+    if (state.cacheUsage) {
+      state.cacheCachedTotal += state.cacheUsage.cachedTokens;
+      state.cacheUncachedTotal += state.cacheUsage.uncachedTokens;
+      state.cacheWriteTotal += state.cacheUsage.cacheWriteTokens;
+      state.cacheSource = state.cacheUsage.source;
+    }
+
     slog.logLlmUsage(iteration, {
       promptTokens: prompt,
       completionTokens: completion,
@@ -84,6 +96,7 @@ export class TokenTracker {
       source,
       durationMs,
       prefix: state.prefixDelta,
+      cache: state.cacheUsage,
     });
     // Кеш учитываем только когда цифры пришли от API: оценка chars/4 о кеше
     // ничего не знает и не должна менять тарификацию.

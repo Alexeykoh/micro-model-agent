@@ -94,6 +94,12 @@ export interface SessionLogEntry {
   cacheStable?: number;
   /** Причина расхождения префикса: system/tools/history/volatile/none/unknown. */
   cacheCause?: string;
+  /** Прочитано из кеша (cache read) за вызов. */
+  cachedTokens?: number;
+  /** Записано в кеш (cache write) за вызов. */
+  cacheWriteTokens?: number;
+  /** Источник кеш-данных: api | derived. */
+  cacheSource?: string;
   // session_start fields
   environment?: Record<string, unknown>;
   lspProbe?: {

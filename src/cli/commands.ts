@@ -547,6 +547,40 @@ function buildSessionCommands(program: Command): void {
           }
         }
       }
+
+      const usageEvents = sessionManager.loadSessionLog(id).filter((e) => e.type === "llm_usage");
+      if (usageEvents.length > 0) {
+        let prompt = 0;
+        let completion = 0;
+        let cached = 0;
+        for (const e of usageEvents) {
+          prompt += e.promptTokens ?? 0;
+          completion += e.completionTokens ?? 0;
+          cached += e.cachedTokens ?? 0;
+        }
+        console.log("");
+        console.log(
+          pc.cyan(
+            t("cli.session_usage", {
+              prompt,
+              completion,
+              total: prompt + completion,
+            }),
+          ),
+        );
+        if (cached > 0 && prompt > 0) {
+          const hit = Math.round((cached / prompt) * 100);
+          console.log(
+            pc.dim(
+              t("cli.session_cache", {
+                hit,
+                cached,
+                uncached: Math.max(0, prompt - cached),
+              }),
+            ),
+          );
+        }
+      }
     });
   session
     .command("delete")

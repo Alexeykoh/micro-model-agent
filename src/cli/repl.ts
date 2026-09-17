@@ -34,6 +34,7 @@ import { SessionLogger } from "../core/session-logger";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
+import { formatCacheLine, type CacheReport } from "./cache-line";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { writeWarning } from "../ui/output";
 import type { ContextProbeResult } from "../llm/model-loader";
@@ -664,6 +665,7 @@ export class Repl implements ReplContext {
     completionTokens?: number;
     totalTokens?: number;
     totalCost?: number;
+    cache?: CacheReport;
   }): void {
     if (
       result.contextUsed === undefined ||
@@ -691,6 +693,10 @@ export class Repl implements ReplContext {
       }
       if (result.totalCost !== undefined && result.totalCost > 0) {
         console.log(pc.yellow(`  ${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
+      }
+      const cacheLine = formatCacheLine(result.cache);
+      if (cacheLine) {
+        console.log(pc.dim(`  ${cacheLine}`));
       }
     } else if (ui?.showCompaction && result.compactionCount !== undefined) {
       if (result.compactionCount > this.lastCompactionShown) {

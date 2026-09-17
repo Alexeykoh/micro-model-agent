@@ -71,6 +71,12 @@ export interface LoopState {
   estimatedPromptTokensTotal: number;
   /** Кеш-статистика последнего API-usage (заменяется per-итерацию). */
   cacheUsage?: CacheUsage;
+  /** Накопительные кеш-токены за прогон. */
+  cacheCachedTotal: number;
+  cacheUncachedTotal: number;
+  cacheWriteTotal: number;
+  /** Источник кеш-данных за прогон. */
+  cacheSource: "api" | "derived" | "none";
   /** Суммарная длительность LLM-вызовов (мс) — выставляется в AgentResult. */
   totalLlmDuration: number;
 
@@ -138,6 +144,10 @@ export function createLoopState(): LoopState {
     apiCompletionChars: 0,
     estimatedPromptTokensTotal: 0,
     totalLlmDuration: 0,
+    cacheCachedTotal: 0,
+    cacheUncachedTotal: 0,
+    cacheWriteTotal: 0,
+    cacheSource: "none",
     auditRetries: 0,
     lastAuditSummary: "",
     emptyResponseRetries: 0,
