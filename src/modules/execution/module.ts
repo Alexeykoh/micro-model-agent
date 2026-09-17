@@ -45,6 +45,53 @@ export type WebSearchRunner = (
  */
 const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 
+/**
+ * Tools that may run while a plan step is active WITHOUT a step-alignment
+ * check. They either cannot touch the filesystem, or are structural/read-only
+ * inspection tools the agent legitimately needs at any point (diagnostics,
+ * index/search, memory, process introspection, interactive prompts). Only
+ * file-mutating tools are pinned to the current step's file tokens.
+ *
+ * `lsp_check` and `project_map` belong here explicitly: both are alwaysOn and
+ * the system prompt MANDATES `lsp_check` after every write (including rewrites
+ * of files owned by already-completed steps). Leaving them off the list made
+ * every diagnostic call burn a plan warning and could hard-block a legitimate
+ * write on the 3rd call (observed: "3 вызовов подряд вне текущего шага" while
+ * the agent was writing the current step's own deliverable).
+ */
+const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
+  // structural / execution control
+  "plan",
+  "todo",
+  "verify",
+  "enable_tools",
+  // filesystem reads
+  "list_dir",
+  "read_file",
+  "glob",
+  "grep",
+  "file_info",
+  // read-only diagnostics + code index
+  "lsp_check",
+  "project_map",
+  "chunk_query",
+  // web / memory / session reads
+  "web_search",
+  "web_fetch",
+  "web_browse",
+  "recall",
+  "search_history",
+  "session_info",
+  // process introspection
+  "process_list",
+  "process_log",
+  // interactive prompts (no filesystem mutation)
+  "question",
+  "approve",
+  // skills
+  "load_skill",
+]);
+
 export class ExecutionModule implements AgentModule {
   name = "execution";
   private tracker: PlanTracker | null = null;
@@ -446,18 +493,7 @@ export class ExecutionModule implements AgentModule {
     const step = this.tracker.getCurrentStep();
     if (!step) return null;
 
-    const allowedAlways = [
-      "plan",
-      "todo",
-      "verify",
-      "list_dir",
-      "read_file",
-      "glob",
-      "grep",
-      "file_info",
-      "load_skill",
-    ];
-    if (allowedAlways.includes(call.name)) return null;
+    if (PLAN_ALIGNMENT_EXEMPT_TOOLS.has(call.name)) return null;
 
     const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map((p) =>
       p.toLowerCase(),
@@ -486,11 +522,18 @@ export class ExecutionModule implements AgentModule {
       }
     }
 
+    // Bidirectional path-token overlap, used for BOTH checks below. A step may
+    // name "main.ts" while the tool calls "src/main.ts" (or vice versa), so a
+    // one-directional `s.includes(p)` missed the common nested/partial case
+    // (observed: rewriting a completed step's src/main.ts was flagged as
+    // off-path for the current step and helped hard-block the third call).
+    const matchesAny = (p: string, tokens: string[]) =>
+      tokens.some((t) => t === p || t.includes(p) || p.includes(t));
+    const finished = [...finishedPaths];
+
     const offPath = callPaths.some((p) => {
-      if (finishedPaths.has(p) || [...finishedPaths].some((s) => s.includes(p))) {
-        return false;
-      }
-      return !stepPaths.some((s) => p.includes(s) || s.includes(p));
+      if (matchesAny(p, finished)) return false;
+      return !matchesAny(p, stepPaths);
     });
     if (!offPath) return null;
 

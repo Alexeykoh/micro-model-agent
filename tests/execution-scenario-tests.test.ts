@@ -477,4 +477,44 @@ describe("Scenario: rewrite of completed-step files is not blocked", () => {
     expect(plugin.onBeforeTool!(ctx, offPlan)).toBe(true);
     expect(typeof plugin.onBeforeTool!(ctx, offPlan)).toBe("string");
   });
+
+  it("exempts a nested path whose completed step named only the bare filename", () => {
+    // Regression: the finished-step exemption used a one-directional
+    // `s.includes(p)`, so a done step that named "main.ts" did not exempt a
+    // rewrite of "src/main.ts" — the call was treated as off-path for the
+    // current step and contributed to the 3-strikes hard block.
+    const execModule = new ExecutionModule(mkdtempSync(join(tmpdir(), "mma-exec-scen-")), 8);
+    execModule.setPlan(mkPlan("Test", ["create main.ts", "create src/style.css"]));
+    const tracker = execModule.getTracker()!;
+    tracker.updateStepStatus(1, "done");
+    tracker.advance();
+    expect(tracker.getCurrentStep()?.id).toBe(2);
+
+    const plugin = execModule.getPlugin();
+    const ctx = mockCtx();
+    const rewriteDone = mockToolCall({
+      name: "write_file",
+      arguments: { path: "src/main.ts" },
+    });
+    for (let i = 0; i < 5; i++) {
+      expect(plugin.onBeforeTool!(ctx, rewriteDone)).toBe(true);
+    }
+  });
+
+  it("exempts read-only diagnostic tools (lsp_check/project_map) from step alignment", () => {
+    // Regression: lsp_check is alwaysOn and mandated after every write, but was
+    // not in the allow-list — each diagnostic call burned a plan warning and
+    // helped hard-block a legitimate write on the 3rd call.
+    const execModule = new ExecutionModule(mkdtempSync(join(tmpdir(), "mma-exec-scen-")), 8);
+    execModule.setPlan(mkPlan("Test", ["create src/a.ts"]));
+    const plugin = execModule.getPlugin();
+    const ctx = mockCtx();
+
+    const lsp = mockToolCall({ name: "lsp_check", arguments: { path: "src/other.ts" } });
+    const map = mockToolCall({ name: "project_map", arguments: { query: "auth" } });
+    for (let i = 0; i < 5; i++) {
+      expect(plugin.onBeforeTool!(ctx, lsp)).toBe(true);
+      expect(plugin.onBeforeTool!(ctx, map)).toBe(true);
+    }
+  });
 });

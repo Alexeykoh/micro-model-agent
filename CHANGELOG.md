@@ -4,6 +4,13 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.63.3] - 2026-09-17
+
+### Fixed
+- **Plan-alignment false positives hard-blocked legitimate writes**: `checkPlanAlignment` (`src/modules/execution/module.ts`) could accumulate 3 "outside the current step" warnings and block a tool call the agent needed for the current step. Two causes fixed:
+  - The completed-step rewrite exemption compared paths one-directionally (`finishedPaths.some((s) => s.includes(p))`), so a done step naming `main.ts` did not exempt a rewrite of `src/main.ts` — now the overlap check is bidirectional, mirroring the current-step comparison.
+  - Read-only diagnostic/structural tools were not exempt: `lsp_check` (mandated by the system prompt after every write) and `project_map` now join the allow-list (`PLAN_ALIGNMENT_EXEMPT_TOOLS`), alongside the other filesystem-reads, web/memory/session reads, process introspection and interactive prompts. Only file-mutating tools are pinned to the current step's file tokens.
+
 ## [0.63.2] - 2026-09-17
 
 ### Fixed
