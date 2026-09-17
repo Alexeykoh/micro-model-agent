@@ -31,6 +31,7 @@ import { LlmError } from "../llm/llm-errors";
 import { createLoopState, clearIterationSignals } from "./agent/loop-state";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
+import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
 import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
 import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
@@ -686,6 +687,13 @@ export class Agent {
 
       this.refreshSystemPrompt();
       const history = contextManager.getActiveHistory();
+
+      // Монитор стабильности префикса: считаем до запроса, пишем в llm_usage
+      // после. Char-оценка (chars/4) достаточна — важна динамика ratio и
+      // причина расхождения, а не абсолютная точность токенов.
+      const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
+      state.prefixDelta = diffPrompt(state.prevPrompt, promptSnapshot, estimateTokens);
+      state.prevPrompt = promptSnapshot;
 
       slog.logToolDefs(
         allToolsForBudget.length,

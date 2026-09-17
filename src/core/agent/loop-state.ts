@@ -1,4 +1,5 @@
 import { FORCED_COMPACTION_COOLDOWN } from "./constants";
+import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
@@ -69,6 +70,11 @@ export interface LoopState {
   estimatedPromptTokensTotal: number;
   /** Суммарная длительность LLM-вызовов (мс) — выставляется в AgentResult. */
   totalLlmDuration: number;
+
+  /** Снимок промпта прошлой итерации для оценки стабильности префикса. */
+  prevPrompt?: PromptSnapshot;
+  /** Дельта префикса текущей итерации — пишется в llm_usage. */
+  prefixDelta?: PrefixDelta;
 
   /** Счётчик отклонений финального аудита. */
   auditRetries: number;

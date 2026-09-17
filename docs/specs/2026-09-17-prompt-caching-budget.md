@@ -369,7 +369,7 @@ export async function fetchBudget(
 - [x] Фаза 0 — типы `CacheCapability`, `ProviderEntry.cache`, дефолты пресетов, resolver, проброс capabilities в `ProviderManager.build()`.
 - [x] Фаза 1 — запросный слой: `cache_prompt` (за флагом), `prompt_cache_key` (OpenAI), `session_id` (OpenRouter), гейтинг `x-opencode-session` по `sessionHeader` с легаси-фолбэком при отсутствии capability. Фабрика `openaiCompat` прокидывает `opts.capabilities.cache` в провайдера. Тесты: `tests/provider-cache-request.test.ts`.
 - [x] Фаза 2 — парсинг/нормализация: `src/llm/cache-usage.ts` (`CacheUsage` + `parseCacheUsage` для форматов openai/deepseek/anthropic/ollama), `Chunk.usage.cache`, парсинг в stream и non-stream. Формат берётся из `cache.report`, по умолчанию `openai` (не меняет запрос, работает и без capability). Тесты: `tests/cache-usage.test.ts`, `tests/provider-cache-usage.test.ts`.
-- [ ] Фаза 3 — prefix monitor.
+- [x] Фаза 3 — prefix monitor: `src/core/agent/prefix-monitor.ts` (`buildPromptSnapshot`, `diffPrompt`, классификация `cause` system/tools/history/volatile/none/unknown). Агент считает дельту на каждой итерации (оценка chars/4), `LoopState.prevPrompt/prefixDelta`, поля `cacheStable`/`cacheCause` в `llm_usage`. Тесты: `tests/prefix-monitor.test.ts`.
 - [ ] Фаза 4 — стоимость.
 - [ ] Фаза 5 — показ.
 - [ ] Фаза 6 — бюджет провайдера.

@@ -90,6 +90,10 @@ export interface SessionLogEntry {
   totalTokens?: number;
   source?: string;
   durationMs?: number;
+  /** Стабильность префикса промпта (0..1), client-side монитор кеша. */
+  cacheStable?: number;
+  /** Причина расхождения префикса: system/tools/history/volatile/none/unknown. */
+  cacheCause?: string;
   // session_start fields
   environment?: Record<string, unknown>;
   lspProbe?: {

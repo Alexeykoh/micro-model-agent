@@ -81,6 +81,7 @@ export class TokenTracker {
       totalTokens: prompt + completion,
       source,
       durationMs,
+      prefix: state.prefixDelta,
     });
     this.costTracker.record(prompt, completion, this.getProviderName());
   }
