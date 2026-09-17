@@ -37,7 +37,12 @@ export interface ToolDefinition {
 }
 
 export interface Chunk {
-  type: "text" | "reasoning" | "tool_call" | "done";
+  /**
+   * `warning` — non-fatal, user-facing notice about the model response
+   * (e.g. it was cut off by the completion token limit). Not part of the
+   * assistant text/context.
+   */
+  type: "text" | "reasoning" | "tool_call" | "done" | "warning";
   content?: string;
   toolCall?: {
     id: string;

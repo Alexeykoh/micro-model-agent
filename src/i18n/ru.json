@@ -43,6 +43,7 @@
   "error.llm_stream_idle_toolcall": "Поток LLM завис после начала tool_call — нет данных {timeout}мс. Скорее всего провайдер буферизирует SSE вместо потоковой передачи аргументов tool_call (наблюдается в LM Studio). Увеличьте \"retry.noDataTimeoutMs\" в ~/.mma/config.json (нужен рестарт)",
   "error.llm_truncated": "Ответ упёрся в лимит токенов генерации ({tokens}) и был обрезан до какого-либо содержимого. Разбейте задачу на меньшие порции вывода или увеличьте \"maxCompletionTokens\" в конфиге",
   "error.llm_truncated_toolcall": "Ответ упёрся в лимит токенов генерации ({tokens}) посреди tool_call — его аргументы обрезаны. Пишите файл частями (несколько вызовов write_file/edit_file) или увеличьте \"maxCompletionTokens\" в конфиге",
+  "error.llm_output_truncated": "Ответ упёрся в лимит токенов генерации ({tokens}) и был обрезан — этот ответ неполный. Увеличьте \"maxCompletionTokens\" в конфиге, чтобы разрешить длинные ответы",
   "error.llm_provider_stream_error": "Провайдер вернул ошибку посреди стрима: {error}",
   "error.llm_timeout": "Время запроса LLM истекло ({timeout}мс)",
   "env.runtime_node": "Запущено под Node (v{version}) — вставка изображений из буфера и LSP на Windows работают урезанно. Установите Bun (https://bun.sh) для полного функционала.",

@@ -536,6 +536,12 @@ export class OpenAICompatProvider implements LLMProvider {
             { terminal: true, recoverable: true },
           );
         }
+        // Текст уже устримлен и не завершён — не глушим ответ, но и не
+        // принимаем обрезок молча: отдаём видимое предупреждение.
+        yield {
+          type: "warning",
+          content: t("error.llm_output_truncated", { tokens: maxTokens }),
+        };
       }
     } finally {
       cleanup();
@@ -620,12 +626,13 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): Promise<Chunk[]> {
+    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096;
     const body = buildRequestBody({
       model: this.model,
       messages,
       tools,
       stream: false,
-      maxTokens: options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096,
+      maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
       ...this.cacheHints(),
@@ -683,6 +690,15 @@ export class OpenAICompatProvider implements LLMProvider {
             },
           });
         }
+      }
+
+      // Completed text but hit the cap: surface a visible warning instead of
+      // silently accepting a cut-off answer (see the streaming path).
+      if (choice.finish_reason === "length" && msg.content && !msg.tool_calls) {
+        chunks.push({
+          type: "warning",
+          content: t("error.llm_output_truncated", { tokens: maxTokens }),
+        });
       }
 
       // Append usage from API response

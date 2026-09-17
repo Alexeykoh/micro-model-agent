@@ -44,6 +44,7 @@
   "error.llm_stream_idle_toolcall": "LLM stream stalled after a tool_call started — no data for {timeout}ms. The provider most likely buffers SSE instead of streaming tool-call argument deltas (seen with LM Studio). Raise \"retry.noDataTimeoutMs\" in ~/.mma/config.json (restart required)",
   "error.llm_truncated": "Response hit the completion token limit ({tokens}) and was cut off before any content arrived. Split the task into smaller outputs or raise \"maxCompletionTokens\" in the config",
   "error.llm_truncated_toolcall": "Response hit the completion token limit ({tokens}) in the middle of a tool_call — its arguments were cut off. Write the file in smaller chunks (several write_file/edit_file calls) or raise \"maxCompletionTokens\" in the config",
+  "error.llm_output_truncated": "The response hit the completion token limit ({tokens}) and was cut off — this answer is incomplete. Raise \"maxCompletionTokens\" in the config to allow longer replies",
   "error.llm_provider_stream_error": "Provider returned an error mid-stream: {error}",
   "error.llm_timeout": "LLM request timed out ({timeout}ms)",
   "env.runtime_node": "Running under Node (v{version}) — clipboard image paste, subagent performance and LSP spawn on Windows degrade. Install Bun (https://bun.sh) for full features.",

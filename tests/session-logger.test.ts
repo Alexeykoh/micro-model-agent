@@ -166,4 +166,21 @@ describe("session-logger sanitization", () => {
     expect(all).not.toContain("sk-ABCDEF12345678901234");
     expect(all).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz1234");
   });
+
+  it("persists the full assistant message and tool output (no 500-char cap)", () => {
+    const { logger, messages } = makeLogger();
+    const long = "The quick brown fox jumps over the lazy dog. ".repeat(40);
+    expect(long.length).toBeGreaterThan(500);
+    logger.saveAssistantMessage(long);
+    logger.logToolResult(
+      { id: "t1", name: "read_file", arguments: {} },
+      { success: true, output: long },
+      10,
+      1,
+    );
+    const assistant = messages.find((m) => m.role === "assistant")!;
+    const tool = messages.find((m) => m.role === "tool")!;
+    expect(assistant.content).toBe(long);
+    expect(tool.content).toBe(long);
+  });
 });

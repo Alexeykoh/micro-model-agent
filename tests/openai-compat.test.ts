@@ -863,6 +863,49 @@ describe("OpenAICompatProvider", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("should emit a warning chunk (not throw) when streamed text is cut by the length limit", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"content":"partial answer"},"finish_reason":null}]}\n\n',
+              ),
+            );
+            // Length limit hit after text already streamed.
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    const chunks: Array<{ type: string; content?: string }> = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      chunks.push(chunk as { type: string; content?: string });
+    }
+
+    expect(chunks.some((c) => c.type === "text" && c.content === "partial answer")).toBe(true);
+    const warning = chunks.find((c) => c.type === "warning");
+    expect(warning).toBeDefined();
+    expect(warning!.content).toContain("maxCompletionTokens");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("should retry a stream that closes before [DONE] with zero content", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",

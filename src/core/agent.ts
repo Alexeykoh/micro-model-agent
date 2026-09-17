@@ -805,6 +805,14 @@ export class Agent {
             // вместо аккумуляции, иначе один реальный запрос посчитается дважды.
             tokenTracker.recordApiUsage(state, baseline, chunk.usage);
           }
+          if (chunk.type === "warning" && chunk.content) {
+            // Non-fatal provider notice (e.g. answer cut by the completion
+            // cap). Rendered through the text stream so it lands after the
+            // partial line without disturbing markdown formatting; it is NOT
+            // added to the assistant context/history.
+            logger.warn(`LLM warning: ${chunk.content}`);
+            onChunk?.(`\n\n> ⚠️ ${chunk.content}\n`);
+          }
         }
       } catch (err: any) {
         if (this.shutdownRequested || err?.name === "AbortError") {

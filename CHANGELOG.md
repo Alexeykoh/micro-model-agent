@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.63.2] - 2026-09-17
+
+### Fixed
+- **Long answers were silently cut by the completion cap**: `max_tokens` (default 4096) is sent on every request; when the model hit it while already streaming text, `finish_reason: "length"` was ignored and the truncated text was accepted as the final answer. The provider now emits a non-fatal `warning` chunk (`src/llm/openai-compat.ts`, streaming and non-streaming paths) that the agent renders in the chat — the answer still arrives, but the user sees it was cut off. Tool-call/empty-response truncation keeps the existing recoverable-error path.
+- **Resumed sessions lost their history**: `saveAssistantMessage` and `logToolResult` (`src/core/session-logger.ts`) persisted only the first 500 chars of each assistant/tool message, so `/resume` seeded the model with truncated context. Full content is stored now; the context budget still trims what actually goes to the LLM.
+
 ## [0.63.1] - 2026-09-17
 
 ### Added

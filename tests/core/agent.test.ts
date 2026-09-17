@@ -1102,6 +1102,34 @@ describe("Agent", () => {
     expect(text.some((c) => c.includes("Let me think"))).toBe(false);
   });
 
+  it("renders a provider warning via the text stream but keeps it out of the answer", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockReturnValue(
+        (async function* () {
+          yield { type: "text" as const, content: "partial answer" };
+          yield {
+            type: "warning" as const,
+            content: "The response hit the completion token limit (4096) and was cut off",
+          };
+          yield { type: "done" as const, finishReason: "length" as const };
+        })(),
+      ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+
+    const deps = createMockDeps({ llmProvider: mockProvider as any });
+    const agent = new Agent(deps as any);
+    const text: string[] = [];
+    const result = await agent.run("test", (c) => text.push(c));
+
+    expect(text.some((c) => c.includes("partial answer"))).toBe(true);
+    expect(text.some((c) => c.includes("completion token limit"))).toBe(true);
+    // The warning is UI-only: it must not pollute the accepted answer.
+    expect(result.text).toBe("partial answer");
+  });
+
   it("suppresses REPL output when a tool result has an empty display string", async () => {
     // read_file full read returns display "" — the fallback to raw output
     // would dump the whole file content into the terminal (regression).

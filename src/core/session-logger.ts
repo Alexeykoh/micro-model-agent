@@ -108,7 +108,7 @@ export class SessionLogger {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "assistant",
-      content: content.slice(0, 500),
+      content,
       timestamp: new Date().toISOString(),
       provider: caller?.provider,
       model: caller?.model,
@@ -145,7 +145,7 @@ export class SessionLogger {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "tool",
-      content: sanitizeLogMessage(result.output.slice(0, 500)),
+      content: sanitizeLogMessage(result.output),
       name: call.name,
       timestamp: new Date().toISOString(),
       provider: caller?.provider,
