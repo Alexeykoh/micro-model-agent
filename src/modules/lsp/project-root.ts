@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { dirname, join, relative, isAbsolute } from "path";
+import { platform } from "os";
 
 /**
  * Resolve the LSP workspace root for an edited file.
@@ -14,6 +15,37 @@ import { dirname, join, relative, isAbsolute } from "path";
  * LSP server config (`LspServerConfig.workspaceMarkers`) — this function takes
  * the markers as a parameter and performs no language detection itself.
  */
+/**
+ * Находит локальный компилятор TypeScript, поднимаясь от `startDir` вверх по
+ * `node_modules`. Возвращает готовую команду или null, если tsc не установлен.
+ *
+ * Почему не `npx`: обёртка npx тратит 5–13 секунд даже на локальный пакет
+ * (Windows), а без локального typescript пытается лезть в сеть. Прямой вызов
+ * локального tsc — доли секунды и честная деградация (null → пропускаем).
+ *
+ * Кросс-платформенность:
+ * - предпочитаем JS-энтрипоинт `typescript/bin/tsc` и запускаем его ТЕКУЩИМ
+ *   рантаймом (`process.execPath` — bun или node). Так не зависим от `node` в
+ *   PATH (актуально для систем только с Bun) и одинаково работает на
+ *   Windows/macOS/Linux;
+ * - если JS-файла нет, но есть `.bin`-стаб, берём его: на Windows `tsc.cmd`,
+ *   на macOS/Linux `tsc` (обёртка сама найдёт интерпретатор).
+ */
+export function resolveTscCommand(startDir: string, maxLevels = 8): string | null {
+  const runtime = process.execPath;
+  let dir = startDir;
+  for (let i = 0; i < maxLevels; i++) {
+    const js = join(dir, "node_modules", "typescript", "bin", "tsc");
+    if (existsSync(js)) return `"${runtime}" "${js}"`;
+    const stub = join(dir, "node_modules", ".bin", platform() === "win32" ? "tsc.cmd" : "tsc");
+    if (existsSync(stub)) return `"${stub}"`;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 export function findProjectRoot(filePath: string, baseDir: string, markers: string[]): string {
   if (!markers || markers.length === 0) return baseDir;
   let dir = dirname(filePath);

@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 - **Code comments are Russian** (new architecture rule #15).
+- **Cross-platform rule** (new architecture rule #16): processes/paths/shell/FS code must work on Windows, macOS and Linux (no `mklink`, no `npx` for local tools, quote paths, skip-not-fail tests when an OS lacks a primitive).
+
+### Fixed
+- **TypeScript checks were slow and unreliable**: syntax/type checks shelled out to `npx tsc`, which on Windows takes 5–13s (and tries the network without a local `typescript`), tripping test timeouts and stalling writes. New `resolveTscCommand` (`src/modules/lsp/project-root.ts`) runs the nearest local `tsc` via the current runtime (`process.execPath`), used by `verifier.ts`, `lint-on-write.ts` and `audit-runners.ts`; when no local tsc exists the check is skipped fast instead of hanging. The nested-project verifier test now links TypeScript with a cross-platform `symlinkSync(..., "junction")` instead of Windows-only `mklink`, and `bash.test.ts` resets the leaked grace window between tests.
 
 ## [0.61.1] - 2026-09-16
 

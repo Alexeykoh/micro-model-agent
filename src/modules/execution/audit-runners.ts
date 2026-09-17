@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "path";
 import type { Plan } from "./planner";
 import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
+import { resolveTscCommand } from "../lsp/project-root";
 
 /** Directories never searched for test files. */
 export const SKIP_DIRS = new Set([
@@ -208,7 +209,11 @@ export function findTypecheckRoot(baseDir: string, existingFiles: string[] = [])
 }
 
 export async function runTypecheck(baseDir: string): Promise<string | null> {
-  const entry = processRegistry.start("npx --no-install tsc --noEmit --skipLibCheck", baseDir);
+  // Локальный tsc напрямую: npx-обёртка добавляет секунды и без локального
+  // пакета уходит в сеть. Нет tsc — проверка невозможна, не блокируем.
+  const tsc = resolveTscCommand(baseDir);
+  if (!tsc) return null;
+  const entry = processRegistry.start(`${tsc} --noEmit --skipLibCheck`, baseDir);
   const exited = await processRegistry.waitForExit(entry.id, 90_000);
   const output = entry.log.join("\n");
   processRegistry.remove(entry.id);

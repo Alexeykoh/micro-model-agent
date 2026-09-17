@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, afterEach } from "vitest";
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -29,6 +29,13 @@ writeFileSync(
 );
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Grace-окно — модульное состояние: тест "auto-promote" ставит 200ms, и без
+// сброса следующая одноразовая команда под нагрузкой уходит в фон (node
+// стартует дольше 200ms) → флейк. Возвращаем дефолт после каждого теста.
+afterEach(() => {
+  setBashGraceMs(5000);
+});
 
 afterAll(async () => {
   setBashGraceMs(5000);

@@ -4,7 +4,7 @@ import { spawn, execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve, extname, join } from "path";
 import { platform } from "os";
-import { findProjectRoot } from "../../lsp/project-root";
+import { findProjectRoot, resolveTscCommand } from "../../lsp/project-root";
 import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
@@ -264,6 +264,11 @@ export class LintOnWritePlugin implements AgentPlugin {
     if (!existsSync(tsconfigPath)) {
       return;
     }
+    // Без локального tsc проверка невозможна — не платим npx-задержку.
+    const tsc = resolveTscCommand(projectRoot);
+    if (!tsc) {
+      return;
+    }
 
     const now = Date.now();
     if (this._checkPromise && now - this._checkTimestamp < TYPE_CHECK_DEBOUNCE_MS) {
@@ -275,12 +280,12 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
 
     this._checkTimestamp = now;
-    this._checkPromise = this.runTscCheck(projectRoot, signal);
+    this._checkPromise = this.runTscCheck(tsc, projectRoot, signal);
     const error = await this._checkPromise;
     if (error) {
       // Try to auto-fix fixable errors
       const { stdout, stderr } = await runAsync(
-        `npx tsc --noEmit --skipLibCheck 2>&1`,
+        `${tsc} --noEmit --skipLibCheck 2>&1`,
         projectRoot,
         30000,
         signal,
@@ -313,10 +318,14 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
   }
 
-  private async runTscCheck(baseDir: string, signal?: AbortSignal): Promise<string | null> {
+  private async runTscCheck(
+    tsc: string,
+    baseDir: string,
+    signal?: AbortSignal,
+  ): Promise<string | null> {
     try {
       const { stdout, stderr } = await runAsync(
-        `npx tsc --noEmit --skipLibCheck`,
+        `${tsc} --noEmit --skipLibCheck`,
         baseDir,
         30000,
         signal,

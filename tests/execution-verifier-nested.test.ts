@@ -11,19 +11,20 @@
 // Fix: resolve the nearest tsconfig.json from the EDITED FILE via the shared
 // `findProjectRoot()` helper, not from baseDir.
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { execSync } from "child_process";
 import { StepVerifier } from "../src/modules/execution/verifier";
 import { LintOnWritePlugin } from "../src/modules/plugins/builtin/lint-on-write";
 
 /**
  * Create a nested project under `baseDir` whose node_modules has a real
- * typescript (junctioned from the MMA repo's own dependency) so `npx tsc`
+ * typescript (linked from the MMA repo's own dependency) so the local tsc
  * actually runs — mirroring a real `npm install` in the nested project.
- * Returns null when typescript is unavailable (CI without the repo dep) so
- * tests can skip rather than assert a broken environment.
+ * Uses `symlinkSync(..., "junction")`: a Windows junction (no admin needed)
+ * and a plain directory symlink on macOS/Linux. Returns null when typescript
+ * is unavailable (CI without the repo dep) or the link cannot be created, so
+ * tests skip rather than assert a broken environment.
  */
 function setupNestedProject(baseDir: string): { proj: string; srcFile: string } | null {
   const repoTypescript = join(__dirname, "..", "node_modules", "typescript");
@@ -36,19 +37,22 @@ function setupNestedProject(baseDir: string): { proj: string; srcFile: string } 
   writeFileSync(join(proj, "package.json"), JSON.stringify({ name: "bicycle-shop" }), "utf-8");
   const srcFile = join(proj, "src", "a.ts");
 
-  try {
-    mkdirSync(join(proj, "node_modules"), { recursive: true });
-    execSync(`mklink /J "${join(proj, "node_modules", "typescript")}" "${repoTypescript}"`, {
-      stdio: "pipe",
-    });
-    if (existsSync(repoBin)) {
-      execSync(`mklink /J "${join(proj, "node_modules", ".bin")}" "${repoBin}"`, {
-        stdio: "pipe",
-      });
+  const link = (target: string, path: string): boolean => {
+    try {
+      symlinkSync(target, path, "junction");
+      return true;
+    } catch (err) {
+      // Нет прав / не поддержано ФС — тесты ниже проверят окружение и скипнут.
+      console.warn(`[test] symlink failed ${path} -> ${target}:`, err);
+      return false;
     }
-  } catch {
-    // Junction failed (permissions, filesystem) — tests below check TS and
-    // skip; the resolution logic is still unit-tested by the non-TS cases.
+  };
+
+  mkdirSync(join(proj, "node_modules"), { recursive: true });
+  // Без локального tsc проверка невозможна — тесты пропускаем, а не падаем.
+  if (!link(repoTypescript, join(proj, "node_modules", "typescript"))) return null;
+  if (existsSync(repoBin)) {
+    link(repoBin, join(proj, "node_modules", ".bin"));
   }
 
   return { proj, srcFile };
@@ -59,7 +63,11 @@ describe("nested-project typecheck (tsconfig in a subdirectory)", () => {
   afterEach(() => {
     try {
       rmSync(tmp, { recursive: true, force: true });
-    } catch {}
+    } catch (err) {
+      // Windows может держать файлы (junction/tsc) — уборка tmp не критична,
+      // но ошибку не прячем.
+      console.warn(`[test] cleanup failed for ${tmp}:`, err);
+    }
   });
 
   it("StepVerifier.runTypeCheckForFile finds a type error in a nested project", async () => {

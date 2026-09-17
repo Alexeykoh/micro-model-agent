@@ -6,7 +6,7 @@ import type { MoEPlan, MoESubtask } from "./types";
 import type { StepKind } from "./planner";
 import type { AppConfig } from "../../config/types";
 import { validateExpertConfig } from "../../config/experts";
-import { findProjectRoot } from "../lsp/project-root";
+import { findProjectRoot, resolveTscCommand } from "../lsp/project-root";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
 
@@ -70,8 +70,10 @@ export class StepVerifier {
     if (!existsSync(tsconfigPath)) {
       return { passed: true, message: "No tsconfig.json found — skipping type check" };
     }
+    const tsc = resolveTscCommand(this.baseDir);
+    if (!tsc) return { passed: true, message: "tsc not installed — skipping type check" };
     try {
-      await this.runAsync("npx tsc --noEmit", this.baseDir, 60_000);
+      await this.runAsync(`${tsc} --noEmit`, this.baseDir, 60_000);
       return { passed: true, message: "TypeScript type check passed" };
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
@@ -92,8 +94,10 @@ export class StepVerifier {
     if (!existsSync(tsconfigPath)) {
       return { passed: true, message: "No tsconfig.json found — skipping type check" };
     }
+    const tsc = resolveTscCommand(projectRoot);
+    if (!tsc) return { passed: true, message: "tsc not installed — skipping type check" };
     try {
-      await this.runAsync("npx tsc --noEmit --skipLibCheck", projectRoot, 60_000);
+      await this.runAsync(`${tsc} --noEmit --skipLibCheck`, projectRoot, 60_000);
       return { passed: true, message: "TypeScript type check passed" };
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
@@ -295,9 +299,14 @@ export class StepVerifier {
     const ext = extname(filePath);
 
     if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
+      // Локальный tsc, а не npx: npx без локального пакета уходит в сеть и
+      // висит секундами. Нет tsc — пропускаем проверку (как и раньше «not
+      // found → true»), но мгновенно.
+      const tsc = resolveTscCommand(dirname(filePath));
+      if (!tsc) return true;
       try {
         // Quote the path — commands run through a shell and break on spaces.
-        await this.runAsync(`npx tsc --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 10000);
+        await this.runAsync(`${tsc} --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 20000);
         return true;
       } catch (err: any) {
         if (
