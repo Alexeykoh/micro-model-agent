@@ -47,8 +47,8 @@ function toDisplayPath(baseDir: string | undefined, p: string): string {
 const GUTTER = "  ";
 const MAX_OUTPUT_LINES = 50;
 
-/** Tools that show a busy spinner while running (inline mode). */
-const BUSY_TOOLS = new Set(["lsp_check"]);
+/** Tools that must NOT get a busy spinner — they block on a user prompt. */
+const SPINNERLESS_TOOLS = new Set(["question", "approve"]);
 
 /** opencode-like leading marker per tool category. */
 export function toolMarker(tool: string): string {
@@ -142,7 +142,7 @@ export class Renderer {
 
   /** Show a thinking spinner while waiting for LLM response. */
   showLoader(): void {
-    this.spinner.start("thinking");
+    this.spinner.start(t("ui.thinking"));
   }
 
   /** Final answer streamed from the model (markdown-formatted). */
@@ -200,6 +200,7 @@ export class Renderer {
     this.thoughtStarted = true;
     this.thoughtStartMs = Date.now();
     this.thoughtHeaderPrinted = false;
+    this.spinner.start(t("ui.thinking"));
   }
 
   /** LLM call finished; print duration and close the thought block. */
@@ -229,13 +230,19 @@ export class Renderer {
         : args;
     const summary = summarizeArgs(displayArgs);
     const marker = icon || toolMarker(tool);
+    const label = friendlyTool(tool);
     this.card = { tool, args, start: Date.now() };
     if (stepContext) {
       this.out.write(`\n${pc.dim("↓")} ${pc.cyan(stepContext)}\n`);
     }
     this.out.write(
-      `${pc.dim(marker)} ${friendlyTool(tool)}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+      `${pc.dim(marker)} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
     );
+    // Busy indicator while the tool actually runs — read/write/edit/bash can
+    // take seconds; without this the chat looks frozen until the footer.
+    if (!SPINNERLESS_TOOLS.has(tool)) {
+      this.spinner.start(`${label}${summary ? ` ${summary}` : ""}`);
+    }
   }
 
   /** Live plan checklist — prints the plan block as-is (already colored). */

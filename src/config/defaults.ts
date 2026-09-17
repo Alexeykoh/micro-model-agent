@@ -119,6 +119,7 @@ export const DEFAULTS: AppConfig = {
     spinner: true,
     showContextStats: false,
     showCompaction: true,
+    verbose: false,
   },
   mcpServers: {
     context7: {

@@ -54,3 +54,20 @@ export function summarizeToolArgs(args: unknown): string {
   if (s.length <= TOOL_ARGS_SUMMARY_MAX_CHARS) return ` (${s})`;
   return ` (${s.slice(0, TOOL_ARGS_SUMMARY_MAX_CHARS)}…(${s.length} chars total))`;
 }
+
+/**
+ * Компактная пользовательская строка для упавшего тула.
+ *
+ * Полный `result.output` — это model-facing текст: хвост с Hint / recovery /
+ * "Do NOT …" инструкциями. В чат он попадать не должен: пользователю нужна
+ * суть ошибки (первая непустая строка), обрезанная по длине.
+ */
+export function compactToolError(output: unknown, max = 200): string {
+  const text = String(output ?? "");
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+  }
+  return "";
+}

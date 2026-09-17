@@ -92,6 +92,12 @@ export async function runWithMoE(
   const ensureNotAborted = () => {
     if (signal?.aborted) throw newAbortError();
   };
+  // Orchestration one-liners are machine-facing: emit them to the chat only
+  // when the user opted into verbose UI (config.ui.verbose).
+  const verbose = config.ui?.verbose === true;
+  const status = (message: string) => {
+    if (verbose) onMeta?.(message);
+  };
 
   ensureNotAborted();
 
@@ -121,7 +127,7 @@ export async function runWithMoE(
     return fallback();
   }
 
-  onMeta?.("🤖 Planning with MoE mode...\n");
+  status("🤖 Planning with MoE mode...\n");
   onPhase?.("thinking");
   const planResult = await orchestrator.plan(input, undefined, signal);
   onPhase?.("done");
@@ -148,7 +154,7 @@ export async function runWithMoE(
   for (let cycle = 1; cycle <= maxCycles; cycle++) {
     ensureNotAborted();
     if (cycle > 1) {
-      onMeta?.(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
+      status(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
       emit("moe_replan", {
         cycle,
         title: currentPlan.title,
@@ -165,14 +171,14 @@ export async function runWithMoE(
       if (!retry.valid) {
         logger.warn(`MoE plan validation failed: ${retry.errors.join("; ")}`);
         if (cycle === 1) {
-          onMeta?.(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
+          status(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
           return fallback();
         }
         return partialFailure(mergedResults, retry.errors.join("; "));
       }
       currentPlan = applied;
       if (validation.autoFixes.length > 0) {
-        onMeta?.(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
+        status(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
       }
     }
 
@@ -191,20 +197,20 @@ export async function runWithMoE(
         onScopeRequest: async (subtaskId, req) => {
           const decision = await orchestrator.resolveScopeRequest(subtaskId, req, signal);
           if (decision.action === "approve") {
-            onMeta?.(
+            status(
               t("moe.scope_approved", {
                 subtask: subtaskId,
                 files: [...decision.write, ...decision.read].join(", "),
               }) + "\n",
             );
           } else {
-            onMeta?.(t("moe.scope_rejected", { subtask: subtaskId }) + "\n");
+            status(t("moe.scope_rejected", { subtask: subtaskId }) + "\n");
           }
           return decision;
         },
       });
 
-    onMeta?.(
+    status(
       t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
     );
 
@@ -247,7 +253,7 @@ export async function runWithMoE(
       mergedResults.set(r.subtaskId, r);
     }
     const succeeded = [...mergedResults.values()].filter((r) => r.success).length;
-    onMeta?.(
+    status(
       `✅ ${t("moe.execution_complete", { succeeded: String(succeeded), total: String(mergedResults.size) })}\n`,
     );
 

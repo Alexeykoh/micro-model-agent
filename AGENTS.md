@@ -145,7 +145,13 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   Приведены `provider`/`model`/`skill` и `SkillNameProvider`.
 - i18n: `repl.provider_usage` расширен, добавлены `repl.provider_add_missing_value`, `repl.provider_switch_hint`.
 
-### Current Version: 0.63.0
+### Chat Output Cleanup (0.63.1)
+
+- **`ui.verbose`** (default `false`) — internal MoE status one-liners (plan/re-plan/execute/scope) в `src/core/agent-moe.ts` пишутся в чат только при включённом флаге.
+- **Упавшие тулы** — в чат идёт только первая непустая строка ошибки (`compactToolError`, `src/core/agent/tool-output.ts`), а не весь model-facing `result.output` с `Hint:`/recovery-директивами.
+- **Спиннеры** — `Renderer` анимирует выполнение тулов (`read_file`/`write_file`/`edit_file`/`bash`/…) и перезапускается на каждой фазе `thinking`; интерактивные (`question`, `approve`) — без спиннера.
+
+### Current Version: 0.63.1
 
 ### Changelog
 

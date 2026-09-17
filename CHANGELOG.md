@@ -4,6 +4,15 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.63.1] - 2026-09-17
+
+### Added
+- **`ui.verbose`**: opt-in chatty mode for internal orchestration status. MoE planning / re-plan / execution / scope one-liners (`src/core/agent-moe.ts`) are now behind this flag (default `false`) instead of always being written to the chat.
+
+### Changed
+- **Failed tool output is no longer echoed verbatim**: the chat used to print the full model-facing `result.output` of any tool without a `display` — including `Hint:` / recovery directives / "Do NOT …" instructions written for the agent. Only the first non-empty line (the gist of the error) is shown now, in red (`compactToolError`, `src/core/agent/tool-output.ts`).
+- **Live busy spinners for tool runs**: the renderer animates while `read_file` / `write_file` / `edit_file` / `bash` / … execute and restarts the spinner on every LLM "thinking" phase. Previously the spinner stopped at the first tool call and the rest of the run looked frozen. Interactive tools (`question`, `approve`) never spin; dead `BUSY_TOOLS` set removed.
+
 ## [0.63.0] - 2026-09-17
 
 ### Added

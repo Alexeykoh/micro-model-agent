@@ -213,6 +213,12 @@ export interface UiConfig {
   showContextStats: boolean;
   /** Show a one-line indicator when context compaction happens. */
   showCompaction: boolean;
+  /**
+   * Chatty internal status: MoE planning/execution phases and other
+   * orchestration one-liners. Off by default — these are meant for the
+   * machine pipeline, not the user.
+   */
+  verbose?: boolean;
 }
 
 export interface BashSecurityConfig {

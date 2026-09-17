@@ -51,7 +51,7 @@ import {
   MUTATION_CYCLE_NUDGE_THRESHOLD,
 } from "./agent/constants";
 
-export { toolOutputCharLimit } from "./agent/tool-output";
+export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 
 export interface AgentDeps {
   config: AppConfig;

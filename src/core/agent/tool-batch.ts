@@ -11,7 +11,7 @@ import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { LoopState } from "./loop-state";
-import { summarizeToolArgs, truncateToolOutput } from "./tool-output";
+import { summarizeToolArgs, truncateToolOutput, compactToolError } from "./tool-output";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import {
@@ -187,12 +187,21 @@ export class ToolBatchExecutor {
         if (result.display.length > 0) {
           onMeta?.("\n" + result.display + "\n");
         }
-      } else {
+      } else if (result.success) {
         const metaOut = pluginManager.runOnMeta(
           { iteration, logger, contextManager },
           result.output,
         );
         onMeta?.("\n" + pc.dim(metaOut) + "\n");
+      } else {
+        // Failed tool: its `output` is model-facing (Hints, recovery
+        // directives, "Do NOT …"). The user only needs the gist — the first
+        // line — not the instructions written for the agent.
+        const line = compactToolError(result.output);
+        const metaOut = line
+          ? pluginManager.runOnMeta({ iteration, logger, contextManager }, line)
+          : "";
+        if (metaOut) onMeta?.("\n" + pc.red(metaOut) + "\n");
       }
       if (result.diff) {
         onMeta?.("\n" + result.diff + "\n");

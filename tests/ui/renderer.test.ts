@@ -231,4 +231,68 @@ describe("Renderer", () => {
       expect(text()).toContain("src/a.ts");
     });
   });
+
+  describe("busy spinners", () => {
+    function makeRich(): {
+      renderer: Renderer;
+      out: () => string;
+      err: () => string;
+    } {
+      const outState = { data: "" };
+      const errState = { data: "" };
+      const out = {
+        write: (s: string) => {
+          outState.data += s;
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      const err = {
+        write: (s: string) => {
+          errState.data += s;
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      const renderer = new Renderer({
+        rich: true,
+        spinner: true,
+        out,
+        err,
+        width: 60,
+      });
+      return { renderer, out: () => outState.data, err: () => errState.data };
+    }
+
+    it("spins while thinking", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart();
+      expect(err().toLowerCase()).toContain("thinking");
+      renderer.thinkingEnd();
+    });
+
+    it("spins while a tool runs and clears on completion", () => {
+      const { renderer, out, err } = makeRich();
+      renderer.toolStart("read_file", { path: "src/a.ts" });
+      expect(err()).toContain("Reading file");
+      expect(out()).toContain("src/a.ts");
+      renderer.toolEnd("read_file", 5, false);
+      expect(err()).toMatch(/\r\x1b\[K$/);
+      expect(out()).toContain("✓");
+    });
+
+    it("restarts the spinner on a later thinking phase", () => {
+      const { renderer, err } = makeRich();
+      renderer.toolStart("bash", { command: "ls" });
+      renderer.toolEnd("bash", 1, false);
+      renderer.thinkingStart();
+      expect(err().toLowerCase()).toContain("thinking");
+      renderer.thinkingEnd();
+    });
+
+    it("does not spin for interactive tools", () => {
+      const { renderer, err } = makeRich();
+      renderer.toolStart("question", {});
+      expect(err()).not.toContain("Question to user");
+      renderer.toolEnd("question", 1, false);
+    });
+  });
 });
