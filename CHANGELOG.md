@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Prompt-cache awareness (cloud + local)**: every provider declares its cache behavior via a new `CacheCapability` (`ProviderCapabilities.cache`, overridable per entry with `provider.entries[].cache`). The OpenAI-compatible provider now sends the right request hints per backend — `cache_prompt` (llama.cpp), `prompt_cache_key` (OpenAI), `session_id` (OpenRouter sticky routing) — while `x-opencode-session` is gated by `sessionHeader` (legacy behavior preserved when no capability is set). `parseCacheUsage` (`src/llm/cache-usage.ts`) normalizes response formats (OpenAI/LM Studio/llama.cpp/vLLM/OpenRouter/Zen/Go, DeepSeek, Anthropic, Ollama) into `Chunk.usage.cache`.
+- **Cache metrics & savings**: `ModelPrice.cachedInput`/`cacheWrite`, `calculateCostDetailed` and `CostTracker.saved` bill cached reads at the cached rate and report the savings; builtin cached-read prices for MiniMax/GLM. A client-side prefix monitor (`src/core/agent/prefix-monitor.ts`) classifies why a cacheable prefix broke (`system`/`tools`/`history`/`volatile`) even when the provider reports nothing.
+- **Cache display**: a single footer line (`Cache: 87% hit · saved $0.42`, or `Prefix stable: 93% · broke: tool set`) in the REPL, single-run result and `--json` (`cache`); `mma session show <id>` aggregates `llm_usage` into token totals and cache hit rate.
+
+### Changed
+- **Code comments are Russian** (new architecture rule #15).
+
 ## [0.61.1] - 2026-09-16
 
 ### Fixed

@@ -259,6 +259,34 @@ When a model has a known price, MMA shows the session's running cost **together 
 
 **Hosted providers** with fixed base URLs are selectable via `mma provider use opencode-zen|opencode-go` and the setup wizard (`HOSTED_BASE_URLS` in `src/cli/setup.ts`): Zen → `https://opencode.ai/zen/v1`, Go → `https://opencode.ai/zen/go/v1`. Both are OpenAI-compatible (`/chat/completions`); model ids use the `opencode/…` / `opencode-go/…` prefix. Builtin pricing is maintained from https://opencode.ai/docs/zen/ and /docs/go/ — update `ZEN_PRICES` when those tables change.
 
+## Prompt Caching & Cache Metrics
+
+> **Source:** `src/llm/cache-usage.ts`, `src/core/agent/prefix-monitor.ts`, `src/cli/cache-line.ts`, `src/modules/providers/cache.ts`. Design: [docs/specs/2026-09-17-prompt-caching-budget.md](../specs/2026-09-17-prompt-caching-budget.md).
+
+Agent loops resend the whole context every iteration; providers reuse the KV cache of the matching prompt prefix. MMA makes that reuse **measurable and cheaper** across cloud and local backends without vendor lock-in.
+
+**Capability descriptor** — each provider declares its cache behavior (`ProviderCapabilities.cache`, defaults in `presets.ts`, overridable per entry via `ProviderEntry.cache`):
+
+| Field | Purpose |
+| ----- | ------- |
+| `mechanism` | `auto` / `explicit` / `local` / `none` |
+| `report` | response format: `openai` / `deepseek` / `anthropic` / `ollama` / `none` |
+| `sessionHeader` | send `x-opencode-session` (Zen/Go sticky routing) |
+| `requestCachePrompt` | send `cache_prompt: true` (llama.cpp) — off by default (nondeterminism) |
+| `requestPromptCacheKey` | send `prompt_cache_key` (OpenAI) |
+| `requestSessionId` | send `session_id` (OpenRouter sticky routing) |
+| `requestCacheControl` | mark blocks with `cache_control` (Anthropic; inert until a real provider lands) |
+
+**Usage parsing** (`parseCacheUsage`) normalizes all known shapes into `Chunk.usage.cache` (`CacheUsage`): OpenAI `prompt_tokens_details.cached_tokens` (+`cache_write_tokens`) also covers LM Studio/llama.cpp/vLLM/OpenRouter/Zen/Go/Gemini; DeepSeek uses `prompt_cache_hit_tokens`/`_miss_tokens`; Anthropic uses `cache_read_input_tokens`/`cache_creation_input_tokens`; Ollama derives cached tokens from `prompt_eval_count` vs a client estimate. Missing fields mean "unknown", never a fake cache miss.
+
+**Prefix monitor** (`diffPrompt`) is client-side and provider-agnostic: it compares consecutive prompts and classifies why the prefix broke (`system` / `tools` / `history` / `volatile`), logged as `cacheStable` + `cacheCause` in `llm_usage`. It works even when the provider reports nothing.
+
+**Cost** — `ModelPrice.cachedInput`/`cacheWrite`; cached reads are billed at the cached rate and savings tracked (`CostTracker.saved`). Only API-sourced cache usage affects pricing. Zen/Go cached-read prices live in `ZEN_PRICES`.
+
+**Display** — `formatCacheLine` renders one footer line: `Cache: 87% hit · saved $0.42` (cloud), `Cache: 91% hit` (local, no price) or `Prefix stable: 93% · broke: tool set` (no telemetry). Shown in the REPL context bar, single-run result and `--json` (`cache`); `mma session show <id>` aggregates `llm_usage` into tokens + cache hit rate.
+
+**Tuning cache hits:** keep volatile content out of the prefix (timestamps, changing tool sets). Note that mid-session tool-set narrowing invalidates the whole cached prefix — the monitor surfaces this as `broke: tool set`.
+
 ## Auto-Update
 
 Self-update is a fire-and-forget background check — it never blocks startup.

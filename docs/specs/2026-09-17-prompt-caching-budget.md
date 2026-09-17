@@ -372,8 +372,8 @@ export async function fetchBudget(
 - [x] Фаза 3 — prefix monitor: `src/core/agent/prefix-monitor.ts` (`buildPromptSnapshot`, `diffPrompt`, классификация `cause` system/tools/history/volatile/none/unknown). Агент считает дельту на каждой итерации (оценка chars/4), `LoopState.prevPrompt/prefixDelta`, поля `cacheStable`/`cacheCause` в `llm_usage`. Тесты: `tests/prefix-monitor.test.ts`.
 - [x] Фаза 4 — стоимость: `ModelPrice.cachedInput/cacheWrite`, `calculateCostDetailed` (+ обратно совместимая `calculateCost`), cached-read цены MiniMax/GLM в `ZEN_PRICES`, `CostTracker.saved` и учёт кеша в `record()`, `LoopState.cacheUsage` из API-usage. Кеш учитывается только при `source: "api"`. Тесты: `tests/pricing.test.ts`.
 - [x] Фаза 5 — показ: `AgentResult.cache` (cached/uncached/write/hitRate/saved/prefix), `src/cli/cache-line.ts` (`formatCacheLine`), строка кеша в `run-result` и `repl` (`showContextBar`), `cache` в `--json`, агрегация `llm_usage` в `session show` (токены + hit-rate). i18n-ключи `repl.cache/repl.cache_nosave/repl.prefix/cache.cause.*/cli.session_*`, поля `cachedTokens`/`cacheWriteTokens`/`cacheSource` в `llm_usage`. Тесты: `tests/cache-line.test.ts`.
-- [ ] Фаза 6 — бюджет провайдера.
-- [ ] Фаза 7 — документация.
+- [ ] Фаза 6 — бюджет провайдера (OpenRouter). **Не реализовано** — оставлено опциональным: только OpenRouter отдаёт баланс по API-ключу, Zen/Go — нет.
+- [x] Фаза 7 — документация: `docs/agents/modules.md` (Prompt Caching & Cache Metrics), `AGENTS.md` (Quick Reference), `CHANGELOG.md` (`## [Unreleased]`), правило #15 в `architecture.md`.
 
 ## 11. Приложение — источники
 
