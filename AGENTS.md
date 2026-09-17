@@ -116,7 +116,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   меньше настроенного → warn (без auto-clamp), больше → подсказка `mma context`. Не-LM-Studio → тихий null.
   Результат пишется в session.jsonl как `context_probe` entry.
 
-### Prompt Caching & Cache Metrics (ветка feat/prompt-caching-budget)
+### Prompt Caching & Cache Metrics (0.62.0)
 
 - **Capability:** `ProviderCapabilities.cache` (тип `CacheCapability`, `src/config/types.ts`), дефолты в
   `src/modules/providers/presets.ts`, переопределение на запись — `ProviderEntry.cache`. Резолвер:
@@ -135,7 +135,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   агрегирует `llm_usage` (токены + hit-rate). i18n: `repl.cache*`, `repl.prefix`, `cache.cause.*`, `cli.session_*`.
 - **Бюджет:** `mma usage` (`src/llm/provider-budget.ts`) — баланс только OpenRouter (`/key`, `/credits`); Zen/Go → `unsupported`. Только явный вызов.
 
-### Current Version: 0.61.1
+### Current Version: 0.62.0
 
 ### Changelog
 
