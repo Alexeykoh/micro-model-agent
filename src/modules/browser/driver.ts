@@ -5,10 +5,83 @@ import type { StoredCookie } from "./cookie-store";
 
 export const DIRECT_LAUNCH_TIMEOUT_MS = 8000;
 
+/**
+ * Explicit browser location/channel resolved from the environment. Escape
+ * hatch for locked-down or offline machines where Playwright cannot download
+ * its pinned Chromium revision (CDN blocked) but a system Chrome/Edge exists:
+ *
+ *   MMA_BROWSER_EXECUTABLE=C:\Program Files\Google\Chrome\Application\chrome.exe
+ *   MMA_BROWSER_CHANNEL=chrome|msedge|chromium
+ */
+export interface BrowserLaunchOverrides {
+  executablePath?: string;
+  channel?: string;
+}
+
+export function resolveBrowserLaunchOverrides(
+  env: NodeJS.ProcessEnv = process.env,
+): BrowserLaunchOverrides {
+  const executablePath = env.MMA_BROWSER_EXECUTABLE?.trim();
+  const channel = env.MMA_BROWSER_CHANNEL?.trim();
+  const out: BrowserLaunchOverrides = {};
+  if (executablePath) out.executablePath = executablePath;
+  if (channel) out.channel = channel;
+  return out;
+}
+
+/** System browsers to try when the bundled Chromium revision is missing. */
+const SYSTEM_CHANNEL_FALLBACKS = ["chrome", "msedge"];
+
+function isMissingBrowserError(err: unknown): boolean {
+  return /Executable doesn't exist|is not found|looks like Playwright was just installed/i.test(
+    String((err as { message?: string })?.message ?? err),
+  );
+}
+
+/** Injectable launcher so the fallback chain is unit-testable without a browser. */
+export type ChromiumLaunchFn = (opts: Record<string, unknown>) => Promise<Browser>;
+
+/**
+ * Launch Chromium, falling back to an installed system Chrome/Edge when the
+ * bundled revision is absent (CDN unreachable). An explicit override always
+ * wins and suppresses the fallback — the user's choice must fail loudly.
+ */
+export async function launchChromiumWithFallback(
+  launch: ChromiumLaunchFn,
+  cfg: LaunchConfig,
+  overrides: BrowserLaunchOverrides = {},
+): Promise<Browser> {
+  const base = { headless: cfg.headless, timeout: cfg.timeoutMs, ...overrides };
+  try {
+    return await launch(base);
+  } catch (err) {
+    const explicit = overrides.executablePath || overrides.channel;
+    if (explicit || !isMissingBrowserError(err)) throw err;
+    let lastErr: unknown = err;
+    for (const channel of SYSTEM_CHANNEL_FALLBACKS) {
+      try {
+        return await launch({ ...base, channel });
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr;
+  }
+}
+
+function launchChromium(cfg: LaunchConfig, overrides: BrowserLaunchOverrides): Promise<Browser> {
+  return launchChromiumWithFallback(
+    (opts) => chromium.launch(opts as Parameters<typeof chromium.launch>[0]),
+    cfg,
+    overrides,
+  );
+}
+
 export interface LaunchConfig {
   headless: boolean;
   viewport: { width: number; height: number };
   timeoutMs: number;
+  overrides?: BrowserLaunchOverrides;
 }
 
 export interface BrowserDriver {
@@ -41,10 +114,7 @@ export class PlaywrightDriver implements BrowserDriver {
   async launch(cfg: LaunchConfig): Promise<void> {
     if (this.browser) return;
 
-    this.browser = await chromium.launch({
-      headless: cfg.headless,
-      timeout: cfg.timeoutMs,
-    });
+    this.browser = await launchChromium(cfg, cfg.overrides ?? {});
     this.context = await this.browser.newContext({ viewport: cfg.viewport });
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(cfg.timeoutMs);
@@ -153,6 +223,7 @@ export function createBrowserDriver(config: BrowserConfig): Promise<BrowserDrive
     headless: config.headless,
     viewport: { width: config.viewportWidth, height: config.viewportHeight },
     timeoutMs: config.navigationTimeout,
+    overrides: resolveBrowserLaunchOverrides(),
   };
 
   return (async () => {

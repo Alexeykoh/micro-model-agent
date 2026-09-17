@@ -102,12 +102,15 @@ export class BridgeDriver implements BrowserDriver {
     headless: boolean;
     viewport: { width: number; height: number };
     timeoutMs: number;
+    overrides?: { executablePath?: string; channel?: string };
   }): Promise<void> {
     this.spawnBridge();
     await this.send("launch", {
       headless: cfg.headless,
       viewport: cfg.viewport,
       timeoutMs: cfg.timeoutMs,
+      executablePath: cfg.overrides?.executablePath,
+      channel: cfg.overrides?.channel,
       maxConsoleLineChars: this.maxConsoleLineChars,
     });
   }

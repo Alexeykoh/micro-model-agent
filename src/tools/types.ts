@@ -114,6 +114,16 @@ export interface ToolResult {
   toolCallId?: string;
   display?: string;
   diff?: string;
+  /**
+   * True when a plugin's `onBeforeTool` refused the call before the tool ran.
+   * Such a result is `success:false`, but it is NOT evidence the action is
+   * broken — the plugin may be guard-railing ordering, scope, or security.
+   * Callers must exclude blocked calls from failure/retry accounting
+   * (consecutive-failure recovery, "already tried & failed" compaction memory,
+   * repeated-tool-failure rules); otherwise a transient guard (or a guard bug)
+   * poisons the agent into never retrying a correct action.
+   */
+  blocked?: boolean;
   /** Absolute path of a persisted artifact (subagent result_mode:"file"). */
   artifactPath?: string;
   /** Token usage of the sub-agent run (MoE cost attribution per expert_tag). */

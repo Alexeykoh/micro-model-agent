@@ -517,4 +517,39 @@ describe("Scenario: rewrite of completed-step files is not blocked", () => {
       expect(plugin.onBeforeTool!(ctx, map)).toBe(true);
     }
   });
+
+  it("matches absolute Windows tool paths against relative step tokens", () => {
+    // Regression (ses_mu5wed4r): the model passes absolute paths
+    // ("C:\…\src\main.ts") while plan steps name files relatively
+    // ("src/main.ts"). Raw comparison with backslashes never intersected the
+    // forward-slash step token, so EVERY write was flagged off-path and the
+    // 3rd consecutive one was hard-blocked — even the current step's own file.
+    const execModule = new ExecutionModule(mkdtempSync(join(tmpdir(), "mma-exec-scen-")), 8);
+    execModule.setPlan(mkPlan("Test", ["create src/main.ts", "create src/style.css"]));
+    const plugin = execModule.getPlugin();
+    const ctx = mockCtx();
+    const abs = (rel: string) => `C:\\Users\\dev\\proj\\${rel.replace(/\//g, "\\")}`;
+
+    // Current step's own file, absolute path → never warned.
+    const onTrack = mockToolCall({
+      name: "write_file",
+      arguments: { path: abs("src/main.ts") },
+    });
+    for (let i = 0; i < 5; i++) {
+      expect(plugin.onBeforeTool!(ctx, onTrack)).toBe(true);
+    }
+
+    // A finished step's file, absolute path → exempt from the new current step.
+    const tracker = execModule.getTracker()!;
+    tracker.updateStepStatus(1, "done");
+    tracker.advance();
+    expect(tracker.getCurrentStep()?.id).toBe(2);
+    const rewriteDone = mockToolCall({
+      name: "write_file",
+      arguments: { path: abs("src/main.ts") },
+    });
+    for (let i = 0; i < 5; i++) {
+      expect(plugin.onBeforeTool!(ctx, rewriteDone)).toBe(true);
+    }
+  });
 });

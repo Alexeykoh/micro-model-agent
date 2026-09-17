@@ -7,9 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [0.63.3] - 2026-09-17
 
 ### Fixed
-- **Plan-alignment false positives hard-blocked legitimate writes**: `checkPlanAlignment` (`src/modules/execution/module.ts`) could accumulate 3 "outside the current step" warnings and block a tool call the agent needed for the current step. Two causes fixed:
-  - The completed-step rewrite exemption compared paths one-directionally (`finishedPaths.some((s) => s.includes(p))`), so a done step naming `main.ts` did not exempt a rewrite of `src/main.ts` — now the overlap check is bidirectional, mirroring the current-step comparison.
+- **Plan-alignment false positives hard-blocked legitimate writes**: `checkPlanAlignment` (`src/modules/execution/module.ts`) could accumulate 3 "outside the current step" warnings and block a tool call the agent needed for the current step (observed in `ses_mu5wed4r`: the current step's own `src/main.ts` was blocked). Causes fixed:
+  - **Path separators were not normalized** (root cause): model tool calls pass absolute Windows paths (`C:\…\src\main.ts`) while plan steps name files relatively (`src/main.ts`); the raw substring comparison never intersected backslash vs forward slash, so *every* write was treated as off-path. Both sides now go through `planPathToken` (forward slashes + lowercase) before matching.
+  - The completed-step rewrite exemption compared paths one-directionally (`finishedPaths.some((s) => s.includes(p))`), so a done step naming `main.ts` did not exempt a rewrite of `src/main.ts` — the overlap check is now bidirectional, mirroring the current-step comparison.
   - Read-only diagnostic/structural tools were not exempt: `lsp_check` (mandated by the system prompt after every write) and `project_map` now join the allow-list (`PLAN_ALIGNMENT_EXEMPT_TOOLS`), alongside the other filesystem-reads, web/memory/session reads, process introspection and interactive prompts. Only file-mutating tools are pinned to the current step's file tokens.
+- **Plugin-blocked calls were treated as real tool failures**: a guard refusal (`onBeforeTool` → `false`/string) is now flagged `blocked` on `ToolResult` and propagated to the context message (`src/tools/executor.ts`, `src/core/agent/tool-batch.ts`, `src/modules/context/manager.ts`). Blocked calls no longer feed the compaction "Already tried & failed — do NOT repeat" memory, the per-tool repeated-failure rule, or the consecutive-failure recovery counter — so a transient guard (or a guard bug) cannot convince the agent to never retry a correct action.
+
+### Added
+- **Browser launch overrides**: `MMA_BROWSER_EXECUTABLE` (absolute path) and `MMA_BROWSER_CHANNEL` (`chrome`/`msedge`/`chromium`) let the browser tool use an installed system browser instead of Playwright's pinned Chromium. When the bundled revision is missing (offline / blocked CDN) it now falls back to `chrome`, then `msedge`, automatically (`src/modules/browser/driver.ts`, `bridge-server.mjs`).
 
 ## [0.63.2] - 2026-09-17
 

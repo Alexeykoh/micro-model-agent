@@ -652,6 +652,32 @@ describe("extractTriedAndFailed", () => {
     expect(result).toHaveLength(0);
   });
 
+  it("should ignore plugin-blocked calls (guards are not failed attempts)", () => {
+    // Regression (ses_mu5wed4r): a false plan-alignment block was recorded as
+    // "Already tried & failed — do NOT repeat", so the model refused to retry
+    // writing its own step's deliverable after compaction.
+    const messages: Message[] = [
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "src/main.ts" },
+        content: "Blocked by plugin: execution. Reason: ...",
+        success: false,
+        blocked: true,
+      },
+      {
+        role: "tool",
+        name: "write_file",
+        arguments: { path: "src/main.ts" },
+        content: "Blocked by plugin: execution. Reason: ...",
+        success: false,
+        blocked: true,
+      },
+    ];
+    const result = extractTriedAndFailed(messages);
+    expect(result).toHaveLength(0);
+  });
+
   it("should track different tools separately", () => {
     const messages: Message[] = [
       {

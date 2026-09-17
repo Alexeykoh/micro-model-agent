@@ -159,7 +159,7 @@ export class ToolBatchExecutor {
       // который никто не увидит.
       if (this.deps.isShutdownRequested()) break;
       const duration = Date.now() - startTime;
-      if (!result.success && !infoTools.has(call.name)) anyToolFailed = true;
+      if (!result.success && !result.blocked && !infoTools.has(call.name)) anyToolFailed = true;
 
       if (result.success && call.name === "plan") {
         const action = String(call.arguments.action ?? "");
@@ -221,6 +221,7 @@ export class ToolBatchExecutor {
         name: call.name,
         tool_call_id: call.id,
         success: result.success,
+        blocked: result.blocked,
         arguments: call.arguments,
       });
       answeredToolCallIds.add(call.id);
@@ -249,7 +250,7 @@ export class ToolBatchExecutor {
       // падает между успехами других тулов, всё равно учится (наблюдалось:
       // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
       // до памяти по пути "5 подряд неудач").
-      if (!result.success && !infoTools.has(call.name)) {
+      if (!result.success && !result.blocked && !infoTools.has(call.name)) {
         const key = call.name;
         const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "" };
         prev.count++;

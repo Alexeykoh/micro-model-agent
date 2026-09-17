@@ -12,6 +12,7 @@ import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { toForwardSlash } from "../../tools/path-utils";
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import type { NetworkSecurityConfig } from "../../config/types";
@@ -91,6 +92,18 @@ const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
   // skills
   "load_skill",
 ]);
+
+/**
+ * Canonical form of a file token for plan alignment: forward slashes + lower
+ * case. Model tool calls pass absolute Windows paths
+ * (`C:\…\test\src\main.ts`) while plan steps name files relatively
+ * (`src/main.ts`); comparing the raw strings made every on-track write look
+ * off-path (backslash vs forward slash never intersects). Normalizing both
+ * sides lets the substring/`endsWith` overlap below match.
+ */
+function planPathToken(p: string): string {
+  return toForwardSlash(p).toLowerCase();
+}
 
 export class ExecutionModule implements AgentModule {
   name = "execution";
@@ -495,9 +508,7 @@ export class ExecutionModule implements AgentModule {
 
     if (PLAN_ALIGNMENT_EXEMPT_TOOLS.has(call.name)) return null;
 
-    const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map((p) =>
-      p.toLowerCase(),
-    );
+    const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map(planPathToken);
     if (stepPaths.length === 0) return null;
 
     // Only path-ish arguments are inspected. JSON-stringifying the whole args
@@ -505,7 +516,7 @@ export class ExecutionModule implements AgentModule {
     // off-path check (e.g. `import "./styles.css"` inside the file body) and
     // raised phantom alignment warnings for on-track writes.
     const argStr = this.pathArgStrings(call.arguments).join(" ");
-    const callPaths = extractFileLikeTokens(stripUrls(argStr)).map((p) => p.toLowerCase());
+    const callPaths = extractFileLikeTokens(stripUrls(argStr)).map(planPathToken);
 
     if (callPaths.length === 0) return null;
 
@@ -517,7 +528,7 @@ export class ExecutionModule implements AgentModule {
     for (const s of plan.steps) {
       if (s.status === "done" || s.status === "skipped") {
         extractFileLikeTokens(stripUrls(s.description))
-          .map((p) => p.toLowerCase())
+          .map(planPathToken)
           .forEach((p) => finishedPaths.add(p));
       }
     }

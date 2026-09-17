@@ -198,6 +198,11 @@ Cookies saved to `.mma/browser/cookies.json` between sessions. Enables staying l
 - **Under Bun → BridgeDriver always.** Playwright's pipe/websocket transport hangs under Bun on some platforms (launch never returns). The bridge runs under Node, where Playwright works reliably (~85ms launch).
 - **Under Node → try `PlaywrightDriver` (8s direct-launch timeout), on failure dispose and fall back to `BridgeDriver`.**
 
+**Browser binary resolution (offline / locked-down machines).** Playwright pins an exact Chromium revision; if it was never downloaded (blocked CDN, no network) `chromium.launch()` fails with `Executable doesn't exist at …`. Both transports then fall back to an installed system browser:
+
+- **Env overrides** (`resolveBrowserLaunchOverrides`, `driver.ts`): `MMA_BROWSER_EXECUTABLE=<abs path>` (e.g. `C:\Program Files\Google\Chrome\Application\chrome.exe`) or `MMA_BROWSER_CHANNEL=chrome|msedge|chromium`. An explicit override is honored as-is and suppresses the automatic fallback.
+- **Automatic fallback** (`launchChromiumWithFallback`, mirrored in `bridge-server.mjs`): only when the bundled revision is missing, retry with `channel: "chrome"`, then `channel: "msedge"`. Unrelated launch errors are rethrown without fallback.
+
 Bridge protocol: commands `ping | launch | goto | evaluate | content | title | url | waitLoad | screenshot | cookies | setCookies | back | forward | close`. Responses are `{id, ok, data|error, console, network}` — each reply carries any console/network events drained since the previous command (`goto` clears the buffers before navigating). The bridge caps console at 500 entries and network at 100; long console lines are truncated to `maxConsoleLineChars` (default 400) with `…`. Event capture is identical to the direct driver: `page.on('console')`, `page.on('pageerror')` → `ConsoleEntry`, `page.on('requestfailed')` → `NetworkErrorEntry`.
 
 **Build/deploy note:** `bridge-server.mjs` is plain JS and must be shipped next to the bundled `dist/` — `scripts/copy-assets.ts` copies `src/modules/browser/bridge-server.mjs` → `dist/modules/browser/`. `bridge-client.ts` resolves its path via `import.meta.url`, so it works in both `src/` and `dist/` layouts. `playwright` stays `external` in the bundle (loaded via `createRequire` inside the bridge).

@@ -41,13 +41,46 @@ function readInt(v, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+// System browsers to try when the bundled Chromium revision is absent (CDN
+// blocked / offline). Mirrors driver.ts so both transports behave the same.
+const SYSTEM_CHANNEL_FALLBACKS = ["chrome", "msedge"];
+
+function isMissingBrowserError(err) {
+  return /Executable doesn't exist|is not found|looks like Playwright was just installed/i.test(
+    String(err && err.message ? err.message : err),
+  );
+}
+
+async function launchChromium(params, extra) {
+  const base = {
+    headless: params?.headless !== false,
+    timeout: readInt(params?.timeoutMs, 30000),
+    ...extra,
+  };
+  try {
+    return await chromium.launch(base);
+  } catch (err) {
+    // An explicit executable/channel is the user's choice — fail loudly.
+    if (base.executablePath || base.channel || !isMissingBrowserError(err)) throw err;
+    let lastErr = err;
+    for (const channel of SYSTEM_CHANNEL_FALLBACKS) {
+      try {
+        return await chromium.launch({ ...base, channel });
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr;
+  }
+}
+
 async function handleLaunch(params) {
   if (browser) return { ok: true };
   maxLineChars = readInt(params?.maxConsoleLineChars, 400);
-  browser = await chromium.launch({
-    headless: params?.headless !== false,
-    timeout: readInt(params?.timeoutMs, 30000),
-  });
+  const extra = {};
+  if (params?.executablePath) extra.executablePath = String(params.executablePath);
+  if (params?.channel) extra.channel = String(params.channel);
+  browser = await launchChromium(params, extra);
   context = await browser.newContext({
     viewport: params?.viewport || { width: 1280, height: 720 },
   });

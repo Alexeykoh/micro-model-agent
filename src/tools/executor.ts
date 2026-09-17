@@ -70,6 +70,7 @@ export class ToolExecutor {
             const reason = typeof proceed === "string" ? proceed : undefined;
             return {
               success: false,
+              blocked: true,
               output: reason
                 ? t("tool.blocked_reason", { plugin: pluginName, reason })
                 : t("tool.blocked", { plugin: pluginName }),

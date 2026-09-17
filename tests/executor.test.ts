@@ -75,6 +75,30 @@ describe("ToolExecutor", () => {
     });
     expect(onBefore).toHaveBeenCalled();
     expect(result.success).toBe(false);
+    // A guard refusal must be flagged so failure/retry accounting can skip it.
+    expect(result.blocked).toBe(true);
+  });
+
+  it("marks a string-reason block as blocked with the reason shown", async () => {
+    registry.register({
+      name: "blockable",
+      description: "",
+      parameters: { type: "object", properties: {} },
+      handler: async () => ({ success: true, output: "ok" }),
+    });
+
+    executor = new ToolExecutor(registry, ctx, {
+      getAllPlugins: () => [{ name: "execution", onBeforeTool: () => "finish step 1" }],
+    });
+
+    const result = await executor.execute({
+      id: "call_1",
+      name: "blockable",
+      arguments: {},
+    });
+    expect(result.success).toBe(false);
+    expect(result.blocked).toBe(true);
+    expect(result.output).toContain("finish step 1");
   });
 
   it("should run plugin onAfterTool hook", async () => {

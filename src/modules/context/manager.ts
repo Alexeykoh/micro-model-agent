@@ -9,6 +9,8 @@ export interface Message {
   name?: string;
   tool_call_id?: string;
   success?: boolean;
+  /** Plugin-blocked call — a guard refused it; not a real failure. */
+  blocked?: boolean;
   arguments?: Record<string, unknown>;
   tool_calls?: Array<{
     id: string;
@@ -96,6 +98,11 @@ export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
 
   for (const msg of messages) {
     if (msg.role === "tool" && msg.name && msg.success === false) {
+      // Plugin-blocked calls are guard decisions, not failed attempts: a
+      // transient guard (or a guard bug) must never be remembered as
+      // "tried & failed — do NOT repeat" (observed: a false plan-alignment
+      // block made the model refuse to rewrite its own step's file).
+      if (msg.blocked) continue;
       const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
       const existing = failures.get(key);
       const errorText = truncate(
