@@ -7,7 +7,7 @@ import type { LspConfig, LspDiagnostic } from "./types";
 import { LspClient } from "./client";
 import { collectCheckFiles } from "./check-tool";
 import { getServerForFile } from "./config";
-import { findProjectRoot } from "./project-root";
+import { findProjectRoot, resolveTscCommand } from "./project-root";
 import { estimateTokens } from "../../llm/token-counter";
 import { errMsg } from "../../utils";
 
@@ -108,8 +108,13 @@ async function runCheck(
 }
 
 async function runTscDefault(projectRoot: string, timeoutMs: number): Promise<string[]> {
+  // Локальный tsc, а не `npx`: npx-обёртка (cmd → node npm-prefix) медленная и
+  // на Windows переживает выход процесса, оставляя открытым stdout-пайп —
+  // команда «виснет». Нет локального tsc — молча пропускаем проверку.
+  const tsc = resolveTscCommand(projectRoot);
+  if (!tsc) return [];
   return new Promise((resolve) => {
-    const child = spawn("npx", ["tsc", "--noEmit", "--skipLibCheck"], {
+    const child = spawn(`${tsc} --noEmit --skipLibCheck`, {
       cwd: projectRoot,
       shell: true,
       windowsHide: true,

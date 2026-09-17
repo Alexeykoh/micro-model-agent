@@ -1,5 +1,5 @@
 ﻿import { createProgram } from "./commands";
-import { bootstrap } from "../core/bootstrap";
+import { bootstrap, setOneShotMode } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
@@ -45,6 +45,27 @@ async function main(): Promise<void> {
   installCrashHandlers();
 
   const program = createProgram();
+
+  // Определяем подкоманду ДО parse: commander запускает async-action синхронно
+  // из parse(), поэтому флаг one-shot нужно выставить заранее, иначе bootstrap
+  // успеет стартовать фоновый startup health check (ребёнок переживает
+  // process.exit и на Windows держит stdout-пайп — команда «виснет»).
+  const valueOpts = new Set(["-d", "--dir", "--reasoning"]);
+  const argv = process.argv.slice(2);
+  let firstPositional: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("-")) {
+      if (valueOpts.has(a)) i++;
+      continue;
+    }
+    firstPositional = a;
+    break;
+  }
+  if (firstPositional && program.commands.some((c) => c.name() === firstPositional)) {
+    setOneShotMode(true);
+  }
+
   program.parse(process.argv);
 
   const cmdNames = new Set(program.commands.map((c) => c.name()));

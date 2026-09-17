@@ -236,6 +236,18 @@ export interface BootstrapResult {
   contextProbe: Promise<ContextProbeResult | null>;
 }
 
+/**
+ * One-shot CLI subcommands (`session show`, `usage`, `config` …) paint a result
+ * and exit. The background startup health check spawns a child (LSP server /
+ * tsc) that `process.exit` does not reap — on Windows the orphan keeps the
+ * stdout pipe open, so piping the command (`mma session show <id> | cat`)
+ * hangs. Subcommands never run an agent, so the check is skipped there.
+ */
+let oneShotMode = false;
+export function setOneShotMode(value: boolean): void {
+  oneShotMode = value;
+}
+
 export async function bootstrap(
   configDir?: string,
   projectDir?: string,
@@ -605,7 +617,7 @@ export async function bootstrap(
   // the time the user types in the interactive REPL).
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
-    !exitOnComplete && process.env.NODE_ENV !== "test"
+    !oneShotMode && !exitOnComplete && process.env.NODE_ENV !== "test"
       ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
       : Promise.resolve(null);
 
