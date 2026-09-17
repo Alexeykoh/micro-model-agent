@@ -4,6 +4,14 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.63.0] - 2026-09-17
+
+### Added
+- **REPL `/provider add`**: add a provider without leaving the agent. Mirrors `mma provider add` — `/provider add <name> [--url <url>] [--key <key>] [--priority <n>] [--context-window <n>] [--rpm <n>] [--parallel <n>]`. Seeds the legacy provider into `provider.entries` on first use, saves the config and hot-reloads the agent; switch with `/provider use <name>`. `/provider` autocompletion now includes `add`; i18n `repl.provider_add_missing_value`, `repl.provider_switch_hint` (en+ru).
+
+### Changed
+- **Subcommand dispatch via handler maps** (new architecture rule #17): `/provider`, `/model` and `/skill` (`src/cli/repl-commands.ts`) and `SkillNameProvider.complete` (`src/cli/completer.ts`) now resolve subcommands through a `Record<string, handler>` map instead of `if (subcmd === …)` chains.
+
 ## [0.62.0] - 2026-09-17
 
 ### Added

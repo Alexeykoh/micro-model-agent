@@ -301,6 +301,7 @@ const body = { model, messages, stream: false, max_tokens };
     - **ОС-детект:** `os.platform()`/`process.platform`, а не проверки строк путей.
     - **Тесты:** если примитив не поддерживается ОС (права, ФС), тест должен **скипаться**, а не падать; уборка ресурсов — с ветвлением по платформе.
     - Учитывать регистрозависимость имён файлов (Linux) и переводы строк CRLF/LF.
+17. **Диспетчеризация подкоманд — через карту хендлеров** — REPL/CLI-команды с несколькими подкомандами (`/provider`, `/model`, `/skill`, `mma provider …`) НЕ строятся на цепочке `if (subcmd === "…")`: она не масштабируется, дублирует вывод `usage` и легко теряет `return`. Используй карту `Record<string, (args: string[]) => void | Promise<void>>` и единый резолв (`subcmd ? handlers[subcmd] : handlers[<default>]`), а общий парсинг аргументов и `usage`-фолбэк держи в одном месте. Разовое ветвление по флагу допустимо, длинная цепочка подкоманд — нет. Пример: `registerProviderCommands` (`src/cli/repl-commands.ts`).
 
 ## Project Structure
 

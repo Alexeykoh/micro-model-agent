@@ -135,7 +135,17 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   агрегирует `llm_usage` (токены + hit-rate). i18n: `repl.cache*`, `repl.prefix`, `cache.cause.*`, `cli.session_*`.
 - **Бюджет:** `mma usage` (`src/llm/provider-budget.ts`) — баланс только OpenRouter (`/key`, `/credits`); Zen/Go → `unsupported`. Только явный вызов.
 
-### Current Version: 0.62.0
+### REPL Subcommand Handlers (0.63.0)
+
+- **`/provider add`** (`src/cli/repl-commands.ts`) — добавление провайдера прямо в REPL, зеркало
+  `mma provider add`: `/provider add <name> [--url <url>] [--key <key>] [--priority <n>] [--context-window <n>] [--rpm <n>] [--parallel <n>]`.
+  Сидит legacy-конфиг в entries, сохраняет, `agent.reconfigure()`. Подсказка переключения — `/provider use <name>`.
+- **Правило #17** (`docs/agents/architecture.md`): подкоманды REPL/CLI — через карту хендлеров
+  (`Record<string, (args) => void | Promise<void>>`), не через цепочку `if (subcmd === …)`.
+  Приведены `provider`/`model`/`skill` и `SkillNameProvider`.
+- i18n: `repl.provider_usage` расширен, добавлены `repl.provider_add_missing_value`, `repl.provider_switch_hint`.
+
+### Current Version: 0.63.0
 
 ### Changelog
 

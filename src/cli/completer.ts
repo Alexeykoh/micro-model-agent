@@ -175,20 +175,15 @@ export class SkillNameProvider implements CompletionProvider {
   }
 
   complete(ctx: CompletionContext): string[] {
-    const subcmd = ctx.tokens[1];
-    if (subcmd === "load") {
-      const available = this.skillsModule.getAvailable();
-      const names = available.map((s) => s.name);
-      if (!ctx.partial) return names;
-      return names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
-    }
-    if (subcmd === "unload") {
-      const loaded = this.skillsModule.getLoaded();
-      const names = loaded.map((s) => s.name);
-      if (!ctx.partial) return names;
-      return names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
-    }
-    return [];
+    const sources: Record<string, () => string[]> = {
+      load: () => this.skillsModule.getAvailable().map((s) => s.name),
+      unload: () => this.skillsModule.getLoaded().map((s) => s.name),
+    };
+    const source = sources[ctx.tokens[1]];
+    if (!source) return [];
+    const names = source();
+    if (!ctx.partial) return names;
+    return names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
   }
 }
 

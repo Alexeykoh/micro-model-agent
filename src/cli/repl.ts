@@ -274,7 +274,7 @@ export class Repl implements ReplContext {
       this.completer.registerProvider(new SkillNameProvider(this.skillsModule));
     }
     // Subcommand + argument completion for provider/model management.
-    this.completer.registerProvider(new SubcommandProvider("provider", ["list", "use"]));
+    this.completer.registerProvider(new SubcommandProvider("provider", ["list", "use", "add"]));
     this.completer.registerProvider(new SubcommandProvider("model", ["list", "use"]));
     const entryLabels = this.config.provider?.entries?.map((e) => e.label || e.type) ?? [];
     if (entryLabels.length > 0) {

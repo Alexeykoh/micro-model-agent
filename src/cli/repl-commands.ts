@@ -4,6 +4,7 @@ import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
 import { saveConfig } from "../config/config";
+import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
 import { getMessageText } from "../llm/provider";
 import { estimateTokens } from "../llm/token-counter";
@@ -340,113 +341,199 @@ function registerConfigCommands(ctx: ReplContext): void {
 }
 
 function registerProviderCommands(ctx: ReplContext): void {
+  const list = (): void => {
+    const providers = ctx.agent.listProviders();
+    if (providers.length === 0) {
+      console.log(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
+      console.log(`  ${ctx.config.provider.baseUrl}`);
+      return;
+    }
+    console.log(t("repl.provider_current"));
+    for (const p of providers) {
+      const marker = p.active ? pc.green("* ") : "  ";
+      console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
+    }
+  };
+
+  const use = async (args: string[]): Promise<void> => {
+    const name = args[0];
+    if (!name) {
+      console.log(t("repl.provider_usage"));
+      return;
+    }
+    try {
+      await ctx.agent.setProvider(name);
+      ctx.refreshModelCache();
+      console.log(pc.green(t("repl.provider_set", { name })));
+    } catch (e: any) {
+      console.log(pc.red(e.message));
+    }
+  };
+
+  const add = async (args: string[]): Promise<void> => {
+    const flags: Record<string, string> = {};
+    let name: string | undefined;
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg.startsWith("--")) {
+        const value = args[i + 1];
+        if (value === undefined || value.startsWith("--")) {
+          console.log(pc.red(t("repl.provider_add_missing_value", { flag: arg })));
+          return;
+        }
+        flags[arg.slice(2)] = value;
+        i++;
+      } else if (name === undefined) {
+        name = arg;
+      }
+    }
+    if (!name) {
+      console.log(t("repl.provider_usage"));
+      return;
+    }
+    const entries = Array.isArray(ctx.config.provider.entries)
+      ? ctx.config.provider.entries
+      : [];
+    if (entries.length === 0) {
+      entries.push({
+        type: ctx.config.provider.type,
+        label: ctx.config.provider.type,
+        baseUrl: ctx.config.provider.baseUrl,
+        apiKey: ctx.config.provider.apiKey,
+      });
+    }
+    const baseUrl =
+      flags.url || HOSTED_BASE_URLS[name] || HOSTED_BASE_URLS[`opencode-${name}`] || "";
+    if (!baseUrl) {
+      console.log(pc.red(t("cli.provider_no_url", { name })));
+      return;
+    }
+    entries.push({
+      type: name,
+      label: name,
+      baseUrl,
+      apiKey: flags.key,
+      ...(flags.priority !== undefined ? { priority: Number(flags.priority) } : {}),
+      ...(flags["context-window"] !== undefined
+        ? { contextWindow: Number(flags["context-window"]) }
+        : {}),
+      ...(flags.rpm !== undefined || flags.parallel !== undefined
+        ? {
+            rateLimits: {
+              maxRequestsPerMinute: Number(flags.rpm ?? 0) || 60,
+              maxParallelTasks: Number(flags.parallel ?? 0) || 1,
+            },
+          }
+        : {}),
+    });
+    ctx.config.provider.entries = entries;
+    ctx.config.provider.active = ctx.config.provider.active || ctx.config.provider.type;
+    const configPath = join(ctx.configDir, "config.json");
+    saveConfig(ctx.config, configPath, dirname(configPath));
+    await ctx.agent.reconfigure(ctx.config);
+    console.log(pc.green(t("cli.provider_added", { name })));
+    console.log(t("repl.provider_switch_hint", { name }));
+  };
+
+  const handlers: Record<string, (args: string[]) => void | Promise<void>> = {
+    list,
+    use,
+    add,
+  };
+
   ctx.registerCommand({
     name: "provider",
     description: t("repl.provider_list"),
     usage: t("repl.provider_usage"),
     action: async (args: string[]) => {
       const subcmd = args[0];
-      if (!subcmd || subcmd === "list") {
-        const providers = ctx.agent.listProviders();
-        if (providers.length === 0) {
-          console.log(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
-          console.log(`  ${ctx.config.provider.baseUrl}`);
-        } else {
-          console.log(t("repl.provider_current"));
-          for (const p of providers) {
-            const marker = p.active ? pc.green("* ") : "  ";
-            console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
-          }
-        }
+      const handler = subcmd ? handlers[subcmd] : handlers.list;
+      if (!handler) {
+        console.log(t("repl.provider_usage"));
         return;
       }
-      if (subcmd === "use") {
-        const name = args[1];
-        if (!name) {
-          console.log(t("repl.provider_usage"));
-          return;
-        }
-        try {
-          await ctx.agent.setProvider(name);
-          ctx.refreshModelCache();
-          console.log(pc.green(t("repl.provider_set", { name })));
-        } catch (e: any) {
-          console.log(pc.red(e.message));
-        }
-        return;
-      }
-      console.log(t("repl.provider_usage"));
+      await handler(args.slice(1));
     },
   });
+  const listModels = async (): Promise<void> => {
+    console.log(`${t("repl.model_current")}  ${ctx.config.model}`);
+
+    const { OpenAICompatProvider } = await import("../llm/openai-compat");
+    const provider = new OpenAICompatProvider({
+      model: ctx.config.model,
+      baseUrl: ctx.config.provider.baseUrl,
+      apiKey: ctx.config.provider.apiKey,
+      contextWindow: ctx.config.contextWindow,
+    });
+
+    const { Spinner } = await import("../ui/spinner");
+    const s = new Spinner();
+    s.start(t("cli.fetching_models"));
+    try {
+      const models = await provider.listModels();
+      s.stop();
+      if (models.length > 0) {
+        ctx.refreshModelCache();
+        console.log(t("cli.available_models"));
+        const { getCertMark } = await import("../modules/certification/manifest");
+        for (const m of models) {
+          const marker = m === ctx.config.model ? pc.green("* ") : "  ";
+          const mark = getCertMark(m, ctx.config.provider.baseUrl, version, process.cwd());
+          const cert =
+            mark === "certified"
+              ? pc.green("✔")
+              : mark === "stale"
+                ? pc.yellow("○")
+                : pc.dim("·");
+          const label =
+            mark === "certified"
+              ? `  ${pc.green(t("cli.cert_label"))}`
+              : mark === "stale"
+                ? `  ${pc.yellow(t("cli.cert_stale_label"))}`
+                : "";
+          console.log(` ${marker}${cert} ${m}${label}`);
+        }
+      } else {
+        console.log(t("cli.no_models_found"));
+      }
+    } catch (err) {
+      s.stop();
+      console.log(t("cli.model_fetch_failed", { error: String(err) }));
+    }
+
+    console.log(t("cli.model_hint"));
+  };
+
+  const useModel = async (args: string[]): Promise<void> => {
+    const name = args[0];
+    if (!name) {
+      console.log(t("repl.model_usage"));
+      return;
+    }
+    ctx.config.model = name;
+    const configPath = join(ctx.configDir, "config.json");
+    saveConfig(ctx.config, configPath, dirname(configPath));
+    await ctx.agent.reconfigure(ctx.config);
+    console.log(pc.green(t("repl.model_set", { name })));
+  };
+
+  const modelHandlers: Record<string, (args: string[]) => void | Promise<void>> = {
+    list: listModels,
+    use: useModel,
+  };
+
   ctx.registerCommand({
     name: "model",
     description: t("repl.model_list"),
     usage: t("repl.model_usage"),
     action: async (args: string[]) => {
       const subcmd = args[0];
-      if (!subcmd || subcmd === "list") {
-        console.log(`${t("repl.model_current")}  ${ctx.config.model}`);
-
-        const { OpenAICompatProvider } = await import("../llm/openai-compat");
-        const provider = new OpenAICompatProvider({
-          model: ctx.config.model,
-          baseUrl: ctx.config.provider.baseUrl,
-          apiKey: ctx.config.provider.apiKey,
-          contextWindow: ctx.config.contextWindow,
-        });
-
-        const { Spinner } = await import("../ui/spinner");
-        const s = new Spinner();
-        s.start(t("cli.fetching_models"));
-        try {
-          const models = await provider.listModels();
-          s.stop();
-          if (models.length > 0) {
-            ctx.refreshModelCache();
-            console.log(t("cli.available_models"));
-            const { getCertMark } = await import("../modules/certification/manifest");
-            for (const m of models) {
-              const marker = m === ctx.config.model ? pc.green("* ") : "  ";
-              const mark = getCertMark(m, ctx.config.provider.baseUrl, version, process.cwd());
-              const cert =
-                mark === "certified"
-                  ? pc.green("✔")
-                  : mark === "stale"
-                    ? pc.yellow("○")
-                    : pc.dim("·");
-              const label =
-                mark === "certified"
-                  ? `  ${pc.green(t("cli.cert_label"))}`
-                  : mark === "stale"
-                    ? `  ${pc.yellow(t("cli.cert_stale_label"))}`
-                    : "";
-              console.log(` ${marker}${cert} ${m}${label}`);
-            }
-          } else {
-            console.log(t("cli.no_models_found"));
-          }
-        } catch (err) {
-          s.stop();
-          console.log(t("cli.model_fetch_failed", { error: String(err) }));
-        }
-
-        console.log(t("cli.model_hint"));
+      const handler = subcmd ? modelHandlers[subcmd] : modelHandlers.list;
+      if (!handler) {
+        console.log(t("repl.model_usage"));
         return;
       }
-      if (subcmd === "use") {
-        const name = args[1];
-        if (!name) {
-          console.log(t("repl.model_usage"));
-          return;
-        }
-        ctx.config.model = name;
-        const configPath = join(ctx.configDir, "config.json");
-        saveConfig(ctx.config, configPath, dirname(configPath));
-        await ctx.agent.reconfigure(ctx.config);
-        console.log(pc.green(t("repl.model_set", { name })));
-        return;
-      }
-      console.log(t("repl.model_usage"));
+      await handler(args.slice(1));
     },
   });
   ctx.registerCommand({
@@ -796,103 +883,112 @@ function registerSessionCommands(ctx: ReplContext): void {
 function registerSkillCommands(ctx: ReplContext): void {
   if (!ctx.skillsModule) return;
 
+  const listSkills = (): void => {
+    const available = ctx.skillsModule!.getAvailable();
+    if (available.length === 0) {
+      console.log(t("repl.no_skills"));
+      return;
+    }
+    console.log(pc.bold(t("repl.available_skills")));
+    for (const skill of available) {
+      const tokens = estimateTokens(skill.content);
+      const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
+      const marker = loaded ? pc.green(" [loaded]") : "";
+      console.log(
+        `  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
+      );
+    }
+  };
+
+  const listLoaded = (): void => {
+    const loaded = ctx.skillsModule!.getLoaded();
+    const budget = ctx.skillsModule!.getBudget();
+    if (loaded.length === 0) {
+      console.log(t("repl.no_loaded"));
+      return;
+    }
+    console.log(pc.bold(t("repl.loaded_skills")));
+    for (const skill of loaded) {
+      const tokens = estimateTokens(skill.content);
+      console.log(
+        `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
+      );
+    }
+    console.log(
+      pc.dim(
+        `\n  ${t("repl.budget", { used: budget.used, total: budget.total, remaining: budget.remaining })}`,
+      ),
+    );
+  };
+
+  const loadSkill = (args: string[]): void => {
+    const arg = args.join(" ");
+    if (!arg) {
+      console.log(t("repl.skill_load_usage"));
+      return;
+    }
+    const result = ctx.skillsModule!.loadByName(arg);
+    if (result.success) {
+      console.log(pc.green(result.message));
+    } else {
+      console.log(pc.red(result.message));
+    }
+  };
+
+  const unloadSkill = (args: string[]): void => {
+    const arg = args.join(" ");
+    if (!arg) {
+      console.log(t("repl.skill_unload_usage"));
+      return;
+    }
+    if (ctx.skillsModule!.unload(arg)) {
+      console.log(pc.green(t("repl.skill_unloaded", { name: arg })));
+    } else {
+      console.log(pc.red(t("repl.skill_not_loaded", { name: arg })));
+    }
+  };
+
+  const searchSkills = (args: string[]): void => {
+    const arg = args.join(" ");
+    if (!arg) {
+      console.log(t("repl.skill_search_usage"));
+      return;
+    }
+    const results = ctx.skillsModule!.search(arg);
+    if (results.length === 0) {
+      console.log(t("repl.no_skill_match", { query: arg }));
+      return;
+    }
+    console.log(pc.bold(t("repl.skills_matching", { query: arg })));
+    for (const skill of results) {
+      const tokens = estimateTokens(skill.content);
+      console.log(
+        `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
+      );
+    }
+  };
+
+  const skillHandlers: Record<string, (args: string[]) => void> = {
+    list: listSkills,
+    loaded: listLoaded,
+    load: loadSkill,
+    unload: unloadSkill,
+    search: searchSkills,
+  };
+
   ctx.registerCommand({
     name: "skill",
     description: t("repl.skill"),
     usage: t("repl.skill_usage"),
     action: (args: string[]) => {
       const subcmd = args[0];
-      const arg = args.slice(1).join(" ");
-
-      if (!subcmd || subcmd === "list") {
-        const available = ctx.skillsModule!.getAvailable();
-        if (available.length === 0) {
-          console.log(t("repl.no_skills"));
-          return;
-        }
-        console.log(pc.bold(t("repl.available_skills")));
-        for (const skill of available) {
-          const tokens = estimateTokens(skill.content);
-          const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
-          const marker = loaded ? pc.green(" [loaded]") : "";
-          console.log(
-            `  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-          );
-        }
+      const handler = subcmd ? skillHandlers[subcmd] : skillHandlers.list;
+      if (!handler) {
+        console.log(pc.red(t("repl.skill_unknown_sub", { subcmd })));
+        console.log(t("repl.skill_usage"));
         return;
       }
-
-      if (subcmd === "loaded") {
-        const loaded = ctx.skillsModule!.getLoaded();
-        const budget = ctx.skillsModule!.getBudget();
-        if (loaded.length === 0) {
-          console.log(t("repl.no_loaded"));
-          return;
-        }
-        console.log(pc.bold(t("repl.loaded_skills")));
-        for (const skill of loaded) {
-          const tokens = estimateTokens(skill.content);
-          console.log(
-            `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-          );
-        }
-        console.log(
-          pc.dim(
-            `\n  ${t("repl.budget", { used: budget.used, total: budget.total, remaining: budget.remaining })}`,
-          ),
-        );
-        return;
-      }
-
-      if (subcmd === "load") {
-        if (!arg) {
-          console.log(t("repl.skill_load_usage"));
-          return;
-        }
-        const result = ctx.skillsModule!.loadByName(arg);
-        if (result.success) {
-          console.log(pc.green(result.message));
-        } else {
-          console.log(pc.red(result.message));
-        }
-        return;
-      }
-
-      if (subcmd === "unload") {
-        if (!arg) {
-          console.log(t("repl.skill_unload_usage"));
-          return;
-        }
-        if (ctx.skillsModule!.unload(arg)) {
-          console.log(pc.green(t("repl.skill_unloaded", { name: arg })));
-        } else {
-          console.log(pc.red(t("repl.skill_not_loaded", { name: arg })));
-        }
-        return;
-      }
-
-      if (subcmd === "search") {
-        if (!arg) {
-          console.log(t("repl.skill_search_usage"));
-          return;
-        }
-        const results = ctx.skillsModule!.search(arg);
-        if (results.length === 0) {
-          console.log(t("repl.no_skill_match", { query: arg }));
-          return;
-        }
-        console.log(pc.bold(t("repl.skills_matching", { query: arg })));
-        for (const skill of results) {
-          const tokens = estimateTokens(skill.content);
-          console.log(
-            `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-          );
-        }
-        return;
-      }
-
-      console.log(pc.red(t("repl.skill_unknown_sub", { subcmd })));
-      console.log(t("repl.skill_usage"));
+      handler(args.slice(1));
     },
   });
 }
