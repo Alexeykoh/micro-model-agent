@@ -51,15 +51,15 @@ bun run mma session delete <id>
 
 All detailed documentation lives in `docs/agents/`:
 
-| Document | Description |
-|----------|-------------|
-| [architecture.md](./docs/agents/architecture.md) | Architecture, Security Module, LLM Provider Contract, Key Design Rules, Project Structure |
-| [tools.md](./docs/agents/tools.md) | Question Tool, Browser Tool, Image Handling, Tool Set Narrowing, Process Management |
-| [modules.md](./docs/agents/modules.md) | Session Management, Project Map, UI Rendering, Plugins, Context Budget, Cost Tracking, Auto-Update |
-| [execution.md](./docs/agents/execution.md) | Execution Guarantees, Agent Loop States, Orchestrator, RLM-Inspired Features, Hallucination Detection, Migration Safety |
-| [testing.md](./docs/agents/testing.md) | Agent Testing from Console, Small Model Observations, Model Certification |
-| [versioning.md](./docs/agents/versioning.md) | Versioning Rules, Release Process, Version History |
-| [changelog](./CHANGELOG.md) | Public changelog (included in npm package) |
+| Document                                         | Description                                                                                                             |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [architecture.md](./docs/agents/architecture.md) | Architecture, Security Module, LLM Provider Contract, Key Design Rules, Project Structure                               |
+| [tools.md](./docs/agents/tools.md)               | Question Tool, Browser Tool, Image Handling, Tool Set Narrowing, Process Management                                     |
+| [modules.md](./docs/agents/modules.md)           | Session Management, Project Map, UI Rendering, Plugins, Context Budget, Cost Tracking, Auto-Update                      |
+| [execution.md](./docs/agents/execution.md)       | Execution Guarantees, Agent Loop States, Orchestrator, RLM-Inspired Features, Hallucination Detection, Migration Safety |
+| [testing.md](./docs/agents/testing.md)           | Agent Testing from Console, Small Model Observations, Model Certification                                               |
+| [versioning.md](./docs/agents/versioning.md)     | Versioning Rules, Release Process, Version History                                                                      |
+| [changelog](./CHANGELOG.md)                      | Public changelog (included in npm package)                                                                              |
 
 ## Quick Reference
 
@@ -72,10 +72,10 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 ### Context Budget
 
 | contextWindow | System (10%) | Reserve (15%) | History (75%) |
-|--------------|-------------|--------------|---------------|
-| 32K          | 3K          | 5K           | 24K           |
-| 64K          | 6K          | 10K          | 48K           |
-| 128K         | 13K         | 19K          | 96K           |
+| ------------- | ------------ | ------------- | ------------- |
+| 32K           | 3K           | 5K            | 24K           |
+| 64K           | 6K           | 10K           | 48K           |
+| 128K          | 13K          | 19K           | 96K           |
 
 ### Agent-Level MoE (moe.enabled)
 
@@ -156,7 +156,15 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Обрезание по completion-лимиту** — `max_tokens` (default 4096) шлётся всегда. Если модель уже стримила текст и упёрлась в `finish_reason: "length"`, провайдер теперь отдаёт non-fatal `warning`-чанк (`src/llm/openai-compat.ts`, стрим + non-stream), а агент рендерит его в чат (не попадает в текст ответа/контекст). Обрыв на tool_call/пустом ответе по-прежнему идёт recoverable-ошибкой. Ключ i18n: `error.llm_output_truncated`.
 - **История сессии без обрезки** — `saveAssistantMessage` / `logToolResult` (`src/core/session-logger.ts`) пишут полный контент (раньше `slice(0, 500)`), чтобы `/resume` не терял прошлые ответы и tool-результаты. Бюджет контекста режет то, что уходит в LLM.
 
-### Current Version: 0.63.3
+### Output Architecture (1.0.0)
+
+- **Single-writer invariant:** единственный владелец терминала — `OutputChannel` (`src/output/channel.ts`); модуль `src/output/machine.ts` — единственный легальный прямой stdout для машинных JSON-контрактов. Продюсеры эмитят `OutputEvent` в `OutputBus`, а не пишут в консоль.
+- **Режимы канала:** `idle` (prompt владеет экраном; `log`/`block` → `printAbove`), `streaming` (прямой passthrough, частичная строка закрывается перед `log`), `modal` (очередь FIFO, флаш на `endModal`), `quiet` (`--json`, человеческий вывод дропается). Singleton — `getDefaultChannel()`.
+- **Prompt:** `LineEditor.printAbove` печатает блок над полем ввода; `suspendFrame`/`resumeFrame` отдают терминал агенту на время стрима; `setInputEnabled(false)` глотает печатные клавиши, оставляя Ctrl+C. DSR-якорь с таймаутом 150мс и opt-out `MMA_DSR=0`.
+- **Sinks:** `JsonOutputSink` (`--json` `diagnostics`, warn/error), `SessionOutputSink` (события с `data.persist === true`). Плагины подписываются через `HostBridge.subscribeOutput`.
+- **Guard:** `tests/output/no-direct-console.test.ts` (AST) запрещает `console.*`/`process.*.write` в `src/` и `examples/`; allowlist — crash-handler, machine JSON, browser bridge, non-TTY REPL fallback.
+
+### Current Version: 1.0.0
 
 ### Changelog
 

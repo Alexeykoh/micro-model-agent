@@ -13,6 +13,37 @@ CLI (main.ts → commands.ts / repl.ts)
     → Modules (skills, plugins, mcp, pipelines, indexer, memory, context, session, hallucination, execution, updater, user-profile, browser, security)
 ```
 
+### Output Architecture
+
+> **Spec/plan:** `docs/superpowers/plans/2026-09-18-output-architecture-refactor.md`
+
+All terminal output flows through `src/output/` as events, so the mode of the
+terminal (streaming / modal / quiet) and every machine surface see the same data.
+
+- **Modules:** `types.ts` (`OutputEvent`, `OutputSubscriber`, `OutputSink`),
+  `bus.ts` (`OutputBus` + `defaultOutputBus`), `channel.ts` (`OutputChannel`,
+  `getDefaultChannel`), `format.ts` (`formatEventLine`), `machine.ts`
+  (`writeMachineJson`), `json-sink.ts`, `session-sink.ts`.
+- **Event flow:** producers (`Logger`, `Renderer`, `Spinner`, REPL, CLI, tools)
+  call `defaultOutputBus.log()` / `emit()`; `OutputBus` fans out to subscribers —
+  `OutputChannel` (the sole terminal writer) plus `JsonOutputSink` and
+  `SessionOutputSink`.
+- **Ownership-mode state machine:** `OutputChannel` is always in one of
+  `idle | streaming | modal | quiet`. `idle` hands `log`/`block` lines to the
+  active prompt (`PromptSink.printAbove`, batched via a microtask) and routes
+  `raw` through a partial-line buffer; `streaming` passes writes straight through
+  and closes an open partial line before a `log`; `modal` queues events and
+  flushes them FIFO on `endModal`; `quiet` (set by `--json`) drops human output.
+  The REPL transitions the channel around each agent run and each interactive
+  tool. Exactly one production channel exists per process (`getDefaultChannel()`).
+- **Prompt coordination:** `LineEditor` implements `PromptSink`
+  (`printAbove`/`isActive`/`clearScreen`); `suspendFrame`/`resumeFrame` and
+  `setInputEnabled` let the agent own the terminal during a stream.
+- **Guard:** `tests/output/no-direct-console.test.ts` parses `src/` and
+  `examples/` with the TypeScript AST and fails on any `console.*` or
+  `process.stdout/stderr.write`, except the documented allowlist (crash-handler,
+  `output/machine.ts`, browser bridge child process, non-TTY REPL fallback).
+
 ### Security Module
 
 > **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
