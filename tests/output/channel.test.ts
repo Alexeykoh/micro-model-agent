@@ -87,4 +87,64 @@ describe("OutputChannel", () => {
     expect(getDefaultChannel()).toBe(getDefaultChannel());
     resetDefaultChannel();
   });
+  it("closes a buffered partial line after the prompt deactivates", () => {
+    const { bus, out, c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("abc");
+    p.set(false);
+    c.beginStreaming();
+    bus.log("warn", "s", "note");
+    expect(out.data.startsWith("abc\n[WARN] [s]")).toBe(true);
+  });
+  it("drains pending buffered lines on newlines only", () => {
+    const { c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("a\nb\nc");
+    expect(p.above).toEqual(["a\nb"]);
+    c.writeRaw("\n");
+    expect(p.above).toEqual(["a\nb", "c"]);
+  });
+  it("endStreaming emits no newline when there is no partial", () => {
+    const { c, out } = ch();
+    c.beginStreaming();
+    c.endStreaming();
+    expect(out.data).toBe("");
+  });
+  it("routes stderr events to the error stream", () => {
+    const { bus, out, err } = ch();
+    bus.emit({ level: "warn", source: "s", kind: "log", text: "x", stream: "stderr" });
+    expect(err.data).toContain("x");
+    expect(out.data).toBe("");
+  });
+  it("restores the prior mode when quiet is lifted", () => {
+    const { bus, out, c } = ch();
+    c.beginModal();
+    bus.log("info", "s", "a");
+    c.setQuiet(true);
+    c.setQuiet(false);
+    c.endModal();
+    expect(out.data).toContain("a");
+  });
+  it("writes block lines verbatim without formatting", () => {
+    const { out, c } = ch();
+    c.writeLine("banner");
+    expect(out.data).toBe("banner\n");
+  });
+  it("detaches from the bus after dispose", () => {
+    const { bus, out, c } = ch();
+    c.dispose();
+    bus.log("info", "s", "x");
+    expect(out.data).toBe("");
+  });
+  it("emits ANSI color when forced on", () => {
+    const bus = new OutputBus();
+    const out = new S();
+    const err = new S();
+    const c = new OutputChannel(bus, { out: out as never, err: err as never, color: true });
+    bus.log("warn", "s", "x");
+    expect(out.data).toContain("\x1b[");
+    c.dispose();
+  });
 });
