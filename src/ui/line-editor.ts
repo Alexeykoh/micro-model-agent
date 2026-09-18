@@ -98,6 +98,10 @@ export class LineEditor implements LineInput {
   private dsrPending = false;
   /** Buffer for partial DSR escape sequences split across data chunks. */
   private dsrTail = "";
+  /** Visual row of the cursor at the exact moment the outstanding DSR query
+   *  was sent. The reply is matched against this, not `prevCursorRow`, which
+   *  later renders overwrite while the query is still pending. */
+  private dsrQueryRow = 0;
   /** When false, keystrokes are ignored (except Ctrl+C) while the agent
    *  streams — the host owns the terminal during that phase. */
   private inputEnabled = true;
@@ -280,9 +284,17 @@ export class LineEditor implements LineInput {
   private onKey(str: string, key: unknown): void {
     if (this.isDone) return;
     if (!this.inputEnabled) {
-      // While streaming, only allow interrupt (Ctrl+C / Esc).
+      // While streaming, only interrupt keys are honored: Ctrl+C aborts the
+      // run, Escape is forwarded so the host can implement double-Esc abort.
       const k = key as { name?: string; ctrl?: boolean };
-      if (k?.ctrl && k.name === "c") this.ctrlC();
+      if (k?.ctrl && k.name === "c") {
+        this.ctrlC();
+        return;
+      }
+      if (k?.name === "escape") {
+        this.onKeyInput?.(str, key);
+        return;
+      }
       return;
     }
     if (this.onKeyInput && this.onKeyInput(str, key)) return;
@@ -897,13 +909,16 @@ export class LineEditor implements LineInput {
     if (!this.dsrPending) return;
     this.dsrPending = false;
     const row = Number(m[1]);
-    const idx = Number(m[2]);
-    // idx is not the layout index — it's the column from the reply; ignore it.
-    // We compute frameTop from the reply row minus the cursor's visual row
-    // at query time.  The visual row was stored in `prevCursorRow` when the
-    // query was sent (right after render).
-    const top = row - this.prevCursorRow;
-    if (top >= 1) this.frameTopAbs = top;
+    if (this.dsrTimer) {
+      clearTimeout(this.dsrTimer);
+      this.dsrTimer = null;
+    }
+    // The frame top is the reply row minus the cursor's visual row at query
+    // time. `dsrQueryRow` — not `prevCursorRow` — because intermediate
+    // renders may have advanced the cursor while the query was pending.
+    const top = row - this.dsrQueryRow;
+    const H = this.screenRows();
+    if (top >= 1 && (H === null || top <= H)) this.frameTopAbs = top;
   }
 
   private render(): void {
@@ -959,6 +974,7 @@ export class LineEditor implements LineInput {
       // stdout while waiting for the reply). A timeout clears dsrPending so
       // a non-responding terminal only falls back to relative moves.
       this.dsrPending = true;
+      this.dsrQueryRow = idx;
       this.output.write("\x1b[6n");
       if (this.dsrTimer) clearTimeout(this.dsrTimer);
       this.dsrTimer = setTimeout(() => {

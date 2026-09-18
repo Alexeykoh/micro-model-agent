@@ -339,6 +339,26 @@ describe("LineEditor", () => {
     expect(output.data.startsWith("\x1b[4;1H")).toBe(true);
   });
 
+  it("anchors the DSR reply against the query-time row, not a later render", async () => {
+    delete process.env.MMA_DSR;
+    const { editor, input, output } = makeEditor({ prompt: "You: " });
+    editor.prompt(); // query sent with dsrQueryRow = 0
+    input.pushData("a");
+    input.pushData("\x1b[13;2u"); // newline → cursor visual row 1
+    await tick();
+    expect(editor["dsrPending"]).toBe(true);
+    expect(editor["dsrQueryRow"]).toBe(0);
+    expect(editor["prevCursorRow"]).toBe(1);
+    output.data = "";
+    input.pushData("\x1b[9;1R"); // reply: cursor on screen row 9
+    await tick();
+    // top = 9 - dsrQueryRow(0) = 9, not 9 - prevCursorRow(1) = 8.
+    input.pushData("b");
+    await tick();
+    expect(editor["frameTopAbs"]).toBe(9);
+    expect(output.data.startsWith("\x1b[9;1H")).toBe(true);
+  });
+
   it("learns the absolute frame anchor from a DSR reply", async () => {
     const { editor, input, output } = makeEditor({ prompt: "You: " });
     // DSR disabled by default; manually set anchor to simulate a reply.

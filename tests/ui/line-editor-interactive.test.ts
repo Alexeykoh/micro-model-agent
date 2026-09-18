@@ -55,7 +55,7 @@ describe("LineEditor interactive", () => {
     editor.prompt();
     input.pushData("hi");
     await tick();
-    // prompt() sent the DSR query; typing render uses relative moves, no query.
+    // MMA_DSR=0 for this file: typing renders use relative moves, no query.
     expect(output.data.endsWith("\r\x1b[2K> hi\x1b[J\r\x1b[4C")).toBe(true);
   });
 
@@ -77,7 +77,7 @@ describe("LineEditor interactive", () => {
     input.pushData("\x1b[13;2u"); // newline
     input.pushData("2");
     await tick();
-    // prompt() sent DSR query; typing renders use relative moves, no query.
+    // MMA_DSR=0 for this file: typing renders use relative moves, no query.
     expect(output.data.endsWith("\x1b[1A\r\x1b[2K> 1\r\n\x1b[2K2\x1b[J\r\x1b[1C")).toBe(true);
   });
 
@@ -179,11 +179,49 @@ describe("LineEditor interactive", () => {
     delete process.env.MMA_DSR;
   });
 
-  it("setInputEnabled(false) swallows printable keys but keeps Ctrl+C", async () => {
-    const { editor, input, lines } = makeEditor();
+  it("printAbove while suspended prints the block without redrawing the frame", async () => {
+    const { editor, input, output } = makeEditor();
+    editor.prompt();
+    editor.suspendFrame();
+    output.data = "";
+    editor.printAbove("x");
+    expect(output.data).toContain("x\r\n");
+    expect(output.data).not.toContain("> ");
+    output.data = "";
+    input.pushData("z"); // still suspended: render must be a no-op
+    await tick();
+    expect(output.data).toBe("");
+    editor.resumeFrame();
+    expect(output.data).toContain("> ");
+  });
+
+  it("setInputEnabled(false) swallows printable keys but honors Ctrl+C and Escape", async () => {
+    let interrupted = false;
+    const { editor, input, lines } = makeEditor({
+      onInterrupt: () => {
+        interrupted = true;
+      },
+    });
+    const seen: unknown[] = [];
+    editor.onKeyInput = (str, key) => {
+      seen.push(key);
+      return false;
+    };
     editor.setInputEnabled(false);
     input.pushData("abc\r");
     await tick();
+    expect(lines).toEqual([]);
+    expect(seen).toEqual([]);
+
+    input.pushData("\u0003"); // Ctrl+C
+    await tick();
+    expect(interrupted).toBe(true);
+
+    // Escape is forwarded to the host hook. Invoke the gate directly: a lone
+    // ESC pushed through readline is only emitted after its ~500ms escape
+    // timeout, which would make this test slow and timing-dependent.
+    editor["onKey"]("\x1b", { name: "escape" });
+    expect(seen.some((k) => (k as { name?: string })?.name === "escape")).toBe(true);
     expect(lines).toEqual([]);
   });
 });
