@@ -326,8 +326,8 @@ describe("LineEditor", () => {
     expect(clears).toBeGreaterThanOrEqual(layout.length);
   });
 
-  it("sends one DSR query per frame by default and parses the reply", async () => {
-    delete process.env.MMA_DSR;
+  it("sends one DSR query per frame when enabled and parses the reply", async () => {
+    process.env.MMA_DSR = "1";
     const { editor, input, output } = makeEditor({ prompt: "You: " });
     editor.prompt();
     expect(output.data).toContain("\x1b[6n");
@@ -339,8 +339,39 @@ describe("LineEditor", () => {
     expect(output.data.startsWith("\x1b[4;1H")).toBe(true);
   });
 
-  it("anchors the DSR reply against the query-time row, not a later render", async () => {
+  it("disables the DSR query by default on Windows, enables it elsewhere", () => {
     delete process.env.MMA_DSR;
+    const { editor, output } = makeEditor({ prompt: "You: " });
+    editor.prompt();
+    if (process.platform === "win32") {
+      expect(output.data).not.toContain("\x1b[6n");
+    } else {
+      expect(output.data).toContain("\x1b[6n");
+    }
+  });
+
+  it("does not treat a DSR cursor report as typed input", async () => {
+    process.env.MMA_DSR = "1";
+    const { editor, input, output } = makeEditor({ prompt: "You: " });
+    editor.prompt();
+    output.data = "";
+    input.pushData("\x1b[4;1R"); // cursor-position report
+    await tick();
+    input.pushData("x");
+    await tick();
+    expect(editor["lines"][0]).toBe("x");
+    expect(editor["lines"][0]).not.toContain("R");
+  });
+
+  it("does not query DSR while a question is pending", async () => {
+    process.env.MMA_DSR = "1";
+    const { editor, output } = makeEditor({ prompt: "You: " });
+    editor.question("Q: ", () => {});
+    expect(output.data).not.toContain("\x1b[6n");
+  });
+
+  it("anchors the DSR reply against the query-time row, not a later render", async () => {
+    process.env.MMA_DSR = "1";
     const { editor, input, output } = makeEditor({ prompt: "You: " });
     editor.prompt(); // query sent with dsrQueryRow = 0
     input.pushData("a");

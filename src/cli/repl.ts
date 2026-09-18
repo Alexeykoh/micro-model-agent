@@ -188,32 +188,32 @@ export class Repl implements ReplContext {
     this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
-    this.rl = process.stdin.isTTY
-      ? new LineEditor({
-          input: process.stdin,
-          output: process.stdout,
-          prompt: pc.cyan(t("repl.you")),
-          history: this.history,
-          historySize: this.maxHistory,
-          completer: (line: string) => {
-            const [matches, partial] = this.completer.complete(line);
-            if (matches.length > 0) return [matches, partial];
-            return [[], line];
-          },
-        })
-      : readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-          prompt: pc.cyan(t("repl.you")),
-          history: this.history,
-          historySize: this.maxHistory,
-          tabSize: 2,
-          completer: (line: string) => {
-            const [matches, partial] = this.completer.complete(line);
-            if (matches.length > 0) return [matches, partial];
-            return [[], line];
-          },
-        });
+    const editorCompleter = (line: string): [string[], string] => {
+      const [matches, partial] = this.completer.complete(line);
+      if (matches.length > 0) return [matches, partial];
+      return [[], line];
+    };
+
+    if (process.stdin.isTTY) {
+      this.rl = new LineEditor({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: pc.cyan(t("repl.you")),
+        history: this.history,
+        historySize: this.maxHistory,
+        completer: editorCompleter,
+      });
+    } else {
+      this.rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: pc.cyan(t("repl.you")),
+        history: this.history,
+        historySize: this.maxHistory,
+        tabSize: 2,
+        completer: editorCompleter,
+      });
+    }
 
     this.output = output ?? getDefaultChannel();
     this.promptSink = {

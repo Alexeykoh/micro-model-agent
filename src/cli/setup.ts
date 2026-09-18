@@ -1,12 +1,10 @@
-import * as readline from "readline";
-import type { LineInput } from "../ui/line-editor";
 import { pc } from "../ui/colors";
 import { t, setLocale } from "../i18n/index";
 import { Spinner } from "../ui/spinner";
 import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
-import { renderTable } from "../ui/table";
 import { getDefaultChannel } from "../output";
+import { SetupPrompt, type PromptInput } from "./setup-prompt";
 
 export interface SetupAnswers {
   provider: string;
@@ -39,7 +37,7 @@ function menuList(items: Array<{ label: string; url?: string }>): void {
   for (const l of box(lines, { width: 72 })) getDefaultChannel().writeLine(l);
 }
 
-function ask(rl: LineInput, question: string, defaultValue?: string): Promise<string> {
+function ask(rl: PromptInput, question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
     const prompt = defaultValue ? `${question} [${defaultValue}]: ` : `${question}: `;
     rl.question(prompt, (answer: string) => {
@@ -48,10 +46,24 @@ function ask(rl: LineInput, question: string, defaultValue?: string): Promise<st
   });
 }
 
+/** Parse a positive integer answer, falling back to the prompt's default. */
+function askInt(rl: PromptInput, question: string, defaultValue: number): Promise<number> {
+  return ask(rl, question, String(defaultValue)).then((raw) => {
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : defaultValue;
+  });
+}
+
 const PROVIDER_TYPES = BUILTIN_PROVIDERS.map((spec) => ({
   value: spec.type,
   label: spec.label,
 }));
+
+/** UI languages offered by the wizard (labels stay in their own language). */
+const LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "ru", label: "Русский" },
+];
 
 const KNOWN_PORTS = [
   { port: 1234, label: "LM Studio" },
@@ -133,19 +145,26 @@ async function testChat(apiBase: string, apiKey: string, model: string): Promise
   }
 }
 
-export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
+export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> {
   getDefaultChannel().writeLine(t("setup.title"));
 
-  const rl =
-    externalRl ||
-    readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
+  const rl: PromptInput = externalRl ?? new SetupPrompt();
   const ownRl = !externalRl;
 
   getDefaultChannel().writeLine(t("setup.language"));
-  const locale = await ask(rl, t("setup.ui_lang"), "en");
+  menuList(LANGUAGES);
+  const languageChoice = await ask(
+    rl,
+    t("setup.select_language_num", { max: LANGUAGES.length }),
+    "1",
+  );
+  const typedLang = languageChoice.trim().toLowerCase();
+  const byCode = LANGUAGES.find((l) => l.value === typedLang);
+  const locale = byCode
+    ? byCode.value
+    : LANGUAGES[
+        Math.max(0, Math.min(LANGUAGES.length - 1, (parseInt(languageChoice) || 1) - 1))
+      ].value;
   setLocale(locale);
 
   getDefaultChannel().writeLine(t("setup.select_provider"));
@@ -216,8 +235,8 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
   }
 
   getDefaultChannel().writeLine(t("setup.agent_settings"));
-  const contextWindow = parseInt(await ask(rl, t("setup.context_window"), "32768"));
-  const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "1000"));
+  const contextWindow = await askInt(rl, t("setup.context_window"), 32768);
+  const maxIterations = await askInt(rl, t("setup.max_iters"), 1000);
 
   // Security settings
   getDefaultChannel().writeLine(t("setup.security_header"));
@@ -234,18 +253,9 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
   }
 
   if (ownRl) {
-    rl.close();
-    // Bun: closed readline can leave stdin in a state where a later
-    // raw-mode LineEditor never receives keypress events. Force-reset:
-    process.stdin.removeAllListeners("data");
-    process.stdin.removeAllListeners("keypress");
-    if (typeof process.stdin.setRawMode === "function") {
-      process.stdin.setRawMode(false);
-    }
-    // Pause + resume forces Bun to flush its internal buffer and
-    // release the stream so LineEditor can attach cleanly.
-    process.stdin.pause();
-    process.stdin.resume();
+    // Detach the prompt reader and pause stdin so the REPL's raw-mode
+    // LineEditor can take over cleanly (no readline/raw-mode state left).
+    (rl as SetupPrompt).close();
   }
 
   const answers: SetupAnswers = {
@@ -262,21 +272,17 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
   };
 
   getDefaultChannel().writeLine(pc.green(pc.bold(t("setup.complete"))));
-  const summary = renderTable(
-    [
-      t("setup.summary_setting"),
-      t("setup.summary_value"),
-      t("setup.summary_setting"),
-      t("setup.summary_value"),
-    ],
-    [
-      [t("setup.provider_type"), provider, t("setup.model_name"), model],
-      ["API Base URL", apiBase, t("setup.context_window"), String(contextWindow)],
-      [t("setup.api_key"), apiKey || "not-needed", t("setup.max_iters"), String(maxIterations)],
-      [t("setup.ui_lang"), locale, "", ""],
-    ],
-    { maxColumns: 4 },
-  );
-  for (const l of summary) getDefaultChannel().writeLine(l);
+  const summary: Array<[string, string]> = [
+    [t("setup.provider_type"), provider],
+    [t("setup.model_name"), model],
+    [t("setup.api_base"), apiBase],
+    [t("setup.api_key"), apiKey || "not-needed"],
+    [t("setup.context_window"), String(contextWindow)],
+    [t("setup.max_iters"), String(maxIterations)],
+    [t("setup.ui_lang"), locale],
+  ];
+  for (const [label, value] of summary) {
+    getDefaultChannel().writeLine(`  ${pc.yellow(label.trim())}: ${pc.white(value)}`);
+  }
   return answers;
 }

@@ -4,7 +4,8 @@ import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
-import { order, applyAnswersToConfig } from "./setup-order";
+import { applyAnswersToConfig } from "./setup-order";
+import { relaunchCli } from "./relaunch";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
 import { buildJsonError, buildJsonResult } from "./json-payload";
 import { saveConfig, loadConfig } from "../config/config";
@@ -229,34 +230,28 @@ async function main(): Promise<void> {
       } catch {}
     }
 
-    // First run: run the wizard BEFORE bootstrap so background probes
-    // (context/reasoning) never start while the wizard owns the terminal.
-    // A non-interactive run (--exit-on-complete) must never open the wizard
-    // and block on stdin.
     const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
-    const { boot } = await order({
-      hasConfig: hasAnyConfig,
-      interactive: !exitOnComplete,
-      runSetup: async () => {
-        getDefaultChannel().writeLine("\n  " + t("cli.first_run") + "\n");
-        return runSetup();
-      },
-      applyAnswers: (a) => {
-        // Load defaults + any existing domain files, apply the wizard answers,
-        // and persist BEFORE bootstrap so bootstrap reads the final config.
-        const { config } = loadConfig({
-          configDir: mmaDir,
-          projectConfigPath,
-        });
-        // Preserve the CLI --reasoning override (bootstrap would have applied
-        // it as well, but here we persist before bootstrap ever runs).
-        applyReasoningCliOverride(config, reasoningLevel);
-        applyAnswersToConfig(config, a);
-        saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
-      },
-      bootstrap: () => bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel),
-    });
+    // First run: collect settings, persist them, then RE-EXEC the CLI in a fresh
+    // process and exit. The wizard and the REPL must not share a process: on
+    // Bun/Windows the raw-mode LineEditor only receives keypresses when it is
+    // the first consumer of stdin, and reusing one editor across
+    // wizard → bootstrap → REPL leaks prompt/frame state. The relaunched
+    // process sees the saved config, skips the wizard, and creates its editor
+    // first thing. `MMA_POST_SETUP=1` guards against a re-run loop.
+    if (!hasAnyConfig && !exitOnComplete && process.env.MMA_POST_SETUP !== "1") {
+      getDefaultChannel().writeLine("\n  " + t("cli.first_run") + "\n");
+      const answers = await runSetup();
+      const { config } = loadConfig({ configDir: mmaDir, projectConfigPath });
+      // Preserve the CLI --reasoning override (bootstrap in the fresh process
+      // would apply it too, but persist it now so the child reads the final
+      // config).
+      applyReasoningCliOverride(config, reasoningLevel);
+      applyAnswersToConfig(config, answers);
+      saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
+      getDefaultChannel().writeLine(pc.dim(`  ${t("cli.setup_saved_restart")}`));
+      relaunchCli();
+    }
 
     const {
       agent,
@@ -270,7 +265,7 @@ async function main(): Promise<void> {
       logger,
       envReport,
       contextProbe,
-    } = boot;
+    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
 
     const repl = new Repl(
       agent,

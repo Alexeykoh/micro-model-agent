@@ -135,6 +135,9 @@ export class LineEditor implements LineInput {
       readline.emitKeypressEvents(this.input as never);
       this.keypressHandler = (str: string, key: unknown) => this.onKey(str, key);
       (this.input as any).on("keypress", this.keypressHandler);
+      // The editor owns stdin now: ensure it is flowing even if a previous
+      // consumer paused it (e.g. the setup wizard).
+      (this.input as any).resume?.();
     } else {
       this.dataHandler = (buf: Buffer) => this.onData(buf);
       (this.input as any).on("data", this.dataHandler);
@@ -323,6 +326,12 @@ export class LineEditor implements LineInput {
       }
       return;
     }
+
+    // Never treat a cursor-position report (`ESC[row;colR`) as typed input:
+    // on some Windows/ConPTY + Bun combinations the trailing "R" leaks into
+    // the buffer and corrupts the answer (observed as every prompt answering
+    // "R"). Swallow the whole sequence.
+    if (/^\x1b\[\d+;\d+R$/.test(seq)) return;
 
     if (name === "paste-start" || seq === "\x1b[200~") {
       this.isPaste = true;
@@ -877,6 +886,18 @@ export class LineEditor implements LineInput {
     return typeof r === "number" && r > 3 ? r : null;
   }
 
+  /**
+   * Whether the cursor-position query (`ESC[6n`) may be sent. It is opt-in on
+   * Windows: ConPTY can mis-decode the `ESC[row;colR` reply as typed input,
+   * which corrupts answers (the setup wizard answered every prompt "R").
+   * `MMA_DSR=1` forces it on, `MMA_DSR=0` off; elsewhere it defaults on.
+   */
+  private dsrEnabled(): boolean {
+    if (process.env.MMA_DSR === "1") return true;
+    if (process.env.MMA_DSR === "0") return false;
+    return process.platform !== "win32";
+  }
+
   /** Cap the rendered frame to the visible screen. A frame taller than the
    *  terminal cannot be redrawn in place at all (its top scrolls off), so
    *  only the tail is drawn; the absolute anchor keeps the next render
@@ -977,10 +998,10 @@ export class LineEditor implements LineInput {
         if (T + L - 1 > H) this.frameTopAbs = H - L + 1;
         // else: no scroll, anchor unchanged
       }
-    } else if (!this.dsrPending && process.env.MMA_DSR !== "0") {
-      // One DSR query per frame; MMA_DSR=0 disables it (ConPTY can buffer
-      // stdout while waiting for the reply). A timeout clears dsrPending so
-      // a non-responding terminal only falls back to relative moves.
+    } else if (!this.dsrPending && this.questionCb === null && this.dsrEnabled()) {
+      // One DSR query per frame, then the anchor is maintained by local scroll
+      // math. Never queried in question mode (see dsrEnabled). A timeout clears
+      // dsrPending so a non-responding terminal falls back to relative moves.
       this.dsrPending = true;
       this.dsrQueryRow = idx;
       this.output.write("\x1b[6n");
