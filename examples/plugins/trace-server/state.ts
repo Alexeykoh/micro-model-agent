@@ -46,6 +46,8 @@ export interface TraceState {
   clients: Set<ServerResponse>;
   traceUrl: string;
   sessionMeta: SessionMetaLike | null;
+  /** Detaches the output-bus subscription registered at session start. */
+  outputUnsub: (() => void) | null;
   pending: { type: "text" | "meta"; text: string; iteration?: number } | null;
   flushTimer: ReturnType<typeof setTimeout> | null;
   llmStartTs: number | null;
@@ -85,6 +87,7 @@ export const state: TraceState =
     clients: new Set<ServerResponse>(),
     traceUrl: "",
     sessionMeta: null,
+    outputUnsub: null,
     pending: null,
     flushTimer: null,
     llmStartTs: null,
@@ -114,9 +117,10 @@ export function broadcast(evt: Record<string, unknown>): void {
 export function pushChunk(type: "text" | "meta", chunk: string, iteration?: number): void {
   if (!chunk) return;
   if (state.pending && state.pending.type !== type) flush();
-  state.pending = state.pending && state.pending.type === type
-    ? { type, text: state.pending.text + chunk, iteration: iteration ?? state.pending.iteration }
-    : { type, text: chunk, iteration };
+  state.pending =
+    state.pending && state.pending.type === type
+      ? { type, text: state.pending.text + chunk, iteration: iteration ?? state.pending.iteration }
+      : { type, text: chunk, iteration };
   if (state.flushTimer) clearTimeout(state.flushTimer);
   state.flushTimer = setTimeout(flush, 350);
 }

@@ -37,7 +37,13 @@ import { formatCost } from "../modules/pricing/prices";
 import { formatCacheLine, type CacheReport } from "./cache-line";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { formatWarning } from "../ui/md-formatter";
-import { getDefaultChannel, type OutputChannel, type PromptSink } from "../output";
+import {
+  defaultOutputBus,
+  getDefaultChannel,
+  SessionOutputSink,
+  type OutputChannel,
+  type PromptSink,
+} from "../output";
 import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
 
@@ -85,6 +91,7 @@ export function createHostBridge(opts: {
     interrupt() {
       if (opts.isBusy()) opts.interruptRun();
     },
+    subscribeOutput: (fn) => defaultOutputBus.subscribe(fn),
   };
 }
 
@@ -126,6 +133,11 @@ export class Repl implements ReplContext {
   public pluginManager?: PluginManager;
   public logger?: Logger;
   private slog: SessionLogger;
+  /**
+   * Persists `data.persist === true` output events to the active session.
+   * Inert until a SessionManager exists; re-bound by `/reload`.
+   */
+  private sessionOutput?: SessionOutputSink;
   private envReport?: EnvironmentReport;
   /** Background probe of the actually loaded model context (bootstrap). */
   private contextProbe?: Promise<ContextProbeResult | null>;
@@ -168,6 +180,7 @@ export class Repl implements ReplContext {
     this.contextProbe = contextProbe;
     this.execModule = execModule;
     this.slog = new SessionLogger(sessionManager, logger);
+    this.bindSessionOutput();
     this.configDir = configDir || join(homedir(), ".mma");
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
@@ -265,6 +278,14 @@ export class Repl implements ReplContext {
     );
   }
 
+  /** (Re)bind the session output sink after construction or `/reload`. */
+  private bindSessionOutput(): void {
+    this.sessionOutput?.dispose();
+    this.sessionOutput = this.sessionManager
+      ? new SessionOutputSink(defaultOutputBus, this.sessionManager)
+      : undefined;
+  }
+
   /**
    * Перезагрузка агента и модулей (команда /reload). Живёт здесь, а не в
    * repl-commands, потому что меняет mutable-поля класса — команда через
@@ -292,6 +313,7 @@ export class Repl implements ReplContext {
     this.skillsModule = result.skillsModule;
     this.pluginManager = result.pluginManager;
     this.execModule = result.execModule;
+    this.bindSessionOutput();
 
     // Fresh PluginManager has no bridge — re-register it, otherwise plugins
     // like web-ui silently lose control of the agent.
@@ -1094,6 +1116,8 @@ export class Repl implements ReplContext {
     this.running = false;
     this.saveHistory();
     this.agent.shutdown();
+    this.sessionOutput?.dispose();
+    this.sessionOutput = undefined;
     // Close session log when REPL stops
     this.logger?.closeSessionLog();
     this.rl.close();

@@ -17,11 +17,20 @@ export interface SessionMetaLike {
   projectDir?: string;
 }
 
+/** Duck-typed against OutputEvent in src/output/types.ts. */
+export interface OutputEventLike {
+  kind?: string;
+  level?: string;
+  source?: string;
+  text?: string;
+}
+
 /** Duck-typed against HostBridge in src/modules/types.ts. */
 export interface BridgeLike {
   isBusy(): boolean;
   submit(text: string, opts?: { images?: string[] }): Promise<unknown>;
   interrupt(): void;
+  subscribeOutput?(fn: (ev: OutputEventLike) => void): () => void;
 }
 
 export interface WebUiState {
@@ -38,6 +47,8 @@ export interface WebUiState {
   bridge: BridgeLike | null;
   /** True between an accepted submit and turn_end. */
   busy: boolean;
+  /** Detaches the output-bus subscription registered at session start. */
+  outputUnsub: (() => void) | null;
   llmStartTs: number | null;
   lastPlansKey: string;
   pending: { type: "text" | "meta"; text: string; iteration?: number } | null;
@@ -68,6 +79,7 @@ function freshState(): WebUiState {
     configDir: null,
     bridge: null,
     busy: false,
+    outputUnsub: null,
     llmStartTs: null,
     lastPlansKey: "",
     pending: null,

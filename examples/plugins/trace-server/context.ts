@@ -32,6 +32,19 @@ export interface ContextMessageLike {
   }>;
 }
 
+/** Duck-typed against OutputEvent in src/output/types.ts. */
+export interface OutputEventLike {
+  kind?: string;
+  level?: string;
+  source?: string;
+  text?: string;
+}
+
+/** Duck-typed against HostBridge in src/modules/types.ts. */
+export interface HostBridgeLike {
+  subscribeOutput?(fn: (ev: OutputEventLike) => void): () => void;
+}
+
 export interface PluginContext {
   iteration?: number;
   lastUserMessage?: string;
@@ -42,6 +55,7 @@ export interface PluginContext {
   };
   sessionManager?: SessionMetaLike;
   contextManager?: ContextManagerLike;
+  hostBridge?: HostBridgeLike;
 }
 
 export function snapshotContext(ctx: PluginContext): ContextSnapshot | null {
@@ -108,7 +122,8 @@ export function emitContext(ctx: PluginContext): void {
 
 /** Render the live conversation history as plain text for the side panel. */
 export function renderContextText(ctx: PluginContext): string {
-  const cm = ctx.contextManager as (ContextManagerLike & { getActiveHistory?: () => ContextMessageLike[] }) | undefined;
+  const cm = ctx.contextManager as
+    (ContextManagerLike & { getActiveHistory?: () => ContextMessageLike[] }) | undefined;
   if (!cm || typeof cm.getActiveHistory !== "function") return "";
   try {
     const history = cm.getActiveHistory();

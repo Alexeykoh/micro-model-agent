@@ -1,5 +1,6 @@
 import type { PromptBlock, AgentPhase, LLMResponse } from "../core/types";
 import type { ToolDefinition, ToolCall, ToolResult } from "../tools/types";
+import type { OutputEvent } from "../output/types";
 
 export interface AgentModule {
   name: string;
@@ -28,6 +29,11 @@ export interface HostBridge {
   submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown>;
   /** Interrupt the current run (no-op when idle). */
   interrupt(): void;
+  /**
+   * Subscribe to the host's output bus (warn/error logs, provider probes, …).
+   * Returns an unsubscribe function. Optional so test stubs stay valid.
+   */
+  subscribeOutput?(fn: (ev: OutputEvent) => void): () => void;
 }
 
 /** Summary of a completed agent run, passed to `AgentPlugin.onTurnEnd`. */

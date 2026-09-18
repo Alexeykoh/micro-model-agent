@@ -104,10 +104,17 @@ interface ContextSnapshotLike {
   messageCount?: number;
   compactionCount?: number;
 }
+interface OutputEventLike {
+  kind?: string;
+  level?: string;
+  source?: string;
+  text?: string;
+}
 interface BridgeLike {
   isBusy(): boolean;
   submit(text: string, opts?: { images?: string[] }): Promise<unknown>;
   interrupt(): void;
+  subscribeOutput?(fn: (ev: OutputEventLike) => void): () => void;
 }
 
 // ---- frontend assets (read verbatim at load time) ----
@@ -151,6 +158,18 @@ export const plugin = {
   onSessionStart(ctx: PluginContextLike): void {
     state.lastPlansKey = "";
     syncState(ctx);
+    // Forward host diagnostics (warn/error logs) to connected browsers so the
+    // web UI shows the same probe/config warnings the terminal would.
+    state.outputUnsub?.();
+    state.outputUnsub =
+      ctx.hostBridge?.subscribeOutput?.((ev) => {
+        if (ev.kind === "log" && (ev.level === "warn" || ev.level === "error")) {
+          broadcast(
+            { type: "output", ts: Date.now(), level: ev.level, source: ev.source, text: ev.text },
+            state,
+          );
+        }
+      }) ?? null;
     startServer(ASSETS, state)
       .then((url) => {
         broadcast({ type: "system", ts: Date.now(), message: `Web UI ready: ${url}` }, state);
@@ -170,6 +189,8 @@ export const plugin = {
 
   onSessionEnd(): void {
     broadcast({ type: "system", ts: Date.now(), message: "Session ended — server closing" }, state);
+    state.outputUnsub?.();
+    state.outputUnsub = null;
     stopPlanPolling();
     stopServer(state);
   },

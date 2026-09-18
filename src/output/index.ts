@@ -1,6 +1,9 @@
 export * from "./types";
 export { OutputBus, defaultOutputBus } from "./bus";
 export { formatEventLine } from "./format";
+export { JsonOutputSink } from "./json-sink";
+export { SessionOutputSink, type SessionLogSink } from "./session-sink";
+export { PluginOutputBridge } from "./plugin-bridge";
 export {
   OutputChannel,
   getDefaultChannel,

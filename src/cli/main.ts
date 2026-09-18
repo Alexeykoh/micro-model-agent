@@ -5,7 +5,7 @@ import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { order, applyAnswersToConfig } from "./setup-order";
-import { defaultOutputBus, getDefaultChannel, writeMachineJson } from "../output";
+import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -87,8 +87,10 @@ async function main(): Promise<void> {
 
   // `--json` owns stdout: silence the human channel before bootstrap so config
   // warnings/migration notices cannot pollute the machine-readable document.
-  // (Task 12 will route these to a diagnostics sink instead of dropping them.)
+  // The sink subscribes BEFORE bootstrap so probe/config warnings emitted during
+  // bootstrap are captured and surfaced in the JSON payload as diagnostics.
   if (jsonMode) getDefaultChannel().setQuiet(true);
+  const jsonSink = jsonMode ? new JsonOutputSink(defaultOutputBus) : undefined;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -135,12 +137,22 @@ async function main(): Promise<void> {
         // crashing tool/plugin still yields a valid machine-readable result,
         // and shutdown/waitForIdle still run.
         const message = errMsg(err);
-        writeMachineJson({ success: false, text: "", error: message, iterationCount: 0 });
         agent.shutdown();
+        const diagnostics = jsonSink?.diagnostics() ?? [];
+        jsonSink?.dispose();
+        writeMachineJson({
+          success: false,
+          text: "",
+          error: message,
+          iterationCount: 0,
+          diagnostics,
+        });
         await updater?.waitForIdle(10_000);
         process.exit(1);
       }
       agent.shutdown();
+      const diagnostics = jsonSink?.diagnostics() ?? [];
+      jsonSink?.dispose();
       writeMachineJson({
         success: result.success,
         text: result.text,
@@ -154,6 +166,7 @@ async function main(): Promise<void> {
         totalCost: result.totalCost ?? null,
         costBreakdown: result.costBreakdown ?? [],
         cache: result.cache ?? null,
+        diagnostics,
       });
       await updater?.waitForIdle(10_000);
       process.exit(result.success ? 0 : 1);

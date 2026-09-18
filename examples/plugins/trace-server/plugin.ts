@@ -100,6 +100,20 @@ export const plugin = {
     state.projectDir = (ctx.sessionManager as { projectDir?: string } | null)?.projectDir || null;
     state.lastPlansKey = "";
     state.planHistory = [];
+    // Forward host diagnostics (warn/error logs) to connected browsers.
+    state.outputUnsub?.();
+    state.outputUnsub =
+      ctx.hostBridge?.subscribeOutput?.((ev) => {
+        if (ev.kind === "log" && (ev.level === "warn" || ev.level === "error")) {
+          broadcast({
+            type: "output",
+            ts: Date.now(),
+            level: ev.level,
+            source: ev.source,
+            text: ev.text,
+          });
+        }
+      }) ?? null;
     startServer(ASSETS)
       .then((url) => {
         broadcast({ type: "system", ts: Date.now(), message: `Trace server ready: ${url}` });
@@ -127,6 +141,8 @@ export const plugin = {
 
   onSessionEnd(): void {
     broadcast({ type: "system", ts: Date.now(), message: "Session ended — server closing" });
+    state.outputUnsub?.();
+    state.outputUnsub = null;
     stopServer();
   },
 
