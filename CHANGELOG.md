@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Misleading prompt-overflow warning** (`src/core/bootstrap.ts`, `src/core/agent.ts`, i18n en+ru): the per-block startup/summary warning compared a single block's size against the whole system-prompt budget and claimed e.g. "AGENTS.md (3232 tok) exceeds the budget (3276 tok)" when the block fits and only the aggregate does not. Both messages now state the total requirement (`~N tok`) alongside the block that gets compressed.
 - **Interactive-command hint** (`src/tools/bash.ts`): a command that aborts waiting on stdin without a TTY (`Operation cancelled`, `stdin is not a TTY` — e.g. a bare `bun create`) now returns a non-interactive remedy instead of letting the model retry it unchanged.
 - **Infinite status-tool loop** (`src/core/agent.ts`): identical `session_info`/`process_list`/`process_log`/`file_info`/`project_map` calls are nudged and then hard-stopped in interactive runs. Mutating tools stay nudge-only, so a legitimate edit/build/read cycle is not cut short.
+- **Removed the "short/empty response" uncertainty warning** (`src/modules/hallucination/confidence.ts`): a short but valid reply (greeting, terse acknowledgement, one-line confirmation) was flagged as uncertain even though the warning neither retried nor blocked anything. Real truncation is already caught by the provider's `finish_reason: "length"` and emptiness by the empty-response retry, so the check only produced false positives on legitimate answers.
 
 ## [1.0.0] - 2026-09-18
 

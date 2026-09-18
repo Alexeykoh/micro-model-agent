@@ -47,6 +47,14 @@ describe("ConfidenceCheck", () => {
     expect(result.status).toBe("warn");
   });
 
+  it("does not flag short replies (greeting, acknowledgement, fragment)", () => {
+    const check = new ConfidenceCheck();
+    expect(check.validate("Привет! Чем могу помочь?").status).toBe("pass");
+    expect(check.validate("Готово").status).toBe("pass");
+    expect(check.validate("Done.").status).toBe("pass");
+    expect(check.validate("The answer is").status).toBe("pass");
+  });
+
   it("should pass on normal response", () => {
     const check = new ConfidenceCheck();
     const result = check.validate("We should use the standard library for this task.");

@@ -171,6 +171,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Overflow-предупреждения** (`bootstrap.ts`/`agent.ts`, i18n): сообщают суммарную потребность (`~N токенов`), а не сравнение одного блока с общим бюджетом.
 - **Interactive-команды** (`src/tools/bash.ts`): `Operation cancelled`/`stdin is not a TTY` → подсказка запустить неинтерактивно.
 - **Status-loop** (`src/core/agent.ts`): идентичные `session_info`/`process_list`/`process_log`/`file_info`/`project_map` жёстко останавливаются в интерактиве (`MAX_REPEATED_TOOL_CALLS_INTERACTIVE`); мутирующие тулы — только nudge.
+- **Short-response варнинг удалён** (`src/modules/hallucination/confidence.ts`): короткий, но законченный ответ (приветствие, «Готово») больше не помечается как «слишком короткий/пустой». Варнинг не делал ни retry, ни блокировки; реальный обрыв ловится по `finish_reason: "length"`, пустой ответ — retry `emptyResponseRetries`.
 
 ### Current Version: 1.0.1
 

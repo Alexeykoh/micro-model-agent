@@ -2,7 +2,6 @@ import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
 
 const MIN_CHARS = 1;
-const MIN_WORDS = 5;
 /** Both responses must be this long before repetition applies — a short
  *  honest answer ("Done." / "The build passes.") repeated twice is not
  *  degeneration and must not burn a hallucination retry. */
@@ -27,16 +26,10 @@ export class ConfidenceCheck {
       };
     }
 
-    // Language-agnostic: very short response with no structured content
+    // Short replies are not flagged: a greeting, a terse acknowledgement or a
+    // one-line confirmation is a valid answer. Real truncation is caught by the
+    // provider's finish_reason ("length"), and emptiness by the retry above.
     const wordCount = response.split(/\s+/).filter(Boolean).length;
-    const hasStructure = /```|^\s*[-*]\s|^\s*\d+\.\s|<[^>]+>/m.test(response);
-    if (wordCount < MIN_WORDS && !hasStructure) {
-      return {
-        status: "warn",
-        kind: "short",
-        reason: t("hall.short_response"),
-      };
-    }
 
     // Language-agnostic: repetition detection via word overlap. Only flag when
     // BOTH the current and the previous response are substantive — a short
