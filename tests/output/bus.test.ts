@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { OutputBus } from "../../src/output/bus";
+import { afterEach, describe, it, expect } from "vitest";
+import { OutputBus, defaultOutputBus } from "../../src/output/bus";
 
 describe("OutputBus", () => {
+  afterEach(() => defaultOutputBus.reset());
+
   it("assigns monotonic ids and timestamps", () => {
     const bus = new OutputBus();
     const a = bus.emit({ level: "info", source: "mma", kind: "log", text: "a" });
@@ -23,9 +25,24 @@ describe("OutputBus", () => {
   it("isolates a throwing subscriber", () => {
     const bus = new OutputBus();
     const seen: string[] = [];
-    bus.subscribe(() => { throw new Error("boom"); });
+    bus.subscribe(() => {
+      throw new Error("boom");
+    });
     bus.subscribe((e) => seen.push(e.text));
     expect(() => bus.log("info", "s", "x")).not.toThrow();
     expect(seen).toEqual(["x"]);
+  });
+  it("resets subscribers and id sequence on the default bus", () => {
+    const seen: string[] = [];
+    defaultOutputBus.subscribe((e) => seen.push(e.text));
+    defaultOutputBus.reset();
+    const ev = defaultOutputBus.emit({
+      level: "info",
+      source: "mma",
+      kind: "log",
+      text: "after-reset",
+    });
+    expect(seen).toEqual([]);
+    expect(ev.id).toBe(1);
   });
 });
