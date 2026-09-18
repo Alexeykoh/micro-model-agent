@@ -1,7 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { questionTool } from "../../src/tools/question";
+import type { PromptIO } from "../../src/tools/prompt-io";
 
 const ctx = {} as any;
+
+function fakeIO(overrides: Partial<PromptIO> = {}): PromptIO {
+  return {
+    askText: vi.fn(async () => "typed answer"),
+    askChoice: vi.fn(async () => [0]),
+    ...overrides,
+  };
+}
 
 describe("questionTool", () => {
   it("has correct definition", () => {
@@ -43,5 +52,43 @@ describe("questionTool", () => {
       ],
     });
     expect(result.success).toBe(false);
+  });
+
+  it("returns the label selected through promptIO", async () => {
+    const io = fakeIO({ askChoice: vi.fn(async () => [1]) });
+    const result = await questionTool.handler({ promptIO: io } as any, {
+      questions: [
+        {
+          question: "Pick a framework",
+          options: [
+            { label: "React", description: "Library" },
+            { label: "Vue", description: "Framework" },
+          ],
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("Vue");
+    expect(io.askChoice).toHaveBeenCalledOnce();
+  });
+
+  it("returns free text typed through promptIO", async () => {
+    const io = fakeIO({ askText: vi.fn(async () => "hello") });
+    const result = await questionTool.handler({ promptIO: io } as any, {
+      questions: [{ question: "What is your name?" }],
+    });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("hello");
+    expect(io.askText).toHaveBeenCalledOnce();
+  });
+
+  it("short-circuits in exitOnComplete mode without prompting", async () => {
+    const io = fakeIO();
+    const result = await questionTool.handler({ promptIO: io, exitOnComplete: true } as any, {
+      questions: [{ question: "Q" }],
+    });
+    expect(result.success).toBe(false);
+    expect(io.askText).not.toHaveBeenCalled();
+    expect(io.askChoice).not.toHaveBeenCalled();
   });
 });

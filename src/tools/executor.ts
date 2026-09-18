@@ -146,9 +146,7 @@ export class ToolExecutor {
           // unhandled rejection.
           for (const p of racePromises.slice(1)) {
             p.catch((e: Error) => {
-              this.ctx.logger.debug(
-                `Tool ${call.name}: discarded race loser: ${e.message}`,
-              );
+              this.ctx.logger.debug(`Tool ${call.name}: discarded race loser: ${e.message}`);
             });
           }
         }
@@ -206,6 +204,10 @@ export class ToolExecutor {
 
   setScope(scope: import("./types").ToolScope | undefined): void {
     this.ctx.scope = scope;
+  }
+
+  setPromptIO(io?: import("./prompt-io").PromptIO): void {
+    this.ctx.promptIO = io;
   }
 
   getRecursionDepth(): number {

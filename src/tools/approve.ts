@@ -23,10 +23,14 @@ export const approveTool: ToolDefinition = {
       return { success: false, output: t("tool.interactive_disabled") };
     }
     const action = String(args.action || "");
-    const indexes = await askChoice(t("tool.approve_prompt", { action }), [
+    const question = t("tool.approve_prompt", { action });
+    const options = [
       { label: t("tool.approve_yes"), description: t("tool.approve_yes_desc") },
       { label: t("tool.approve_no"), description: t("tool.approve_no_desc") },
-    ]);
+    ];
+    const indexes = ctx.promptIO
+      ? await ctx.promptIO.askChoice(question, options, { allowCustom: false })
+      : await askChoice(question, options);
     if (indexes[0] === 0) {
       return { success: true, output: t("tool.approved") };
     }

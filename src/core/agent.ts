@@ -38,11 +38,7 @@ import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
-import {
-  resolvePromptOverflow,
-  overflowHint,
-  HINT_BLOCK_TOKENS,
-} from "./prompt-overflow";
+import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "./prompt-overflow";
 import type { PromptBlockKind } from "./types";
 import {
   MAX_EMPTY_RESPONSE_RETRIES,
@@ -124,10 +120,7 @@ export interface AgentDeps {
  * Остальные тула (read-only, bookkeeping) не считаются мутациями.
  * Внимание: в цикле toolCall.arguments — сырая JSON-строка от провайдера.
  */
-export function mutationTargetKey(
-  name: string,
-  rawArgs: unknown,
-): string | null {
+export function mutationTargetKey(name: string, rawArgs: unknown): string | null {
   let a: Record<string, unknown> | null = null;
   if (typeof rawArgs === "string") {
     try {
@@ -185,7 +178,9 @@ export class Agent {
     this.contextRenderer = new ContextRenderer();
     this.policyState = createPolicyState();
     this.probePassed = deps.reasoningProbePassed ?? false;
-    const initialLevel = (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ?? "medium";
+    const initialLevel =
+      (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ??
+      "medium";
     this.reasoningState = { level: initialLevel, overrideIteration: -100 };
   }
 
@@ -242,6 +237,15 @@ export class Agent {
     }
   }
 
+  /**
+   * Install (or clear) the terminal-aware prompt surface used by interactive
+   * tools. Delegates to the tool executor so the shared ToolContext — the one
+   * tools actually receive — carries the same instance.
+   */
+  setPromptIO(io?: import("../tools/prompt-io").PromptIO): void {
+    this.deps.toolExecutor.setPromptIO(io);
+  }
+
   private buildSystemPrompt(): {
     prompt: string;
     excluded: string[];
@@ -260,7 +264,9 @@ export class Agent {
     // Overflow replacements (compressed instructions / project map) take
     // precedence over the original oversized blocks.
     const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
-      blocks.map((b) => (b.kind && this.promptOverrides.has(b.kind) ? this.promptOverrides.get(b.kind)! : b));
+      blocks.map((b) =>
+        b.kind && this.promptOverrides.has(b.kind) ? this.promptOverrides.get(b.kind)! : b,
+      );
     builder.addBlocks(applyOverrides(this.deps.promptBlocks));
     const dynamic = this.deps.getDynamicPromptBlocks?.() ?? [];
     if (dynamic.length > 0) {
@@ -760,7 +766,9 @@ export class Agent {
           history,
           allToolsForBudget as ToolDefinition[],
           this.abortController?.signal,
-          reasoning.level ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy } : undefined,
+          reasoning.level
+            ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy }
+            : undefined,
         )) {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
@@ -768,7 +776,10 @@ export class Agent {
               onMeta?.("\n\n");
             }
             textContent += chunk.content;
-            const textOut = pluginManager.runOnText({ iteration: state.iteration, logger, contextManager }, chunk.content);
+            const textOut = pluginManager.runOnText(
+              { iteration: state.iteration, logger, contextManager },
+              chunk.content,
+            );
             onChunk?.(textOut);
           }
           if (chunk.type === "reasoning" && chunk.content) {
@@ -823,7 +834,11 @@ export class Agent {
         // tool_call): отдаём локализованную причину обратно в контекст, чтобы
         // модель адаптировалась (разбить запись на куски) вместо смерти всей
         // сессии. Ограничено во избежание бесконечного цикла.
-        if (err instanceof LlmError && err.recoverable && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
+        if (
+          err instanceof LlmError &&
+          err.recoverable &&
+          state.llmErrorRetries < MAX_LLM_ERROR_RETRIES
+        ) {
           state.iterRecoverableLlmError = true;
           state.llmErrorRetries++;
           logger.warn(
@@ -895,7 +910,10 @@ export class Agent {
       } else if (reasoningContent) {
         llmResponse = { type: "reasoning", content: reasoningContent };
       }
-      pluginManager.runOnAfterThink({ iteration: state.iteration, logger, contextManager }, llmResponse);
+      pluginManager.runOnAfterThink(
+        { iteration: state.iteration, logger, contextManager },
+        llmResponse,
+      );
 
       // Детекция повторных одинаковых тулов (структурная, не по ключевым
       // словам). Сигнал питает reasoning policy для понижения effort на рутине.
@@ -942,10 +960,7 @@ export class Agent {
           if (!target) continue;
           const count = (state.toolTargetCounts.get(target) ?? 0) + 1;
           state.toolTargetCounts.set(target, count);
-          if (
-            count >= MUTATION_CYCLE_NUDGE_THRESHOLD &&
-            !state.cycleNudgedKeys.has(target)
-          ) {
+          if (count >= MUTATION_CYCLE_NUDGE_THRESHOLD && !state.cycleNudgedKeys.has(target)) {
             state.cycleNudgedKeys.add(target);
             cycleNudges.push(target);
           }

@@ -38,6 +38,7 @@ import { formatCacheLine, type CacheReport } from "./cache-line";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { formatWarning } from "../ui/md-formatter";
 import { getDefaultChannel, type OutputChannel, type PromptSink } from "../output";
+import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
 
 function formatContextBar(
@@ -136,6 +137,8 @@ export class Repl implements ReplContext {
   public readonly output: OutputChannel;
   /** Bridge that lets the channel draw above the live input frame. */
   private promptSink: PromptSink;
+  /** Terminal-aware PromptIO installed on the agent's tool executor. */
+  private promptIO: PromptIO;
 
   constructor(
     agent: Agent,
@@ -219,6 +222,16 @@ export class Repl implements ReplContext {
     };
     this.output.attachPrompt(this.promptSink);
 
+    // Terminal-aware prompt surface for interactive tools (question/approve).
+    // The REPL owns stdin and is in `streaming` mode during a run, so tools
+    // must borrow the editor for a question instead of opening a competing
+    // readline that would fight the LineEditor's raw mode.
+    this.promptIO = createPromptIO({
+      ask: (prompt) => this.askViaEditor(prompt),
+      print: (line) => this.output.writeLine(line),
+    });
+    this.agent.setPromptIO?.(this.promptIO);
+
     registerAllCommands(this);
     this.setupCompleter();
     this.setupListeners();
@@ -270,6 +283,9 @@ export class Repl implements ReplContext {
 
     const result = await bootstrap(this.configDir, this.baseDir, false, false);
     this.agent = result.agent;
+    // Re-install the prompt surface on the freshly bootstrapped agent — the
+    // REPL's `askViaEditor` closure still belongs to this instance.
+    this.agent.setPromptIO?.(this.promptIO);
     this.sessionManager = result.sessionManager;
     this.skillsModule = result.skillsModule;
     this.pluginManager = result.pluginManager;
@@ -690,6 +706,36 @@ export class Repl implements ReplContext {
     } finally {
       this.output.endModal();
       this.inputLocked = false;
+    }
+  }
+
+  /**
+   * Borrow the terminal for one interactive-tool question and hand it back.
+   * During a run the LineEditor is suspended with input disabled; enabling
+   * input + resuming the frame lets `question()` read keys while the agent
+   * blocks, and the `finally` restores exactly the streaming state so the
+   * agent's own renderer keeps working afterwards.
+   *
+   * Order matters: `beginModal()` first flushes any output still buffered by
+   * the streaming channel so it prints plainly before the frame returns;
+   * `endModal()` runs only after the frame is suspended again, so events
+   * queued during the question flush plainly instead of corrupting the frame.
+   */
+  private async askViaEditor(prompt: string): Promise<string> {
+    const editor = this.rl instanceof LineEditor ? this.rl : null;
+    this.output.beginModal();
+    if (editor) {
+      editor.setInputEnabled(true);
+      editor.resumeFrame();
+    }
+    try {
+      return await new Promise<string>((resolve) => this.rl.question(prompt, resolve));
+    } finally {
+      if (editor) {
+        editor.suspendFrame();
+        editor.setInputEnabled(false);
+      }
+      this.output.endModal();
     }
   }
 

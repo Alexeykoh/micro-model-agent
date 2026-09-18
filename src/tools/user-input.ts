@@ -1,5 +1,7 @@
 import * as readline from "readline";
 import { t } from "../i18n/index";
+import { getDefaultChannel } from "../output/index";
+import type { PromptIO } from "./prompt-io";
 
 export interface InputOption {
   label: string;
@@ -109,14 +111,15 @@ export async function askChoice(
   const customEntry = options.length; // index of the custom entry, if enabled
   const rl = createRl();
   try {
-    console.log(formatMenu(question, options, opts));
+    const channel = getDefaultChannel();
+    channel.writeLine(formatMenu(question, options, opts));
     for (;;) {
       const answer = await promptLine(rl, choicePrompt(entryCount, multiple));
       const parsed = parseSelection(answer, entryCount, multiple);
       if (parsed) {
         return parsed.map((i) => (opts.allowCustom && i === customEntry ? CUSTOM_INDEX : i));
       }
-      console.log(t("tool.user_input.invalid"));
+      channel.writeLine(t("tool.user_input.invalid"));
     }
   } finally {
     rl.close();
@@ -127,23 +130,32 @@ export async function askChoice(
  * High-level helper used by the question tool.
  * - No options: free-text input, returns [text] or [] when empty.
  * - With options: returns selected labels; custom entry resolves to typed text.
+ *
+ * When `io` is provided (REPL), all prompting goes through it so the tool can
+ * borrow the terminal from the input editor. Without it (headless/non-REPL)
+ * the module-level readline helpers above remain the fallback.
  */
-export async function askUser(question: string, opts: AskUserOptions = {}): Promise<string[]> {
+export async function askUser(
+  question: string,
+  opts: AskUserOptions = {},
+  io?: PromptIO,
+): Promise<string[]> {
   const header = [opts.progress, opts.header].filter(Boolean).join(" — ");
   const text = header ? `${header}\n${question}` : question;
   if (!opts.options || opts.options.length === 0) {
-    const answer = await askText(text);
+    const answer = io ? await io.askText(text) : await askText(text);
     return answer ? [answer] : [];
   }
   const allowCustom = opts.custom ?? true;
-  const indexes = await askChoice(text, opts.options, {
-    multiple: opts.multiple,
-    allowCustom,
-  });
+  const indexes = io
+    ? await io.askChoice(text, opts.options, { multiple: opts.multiple, allowCustom })
+    : await askChoice(text, opts.options, { multiple: opts.multiple, allowCustom });
   const labels: string[] = [];
   for (const idx of indexes) {
     if (idx === CUSTOM_INDEX) {
-      const custom = await askText(t("tool.user_input.custom_prompt"));
+      const custom = io
+        ? await io.askText(t("tool.user_input.custom_prompt"))
+        : await askText(t("tool.user_input.custom_prompt"));
       if (custom) labels.push(custom);
     } else {
       labels.push(opts.options[idx].label);

@@ -135,13 +135,17 @@ export const questionTool: ToolDefinition = {
             })
           : undefined;
       answers.push(
-        await askUser(q.question, {
-          header: q.header,
-          options: q.options,
-          multiple: q.multiple,
-          custom: q.custom,
-          progress,
-        }),
+        await askUser(
+          q.question,
+          {
+            header: q.header,
+            options: q.options,
+            multiple: q.multiple,
+            custom: q.custom,
+            progress,
+          },
+          ctx.promptIO,
+        ),
       );
     }
 
