@@ -11,4 +11,4 @@ export {
   type OutputChannelOptions,
   type ChannelMode,
 } from "./channel";
-export { writeMachineJson } from "./machine";
+export { writeMachineJson, writeNonTtyLine } from "./machine";

@@ -23,6 +23,7 @@ export class OutputChannel {
   private mode: ChannelMode = "idle";
   private modeBeforeQuiet: ChannelMode = "idle";
   private modeBeforeModal: ChannelMode = "idle";
+  private modalDepth = 0;
   private sink: PromptSink | null = null;
   private queue: OutputEvent[] = [];
   private pending: { stream: OutputStream; text: string } | null = null;
@@ -67,12 +68,17 @@ export class OutputChannel {
   }
 
   beginStreaming(): void {
+    // A streaming transition must never discard the quiet state: `--json`
+    // sets quiet for the whole run and streamed runs must stay silent.
+    if (this.mode === "quiet") return;
     this.flushBlocks();
     this.flushPendingAsBlock();
     this.mode = "streaming";
   }
 
   endStreaming(): void {
+    // Symmetric with beginStreaming: quiet owns the mode until setQuiet(false).
+    if (this.mode === "quiet") return;
     this.closePartial();
     this.mode = "idle";
   }
@@ -81,12 +87,16 @@ export class OutputChannel {
     this.flushBlocks();
     this.flushPendingAsBlock();
     if (this.mode === "quiet") return; // setQuiet owns quiet
-    this.modeBeforeModal = this.mode;
+    // Nested modals (e.g. a wizard command inside another exclusive scope)
+    // must not overwrite the mode saved by the outermost beginModal.
+    if (this.modalDepth === 0) this.modeBeforeModal = this.mode;
+    this.modalDepth++;
     this.mode = "modal";
   }
 
   endModal(): void {
-    if (this.mode === "modal") this.mode = this.modeBeforeModal;
+    if (this.modalDepth > 0) this.modalDepth--;
+    if (this.mode === "modal" && this.modalDepth === 0) this.mode = this.modeBeforeModal;
     const q = this.queue;
     this.queue = [];
     for (const ev of q) this.onEvent(ev);
@@ -156,8 +166,10 @@ export class OutputChannel {
     }
     const stream = ev.stream ?? "stdout";
     const line = ev.kind === "block" ? ev.text : formatEventLine(ev, this.color);
-    if (stream === "stdout" && this.mode === "idle" && this.sink?.isActive()) {
+    if (this.mode === "idle" && this.sink?.isActive()) {
       // Batch a synchronous burst into one printAbove/render (see blockLines).
+      // Both streams route above the prompt, otherwise a stderr log writes
+      // directly over the active input frame and skips flushBlocks ordering.
       if (this.blockLines === null) this.blockLines = [];
       this.blockLines.push(line);
       if (!this.blockFlushScheduled) {
@@ -166,6 +178,9 @@ export class OutputChannel {
       }
       return;
     }
+    // Preserve FIFO ordering: buffered blocks must not be overtaken by an
+    // event written straight to a raw stream (e.g. a stderr log mid-stream).
+    this.flushBlocks();
     if (this.mode === "streaming") this.closePartial();
     (stream === "stderr" ? this.err : this.out).write(`${line}\n`);
   }

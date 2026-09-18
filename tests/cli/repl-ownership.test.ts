@@ -181,15 +181,16 @@ describe("REPL terminal ownership", () => {
     await runPromise;
   });
 
-  it("queues channel events during withExclusiveInput and flushes them on endModal", async () => {
+  it("writes withExclusiveInput output directly (wizard owns the terminal)", async () => {
     const { repl, capture } = makeRepl();
 
     await repl.withExclusiveInput(async () => {
-      capture.channel.writeLine("during-modal");
-      expect(capture.out.data).toBe("");
+      capture.channel.writeLine("during-wizard");
+      // No modal queue: the menu/scan text is visible before the command returns.
+      expect(capture.out.data).toContain("during-wizard");
     });
 
-    expect(capture.out.data).toContain("during-modal");
+    expect(capture.out.data).toContain("during-wizard");
   });
 
   it("presents the prompt exactly once for a command that runs the agent (/run)", async () => {

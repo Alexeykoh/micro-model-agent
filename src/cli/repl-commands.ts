@@ -479,7 +479,7 @@ function registerProviderCommands(ctx: ReplContext): void {
     });
 
     const { Spinner } = await import("../ui/spinner");
-    const s = new Spinner();
+    const s = new Spinner({ channel: ctx.output });
     s.start(t("cli.fetching_models"));
     try {
       const models = await provider.listModels();

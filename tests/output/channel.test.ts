@@ -119,6 +119,37 @@ describe("OutputChannel", () => {
     c.writeLine("banner");
     expect(out.data).toBe("");
   });
+  it("keeps quiet across streaming transitions and restores idle when lifted", () => {
+    const { bus, out, c } = ch();
+    c.setQuiet(true);
+    c.beginStreaming();
+    expect(c.getMode()).toBe("quiet");
+    bus.log("error", "s", "boom");
+    c.writeLine("banner");
+    expect(out.data).toBe("");
+    c.setQuiet(false);
+    expect(c.getMode()).toBe("idle");
+  });
+  it("routes stderr events above an active prompt instead of writing to stderr", async () => {
+    const { bus, out, err, c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    bus.emit({ level: "warn", source: "s", kind: "log", text: "stderr-note", stream: "stderr" });
+    await flushMicrotasks();
+    expect(p.above).toEqual([expect.stringContaining("stderr-note")]);
+    expect(err.data).toBe("");
+    expect(out.data).toBe("");
+  });
+  it("restores streaming after nested modals", () => {
+    const { c } = ch();
+    c.beginStreaming();
+    c.beginModal();
+    c.beginModal();
+    c.endModal();
+    expect(c.getMode()).toBe("modal");
+    c.endModal();
+    expect(c.getMode()).toBe("streaming");
+  });
   it("writeOverlay is suppressed while prompt is active", () => {
     const { c, err } = ch();
     const p = prompt(true);

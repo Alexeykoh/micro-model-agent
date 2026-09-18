@@ -41,6 +41,7 @@ import {
   defaultOutputBus,
   getDefaultChannel,
   SessionOutputSink,
+  writeNonTtyLine,
   type OutputChannel,
   type PromptSink,
 } from "../output";
@@ -227,9 +228,9 @@ export class Repl implements ReplContext {
           return;
         }
         // Non-TTY fallback (readline / piped stdin): no input frame to redraw
-        // above, so write directly. Kept as an explicit documented exception to
-        // the OutputChannel contract — there is no frame for `printAbove` here.
-        process.stdout.write(text + "\n");
+        // above, so write directly through the sanctioned machine-output helper
+        // — there is no frame for `printAbove` here.
+        writeNonTtyLine(text);
       },
       clearScreen: () => {
         if (this.rl instanceof LineEditor) this.rl.clearScreen();
@@ -727,15 +728,15 @@ export class Repl implements ReplContext {
   }
 
   public async withExclusiveInput(fn: () => Promise<void>): Promise<void> {
+    // The wizard owns the terminal through its own `rl.question()` calls. Between
+    // questions no frame is active, so its menus/scan results must be written
+    // directly — bracketing with beginModal/endModal would QUEUE the whole
+    // transcript and the user would only see bare `: ` prompts until completion.
+    // `inputLocked` makes `promptSink.isActive()` false, routing writes direct.
     this.inputLocked = true;
-    // Smallest correct modal scope: only commands that take exclusive stdin
-    // (interactive wizard) run under beginModal/endModal. Blanket-bracketing
-    // executeCommand would queue the agent stream of `/run` and drop it.
-    this.output.beginModal();
     try {
       await fn();
     } finally {
-      this.output.endModal();
       this.inputLocked = false;
     }
   }

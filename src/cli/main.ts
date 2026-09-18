@@ -93,12 +93,14 @@ async function main(): Promise<void> {
   jsonMode = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
 
-  // `--json` owns stdout: silence the human channel before bootstrap so config
-  // warnings cannot pollute the machine-readable document. The sink subscribes
+  // `--json` owns stdout for ONE-SHOT runs: silence the human channel before
+  // bootstrap so config warnings cannot pollute the machine-readable document.
+  // A no-prompt invocation (`mma --json`) still opens the interactive REPL, so
+  // quiet must not be set there or the whole REPL is muted. The sink subscribes
   // BEFORE bootstrap so warn/error events emitted during bootstrap are captured
   // and surfaced as diagnostics. Info-level migration notices are intentionally
   // not captured (diagnostics are warn/error only).
-  if (jsonMode) getDefaultChannel().setQuiet(true);
+  if (jsonMode && program.args.length > 0) getDefaultChannel().setQuiet(true);
   const jsonSink = jsonMode ? new JsonOutputSink(defaultOutputBus) : undefined;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
@@ -161,6 +163,9 @@ async function main(): Promise<void> {
       process.exit(result.success ? 0 : 1);
     }
 
+    // TODO(output): one-shot runs don't surface the context-probe warning
+    // (only Repl.start() renders it). Surface it here when bootstrap exposes
+    // the probe result to this branch.
     const renderer = new Renderer({
       spinner: config.ui?.spinner ?? true,
       baseDir,

@@ -44,7 +44,6 @@ export const ALLOWLIST = new Set([
   "src/output/machine.ts", // the one legal raw-stdout JSON contract
   "src/core/crash-handler.ts", // crash reporting must survive a broken output layer
   "src/modules/browser/bridge-server.mjs", // separate child process; stdout is a JSON-RPC pipe
-  "src/cli/repl.ts", // documented non-TTY printAbove fallback (single line)
 ]);
 
 export interface ScanFile {
