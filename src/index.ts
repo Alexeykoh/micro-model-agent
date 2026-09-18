@@ -50,7 +50,7 @@ export { MigrationDetector, BackupManager } from "./migration/index";
 import { MigrationDetector } from "./migration/detect";
 import { BackupManager } from "./migration/backup";
 import { t } from "./i18n/index";
-import { defaultOutputBus } from "./output";
+import { defaultOutputBus, getDefaultChannel } from "./output";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -58,6 +58,9 @@ export function checkMigration(configDir?: string): void {
   const dir = configDir || join(homedir(), ".mma");
   const detector = new MigrationDetector(dir);
   if (detector.needsMigration()) {
+    // Ensure a terminal subscriber exists before emitting to the bus; library
+    // consumers have no other eager channel creation.
+    getDefaultChannel();
     const backup = new BackupManager(dir);
     backup.backupConfig();
     backup.backupAll();

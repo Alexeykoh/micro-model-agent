@@ -46,6 +46,13 @@ async function main(): Promise<void> {
   // ~/.mma/logs/crash.jsonl (with env report) instead of a bare stderr stack.
   installCrashHandlers();
 
+  // Eagerly create the default channel so it subscribes to `defaultOutputBus`
+  // BEFORE any config/bootstrap code can emit (config warnings, migration
+  // summary, updater notices). The channel is created lazily by
+  // `getDefaultChannel()`; without this call every bus event emitted before the
+  // first channel use would have no terminal subscriber and be dropped.
+  getDefaultChannel();
+
   const program = createProgram();
 
   // Определяем подкоманду ДО parse: commander запускает async-action синхронно
@@ -77,6 +84,11 @@ async function main(): Promise<void> {
   const exitOnComplete = opts.exitOnComplete === true;
   const jsonMode = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
+
+  // `--json` owns stdout: silence the human channel before bootstrap so config
+  // warnings/migration notices cannot pollute the machine-readable document.
+  // (Task 12 will route these to a diagnostics sink instead of dropping them.)
+  if (jsonMode) getDefaultChannel().setQuiet(true);
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 

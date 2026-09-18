@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { OutputBus } from "../../src/output/bus";
+import { describe, it, expect, vi } from "vitest";
+import { OutputBus, defaultOutputBus } from "../../src/output/bus";
 import {
   OutputChannel,
   getDefaultChannel,
@@ -216,5 +216,54 @@ describe("OutputChannel", () => {
     c.clearScreen();
     expect(called).toBe(1);
     expect(out.data).toBe("");
+  });
+  it("clearScreen falls back to ANSI when the active sink has no clearScreen", () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.clearScreen();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen drops a buffered raw partial", () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("abc");
+    c.clearScreen();
+    // Buffered partial is flushed once and the sink lacks clearScreen → ANSI.
+    expect(p.above).toEqual(["abc"]);
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+    c.beginStreaming();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen resets partialOpen so endStreaming adds no newline", () => {
+    const { c, out } = ch();
+    c.beginStreaming();
+    c.writeRaw("partial");
+    c.clearScreen();
+    const afterClear = out.data;
+    c.endStreaming();
+    expect(out.data).toBe(afterClear);
+  });
+  it("clearScreen is a no-op in quiet mode", () => {
+    const { c, out } = ch();
+    c.setQuiet(true);
+    c.clearScreen();
+    expect(out.data).toBe("");
+  });
+  it("renders config-style bus events once the default channel exists", () => {
+    // Eager creation at process entry (main.ts) guarantees a subscriber exists
+    // before config/bootstrap can emit; this proves the late-default-can-render
+    // half of that contract.
+    resetDefaultChannel();
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      getDefaultChannel();
+      defaultOutputBus.log("warn", "config", "EARLY_BUS_MARKER");
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining("EARLY_BUS_MARKER"));
+    } finally {
+      spy.mockRestore();
+      resetDefaultChannel();
+    }
   });
 });

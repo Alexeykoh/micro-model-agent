@@ -3,6 +3,7 @@ import { Updater, type InstallRunner } from "./checker";
 import { extractLatestChangelog, readChangelog } from "./changelog-reader";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
+import { defaultOutputBus } from "../../output";
 
 export interface UpdaterLogger {
   info(msg: string): void;
@@ -40,8 +41,8 @@ export class UpdaterModule {
     this.updater = new Updater(currentVersion, packageName, installRunner);
     this.logger = logger ?? {
       info: () => {},
-      warn: (m) => console.warn(pc.yellow(m)),
-      error: (m) => console.error(pc.red(m)),
+      warn: (m) => defaultOutputBus.log("warn", "updater", m),
+      error: (m) => defaultOutputBus.log("error", "updater", m),
     };
   }
 

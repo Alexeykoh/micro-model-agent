@@ -213,10 +213,9 @@ export class Repl implements ReplContext {
           this.rl.printAbove(text);
           return;
         }
-        // Non-TTY fallback (readline / piped stdin): the only remaining direct
-        // stdout write in the REPL — there is no frame to draw above.
-        // TODO(Task 11): route through this.output's `out` stream instead of
-        // process.stdout so injected/captured channels observe it.
+        // Non-TTY fallback (readline / piped stdin): no input frame to redraw
+        // above, so write directly. Kept as an explicit documented exception to
+        // the OutputChannel contract — there is no frame for `printAbove` here.
         process.stdout.write(text + "\n");
       },
       clearScreen: () => {

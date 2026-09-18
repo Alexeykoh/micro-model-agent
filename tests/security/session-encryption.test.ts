@@ -8,6 +8,7 @@ import {
 } from "../../src/modules/security/session-encryption";
 import type { SessionEncryptionConfig } from "../../src/config/types";
 import { ConfigEncryptor } from "../../src/modules/security/encryption";
+import { defaultOutputBus } from "../../src/output";
 
 const TEST_DIR = join(__dirname, "test-sessions-encryption");
 
@@ -333,5 +334,27 @@ describe("corruption resilience (audit 2026-08-26)", () => {
     const { isEncryptedString } = require("../../src/modules/security/encryption");
     expect(isEncryptedString("foo:bar:baz:qux")).toBe(false);
     expect(isEncryptedString("some log line: with colons: here: yes")).toBe(false);
+  });
+
+  it("emits a security diagnostic to the output bus when a line cannot be decrypted", () => {
+    const enc = new SessionFileEncryptor({ enabled: true } as any);
+    const good = enc.encryptFileContent('{"a":1}');
+    // Tamper with the ciphertext while keeping the salt:iv:tag:data base64
+    // shape — decryptString must fail authentication on exactly this line.
+    const parts = good.split(":");
+    parts[3] = ("A" === parts[3][0] ? "B" : "A") + parts[3].slice(1);
+    const corrupted = parts.join(":");
+
+    const events: Array<{ level: string; source: string; text: string }> = [];
+    const unsub = defaultOutputBus.subscribe((ev) => {
+      if (ev.source === "security") events.push(ev);
+    });
+    const out = enc.decryptJSONL([corrupted]);
+    unsub();
+
+    expect(out).toEqual([]);
+    expect(events).toHaveLength(1);
+    expect(events[0].level).toBe("error");
+    expect(events[0].text).toContain("failed to decrypt JSONL line");
   });
 });

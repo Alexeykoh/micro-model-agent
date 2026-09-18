@@ -3,9 +3,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import type { AuditLogEntry } from "./audit-log";
 import { backoffDelay } from "../../utils/retry";
-import { Logger } from "../../logger/app-logger";
-
-const logger = new Logger("warn", "audit");
+import { defaultOutputBus } from "../../output";
 
 // Use global fetch (available in Bun)
 declare const fetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -209,8 +207,9 @@ export class AuditNotifier {
       try {
         await this.sendToWebhook(notification);
       } catch (error) {
-        logger.logSilent(
-          "error",
+        defaultOutputBus.log(
+          "warn",
+          "audit",
           `[AuditNotifier] Webhook failed, adding to retry queue: ${error instanceof Error ? error.message : String(error)}`,
         );
         this.addToRetryQueue(notification);
@@ -264,8 +263,9 @@ export class AuditNotifier {
       const line = JSON.stringify(notification);
       appendFileSync(this.config.filePath, line + "\n", "utf8");
     } catch (error) {
-      logger.logSilent(
+      defaultOutputBus.log(
         "error",
+        "audit",
         `[AuditNotifier] Failed to write to file: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
@@ -320,8 +320,9 @@ export class AuditNotifier {
         const item = this.retryQueue[0];
 
         if (item.retries >= (this.config.maxRetries ?? 3)) {
-          logger.logSilent(
+          defaultOutputBus.log(
             "error",
+            "audit",
             `[AuditNotifier] Max retries exceeded for notification: ${JSON.stringify(item.entry)}`,
           );
           this.retryQueue.shift();
@@ -335,8 +336,9 @@ export class AuditNotifier {
           // sendToWebhook no longer queues copies itself — the retry counter
           // actually increments and maxRetries is reachable.
           item.retries++;
-          logger.logSilent(
-            "error",
+          defaultOutputBus.log(
+            "warn",
+            "audit",
             `[AuditNotifier] Webhook retry ${item.retries} failed: ${
               error instanceof Error ? error.message : String(error)
             }`,
@@ -364,8 +366,9 @@ export class AuditNotifier {
       const lines = content.split("\n").filter(Boolean);
       return lines.slice(-limit).map((line) => JSON.parse(line) as AuditNotification);
     } catch (error) {
-      logger.logSilent(
+      defaultOutputBus.log(
         "error",
+        "audit",
         `[AuditNotifier] Failed to read notifications: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];

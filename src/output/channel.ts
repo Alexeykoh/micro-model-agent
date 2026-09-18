@@ -125,6 +125,10 @@ export class OutputChannel {
 
   clearScreen(): void {
     this.flushBlocks();
+    // A buffered raw partial line would otherwise re-appear after the clear.
+    this.flushPendingAsBlock();
+    this.partialOpen = false;
+    if (this.mode === "quiet") return;
     if (this.sink?.isActive() && this.sink.clearScreen) {
       this.sink.clearScreen();
       return;

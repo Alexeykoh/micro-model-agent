@@ -1,11 +1,9 @@
 import { spawn, ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
-import { Logger } from "../../logger/app-logger";
+import { defaultOutputBus } from "../../output";
 
 /** Default timeout for MCP HTTP requests (connect + tool calls). */
 const HTTP_TIMEOUT_MS = 10_000;
-
-const logger = new Logger("warn", "mcp");
 
 /**
  * Accept header required by the MCP Streamable HTTP transport — the server
@@ -138,8 +136,9 @@ export class MCPClient {
     } catch (e) {
       // Heartbeats/comments are not JSON — expected noise, but still logged
       // so a genuinely broken stream is visible in diagnostics.
-      logger.logSilent(
+      defaultOutputBus.log(
         "error",
+        "mcp",
         `[MCPClient] Unparseable SSE message: ${String(data).slice(0, 120)} ${e instanceof Error ? e.message : String(e)}`,
       );
     }
