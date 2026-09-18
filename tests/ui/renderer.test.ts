@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { join, sep } from "path";
 import { tmpdir } from "os";
 import { Renderer, summarizeArgs } from "../../src/ui/renderer";
+import { OutputBus } from "../../src/output/bus";
+import { OutputChannel } from "../../src/output/channel";
 
 function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   const parts: string[] = [];
@@ -19,11 +21,15 @@ function makeRenderer(opts: { rich: boolean }): {
   text: () => string;
 } {
   const out = makeOut();
+  const channel = new OutputChannel(new OutputBus(), {
+    out: out.stream,
+    err: out.stream,
+    color: false,
+  });
   const renderer = new Renderer({
     rich: opts.rich,
     spinner: false,
-    out: out.stream,
-    err: out.stream,
+    channel,
     width: 60,
   });
   return { renderer, text: out.text };
@@ -182,6 +188,16 @@ describe("Renderer", () => {
     expect(out).toContain("2800ms");
   });
 
+  it("flushes a pending markdown partial before a tool header", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.text("pending partial");
+    renderer.toolStart("bash", { command: "ls" });
+    renderer.toolEnd("bash", 1, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("pending partial\n");
+  });
+
   it("adds text prefix before first chunk", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.text("hello world");
@@ -194,11 +210,15 @@ describe("Renderer", () => {
   describe("relative paths in tool headers", () => {
     function makeBaseRenderer(baseDir?: string, width = 60) {
       const out = makeOut();
+      const channel = new OutputChannel(new OutputBus(), {
+        out: out.stream,
+        err: out.stream,
+        color: false,
+      });
       const renderer = new Renderer({
         rich: true,
         spinner: false,
-        out: out.stream,
-        err: out.stream,
+        channel,
         width,
         baseDir,
       });
@@ -252,11 +272,11 @@ describe("Renderer", () => {
           return true;
         },
       } as unknown as NodeJS.WritableStream;
+      const channel = new OutputChannel(new OutputBus(), { out, err, color: false });
       const renderer = new Renderer({
         rich: true,
         spinner: true,
-        out,
-        err,
+        channel,
         width: 60,
       });
       return { renderer, out: () => outState.data, err: () => errState.data };

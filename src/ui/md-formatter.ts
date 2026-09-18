@@ -58,7 +58,11 @@ export class FormattingStream {
   private width: number;
   private partialWritten = 0;
 
-  constructor(onWrite: (text: string) => void, width?: number, onRawWrite?: (text: string) => void) {
+  constructor(
+    onWrite: (text: string) => void,
+    width?: number,
+    onRawWrite?: (text: string) => void,
+  ) {
     this.onWrite = onWrite;
     this.onRawWrite = onRawWrite ?? onWrite;
     this.width = width ?? getTerminalWidth();
@@ -86,6 +90,39 @@ export class FormattingStream {
       // Move cursor back to overwrite partial output
       this.onRawWrite(`\x1b[${this.partialWritten}D`);
       this.partialWritten = 0;
+    }
+  }
+
+  /** True when there is displayed partial output or unprocessed buffered text. */
+  hasPartial(): boolean {
+    return this.partialWritten > 0 || this.buffer.length > 0 || this.tableBuffer.length > 0;
+  }
+
+  /**
+   * Finalize a pending raw partial so the next write starts on a fresh line.
+   * Content is never dropped or double-printed: a streamed partial gets a
+   * trailing newline, while an un-displayed buffer (only possible inside an
+   * open code block) is emitted before being cleared. `partialWritten` is
+   * reset so a later complete line does not rewind over finalized text.
+   */
+  flushPartialNow(): void {
+    if (this.partialWritten > 0) {
+      this.onRawWrite("\n");
+      this.partialWritten = 0;
+    }
+    if (this.buffer.length > 0) {
+      if (this.inCodeBlock) {
+        this.codeLines.push(this.buffer);
+        this.buffer = "";
+        this.emitCodeBlock();
+      } else {
+        const line = this.buffer;
+        this.buffer = "";
+        this.onWrite(this.formatLine(line));
+      }
+    }
+    if (this.tableBuffer.length > 0) {
+      this.flushTable();
     }
   }
 

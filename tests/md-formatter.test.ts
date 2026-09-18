@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatMarkdown } from "../src/ui/md-formatter";
+import { formatMarkdown, FormattingStream } from "../src/ui/md-formatter";
 
 describe("formatMarkdown", () => {
   it("should format headings", () => {
@@ -78,5 +78,28 @@ describe("formatMarkdown", () => {
   it("should not double-wrap inline code that contains markdown", () => {
     const result = formatMarkdown("Use `**x**` here");
     expect(result).toContain("**x**");
+  });
+});
+
+describe("FormattingStream.flushPartialNow", () => {
+  it("finalizes a displayed raw partial without duplication or rewinding", () => {
+    const chunks: string[] = [];
+    const stream = new FormattingStream(
+      (line) => chunks.push(line + "\n"),
+      60,
+      (text) => chunks.push(text),
+    );
+    stream.write("partial");
+    expect(stream.hasPartial()).toBe(true);
+    stream.flushPartialNow();
+    expect(stream.hasPartial()).toBe(false);
+    stream.write("next line\n");
+    stream.flush();
+    const out = chunks.join("");
+    expect(out).toContain("partial");
+    expect(out).toContain("next line");
+    expect(out.indexOf("next line")).toBeGreaterThan(out.indexOf("partial"));
+    expect(out).toContain("partial\nnext line\n");
+    expect(out).not.toContain("\x1b[7D");
   });
 });

@@ -1,12 +1,13 @@
 import { pc } from "./colors";
 import stringWidth from "string-width";
 import { getTerminalWidth } from "./table";
+import type { OutputChannel } from "../output";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export interface SpinnerOptions {
   enabled?: boolean;
-  stream?: NodeJS.WritableStream;
+  channel?: OutputChannel;
   intervalMs?: number;
   width?: number;
 }
@@ -26,13 +27,15 @@ export class Spinner {
   private frame = 0;
   private message = "";
   private enabled: boolean;
+  private channel?: OutputChannel;
   private stream: NodeJS.WritableStream;
   private intervalMs: number;
   private width: number;
 
   constructor(opts: SpinnerOptions = {}) {
-    this.stream = opts.stream ?? process.stderr;
-    this.enabled = opts.enabled ?? isSpinnerSupported(this.stream);
+    this.channel = opts.channel;
+    this.stream = process.stderr;
+    this.enabled = opts.enabled ?? isSpinnerSupported();
     this.intervalMs = opts.intervalMs ?? 80;
     this.width = opts.width ?? getTerminalWidth();
   }
@@ -59,7 +62,9 @@ export class Spinner {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
-      this.stream.write("\r\x1b[K");
+      const clear = "\r\x1b[K";
+      if (this.channel) this.channel.writeOverlay(clear);
+      else this.stream.write(clear);
     }
   }
 
@@ -77,6 +82,8 @@ export class Spinner {
     if (!this.timer) return;
     const frame = FRAMES[this.frame % FRAMES.length];
     this.frame++;
-    this.stream.write("\r" + pc.cyan(frame) + " " + this.message + "\x1b[K");
+    const text = "\r" + pc.cyan(frame) + " " + this.message + "\x1b[K";
+    if (this.channel) this.channel.writeOverlay(text);
+    else this.stream.write(text);
   }
 }

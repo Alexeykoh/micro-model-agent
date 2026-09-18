@@ -5,6 +5,7 @@ import { Spinner } from "./spinner";
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
 import { formatCost } from "../modules/pricing/prices";
+import { getDefaultChannel, type OutputChannel } from "../output";
 import { isAbsolute, relative, sep } from "path";
 
 function formatUsd(cost: number): string {
@@ -15,8 +16,7 @@ export interface RendererOptions {
   rich?: boolean;
   spinner?: boolean;
   width?: number;
-  out?: NodeJS.WritableStream;
-  err?: NodeJS.WritableStream;
+  channel?: OutputChannel;
   /**
    * Workspace root — absolute paths inside it are shown as short relative
    * paths in tool headers (the agent already knows the root).
@@ -106,8 +106,7 @@ export class Renderer {
   private rich: boolean;
   private spinner: Spinner;
   private fmt: FormattingStream;
-  private out: NodeJS.WritableStream;
-  private err: NodeJS.WritableStream;
+  private channel: OutputChannel;
   private width: number;
   private baseDir?: string;
   private card: {
@@ -124,19 +123,18 @@ export class Renderer {
 
   constructor(opts: RendererOptions = {}) {
     this.rich = opts.rich ?? isRichTerminal();
-    this.out = opts.out ?? process.stdout;
-    this.err = opts.err ?? process.stderr;
     this.width = opts.width ?? getTerminalWidth();
     this.baseDir = opts.baseDir;
+    this.channel = opts.channel ?? getDefaultChannel();
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
-      stream: this.err,
+      channel: this.channel,
       width: this.width,
     });
     this.fmt = new FormattingStream(
-      (line) => this.out.write(`${line}\n`),
+      (line) => this.channel.writeRaw(`${line}\n`),
       this.width,
-      (text) => this.out.write(text),
+      (text) => this.channel.writeRaw(text),
     );
   }
 
@@ -151,7 +149,7 @@ export class Renderer {
     this.spinner.stop();
     if (!this.textStarted) {
       this.textStarted = true;
-      this.out.write(`\n${pc.dim("-")} `);
+      this.channel.writeRaw(`\n${pc.dim("-")} `);
     }
     this.fmt.write(chunk);
   }
@@ -161,14 +159,14 @@ export class Renderer {
     this.spinner.stop();
     if (this.thoughtStarted) {
       if (!this.thoughtHeaderPrinted) {
-        this.out.write(`\n${pc.dim("→")} Thought: `);
+        this.channel.writeRaw(`\n${pc.dim("→")} Thought: `);
         this.thoughtHeaderPrinted = true;
       }
-      this.out.write(pc.dim(chunk));
+      this.channel.writeRaw(pc.dim(chunk));
     } else if (this.card) {
       this.writeInlineBody(chunk);
     } else {
-      this.out.write(chunk);
+      this.channel.writeRaw(chunk);
     }
   }
 
@@ -181,7 +179,7 @@ export class Renderer {
         this.outputSuppressed = true;
         continue;
       }
-      this.out.write(`${GUTTER}${line}\n`);
+      this.channel.writeRaw(`${GUTTER}${line}\n`);
     }
   }
 
@@ -189,10 +187,10 @@ export class Renderer {
   reasoning(chunk: string): void {
     this.spinner.stop();
     if (this.thoughtStarted && !this.thoughtHeaderPrinted) {
-      this.out.write(`\n${pc.dim("→")} Thought: `);
+      this.channel.writeRaw(`\n${pc.dim("→")} Thought: `);
       this.thoughtHeaderPrinted = true;
     }
-    this.out.write(pc.dim(chunk));
+    this.channel.writeRaw(pc.dim(chunk));
   }
 
   /** Model is loading / generating — record start time. */
@@ -208,7 +206,7 @@ export class Renderer {
     this.spinner.stop();
     if (this.thoughtStarted && this.thoughtHeaderPrinted) {
       const duration = Date.now() - this.thoughtStartMs;
-      this.out.write(pc.dim(` ${duration}ms\n`));
+      this.channel.writeRaw(pc.dim(` ${duration}ms\n`));
     }
     this.thoughtStarted = false;
     this.thoughtHeaderPrinted = false;
@@ -220,6 +218,7 @@ export class Renderer {
     stepContext?: string | null,
     icon?: string,
   ): void {
+    this.fmt.flushPartialNow();
     this.endCard();
     this.spinner.stop();
     this.outputLineCount = 0;
@@ -233,11 +232,9 @@ export class Renderer {
     const label = friendlyTool(tool);
     this.card = { tool, args, start: Date.now() };
     if (stepContext) {
-      this.out.write(`\n${pc.dim("↓")} ${pc.cyan(stepContext)}\n`);
+      this.channel.writeRaw(`\n${pc.dim("↓")} ${pc.cyan(stepContext)}\n`);
     }
-    this.out.write(
-      `${pc.dim(marker)} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
-    );
+    this.channel.writeRaw(`${pc.dim(marker)} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`);
     // Busy indicator while the tool actually runs — read/write/edit/bash can
     // take seconds; without this the chat looks frozen until the footer.
     if (!SPINNERLESS_TOOLS.has(tool)) {
@@ -247,10 +244,11 @@ export class Renderer {
 
   /** Live plan checklist — prints the plan block as-is (already colored). */
   planBlock(lines: string[]): void {
+    this.fmt.flushPartialNow();
     this.endCard();
     this.spinner.stop();
     for (const line of lines) {
-      this.out.write(`${line}\n`);
+      this.channel.writeRaw(`${line}\n`);
     }
   }
 
@@ -261,6 +259,7 @@ export class Renderer {
     ctxDelta?: number,
     costUsd?: number,
   ): void {
+    this.fmt.flushPartialNow();
     this.spinner.stop();
     if (!this.card) return;
     const marker = error ? pc.red("✗") : pc.green("✓");
@@ -272,24 +271,28 @@ export class Renderer {
     if (costUsd !== undefined && costUsd > 0) {
       footer += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
     }
-    this.out.write(`${footer}\n`);
+    this.channel.writeRaw(`${footer}\n`);
     if (this.outputSuppressed) {
-      this.out.write(`${GUTTER}${pc.dim(`... (${this.outputLineCount - MAX_OUTPUT_LINES} more lines)`)}\n`);
+      this.channel.writeRaw(
+        `${GUTTER}${pc.dim(`... (${this.outputLineCount - MAX_OUTPUT_LINES} more lines)`)}\n`,
+      );
     }
     this.card = null;
   }
 
   /** Raw pre-formatted text (diff blocks, warnings). */
   raw(text: string): void {
+    this.fmt.flushPartialNow();
     this.endCard();
     this.spinner.stop();
-    this.out.write(text);
+    this.channel.writeRaw(text);
   }
 
   error(text: string): void {
+    this.fmt.flushPartialNow();
     this.endCard();
     this.spinner.stop();
-    this.err.write(`${pc.red(text)}\n`);
+    this.channel.writeRaw(`${pc.red(text)}\n`, "stderr");
   }
 
   flush(): void {
@@ -301,7 +304,9 @@ export class Renderer {
 
   /** Footer with model, provider, and total duration. */
   footer(model: string, provider: string, durationMs: number): void {
-    this.out.write(`\n${pc.dim("▣")} ${model} · ${provider} · ${pc.dim(`${durationMs}ms`)}\n`);
+    this.channel.writeRaw(
+      `\n${pc.dim("▣")} ${model} · ${provider} · ${pc.dim(`${durationMs}ms`)}\n`,
+    );
   }
 
   private endCard(): void {

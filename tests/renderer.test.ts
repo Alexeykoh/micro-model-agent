@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { Writable } from "stream";
 import { Renderer, toolMarker } from "../src/ui/renderer";
+import { OutputBus } from "../src/output/bus";
+import { OutputChannel } from "../src/output/channel";
 
 class Capture extends Writable {
   chunks: string[] = [];
@@ -18,10 +20,14 @@ function makeRenderer(): {
   capture: Capture;
 } {
   const capture = new Capture();
-  const renderer = new Renderer({
-    rich: true,
+  const channel = new OutputChannel(new OutputBus(), {
     out: capture,
     err: capture,
+    color: false,
+  });
+  const renderer = new Renderer({
+    rich: true,
+    channel,
     width: 60,
   });
   return { renderer, capture };
@@ -96,10 +102,14 @@ describe("Renderer", () => {
 describe("Renderer plain mode", () => {
   it("does not emit box characters", () => {
     const capture = new Capture();
-    const renderer = new Renderer({
-      rich: false,
+    const channel = new OutputChannel(new OutputBus(), {
       out: capture,
       err: capture,
+      color: false,
+    });
+    const renderer = new Renderer({
+      rich: false,
+      channel,
       width: 60,
     });
     renderer.toolStart("bash", { command: "bun test" });
