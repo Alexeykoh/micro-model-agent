@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { join, sep } from "path";
 import { tmpdir } from "os";
 import { Renderer, summarizeArgs } from "../../src/ui/renderer";
 import { OutputBus } from "../../src/output/bus";
-import { OutputChannel } from "../../src/output/channel";
+import { OutputChannel, resetDefaultChannel } from "../../src/output";
+import { writeWarning } from "../../src/ui/output";
 
 function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   const parts: string[] = [];
@@ -314,5 +315,20 @@ describe("Renderer", () => {
       expect(err()).not.toContain("Question to user");
       renderer.toolEnd("question", 1, false);
     });
+  });
+});
+
+describe("deprecated output wrappers", () => {
+  it("writeWarning reaches the default channel before any Renderer exists", () => {
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      resetDefaultChannel();
+      writeWarning("warn-test");
+      const written = spy.mock.calls.map((call) => String(call[0])).join("");
+      expect(written).toContain("warn-test");
+    } finally {
+      resetDefaultChannel();
+      spy.mockRestore();
+    }
   });
 });

@@ -218,9 +218,9 @@ export class Renderer {
     stepContext?: string | null,
     icon?: string,
   ): void {
+    this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
-    this.spinner.stop();
     this.outputLineCount = 0;
     this.outputSuppressed = false;
     const displayArgs =
@@ -244,9 +244,9 @@ export class Renderer {
 
   /** Live plan checklist — prints the plan block as-is (already colored). */
   planBlock(lines: string[]): void {
+    this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
-    this.spinner.stop();
     for (const line of lines) {
       this.channel.writeRaw(`${line}\n`);
     }
@@ -259,8 +259,8 @@ export class Renderer {
     ctxDelta?: number,
     costUsd?: number,
   ): void {
-    this.fmt.flushPartialNow();
     this.spinner.stop();
+    this.fmt.flushPartialNow();
     if (!this.card) return;
     const marker = error ? pc.red("✗") : pc.green("✓");
     let footer = `${GUTTER}${marker} ${pc.dim(`${duration}ms`)}`;
@@ -282,22 +282,23 @@ export class Renderer {
 
   /** Raw pre-formatted text (diff blocks, warnings). */
   raw(text: string): void {
+    this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
-    this.spinner.stop();
     this.channel.writeRaw(text);
   }
 
   error(text: string): void {
+    this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
-    this.spinner.stop();
     this.channel.writeRaw(`${pc.red(text)}\n`, "stderr");
   }
 
   flush(): void {
     this.endCard();
     this.spinner.stop();
+    this.fmt.flushPartialNow();
     this.fmt.flush();
     this.textStarted = false;
   }

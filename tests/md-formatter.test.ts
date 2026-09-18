@@ -81,14 +81,19 @@ describe("formatMarkdown", () => {
   });
 });
 
+function makeStream(): { chunks: string[]; stream: FormattingStream } {
+  const chunks: string[] = [];
+  const stream = new FormattingStream(
+    (line) => chunks.push(line + "\n"),
+    60,
+    (text) => chunks.push(text),
+  );
+  return { chunks, stream };
+}
+
 describe("FormattingStream.flushPartialNow", () => {
   it("finalizes a displayed raw partial without duplication or rewinding", () => {
-    const chunks: string[] = [];
-    const stream = new FormattingStream(
-      (line) => chunks.push(line + "\n"),
-      60,
-      (text) => chunks.push(text),
-    );
+    const { chunks, stream } = makeStream();
     stream.write("partial");
     expect(stream.hasPartial()).toBe(true);
     stream.flushPartialNow();
@@ -101,5 +106,40 @@ describe("FormattingStream.flushPartialNow", () => {
     expect(out.indexOf("next line")).toBeGreaterThan(out.indexOf("partial"));
     expect(out).toContain("partial\nnext line\n");
     expect(out).not.toContain("\x1b[7D");
+  });
+
+  it("is idempotent and emits only one trailing newline", () => {
+    const { chunks, stream } = makeStream();
+    stream.write("partial");
+    stream.flushPartialNow();
+    stream.flushPartialNow();
+    expect(chunks.join("")).toBe("partial\n");
+  });
+
+  it("keeps an open code block open so following prose is not swallowed", () => {
+    const { chunks, stream } = makeStream();
+    stream.write("```ts\nconst x = 1");
+    stream.flushPartialNow();
+    expect(chunks.join("")).toBe("");
+    stream.write("\n```\nprose after\n");
+    stream.flush();
+    const out = chunks.join("");
+    const boxStart = out.indexOf("┌");
+    const boxEnd = out.lastIndexOf("┘");
+    expect(boxStart).toBeGreaterThanOrEqual(0);
+    const codeBox = out.slice(boxStart, boxEnd + 1);
+    expect(codeBox).toContain("const x = 1");
+    expect(codeBox).not.toContain("prose after");
+    expect(out.indexOf("prose after")).toBeGreaterThan(boxEnd);
+  });
+
+  it("flushes a pending table buffer", () => {
+    const { chunks, stream } = makeStream();
+    stream.write("| Name | Value |\n|---|---|\n");
+    stream.flushPartialNow();
+    const out = chunks.join("");
+    expect(out).toContain("┌");
+    expect(out).toContain("Name");
+    expect(out).toContain("Value");
   });
 });
