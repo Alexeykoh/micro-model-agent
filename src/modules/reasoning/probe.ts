@@ -19,9 +19,9 @@ interface CacheEntry {
 /** TTL: re-probe after 24 hours. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Disk cache path: ~/.mma/reasoning-cache.json */
+/** Disk cache path: ~/.mma/reasoning-cache.json (override with MMA_REASONING_CACHE). */
 function cachePath(): string {
-  return join(homedir(), ".mma", "reasoning-cache.json");
+  return process.env.MMA_REASONING_CACHE ?? join(homedir(), ".mma", "reasoning-cache.json");
 }
 
 /** In-memory L1 cache (same-process fast path). */

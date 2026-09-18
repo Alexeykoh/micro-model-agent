@@ -185,6 +185,9 @@ describe("bootstrap", () => {
       };
     }) as unknown as typeof global.fetch;
 
+    // Sandbox the probe disk cache so the test never touches ~/.mma.
+    const originalCachePath = process.env.MMA_REASONING_CACHE;
+    process.env.MMA_REASONING_CACHE = join(dir, "reasoning-cache.json");
     try {
       resetProbeCache();
       const { contextProbe } = await bootstrap(dir, dir);
@@ -218,6 +221,8 @@ describe("bootstrap", () => {
       }
       global.fetch = originalFetch;
       resetProbeCache();
+      if (originalCachePath === undefined) delete process.env.MMA_REASONING_CACHE;
+      else process.env.MMA_REASONING_CACHE = originalCachePath;
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
