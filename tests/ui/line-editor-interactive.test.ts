@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Readable } from "stream";
 import { LineEditor } from "../../src/ui/line-editor";
 
@@ -21,10 +21,7 @@ class FakeOutput {
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-function makeEditor(opts?: {
-  columns?: number;
-  onInterrupt?: () => void;
-}) {
+function makeEditor(opts?: { columns?: number; onInterrupt?: () => void }) {
   const input = new FakeInput();
   const output = new FakeOutput();
   if (opts?.columns) output.columns = opts.columns;
@@ -40,6 +37,13 @@ function makeEditor(opts?: {
 }
 
 describe("LineEditor interactive", () => {
+  beforeEach(() => {
+    process.env.MMA_DSR = "0";
+  });
+  afterEach(() => {
+    delete process.env.MMA_DSR;
+  });
+
   it("renders the prompt with cursor after it", () => {
     const { editor, output } = makeEditor();
     editor.prompt();
@@ -137,5 +141,49 @@ describe("LineEditor interactive", () => {
     editor.setPrompt("... ");
     editor.prompt();
     expect(output.data).toContain("... ");
+  });
+
+  it("printAbove erases the frame, prints the block and redraws the prompt", () => {
+    process.env.MMA_DSR = "0";
+    const { editor, output } = makeEditor();
+    editor.prompt();
+    output.data = "";
+    editor.printAbove("hello\nworld");
+    expect(output.data).toContain("hello\r\nworld\r\n");
+    expect(output.data).toContain("> ");
+    delete process.env.MMA_DSR;
+  });
+
+  it("printAbove writes plainly when not a TTY", () => {
+    const input = new FakeInput();
+    (input as { isTTY: boolean }).isTTY = false;
+    const output = new FakeOutput();
+    const editor = new LineEditor({
+      input: input as never,
+      output: output as never,
+      prompt: "> ",
+    });
+    editor.printAbove("x");
+    expect(output.data).toBe("x\n");
+  });
+
+  it("suspendFrame stops rendering; resumeFrame redraws", () => {
+    process.env.MMA_DSR = "0";
+    const { editor, input, output } = makeEditor();
+    editor.prompt();
+    editor.suspendFrame();
+    output.data = "";
+    input.pushData("abc");
+    editor.resumeFrame();
+    expect(output.data).toContain("> ");
+    delete process.env.MMA_DSR;
+  });
+
+  it("setInputEnabled(false) swallows printable keys but keeps Ctrl+C", async () => {
+    const { editor, input, lines } = makeEditor();
+    editor.setInputEnabled(false);
+    input.pushData("abc\r");
+    await tick();
+    expect(lines).toEqual([]);
   });
 });

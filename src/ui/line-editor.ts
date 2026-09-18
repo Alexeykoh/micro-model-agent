@@ -16,6 +16,7 @@ export interface LineInput {
   write(s: string): void;
   question(query: string, cb: (answer: string) => void): void;
   close(): void;
+  printAbove?(text: string): void;
   on(event: "line", listener: (line: string) => void): this;
   on(event: "close", listener: () => void): this;
 }
@@ -97,6 +98,14 @@ export class LineEditor implements LineInput {
   private dsrPending = false;
   /** Buffer for partial DSR escape sequences split across data chunks. */
   private dsrTail = "";
+  /** When false, keystrokes are ignored (except Ctrl+C) while the agent
+   *  streams — the host owns the terminal during that phase. */
+  private inputEnabled = true;
+  /** While true the prompt frame is not drawn; the agent owns the screen. */
+  private frameSuspended = false;
+  /** Clears `dsrPending` when no DSR reply arrives, falling back to
+   *  relative cursor moves instead of wedging on a broken terminal. */
+  private dsrTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: LineEditorOptions) {
     this.input = opts.input;
@@ -117,8 +126,7 @@ export class LineEditor implements LineInput {
       // Raw data listener for DSR cursor-position replies. Runs alongside
       // readline's keypress emitter (both receive every chunk); replies may
       // arrive merged with regular keystrokes, hence the global regex.
-      this.dsrDataHandler = (buf: Buffer | string) =>
-        this.consumeDsrReplies(buf.toString("utf-8"));
+      this.dsrDataHandler = (buf: Buffer | string) => this.consumeDsrReplies(buf.toString("utf-8"));
       (this.input as any).on("data", this.dsrDataHandler);
       readline.emitKeypressEvents(this.input as never);
       this.keypressHandler = (str: string, key: unknown) => this.onKey(str, key);
@@ -162,6 +170,52 @@ export class LineEditor implements LineInput {
     this.insertText(s);
   }
 
+  setInputEnabled(enabled: boolean): void {
+    this.inputEnabled = enabled;
+  }
+
+  /** Clear the prompt frame (the agent takes over the terminal) and stop
+   *  rendering until `resumeFrame()`. */
+  suspendFrame(): void {
+    if (!this.input.isTTY || this.isDone) return;
+    const out: string[] = [];
+    if (this.frameTopAbs !== null) out.push(`\x1b[${this.frameTopAbs};1H`);
+    else if (this.prevCursorRow > 0) out.push(`\x1b[${this.prevCursorRow}A`);
+    out.push("\r\x1b[J");
+    this.output.write(out.join(""));
+    this.invalidateAnchor();
+    this.frameSuspended = true;
+  }
+
+  /** Restore the frame after streaming. */
+  resumeFrame(): void {
+    this.frameSuspended = false;
+    this.invalidateAnchor();
+    this.render();
+  }
+
+  /** Print a block of lines above the current prompt frame without erasing
+   *  the input buffer. When the frame is suspended the block is printed in
+   *  place and the suspension is preserved. */
+  printAbove(text: string): void {
+    if (!this.input.isTTY || this.isDone) {
+      this.output.write(text.endsWith("\n") ? text : `${text}\n`);
+      return;
+    }
+    const wasSuspended = this.frameSuspended;
+    this.frameSuspended = false;
+    const out: string[] = [];
+    if (this.frameTopAbs !== null) out.push(`\x1b[${this.frameTopAbs};1H`);
+    else if (this.prevCursorRow > 0) out.push(`\x1b[${this.prevCursorRow}A`);
+    out.push("\r\x1b[J");
+    out.push(text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n").join("\r\n"));
+    out.push("\r\n");
+    this.output.write(out.join(""));
+    this.invalidateAnchor();
+    if (wasSuspended) this.frameSuspended = true;
+    else this.render();
+  }
+
   reset(): void {
     this.lines = [""];
     this.row = 0;
@@ -194,6 +248,10 @@ export class LineEditor implements LineInput {
     if (this.rawMode && this.input.setRawMode) {
       this.input.setRawMode(false);
     }
+    if (this.dsrTimer) {
+      clearTimeout(this.dsrTimer);
+      this.dsrTimer = null;
+    }
     this.emitClose();
   }
 
@@ -221,6 +279,12 @@ export class LineEditor implements LineInput {
 
   private onKey(str: string, key: unknown): void {
     if (this.isDone) return;
+    if (!this.inputEnabled) {
+      // While streaming, only allow interrupt (Ctrl+C / Esc).
+      const k = key as { name?: string; ctrl?: boolean };
+      if (k?.ctrl && k.name === "c") this.ctrlC();
+      return;
+    }
     if (this.onKeyInput && this.onKeyInput(str, key)) return;
 
     const k = key as {
@@ -784,11 +848,7 @@ export class LineEditor implements LineInput {
 
   private layout(): LayoutRow[] {
     const promptWidth = stringWidth(stripAnsi(this.promptStr));
-    return buildLayout(
-      this.lines,
-      this.columns(),
-      Math.max(1, this.columns() - promptWidth),
-    );
+    return buildLayout(this.lines, this.columns(), Math.max(1, this.columns() - promptWidth));
   }
 
   /** 1-based terminal height, or null when unknown (tests / non-TTY). */
@@ -819,6 +879,10 @@ export class LineEditor implements LineInput {
     this.dsrPending = false;
     this.dsrTail = "";
     this.prevCursorRow = 0;
+    if (this.dsrTimer) {
+      clearTimeout(this.dsrTimer);
+      this.dsrTimer = null;
+    }
   }
 
   /** Parse `ESC[row;colR` cursor-position replies. Buffers partial escape
@@ -843,7 +907,7 @@ export class LineEditor implements LineInput {
   }
 
   private render(): void {
-    if (!this.input.isTTY || this.isDone) return;
+    if (!this.input.isTTY || this.isDone || this.frameSuspended) return;
     const layout = this.visibleLayout();
     const promptWidth = stringWidth(stripAnsi(this.promptStr));
     const idx = layoutIndexFor(layout, this.row, this.col);
@@ -876,6 +940,8 @@ export class LineEditor implements LineInput {
     if (ccol > 0) out.push(`\x1b[${ccol}C`);
     this.output.write(out.join(""));
 
+    this.prevCursorRow = idx;
+
     // Deterministic scroll math: update the anchor for the NEXT render.
     // After writing L rows starting from frameTopAbs, if the frame extends
     // past the screen bottom the terminal scrolls; the new frame top is
@@ -888,17 +954,18 @@ export class LineEditor implements LineInput {
         if (T + L - 1 > H) this.frameTopAbs = H - L + 1;
         // else: no scroll, anchor unchanged
       }
-    } else if (!this.dsrPending) {
-      // First render after prompt — send exactly ONE DSR query.
-      // Disabled for now: ConPTY may buffer stdout while processing
-      // the DSR reply, hiding agent responses.  Will revisit once
-      // scroll-proof rendering is solved via deterministic tracking.
-      //
-      // this.dsrPending = true;
-      // this.output.write("\x1b[6n");
+    } else if (!this.dsrPending && process.env.MMA_DSR !== "0") {
+      // One DSR query per frame; MMA_DSR=0 disables it (ConPTY can buffer
+      // stdout while waiting for the reply). A timeout clears dsrPending so
+      // a non-responding terminal only falls back to relative moves.
+      this.dsrPending = true;
+      this.output.write("\x1b[6n");
+      if (this.dsrTimer) clearTimeout(this.dsrTimer);
+      this.dsrTimer = setTimeout(() => {
+        this.dsrPending = false;
+        this.dsrTimer = null;
+      }, 150);
     }
-
-    this.prevCursorRow = idx;
   }
 
   private enableTerminalProtocols(): void {

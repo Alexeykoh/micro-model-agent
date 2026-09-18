@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Readable } from "stream";
 import { LineEditor } from "../../src/ui/line-editor";
 import {
@@ -133,6 +133,13 @@ describe("line-math", () => {
 });
 
 describe("LineEditor", () => {
+  beforeEach(() => {
+    process.env.MMA_DSR = "0";
+  });
+  afterEach(() => {
+    delete process.env.MMA_DSR;
+  });
+
   it("emits a line on Enter", async () => {
     const { input, lines } = makeEditor();
     input.pushData("hello");
@@ -319,11 +326,17 @@ describe("LineEditor", () => {
     expect(clears).toBeGreaterThanOrEqual(layout.length);
   });
 
-  it("does not send DSR queries (disabled for ConPTY compatibility)", async () => {
-    const { input, output } = makeEditor();
-    input.pushData("hi");
+  it("sends one DSR query per frame by default and parses the reply", async () => {
+    delete process.env.MMA_DSR;
+    const { editor, input, output } = makeEditor({ prompt: "You: " });
+    editor.prompt();
+    expect(output.data).toContain("\x1b[6n");
+    output.data = "";
+    input.pushData("\x1b[4;1R"); // cursor-position report: row 4
     await tick();
-    expect(output.data).not.toContain("\x1b[6n");
+    input.pushData("!");
+    await tick();
+    expect(output.data.startsWith("\x1b[4;1H")).toBe(true);
   });
 
   it("learns the absolute frame anchor from a DSR reply", async () => {
