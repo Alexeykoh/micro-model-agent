@@ -1,7 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { createHostBridge } from "../../src/cli/repl";
+import { defaultOutputBus, type OutputEvent } from "../../src/output";
 
 describe("createHostBridge", () => {
+  afterEach(() => {
+    defaultOutputBus.reset();
+  });
+
   function makeOpts(overrides?: Partial<Parameters<typeof createHostBridge>[0]>) {
     return {
       isBusy: vi.fn().mockReturnValue(false),
@@ -36,6 +41,25 @@ describe("createHostBridge", () => {
     expect(opts.addPendingImage).toHaveBeenCalledWith(url);
     expect(opts.addPendingImage).toHaveBeenCalledTimes(1);
     expect(opts.runAgent).toHaveBeenCalledWith("look");
+  });
+
+  it("subscribeOutput forwards defaultOutputBus events until unsubscribed", () => {
+    const bridge = createHostBridge(makeOpts());
+    const seen: OutputEvent[] = [];
+    const unsub = bridge.subscribeOutput!((ev) => seen.push(ev));
+
+    defaultOutputBus.log("warn", "probe.context", "small context");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      kind: "log",
+      level: "warn",
+      source: "probe.context",
+      text: "small context",
+    });
+
+    unsub();
+    defaultOutputBus.log("error", "mcp", "after unsubscribe");
+    expect(seen).toHaveLength(1);
   });
 
   it("interrupt only fires while busy", () => {

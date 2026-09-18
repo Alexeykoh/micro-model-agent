@@ -36,7 +36,8 @@ export interface SessionLogEntry {
     | "moe_plan"
     | "moe_subtask"
     | "moe_replan"
-    | "moe_verify";
+    | "moe_verify"
+    | "output";
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -112,7 +113,7 @@ export interface SessionLogEntry {
   // baseline_typecheck fields
   passed?: boolean;
   message?: string;
-  // reasoning_control fields
+  // reasoning_control fields; `level` is also the severity of persisted output events
   level?: string;
   strategy?: string;
   probePassed?: boolean;
@@ -196,7 +197,10 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(meta, null, 2);
     if (this.encryptor) {
-      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), { encoding: "utf-8", mode: 0o600 });
+      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
     } else {
       writeFileSync(this.metaPath(id), content, { encoding: "utf-8", mode: 0o600 });
     }
@@ -237,7 +241,10 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(msg);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", { encoding: "utf-8", mode: 0o600 });
+      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
     } else {
       appendFileSync(this.historyPath(id), line + "\n", { encoding: "utf-8", mode: 0o600 });
     }
@@ -290,11 +297,10 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(entry);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(
-        this.sessionLogPath(id),
-        this.encryptor.encryptFileContent(line) + "\n",
-        { encoding: "utf-8", mode: 0o600 },
-      );
+      appendFileSync(this.sessionLogPath(id), this.encryptor.encryptFileContent(line) + "\n", {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
     } else {
       appendFileSync(this.sessionLogPath(id), line + "\n", { encoding: "utf-8", mode: 0o600 });
     }

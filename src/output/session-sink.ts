@@ -1,14 +1,14 @@
 import type { OutputBus } from "./bus";
 import type { OutputEvent } from "./types";
+import type { SessionManager } from "../modules/session/manager";
 
 /**
- * Narrow session-log contract so the sink stays testable without a real
- * manager. `any` (not `Record<string, unknown>`) keeps `SessionManager`
- * assignable: its `appendLog` takes the narrower `SessionLogEntry` union, which
- * is not bivariant with an index-signature record.
+ * Narrow session-log seam so the sink stays testable without a real manager.
+ * Typed via `SessionManager.appendLog` — no `any`, and a real manager is
+ * assignable by construction.
  */
 export interface SessionLogSink {
-  appendLog(entry: any): void;
+  appendLog(entry: Parameters<SessionManager["appendLog"]>[0]): void;
 }
 
 /**

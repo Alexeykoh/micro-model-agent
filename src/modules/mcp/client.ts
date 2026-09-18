@@ -140,6 +140,7 @@ export class MCPClient {
         "error",
         "mcp",
         `[MCPClient] Unparseable SSE message: ${String(data).slice(0, 120)} ${e instanceof Error ? e.message : String(e)}`,
+        { persist: true },
       );
     }
   }

@@ -6,6 +6,7 @@ import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { order, applyAnswersToConfig } from "./setup-order";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
+import { buildJsonError, buildJsonResult } from "./json-payload";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -18,6 +19,13 @@ import { installCrashHandlers } from "../core/crash-handler";
 import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
+
+/**
+ * Set once `--json` is parsed. Module-scoped so the top-level `main().catch`
+ * can still emit a valid document when `bootstrap` (or anything before the
+ * JSON branch) throws with empty stdout.
+ */
+let jsonMode = false;
 
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
@@ -82,13 +90,14 @@ async function main(): Promise<void> {
   const noAgentsMd = opts.noAgentsMd === true;
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
-  const jsonMode = opts.json === true;
+  jsonMode = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
 
   // `--json` owns stdout: silence the human channel before bootstrap so config
-  // warnings/migration notices cannot pollute the machine-readable document.
-  // The sink subscribes BEFORE bootstrap so probe/config warnings emitted during
-  // bootstrap are captured and surfaced in the JSON payload as diagnostics.
+  // warnings cannot pollute the machine-readable document. The sink subscribes
+  // BEFORE bootstrap so warn/error events emitted during bootstrap are captured
+  // and surfaced as diagnostics. Info-level migration notices are intentionally
+  // not captured (diagnostics are warn/error only).
   if (jsonMode) getDefaultChannel().setQuiet(true);
   const jsonSink = jsonMode ? new JsonOutputSink(defaultOutputBus) : undefined;
 
@@ -140,34 +149,14 @@ async function main(): Promise<void> {
         agent.shutdown();
         const diagnostics = jsonSink?.diagnostics() ?? [];
         jsonSink?.dispose();
-        writeMachineJson({
-          success: false,
-          text: "",
-          error: message,
-          iterationCount: 0,
-          diagnostics,
-        });
+        writeMachineJson(buildJsonError(message, diagnostics));
         await updater?.waitForIdle(10_000);
         process.exit(1);
       }
       agent.shutdown();
       const diagnostics = jsonSink?.diagnostics() ?? [];
       jsonSink?.dispose();
-      writeMachineJson({
-        success: result.success,
-        text: result.text,
-        error: result.error ?? null,
-        iterationCount: result.iterationCount,
-        contextUsed: result.contextUsed ?? null,
-        contextLimit: result.contextLimit ?? null,
-        promptTokens: result.promptTokens ?? null,
-        completionTokens: result.completionTokens ?? null,
-        totalTokens: result.totalTokens ?? null,
-        totalCost: result.totalCost ?? null,
-        costBreakdown: result.costBreakdown ?? [],
-        cache: result.cache ?? null,
-        diagnostics,
-      });
+      writeMachineJson(buildJsonResult(result, diagnostics));
       await updater?.waitForIdle(10_000);
       process.exit(result.success ? 0 : 1);
     }
@@ -297,10 +286,16 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  getDefaultChannel().writeLine(
-    err instanceof Error ? (err.stack ?? err.message) : String(err),
-    "stderr",
-  );
+  // A throw before/during bootstrap would otherwise leave `--json` callers with
+  // empty stdout; emit a valid failure document instead of a human stack.
+  if (jsonMode) {
+    writeMachineJson(buildJsonError(errMsg(err)));
+  } else {
+    getDefaultChannel().writeLine(
+      err instanceof Error ? (err.stack ?? err.message) : String(err),
+      "stderr",
+    );
+  }
   process.exit(1);
 });
 

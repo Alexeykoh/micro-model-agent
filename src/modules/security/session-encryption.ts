@@ -130,6 +130,7 @@ export class SessionFileEncryptor {
           `[session-encryption] failed to decrypt JSONL line — skipping it: ${
             e instanceof Error ? e.message : String(e)
           }`,
+          { persist: true },
         );
         return [];
       }

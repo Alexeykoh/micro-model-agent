@@ -211,6 +211,7 @@ export class AuditNotifier {
           "warn",
           "audit",
           `[AuditNotifier] Webhook failed, adding to retry queue: ${error instanceof Error ? error.message : String(error)}`,
+          { persist: true },
         );
         this.addToRetryQueue(notification);
       }
@@ -267,6 +268,7 @@ export class AuditNotifier {
         "error",
         "audit",
         `[AuditNotifier] Failed to write to file: ${error instanceof Error ? error.message : String(error)}`,
+        { persist: true },
       );
     }
   }
@@ -324,6 +326,7 @@ export class AuditNotifier {
             "error",
             "audit",
             `[AuditNotifier] Max retries exceeded for notification: ${JSON.stringify(item.entry)}`,
+            { persist: true },
           );
           this.retryQueue.shift();
           continue;
@@ -342,6 +345,7 @@ export class AuditNotifier {
             `[AuditNotifier] Webhook retry ${item.retries} failed: ${
               error instanceof Error ? error.message : String(error)
             }`,
+            { persist: true },
           );
           // Exponential backoff before the next attempt on the same head item.
           const delay = backoffDelay(item.retries, 1000);
@@ -370,6 +374,7 @@ export class AuditNotifier {
         "error",
         "audit",
         `[AuditNotifier] Failed to read notifications: ${error instanceof Error ? error.message : String(error)}`,
+        { persist: true },
       );
       return [];
     }

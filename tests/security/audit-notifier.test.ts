@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   AuditNotifier,
@@ -8,6 +8,7 @@ import {
   type AuditNotifierConfig,
 } from "../../src/modules/security/audit-notifier";
 import type { AuditLogEntry } from "../../src/modules/security/audit-log";
+import { defaultOutputBus, type OutputEvent } from "../../src/output";
 
 const TEST_DIR = join(__dirname, "test-audit-notifier");
 const TEST_FILE = join(TEST_DIR, "audit-notifications.jsonl");
@@ -282,6 +283,21 @@ describe("AuditNotifier", () => {
     it("should return empty array for non-existent file", () => {
       const notifications = notifier.readNotifications();
       expect(notifications).toEqual([]);
+    });
+
+    it("marks read-failure diagnostics for session persistence", () => {
+      writeFileSync(TEST_FILE, "not valid json\n", "utf8");
+      const events: OutputEvent[] = [];
+      const unsub = defaultOutputBus.subscribe((ev) => events.push(ev));
+      try {
+        notifier.readNotifications();
+      } finally {
+        unsub();
+      }
+
+      const ev = events.find((e) => e.source === "audit" && e.level === "error");
+      expect(ev).toBeDefined();
+      expect(ev?.data).toMatchObject({ persist: true });
     });
   });
 

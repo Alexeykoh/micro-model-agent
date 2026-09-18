@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { OutputBus } from "../../src/output";
 import { SessionOutputSink } from "../../src/output/session-sink";
+import type { SessionLogEntry } from "../../src/modules/session/store";
 
 describe("SessionOutputSink", () => {
   it("persists only events marked data.persist === true", () => {
     const bus = new OutputBus();
-    const logs: Array<Record<string, unknown>> = [];
+    const logs: SessionLogEntry[] = [];
     const sink = new SessionOutputSink(bus, { appendLog: (entry) => logs.push(entry) });
 
     bus.log("info", "indexer", "transient");
@@ -26,7 +27,7 @@ describe("SessionOutputSink", () => {
 
   it("dispose() detaches from the bus", () => {
     const bus = new OutputBus();
-    const logs: Array<Record<string, unknown>> = [];
+    const logs: SessionLogEntry[] = [];
     const sink = new SessionOutputSink(bus, { appendLog: (entry) => logs.push(entry) });
 
     bus.log("warn", "a", "before", { persist: true });
