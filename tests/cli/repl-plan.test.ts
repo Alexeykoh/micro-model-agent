@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { Repl } from "../../src/cli/repl";
 import { ExecutionModule } from "../../src/modules/execution/module";
+import { makeCaptureChannel } from "./capture-channel";
 
 function makeRepl(execModule?: ExecutionModule): Repl {
+  const { channel } = makeCaptureChannel();
   return new Repl(
     { shutdown: () => {}, run: async () => ({}) } as any,
     { ui: {} } as any,
@@ -17,6 +19,8 @@ function makeRepl(execModule?: ExecutionModule): Repl {
     undefined,
     undefined,
     execModule,
+    undefined,
+    channel,
   );
 }
 

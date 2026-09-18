@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Repl } from "../../src/cli/repl";
+import { makeCaptureChannel } from "./capture-channel";
 
 describe("REPL multi-line input", () => {
   const createMockRepl = () => {
@@ -21,7 +22,24 @@ describe("REPL multi-line input", () => {
       session: { autoSave: false, maxSessions: 50, isolateMemory: false },
     } as any;
 
-    return new Repl(mockAgent, mockConfig);
+    const { channel } = makeCaptureChannel();
+    return new Repl(
+      mockAgent,
+      mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      channel,
+    );
   };
 
   it("should detect multi-line input with backslash continuation", () => {

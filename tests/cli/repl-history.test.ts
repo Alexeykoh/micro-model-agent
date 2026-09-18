@@ -3,6 +3,7 @@ import { Repl } from "../../src/cli/repl";
 import { existsSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { makeCaptureChannel } from "./capture-channel";
 
 describe("REPL persistent history", () => {
   let dir: string;
@@ -38,7 +39,24 @@ describe("REPL persistent history", () => {
       shutdown: () => {},
     } as any;
 
-    const repl = new Repl(mockAgent, makeMockConfig(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, historyPath);
+    const { channel } = makeCaptureChannel();
+    const repl = new Repl(
+      mockAgent,
+      makeMockConfig(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      historyPath,
+      undefined,
+      undefined,
+      channel,
+    );
 
     const rl = (repl as any).rl;
     rl.write("test command 1\n");
@@ -63,7 +81,24 @@ describe("REPL persistent history", () => {
       shutdown: () => {},
     } as any;
 
-    const repl = new Repl(mockAgent, makeMockConfig(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, historyPath);
+    const { channel } = makeCaptureChannel();
+    const repl = new Repl(
+      mockAgent,
+      makeMockConfig(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      historyPath,
+      undefined,
+      undefined,
+      channel,
+    );
     const history = (repl as any).history;
 
     expect(history).toContain("old command 1");

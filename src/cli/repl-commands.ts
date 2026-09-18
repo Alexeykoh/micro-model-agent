@@ -21,6 +21,7 @@ import type { LspModule } from "../modules/lsp/module";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { errMsg } from "../utils";
+import type { OutputChannel } from "../output";
 
 const version = readMmaVersion();
 
@@ -41,6 +42,8 @@ export interface ReplContext {
   readonly pluginManager?: PluginManager;
   readonly configDir: string;
   readonly baseDir: string;
+  /** Single terminal writer — commands must never write to console/stdout directly. */
+  readonly output: OutputChannel;
   registerCommand(cmd: SlashCommand): void;
   runAgent(input: string): Promise<void>;
   withExclusiveInput(fn: () => Promise<void>): Promise<void>;
@@ -117,7 +120,7 @@ function registerRunCommands(ctx: ReplContext): void {
     usage: t("repl.run_usage"),
     action: async (args: string[]) => {
       if (args.length === 0) {
-        console.log(t("repl.run_usage"));
+        ctx.output.writeLine(t("repl.run_usage"));
         return;
       }
       const prompt = args.join(" ");
@@ -132,7 +135,7 @@ function registerRunCommands(ctx: ReplContext): void {
     action: async (args: string[]) => {
       const source = args.join(" ");
       if (!source) {
-        console.log(t("repl.image_usage"));
+        ctx.output.writeLine(t("repl.image_usage"));
         return;
       }
       try {
@@ -147,7 +150,7 @@ function registerRunCommands(ctx: ReplContext): void {
         if (source.toLowerCase() === "clipboard") {
           const clipBuf = await readClipboardImage();
           if (!clipBuf) {
-            console.log(pc.yellow(t("image.clipboard_empty")));
+            ctx.output.writeLine(pc.yellow(t("image.clipboard_empty")));
             return;
           }
           const { bufferToDataUrl } = await import("../llm/image-utils");
@@ -161,7 +164,7 @@ function registerRunCommands(ctx: ReplContext): void {
         } else {
           const absPath = resolve(process.cwd(), source);
           if (!existsSync(absPath)) {
-            console.log(pc.red(t("image.not_found", { path: source })));
+            ctx.output.writeLine(pc.red(t("image.not_found", { path: source })), "stderr");
             return;
           }
           const result = await loadFileAsDataUrl(absPath);
@@ -171,7 +174,7 @@ function registerRunCommands(ctx: ReplContext): void {
 
         const contextManager = ctx.agent.contextManager;
         if (!contextManager) {
-          console.log(pc.red(t("image.no_context")));
+          ctx.output.writeLine(pc.red(t("image.no_context")), "stderr");
           return;
         }
 
@@ -181,9 +184,11 @@ function registerRunCommands(ctx: ReplContext): void {
         });
 
         const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-        console.log(pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })));
+        ctx.output.writeLine(
+          pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })),
+        );
       } catch (err: any) {
-        console.log(pc.red(t("image.error", { message: err.message })));
+        ctx.output.writeLine(pc.red(t("image.error", { message: err.message })), "stderr");
       }
     },
   });
@@ -205,29 +210,31 @@ function registerConfigCommands(ctx: ReplContext): void {
       const ctxW = cfg.contextWindow;
       const sys = Math.floor(ctxW * cfg.contextBudget.systemPrompt);
       const res = Math.floor(ctxW * cfg.contextBudget.responseReserve);
-      console.log(`${t("repl.model")}       ${cfg.model}`);
+      ctx.output.writeLine(`${t("repl.model")}       ${cfg.model}`);
       const providers = ctx.agent.listProviders();
       const active = providers.find((p) => p.active);
       if (active) {
-        console.log(
+        ctx.output.writeLine(
           `${t("repl.provider")}    ${active.label} (${pc.dim(active.type)})  →  ${pc.dim(active.baseUrl)}`,
         );
       } else {
-        console.log(`${t("repl.provider")}    ${cfg.provider.type}  →  ${cfg.provider.baseUrl}`);
+        ctx.output.writeLine(
+          `${t("repl.provider")}    ${cfg.provider.type}  →  ${cfg.provider.baseUrl}`,
+        );
       }
-      console.log(
+      ctx.output.writeLine(
         `${t("repl.context")}     ${ctxW}  (sys:${sys}  res:${res}  hist:${ctxW - sys - res})`,
       );
-      console.log(`${t("repl.max_iters")}   ${cfg.maxToolIterations}`);
-      console.log(`${t("repl.stuck_thresh")} ${cfg.stuckThreshold}`);
-      console.log(
+      ctx.output.writeLine(`${t("repl.max_iters")}   ${cfg.maxToolIterations}`);
+      ctx.output.writeLine(`${t("repl.stuck_thresh")} ${cfg.stuckThreshold}`);
+      ctx.output.writeLine(
         `${t("repl.reasoning_label")}   ${cfg.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"))}`,
       );
-      console.log(`${t("repl.log_level")}   ${cfg.logLevel}`);
-      console.log(`${t("repl.locale")}      ${cfg.locale}`);
+      ctx.output.writeLine(`${t("repl.log_level")}   ${cfg.logLevel}`);
+      ctx.output.writeLine(`${t("repl.locale")}      ${cfg.locale}`);
       const meta = ctx.sessionManager?.getActiveMeta();
       if (meta) {
-        console.log(
+        ctx.output.writeLine(
           `${t("repl.session_label")}     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`,
         );
       }
@@ -244,13 +251,15 @@ function registerConfigCommands(ctx: ReplContext): void {
         // Toggle show/hide reasoning content
         ctx.config.showReasoning = !ctx.config.showReasoning;
         const status = ctx.config.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"));
-        console.log(t("repl.reasoning_status", { status }));
+        ctx.output.writeLine(t("repl.reasoning_status", { status }));
       } else if (VALID_LEVELS.includes(level)) {
         // Set reasoning effort level
         ctx.agent.setReasoningLevel(level as any);
-        console.log(pc.green(t("repl.reasoning_level_set", { level })));
+        ctx.output.writeLine(pc.green(t("repl.reasoning_level_set", { level })));
       } else {
-        console.log(pc.yellow(t("repl.reasoning_invalid_level", { level, valid: VALID_LEVELS.join(", ") })));
+        ctx.output.writeLine(
+          pc.yellow(t("repl.reasoning_invalid_level", { level, valid: VALID_LEVELS.join(", ") })),
+        );
       }
     },
   });
@@ -261,19 +270,19 @@ function registerConfigCommands(ctx: ReplContext): void {
     action: () => {
       const providers = ctx.agent.listProviders();
       const active = providers.find((p) => p.active);
-      console.log(`${t("repl.model")} ${ctx.config.model}`);
+      ctx.output.writeLine(`${t("repl.model")} ${ctx.config.model}`);
       if (active) {
-        console.log(
+        ctx.output.writeLine(
           `${t("repl.provider")} ${active.label} (${pc.dim(active.type)}) @ ${pc.dim(active.baseUrl)}`,
         );
       } else {
-        console.log(
+        ctx.output.writeLine(
           `${t("repl.provider")} ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
         );
       }
       const meta = ctx.sessionManager?.getActiveMeta();
       if (meta) {
-        console.log(
+        ctx.output.writeLine(
           `${t("repl.session_label")} ${meta.name} (${meta.id}) — ${meta.messageCount} messages`,
         );
       }
@@ -285,7 +294,7 @@ function registerConfigCommands(ctx: ReplContext): void {
     aliases: ["setup"],
     usage: t("repl.wizard_usage"),
     action: async () => {
-      console.log(pc.yellow(t("repl.wizard_running")));
+      ctx.output.writeLine(pc.yellow(t("repl.wizard_running")));
       await ctx.withExclusiveInput(async () => {
         const answers = await runSetup(ctx.rl);
         const configPath = join(ctx.configDir, "config.json");
@@ -298,7 +307,7 @@ function registerConfigCommands(ctx: ReplContext): void {
         ctx.config.locale = answers.locale;
         saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
-        console.log(pc.green(t("cli.config_saved")));
+        ctx.output.writeLine(pc.green(t("cli.config_saved")));
       });
     },
   });
@@ -308,16 +317,18 @@ function registerConfigCommands(ctx: ReplContext): void {
     usage: t("repl.sysprompt_desc"),
     action: () => {
       const info = ctx.agent.getSystemPromptInfo();
-      console.log(pc.bold(t("repl.sysprompt_tokens", { count: String(info.tokenCount) })));
-      console.log(pc.dim("─".repeat(60)));
+      ctx.output.writeLine(pc.bold(t("repl.sysprompt_tokens", { count: String(info.tokenCount) })));
+      ctx.output.writeLine(pc.dim("─".repeat(60)));
       for (const line of info.text.split("\n")) {
-        console.log(line);
+        ctx.output.writeLine(line);
       }
-      console.log(pc.dim("─".repeat(60)));
+      ctx.output.writeLine(pc.dim("─".repeat(60)));
       if (info.excluded.length > 0) {
-        console.log(pc.yellow(t("repl.excluded_blocks", { count: String(info.excluded.length) })));
+        ctx.output.writeLine(
+          pc.yellow(t("repl.excluded_blocks", { count: String(info.excluded.length) })),
+        );
         for (const e of info.excluded) {
-          console.log(pc.dim(`  - ${e.slice(0, 80)}${e.length > 80 ? "..." : ""}`));
+          ctx.output.writeLine(pc.dim(`  - ${e.slice(0, 80)}${e.length > 80 ? "..." : ""}`));
         }
       }
     },
@@ -329,13 +340,13 @@ function registerConfigCommands(ctx: ReplContext): void {
     action: async (args: string[]) => {
       const indexer = ctx.agent.getModule<IndexerModule>("indexer");
       if (!indexer) {
-        console.log(pc.yellow(t("indexer.not_indexed")));
+        ctx.output.writeLine(pc.yellow(t("indexer.not_indexed")));
         return;
       }
       const action = args[0] || "summary";
       const query = args.slice(1).join(" ");
       const result = await runMapAction(indexer, action, query);
-      console.log(result.output);
+      ctx.output.writeLine(result.output);
     },
   });
 }
@@ -344,29 +355,29 @@ function registerProviderCommands(ctx: ReplContext): void {
   const list = (): void => {
     const providers = ctx.agent.listProviders();
     if (providers.length === 0) {
-      console.log(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
-      console.log(`  ${ctx.config.provider.baseUrl}`);
+      ctx.output.writeLine(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
+      ctx.output.writeLine(`  ${ctx.config.provider.baseUrl}`);
       return;
     }
-    console.log(t("repl.provider_current"));
+    ctx.output.writeLine(t("repl.provider_current"));
     for (const p of providers) {
       const marker = p.active ? pc.green("* ") : "  ";
-      console.log(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
+      ctx.output.writeLine(` ${marker}${p.label}  (${pc.dim(p.type)})  ${pc.dim(p.baseUrl)}`);
     }
   };
 
   const use = async (args: string[]): Promise<void> => {
     const name = args[0];
     if (!name) {
-      console.log(t("repl.provider_usage"));
+      ctx.output.writeLine(t("repl.provider_usage"));
       return;
     }
     try {
       await ctx.agent.setProvider(name);
       ctx.refreshModelCache();
-      console.log(pc.green(t("repl.provider_set", { name })));
+      ctx.output.writeLine(pc.green(t("repl.provider_set", { name })));
     } catch (e: any) {
-      console.log(pc.red(e.message));
+      ctx.output.writeLine(pc.red(e.message), "stderr");
     }
   };
 
@@ -378,7 +389,10 @@ function registerProviderCommands(ctx: ReplContext): void {
       if (arg.startsWith("--")) {
         const value = args[i + 1];
         if (value === undefined || value.startsWith("--")) {
-          console.log(pc.red(t("repl.provider_add_missing_value", { flag: arg })));
+          ctx.output.writeLine(
+            pc.red(t("repl.provider_add_missing_value", { flag: arg })),
+            "stderr",
+          );
           return;
         }
         flags[arg.slice(2)] = value;
@@ -388,12 +402,10 @@ function registerProviderCommands(ctx: ReplContext): void {
       }
     }
     if (!name) {
-      console.log(t("repl.provider_usage"));
+      ctx.output.writeLine(t("repl.provider_usage"));
       return;
     }
-    const entries = Array.isArray(ctx.config.provider.entries)
-      ? ctx.config.provider.entries
-      : [];
+    const entries = Array.isArray(ctx.config.provider.entries) ? ctx.config.provider.entries : [];
     if (entries.length === 0) {
       entries.push({
         type: ctx.config.provider.type,
@@ -405,7 +417,7 @@ function registerProviderCommands(ctx: ReplContext): void {
     const baseUrl =
       flags.url || HOSTED_BASE_URLS[name] || HOSTED_BASE_URLS[`opencode-${name}`] || "";
     if (!baseUrl) {
-      console.log(pc.red(t("cli.provider_no_url", { name })));
+      ctx.output.writeLine(pc.red(t("cli.provider_no_url", { name })), "stderr");
       return;
     }
     entries.push({
@@ -431,8 +443,8 @@ function registerProviderCommands(ctx: ReplContext): void {
     const configPath = join(ctx.configDir, "config.json");
     saveConfig(ctx.config, configPath, dirname(configPath));
     await ctx.agent.reconfigure(ctx.config);
-    console.log(pc.green(t("cli.provider_added", { name })));
-    console.log(t("repl.provider_switch_hint", { name }));
+    ctx.output.writeLine(pc.green(t("cli.provider_added", { name })));
+    ctx.output.writeLine(t("repl.provider_switch_hint", { name }));
   };
 
   const handlers: Record<string, (args: string[]) => void | Promise<void>> = {
@@ -449,14 +461,14 @@ function registerProviderCommands(ctx: ReplContext): void {
       const subcmd = args[0];
       const handler = subcmd ? handlers[subcmd] : handlers.list;
       if (!handler) {
-        console.log(t("repl.provider_usage"));
+        ctx.output.writeLine(t("repl.provider_usage"));
         return;
       }
       await handler(args.slice(1));
     },
   });
   const listModels = async (): Promise<void> => {
-    console.log(`${t("repl.model_current")}  ${ctx.config.model}`);
+    ctx.output.writeLine(`${t("repl.model_current")}  ${ctx.config.model}`);
 
     const { OpenAICompatProvider } = await import("../llm/openai-compat");
     const provider = new OpenAICompatProvider({
@@ -474,47 +486,43 @@ function registerProviderCommands(ctx: ReplContext): void {
       s.stop();
       if (models.length > 0) {
         ctx.refreshModelCache();
-        console.log(t("cli.available_models"));
+        ctx.output.writeLine(t("cli.available_models"));
         const { getCertMark } = await import("../modules/certification/manifest");
         for (const m of models) {
           const marker = m === ctx.config.model ? pc.green("* ") : "  ";
           const mark = getCertMark(m, ctx.config.provider.baseUrl, version, process.cwd());
           const cert =
-            mark === "certified"
-              ? pc.green("✔")
-              : mark === "stale"
-                ? pc.yellow("○")
-                : pc.dim("·");
+            mark === "certified" ? pc.green("✔") : mark === "stale" ? pc.yellow("○") : pc.dim("·");
           const label =
             mark === "certified"
               ? `  ${pc.green(t("cli.cert_label"))}`
               : mark === "stale"
                 ? `  ${pc.yellow(t("cli.cert_stale_label"))}`
                 : "";
-          console.log(` ${marker}${cert} ${m}${label}`);
+          ctx.output.writeLine(` ${marker}${cert} ${m}${label}`);
         }
       } else {
-        console.log(t("cli.no_models_found"));
+        ctx.output.writeLine(t("cli.no_models_found"));
       }
     } catch (err) {
       s.stop();
-      console.log(t("cli.model_fetch_failed", { error: String(err) }));
+      ctx.output.writeLine(t("cli.model_fetch_failed", { error: String(err) }), "stderr");
     }
 
-    console.log(t("cli.model_hint"));
+    ctx.output.writeLine(t("cli.model_hint"));
   };
 
   const useModel = async (args: string[]): Promise<void> => {
     const name = args[0];
     if (!name) {
-      console.log(t("repl.model_usage"));
+      ctx.output.writeLine(t("repl.model_usage"));
       return;
     }
     ctx.config.model = name;
     const configPath = join(ctx.configDir, "config.json");
     saveConfig(ctx.config, configPath, dirname(configPath));
     await ctx.agent.reconfigure(ctx.config);
-    console.log(pc.green(t("repl.model_set", { name })));
+    ctx.output.writeLine(pc.green(t("repl.model_set", { name })));
   };
 
   const modelHandlers: Record<string, (args: string[]) => void | Promise<void>> = {
@@ -530,7 +538,7 @@ function registerProviderCommands(ctx: ReplContext): void {
       const subcmd = args[0];
       const handler = subcmd ? modelHandlers[subcmd] : modelHandlers.list;
       if (!handler) {
-        console.log(t("repl.model_usage"));
+        ctx.output.writeLine(t("repl.model_usage"));
         return;
       }
       await handler(args.slice(1));
@@ -548,8 +556,8 @@ function registerProviderCommands(ctx: ReplContext): void {
       };
 
       if (args.length === 0) {
-        for (const line of budgetBreakdownLines(ctx.config)) console.log(line);
-        console.log(pc.dim(t("repl.context_usage")));
+        for (const line of budgetBreakdownLines(ctx.config)) ctx.output.writeLine(line);
+        ctx.output.writeLine(pc.dim(t("repl.context_usage")));
         return;
       }
 
@@ -557,22 +565,22 @@ function registerProviderCommands(ctx: ReplContext): void {
         const key = args[0] as "system" | "reserve";
         const value = Number(args[1]);
         if (setBudgetShare(ctx.config, key, value) !== null) {
-          console.log(pc.yellow(t("cli.context_invalid_fraction")));
+          ctx.output.writeLine(pc.yellow(t("cli.context_invalid_fraction")));
           return;
         }
         await save();
-        console.log(pc.green(t("cli.context_fraction_set", { key, value })));
+        ctx.output.writeLine(pc.green(t("cli.context_fraction_set", { key, value })));
         return;
       }
 
       const size = parseInt(args[0], 10);
       if (isNaN(size) || size < 1024) {
-        console.log(t("cli.invalid_context_size"));
+        ctx.output.writeLine(t("cli.invalid_context_size"));
         return;
       }
       ctx.config.contextWindow = size;
       await save();
-      console.log(pc.green(t("cli.context_set", { size })));
+      ctx.output.writeLine(pc.green(t("cli.context_set", { size })));
     },
   });
 }
@@ -583,12 +591,12 @@ function registerAgentCommands(ctx: ReplContext): void {
     description: t("repl.reload"),
     usage: t("repl.reload_usage"),
     action: async () => {
-      console.log(pc.yellow(t("repl.reloading")));
+      ctx.output.writeLine(pc.yellow(t("repl.reloading")));
       await ctx.reload();
-      console.log(pc.green(t("repl.reloaded")));
-      console.log(`${t("repl.model")}       ${ctx.config.model}`);
-      console.log(`${t("repl.context")}     ${ctx.config.contextWindow}`);
-      console.log(
+      ctx.output.writeLine(pc.green(t("repl.reloaded")));
+      ctx.output.writeLine(`${t("repl.model")}       ${ctx.config.model}`);
+      ctx.output.writeLine(`${t("repl.context")}     ${ctx.config.contextWindow}`);
+      ctx.output.writeLine(
         `${t("repl.provider")}    ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
       );
     },
@@ -599,18 +607,18 @@ function registerAgentCommands(ctx: ReplContext): void {
     usage: t("repl.plugins_usage"),
     action: (args: string[]) => {
       if (!ctx.pluginManager) {
-        console.log(t("cli.plugins.none"));
+        ctx.output.writeLine(t("cli.plugins.none"));
         return;
       }
       const showAll = args.includes("--all");
       const infos = ctx.pluginManager.getPluginInfos();
       const filtered = showAll ? infos : infos.filter(({ plugin }) => !plugin.isBuiltin);
       if (filtered.length === 0) {
-        console.log(t("cli.plugins.none"));
+        ctx.output.writeLine(t("cli.plugins.none"));
         return;
       }
       const mmaVersion = version;
-      console.log(
+      ctx.output.writeLine(
         t("cli.plugins.header", {
           count: String(filtered.length),
           mma: mmaVersion,
@@ -620,12 +628,14 @@ function registerAgentCommands(ctx: ReplContext): void {
         const v = plugin.version || "-";
         const origin = source || "builtin";
         const mark = plugin.isBuiltin ? t("cli.plugins.builtin_mark") : " ";
-        console.log(`  ${mark} ${plugin.name}  v${v}  [${origin}]`);
+        ctx.output.writeLine(`  ${mark} ${plugin.name}  v${v}  [${origin}]`);
       }
       if (!showAll) {
         const builtinCount = infos.filter(({ plugin }) => plugin.isBuiltin).length;
         if (builtinCount > 0) {
-          console.log(pc.dim(`  (${builtinCount} builtin hidden — /plugins --all to show)`));
+          ctx.output.writeLine(
+            pc.dim(`  (${builtinCount} builtin hidden — /plugins --all to show)`),
+          );
         }
       }
     },
@@ -633,7 +643,6 @@ function registerAgentCommands(ctx: ReplContext): void {
 }
 
 function registerLspCommands(ctx: ReplContext): void {
-
   ctx.registerCommand({
     name: "lsp",
     description: t("repl.lsp"),
@@ -645,7 +654,7 @@ function registerLspCommands(ctx: ReplContext): void {
       const lspModule = ctx.agent.getModule<LspModule>("lsp");
 
       if (!lspModule) {
-        console.log(pc.yellow(t("repl.lsp_not_available")));
+        ctx.output.writeLine(pc.yellow(t("repl.lsp_not_available")));
         return;
       }
 
@@ -655,56 +664,58 @@ function registerLspCommands(ctx: ReplContext): void {
           const failures = lspModule.getFailureCounts();
           const config = ctx.config.lsp;
 
-          console.log(pc.bold(t("repl.lsp_status_header")));
-          console.log(`${t("repl.lsp_enabled")} ${config?.enabled ? pc.green("yes") : pc.red("no")}`);
+          ctx.output.writeLine(pc.bold(t("repl.lsp_status_header")));
+          ctx.output.writeLine(
+            `${t("repl.lsp_enabled")} ${config?.enabled ? pc.green("yes") : pc.red("no")}`,
+          );
 
           if (disabled.length > 0) {
-            console.log(pc.yellow(`${t("repl.lsp_disabled_servers")} ${disabled.join(", ")}`));
+            ctx.output.writeLine(
+              pc.yellow(`${t("repl.lsp_disabled_servers")} ${disabled.join(", ")}`),
+            );
           }
 
           if (failures.size > 0) {
-            console.log(pc.dim(t("repl.lsp_failure_counts")));
+            ctx.output.writeLine(pc.dim(t("repl.lsp_failure_counts")));
             for (const [server, count] of failures) {
-              console.log(pc.dim(`  ${server}: ${count}`));
+              ctx.output.writeLine(pc.dim(`  ${server}: ${count}`));
             }
           }
 
           if (disabled.length === 0 && failures.size === 0) {
-            console.log(pc.green(t("repl.lsp_all_ok")));
+            ctx.output.writeLine(pc.green(t("repl.lsp_all_ok")));
           }
           break;
         }
 
         case "restart": {
-          console.log(pc.yellow(t("repl.lsp_restarting")));
+          ctx.output.writeLine(pc.yellow(t("repl.lsp_restarting")));
           lspModule.resetDisabledServers();
-          console.log(pc.green(t("repl.lsp_restarted")));
+          ctx.output.writeLine(pc.green(t("repl.lsp_restarted")));
           break;
         }
 
         case "check": {
           const path = args[1];
           if (!path) {
-            console.log(pc.yellow(t("repl.lsp_check_usage")));
+            ctx.output.writeLine(pc.yellow(t("repl.lsp_check_usage")));
             return;
           }
-          console.log(pc.dim(t("repl.lsp_checking", { path })));
+          ctx.output.writeLine(pc.dim(t("repl.lsp_checking", { path })));
           // Запуск тула lsp_check через публичный API агента (не через приватные deps)
           try {
             const result = await ctx.agent.runTool("lsp_check", { path });
             if (result?.output) {
-              console.log(result.output);
+              ctx.output.writeLine(result.output);
             }
           } catch (e) {
-            console.log(pc.red(t("repl.lsp_check_error", {
-              error: errMsg(e),
-            })));
+            ctx.output.writeLine(pc.red(t("repl.lsp_check_error", { error: errMsg(e) })), "stderr");
           }
           break;
         }
 
         default: {
-          console.log(pc.dim(t("repl.lsp_usage")));
+          ctx.output.writeLine(pc.dim(t("repl.lsp_usage")));
           break;
         }
       }
@@ -732,7 +743,7 @@ function registerSessionCommands(ctx: ReplContext): void {
       const sessions = ctx.sessionManager!.list();
       const active = ctx.sessionManager!.getActive();
       if (sessions.length === 0) {
-        console.log(t("session.no_sessions_hint"));
+        ctx.output.writeLine(t("session.no_sessions_hint"));
         return;
       }
       const rows = sessions.map((s) => [
@@ -752,9 +763,9 @@ function registerSessionCommands(ctx: ReplContext): void {
         ],
         rows,
       )) {
-        console.log(line);
+        ctx.output.writeLine(line);
       }
-      console.log(pc.dim(`\n  ${t("repl.resume_hint")}`));
+      ctx.output.writeLine(pc.dim(`\n  ${t("repl.resume_hint")}`));
     },
   });
 
@@ -768,8 +779,10 @@ function registerSessionCommands(ctx: ReplContext): void {
       const meta = ctx.sessionManager!.create(name);
       ctx.agent.clearContext();
       console.clear();
-      console.log(`${t("session.created", { name: meta.name })} (${pc.dim(meta.id.slice(0, 12))})`);
-      console.log(pc.dim(`  ${t("session.chat_cleared")}\n`));
+      ctx.output.writeLine(
+        `${t("session.created", { name: meta.name })} (${pc.dim(meta.id.slice(0, 12))})`,
+      );
+      ctx.output.writeLine(pc.dim(`  ${t("session.chat_cleared")}\n`));
     },
   });
 
@@ -782,13 +795,13 @@ function registerSessionCommands(ctx: ReplContext): void {
       const query = args.join(" ");
       const sessions = ctx.sessionManager!.list();
       if (!query) {
-        console.log(pc.dim(t("session.available")));
+        ctx.output.writeLine(pc.dim(t("session.available")));
         const active = ctx.sessionManager!.getActive();
         for (const s of sessions) {
           const marker = s.id === active ? pc.green(" *") : "  ";
-          console.log(pc.dim(` ${marker} ${s.id.slice(0, 12)}  ${s.name}`));
+          ctx.output.writeLine(pc.dim(` ${marker} ${s.id.slice(0, 12)}  ${s.name}`));
         }
-        console.log(pc.dim(`\n  ${t("repl.resume_usage")}`));
+        ctx.output.writeLine(pc.dim(`\n  ${t("repl.resume_usage")}`));
         return;
       }
       const match = sessions.find(
@@ -798,14 +811,14 @@ function registerSessionCommands(ctx: ReplContext): void {
           s.name.toLowerCase().includes(query.toLowerCase()),
       );
       if (!match) {
-        console.log(t("session.no_match", { query }));
+        ctx.output.writeLine(t("session.no_match", { query }));
         return;
       }
       ctx.sessionManager!.setActive(match.id);
       const history = ctx.sessionManager!.loadHistory();
       ctx.agent.setContext(history);
       console.clear();
-      console.log(
+      ctx.output.writeLine(
         pc.bold(pc.green(t("session.resumed", { name: match.name }))) +
           " " +
           pc.dim(`(${match.id.slice(0, 12)})`) +
@@ -814,26 +827,26 @@ function registerSessionCommands(ctx: ReplContext): void {
           " " +
           t("repl.msgs"),
       );
-      console.log(pc.dim("─".repeat(50)));
+      ctx.output.writeLine(pc.dim("─".repeat(50)));
       if (history.length === 0) {
-        console.log(pc.dim(t("session.no_history")));
+        ctx.output.writeLine(pc.dim(t("session.no_history")));
       } else {
-        console.log(pc.dim(t("session.chat_history")));
-        console.log();
+        ctx.output.writeLine(pc.dim(t("session.chat_history")));
+        ctx.output.writeLine("");
         for (const msg of history) {
           if (msg.role === "user") {
-            console.log(pc.cyan(t("session.user_label") + ":"));
-            console.log(getMessageText(msg.content));
-            console.log();
+            ctx.output.writeLine(pc.cyan(t("session.user_label") + ":"));
+            ctx.output.writeLine(getMessageText(msg.content));
+            ctx.output.writeLine("");
           } else if (msg.role === "assistant") {
-            console.log(pc.green(t("session.assistant_label") + ":"));
-            console.log(getMessageText(msg.content));
-            console.log();
+            ctx.output.writeLine(pc.green(t("session.assistant_label") + ":"));
+            ctx.output.writeLine(getMessageText(msg.content));
+            ctx.output.writeLine("");
           }
         }
       }
-      console.log(pc.dim("─".repeat(50)));
-      console.log(pc.dim(`  ${t("session.chat_loaded")}`));
+      ctx.output.writeLine(pc.dim("─".repeat(50)));
+      ctx.output.writeLine(pc.dim(`  ${t("session.chat_loaded")}`));
     },
   });
 
@@ -844,16 +857,16 @@ function registerSessionCommands(ctx: ReplContext): void {
     action: (args: string[]) => {
       const name = args.join(" ");
       if (!name) {
-        console.log(t("repl.rename_usage"));
+        ctx.output.writeLine(t("repl.rename_usage"));
         return;
       }
       const active = ctx.sessionManager!.getActive();
       if (!active) {
-        console.log(t("session.no_active"));
+        ctx.output.writeLine(t("session.no_active"));
         return;
       }
       ctx.sessionManager!.rename(active, name);
-      console.log(t("session.renamed", { name }));
+      ctx.output.writeLine(t("session.renamed", { name }));
     },
   });
 
@@ -865,17 +878,17 @@ function registerSessionCommands(ctx: ReplContext): void {
     action: (args: string[]) => {
       const query = args[0];
       if (!query) {
-        console.log(t("repl.delete_usage"));
+        ctx.output.writeLine(t("repl.delete_usage"));
         return;
       }
       const sessions = ctx.sessionManager!.list();
       const match = sessions.find((s) => s.id === query || s.id.startsWith(query));
       if (!match) {
-        console.log(t("session.no_match", { query }));
+        ctx.output.writeLine(t("session.no_match", { query }));
         return;
       }
       ctx.sessionManager!.delete(match.id);
-      console.log(`${t("session.deleted", { id: match.id })}: ${match.name}`);
+      ctx.output.writeLine(`${t("session.deleted", { id: match.id })}: ${match.name}`);
     },
   });
 }
@@ -886,15 +899,15 @@ function registerSkillCommands(ctx: ReplContext): void {
   const listSkills = (): void => {
     const available = ctx.skillsModule!.getAvailable();
     if (available.length === 0) {
-      console.log(t("repl.no_skills"));
+      ctx.output.writeLine(t("repl.no_skills"));
       return;
     }
-    console.log(pc.bold(t("repl.available_skills")));
+    ctx.output.writeLine(pc.bold(t("repl.available_skills")));
     for (const skill of available) {
       const tokens = estimateTokens(skill.content);
       const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
       const marker = loaded ? pc.green(" [loaded]") : "";
-      console.log(
+      ctx.output.writeLine(
         `  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
       );
     }
@@ -904,17 +917,17 @@ function registerSkillCommands(ctx: ReplContext): void {
     const loaded = ctx.skillsModule!.getLoaded();
     const budget = ctx.skillsModule!.getBudget();
     if (loaded.length === 0) {
-      console.log(t("repl.no_loaded"));
+      ctx.output.writeLine(t("repl.no_loaded"));
       return;
     }
-    console.log(pc.bold(t("repl.loaded_skills")));
+    ctx.output.writeLine(pc.bold(t("repl.loaded_skills")));
     for (const skill of loaded) {
       const tokens = estimateTokens(skill.content);
-      console.log(
+      ctx.output.writeLine(
         `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
       );
     }
-    console.log(
+    ctx.output.writeLine(
       pc.dim(
         `\n  ${t("repl.budget", { used: budget.used, total: budget.total, remaining: budget.remaining })}`,
       ),
@@ -924,45 +937,45 @@ function registerSkillCommands(ctx: ReplContext): void {
   const loadSkill = (args: string[]): void => {
     const arg = args.join(" ");
     if (!arg) {
-      console.log(t("repl.skill_load_usage"));
+      ctx.output.writeLine(t("repl.skill_load_usage"));
       return;
     }
     const result = ctx.skillsModule!.loadByName(arg);
     if (result.success) {
-      console.log(pc.green(result.message));
+      ctx.output.writeLine(pc.green(result.message));
     } else {
-      console.log(pc.red(result.message));
+      ctx.output.writeLine(pc.red(result.message), "stderr");
     }
   };
 
   const unloadSkill = (args: string[]): void => {
     const arg = args.join(" ");
     if (!arg) {
-      console.log(t("repl.skill_unload_usage"));
+      ctx.output.writeLine(t("repl.skill_unload_usage"));
       return;
     }
     if (ctx.skillsModule!.unload(arg)) {
-      console.log(pc.green(t("repl.skill_unloaded", { name: arg })));
+      ctx.output.writeLine(pc.green(t("repl.skill_unloaded", { name: arg })));
     } else {
-      console.log(pc.red(t("repl.skill_not_loaded", { name: arg })));
+      ctx.output.writeLine(pc.red(t("repl.skill_not_loaded", { name: arg })), "stderr");
     }
   };
 
   const searchSkills = (args: string[]): void => {
     const arg = args.join(" ");
     if (!arg) {
-      console.log(t("repl.skill_search_usage"));
+      ctx.output.writeLine(t("repl.skill_search_usage"));
       return;
     }
     const results = ctx.skillsModule!.search(arg);
     if (results.length === 0) {
-      console.log(t("repl.no_skill_match", { query: arg }));
+      ctx.output.writeLine(t("repl.no_skill_match", { query: arg }));
       return;
     }
-    console.log(pc.bold(t("repl.skills_matching", { query: arg })));
+    ctx.output.writeLine(pc.bold(t("repl.skills_matching", { query: arg })));
     for (const skill of results) {
       const tokens = estimateTokens(skill.content);
-      console.log(
+      ctx.output.writeLine(
         `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
       );
     }
@@ -984,8 +997,8 @@ function registerSkillCommands(ctx: ReplContext): void {
       const subcmd = args[0];
       const handler = subcmd ? skillHandlers[subcmd] : skillHandlers.list;
       if (!handler) {
-        console.log(pc.red(t("repl.skill_unknown_sub", { subcmd })));
-        console.log(t("repl.skill_usage"));
+        ctx.output.writeLine(pc.red(t("repl.skill_unknown_sub", { subcmd })), "stderr");
+        ctx.output.writeLine(t("repl.skill_usage"));
         return;
       }
       handler(args.slice(1));
@@ -1000,16 +1013,16 @@ async function runConfigMigrate(ctx: ReplContext): Promise<void> {
   const configPath = join(configDir, "config.json");
 
   if (hasDomainFiles(configDir)) {
-    console.log(pc.yellow(t("config.migrate_no_legacy")));
+    ctx.output.writeLine(pc.yellow(t("config.migrate_no_legacy")));
     return;
   }
 
   if (!existsSync(configPath)) {
-    console.log(pc.yellow(t("config.migrate_no_legacy")));
+    ctx.output.writeLine(pc.yellow(t("config.migrate_no_legacy")));
     return;
   }
 
-  console.log(t("config.migrate_start"));
+  ctx.output.writeLine(t("config.migrate_start"));
 
   const { config } = loadCfg({ configDir, projectConfigPath: join(configDir, ".mmrc") });
   saveConfig(config, configPath, configDir);
@@ -1020,5 +1033,5 @@ async function runConfigMigrate(ctx: ReplContext): Promise<void> {
   const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) =>
     f.endsWith(".json"),
   );
-  console.log(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
+  ctx.output.writeLine(pc.green(t("config.migrate_done", { count: String(domainFiles.length) })));
 }

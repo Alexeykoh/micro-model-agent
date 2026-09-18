@@ -36,7 +36,8 @@ import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
 import { formatCacheLine, type CacheReport } from "./cache-line";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
-import { writeWarning } from "../ui/output";
+import { formatWarning } from "../ui/md-formatter";
+import { getDefaultChannel, type OutputChannel, type PromptSink } from "../output";
 import type { ContextProbeResult } from "../llm/model-loader";
 
 function formatContextBar(
@@ -116,6 +117,14 @@ export class Repl implements ReplContext {
   private envReport?: EnvironmentReport;
   /** Background probe of the actually loaded model context (bootstrap). */
   private contextProbe?: Promise<ContextProbeResult | null>;
+  /**
+   * Single terminal writer for this REPL. Public (not private) because
+   * `ReplContext` exposes it to slash commands as `ctx.output`; a private
+   * field cannot satisfy a public interface property.
+   */
+  public readonly output: OutputChannel;
+  /** Bridge that lets the channel draw above the live input frame. */
+  private promptSink: PromptSink;
 
   constructor(
     agent: Agent,
@@ -132,6 +141,7 @@ export class Repl implements ReplContext {
     historyPath?: string,
     execModule?: ExecutionModule,
     contextProbe?: Promise<ContextProbeResult | null>,
+    output?: OutputChannel,
   ) {
     this.agent = agent;
     this.config = config;
@@ -176,6 +186,21 @@ export class Repl implements ReplContext {
             return [[], line];
           },
         });
+
+    this.output = output ?? getDefaultChannel();
+    this.promptSink = {
+      isActive: () => this.rl instanceof LineEditor && !this.agentRunning && !this.inputLocked,
+      printAbove: (text: string) => {
+        if (this.rl instanceof LineEditor) {
+          this.rl.printAbove(text);
+          return;
+        }
+        // Non-TTY fallback (readline / piped stdin): the only remaining direct
+        // stdout write in the REPL — there is no frame to draw above.
+        process.stdout.write(text + "\n");
+      },
+    };
+    this.output.attachPrompt(this.promptSink);
 
     registerAllCommands(this);
     this.setupCompleter();
@@ -341,13 +366,10 @@ export class Repl implements ReplContext {
           if (fullInput) {
             if (fullInput.startsWith("/")) {
               await this.executeCommand(fullInput);
+              this.presentPrompt();
             } else {
               await this.runAgent(fullInput);
             }
-          }
-          if (this.running) {
-            this.rl.setPrompt(pc.cyan(t("repl.you")));
-            this.rl.prompt();
           }
         } else {
           this.rl.setPrompt(pc.cyan(t("repl.you") + "… "));
@@ -372,13 +394,9 @@ export class Repl implements ReplContext {
 
       if (trimmed.startsWith("/")) {
         await this.executeCommand(trimmed);
+        this.presentPrompt();
       } else {
         await this.runAgent(trimmed);
-      }
-
-      if (this.running) {
-        this.rl.setPrompt(pc.cyan(t("repl.you")));
-        this.rl.prompt();
       }
     });
 
@@ -417,7 +435,7 @@ export class Repl implements ReplContext {
     }
     (Repl as any).sigintHandler = () => {
       if (this.agentRunning) {
-        console.log(pc.yellow(t("repl.ctrl_c_interrupt")));
+        this.output.writeLine(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
         this.agentRunning = false;
         if (forceExitTimer) clearTimeout(forceExitTimer);
@@ -427,6 +445,18 @@ export class Repl implements ReplContext {
       }
     };
     process.on("SIGINT", (Repl as any).sigintHandler);
+  }
+
+  /**
+   * Re-present the input prompt after a slash command. Commands do not own a
+   * frame lifecycle, so they need this explicit redraw. The agent path is
+   * deliberately excluded: `runAgent`'s finally calls `LineEditor.resumeFrame()`
+   * as its single prompt presentation, so prompting here again would double-draw.
+   */
+  private presentPrompt(): void {
+    if (!this.running) return;
+    this.rl.setPrompt(pc.cyan(t("repl.you")));
+    this.rl.prompt();
   }
 
   private handleSpecialKey(str: string, key: any): boolean {
@@ -442,7 +472,7 @@ export class Repl implements ReplContext {
       if (escBytes >= 2 || withinWindow) {
         this.lastEscTime = 0;
         if (this.agentRunning) {
-          process.stdout.write(pc.yellow(`\n${t("repl.interrupt")}\n`));
+          this.output.writeLine(pc.yellow(`\n${t("repl.interrupt")}`));
           this.agent.shutdown();
         }
       }
@@ -463,13 +493,13 @@ export class Repl implements ReplContext {
         const { dataUrl } = await bufferToDataUrl(clipBuf);
         this.pendingClipboardImage = dataUrl;
         const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-        console.log(
+        this.output.writeLine(
           pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`),
         );
         if (this.rl instanceof LineEditor) this.rl.reset();
         this.rl.prompt();
       } else {
-        console.log(pc.yellow(`\n${t("image.clipboard_empty")}`));
+        this.output.writeLine(pc.yellow(`\n${t("image.clipboard_empty")}`));
         if (this.rl instanceof LineEditor) this.rl.reset();
         this.rl.prompt();
       }
@@ -506,14 +536,21 @@ export class Repl implements ReplContext {
       this.logger?.logREPL("user", input);
 
       if (this.rl instanceof LineEditor) this.rl.reset();
-      // Overwrite the empty prompt that reset() just drew with a divider,
-      // then label the agent's reply — separates the user's message from
-      // the agent's answer.
-      process.stdout.write("\r" + divider() + "\n" + pc.green(t("repl.agent")));
+      // Hand the terminal to the channel for the duration of the run: the
+      // editor stops drawing its frame and ignores typed keys, so streamed
+      // output cannot corrupt the input line.
+      if (this.rl instanceof LineEditor) {
+        this.rl.suspendFrame();
+        this.rl.setInputEnabled(false);
+      }
+      this.output.beginStreaming();
+      // Divider + agent label replace the empty prompt reset() just drew.
+      this.output.writeLine(`\r${divider()}\n${pc.green(t("repl.agent"))}`);
 
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
         baseDir: this.baseDir,
+        channel: this.output,
       });
       renderer.showLoader();
       const result = await this.agent.run(
@@ -529,13 +566,7 @@ export class Repl implements ReplContext {
               ev.icon,
             );
           } else {
-            renderer.toolEnd(
-              ev.tool,
-              ev.duration ?? 0,
-              ev.error,
-              ev.ctxDelta,
-              ev.costUsd,
-            );
+            renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
             if (ev.tool === "plan" || ev.tool === "todo") {
               this.renderPlan(renderer);
             }
@@ -551,9 +582,13 @@ export class Repl implements ReplContext {
       );
       renderer.flush();
       if (result.provider && result.model) {
-        renderer.footer(result.model, result.provider, result.llmDurationMs ?? result.durationMs ?? 0);
+        renderer.footer(
+          result.model,
+          result.provider,
+          result.llmDurationMs ?? result.durationMs ?? 0,
+        );
       }
-      process.stdout.write("\n");
+      this.output.writeLine("");
 
       this.logger?.logREPL(
         result.success ? "assistant" : "system",
@@ -561,14 +596,26 @@ export class Repl implements ReplContext {
       );
 
       if (!result.success) {
-        console.error(pc.red(`${t("error.prefix")}${result.error}`));
+        this.output.writeLine(pc.red(`${t("error.prefix")}${result.error}`), "stderr");
       }
       this.showContextBar(result);
       // Close the agent's turn: a divider before the next prompt keeps
       // consecutive user/agent messages visually separated.
-      process.stdout.write("\n" + divider() + "\n");
+      this.output.writeLine(`\n${divider()}`);
     } finally {
       this.agentRunning = false;
+      this.output.endStreaming();
+      if (this.rl instanceof LineEditor) {
+        this.rl.setInputEnabled(true);
+        // Single prompt presentation for the agent path: resumeFrame()
+        // redraws the frame, so the `line` listener must NOT prompt again
+        // after runAgent() (it still does after slash commands).
+        this.rl.resumeFrame();
+      } else {
+        // Piped/non-TTY fallback has no frame to resume; present the readline
+        // prompt here to preserve the old post-run behavior.
+        this.presentPrompt();
+      }
     }
   }
 
@@ -594,9 +641,14 @@ export class Repl implements ReplContext {
 
   public async withExclusiveInput(fn: () => Promise<void>): Promise<void> {
     this.inputLocked = true;
+    // Smallest correct modal scope: only commands that take exclusive stdin
+    // (interactive wizard) run under beginModal/endModal. Blanket-bracketing
+    // executeCommand would queue the agent stream of `/run` and drop it.
+    this.output.beginModal();
     try {
       await fn();
     } finally {
+      this.output.endModal();
       this.inputLocked = false;
     }
   }
@@ -608,19 +660,20 @@ export class Repl implements ReplContext {
 
     const cmd = this.commands.get(name);
     if (!cmd) {
-      console.log(pc.red(t("cli.unknown_cmd", { name })), t("cli.help_hint"));
+      this.output.writeLine(`${pc.red(t("cli.unknown_cmd", { name }))} ${t("cli.help_hint")}`);
       return;
     }
 
     try {
       await cmd.action(args);
     } catch (err) {
-      console.error(
+      this.output.writeLine(
         pc.red(
           t("error.command_error", {
             message: errMsg(err),
           }),
         ),
+        "stderr",
       );
     }
   }
@@ -642,15 +695,15 @@ export class Repl implements ReplContext {
       }
       if (cmds.length === 0) continue;
 
-      console.log(pc.bold(t(`repl.group.${groupKey}`)));
+      this.output.writeLine(pc.bold(t(`repl.group.${groupKey}`)));
       for (const cmd of cmds) {
         const aliases = cmd.aliases?.length ? ` (${pc.dim(cmd.aliases.join(", "))})` : "";
-        console.log(`  ${pc.cyan("/" + cmd.name)}${aliases}  ${pc.dim(cmd.description)}`);
+        this.output.writeLine(`  ${pc.cyan("/" + cmd.name)}${aliases}  ${pc.dim(cmd.description)}`);
         if (cmd.usage) {
-          console.log(`    ${pc.dim(cmd.usage)}`);
+          this.output.writeLine(`    ${pc.dim(cmd.usage)}`);
         }
       }
-      console.log();
+      this.output.writeLine("");
     }
   }
 
@@ -677,31 +730,33 @@ export class Repl implements ReplContext {
 
     const ui = this.config.ui;
     if (ui?.showContextStats) {
-      console.log();
+      this.output.writeLine("");
       const ctxLine = formatContextBar(
         result.contextUsed,
         result.contextLimit,
         result.compactionCount,
         result.contextQuality,
       );
-      console.log(ctxLine);
+      this.output.writeLine(ctxLine);
       if (result.totalTokens !== undefined && result.totalTokens > 0) {
         const apiLine = pc.dim(
           `  API: ${result.promptTokens} prompt + ${result.completionTokens} completion = ${result.totalTokens} total`,
         );
-        console.log(apiLine);
+        this.output.writeLine(apiLine);
       }
       if (result.totalCost !== undefined && result.totalCost > 0) {
-        console.log(pc.yellow(`  ${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
+        this.output.writeLine(
+          pc.yellow(`  ${t("repl.cost", { cost: formatCost(result.totalCost) })}`),
+        );
       }
       const cacheLine = formatCacheLine(result.cache);
       if (cacheLine) {
-        console.log(pc.dim(`  ${cacheLine}`));
+        this.output.writeLine(pc.dim(`  ${cacheLine}`));
       }
     } else if (ui?.showCompaction && result.compactionCount !== undefined) {
       if (result.compactionCount > this.lastCompactionShown) {
         this.lastCompactionShown = result.compactionCount;
-        console.log(pc.dim(`\n  ⟳ Context compacted (${result.compactionCount})`));
+        this.output.writeLine(pc.dim(`\n  ⟳ Context compacted (${result.compactionCount})`));
       }
     }
   }
@@ -806,9 +861,9 @@ export class Repl implements ReplContext {
 
     // Plain banner without a surrounding box — line-based, wraps to width.
     for (const line of info) {
-      console.log(pc.dim(line).trimEnd());
+      this.output.writeLine(pc.dim(line).trimEnd());
     }
-    console.log();
+    this.output.writeLine("");
 
     // Legacy config hint
     try {
@@ -817,8 +872,8 @@ export class Repl implements ReplContext {
       const { hasDomainFiles } = await import("../config/domains");
       const legacyPath = pathJoin(this.configDir, "config.json");
       if (exists(legacyPath) && !hasDomainFiles(this.configDir)) {
-        console.log(pc.yellow(`  ${t("config.legacy_hint")}`));
-        console.log();
+        this.output.writeLine(pc.yellow(`  ${t("config.legacy_hint")}`));
+        this.output.writeLine("");
       }
     } catch {}
 
@@ -829,8 +884,8 @@ export class Repl implements ReplContext {
         .then((lspSummary) => {
           if (lspSummary) {
             const line = `${pc.green(t("repl.agent"))}${pc.yellow(t("repl.lsp_label"))} ${lspSummary}`;
-            process.stdout.write(`\x1b[2K\r${divider()}\n${line}\n`);
-            this.rl.prompt();
+            // Channel owns the prompt row now: no manual erase + prompt() hack.
+            this.output.writeLine(`${divider()}\n${line}`);
           }
         })
         .catch(() => {});
@@ -856,7 +911,9 @@ export class Repl implements ReplContext {
         .then((results) => {
           for (const r of results) {
             if (!r.ok && r.name !== this.config.provider.active) {
-              writeWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" }));
+              this.output.writeLine(
+                formatWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" })),
+              );
             }
           }
         })
@@ -882,8 +939,8 @@ export class Repl implements ReplContext {
                 ? `${pc.dim(t("repl.context_probe_big", { model: probe.model, actual: probe.actual }))}`
                 : null;
           if (line) {
-            process.stdout.write(`\x1b[2K\r${divider()}\n${line}\n`);
-            this.rl.prompt();
+            // Channel owns the prompt row now: no manual erase + prompt() hack.
+            this.output.writeLine(`${divider()}\n${line}`);
           }
         })
         .catch(() => {});
