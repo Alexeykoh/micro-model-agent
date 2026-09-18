@@ -324,15 +324,17 @@ export async function bootstrap(
       const probe = await getLoadedContextLength(config.provider.baseUrl, config.model);
       if (!probe) return null;
       if (probe.actual < config.contextWindow) {
-        logger.warn(
+        logger.logSilent(
+          "warn",
           `Context probe: model "${probe.model}" is loaded with ${probe.actual} tokens, but contextWindow is configured as ${config.contextWindow} — overflow/429 risk. Lower contextWindow or reload the model with a larger context.`,
         );
       } else if (probe.actual > config.contextWindow) {
-        logger.info(
+        logger.logSilent(
+          "info",
           `Context probe: model "${probe.model}" supports ${probe.actual} tokens — consider "mma context ${probe.actual}" to use the full window.`,
         );
       } else {
-        logger.debug(`Context probe: configured contextWindow matches loaded context (${probe.actual})`);
+        logger.logSilent("debug", `Context probe: configured contextWindow matches loaded context (${probe.actual})`);
       }
       return probe;
     } catch {
@@ -376,7 +378,8 @@ export async function bootstrap(
         // Only cache a definitive result — a transient probe error (null) must
         // NOT pin "reasoning not supported" for the 24h TTL.
         if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
-        logger.info(
+        logger.logSilent(
+          "info",
           t("env.reasoning_probe", {
             strategy: reasoningStrategy,
             result: passed === true ? t("env.reasoning_respected") : t("env.reasoning_ignored"),

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo } from "../../src/core/bootstrap";
+import { Logger } from "../../src/logger/app-logger";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "mma-bootstrap-"));
@@ -94,6 +95,53 @@ describe("bootstrap", () => {
       const { execModule } = await bootstrap(dir, dir);
       expect(execModule.getActivePlan()?.id).toBe("stale-plan");
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("writes background probe diagnostics to file only, never to the console", async () => {
+    // The context probe runs in the background and used to call
+    // logger.warn/info directly, which raced the first-run wizard and
+    // interleaved with the REPL prompt. It must go through logSilent
+    // (app.jsonl only) — the REPL renders the probe itself via OutputChannel.
+    const dir = tempDir();
+    const originalFetch = global.fetch;
+    const recorded: { method: string; msg: string }[] = [];
+    const methods = ["logSilent", "warn", "info", "debug"] as const;
+    const originals: Record<string, unknown> = {};
+    for (const method of methods) {
+      originals[method] = (Logger.prototype as any)[method];
+      (Logger.prototype as any)[method] = function (this: unknown, ...args: unknown[]) {
+        const msg = method === "logSilent" ? String(args[1]) : String(args[0]);
+        recorded.push({ method, msg });
+        return (originals[method] as any).apply(this, args);
+      };
+    }
+    global.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            key: "qwen/qwen3.5-9b",
+            max_context_length: 131072,
+            loaded_instances: [{ config: { context_length: 65536 } }],
+          },
+        ],
+      }),
+    })) as unknown as typeof global.fetch;
+    try {
+      const { contextProbe } = await bootstrap(dir, dir);
+      const probe = await contextProbe;
+      expect(probe).toEqual({ model: "qwen/qwen3.5-9b", actual: 65536 });
+
+      const probeCalls = recorded.filter((c) => c.msg.includes("Context probe"));
+      expect(probeCalls.length).toBeGreaterThan(0);
+      expect(probeCalls.every((c) => c.method === "logSilent")).toBe(true);
+    } finally {
+      for (const method of methods) {
+        (Logger.prototype as any)[method] = originals[method];
+      }
+      global.fetch = originalFetch;
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
