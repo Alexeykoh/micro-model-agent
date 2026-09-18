@@ -1,11 +1,13 @@
-import pc from "picocolors";
+import { createColors } from "picocolors";
 import type { OutputEvent, OutputLevel } from "./types";
 
+const colored = createColors(true);
+
 const LEVEL_COLORS: Record<OutputLevel, (s: string) => string> = {
-  debug: (s) => pc.dim(s),
+  debug: (s) => colored.dim(s),
   info: (s) => s,
-  warn: (s) => pc.yellow(s),
-  error: (s) => pc.red(s),
+  warn: (s) => colored.yellow(s),
+  error: (s) => colored.red(s),
 };
 
 /** Reproduces the legacy Logger format: `[LEVEL] [source] ISO — text`. */
