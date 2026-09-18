@@ -12,6 +12,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { FileLogWriter } from "../src/logger/file-log";
 import { Logger } from "../src/logger/app-logger";
+import { OutputBus } from "../src/output";
 
 describe("FileLogWriter", () => {
   let dir: string;
@@ -131,7 +132,7 @@ describe("Logger tagged integration", () => {
   });
 
   it("writes plain log() calls into the session .log file too", () => {
-    const logger = new Logger("info");
+    const logger = new Logger("info", "", new OutputBus());
     logger.setLogDir(dir);
     logger.initSessionLog("ses_int");
 
@@ -143,7 +144,7 @@ describe("Logger tagged integration", () => {
   });
 
   it("exposes getLogPath pointing at session or daily file", () => {
-    const logger = new Logger("info");
+    const logger = new Logger("info", "", new OutputBus());
     logger.setLogDir(dir);
     expect(logger.getLogPath()).toContain(".log");
 

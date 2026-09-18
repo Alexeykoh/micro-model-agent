@@ -2,21 +2,10 @@ import { appendFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { FileLogWriter, type FileLogLevel } from "./file-log";
-import pc from "picocolors";
+import { defaultOutputBus, type OutputSink } from "../output";
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
 type LogLevel = keyof typeof LEVELS;
-
-const LEVEL_COLORS: Record<LogLevel, (s: string) => string> = {
-  debug: (s) => pc.dim(s),
-  info: (s) => s,
-  warn: (s) => pc.yellow(s),
-  error: (s) => pc.red(s),
-};
-
-function isColorEnabled(): boolean {
-  return !process.env.NO_COLOR && !process.env.CI && process.stdout.isTTY === true;
-}
 
 export class Logger {
   private level: LogLevel;
@@ -24,10 +13,12 @@ export class Logger {
   private logDir: string | null = null;
   private sessionDir: string | null = null;
   private fileLog: FileLogWriter;
+  private sink: OutputSink;
 
-  constructor(level: LogLevel = "info", prefix = "") {
+  constructor(level: LogLevel = "info", prefix = "", sink: OutputSink = defaultOutputBus) {
     this.level = level;
     this.prefix = prefix;
+    this.sink = sink;
     this.fileLog = new FileLogWriter();
   }
 
@@ -94,7 +85,11 @@ export class Logger {
   }
 
   logToolCall(tool: string, preview: string, result?: string): void {
-    this.fileLog.logToolCall(tool, sanitizeLogMessage(preview), result !== undefined ? sanitizeLogMessage(result) : undefined);
+    this.fileLog.logToolCall(
+      tool,
+      sanitizeLogMessage(preview),
+      result !== undefined ? sanitizeLogMessage(result) : undefined,
+    );
   }
 
   logToolOutput(tool: string, output: string, exitCode: number): void {
@@ -106,7 +101,11 @@ export class Logger {
   }
 
   child(prefix: string): Logger {
-    const childLogger = new Logger(this.level, this.prefix ? `${this.prefix}:${prefix}` : prefix);
+    const childLogger = new Logger(
+      this.level,
+      this.prefix ? `${this.prefix}:${prefix}` : prefix,
+      this.sink,
+    );
     if (this.logDir) childLogger.setLogDir(this.logDir);
     if (this.sessionDir) childLogger.setSessionDir(this.sessionDir);
     return childLogger;
@@ -136,11 +135,15 @@ export class Logger {
     const sanitizedMeta = meta ? this.sanitizeMeta(meta) : undefined;
 
     const ts = new Date().toISOString();
-    const prefix = this.prefix ? ` [${this.prefix}]` : "";
     const metaStr = sanitizedMeta ? ` ${JSON.stringify(sanitizedMeta)}` : "";
 
-    const line = `[${level.toUpperCase()}]${prefix} ${ts} — ${sanitizedMsg}${metaStr}`;
-    console.log(isColorEnabled() ? LEVEL_COLORS[level](line) : line);
+    const line = `${sanitizedMsg}${metaStr}`;
+    this.sink.emit({
+      level,
+      source: this.prefix || "mma",
+      kind: "log",
+      text: line,
+    });
 
     // Legacy v1 behavior: also append to the tagged `.log` file (session or daily).
     this.fileLog.log(
