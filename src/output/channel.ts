@@ -25,6 +25,14 @@ export class OutputChannel {
   private queue: OutputEvent[] = [];
   private pending: { stream: OutputStream; text: string } | null = null;
   private partialOpen = false;
+  /**
+   * Log/block stdout events captured while a prompt is active. They are
+   * flushed once per microtask so a synchronous burst (e.g. a 20-line command
+   * result) produces a single `printAbove` + one frame render instead of one
+   * per line (which erased/redrew the frame and fired a DSR query each time).
+   */
+  private blockLines: string[] | null = null;
+  private blockFlushScheduled = false;
   private readonly unsub: () => void;
 
   constructor(
@@ -39,6 +47,7 @@ export class OutputChannel {
   }
 
   dispose(): void {
+    this.flushBlocks();
     this.unsub();
     this.queue = [];
     this.pending = null;
@@ -56,6 +65,7 @@ export class OutputChannel {
   }
 
   beginStreaming(): void {
+    this.flushBlocks();
     this.flushPendingAsBlock();
     this.mode = "streaming";
   }
@@ -66,6 +76,7 @@ export class OutputChannel {
   }
 
   beginModal(): void {
+    this.flushBlocks();
     this.flushPendingAsBlock();
     this.mode = "modal";
   }
@@ -78,6 +89,7 @@ export class OutputChannel {
   }
 
   setQuiet(quiet: boolean): void {
+    this.flushBlocks();
     if (quiet) {
       if (this.mode !== "quiet") {
         this.modeBeforeQuiet = this.mode;
@@ -89,6 +101,8 @@ export class OutputChannel {
   }
 
   writeRaw(text: string, stream: OutputStream = "stdout"): void {
+    // Raw output must never jump ahead of queued block lines.
+    this.flushBlocks();
     // modal intentionally drops direct writes: the Renderer never runs during a modal prompt.
     if (this.mode === "modal" || this.mode === "quiet") return;
     if (this.mode === "idle" && this.sink?.isActive() && stream === "stdout") {
@@ -126,12 +140,30 @@ export class OutputChannel {
     const stream = ev.stream ?? "stdout";
     const line = ev.kind === "block" ? ev.text : formatEventLine(ev, this.color);
     if (stream === "stdout" && this.mode === "idle" && this.sink?.isActive()) {
-      this.flushPendingAsBlock();
-      this.sink.printAbove(line);
+      // Batch a synchronous burst into one printAbove/render (see blockLines).
+      if (this.blockLines === null) this.blockLines = [];
+      this.blockLines.push(line);
+      if (!this.blockFlushScheduled) {
+        this.blockFlushScheduled = true;
+        queueMicrotask(() => this.flushBlocks());
+      }
       return;
     }
     if (this.mode === "streaming") this.closePartial();
     (stream === "stderr" ? this.err : this.out).write(`${line}\n`);
+  }
+
+  private flushBlocks(): void {
+    this.blockFlushScheduled = false;
+    const lines = this.blockLines;
+    this.blockLines = null;
+    if (!lines || lines.length === 0) return;
+    const text = lines.join("\n");
+    if (this.sink?.isActive()) {
+      this.sink.printAbove(text);
+    } else {
+      this.out.write(`${text}\n`);
+    }
   }
 
   private closePartial(): void {
@@ -154,6 +186,7 @@ export class OutputChannel {
   }
 
   private flushPendingAsBlock(): void {
+    this.flushBlocks();
     if (!this.pending) return;
     const text = this.pending.text;
     const { stream } = this.pending;

@@ -28,19 +28,50 @@ function ch() {
   return { bus, out, err, c };
 }
 
+/** Blocks flushed through a prompt sink are batched one microtask deep. */
+const flushMicrotasks = () => Promise.resolve();
+
 describe("OutputChannel", () => {
   it("writes formatted lines to stdout in idle mode", () => {
     const { bus, out } = ch();
     bus.log("info", "indexer", "hello");
     expect(out.data).toContain("[INFO] [indexer]");
   });
-  it("prints above the prompt when idle and prompt is active", () => {
+  it("prints above the prompt when idle and prompt is active", async () => {
     const { bus, out, c } = ch();
     const p = prompt(true);
     c.attachPrompt(p.sink);
     bus.log("warn", "probe.context", "big");
+    await flushMicrotasks();
     expect(p.above).toEqual([expect.stringContaining("big")]);
     expect(out.data).toBe("");
+  });
+  it("batches a synchronous burst of lines into one printAbove call", async () => {
+    const { c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeLine("line 1");
+    c.writeLine("line 2");
+    c.writeLine("line 3");
+    expect(p.above).toEqual([]);
+    await flushMicrotasks();
+    expect(p.above).toHaveLength(1);
+    expect(p.above[0]).toContain("line 1");
+    expect(p.above[0]).toContain("line 2");
+    expect(p.above[0]).toContain("line 3");
+  });
+  it("flushes batched blocks before raw output (ordering)", async () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeLine("queued");
+    // Raw output must not jump ahead of the queued block.
+    c.beginStreaming();
+    expect(p.above).toHaveLength(1);
+    expect(p.above[0]).toContain("queued");
+    c.writeRaw("raw");
+    expect(out.data).toContain("raw");
+    await flushMicrotasks();
   });
   it("passes streaming raw through and closes the partial before a log", () => {
     const { bus, out, c } = ch();

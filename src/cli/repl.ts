@@ -105,6 +105,17 @@ export class Repl implements ReplContext {
   private exitOnClose = false;
   /** Owner of plan state (bootstrap). Null in tests — plan UI degrades. */
   private execModule?: ExecutionModule;
+  /**
+   * True only once the input prompt frame is actually on screen. The channel's
+   * prompt sink stays inactive until then, so the startup banner prints plainly
+   * instead of erasing/redrawing a frame that was never drawn.
+   */
+  private promptPresented = false;
+  /**
+   * Set by `runAgent` so the slash-command path knows the run already restored
+   * the prompt and must not present it a second time (e.g. `/run`).
+   */
+  private runHandledPrompt = false;
 
   public rl: LineInput;
   public agent: Agent;
@@ -189,7 +200,11 @@ export class Repl implements ReplContext {
 
     this.output = output ?? getDefaultChannel();
     this.promptSink = {
-      isActive: () => this.rl instanceof LineEditor && !this.agentRunning && !this.inputLocked,
+      isActive: () =>
+        this.rl instanceof LineEditor &&
+        this.promptPresented &&
+        !this.agentRunning &&
+        !this.inputLocked,
       printAbove: (text: string) => {
         if (this.rl instanceof LineEditor) {
           this.rl.printAbove(text);
@@ -197,6 +212,8 @@ export class Repl implements ReplContext {
         }
         // Non-TTY fallback (readline / piped stdin): the only remaining direct
         // stdout write in the REPL — there is no frame to draw above.
+        // TODO(Task 11): route through this.output's `out` stream instead of
+        // process.stdout so injected/captured channels observe it.
         process.stdout.write(text + "\n");
       },
     };
@@ -366,7 +383,7 @@ export class Repl implements ReplContext {
           if (fullInput) {
             if (fullInput.startsWith("/")) {
               await this.executeCommand(fullInput);
-              this.presentPrompt();
+              this.afterCommand();
             } else {
               await this.runAgent(fullInput);
             }
@@ -394,7 +411,7 @@ export class Repl implements ReplContext {
 
       if (trimmed.startsWith("/")) {
         await this.executeCommand(trimmed);
-        this.presentPrompt();
+        this.afterCommand();
       } else {
         await this.runAgent(trimmed);
       }
@@ -457,6 +474,21 @@ export class Repl implements ReplContext {
     if (!this.running) return;
     this.rl.setPrompt(pc.cyan(t("repl.you")));
     this.rl.prompt();
+    this.promptPresented = true;
+  }
+
+  /**
+   * Prompt bookkeeping after a slash command. A command that drove a run
+   * (e.g. `/run`) already had its prompt restored by `runAgent`; presenting
+   * again would double-render, so skip it exactly once. All other commands
+   * present the prompt here.
+   */
+  private afterCommand(): void {
+    if (this.runHandledPrompt) {
+      this.runHandledPrompt = false;
+      return;
+    }
+    this.presentPrompt();
   }
 
   private handleSpecialKey(str: string, key: any): boolean {
@@ -535,17 +567,23 @@ export class Repl implements ReplContext {
 
       this.logger?.logREPL("user", input);
 
-      if (this.rl instanceof LineEditor) this.rl.reset();
+      // The prompt frame is about to be taken down; deactivate the sink before
+      // any streamed output so nothing tries to draw above it.
+      this.promptPresented = false;
       // Hand the terminal to the channel for the duration of the run: the
       // editor stops drawing its frame and ignores typed keys, so streamed
-      // output cannot corrupt the input line.
+      // output cannot corrupt the input line. suspendFrame() runs before
+      // reset(), which would otherwise draw a frame only to erase it.
       if (this.rl instanceof LineEditor) {
         this.rl.suspendFrame();
         this.rl.setInputEnabled(false);
+        this.rl.reset();
       }
       this.output.beginStreaming();
-      // Divider + agent label replace the empty prompt reset() just drew.
-      this.output.writeLine(`\r${divider()}\n${pc.green(t("repl.agent"))}`);
+      // Divider + agent label, written raw (no trailing newline): the next
+      // Renderer.text() chunk adds its own leading "\n" ("- ..."), so a
+      // writeLine here would insert a blank line ("Agent:\n\n- ...").
+      this.output.writeRaw(`\r${divider()}\n${pc.green(t("repl.agent"))}`);
 
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
@@ -611,11 +649,13 @@ export class Repl implements ReplContext {
         // redraws the frame, so the `line` listener must NOT prompt again
         // after runAgent() (it still does after slash commands).
         this.rl.resumeFrame();
+        this.promptPresented = true;
       } else {
         // Piped/non-TTY fallback has no frame to resume; present the readline
         // prompt here to preserve the old post-run behavior.
         this.presentPrompt();
       }
+      this.runHandledPrompt = true;
     }
   }
 
@@ -657,6 +697,10 @@ export class Repl implements ReplContext {
     const parts = input.split(/\s+/);
     const name = parts[0].slice(1);
     const args = parts.slice(1);
+
+    // Clear any stale run flag from a previous direct agent run so this
+    // command's own presentPrompt() decision is based on its own action.
+    this.runHandledPrompt = false;
 
     const cmd = this.commands.get(name);
     if (!cmd) {
@@ -877,7 +921,10 @@ export class Repl implements ReplContext {
       }
     } catch {}
 
+    // Single prompt presentation for startup: the banner above was written
+    // plainly (promptPresented was false), so no frame needs erasing here.
     this.rl.prompt();
+    this.promptPresented = true;
 
     if (lspEnabled) {
       this.probeLspBanner()
