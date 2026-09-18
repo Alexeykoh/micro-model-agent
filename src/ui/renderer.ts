@@ -135,6 +135,7 @@ export class Renderer {
       (line) => this.channel.writeRaw(`${line}\n`),
       this.width,
       (text) => this.channel.writeRaw(text),
+      { reservedCols: 2, streamPartials: this.rich },
     );
   }
 

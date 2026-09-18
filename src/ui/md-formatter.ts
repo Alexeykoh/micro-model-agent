@@ -1,4 +1,5 @@
 import { pc } from "./colors";
+import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import { formatTable, getTerminalWidth } from "./table";
 
@@ -56,16 +57,29 @@ export class FormattingStream {
   private onWrite: (text: string) => void;
   private onRawWrite: (text: string) => void;
   private width: number;
+  /** Display columns of the raw partial currently shown on the terminal. */
   private partialWritten = 0;
+  /** How many chars of the pending line have already been streamed raw. */
+  private streamedChars = 0;
+  /** Columns reserved on the left (caller prefix) so a partial never wraps. */
+  private reservedCols: number;
+  /**
+   * Stream the current (not-yet-newline-terminated) line raw for live
+   * feedback. Off by default — offline callers use `formatMarkdown`.
+   */
+  private streamPartials: boolean;
 
   constructor(
     onWrite: (text: string) => void,
     width?: number,
     onRawWrite?: (text: string) => void,
+    opts: { reservedCols?: number; streamPartials?: boolean } = {},
   ) {
     this.onWrite = onWrite;
     this.onRawWrite = onRawWrite ?? onWrite;
     this.width = width ?? getTerminalWidth();
+    this.reservedCols = opts.reservedCols ?? 0;
+    this.streamPartials = opts.streamPartials ?? false;
   }
 
   write(chunk: string): void {
@@ -77,20 +91,42 @@ export class FormattingStream {
       this.emitPartialRewind();
       this.processLine(line);
     }
-    // Stream partial line directly for real-time feedback
     if (this.buffer.length > 0 && !this.inCodeBlock) {
-      this.onRawWrite(this.buffer);
-      this.partialWritten = this.buffer.length;
-      this.buffer = "";
+      this.streamPartial();
     }
+  }
+
+  /**
+   * Stream the pending line raw for real-time feedback; the formatted line
+   * replaces it once the newline arrives.
+   *
+   * The replacement uses a RELATIVE cursor move (`\x1b[<cols>D`), which is only
+   * correct while the streamed text stays on the single visual line it started
+   * on. If the partial would exceed the terminal width it wraps and every
+   * relative move lands in the wrong place — the garbled output observed after
+   * the 1.0.0 output refactor (missing/swapped characters, leaked markers,
+   * broken tables). So streaming freezes at the last chunk that fits and the
+   * line is rendered when it completes.
+   */
+  private streamPartial(): void {
+    if (!this.streamPartials) return;
+    const available = Math.max(1, this.width - this.reservedCols);
+    if (stringWidth(this.buffer) > available) return;
+    const delta = this.buffer.slice(this.streamedChars);
+    if (!delta) return;
+    this.onRawWrite(delta);
+    this.streamedChars = this.buffer.length;
+    this.partialWritten = stringWidth(this.buffer);
   }
 
   private emitPartialRewind(): void {
     if (this.partialWritten > 0) {
-      // Move cursor back to overwrite partial output
-      this.onRawWrite(`\x1b[${this.partialWritten}D`);
+      // Move back over the streamed partial and erase any tail left by a
+      // shorter formatted replacement before the caller renders the line.
+      this.onRawWrite(`\x1b[${this.partialWritten}D\x1b[K`);
       this.partialWritten = 0;
     }
+    this.streamedChars = 0;
   }
 
   /** True when there is displayed partial output or unprocessed buffered text. @internal */
@@ -108,8 +144,18 @@ export class FormattingStream {
    */
   flushPartialNow(): void {
     if (this.partialWritten > 0) {
+      // The line is already on screen raw; terminate it as-is (it may be
+      // interrupted mid-markdown) and drop it so it is not rendered twice.
       this.onRawWrite("\n");
       this.partialWritten = 0;
+      this.streamedChars = 0;
+      this.buffer = "";
+    } else if (this.buffer.length > 0 && !this.inCodeBlock) {
+      // Never streamed (plain mode) — render the pending line now.
+      const line = this.buffer;
+      this.buffer = "";
+      this.streamedChars = 0;
+      this.onWrite(this.formatLine(line));
     }
     if (this.tableBuffer.length > 0) {
       this.flushTable();
@@ -128,13 +174,16 @@ export class FormattingStream {
       if (this.codeLines.length > 0) {
         this.emitCodeBlock();
       }
+      this.streamedChars = 0;
       return;
     }
     if (this.buffer.length > 0) {
       const line = this.buffer;
       this.buffer = "";
+      this.emitPartialRewind();
       this.onWrite(this.formatLine(line));
     }
+    this.streamedChars = 0;
   }
 
   private processLine(line: string): void {

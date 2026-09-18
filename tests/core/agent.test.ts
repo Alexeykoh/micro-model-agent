@@ -501,6 +501,33 @@ describe("Agent", () => {
     expect(result.text).toBe("Done with a different approach");
   });
 
+  it("hard-stops an interactive run stuck on the same status tool", async () => {
+    const infoCall = {
+      type: "tool_call" as const,
+      toolCall: { id: "t1", name: "session_info", arguments: "{}" },
+    };
+    const identical = () =>
+      (async function* () {
+        yield infoCall;
+        yield { type: "done" as const, finishReason: "tool_calls" as const };
+      })();
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi.fn().mockImplementation(identical),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider,
+      config: { ...createMockDeps().config, maxToolIterations: 20 },
+    });
+    const agent = new Agent(deps as any);
+    await agent.run("loop forever");
+    // Nudged on each repeat, then hard-stopped at
+    // MAX_REPEATED_TOOL_CALLS_INTERACTIVE (5): never a 7th provider call.
+    expect(mockProvider.chat).toHaveBeenCalledTimes(6);
+  });
+
   it("nudges the model when one target is mutated repeatedly (perfectionism cycle)", async () => {
     // Alternating identical bash builds and distinct other-tool calls — the
     // consecutive-duplicate guard must NOT fire, but after the 5th mutation

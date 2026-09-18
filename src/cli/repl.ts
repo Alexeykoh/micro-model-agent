@@ -950,8 +950,9 @@ export class Repl implements ReplContext {
       );
     }
 
-    const cwd = process.cwd();
-    row(t("repl.work_dir"), pc.dim(cwd));
+    // Show the agent's workspace (the `-d` dir), not the process cwd: `bun run`
+    // sets cwd to the package root, which is NOT where the agent operates.
+    row(t("repl.work_dir"), pc.dim(this.baseDir));
 
     if (this.noAgentsMd) {
       row(t("repl.agents_label"), pc.red(t("repl.disabled")));

@@ -12,6 +12,7 @@ import {
   detectTestResults,
   emptyCliRunHint,
   npmExecHint,
+  interactivePromptHint,
   resetBashFailureTracking,
 } from "../src/tools/bash";
 import { processRegistry } from "../src/modules/processes";
@@ -478,6 +479,26 @@ describe("npmExecHint (Task E)", () => {
   it("returns the output unchanged for successful runs", () => {
     const out = "hello world";
     expect(npmExecHint(out)).toBe(out);
+  });
+});
+
+describe("interactivePromptHint", () => {
+  it("appends a non-interactive remedy on 'Operation cancelled'", () => {
+    const out = "Scaffolding project...\nOperation cancelled";
+    const r = interactivePromptHint(out);
+    expect(r.startsWith(out)).toBe(true);
+    expect(r).toContain("Hint:");
+    expect(r).toContain("non-interactively");
+  });
+
+  it("detects the no-TTY stdin error", () => {
+    const r = interactivePromptHint("Error: stdin is not a TTY");
+    expect(r).toContain("Hint:");
+  });
+
+  it("returns unrelated output unchanged", () => {
+    const out = "added 42 packages in 3s";
+    expect(interactivePromptHint(out)).toBe(out);
   });
 });
 

@@ -48,10 +48,26 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
   MAX_LLM_ERROR_RETRIES,
   MAX_REPEATED_TOOL_CALLS,
+  MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
   MUTATION_CYCLE_NUDGE_THRESHOLD,
 } from "./agent/constants";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
+
+/**
+ * Read-only introspection tools. Repeating one with identical arguments can
+ * never make progress, so the interactive loop hard-stops after a few repeats
+ * (observed: `session_info` called in a tight loop after the task was already
+ * complete). Mutating tools stay nudge-only so a legitimate edit/build/read
+ * cycle is never cut short.
+ */
+const LOOP_PRONE_STATUS_TOOLS = new Set([
+  "session_info",
+  "process_list",
+  "process_log",
+  "file_info",
+  "project_map",
+]);
 
 export interface AgentDeps {
   config: AppConfig;
@@ -394,6 +410,7 @@ export class Agent {
         t("prompt.overflow.exceeded", {
           label: w.label,
           original: String(w.originalTokens),
+          needed: String(needed),
           budget: String(systemBudget),
           mode: w.mode === "summary" ? "summarized" : "truncated",
           resolved: String(w.resolvedTokens),
@@ -917,8 +934,9 @@ export class Agent {
           // Nudge fires in ALL modes: an identical (tool,args) repeat is a
           // wasted iteration — observed with qwen3.5-9b re-running the same
           // verification command back-to-back after the answer was already
-          // in the result. The hard stop below stays exitOnComplete-only so
-          // interactive sessions keep user control.
+          // in the result. Mutating tools stay nudge-only in interactive
+          // sessions (the user keeps control); status tools, which can never
+          // make progress by repeating, hard-stop after a few identical calls.
           logger.info(
             `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
           );
@@ -926,12 +944,20 @@ export class Agent {
             role: "user",
             content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
           });
+          state.repeatedToolCount++;
           if (this.deps.exitOnComplete) {
-            state.repeatedToolCount++;
             if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
               logger.debug("Exit-on-complete: repeated identical tool call, stopping");
               break;
             }
+          } else if (
+            state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS_INTERACTIVE &&
+            toolCalls.every((tc) => LOOP_PRONE_STATUS_TOOLS.has(tc.name))
+          ) {
+            logger.warn(
+              `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
+            );
+            break;
           }
         } else {
           state.repeatedToolCount = 0;

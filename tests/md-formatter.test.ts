@@ -143,3 +143,64 @@ describe("FormattingStream.flushPartialNow", () => {
     expect(out).toContain("Value");
   });
 });
+
+function makeStreamingStream(width = 60, reservedCols = 0) {
+  const chunks: string[] = [];
+  const stream = new FormattingStream(
+    (line) => chunks.push(`F:${line}\n`),
+    width,
+    (text) => chunks.push(text),
+    { streamPartials: true, reservedCols },
+  );
+  return { chunks, stream };
+}
+
+describe("FormattingStream partial streaming (live feedback)", () => {
+  it("rewinds the full displayed width, not just the last chunk", () => {
+    const { chunks, stream } = makeStreamingStream();
+    stream.write("**hello ");
+    stream.write("world** answer");
+    stream.write("\n");
+    stream.flush();
+    const out = chunks.join("");
+    const full = "**hello world** answer";
+    // Displayed raw width is the WHOLE line; the old bug rewound only the
+    // last chunk ("world** answer"), leaving the prefix on screen.
+    expect(out).toContain(`\x1b[${full.length}D\x1b[K`);
+    expect(out).toContain("F:hello world answer\n");
+    expect(out.indexOf("F:hello world answer")).toBeGreaterThan(out.indexOf("\x1b["));
+  });
+
+  it("freezes a partial before it can wrap past the available width", () => {
+    const { chunks, stream } = makeStreamingStream(10, 2);
+    // available = 10 - 2 = 8.
+    stream.write("12345678");
+    stream.write("9"); // would wrap → must NOT be streamed
+    stream.write("\n");
+    stream.flush();
+    const out = chunks.join("");
+    expect(out).not.toContain("\x1b[9D");
+    expect(out).toContain("\x1b[8D\x1b[K");
+    expect(out).toContain("F:123456789\n");
+  });
+
+  it("finalizes a streamed partial exactly once", () => {
+    const { chunks, stream } = makeStreamingStream();
+    stream.write("partial");
+    stream.flushPartialNow();
+    stream.write("next line\n");
+    stream.flush();
+    const out = chunks.join("");
+    expect(out).toContain("F:next line\n");
+    expect(out.split("partial").length - 1).toBe(1);
+  });
+
+  it("renders the final unterminated line formatted, without duplication", () => {
+    const { chunks, stream } = makeStreamingStream();
+    stream.write("**bold** tail");
+    stream.flush();
+    const out = chunks.join("");
+    expect(out).toContain("F:bold tail\n");
+    expect(out.split("bold tail").length - 1).toBe(1);
+  });
+});

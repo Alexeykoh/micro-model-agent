@@ -714,12 +714,14 @@ export async function bootstrap(
     const dry = dryRunOverflow([...promptBlocks, ...dynamicBlocks], systemBudget);
     if (dry.overflow.length > 0) {
       const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
-      const hint = overflowHint(config, dir, dry.includedTokens + overflowTokens);
+      const needed = dry.includedTokens + overflowTokens;
+      const hint = overflowHint(config, dir, needed);
       for (const b of dry.overflow) {
         logger.warn(
           t("prompt.overflow.startup", {
             block: b.kind === "instructions" ? "AGENTS.md" : "project map",
             original: String(b.estimatedTokens),
+            needed: String(needed),
             budget: String(systemBudget),
             hint,
           }),

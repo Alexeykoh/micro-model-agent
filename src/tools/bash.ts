@@ -345,6 +345,15 @@ export function emptyCliRunHint(
  */
 const NPM_EXEC_RE = /could not determine executable to run/i;
 
+/**
+ * A command that waited for interactive input with no TTY aborts with
+ * "Operation cancelled" (Bun/Node prompt) or "stdin is not a TTY". Common on
+ * bare `bun create`/`npm create` scaffolds. Append a concrete non-interactive
+ * remedy instead of letting the model retry the identical interactive command.
+ */
+const INTERACTIVE_PROMPT_RE =
+  /operation (?:cancelled|canceled|aborted)|stdin is not a tty|not a tty|cannot prompt without a tty/i;
+
 /** process-management tools hidden behind enable_tools (tag "shell"). */
 const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill"];
 
@@ -411,6 +420,9 @@ function decorateCommandOutput(opts: {
   // before the win32 hint block.
   output = npmExecHint(output);
 
+  // Interactive prompt with no TTY (Bun/Node "Operation cancelled").
+  output = interactivePromptHint(output);
+
   // On Windows, hint about Unix commands that don't work, and hard-stop a
   // command that keeps failing the same way. The hint keys on the ORIGINAL
   // command word (before adaptCommandForWindows translated cat→type): the
@@ -467,6 +479,14 @@ function decorateCommandOutput(opts: {
 export function npmExecHint(output: string): string {
   if (NPM_EXEC_RE.test(output)) {
     return `${output}\n\nHint: ${t("exec.npm_exec_hint")}`;
+  }
+  return output;
+}
+
+/** Append a non-interactive remedy when a command aborted waiting on stdin. */
+export function interactivePromptHint(output: string): string {
+  if (INTERACTIVE_PROMPT_RE.test(output)) {
+    return `${output}\n\nHint: ${t("exec.interactive_hint")}`;
   }
   return output;
 }

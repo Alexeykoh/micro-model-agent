@@ -67,7 +67,7 @@
 - Changing LLMProvider interface (breaking)
 - Architecture rewrites
 
-### Current Version: 0.63.0
+### Current Version: 1.0.1
 
 - **80** = REPL `/provider add` + subcommand handler maps (user request: «как через команду добавить провайдера? … можно прямо в агенте?»): (1) **`/provider add`** (`src/cli/repl-commands.ts`) — зеркало `mma provider add` без выхода из REPL (`--url/--key/--priority/--context-window/--rpm/--parallel`): сидит legacy-провайдера в `provider.entries`, сохраняет конфиг и вызывает `agent.reconfigure()`; подсказка переключения `/provider use <name>`; в completer добавлен `add`; i18n `repl.provider_add_missing_value`/`repl.provider_switch_hint` (en+ru). (2) **Handler-map dispatch** — `/provider`, `/model`, `/skill` и `SkillNameProvider.complete` переведены с цепочек `if (subcmd === …)` на карты `Record<string, handler>`; зафиксировано правилом архитектуры #17. Version: **0.63.0** (MINOR — new REPL subcommand).
 

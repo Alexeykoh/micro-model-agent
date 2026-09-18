@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-09-18
+
+### Fixed
+
+- **Garbled streamed output** (`src/ui/md-formatter.ts`): the live partial line was streamed raw and then overwritten with the formatted line using a cursor rewind equal to the **last chunk's** length (and, on completion, it re-formatted only the tail). Any line delivered in multiple chunks — i.e. every real answer — left the raw prefix on screen and mixed it with the formatted text (missing/swapped Cyrillic characters, leaked `▍` markers, broken tables; observed in `ses_mu6w6jmk`). The stream now tracks the **cumulative** displayed line, rewinds the full display width, and opts in to partial streaming only for rich terminals (`reservedCols` keeps the `- ` prefix from wrapping). A partial that would exceed the terminal width now freezes instead of wrapping, where a relative cursor move is meaningless.
+- **REPL banner directory** (`src/cli/repl.ts`): `Директория` showed `process.cwd()`, which `bun run` sets to the package root — so `mma -d <dir>` reported the wrong folder. It now shows the agent workspace (`baseDir`).
+- **Misleading prompt-overflow warning** (`src/core/bootstrap.ts`, `src/core/agent.ts`, i18n en+ru): the per-block startup/summary warning compared a single block's size against the whole system-prompt budget and claimed e.g. "AGENTS.md (3232 tok) exceeds the budget (3276 tok)" when the block fits and only the aggregate does not. Both messages now state the total requirement (`~N tok`) alongside the block that gets compressed.
+- **Interactive-command hint** (`src/tools/bash.ts`): a command that aborts waiting on stdin without a TTY (`Operation cancelled`, `stdin is not a TTY` — e.g. a bare `bun create`) now returns a non-interactive remedy instead of letting the model retry it unchanged.
+- **Infinite status-tool loop** (`src/core/agent.ts`): identical `session_info`/`process_list`/`process_log`/`file_info`/`project_map` calls are nudged and then hard-stopped in interactive runs. Mutating tools stay nudge-only, so a legitimate edit/build/read cycle is not cut short.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added

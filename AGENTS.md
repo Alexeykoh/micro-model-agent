@@ -164,7 +164,15 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Sinks:** `JsonOutputSink` (`--json` `diagnostics`, warn/error), `SessionOutputSink` (события с `data.persist === true`). Плагины подписываются через `HostBridge.subscribeOutput`.
 - **Guard:** `tests/output/no-direct-console.test.ts` (AST) запрещает `console.*`/`process.*.write` в `src/` и `examples/`; allowlist — crash-handler, machine JSON, browser bridge, non-TTY REPL fallback.
 
-### Current Version: 1.0.0
+### Streaming & Loop Fixes (1.0.1)
+
+- **Streaming partials** (`src/ui/md-formatter.ts`): `FormattingStream` отслеживает накопленную ширину частичной строки (`streamedChars`/`partialWritten`) и откатывает курсор на всю отображённую ширину перед записью форматированной строки. Частичный стрим — opt-in (`streamPartials`, включает `Renderer` только в rich-TTY; `reservedCols` учитывает префикс `- `). Частичная строка, которая перенеслась бы за ширину терминала, замораживается — относительный `\x1b[ND` при переносе некорректен.
+- **Баннер** (`src/cli/repl.ts`): «Директория» = `baseDir` агента (не `process.cwd()`, который `bun run` ставит в корень пакета).
+- **Overflow-предупреждения** (`bootstrap.ts`/`agent.ts`, i18n): сообщают суммарную потребность (`~N токенов`), а не сравнение одного блока с общим бюджетом.
+- **Interactive-команды** (`src/tools/bash.ts`): `Operation cancelled`/`stdin is not a TTY` → подсказка запустить неинтерактивно.
+- **Status-loop** (`src/core/agent.ts`): идентичные `session_info`/`process_list`/`process_log`/`file_info`/`project_map` жёстко останавливаются в интерактиве (`MAX_REPEATED_TOOL_CALLS_INTERACTIVE`); мутирующие тулы — только nudge.
+
+### Current Version: 1.0.1
 
 ### Changelog
 

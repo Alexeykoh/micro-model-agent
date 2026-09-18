@@ -83,6 +83,19 @@ describe("Renderer", () => {
     expect(out).toContain("answer");
   });
 
+  it("renders a chunked markdown answer once, without garbling", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.text("**bo");
+    renderer.text("ld** ans");
+    renderer.text("wer\n");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("bold answer");
+    // The formatted line is emitted exactly once (the raw partial is replaced,
+    // not duplicated) — the 1.0.0 streaming regression.
+    expect(out.split("bold answer").length - 1).toBe(1);
+  });
+
   it("writes errors to the error stream", () => {
     const { renderer, text } = makeRenderer({ rich: false });
     renderer.error("boom");
