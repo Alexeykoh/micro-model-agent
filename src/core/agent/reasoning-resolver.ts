@@ -53,7 +53,10 @@ export class ReasoningEffortResolver {
       overrideAge > 0 &&
       overrideAge <= overrideCooldown;
 
-    if (overrideActive) {
+    if (reasoningState.manual) {
+      level = reasoningState.level;
+      source = "agent_override";
+    } else if (overrideActive) {
       level = reasoningState.level;
       source = "agent_override";
     } else if (reasoningConfig && reasoningConfig.mode === "auto" && deps.probePassed) {

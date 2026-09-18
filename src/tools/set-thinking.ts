@@ -8,6 +8,12 @@ const VALID_LEVELS: ReasoningLevel[] = ["default", "none", "low", "medium", "hig
 export interface ReasoningState {
   level: ReasoningLevel;
   overrideIteration: number;
+  /**
+   * Persistent manual override set by the user (`/reasoning <level>`), unlike
+   * the transient `set_thinking` override which expires after `overrideCooldown`.
+   * Cleared by `/reasoning auto`.
+   */
+  manual?: boolean;
 }
 
 export function createSetThinkingTool(

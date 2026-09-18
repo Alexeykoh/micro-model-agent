@@ -198,7 +198,7 @@ export class Repl implements ReplContext {
       this.rl = new LineEditor({
         input: process.stdin,
         output: process.stdout,
-        prompt: pc.cyan(t("repl.you")),
+        prompt: this.inputPrompt(),
         history: this.history,
         historySize: this.maxHistory,
         completer: editorCompleter,
@@ -207,7 +207,7 @@ export class Repl implements ReplContext {
       this.rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
-        prompt: pc.cyan(t("repl.you")),
+        prompt: this.inputPrompt(),
         history: this.history,
         historySize: this.maxHistory,
         tabSize: 2,
@@ -437,7 +437,7 @@ export class Repl implements ReplContext {
             }
           }
         } else {
-          this.rl.setPrompt(pc.cyan(t("repl.you") + "… "));
+          this.rl.setPrompt(this.inputPrompt(true));
           this.rl.prompt();
         }
         return;
@@ -446,13 +446,13 @@ export class Repl implements ReplContext {
       if (this.isMultiLineInput(trimmed)) {
         inMultiLine = true;
         multiLineBuffer = trimmed;
-        this.rl.setPrompt(pc.cyan(t("repl.you") + "… "));
+        this.rl.setPrompt(this.inputPrompt(true));
         this.rl.prompt();
         return;
       }
 
       if (!trimmed) {
-        this.rl.setPrompt(pc.cyan(t("repl.you")));
+        this.rl.setPrompt(this.inputPrompt());
         this.rl.prompt();
         return;
       }
@@ -520,9 +520,34 @@ export class Repl implements ReplContext {
    */
   private presentPrompt(): void {
     if (!this.running) return;
-    this.rl.setPrompt(pc.cyan(t("repl.you")));
+    this.rl.setPrompt(this.inputPrompt());
     this.rl.prompt();
     this.promptPresented = true;
+  }
+
+  /**
+   * Reasoning label shown in the input prompt. In `auto` mode the effective
+   * level is normally decided per iteration by the policy, so we show only the
+   * fact that reasoning is automatic. If the user set an explicit override
+   * (`/reasoning <level>`, persistent) or the agent set a still-active
+   * `set_thinking` override (transient), we show `auto→<level>`. In a fixed
+   * mode we show the effective level.
+   */
+  private reasoningLabel(): string {
+    const mode = this.config.reasoning?.mode ?? "default";
+    if (mode !== "auto") return this.agent.reasoningLevel ?? mode;
+    const rs = this.agent.reasoningState;
+    const cooldown = this.config.reasoning?.overrideCooldown ?? 0;
+    const transientActive =
+      rs.overrideIteration >= 0 && this.agent.currentIteration - rs.overrideIteration <= cooldown;
+    if (rs.manual || transientActive) return `auto→${this.agent.reasoningLevel}`;
+    return "auto";
+  }
+
+  /** Localized input prompt embedding the active reasoning mode/level. */
+  private inputPrompt(continuation = false): string {
+    const key = continuation ? "repl.you_reasoning_cont" : "repl.you_reasoning";
+    return pc.cyan(t(key, { level: this.reasoningLabel() }));
   }
 
   /**
@@ -696,6 +721,9 @@ export class Repl implements ReplContext {
         // Single prompt presentation for the agent path: resumeFrame()
         // redraws the frame, so the `line` listener must NOT prompt again
         // after runAgent() (it still does after slash commands).
+        // Re-set the prompt first so a reasoning level changed by
+        // set_thinking during the run is reflected on the resumed frame.
+        this.rl.setPrompt(this.inputPrompt());
         this.rl.resumeFrame();
         this.promptPresented = true;
       } else {

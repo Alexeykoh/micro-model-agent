@@ -149,6 +149,28 @@ describe("Agent reasoning override", () => {
     expect(capturedOptions[0]?.reasoningEffort).toBe("medium");
   });
 
+  it("manual override from setReasoningLevel persists (no cooldown)", async () => {
+    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
+    const agent = new Agent(deps as any);
+    agent.setReasoningLevel("max");
+
+    await agent.run("hello");
+
+    expect(capturedOptions[0]?.reasoningEffort).toBe("max");
+  });
+
+  it("setReasoningLevel('auto') clears the manual override", async () => {
+    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
+    const agent = new Agent(deps as any);
+    agent.setReasoningLevel("max");
+    agent.setReasoningLevel("auto");
+
+    await agent.run("hello");
+
+    // Back to the auto policy baseline (medium).
+    expect(capturedOptions[0]?.reasoningEffort).toBe("medium");
+  });
+
   it("previous-iteration hallucination retry reaches the policy raise branch", async () => {
     const validate = vi
       .fn()

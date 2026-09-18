@@ -215,9 +215,14 @@ export class Agent {
     return this.reasoningState.level;
   }
 
-  /** Set reasoning level (used by REPL and CLI). */
-  setReasoningLevel(level: ReasoningLevel): void {
+  /** Set reasoning level (used by REPL and CLI). "auto" clears a manual override. */
+  setReasoningLevel(level: ReasoningLevel | "auto"): void {
+    if (level === "auto") {
+      this.reasoningState.manual = false;
+      return;
+    }
     this.reasoningState.level = level;
+    this.reasoningState.manual = true;
   }
 
   /** Current iteration number (for tool cooldown checks). */

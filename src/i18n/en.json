@@ -442,6 +442,8 @@
   "repl.skill_usage": "Usage: /skill [list|loaded|load|unload|search]",
   "repl.agent": "Agent: ",
   "repl.you": "You: ",
+  "repl.you_reasoning": "You [{level}]: ",
+  "repl.you_reasoning_cont": "You [{level}]… ",
   "repl.interrupt": "Interrupted (Esc)",
   "repl.title": "MMA REPL v{version}",
   "repl.model": "Model:",
