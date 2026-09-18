@@ -47,7 +47,7 @@ import type { ReasoningLevel } from "../config/types";
  * (приоритет: CLI > config > default). "auto" пропускается — полагаемся
  * на конфиг. Строка CLI приводится к типизированному ReasoningLevel.
  */
-function applyReasoningCliOverride(config: AppConfig, reasoningLevel: string | undefined): void {
+export function applyReasoningCliOverride(config: AppConfig, reasoningLevel: string | undefined): void {
   if (!reasoningLevel || reasoningLevel === "auto") return;
   if (!config.reasoning) {
     config.reasoning = {

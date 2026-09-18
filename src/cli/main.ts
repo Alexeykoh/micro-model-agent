@@ -1,10 +1,10 @@
 ﻿import { createProgram } from "./commands";
-import { bootstrap, setOneShotMode } from "../core/bootstrap";
+import { bootstrap, setOneShotMode, applyReasoningCliOverride } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
-import { order } from "./setup-order";
+import { order, applyAnswersToConfig } from "./setup-order";
 import { getDefaultChannel } from "../output";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
@@ -235,43 +235,10 @@ async function main(): Promise<void> {
           configDir: mmaDir,
           projectConfigPath,
         });
-        config.provider.type = a.provider;
-        config.provider.baseUrl = a.apiBase;
-        config.provider.apiKey = a.apiKey;
-        config.model = a.model;
-        config.contextWindow = a.contextWindow;
-        config.maxToolIterations = a.maxToolIterations;
-        config.locale = a.locale;
-        if (config.security) {
-          config.security.enabled = true;
-          config.security.bash.enabled = true;
-          config.security.bash.blockDangerousFlags =
-            a.securityFlagsBlock || config.security.bash.blockDangerousFlags;
-          if (a.securityBashBlock) {
-            config.security.bash.blacklist = [
-              ...new Set([
-                ...config.security.bash.blacklist,
-                "rm",
-                "dd",
-                "chmod",
-                "wget",
-                "curl",
-                "scp",
-                "ssh",
-                "nc",
-                "netcat",
-                "sudo",
-                "su",
-                "kill",
-                "pkill",
-                "killall",
-                "shutdown",
-                "reboot",
-              ]),
-            ];
-          }
-          if (!a.securityPathsDeny) config.security.paths.denied = [];
-        }
+        // Preserve the CLI --reasoning override (bootstrap would have applied
+        // it as well, but here we persist before bootstrap ever runs).
+        applyReasoningCliOverride(config, reasoningLevel);
+        applyAnswersToConfig(config, a);
         saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
       },
       bootstrap: () => bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel),
