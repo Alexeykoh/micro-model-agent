@@ -4,6 +4,8 @@ import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
+import { order } from "./setup-order";
+import { getDefaultChannel } from "../output";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -89,9 +91,7 @@ async function main(): Promise<void> {
     const suggestion = closestCommand(program.args[0], [...cmdNames]);
     if (suggestion && suggestion !== program.args[0]) {
       console.error(
-        pc.yellow(
-          `${t("cli.unknown_command", { input: program.args[0], suggestion })}`,
-        ),
+        pc.yellow(`${t("cli.unknown_command", { input: program.args[0], suggestion })}`),
       );
       process.exit(2);
     }
@@ -99,7 +99,13 @@ async function main(): Promise<void> {
 
   if (program.args.length > 0) {
     const prompt = program.args.join(" ");
-    const { agent, config, baseDir, legacyDetected } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
+    const { agent, config, baseDir, legacyDetected } = await bootstrap(
+      undefined,
+      projectDir,
+      noAgentsMd,
+      exitOnComplete,
+      reasoningLevel,
+    );
 
     if (legacyDetected) {
       console.error(pc.yellow(`  ${t("config.legacy_hint")}`));
@@ -188,7 +194,11 @@ async function main(): Promise<void> {
     }
     renderer.flush();
     if (result.provider && result.model) {
-      renderer.footer(result.model, result.provider, result.llmDurationMs ?? result.durationMs ?? 0);
+      renderer.footer(
+        result.model,
+        result.provider,
+        result.llmDurationMs ?? result.durationMs ?? 0,
+      );
     }
     const exitCode = printRunResult(result, () => renderer.flush());
     agent.shutdown();
@@ -204,6 +214,69 @@ async function main(): Promise<void> {
         hasAnyConfig = hasDomainFiles(mmaDir);
       } catch {}
     }
+
+    // First run: run the wizard BEFORE bootstrap so background probes
+    // (context/reasoning) never start while the wizard owns the terminal.
+    // A non-interactive run (--exit-on-complete) must never open the wizard
+    // and block on stdin.
+    const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
+
+    const { boot } = await order({
+      hasConfig: hasAnyConfig,
+      interactive: !exitOnComplete,
+      runSetup: async () => {
+        getDefaultChannel().writeLine("\n  " + t("cli.first_run") + "\n");
+        return runSetup();
+      },
+      applyAnswers: (a) => {
+        // Load defaults + any existing domain files, apply the wizard answers,
+        // and persist BEFORE bootstrap so bootstrap reads the final config.
+        const { config } = loadConfig({
+          configDir: mmaDir,
+          projectConfigPath,
+        });
+        config.provider.type = a.provider;
+        config.provider.baseUrl = a.apiBase;
+        config.provider.apiKey = a.apiKey;
+        config.model = a.model;
+        config.contextWindow = a.contextWindow;
+        config.maxToolIterations = a.maxToolIterations;
+        config.locale = a.locale;
+        if (config.security) {
+          config.security.enabled = true;
+          config.security.bash.enabled = true;
+          config.security.bash.blockDangerousFlags =
+            a.securityFlagsBlock || config.security.bash.blockDangerousFlags;
+          if (a.securityBashBlock) {
+            config.security.bash.blacklist = [
+              ...new Set([
+                ...config.security.bash.blacklist,
+                "rm",
+                "dd",
+                "chmod",
+                "wget",
+                "curl",
+                "scp",
+                "ssh",
+                "nc",
+                "netcat",
+                "sudo",
+                "su",
+                "kill",
+                "pkill",
+                "killall",
+                "shutdown",
+                "reboot",
+              ]),
+            ];
+          }
+          if (!a.securityPathsDeny) config.security.paths.denied = [];
+        }
+        saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
+      },
+      bootstrap: () => bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel),
+    });
+
     const {
       agent,
       config,
@@ -216,7 +289,7 @@ async function main(): Promise<void> {
       logger,
       envReport,
       contextProbe,
-    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
+    } = boot;
 
     const repl = new Repl(
       agent,
@@ -234,42 +307,6 @@ async function main(): Promise<void> {
       execModule,
       contextProbe,
     );
-
-    if (!hasAnyConfig && !exitOnComplete) {
-      // First run: wizard via the REPL's LineEditor (avoids Bun stdin conflict
-      // from creating a second readline on process.stdin). A non-interactive
-      // run (--exit-on-complete) must never open the wizard and block on stdin.
-      console.log(pc.yellow("\n  " + t("cli.first_run") + "\n"));
-      const answers = await runSetup(repl.rl);
-      config.provider.type = answers.provider;
-      config.provider.baseUrl = answers.apiBase;
-      config.provider.apiKey = answers.apiKey;
-      config.model = answers.model;
-      config.contextWindow = answers.contextWindow;
-      config.maxToolIterations = answers.maxToolIterations;
-      config.locale = answers.locale;
-      if (config.security) {
-        config.security.enabled = true;
-        config.security.bash.enabled = true;
-        config.security.bash.blockDangerousFlags =
-          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
-        if (answers.securityBashBlock) {
-          config.security.bash.blacklist = [
-            ...new Set([
-              ...config.security.bash.blacklist,
-              "rm", "dd", "chmod", "wget", "curl", "scp", "ssh",
-              "nc", "netcat", "sudo", "su", "kill", "pkill",
-              "killall", "shutdown", "reboot",
-            ]),
-          ];
-        }
-        if (!answers.securityPathsDeny) {
-          config.security.paths.denied = [];
-        }
-      }
-      saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
-      await agent.reconfigure(config);
-    }
 
     startAutoUpdate(config);
     await repl.start();

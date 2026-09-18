@@ -7,7 +7,7 @@ import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/preset
 import { box } from "../ui/box";
 import { renderTable } from "../ui/table";
 
-interface SetupAnswers {
+export interface SetupAnswers {
   provider: string;
   apiBase: string;
   apiKey: string;
