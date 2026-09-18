@@ -124,6 +124,7 @@ describe("OutputChannel", () => {
     bus.log("info", "s", "a");
     c.setQuiet(true);
     c.setQuiet(false);
+    expect(c.getMode()).toBe("modal");
     c.endModal();
     expect(out.data).toContain("a");
   });
@@ -132,10 +133,13 @@ describe("OutputChannel", () => {
     c.writeLine("banner");
     expect(out.data).toBe("banner\n");
   });
-  it("detaches from the bus after dispose", () => {
+  it("resets state and detaches from the bus after dispose", () => {
     const { bus, out, c } = ch();
+    c.beginStreaming();
     c.dispose();
+    expect(c.getMode()).toBe("idle");
     bus.log("info", "s", "x");
+    c.writeLine("after");
     expect(out.data).toBe("");
   });
   it("emits ANSI color when forced on", () => {
