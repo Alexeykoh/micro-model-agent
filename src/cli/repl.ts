@@ -219,6 +219,9 @@ export class Repl implements ReplContext {
         // process.stdout so injected/captured channels observe it.
         process.stdout.write(text + "\n");
       },
+      clearScreen: () => {
+        if (this.rl instanceof LineEditor) this.rl.clearScreen();
+      },
     };
     this.output.attachPrompt(this.promptSink);
 

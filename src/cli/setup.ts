@@ -6,6 +6,7 @@ import { Spinner } from "../ui/spinner";
 import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
 import { renderTable } from "../ui/table";
+import { getDefaultChannel } from "../output";
 
 export interface SetupAnswers {
   provider: string;
@@ -21,7 +22,7 @@ export interface SetupAnswers {
 }
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
-  const spinner = new Spinner();
+  const spinner = new Spinner({ channel: getDefaultChannel() });
   spinner.start(message);
   try {
     return await fn();
@@ -35,7 +36,7 @@ function menuList(items: Array<{ label: string; url?: string }>): void {
   const lines = items.map(
     (it, i) => ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
   );
-  for (const l of box(lines, { width: 72 })) console.log(l);
+  for (const l of box(lines, { width: 72 })) getDefaultChannel().writeLine(l);
 }
 
 function ask(rl: LineInput, question: string, defaultValue?: string): Promise<string> {
@@ -133,7 +134,7 @@ async function testChat(apiBase: string, apiKey: string, model: string): Promise
 }
 
 export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
-  console.log(t("setup.title"));
+  getDefaultChannel().writeLine(t("setup.title"));
 
   const rl =
     externalRl ||
@@ -143,11 +144,11 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     });
   const ownRl = !externalRl;
 
-  console.log(t("setup.language"));
+  getDefaultChannel().writeLine(t("setup.language"));
   const locale = await ask(rl, t("setup.ui_lang"), "en");
   setLocale(locale);
 
-  console.log(t("setup.select_provider"));
+  getDefaultChannel().writeLine(t("setup.select_provider"));
   menuList(PROVIDER_TYPES);
   const providerChoice = await ask(
     rl,
@@ -166,7 +167,7 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     const found = await withSpinner(t("setup.scanning_spinner"), async () => scanPorts());
 
     if (found.length > 0) {
-      console.log(t("setup.found_servers", { count: found.length }));
+      getDefaultChannel().writeLine(t("setup.found_servers", { count: found.length }));
       menuList([
         ...found.map((f) => ({ label: f.label, url: f.url })),
         { label: t("setup.custom_url") },
@@ -179,7 +180,7 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
         apiBase = found[Math.max(0, Math.min(found.length - 1, idx))].url;
       }
     } else {
-      console.log(t("setup.no_servers"));
+      getDefaultChannel().writeLine(t("setup.no_servers"));
       apiBase = await ask(rl, t("setup.api_base"), "http://localhost:1234/v1");
     }
   } else {
@@ -192,7 +193,7 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
   const models = await withSpinner(t("setup.fetching_spinner"), () => fetchModels(apiBase, apiKey));
   let model = "";
   if (models.length > 0) {
-    console.log(t("setup.available_models"));
+    getDefaultChannel().writeLine(t("setup.available_models"));
     menuList(models.slice(0, 10).map((m) => ({ label: m })));
     const choice = await ask(
       rl,
@@ -209,18 +210,18 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     testChat(apiBase, apiKey, model),
   );
   if (connected) {
-    console.log(pc.green(t("setup.ok")));
+    getDefaultChannel().writeLine(pc.green(t("setup.ok")));
   } else {
-    console.log(pc.yellow(t("setup.warning")));
+    getDefaultChannel().writeLine(pc.yellow(t("setup.warning")));
   }
 
-  console.log(t("setup.agent_settings"));
+  getDefaultChannel().writeLine(t("setup.agent_settings"));
   const contextWindow = parseInt(await ask(rl, t("setup.context_window"), "32768"));
   const maxIterations = parseInt(await ask(rl, t("setup.max_iters"), "1000"));
 
   // Security settings
-  console.log(t("setup.security_header"));
-  console.log(pc.dim(t("setup.security_status_on")));
+  getDefaultChannel().writeLine(t("setup.security_header"));
+  getDefaultChannel().writeLine(pc.dim(t("setup.security_status_on")));
   const configureSecurity = await ask(rl, t("setup.security_configure"), "n");
   let securityBashBlock = false;
   let securityFlagsBlock = false;
@@ -260,7 +261,7 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     securityPathsDeny,
   };
 
-  console.log(pc.green(pc.bold(t("setup.complete"))));
+  getDefaultChannel().writeLine(pc.green(pc.bold(t("setup.complete"))));
   const summary = renderTable(
     [
       t("setup.summary_setting"),
@@ -276,6 +277,6 @@ export async function runSetup(externalRl?: LineInput): Promise<SetupAnswers> {
     ],
     { maxColumns: 4 },
   );
-  for (const l of summary) console.log(l);
+  for (const l of summary) getDefaultChannel().writeLine(l);
   return answers;
 }

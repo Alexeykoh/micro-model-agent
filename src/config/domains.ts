@@ -3,6 +3,7 @@ import { join } from "path";
 import type { AppConfig } from "./types";
 import { t } from "../i18n/index";
 import { deepMerge, regexReplacer, regexReviver } from "./utils";
+import { defaultOutputBus } from "../output";
 
 /**
  * Mapping: domain name → AppConfig keys that belong to it.
@@ -42,10 +43,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
 /**
  * Extract a domain subset from a full AppConfig.
  */
-export function extractDomain(
-  config: AppConfig,
-  domain: string,
-): Record<string, unknown> {
+export function extractDomain(config: AppConfig, domain: string): Record<string, unknown> {
   const keys = CONFIG_DOMAINS[domain];
   if (!keys) return {};
   const subset: Record<string, unknown> = {};
@@ -83,9 +81,7 @@ export function hasDomainFiles(configDir: string): boolean {
  * Each file is parsed with regexReviver to restore RegExp objects.
  * Returns null if no domain files exist.
  */
-export function loadDomainFiles(
-  configDir: string,
-): Partial<AppConfig> | null {
+export function loadDomainFiles(configDir: string): Partial<AppConfig> | null {
   const configDirPath = join(configDir, "config");
   if (!existsSync(configDirPath)) return null;
 
@@ -104,7 +100,7 @@ export function loadDomainFiles(
     } catch {
       // Never silent: surface the offending path instead of silently ignoring
       // a domain the user believes is active.
-      console.warn(t("config.parse_failed", { path: filePath }));
+      defaultOutputBus.log("warn", "config", t("config.parse_failed", { path: filePath }));
     }
   }
 
@@ -116,10 +112,7 @@ export function loadDomainFiles(
  * Each domain's keys are extracted and written to config/<domain>.json.
  * RegExp objects are serialized via regexReplacer.
  */
-export function saveDomainFiles(
-  config: AppConfig,
-  configDir: string,
-): void {
+export function saveDomainFiles(config: AppConfig, configDir: string): void {
   const configDirPath = join(configDir, "config");
   mkdirSync(configDirPath, { recursive: true });
 
@@ -135,11 +128,7 @@ export function saveDomainFiles(
     if (!hasContent) continue;
 
     const filePath = getDomainFilePath(configDir, domain);
-    writeFileSync(
-      filePath,
-      JSON.stringify(subset, regexReplacer, 2),
-      "utf-8",
-    );
+    writeFileSync(filePath, JSON.stringify(subset, regexReplacer, 2), "utf-8");
   }
 }
 

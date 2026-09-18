@@ -2,6 +2,7 @@ import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { formatCost } from "../modules/pricing/prices";
 import { formatCacheLine, type CacheReport } from "./cache-line";
+import { getDefaultChannel, type OutputChannel } from "../output";
 
 /**
  * Render a single-run AgentResult to the terminal (non-JSON mode) and return
@@ -23,29 +24,28 @@ export function printRunResult(
     cache?: CacheReport;
   },
   flush: () => void,
+  channel: OutputChannel = getDefaultChannel(),
 ): number {
   flush();
   if (result.success) {
     if (result.totalCost !== undefined && result.totalCost > 0) {
-      console.log(pc.dim(`${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
+      channel.writeLine(pc.dim(`${t("repl.cost", { cost: formatCost(result.totalCost) })}`));
       if (result.costBreakdown && result.costBreakdown.length > 1) {
-        const parts = result.costBreakdown.map(
-          (e) => `${e.provider} ${formatCost(e.cost)}`,
-        );
-        console.log(pc.dim(`  ${t("repl.cost_breakdown", { breakdown: parts.join(", ") })}`));
+        const parts = result.costBreakdown.map((e) => `${e.provider} ${formatCost(e.cost)}`);
+        channel.writeLine(pc.dim(`  ${t("repl.cost_breakdown", { breakdown: parts.join(", ") })}`));
       }
     } else if (result.totalTokens !== undefined && result.totalTokens > 0) {
-      console.log(pc.dim(`${t("repl.tokens", { tokens: result.totalTokens })}`));
+      channel.writeLine(pc.dim(`${t("repl.tokens", { tokens: result.totalTokens })}`));
     }
     const cacheLine = formatCacheLine(result.cache);
     if (cacheLine) {
-      console.log(pc.dim(`  ${cacheLine}`));
+      channel.writeLine(pc.dim(`  ${cacheLine}`));
     }
     if (!result.text) {
-      console.log(pc.yellow(t("cli.no_output")));
+      channel.writeLine(pc.yellow(t("cli.no_output")));
     }
     return 0;
   }
-  console.error(`${t("error.prefix")}${result.error}`);
+  channel.writeLine(`${t("error.prefix")}${result.error}`, "stderr");
   return 1;
 }

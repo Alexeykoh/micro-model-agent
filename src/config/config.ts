@@ -13,6 +13,7 @@ import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles, hasDomainFiles } from "./domains";
+import { defaultOutputBus } from "../output";
 
 // ── Centralized path constants ──────────────────────────────────────────
 export const CONFIG_DIR = join(homedir(), ".mma");
@@ -69,7 +70,8 @@ function normalizeLspServerArgs(config: AppConfig): void {
     const def = DEFAULT_LSP_CONFIG.servers[lang];
     if (!server || server.command !== "npx" || !def) continue;
     const storedArgs = Array.isArray(server.args) ? server.args : null;
-    const isLegacy = storedArgs === null || JSON.stringify(storedArgs) === JSON.stringify(legacy.args);
+    const isLegacy =
+      storedArgs === null || JSON.stringify(storedArgs) === JSON.stringify(legacy.args);
     if (isLegacy) {
       server.args = def.args;
       server.timeout = def.timeout;
@@ -86,7 +88,7 @@ function loadJSON(path: string): Record<string, unknown> | null {
     ) as Record<string, unknown>;
   } catch {
     // Never silent: a typo'd config must not quietly wipe the user's settings.
-    console.warn(t("config.parse_failed", { path }));
+    defaultOutputBus.log("warn", "config", t("config.parse_failed", { path }));
   }
   return null;
 }
@@ -261,13 +263,17 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     backup.backupAll();
     backup.backupConfig();
     const summary = backup.getBackupSummary();
-    console.log(t("migration.detected", { summary }));
+    defaultOutputBus.log("info", "config", t("migration.detected", { summary }));
     try {
       unlinkSync(globalPath);
     } catch (e) {
       // Best-effort removal: loadConfig falls back to defaults either way,
       // but a leftover v1 file would re-trigger migration on every startup.
-      console.error("[config] failed to remove legacy config.json:", e);
+      defaultOutputBus.log(
+        "error",
+        "config",
+        `[config] failed to remove legacy config.json: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -327,7 +333,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     const providerOverride = overrides.find((o) => o.key === "provider");
     if (providerOverride) providerOverride.envValue = (config as any).provider;
   } catch (e: any) {
-    console.warn(t("config.decryption_warning", { error: e.message }));
+    defaultOutputBus.log("warn", "config", t("config.decryption_warning", { error: e.message }));
   }
 
   if (overrides.length > 0) envOverrideMap.set(config, overrides);
@@ -376,7 +382,7 @@ export function saveConfig(config: AppConfig, configPath: string, configDir?: st
     } as unknown as Record<string, unknown>);
     writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
   } catch (e: any) {
-    console.warn(t("config.encryption_warning", { error: e.message }));
+    defaultOutputBus.log("warn", "config", t("config.encryption_warning", { error: e.message }));
     writeFileSync(configPath, JSON.stringify(toWrite, regexReplacer, 2), "utf-8");
   }
 }

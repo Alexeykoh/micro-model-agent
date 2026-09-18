@@ -198,4 +198,23 @@ describe("OutputChannel", () => {
     expect(out.data).toContain("\x1b[");
     c.dispose();
   });
+  it("clearScreen writes the ANSI clear sequence when no prompt is active", () => {
+    const { c, out } = ch();
+    c.clearScreen();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen delegates to the active prompt sink", () => {
+    const { c, out } = ch();
+    let called = 0;
+    c.attachPrompt({
+      isActive: () => true,
+      printAbove: () => {},
+      clearScreen: () => {
+        called++;
+      },
+    });
+    c.clearScreen();
+    expect(called).toBe(1);
+    expect(out.data).toBe("");
+  });
 });

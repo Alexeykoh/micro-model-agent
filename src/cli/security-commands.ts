@@ -11,16 +11,14 @@ import {
 } from "../modules/security/security-policies";
 import { globalAuditNotifier } from "../modules/security/audit-notifier";
 import { t } from "../i18n/index";
+import { getDefaultChannel } from "../output";
 
 /**
  * Toggle session-file encryption in place: flips `enabled` (and the two
  * per-file flags) while PRESERVING user-set fields already stored in the
  * config (keyPath etc.). Mutates the passed security object.
  */
-export function toggleSessionEncryption(
-  security: Record<string, any>,
-  enabled: boolean,
-): void {
+export function toggleSessionEncryption(security: Record<string, any>, enabled: boolean): void {
   const enc = (security.sessionEncryption ?? {}) as Record<string, any>;
   enc.enabled = enabled;
   enc.encryptHistory = enabled;
@@ -59,28 +57,32 @@ export function createSecurityCommand(program: Command): void {
       const sessionEncryption = security.sessionEncryption || {};
       const auditNotifier = security.auditNotifier || {};
 
-      console.log(t("cli.security.current_policy"));
-      console.log(
+      getDefaultChannel().writeLine(t("cli.security.current_policy"));
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.bash_enabled")}: ${bash.blacklist?.length > 0 ? t("cli.yes") : t("cli.no")}`,
       );
-      console.log(
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.path_validation")}: ${paths.denied?.length > 0 ? t("cli.yes") : t("cli.no")}`,
       );
-      console.log(
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.network_validation")}: ${network.deniedDomains?.length > 0 || network.allowedDomains?.length > 0 ? t("cli.yes") : t("cli.no")}`,
       );
-      console.log(
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.content_scanning")}: ${contentScan.enabled ? t("cli.yes") : t("cli.no")}`,
       );
-      console.log(`  ${t("cli.security.max_recursion")}: ${security.maxRecursionDepth ?? 3}`);
-      console.log(`  ${t("cli.security.max_file_ops")}: ${security.maxFileOperations ?? 100}`);
-      console.log(
+      getDefaultChannel().writeLine(
+        `  ${t("cli.security.max_recursion")}: ${security.maxRecursionDepth ?? 3}`,
+      );
+      getDefaultChannel().writeLine(
+        `  ${t("cli.security.max_file_ops")}: ${security.maxFileOperations ?? 100}`,
+      );
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.rate_limit")}: ${rateLimits.maxRequestsPerMinute ?? 60}/min`,
       );
-      console.log(
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.session_encryption")}: ${sessionEncryption.enabled ? t("cli.yes") : t("cli.no")}`,
       );
-      console.log(
+      getDefaultChannel().writeLine(
         `  ${t("cli.security.audit_notifier")}: ${auditNotifier.enabled ? t("cli.yes") : t("cli.no")}`,
       );
     });
@@ -90,19 +92,19 @@ export function createSecurityCommand(program: Command): void {
     .command("policies")
     .description(t("cli.security.policies"))
     .action(async () => {
-      console.log(t("cli.security.available_policies"));
-      console.log("");
+      getDefaultChannel().writeLine(t("cli.security.available_policies"));
+      getDefaultChannel().writeLine("");
 
       for (const [preset, policy] of Object.entries(SECURITY_POLICIES)) {
         if (preset === "custom") continue;
 
         const marker = " ";
-        console.log(` ${marker}${preset.padEnd(12)}  ${policy.name}`);
-        console.log(`             ${policy.description}`);
-        console.log(
+        getDefaultChannel().writeLine(` ${marker}${preset.padEnd(12)}  ${policy.name}`);
+        getDefaultChannel().writeLine(`             ${policy.description}`);
+        getDefaultChannel().writeLine(
           `             ${t("cli.security.recommended_for")}: ${policy.recommendedFor.join(", ")}`,
         );
-        console.log("");
+        getDefaultChannel().writeLine("");
       }
     });
 
@@ -117,7 +119,9 @@ export function createSecurityCommand(program: Command): void {
 
       const validPresets: SecurityPolicyPreset[] = ["strict", "balanced", "permissive"];
       if (!validPresets.includes(preset as SecurityPolicyPreset)) {
-        console.log(t("cli.security.invalid_preset", { presets: validPresets.join(", ") }));
+        getDefaultChannel().writeLine(
+          t("cli.security.invalid_preset", { presets: validPresets.join(", ") }),
+        );
         return;
       }
 
@@ -128,8 +132,10 @@ export function createSecurityCommand(program: Command): void {
       (appConfig as any).security = newSecurityConfig;
       saveConfig(appConfig, configPath, dirname(configPath));
 
-      console.log(t("cli.security.policy_applied", { name: policy.name }));
-      console.log(t("cli.security.policy_description", { description: policy.description }));
+      getDefaultChannel().writeLine(t("cli.security.policy_applied", { name: policy.name }));
+      getDefaultChannel().writeLine(
+        t("cli.security.policy_description", { description: policy.description }),
+      );
     });
 
   // security enable-encryption - enable session file encryption
@@ -144,7 +150,7 @@ export function createSecurityCommand(program: Command): void {
       toggleSessionEncryption(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
-      console.log(t("cli.security.encryption_enabled"));
+      getDefaultChannel().writeLine(t("cli.security.encryption_enabled"));
     });
 
   // security disable-encryption - disable session file encryption
@@ -159,7 +165,7 @@ export function createSecurityCommand(program: Command): void {
       toggleSessionEncryption(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
-      console.log(t("cli.security.encryption_disabled"));
+      getDefaultChannel().writeLine(t("cli.security.encryption_disabled"));
     });
 
   // security enable-audit - enable audit notifications
@@ -174,7 +180,7 @@ export function createSecurityCommand(program: Command): void {
       toggleAuditNotifier(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
-      console.log(t("cli.security.audit_enabled"));
+      getDefaultChannel().writeLine(t("cli.security.audit_enabled"));
     });
 
   // security disable-audit - disable audit notifications
@@ -189,7 +195,7 @@ export function createSecurityCommand(program: Command): void {
       toggleAuditNotifier(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
-      console.log(t("cli.security.audit_disabled"));
+      getDefaultChannel().writeLine(t("cli.security.audit_disabled"));
     });
 
   // security audit-stats - show audit notification statistics
@@ -199,19 +205,21 @@ export function createSecurityCommand(program: Command): void {
     .action(async () => {
       const stats = globalAuditNotifier.getStats();
 
-      console.log(t("cli.security.audit_stats_title"));
-      console.log(`  ${t("cli.security.total_notifications")}: ${stats.total}`);
-      console.log("");
-      console.log(t("cli.security.by_severity"));
-      console.log(`  ${t("cli.security.low")}: ${stats.bySeverity.low}`);
-      console.log(`  ${t("cli.security.medium")}: ${stats.bySeverity.medium}`);
-      console.log(`  ${t("cli.security.high")}: ${stats.bySeverity.high}`);
-      console.log(`  ${t("cli.security.critical")}: ${stats.bySeverity.critical}`);
-      console.log("");
-      console.log(t("cli.security.by_type"));
+      getDefaultChannel().writeLine(t("cli.security.audit_stats_title"));
+      getDefaultChannel().writeLine(`  ${t("cli.security.total_notifications")}: ${stats.total}`);
+      getDefaultChannel().writeLine("");
+      getDefaultChannel().writeLine(t("cli.security.by_severity"));
+      getDefaultChannel().writeLine(`  ${t("cli.security.low")}: ${stats.bySeverity.low}`);
+      getDefaultChannel().writeLine(`  ${t("cli.security.medium")}: ${stats.bySeverity.medium}`);
+      getDefaultChannel().writeLine(`  ${t("cli.security.high")}: ${stats.bySeverity.high}`);
+      getDefaultChannel().writeLine(
+        `  ${t("cli.security.critical")}: ${stats.bySeverity.critical}`,
+      );
+      getDefaultChannel().writeLine("");
+      getDefaultChannel().writeLine(t("cli.security.by_type"));
       for (const [type, count] of Object.entries(stats.byType)) {
         if (count > 0) {
-          console.log(`  ${type}: ${count}`);
+          getDefaultChannel().writeLine(`  ${type}: ${count}`);
         }
       }
     });

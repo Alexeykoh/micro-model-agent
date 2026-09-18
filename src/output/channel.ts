@@ -5,6 +5,7 @@ import type { OutputEvent, OutputStream } from "./types";
 export interface PromptSink {
   isActive(): boolean;
   printAbove(text: string): void;
+  clearScreen?(): void;
 }
 
 export type ChannelMode = "idle" | "streaming" | "modal" | "quiet";
@@ -120,6 +121,15 @@ export class OutputChannel {
 
   writeLine(text: string, stream: OutputStream = "stdout"): void {
     this.bus.emit({ level: "info", source: "", kind: "block", text, stream });
+  }
+
+  clearScreen(): void {
+    this.flushBlocks();
+    if (this.sink?.isActive() && this.sink.clearScreen) {
+      this.sink.clearScreen();
+      return;
+    }
+    this.out.write("\x1b[2J\x1b[H");
   }
 
   writeOverlay(text: string): void {

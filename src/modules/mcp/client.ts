@@ -1,8 +1,11 @@
 import { spawn, ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
+import { Logger } from "../../logger/app-logger";
 
 /** Default timeout for MCP HTTP requests (connect + tool calls). */
 const HTTP_TIMEOUT_MS = 10_000;
+
+const logger = new Logger("warn", "mcp");
 
 /**
  * Accept header required by the MCP Streamable HTTP transport — the server
@@ -46,7 +49,10 @@ export class MCPClient {
     if (!url) throw new Error("SSE transport requires a url");
 
     this.abortController = new AbortController();
-    const timeout = setTimeout(() => this.abortController?.abort(), this.config.timeout || HTTP_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => this.abortController?.abort(),
+      this.config.timeout || HTTP_TIMEOUT_MS,
+    );
 
     try {
       const response = await fetch(url, {
@@ -132,10 +138,9 @@ export class MCPClient {
     } catch (e) {
       // Heartbeats/comments are not JSON — expected noise, but still logged
       // so a genuinely broken stream is visible in diagnostics.
-      console.error(
-        "[MCPClient] Unparseable SSE message:",
-        String(data).slice(0, 120),
-        e instanceof Error ? e.message : e,
+      logger.logSilent(
+        "error",
+        `[MCPClient] Unparseable SSE message: ${String(data).slice(0, 120)} ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
@@ -215,11 +220,7 @@ export class MCPClient {
    * buffer-aware line parsing (notifications and stale responses between
    * our request and its response no longer break matching).
    */
-  private stdioRequest<T>(
-    method: string,
-    params?: unknown,
-    timeoutMs?: number,
-  ): Promise<T> {
+  private stdioRequest<T>(method: string, params?: unknown, timeoutMs?: number): Promise<T> {
     const proc = this.process;
     if (!proc || !proc.stdout || !proc.stdin) {
       return Promise.reject(new Error("Not connected to MCP server"));
@@ -390,11 +391,13 @@ export class MCPClient {
       throw new Error("Not connected to MCP server");
     }
 
-    const result = await this.stdioRequest<{ tools?: Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }> }>("tools/list");
+    const result = await this.stdioRequest<{
+      tools?: Array<{
+        name: string;
+        description?: string;
+        inputSchema?: Record<string, unknown>;
+      }>;
+    }>("tools/list");
 
     return result?.tools || [];
   }

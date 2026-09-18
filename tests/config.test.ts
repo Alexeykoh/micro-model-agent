@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { DEFAULTS } from "../src/config/defaults";
 import { loadConfig, deepMerge, saveConfig } from "../src/config/config";
+import { defaultOutputBus } from "../src/output";
 import { mkdtempSync, writeFileSync, existsSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -240,9 +241,7 @@ describe("loadConfig", () => {
 
       // …but a save persists the ORIGINAL user values.
       saveConfig(cfg, join(tmpDir, "config.json"), tmpDir);
-      const persistedCore = JSON.parse(
-        readFileSync(join(tmpDir, "config", "core.json"), "utf-8"),
-      );
+      const persistedCore = JSON.parse(readFileSync(join(tmpDir, "config", "core.json"), "utf-8"));
       const persistedProvider = JSON.parse(
         readFileSync(join(tmpDir, "config", "provider.json"), "utf-8"),
       );
@@ -471,18 +470,21 @@ describe("stale security config normalization", () => {
     const tmpDir = makeTempDir();
     const corruptPath = join(tmpDir, "config.json");
     writeFileSync(corruptPath, '{ "version": "2.0.0", "model": "broken", ');
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnings: string[] = [];
+    const unsub = defaultOutputBus.subscribe((ev) => {
+      if (ev.level === "warn") warnings.push(ev.text);
+    });
 
     const { config: cfg } = loadConfig({
       configDir: tmpDir,
       projectConfigPath: join(tmpDir, ".mmrc"),
     });
+    unsub();
 
     // Falls back to defaults, keeps the file, and is no longer silent.
     expect(cfg.model).toBe("qwen/qwen3.5-9b");
     expect(existsSync(corruptPath)).toBe(true);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(warnings.length).toBeGreaterThan(0);
   });
 
   it("deepMerge preserves RegExp values by reference instead of destroying them", () => {

@@ -50,6 +50,7 @@ export { MigrationDetector, BackupManager } from "./migration/index";
 import { MigrationDetector } from "./migration/detect";
 import { BackupManager } from "./migration/backup";
 import { t } from "./i18n/index";
+import { defaultOutputBus } from "./output";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -61,6 +62,6 @@ export function checkMigration(configDir?: string): void {
     backup.backupConfig();
     backup.backupAll();
     const summary = backup.getBackupSummary();
-    console.log(t("migration.summary", { summary }));
+    defaultOutputBus.log("info", "mma", t("migration.summary", { summary }));
   }
 }

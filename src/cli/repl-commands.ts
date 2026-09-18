@@ -108,8 +108,7 @@ function registerBuiltinCommands(ctx: ReplContext): void {
     description: t("repl.clear"),
     usage: t("repl.clear_usage"),
     action: () => {
-      // TODO(Task 11): route through OutputChannel; invalidate LineEditor anchor
-      console.clear();
+      ctx.output.clearScreen();
     },
   });
 }
@@ -779,8 +778,7 @@ function registerSessionCommands(ctx: ReplContext): void {
       const name = args.join(" ") || undefined;
       const meta = ctx.sessionManager!.create(name);
       ctx.agent.clearContext();
-      // TODO(Task 11): route through OutputChannel; invalidate LineEditor anchor
-      console.clear();
+      ctx.output.clearScreen();
       ctx.output.writeLine(
         `${t("session.created", { name: meta.name })} (${pc.dim(meta.id.slice(0, 12))})`,
       );
@@ -819,8 +817,7 @@ function registerSessionCommands(ctx: ReplContext): void {
       ctx.sessionManager!.setActive(match.id);
       const history = ctx.sessionManager!.loadHistory();
       ctx.agent.setContext(history);
-      // TODO(Task 11): route through OutputChannel; invalidate LineEditor anchor
-      console.clear();
+      ctx.output.clearScreen();
       ctx.output.writeLine(
         pc.bold(pc.green(t("session.resumed", { name: match.name }))) +
           " " +

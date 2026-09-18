@@ -5,7 +5,7 @@ import { Renderer } from "../ui/renderer";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { order, applyAnswersToConfig } from "./setup-order";
-import { getDefaultChannel } from "../output";
+import { defaultOutputBus, getDefaultChannel, writeMachineJson } from "../output";
 import { saveConfig, loadConfig } from "../config/config";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -29,9 +29,9 @@ function startAutoUpdate(config: {
   if (isDevEntryPath(fileURLToPath(import.meta.url))) return undefined;
   try {
     const module = new UpdaterModule(config.updater, readMmaVersion(), "micro-models-agent", {
-      info: (m) => process.stderr.write(pc.dim(m) + "\n"),
-      warn: (m) => process.stderr.write(pc.yellow(m) + "\n"),
-      error: (m) => process.stderr.write(pc.red(m) + "\n"),
+      info: (m) => defaultOutputBus.log("info", "updater", m),
+      warn: (m) => defaultOutputBus.log("warn", "updater", m),
+      error: (m) => defaultOutputBus.log("error", "updater", m),
     });
     module.start();
     return module;
@@ -90,8 +90,9 @@ async function main(): Promise<void> {
   if (program.args.length > 0) {
     const suggestion = closestCommand(program.args[0], [...cmdNames]);
     if (suggestion && suggestion !== program.args[0]) {
-      console.error(
+      getDefaultChannel().writeLine(
         pc.yellow(`${t("cli.unknown_command", { input: program.args[0], suggestion })}`),
+        "stderr",
       );
       process.exit(2);
     }
@@ -108,7 +109,7 @@ async function main(): Promise<void> {
     );
 
     if (legacyDetected) {
-      console.error(pc.yellow(`  ${t("config.legacy_hint")}`));
+      getDefaultChannel().writeLine(pc.yellow(`  ${t("config.legacy_hint")}`), "stderr");
     }
 
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
@@ -122,36 +123,26 @@ async function main(): Promise<void> {
         // crashing tool/plugin still yields a valid machine-readable result,
         // and shutdown/waitForIdle still run.
         const message = errMsg(err);
-        process.stdout.write(
-          JSON.stringify({ success: false, text: "", error: message, iterationCount: 0 }, null, 2),
-        );
-        process.stdout.write("\n");
+        writeMachineJson({ success: false, text: "", error: message, iterationCount: 0 });
         agent.shutdown();
         await updater?.waitForIdle(10_000);
         process.exit(1);
       }
       agent.shutdown();
-      process.stdout.write(
-        JSON.stringify(
-          {
-            success: result.success,
-            text: result.text,
-            error: result.error ?? null,
-            iterationCount: result.iterationCount,
-            contextUsed: result.contextUsed ?? null,
-            contextLimit: result.contextLimit ?? null,
-            promptTokens: result.promptTokens ?? null,
-            completionTokens: result.completionTokens ?? null,
-            totalTokens: result.totalTokens ?? null,
-            totalCost: result.totalCost ?? null,
-            costBreakdown: result.costBreakdown ?? [],
-            cache: result.cache ?? null,
-          },
-          null,
-          2,
-        ),
-      );
-      process.stdout.write("\n");
+      writeMachineJson({
+        success: result.success,
+        text: result.text,
+        error: result.error ?? null,
+        iterationCount: result.iterationCount,
+        contextUsed: result.contextUsed ?? null,
+        contextLimit: result.contextLimit ?? null,
+        promptTokens: result.promptTokens ?? null,
+        completionTokens: result.completionTokens ?? null,
+        totalTokens: result.totalTokens ?? null,
+        totalCost: result.totalCost ?? null,
+        costBreakdown: result.costBreakdown ?? [],
+        cache: result.cache ?? null,
+      });
       await updater?.waitForIdle(10_000);
       process.exit(result.success ? 0 : 1);
     }
@@ -281,7 +272,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(err);
+  getDefaultChannel().writeLine(
+    err instanceof Error ? (err.stack ?? err.message) : String(err),
+    "stderr",
+  );
   process.exit(1);
 });
 

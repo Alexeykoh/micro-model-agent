@@ -854,7 +854,7 @@ export class LineEditor implements LineInput {
     this.render();
   }
 
-  private clearScreen(): void {
+  clearScreen(): void {
     this.output.write("\x1b[2J\x1b[H");
     this.invalidateAnchor();
     this.render();

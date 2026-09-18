@@ -9,6 +9,9 @@ import {
   getOrCreateEncryptionKey,
   ConfigEncryptor,
 } from "./encryption";
+import { Logger } from "../../logger/app-logger";
+
+const logger = new Logger("warn", "security");
 
 /**
  * Session file encryption configuration
@@ -123,9 +126,11 @@ export class SessionFileEncryptor {
       try {
         return [this.decryptFileContent(line)];
       } catch (e) {
-        console.error(
-          "[session-encryption] failed to decrypt JSONL line — skipping it:",
-          e instanceof Error ? e.message : e,
+        logger.logSilent(
+          "error",
+          `[session-encryption] failed to decrypt JSONL line — skipping it: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
         );
         return [];
       }
