@@ -96,6 +96,22 @@ describe("OutputChannel", () => {
     c.endModal();
     expect(out.data).toContain("later");
   });
+  it("restores the streaming mode after a modal (interactive tool mid-run)", () => {
+    const { c } = ch();
+    c.beginStreaming();
+    c.beginModal();
+    c.endModal();
+    expect(c.getMode()).toBe("streaming");
+  });
+  it("closes a streaming partial after a modal, so the next log does not glue", () => {
+    const { bus, out, c } = ch();
+    c.beginStreaming();
+    c.writeRaw("partial");
+    c.beginModal();
+    c.endModal();
+    bus.log("warn", "s", "note");
+    expect(out.data.startsWith("partial\n[WARN] [s]")).toBe(true);
+  });
   it("drops human output in quiet mode", () => {
     const { bus, out, c } = ch();
     c.setQuiet(true);

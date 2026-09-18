@@ -178,6 +178,14 @@ export class LineEditor implements LineInput {
     this.inputEnabled = enabled;
   }
 
+  isInputEnabled(): boolean {
+    return this.inputEnabled;
+  }
+
+  isFrameSuspended(): boolean {
+    return this.frameSuspended;
+  }
+
   /** Clear the prompt frame (the agent takes over the terminal) and stop
    *  rendering until `resumeFrame()`. */
   suspendFrame(): void {

@@ -21,6 +21,7 @@ export class OutputChannel {
   private color: boolean;
   private mode: ChannelMode = "idle";
   private modeBeforeQuiet: ChannelMode = "idle";
+  private modeBeforeModal: ChannelMode = "idle";
   private sink: PromptSink | null = null;
   private queue: OutputEvent[] = [];
   private pending: { stream: OutputStream; text: string } | null = null;
@@ -78,11 +79,13 @@ export class OutputChannel {
   beginModal(): void {
     this.flushBlocks();
     this.flushPendingAsBlock();
+    if (this.mode === "quiet") return; // setQuiet owns quiet
+    this.modeBeforeModal = this.mode;
     this.mode = "modal";
   }
 
   endModal(): void {
-    this.mode = "idle";
+    if (this.mode === "modal") this.mode = this.modeBeforeModal;
     const q = this.queue;
     this.queue = [];
     for (const ev of q) this.onEvent(ev);

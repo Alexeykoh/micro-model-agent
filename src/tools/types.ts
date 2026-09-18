@@ -98,23 +98,13 @@ export interface ToolContext {
    * Test seam — factory for the sub-agent instance (Bun module mocks are
    * process-global, so vi.mock cannot be used for the Agent class).
    */
-  agentFactory?: (deps: unknown) => {
-    run(task: string): Promise<import("../core/types").AgentResult>;
-  };
+  agentFactory?: (deps: unknown) => { run(task: string): Promise<import("../core/types").AgentResult> };
   /**
    * Session manager — exposes active session metadata to tools.
    * Added for session_info tool; kept minimal to avoid circular deps.
    */
   sessionManager?: {
-    getActiveMeta(): {
-      id: string;
-      name: string;
-      model?: string;
-      contextWindow?: number;
-      messageCount: number;
-      createdAt: string;
-      updatedAt: string;
-    } | null;
+    getActiveMeta(): { id: string; name: string; model?: string; contextWindow?: number; messageCount: number; createdAt: string; updatedAt: string } | null;
   };
   /**
    * Terminal-agnostic prompt surface for interactive tools. The REPL installs

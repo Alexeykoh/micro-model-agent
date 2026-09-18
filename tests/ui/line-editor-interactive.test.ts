@@ -179,6 +179,20 @@ describe("LineEditor interactive", () => {
     delete process.env.MMA_DSR;
   });
 
+  it("reports frame suspension and input-enabled state", () => {
+    const { editor } = makeEditor();
+    expect(editor.isFrameSuspended()).toBe(false);
+    expect(editor.isInputEnabled()).toBe(true);
+    editor.suspendFrame();
+    editor.setInputEnabled(false);
+    expect(editor.isFrameSuspended()).toBe(true);
+    expect(editor.isInputEnabled()).toBe(false);
+    editor.resumeFrame();
+    editor.setInputEnabled(true);
+    expect(editor.isFrameSuspended()).toBe(false);
+    expect(editor.isInputEnabled()).toBe(true);
+  });
+
   it("printAbove while suspended prints the block without redrawing the frame", async () => {
     const { editor, input, output } = makeEditor();
     editor.prompt();

@@ -67,6 +67,7 @@ describe("REPL PromptIO", () => {
   let historyPath: string;
   let editors: LineEditor[] = [];
   let captures: CaptureChannel[] = [];
+  let originalRl: { close?: () => void } | undefined;
 
   beforeEach(() => {
     process.env.MMA_DSR = "0";
@@ -74,11 +75,16 @@ describe("REPL PromptIO", () => {
     historyPath = join(dir, "repl-history");
     editors = [];
     captures = [];
+    originalRl = undefined;
   });
 
   afterEach(() => {
     for (const editor of editors) editor.close();
     for (const capture of captures) capture.channel.dispose();
+    // Close the constructor-created rl before removing its history dir, so no
+    // orphaned close handler tries to save history after teardown.
+    originalRl?.close?.();
+    originalRl = undefined;
     rmSync(dir, { recursive: true, force: true });
     delete process.env.MMA_DSR;
   });
@@ -103,6 +109,7 @@ describe("REPL PromptIO", () => {
       undefined,
       capture.channel,
     );
+    originalRl = repl.rl as unknown as { close?: () => void };
     return { repl, capture };
   }
 
@@ -137,6 +144,10 @@ describe("REPL PromptIO", () => {
       }),
     );
     const editor = attachEditor(repl);
+    // Mirror the mid-run state the tool actually encounters: the frame is
+    // suspended and input is disabled by runAgent.
+    editor.suspendFrame();
+    editor.setInputEnabled(false);
     const question = vi
       .spyOn(editor, "question")
       .mockImplementation((_query: string, cb: (answer: string) => void) => cb("  hi  "));

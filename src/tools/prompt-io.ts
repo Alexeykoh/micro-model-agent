@@ -26,6 +26,9 @@ export function createPromptIO(deps: {
     async askChoice(question, options, opts = {}) {
       const multiple = opts.multiple ?? false;
       const entryCount = options.length + (opts.allowCustom ? 1 : 0);
+      // No selectable entries (and no custom entry) — parseSelection can never
+      // succeed, so return without printing a dead menu or looping forever.
+      if (entryCount === 0) return [];
       const customEntry = options.length;
       deps.print(formatMenu(question, options, opts));
       for (;;) {

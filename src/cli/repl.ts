@@ -1,8 +1,8 @@
 import * as readline from "readline";
 import { pc } from "../ui/colors";
 import { LineEditor, type LineInput } from "../ui/line-editor";
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
 import { homedir } from "os";
 import {
   Completer,
@@ -310,8 +310,15 @@ export class Repl implements ReplContext {
   }
 
   private saveHistory(): void {
-    const allHistory = this.history.slice(-this.maxHistory);
-    writeFileSync(this.historyPath, allHistory.join("\n"), "utf-8");
+    try {
+      // The history dir may be gone (e.g. a temp dir removed during test or
+      // session teardown). Recreate it and never let a save throw.
+      mkdirSync(dirname(this.historyPath), { recursive: true });
+      const allHistory = this.history.slice(-this.maxHistory);
+      writeFileSync(this.historyPath, allHistory.join("\n"), "utf-8");
+    } catch (e) {
+      this.logger?.debug(`Failed to save REPL history: ${(e as Error).message}`);
+    }
   }
 
   public setupCompleter(): void {
@@ -723,6 +730,8 @@ export class Repl implements ReplContext {
    */
   private async askViaEditor(prompt: string): Promise<string> {
     const editor = this.rl instanceof LineEditor ? this.rl : null;
+    const wasSuspended = editor ? editor.isFrameSuspended() : true;
+    const wasEnabled = editor ? editor.isInputEnabled() : false;
     this.output.beginModal();
     if (editor) {
       editor.setInputEnabled(true);
@@ -732,8 +741,9 @@ export class Repl implements ReplContext {
       return await new Promise<string>((resolve) => this.rl.question(prompt, resolve));
     } finally {
       if (editor) {
-        editor.suspendFrame();
-        editor.setInputEnabled(false);
+        editor.setInputEnabled(wasEnabled);
+        if (wasSuspended) editor.suspendFrame();
+        else editor.resumeFrame();
       }
       this.output.endModal();
     }
