@@ -21,9 +21,10 @@ import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
 
 /**
- * Set once `--json` is parsed. Module-scoped so the top-level `main().catch`
- * can still emit a valid document when `bootstrap` (or anything before the
- * JSON branch) throws with empty stdout.
+ * Set only for one-shot `--json` runs (a positional prompt exists). Module-scoped
+ * so the top-level `main().catch` can still emit a valid document when `bootstrap`
+ * (or anything before the JSON branch) throws with empty stdout. Interactive
+ * `mma --json` (no prompt) must not set it, or a REPL crash would emit JSON.
  */
 let jsonMode = false;
 
@@ -90,18 +91,8 @@ async function main(): Promise<void> {
   const noAgentsMd = opts.noAgentsMd === true;
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
-  jsonMode = opts.json === true;
+  const jsonOpt = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
-
-  // `--json` owns stdout for ONE-SHOT runs: silence the human channel before
-  // bootstrap so config warnings cannot pollute the machine-readable document.
-  // A no-prompt invocation (`mma --json`) still opens the interactive REPL, so
-  // quiet must not be set there or the whole REPL is muted. The sink subscribes
-  // BEFORE bootstrap so warn/error events emitted during bootstrap are captured
-  // and surfaced as diagnostics. Info-level migration notices are intentionally
-  // not captured (diagnostics are warn/error only).
-  if (jsonMode && program.args.length > 0) getDefaultChannel().setQuiet(true);
-  const jsonSink = jsonMode ? new JsonOutputSink(defaultOutputBus) : undefined;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -124,6 +115,19 @@ async function main(): Promise<void> {
   }
 
   if (program.args.length > 0) {
+    // `--json` owns stdout for ONE-SHOT runs only: silence the human channel
+    // before bootstrap so config warnings cannot pollute the machine-readable
+    // document, and subscribe the sink BEFORE bootstrap so warn/error events
+    // emitted during bootstrap are captured and surfaced as diagnostics.
+    // Info-level migration notices are intentionally not captured (diagnostics
+    // are warn/error only). A no-prompt invocation (`mma --json`) opens the
+    // interactive REPL, so neither quiet nor the sink is set there.
+    if (jsonOpt) {
+      jsonMode = true;
+      getDefaultChannel().setQuiet(true);
+    }
+    const jsonSink = jsonOpt ? new JsonOutputSink(defaultOutputBus) : undefined;
+
     const prompt = program.args.join(" ");
     const { agent, config, baseDir, legacyDetected } = await bootstrap(
       undefined,
