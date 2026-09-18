@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-09-19
+
+### Added
+
+- **Reasoning mode in the REPL prompt** (`src/cli/repl.ts`, i18n `repl.you_reasoning`/`repl.you_reasoning_cont`, en+ru): the input prompt now shows the active reasoning state - `You [auto]:` under the auto policy, `You [auto→high]:` when a level override is in effect, and the effective level (`You [high]:`) in a fixed mode. The label is rebuilt after every slash command and after a run, so a `set_thinking` override and `/reasoning <level>` are reflected immediately.
+
+### Fixed
+
+- **`/reasoning <level>` had no effect in auto mode** (`src/core/agent/reasoning-resolver.ts`, `src/core/agent.ts`, `src/tools/set-thinking.ts`): the chosen level was stored in `reasoningState.level` but never consulted while `reasoning.mode` was `auto`, so the policy always won. It is now a **persistent manual override** (`ReasoningState.manual`) that takes priority over the auto policy and is cleared by `/reasoning auto`; `set_thinking` keeps its transient cooldown behavior.
+
 ## [1.0.1] - 2026-09-18
 
 ### Fixed
