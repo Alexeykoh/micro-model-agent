@@ -138,12 +138,11 @@ export class Logger {
     const metaStr = sanitizedMeta ? ` ${JSON.stringify(sanitizedMeta)}` : "";
 
     const line = `${sanitizedMsg}${metaStr}`;
-    this.sink.emit({
-      level,
-      source: this.prefix || "mma",
-      kind: "log",
-      text: line,
-    });
+    try {
+      this.sink.emit({ level, source: this.prefix || "mma", kind: "log", text: line });
+    } catch {
+      /* terminal output is best-effort; file logging below must still run */
+    }
 
     // Legacy v1 behavior: also append to the tagged `.log` file (session or daily).
     this.fileLog.log(
