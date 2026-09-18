@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 /**
  * Task 13 — output-layer guard.
@@ -10,6 +11,21 @@ import { fileURLToPath } from "node:url";
  * OutputChannel so that modes (streaming/modal/quiet), the JSON sink and the
  * session sink all observe it. A stray `console.log` or `process.stdout.write`
  * silently bypasses all of that, so this test fails the build when one appears.
+ *
+ * Detection uses the TypeScript parser instead of a hand-rolled text masker.
+ * A regex/masking approach cannot reliably tell a regex literal from division
+ * (`if (x) /console\.log/.test(s)` vs `(a + b) / c`), and quote characters
+ * inside regex character classes (e.g. `/["'']$/`, `/[...][^"'\s]+"?/`) desync
+ * string masking for the rest of the file. The AST is unambiguous: only real
+ * `console.<method>` and `process.<stdout|stderr>.write` member accesses match,
+ * including ones nested inside template interpolations such as
+ * `` `${console.log(x)}` ``, while comments, string literals, regex literals and
+ * unrelated member accesses like `this.console.clear()` are ignored.
+ *
+ * Known limitations (accepted): computed access (`console["log"]`) and writes
+ * through an alias (`const c = console; c.log(...)`) are not detected, and only
+ * the global `console`/`process` identifiers are considered — `foo.console.log`
+ * is intentionally not a match.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -17,13 +33,8 @@ const SCAN_ROOTS = ["src", "examples"];
 const FILE_RE = /\.(ts|mjs)$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage"]);
 
-/**
- * The canonical forbidden pattern. Run over code with comments and string
- * literals stripped ({@link maskNonCode}) so a mention of `console.log` in a
- * prompt, hint or doc comment is not mistaken for an actual write.
- */
-export const FORBIDDEN =
-  /\bconsole\.(log|warn|error|info|debug|clear)\b|process\.(stdout|stderr)\.write\b/;
+export const CONSOLE_METHODS = new Set(["log", "warn", "error", "info", "debug", "clear"]);
+export const WRITE_STREAMS = new Set(["stdout", "stderr"]);
 
 /**
  * Files with a genuine, justified exception. Keep this list tiny and always
@@ -42,165 +53,28 @@ export interface ScanFile {
   text: string;
 }
 
-type MaskState =
-  "code" | "line" | "block" | "single" | "double" | "template" | "regex" | "regexClass";
-
-/** Keywords after which a `/` opens a regex literal rather than division. */
-const REGEX_PREFIX_KEYWORDS = new Set([
-  "return",
-  "typeof",
-  "instanceof",
-  "in",
-  "of",
-  "new",
-  "delete",
-  "void",
-  "case",
-  "do",
-  "else",
-  "yield",
-  "await",
-  "throw",
-]);
-
-function isRegexStart(prev: string, word: string): boolean {
-  if (REGEX_PREFIX_KEYWORDS.has(word)) return true;
-  if (prev === "") return true;
-  return "(,=:[!&|?{};+-*%^~<>".includes(prev);
+function isIdentifier(node: ts.Node, name: string): boolean {
+  return ts.isIdentifier(node) && node.text === name;
 }
 
-/**
- * Replace every character inside a comment, string or regex literal with a
- * space while preserving newlines, so line numbers stay aligned for reporting.
- * This lets the forbidden regex run without matching text that merely quotes
- * `console.log`. Regex detection uses the usual "previous token" heuristic,
- * which is enough to avoid quote/backtick characters inside character classes
- * (e.g. `/["']$/`) desyncing the scanner.
- */
-export function maskNonCode(text: string): string {
-  const out: string[] = [];
-  let state: MaskState = "code";
-  let prev = "";
-  let word = "";
-
-  const wordChar = (c: string): boolean => /[A-Za-z0-9_$]/.test(c);
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (state === "code") {
-      if (ch === "/" && next === "/") {
-        out.push(" ", " ");
-        i++;
-        state = "line";
-      } else if (ch === "/" && next === "*") {
-        out.push(" ", " ");
-        i++;
-        state = "block";
-      } else if (ch === "/" && isRegexStart(prev, word)) {
-        out.push(" ");
-        state = "regex";
-      } else if (ch === '"') {
-        out.push(" ");
-        state = "double";
-      } else if (ch === "'") {
-        out.push(" ");
-        state = "single";
-      } else if (ch === "`") {
-        out.push(" ");
-        state = "template";
-      } else {
-        out.push(ch);
-        if (!/\s/.test(ch)) {
-          if (wordChar(ch)) word += ch;
-          else word = "";
-          prev = ch;
-        }
-      }
-      continue;
-    }
-
-    if (state === "line") {
-      out.push(ch === "\n" ? "\n" : " ");
-      if (ch === "\n") state = "code";
-      continue;
-    }
-
-    if (state === "block") {
-      if (ch === "*" && next === "/") {
-        out.push(" ", " ");
-        i++;
-        state = "code";
-      } else {
-        out.push(ch === "\n" ? "\n" : " ");
-      }
-      continue;
-    }
-
-    if (state === "regex") {
-      if (ch === "\\") {
-        out.push(" ", " ");
-        i++;
-      } else if (ch === "[") {
-        out.push(" ");
-        state = "regexClass";
-      } else if (ch === "/") {
-        out.push(" ");
-        state = "code";
-      } else {
-        out.push(ch === "\n" ? "\n" : " ");
-      }
-      continue;
-    }
-
-    if (state === "regexClass") {
-      if (ch === "\\") {
-        out.push(" ", " ");
-        i++;
-      } else if (ch === "]") {
-        out.push(" ");
-        state = "regex";
-      } else {
-        out.push(ch === "\n" ? "\n" : " ");
-      }
-      continue;
-    }
-
-    // Inside single/double/template string.
-    if (ch === "\\") {
-      if (next === "\n") {
-        out.push(" ", "\n");
-        i++;
-      } else {
-        out.push(" ", " ");
-        i++;
-      }
-      continue;
-    }
-    const closes =
-      (state === "double" && ch === '"') ||
-      (state === "single" && ch === "'") ||
-      (state === "template" && ch === "`");
-    if (closes) {
-      out.push(" ");
-      state = "code";
-      continue;
-    }
-    out.push(ch === "\n" ? "\n" : " ");
-  }
-
-  return out.join("");
+/** `console.log` / `console.warn` … where `console` is the global identifier. */
+function isConsoleWrite(node: ts.Node): boolean {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    isIdentifier(node.expression, "console") &&
+    CONSOLE_METHODS.has(node.name.text)
+  );
 }
 
-/** True when a masked line contains a global write (not `obj.console.clear()`). */
-function isDirectWrite(maskedLine: string): boolean {
-  const scan = new RegExp(FORBIDDEN.source, "g");
-  for (const match of maskedLine.matchAll(scan)) {
-    const index = match.index ?? 0;
-    if (maskedLine[index - 1] !== ".") return true;
-  }
-  return false;
+/** `process.stdout.write` / `process.stderr.write`. */
+function isProcessStreamWrite(node: ts.Node): boolean {
+  if (!ts.isPropertyAccessExpression(node) || node.name.text !== "write") return false;
+  const stream = node.expression;
+  return (
+    ts.isPropertyAccessExpression(stream) &&
+    WRITE_STREAMS.has(stream.name.text) &&
+    isIdentifier(stream.expression, "process")
+  );
 }
 
 /**
@@ -211,19 +85,25 @@ export function findDirectWrites(
   files: ScanFile[],
   allowlist: ReadonlySet<string> = ALLOWLIST,
 ): string[] {
-  const offenders: string[] = [];
+  const offenders = new Set<string>();
   for (const file of files) {
     const path = file.path.replace(/\\/g, "/");
     if (allowlist.has(path)) continue;
+
+    const kind = path.endsWith(".mjs") ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, file.text, ts.ScriptTarget.Latest, false, kind);
     const rawLines = file.text.split(/\r?\n/);
-    const maskedLines = maskNonCode(file.text).split(/\r?\n/);
-    for (let line = 0; line < maskedLines.length; line++) {
-      if (isDirectWrite(maskedLines[line])) {
-        offenders.push(`${path}:${line + 1}: ${rawLines[line].trim()}`);
+
+    const visit = (node: ts.Node): void => {
+      if (isConsoleWrite(node) || isProcessStreamWrite(node)) {
+        const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
+        offenders.add(`${path}:${line + 1}: ${rawLines[line].trim()}`);
       }
-    }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
   }
-  return offenders;
+  return [...offenders];
 }
 
 function walk(dir: string, files: ScanFile[]): void {
@@ -271,7 +151,24 @@ describe("no direct terminal writes", () => {
     expect(offenders).toEqual(['src/fixture/offender.ts:2: console.log("x");']);
   });
 
-  it("ignores member access, comments and quoted mentions", () => {
+  it("flags a write inside a template interpolation", () => {
+    const offenders = findDirectWrites([
+      { path: "src/fixture/template.ts", text: "const s = `${console.log(x)}`;\n" },
+    ]);
+    expect(offenders).toEqual(["src/fixture/template.ts:1: const s = `${console.log(x)}`;"]);
+  });
+
+  it("ignores regex literals (no regex-vs-division guessing)", () => {
+    const offenders = findDirectWrites([
+      {
+        path: "src/fixture/regex.ts",
+        text: "if (x) /console\\.log/.test(s);\nif (y) /console.log/.test(s);\n",
+      },
+    ]);
+    expect(offenders).toEqual([]);
+  });
+
+  it("ignores member access, comments, strings and aliased process streams", () => {
     const offenders = findDirectWrites([
       {
         path: "src/fixture/innocent.ts",
@@ -280,6 +177,7 @@ describe("no direct terminal writes", () => {
           "/* process.stdout.write('in a block comment') */",
           'const hint = "call console.log to print";',
           "this.console.clear();",
+          "other.process.stdout.write('not the global process');",
           "// process.stderr.write('nope')",
         ].join("\n"),
       },
