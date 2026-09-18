@@ -4,9 +4,19 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo } from "../../src/core/bootstrap";
 import { Logger } from "../../src/logger/app-logger";
+import { defaultOutputBus, type OutputEvent } from "../../src/output";
+import { resetProbeCache } from "../../src/modules/reasoning/probe";
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "mma-bootstrap-"));
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for condition");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 describe("bootstrap", () => {
@@ -100,48 +110,114 @@ describe("bootstrap", () => {
   }, 30_000);
 
   it("writes background probe diagnostics to file only, never to the console", async () => {
-    // The context probe runs in the background and used to call
-    // logger.warn/info directly, which raced the first-run wizard and
-    // interleaved with the REPL prompt. It must go through logSilent
-    // (app.jsonl only) — the REPL renders the probe itself via OutputChannel.
+    // Both background probes (context + reasoning) used to call logger.info
+    // directly, which raced the first-run wizard and interleaved with the
+    // REPL prompt. They must go through logSilent (app.jsonl only): the REPL
+    // renders the context probe itself via OutputChannel, and the reasoning
+    // probe only drives agent behavior. This guards against a regression to
+    // logger.warn/info/debug OR a direct console.* / bus.emit call.
     const dir = tempDir();
     const originalFetch = global.fetch;
     const recorded: { method: string; msg: string }[] = [];
-    const methods = ["logSilent", "warn", "info", "debug"] as const;
-    const originals: Record<string, unknown> = {};
-    for (const method of methods) {
-      originals[method] = (Logger.prototype as any)[method];
+    const consoleCalls: { method: string; text: string }[] = [];
+    const busEvents: OutputEvent[] = [];
+
+    const loggerMethods = ["logSilent", "warn", "info", "debug"] as const;
+    const loggerOriginals: Record<string, unknown> = {};
+    for (const method of loggerMethods) {
+      loggerOriginals[method] = (Logger.prototype as any)[method];
       (Logger.prototype as any)[method] = function (this: unknown, ...args: unknown[]) {
         const msg = method === "logSilent" ? String(args[1]) : String(args[0]);
         recorded.push({ method, msg });
-        return (originals[method] as any).apply(this, args);
+        return (loggerOriginals[method] as any).apply(this, args);
       };
     }
-    global.fetch = (async () => ({
-      ok: true,
-      json: async () => ({
-        models: [
-          {
-            key: "qwen/qwen3.5-9b",
-            max_context_length: 131072,
-            loaded_instances: [{ config: { context_length: 65536 } }],
-          },
-        ],
-      }),
-    })) as unknown as typeof global.fetch;
+
+    const consoleMethods = ["log", "warn", "info", "error"] as const;
+    const consoleOriginals: Record<string, unknown> = {};
+    for (const method of consoleMethods) {
+      consoleOriginals[method] = (console as any)[method];
+      (console as any)[method] = function (this: unknown, ...args: unknown[]) {
+        consoleCalls.push({
+          method,
+          text: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "),
+        });
+        return (consoleOriginals[method] as any).apply(this, args);
+      };
+    }
+
+    const unsubscribe = defaultOutputBus.subscribe((ev) => busEvents.push(ev));
+
+    // fetch mock: /api/v1/models answers the context probe; chat/completions
+    // answers the (background) reasoning probe with a trivial SSE stream that
+    // carries text but no reasoning — deterministic, so no retries/idle waits.
+    const encoder = new TextEncoder();
+    global.fetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/v1/models")) {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [
+              {
+                key: "qwen/qwen3.5-9b",
+                max_context_length: 131072,
+                loaded_instances: [{ config: { context_length: 65536 } }],
+              },
+            ],
+          }),
+        };
+      }
+      const sse = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/event-stream" },
+        body: sse,
+        text: async () => "",
+        json: async () => ({}),
+      };
+    }) as unknown as typeof global.fetch;
+
     try {
+      resetProbeCache();
       const { contextProbe } = await bootstrap(dir, dir);
+
       const probe = await contextProbe;
       expect(probe).toEqual({ model: "qwen/qwen3.5-9b", actual: 65536 });
 
-      const probeCalls = recorded.filter((c) => c.msg.includes("Context probe"));
-      expect(probeCalls.length).toBeGreaterThan(0);
-      expect(probeCalls.every((c) => c.method === "logSilent")).toBe(true);
+      // The reasoning probe is fire-and-forget (not exposed on the result), so
+      // wait until it has logged before asserting and before restoring fetch.
+      await waitFor(() => recorded.some((c) => c.msg.includes("Reasoning probe")));
+
+      const contextCalls = recorded.filter((c) => c.msg.includes("Context probe"));
+      expect(contextCalls.length).toBeGreaterThan(0);
+      expect(contextCalls.every((c) => c.method === "logSilent")).toBe(true);
+
+      const reasoningCalls = recorded.filter((c) => c.msg.includes("Reasoning probe"));
+      expect(reasoningCalls.length).toBeGreaterThan(0);
+      expect(reasoningCalls.every((c) => c.method === "logSilent")).toBe(true);
+
+      // Neither probe line may reach the console or the output bus directly.
+      const needles = ["Context probe", "Reasoning probe"];
+      expect(consoleCalls.filter((c) => needles.some((n) => c.text.includes(n)))).toEqual([]);
+      expect(busEvents.filter((ev) => needles.some((n) => ev.text.includes(n)))).toEqual([]);
     } finally {
-      for (const method of methods) {
-        (Logger.prototype as any)[method] = originals[method];
+      unsubscribe();
+      for (const method of loggerMethods) {
+        (Logger.prototype as any)[method] = loggerOriginals[method];
+      }
+      for (const method of consoleMethods) {
+        (console as any)[method] = consoleOriginals[method];
       }
       global.fetch = originalFetch;
+      resetProbeCache();
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
