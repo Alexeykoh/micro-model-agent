@@ -94,6 +94,7 @@ async function main(): Promise<void> {
   const exitOnComplete = opts.exitOnComplete === true;
   const jsonOpt = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
+  const contextLog = opts.contextLog === true;
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -136,6 +137,7 @@ async function main(): Promise<void> {
       noAgentsMd,
       exitOnComplete,
       reasoningLevel,
+      contextLog,
     );
 
     if (legacyDetected) {
@@ -265,7 +267,7 @@ async function main(): Promise<void> {
       logger,
       envReport,
       contextProbe,
-    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel);
+    } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel, contextLog);
 
     const repl = new Repl(
       agent,

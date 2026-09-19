@@ -33,6 +33,7 @@ import type { LoopState } from "./agent/loop-state";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
+import type { ContextLogger } from "./agent/context-log";
 import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
 import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
@@ -104,6 +105,8 @@ export interface AgentDeps {
     summary: string;
   } | null>;
   sessionManager?: SessionManager;
+  /** Opt-in git-style context logger (--context-log). Null/undefined disables it. */
+  contextLogger?: ContextLogger;
   memoryStore?: MemoryStore;
   moduleRegistry?: ModuleRegistry;
   exitOnComplete?: boolean;
@@ -726,6 +729,23 @@ export class Agent {
       const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
       state.prefixDelta = diffPrompt(state.prevPrompt, promptSnapshot, estimateTokens);
       state.prevPrompt = promptSnapshot;
+
+      // Opt-in git-style context log: snapshot отправляемого контекста.
+      if (this.deps.contextLogger) {
+        try {
+          this.deps.contextLogger.record(history, allToolsForBudget, {
+            iteration: state.iteration,
+            ts: new Date().toISOString(),
+            systemTokens: estimateTokens(promptSnapshot.system),
+            toolTokens: estimateTokens(promptSnapshot.tools),
+            historyTokens: estimateTokens(promptSnapshot.history),
+            totalTokens: contextManager.getEstimatedTokens(),
+            contextWindow: config.contextWindow,
+          });
+        } catch {
+          // Логирование контекста не должно ронять агент.
+        }
+      }
       if (
         state.prefixDelta.cause === "system" ||
         state.prefixDelta.cause === "tools" ||
@@ -927,6 +947,22 @@ export class Agent {
         llmResponse = { type: "reasoning", content: reasoningContent };
       }
       pluginManager.runOnAfterThink({ iteration: state.iteration, logger, contextManager }, llmResponse);
+
+      // Аннотация вывода модели в context-log (reasoning/текст/tool_calls).
+      // НЕ входит в отправляемый контекст — пишется отдельным [OUTPUT]-блоком.
+      if (this.deps.contextLogger && (reasoningContent || textContent || toolCalls.length > 0)) {
+        try {
+          this.deps.contextLogger.recordOutput({
+            iteration: state.iteration,
+            ts: new Date().toISOString(),
+            reasoning: reasoningContent || undefined,
+            text: textContent || undefined,
+            toolCalls: toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments })),
+          });
+        } catch {
+          // Логирование контекста не должно ронять агент.
+        }
+      }
 
       // Детекция повторных одинаковых тулов (структурная, не по ключевым
       // словам). Сигнал питает reasoning policy для понижения effort на рутине.

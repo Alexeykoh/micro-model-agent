@@ -174,7 +174,22 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Short-response варнинг удалён** (`src/modules/hallucination/confidence.ts`): короткий, но законченный ответ (приветствие, «Готово») больше не помечается как «слишком короткий/пустой». Варнинг не делал ни retry, ни блокировки; реальный обрыв ловится по `finish_reason: "length"`, пустой ответ — retry `emptyResponseRetries`.
 - **Первый запуск** (`src/cli/relaunch.ts`, `src/cli/main.ts`): мастер и REPL больше не живут в одном процессе. Raw-mode `LineEditor` на Bun/Windows получает keypress только как первый потребитель stdin, а переиспользование одного редактора через `wizard → bootstrap → REPL` протекало кадром/промптом. Теперь первый запуск: cooked-mode `SetupPrompt` (без raw-mode/readline) → сохранить конфиг → **re-exec тем же CLI новым процессом** (`spawnSync`, `stdio:"inherit"`, guard `MMA_POST_SETUP=1`) → новый процесс видит конфиг, пропускает мастер и создаёт редактор первым. Отдельно: DSR-запрос курсора теперь opt-in на Windows (`MMA_DSR=1`, вне Windows — по умолчанию вкл), т.к. ConPTY декодировал ответ `ESC[row;colR` как ввод (все ответы мастера «R»); в режиме `question()` DSR не шлётся. Числовые ответы валидируются (`NaN` исключён).
 
-### Current Version: 1.0.1
+### Context Log (1.2.0)
+
+- **Флаг `--context-log`** (плюс конфиг `contextLog.enabled`, env `MMA_CONTEXT_LOG`): пишет весь уходящий в LLM контекст
+  (system + tools + history) в `<session>/context.diff` в git-подобном формате. Snapshot 0 — полный контекст (все строки `+`,
+  как новый файл), каждый следующий — построчный unified diff (`-`/`+`) к предыдущей итерации. Секции: `[SYSTEM]`, `[TOOLS]`, `[HISTORY]`.
+- **Модуль** `src/core/agent/context-log.ts`: `serializeContextForLog` (канонический текст), `unifiedDiff` (plain, без ANSI,
+  с common prefix/suffix + LCS, guard `MAX_LCS_CELLS` → fallback full-replace), `ContextLogger` (`record`/`recordOutput`/`close`).
+  Секреты редакторятся точечным `redactContextSecrets` (`contextLog.redact`, default true): только опознаваемые токены
+  (`sk-`, `ghp_`, `AKIA`, JWT, `Bearer`, `api_key=`/`token=`/`password=`), обычный текст контекста (имена скиллов,
+  `pass "background: true"`) не калечится. Общий `sanitizeLogMessage` намеренно НЕ применяется (generic-паттерн 30+ символов вырезал бы легитимный текст).
+- **Reasoning** (`reasoningContent`) НЕ входит в контекст LLM — пишется отдельной `[OUTPUT]`-аннотацией (`▍`), в diff не участвует.
+- **Файл append-only**: повторный запуск добавляет run-разделитель (`run <pid> · <ts>`) и начинает с полного snapshot, нумерация продолжается.
+- **Точка хука** — `Agent.executeSingleAgentLoop` рядом с prefix-monitor (`record` до запроса, `recordOutput` после стрима).
+  MoE-путь не логируется. `--context-log` — boolean, значение пути не парсится (pre-parse `valueOpts` не трогаем).
+
+### Current Version: 1.2.0
 
 ### Changelog
 

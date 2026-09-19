@@ -701,7 +701,8 @@ export function createProgram(): Command {
     .option("-d, --dir <path>", t("cli.dir"))
     .option("-e, --exit-on-complete", t("cli.exit_on_complete"))
     .option("-j, --json", t("cli.json"))
-    .option("--reasoning <level>", t("cli.reasoning_level"), "auto");
+    .option("--reasoning <level>", t("cli.reasoning_level"), "auto")
+    .option("--context-log", t("cli.context_log"));
 
   buildInitCommand(program);
   buildConfigCommands(program);

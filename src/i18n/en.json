@@ -351,6 +351,7 @@
   "cli.exit_on_complete": "Exit immediately when the task is done; interactive tools (question/approve) fail fast instead of blocking on stdin",
   "cli.reasoning_level": "Set reasoning effort level (auto|none|low|medium|high|max)",
   "cli.json": "Output the result as JSON (single-run mode)",
+  "cli.context_log": "Write the full LLM context to <session>/context.diff as a git-style diff (first snapshot full, then +/- changes)",
   "cli.security.description": "Manage security settings",
   "cli.security.status": "Show current security configuration",
   "cli.security.policies": "List available security policies",

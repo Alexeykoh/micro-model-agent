@@ -32,7 +32,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   browser: ["browser"],
   search: ["webSearch", "errorWebSearch"],
   tools: ["tools", "subagent"],
-  session: ["session", "sessionIsolation"],
+  session: ["session", "sessionIsolation", "contextLog"],
   ui: ["ui"],
   mcp: ["mcpServers"],
   lsp: ["lsp"],

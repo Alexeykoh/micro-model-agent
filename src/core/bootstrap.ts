@@ -28,6 +28,7 @@ import { MemoryModule } from "../modules/memory/module";
 import { MemoryStore } from "../modules/memory/store";
 import { t, setLocale } from "../i18n/index";
 import { Agent } from "./agent";
+import { ContextLogger } from "./agent/context-log";
 import { homedir } from "os";
 import { join, resolve } from "path";
 import { existsSync, readFileSync, writeFileSync } from "fs";
@@ -254,6 +255,7 @@ export async function bootstrap(
   noAgentsMd?: boolean,
   exitOnComplete?: boolean,
   reasoningLevel?: string,
+  contextLog?: boolean,
 ): Promise<BootstrapResult> {
   const dir = configDir || process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
@@ -466,6 +468,28 @@ export async function bootstrap(
 
   if (config.session.autoSave && !sessionManager.getActive()) {
     sessionManager.create();
+  }
+
+  // Git-style context log (opt-in via --context-log / config / env). Written
+  // next to the session files so it travels with the session. Best-effort:
+  // logging must never break a run.
+  const contextLogEnabled = contextLog === true || config.contextLog?.enabled === true;
+  let contextLogger: ContextLogger | undefined;
+  if (contextLogEnabled) {
+    const activeMeta = sessionManager.getActiveMeta();
+    if (activeMeta) {
+      try {
+        contextLogger = new ContextLogger({
+          path: join(sessionStore.getSessionDir(activeMeta.id), "context.diff"),
+          sessionId: activeMeta.id,
+          model: config.model,
+          contextWindow: config.contextWindow,
+          redact: config.contextLog?.redact !== false,
+        });
+      } catch {
+        contextLogger = undefined;
+      }
+    }
   }
 
   const tokenCounter = new TokenCounter(config.model);
@@ -780,6 +804,7 @@ export async function bootstrap(
     memoryStore,
     moduleRegistry,
     exitOnComplete,
+    contextLogger,
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
     planSummary: () => execModule.getPlanSummary(),

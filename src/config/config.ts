@@ -197,6 +197,11 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
     record("moe", next);
     result.moe = next;
   }
+  if (env.MMA_CONTEXT_LOG) {
+    const next = { ...result.contextLog, enabled: env.MMA_CONTEXT_LOG !== "false" };
+    record("contextLog", next);
+    result.contextLog = next;
+  }
 
   return { config: result, overrides };
 }

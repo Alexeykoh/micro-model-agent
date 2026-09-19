@@ -132,6 +132,17 @@ export interface SessionConfig {
   isolateMemory: boolean;
 }
 
+/**
+ * Git-style context log. When enabled, every LLM context snapshot is written to
+ * `<session>/context.diff`: snapshot 0 is the full context (all lines "+"),
+ * later snapshots are line diffs (- removed, + added). `redact` runs the
+ * context through sanitizeLogMessage before writing.
+ */
+export interface ContextLogConfig {
+  enabled: boolean;
+  redact: boolean;
+}
+
 export interface ModelLoadConfig {
   autoLoad: boolean;
   flashAttention?: boolean;
@@ -424,6 +435,7 @@ export interface AppConfig {
   logLevel: string;
   locale: string;
   session: SessionConfig;
+  contextLog: ContextLogConfig;
   browser: BrowserToolConfig;
   webSearch?: WebSearchConfig;
   errorWebSearch?: ErrorWebSearchConfig;

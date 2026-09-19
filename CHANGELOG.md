@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-09-19
+
+### Added
+
+- **Git-style context log** (`--context-log`, `src/core/agent/context-log.ts`, config `contextLog`, env `MMA_CONTEXT_LOG`): writes the full LLM context (system prompt + tool definitions + message history) to `<session>/context.diff`. Snapshot 0 is the complete context (every line `+`, like a new git file); each later snapshot is a plain unified line diff (`-` removed, `+` added) against the previous iteration. Sections are `[SYSTEM]`, `[TOOLS]`, `[HISTORY]`. Secrets are redacted via a dedicated, conservative pattern set (`redactContextSecrets`; `contextLog.redact`, default on) that targets recognizable tokens (sk-, ghp_, AKIA, JWT, Bearer, `api_key=`/`token=`/`password=`) and leaves ordinary context text (skill names, `pass "background: true"`, etc.) intact. The file is append-only: a second run adds a `run <pid> · <timestamp>` separator and restarts with a full snapshot while snapshot numbering continues. Model **reasoning/text/tool calls** are not part of the outgoing context and are recorded as separate `[OUTPUT]` annotations (`▍`), never diffed. Hooked in `Agent.executeSingleAgentLoop` next to the prefix monitor; no-op when disabled.
+
 ## [1.1.0] - 2026-09-19
 
 ### Added

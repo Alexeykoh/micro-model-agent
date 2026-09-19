@@ -345,6 +345,7 @@
   "cli.exit_on_complete": "Завершить сразу после выполнения задачи; интерактивные тулзы (question/approve) не блокируют stdin, а возвращают ошибку",
   "cli.reasoning_level": "Установить уровень рассуждений (auto|none|low|medium|high|max)",
   "cli.json": "Вывести результат в формате JSON (режим однократного запуска)",
+  "cli.context_log": "Писать весь контекст LLM в <session>/context.diff в git-подобном diff-формате (первый снимок — полный, далее изменения +/-)",
   "cli.security.description": "Управление настройками безопасности",
   "cli.security.status": "Показать текущую конфигурацию безопасности",
   "cli.security.policies": "Список доступных политик безопасности",

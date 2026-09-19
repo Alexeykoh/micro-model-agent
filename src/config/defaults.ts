@@ -89,6 +89,10 @@ export const DEFAULTS: AppConfig = {
     maxSessions: 50,
     isolateMemory: false,
   },
+  contextLog: {
+    enabled: false,
+    redact: true,
+  },
   browser: {
     enabled: true,
     headless: true,
