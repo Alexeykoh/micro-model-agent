@@ -1,6 +1,7 @@
 import { FORCED_COMPACTION_COOLDOWN } from "./constants";
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
+import { createArtifactChurnState, type ArtifactChurnState } from "./artifact-progress";
 
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
@@ -60,6 +61,13 @@ export interface LoopState {
   toolTargetCounts: Map<string, number>;
   /** Ключи-цели, по которым nudge «закрывай задачу» уже отправлен (1 раз на цель). */
   cycleNudgedKeys: Set<string>;
+
+  /** Прогресс тест/спек-артефактов: churn тестов без production-правок. */
+  artifactChurn: ArtifactChurnState;
+  /** В этом прогоне был ответ [SECURITY BLOCKED] (вход для script-workaround nudge). */
+  sawSecurityBlock: boolean;
+  /** Nudge против скрипта-обхода блокировки уже отправлен. */
+  scriptWorkaroundNudged: boolean;
 
   /** Совокупные prompt-токены от API (заменяются per-итерацию). */
   apiPromptTokens: number;
@@ -141,6 +149,9 @@ export function createLoopState(): LoopState {
     memoryRuleRecorded: new Set(),
     toolTargetCounts: new Map(),
     cycleNudgedKeys: new Set(),
+    artifactChurn: createArtifactChurnState(),
+    sawSecurityBlock: false,
+    scriptWorkaroundNudged: false,
     apiPromptTokens: 0,
     apiCompletionTokens: 0,
     apiCompletionChars: 0,

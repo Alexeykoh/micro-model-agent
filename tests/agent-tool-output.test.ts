@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toolOutputCharLimit, compactToolError } from "../src/core/agent";
+import { toolOutputCharLimit, compactToolError, summarizeToolArgs, isExecutableScriptPath } from "../src/core/agent/tool-output";
 
 describe("toolOutputCharLimit", () => {
   it("never truncates a tool that declares boundedOutput regardless of remaining budget", () => {
@@ -36,5 +36,41 @@ describe("compactToolError", () => {
     expect(compactToolError("")).toBe("");
     expect(compactToolError(undefined)).toBe("");
     expect(compactToolError("\n  \n")).toBe("");
+  });
+});
+
+describe("summarizeToolArgs", () => {
+  it("keeps short scalar args", () => {
+    const out = summarizeToolArgs({ path: "src/a.ts", command: "bun test" });
+    expect(out).toContain("path:src/a.ts");
+    expect(out).toContain("command:bun test");
+  });
+
+  it("collapses long string values instead of echoing the body", () => {
+    const out = summarizeToolArgs({ path: "src/a.ts", content: "x".repeat(5000) });
+    expect(out).toContain("path:src/a.ts");
+    expect(out).toContain("content:…(5000 chars)");
+    expect(out).not.toContain("x".repeat(100));
+  });
+
+  it("returns empty for nullish/empty args", () => {
+    expect(summarizeToolArgs(undefined)).toBe("");
+    expect(summarizeToolArgs(null)).toBe("");
+    expect(summarizeToolArgs({})).toBe("");
+  });
+});
+
+describe("isExecutableScriptPath", () => {
+  it("flags wrapper-script extensions", () => {
+    expect(isExecutableScriptPath("run.bat")).toBe(true);
+    expect(isExecutableScriptPath("C:/x/setup.CMD")).toBe(true);
+    expect(isExecutableScriptPath("deploy.sh")).toBe(true);
+    expect(isExecutableScriptPath("a.ps1")).toBe(true);
+  });
+
+  it("does not flag regular source/config files", () => {
+    expect(isExecutableScriptPath("src/a.ts")).toBe(false);
+    expect(isExecutableScriptPath("package.json")).toBe(false);
+    expect(isExecutableScriptPath("README.md")).toBe(false);
   });
 });

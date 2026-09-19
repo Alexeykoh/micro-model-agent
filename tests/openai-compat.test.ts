@@ -721,7 +721,7 @@ describe("OpenAICompatProvider", () => {
     expect(chunks.join("")).toBe("ok");
   });
 
-  it("should enrich the idle-timeout error when a tool_call has started", async () => {
+  it("falls back to non-streaming when the stream stalls after a tool_call started", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",
       baseUrl: "http://localhost:1234/v1",
@@ -738,6 +738,7 @@ describe("OpenAICompatProvider", () => {
     let firstSignal: AbortSignal | undefined;
     const mockFetch = vi
       .fn()
+      // 1st call: tool_call starts, then the buffered provider goes silent.
       .mockImplementationOnce((_url: string, init: RequestInit) => {
         firstSignal = init.signal ?? undefined;
         return Promise.resolve({
@@ -745,7 +746,6 @@ describe("OpenAICompatProvider", () => {
           headers: new Map(),
           body: new ReadableStream({
             start(controller) {
-              // First packet: tool_call starts, then silence forever (buffered provider).
               controller.enqueue(
                 encoder.encode(
                   'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"t1","type":"function","function":{"name":"write_file","arguments":""}}]}}]}\n\n',
@@ -761,29 +761,39 @@ describe("OpenAICompatProvider", () => {
           }),
         });
       })
-      .mockImplementation((_url: string, _init: RequestInit) =>
+      // 2nd call: non-streaming fallback returns the completed tool_call.
+      .mockImplementationOnce(() =>
         Promise.resolve({
           ok: true,
           headers: new Map(),
-          body: new ReadableStream({
-            start(controller) {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-            },
-          }),
+          json: () =>
+            Promise.resolve({
+              choices: [
+                {
+                  message: {
+                    tool_calls: [
+                      {
+                        id: "t1",
+                        function: { name: "write_file", arguments: '{"path":"a.txt","content":"x"}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
         }),
       );
     global.fetch = mockFetch as any;
 
-    try {
-      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
-      }
-      expect.unreachable("Should have thrown");
-    } catch (e: any) {
-      expect(e.message).toContain("tool_call");
-      expect(e.message).toContain("retry.noDataTimeoutMs");
+    let toolCall: any = null;
+    for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+      if (chunk.type === "tool_call") toolCall = chunk.toolCall;
     }
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // The stalled stream is retried non-streaming (not fatal), no repeat stall.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(toolCall).not.toBeNull();
+    expect(toolCall!.name).toBe("write_file");
   });
 
   it("should throw an actionable error when a tool_call is cut off by the length limit", async () => {

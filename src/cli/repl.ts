@@ -1084,11 +1084,8 @@ export class Repl implements ReplContext {
       void this.contextProbe
         .then((probe) => {
           if (!probe) return;
-          this.sessionManager?.appendLog({
-            ts: new Date().toISOString(),
-            type: "context_probe",
-            content: `model=${probe.model} actual=${probe.actual} configured=${this.config.contextWindow}`,
-          });
+          // The probe entry is persisted by bootstrap (all modes); here we only
+          // render the banner line.
           const line =
             probe.actual < this.config.contextWindow
               ? `${pc.yellow("⚠")} ${t("repl.context_probe_small", { model: probe.model, actual: probe.actual, configured: this.config.contextWindow })}`

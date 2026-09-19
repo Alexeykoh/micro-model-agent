@@ -82,4 +82,23 @@ describe("stuck warning anti-spam", () => {
 
     expect(stuckWarningCount(c)).toBeLessThanOrEqual(4);
   });
+
+  it("injects a model-facing escalation directive after repeated recovery attempts", async () => {
+    await createPlan();
+    const plugin: any = mod.getPlugin();
+    const c = makeCtx();
+
+    // Stay on step 1 without producing anything: the stuck detector escalates
+    // after ESCALATION_THRESHOLD recovery attempts. The directive must reach
+    // the MODEL (a system-summary message), not only the UI banner.
+    for (let i = 1; i <= 20; i++) {
+      c.iteration = i;
+      plugin.onBeforeThink(c);
+    }
+
+    const messages = c.contextManager.addMessage.mock.calls.map((a: any[]) =>
+      String(a[0]?.content ?? ""),
+    );
+    expect(messages.some((m: string) => m.includes("fundamentally different approach"))).toBe(true);
+  });
 });

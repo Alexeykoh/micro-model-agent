@@ -248,6 +248,7 @@ export class OpenAICompatProvider implements LLMProvider {
     const { baseDelay, maxDelay, maxStreamRetries, noDataTimeoutMs } = this.retryConfig;
     const streamRetries = maxStreamRetries ?? 2;
     const idleTimeoutMs = noDataTimeoutMs ?? 180000;
+    let usedNonStreamingFallback = false;
 
     for (let attempt = 0; ; attempt++) {
       let emitted = false;
@@ -262,6 +263,26 @@ export class OpenAICompatProvider implements LLMProvider {
         if (attempt >= streamRetries) return;
       } catch (err: any) {
         if (err?.name === "AbortError" || (err instanceof LlmError && err.terminal) || signal?.aborted) throw err;
+
+        // Buffered-SSE stall after tool_call deltas: re-request non-streaming
+        // once. Streaming is the broken path here, so retrying the same way
+        // would stall again; the agent must still get its tool_call.
+        if (err?.stalledAfterToolCall === true && !usedNonStreamingFallback) {
+          usedNonStreamingFallback = true;
+          this.debug?.(
+            "LLM stream stalled after tool_call — falling back to non-streaming request",
+          );
+          const fallback = await this.doNonStreaming(messages, tools, signal, options);
+          this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
+          for (const chunk of fallback) {
+            // Reasoning was likely already streamed before the stall; drop the
+            // fallback's copy to avoid duplicating thinking.
+            if (chunk.type === "reasoning") continue;
+            yield chunk;
+          }
+          return;
+        }
+
         // Content was already delivered — a re-stream would duplicate chunks.
         if (emitted || attempt >= streamRetries) throw err;
         // Connection dropped before any content → retry the whole request.
@@ -355,6 +376,20 @@ export class OpenAICompatProvider implements LLMProvider {
     const st = new StreamState();
 
     type ReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
+    // Stall after tool_call deltas started usually means the provider buffers
+    // SSE instead of streaming argument deltas (seen with LM Studio). Mark the
+    // error so `doStream` can retry the request non-streaming instead of
+    // failing the whole run.
+    const idleError = (): Error => {
+      const e = new Error(
+        t(
+          st.sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
+          { timeout: idleTimeoutMs },
+        ),
+      );
+      (e as { stalledAfterToolCall?: boolean }).stalledAfterToolCall = st.sawToolCallStart;
+      return e;
+    };
     const readIdle = (): Promise<ReadResult> =>
       new Promise<ReadResult>((resolve, reject) => {
         const idleTimer = setTimeout(() => {
@@ -364,28 +399,12 @@ export class OpenAICompatProvider implements LLMProvider {
         reader.read().then(
           (result) => {
             clearTimeout(idleTimer);
-            if (isTimeout())
-              reject(
-                new Error(
-                  t(
-                    st.sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
-                    { timeout: idleTimeoutMs },
-                  ),
-                ),
-              );
+            if (isTimeout()) reject(idleError());
             else resolve(result);
           },
           (err) => {
             clearTimeout(idleTimer);
-            if (isTimeout())
-              reject(
-                new Error(
-                  t(
-                    st.sawToolCallStart ? "error.llm_stream_idle_toolcall" : "error.llm_stream_idle",
-                    { timeout: idleTimeoutMs },
-                  ),
-                ),
-              );
+            if (isTimeout()) reject(idleError());
             else reject(err);
           },
         );

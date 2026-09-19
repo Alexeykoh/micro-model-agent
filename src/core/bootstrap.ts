@@ -127,6 +127,7 @@ export function buildSystemInfo(
     `You are MMA v2, an AI coding agent for small models (${config.model}). Date: ${now}. Workspace: ${baseDir}. ${profileCompressed}.`,
     `Reply in the user's language. Use tools for file ops (read/write/edit/delete), search (glob/grep), shell (bash), web, subagents, browser, MCP. Explain briefly if not obvious. On tool failure: analyze, fix the call, retry up to 2x with different approaches, then ask the user.`,
     `Design: YAGNI (no unneeded code), KISS (simple over clever), DRY (reuse existing utilities).`,
+    `ARTIFACTS: when the user asks for a document or file (specification, design, README, plan file, config, script, report), CREATE it as a real file in the workspace — a plan described only in chat or held in your reasoning is NOT the artifact. Use the format and stack the user requested, and do not add libraries/tools that were not agreed or listed; if the request is silent on a needed choice, ask or search before adding dependencies.`,
     `SCOPE DISCIPLINE: do ONLY what the user explicitly asked — no extra features, files, refactors, "improvements", or fixes beyond the request. Read-only requests ("расскажи", "покажи", "объясни", "check") mean READ-ONLY: inspect and answer, never create/modify/delete anything. If the task is ambiguous (what to create, where, which variant) or the request implies action on something you could not find — STOP and ask the user a short clarifying question in plain text instead of guessing.`,
     `INPUT PRIORITY: the current user message outranks stored memory/preferences/facts. Never override, reinterpret, or "correct" an explicit value the user states now (city, path, name, language, choice) because a stored preference disagrees — follow the user's current message. If they truly conflict or look like a typo, ask the user instead of assuming.`,
     `NOT FOUND ≠ MISSING PROJECT: a "not found" tool result means the PATH was wrong (typo, different location), not that the project does not exist. Before creating or scaffolding ANY project/files: first run list_dir on the working directory to see what is already there; if a user-named path is not found, list its parent directory to locate the real path. NEVER create a new project when the user asked about an existing one — inspect first, create only after confirming the workspace is empty AND the user asked for creation.`,
@@ -469,6 +470,25 @@ export async function bootstrap(
   if (config.session.autoSave && !sessionManager.getActive()) {
     sessionManager.create();
   }
+
+  // Persist the context probe to the session as soon as it resolves, in BOTH
+  // interactive and one-shot modes. Previously only the REPL wrote this entry,
+  // so one-shot runs lost the loaded-vs-configured context mismatch entirely
+  // (observed: LM Studio loaded 86016 while contextWindow was 32768 — silent).
+  void contextProbePromise
+    .then((probe) => {
+      if (!probe) return;
+      try {
+        sessionManager.appendLog({
+          ts: new Date().toISOString(),
+          type: "context_probe",
+          content: `model=${probe.model} actual=${probe.actual} configured=${config.contextWindow}`,
+        });
+      } catch {
+        // best-effort
+      }
+    })
+    .catch(() => {});
 
   // Git-style context log (opt-in via --context-log / config / env). Written
   // next to the session files so it travels with the session. Best-effort:

@@ -34,6 +34,7 @@ import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
 import type { ContextLogger } from "./agent/context-log";
+import { recordArtifactWrite, testChurnFile } from "./agent/artifact-progress";
 import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
 import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
@@ -1014,6 +1015,13 @@ export class Agent {
       const cycleNudges: string[] = [];
       if (sawToolCall) {
         for (const tc of toolCalls) {
+          // Прогресс тест/спек-артефактов (обобщённо, по пути файла).
+          if (
+            (tc.name === "write_file" || tc.name === "edit_file") &&
+            typeof tc.arguments.path === "string"
+          ) {
+            recordArtifactWrite(state.artifactChurn, tc.arguments.path);
+          }
           const target = mutationTargetKey(tc.name, tc.arguments);
           if (!target) continue;
           const count = (state.toolTargetCounts.get(target) ?? 0) + 1;
@@ -1051,6 +1059,20 @@ export class Agent {
           contextManager.addMessage({
             role: "user",
             content: `<system-summary>You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.</system-summary>`,
+          });
+        }
+
+        // Тест/спек-churn: серия правок тестов без единой production-правки
+        // (обобщённо — см. artifact-progress.ts).
+        const churnFile = testChurnFile(state.artifactChurn);
+        if (churnFile) {
+          state.artifactChurn.nudged = true;
+          logger.info(
+            `Test/spec artifact churn: "${churnFile}" repeatedly edited with no production changes — nudging to implement or change approach`,
+          );
+          contextManager.addMessage({
+            role: "user",
+            content: `<system-summary>${t("exec.test_churn_nudge", { file: churnFile })}</system-summary>`,
           });
         }
 

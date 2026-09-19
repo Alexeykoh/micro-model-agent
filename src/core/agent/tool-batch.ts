@@ -11,7 +11,7 @@ import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { LoopState } from "./loop-state";
-import { summarizeToolArgs, truncateToolOutput, compactToolError } from "./tool-output";
+import { summarizeToolArgs, truncateToolOutput, compactToolError, isExecutableScriptPath } from "./tool-output";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import {
@@ -240,6 +240,27 @@ export class ToolBatchExecutor {
       summaries.push(
         `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
       );
+
+      // Security block seen? Remember it for the wrapper-script heuristic.
+      if (
+        typeof result.output === "string" &&
+        result.output.includes("[SECURITY BLOCKED]")
+      ) {
+        state.sawSecurityBlock = true;
+      }
+      // Wrapper-script workaround: after a security block, writing a shell
+      // script (.bat/.cmd/.sh/.ps1) is almost always an attempt to bypass the
+      // blocked operator — nudge once, generically (no tool/language specifics).
+      if (
+        state.sawSecurityBlock &&
+        !state.scriptWorkaroundNudged &&
+        call.name === "write_file" &&
+        typeof call.arguments.path === "string" &&
+        isExecutableScriptPath(call.arguments.path)
+      ) {
+        state.scriptWorkaroundNudged = true;
+        summaries.push(t("exec.script_workaround_nudge"));
+      }
 
       if (config.session.autoSave) {
         slog?.logToolResult(call, result, duration, iteration);

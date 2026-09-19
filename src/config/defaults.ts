@@ -62,6 +62,7 @@ export const DEFAULTS: AppConfig = {
     systemPrompt: 0.1,
     responseReserve: 0.15,
     compactionThreshold: 0.75,
+    compactionMinLoad: 0.5,
   },
   instructions: {
     summarize: true,

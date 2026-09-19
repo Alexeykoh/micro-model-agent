@@ -261,7 +261,7 @@ describe("plan update deliverable gate", () => {
     expect(res.output).toContain("a.js");
   });
 
-  it("keeps kinds when rebuilding the plan via update with steps", async () => {
+  it("rejects steps[] rewrite via update, while create keeps kinds", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
     await tool.handler(ctx, {
@@ -271,8 +271,18 @@ describe("plan update deliverable gate", () => {
     });
     mkdirSync(join(tmpDir, "src"), { recursive: true });
     writeFileSync(join(tmpDir, "src", "x.ts"), "x");
-    const res = await tool.handler(ctx, {
+    // Changing the plan's steps via `update` is refused (use re-plan/create).
+    const rejected = await tool.handler(ctx, {
       action: "update",
+      title: "T2",
+      steps: ["Remove src/x.ts"],
+      kinds: ["delete"],
+    });
+    expect(rejected.success).toBe(false);
+    expect(rejected.output).toContain("re-plan");
+    // Rebuilding through `create` (no progress yet) keeps the declared kinds.
+    const res = await tool.handler(ctx, {
+      action: "create",
       title: "T2",
       steps: ["Remove src/x.ts"],
       kinds: ["delete"],

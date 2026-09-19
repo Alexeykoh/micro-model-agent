@@ -58,6 +58,9 @@ export interface ExecutionPluginState {
   /** Stable key of the last logged stuck-warning (getWarningKey) + iteration. */
   lastStuckWarnKey: string;
   lastStuckWarnIter: number;
+  /** Whether the model-facing escalation directive was already injected for
+   *  the current stuck episode (prevents repeating it every cooldown). */
+  escalationDirectiveSent: boolean;
   depsGateHints: Map<number, number>;
   /** write/edit/bash/download calls made while NO plan is active. */
   mutationsWithoutPlan: number;
@@ -132,6 +135,7 @@ function resetStepFlags(state: ExecutionPluginState, stepId: number): void {
   state.consecutivePlanWarnings = 0;
   state.lastStepId = stepId;
   state.stuckNotified = false;
+  state.escalationDirectiveSent = false;
 }
 
 /** Полный сброс состояния плана (завершён или его нет). */
@@ -141,6 +145,7 @@ function resetPlanState(state: ExecutionPluginState): void {
   state.stuckNotified = false;
   state.mutationsWithoutPlan = 0;
   state.planNudgeSent = false;
+  state.escalationDirectiveSent = false;
 }
 
 /**
@@ -292,12 +297,23 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.stuckDetector.recordEscalation();
           deps.state.lastRecoveryIteration = currentIter;
 
-          if (deps.stuckDetector.shouldEscalate() && ctx.onMeta) {
+          if (deps.stuckDetector.shouldEscalate()) {
             const escalation = t("exec.escalation", {
               stepId: String(deps.trackerRef.current?.getCurrentStep()?.id ?? "?"),
               description: deps.trackerRef.current?.getCurrentStep()?.description ?? "",
             });
-            ctx.onMeta(escalation);
+            // Escalate to the MODEL, not just the UI banner: after several
+            // recovery attempts, give explicit generic options (change
+            // approach, search the error, ask the user, re-plan/skip) instead
+            // of repeating the same failing action. Injected once per episode.
+            if (!deps.state.escalationDirectiveSent && ctx.contextManager) {
+              deps.state.escalationDirectiveSent = true;
+              ctx.contextManager.addMessage({
+                role: "user",
+                content: `<system-summary>${t("exec.escalation_directive")}</system-summary>`,
+              });
+            }
+            ctx.onMeta?.(escalation);
           }
 
           // Force skip after too many iterations on the same step

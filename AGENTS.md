@@ -189,7 +189,25 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Точка хука** — `Agent.executeSingleAgentLoop` рядом с prefix-monitor (`record` до запроса, `recordOutput` после стрима).
   MoE-путь не логируется. `--context-log` — boolean, значение пути не парсится (pre-parse `valueOpts` не трогаем).
 
-### Current Version: 1.2.0
+### Agent Hardening from Context-Log Analysis (1.3.0)
+
+Реальный прогон (лендинг/TDD) + разбор `context.diff` выявил баги петли; исправлены обобщённо (без привязки к языку/задаче):
+
+- **Компакция по бюджету** (`contextBudget.compactionMinLoad`, default 0.5): 15-итерационный интервал сам по себе больше не триггерит —
+  нужна загрузка истории ≥ порога. Раньше компакция срабатывала на ~40% и теряла 33-44 хода посреди задачи.
+- **`context_probe` пишется всегда** (bootstrap) и показывается в one-shot; раньше — только REPL (TODO в `main.ts` закрыт).
+- **Churn тест/спек-артефактов** (`src/core/agent/artifact-progress.ts`): серия правок test/spec без production-правок → nudge
+  «исправляй код под тестом, а не тест». Классификация путей мультиязычна.
+- **Эскалация stuck доходит до модели**: после порога в контекст идёт `<system-summary>` с общими опциями (сменить подход / поиск /
+  вопрос / re-plan|skip), а не только UI-баннер.
+- **Защита от скриптов-обходов** (`tool-batch.ts`, `bash.ts`): после `[SECURITY BLOCKED]` запись `.bat/.cmd/.sh/.ps1` → nudge;
+  подсказка блока указывает на тулы, а не только `workdir`.
+- **`plan update` не перезаписывает шаги** (только `re-plan`/`create`); `kinds` валидируется 1:1.
+- **Non-streaming fallback при stall после tool_call** (`openai-compat.ts`): буферизованный SSE LM Studio не роняет прогон.
+- **Сводка аргументов тулов без тел** (`summarizeToolArgs` сворачивает длинные значения в `…(N chars)`).
+- **Артефакт-правило в промпте**: запрошенный документ/артефакт создаётся файлом; неоговорённые библиотеки не добавляются.
+
+### Current Version: 1.3.0
 
 ### Changelog
 

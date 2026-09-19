@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     const jsonSink = jsonOpt ? new JsonOutputSink(defaultOutputBus) : undefined;
 
     const prompt = program.args.join(" ");
-    const { agent, config, baseDir, legacyDetected } = await bootstrap(
+    const { agent, config, baseDir, legacyDetected, contextProbe } = await bootstrap(
       undefined,
       projectDir,
       noAgentsMd,
@@ -142,6 +142,33 @@ async function main(): Promise<void> {
 
     if (legacyDetected) {
       getDefaultChannel().writeLine(pc.yellow(`  ${t("config.legacy_hint")}`), "stderr");
+    }
+
+    // Surface the loaded-vs-configured context mismatch in one-shot mode too
+    // (previously only Repl.start() rendered it). Skipped under --json.
+    if (contextProbe && !jsonOpt) {
+      try {
+        const probe = await contextProbe;
+        if (probe) {
+          if (probe.actual < config.contextWindow) {
+            getDefaultChannel().writeLine(
+              pc.yellow(
+                t("repl.context_probe_small", {
+                  model: probe.model,
+                  actual: String(probe.actual),
+                  configured: String(config.contextWindow),
+                }),
+              ),
+            );
+          } else if (probe.actual > config.contextWindow) {
+            getDefaultChannel().writeLine(
+              pc.dim(t("repl.context_probe_big", { model: probe.model, actual: String(probe.actual) })),
+            );
+          }
+        }
+      } catch {
+        // best-effort
+      }
     }
 
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);

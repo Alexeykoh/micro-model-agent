@@ -113,6 +113,12 @@ export interface ContextBudget {
   systemPrompt: number;
   responseReserve: number;
   compactionThreshold: number;
+  /**
+   * Minimum history load (fraction) for the compaction iteration interval to
+   * fire. Default 0.5. Prevents compacting a lightly-loaded context purely
+   * because N iterations elapsed.
+   */
+  compactionMinLoad?: number;
 }
 
 /**

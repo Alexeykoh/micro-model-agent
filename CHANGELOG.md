@@ -4,6 +4,26 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-09-19
+
+### Added
+
+- **Budget-driven compaction floor** (`contextBudget.compactionMinLoad`, default 0.5, `src/modules/context/manager.ts`): the 15-iteration interval no longer triggers a compaction on its own — it now requires the history to be at least `compactionMinLoad` full. Previously compaction fired at ~40% of the budget and discarded 33-44 useful turns mid-task (observed in a real run), derailing the agent. Token-pressure compaction (`compactionThreshold`) is unchanged.
+- **Context probe persistence in every mode** (`src/core/bootstrap.ts`, `src/cli/main.ts`): the loaded-vs-configured context probe is now written to the session (`context_probe`) and surfaced in one-shot runs too. Previously only the REPL recorded/rendered it, so a mismatch (LM Studio loaded 86016 while `contextWindow` was 32768) was silent in `mma "<prompt>"`.
+- **Artifact churn detector** (`src/core/agent/artifact-progress.ts`): nudges the model once when it repeatedly rewrites a test/spec file without changing production code. Path classification is cross-language (`*.test.*`, `*_test.*`, `test_*`, `*Test.java`, `tests/`, `specs/`, …), with no framework/task specifics.
+- **Stuck escalation reaches the model** (`src/modules/execution/execution-plugin.ts`): after the escalation threshold, a generic directive (change approach / search the exact error / ask the user / re-plan or skip) is injected as a `system-summary`, not only shown in the UI.
+- **Wrapper-script guard** (`src/core/agent/tool-batch.ts`, `src/tools/bash.ts`): after a `[SECURITY BLOCKED]` result, writing a `.bat/.cmd/.sh/.ps1` wrapper triggers a one-time nudge; the security block hint now points to tools (write_file, workdir, separate calls) instead of only `workdir`.
+
+### Changed
+
+- **`plan update` no longer rewrites the plan's steps** (`src/modules/execution/plan-actions.ts`): a bulk `steps[]`/`title` rewrite via `update` is rejected in all cases (previously only when the plan had progress). Use `re-plan` (keeps completed steps) or `create`.
+- **Tool-arg summaries omit long values** (`src/core/agent/tool-output.ts`): `summarizeToolArgs` collapses long string values (`content`/`new_string`/…) to `…(N chars)` instead of echoing the body into the `<system-summary>` envelope.
+- **Artifact-requirement prompt rule** (`src/core/bootstrap.ts`): explicit generic line — a requested document/artifact (spec, design, README, plan file, script) must be created as a real file, and libraries not agreed/listed must not be added.
+
+### Fixed
+
+- **Non-streaming fallback on buffered-SSE stall** (`src/llm/openai-compat.ts`): a stream that stalls after tool-call deltas started (LM Studio buffers large tool-call SSE) is retried non-streaming once instead of failing the whole run. Reasoning from the fallback is dropped (already streamed).
+
 ## [1.2.0] - 2026-09-19
 
 ### Added

@@ -171,17 +171,24 @@ describe("ContextManager", () => {
   });
 });
 
-describe("ContextManager compaction interval reset between user turns", () => {
-  it("should not trigger interval compaction right after reset", () => {
+describe("ContextManager compaction cadence", () => {
+  it("does not compact on the interval alone when the context is lightly loaded", () => {
     const cm = new ContextManager(100000);
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 15; i++) {
       cm.addMessage({ role: "user", content: `task ${i}` });
       cm.noteIteration();
     }
-    // 14 iterations — still below COMPACTION_INTERVAL (15)
+    // 15 iterations elapsed, but the history is far below the load floor —
+    // compacting here would only destroy useful working state.
     expect(cm.needsCompaction()).toBe(false);
+  });
 
-    cm.noteIteration(); // iteration 15
+  it("compacts on the interval once the history is meaningfully loaded", () => {
+    const cm = new ContextManager(2000); // fallback history budget ≈ 1260 tok
+    for (let i = 0; i < 15; i++) {
+      cm.addMessage({ role: "user", content: "x".repeat(200) });
+      cm.noteIteration();
+    }
     expect(cm.needsCompaction()).toBe(true);
   });
 

@@ -221,9 +221,11 @@ function actionUpdate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   if (args.step && deps.trackerRef.current) {
     return updateStep(deps, ctx, args);
   }
-  // Массовая пересборка плана новыми шагами.
+  // Массовая пересборка плана через update запрещена: она молча меняет
+  // состав/название плана (churn) и теряет статусы. Модель должна осознанно
+  // выбрать `re-plan` (сохраняет завершённые шаги) или `create` (новый план).
   if (Array.isArray(args.steps) && args.steps.length > 0 && !args.step) {
-    return bulkUpdate(deps, args);
+    return { success: false, output: t("plan.bulk_update_rejected") };
   }
   // Ни шага, ни шагов — тот же фолбэк, что был в хвосте монолита.
   return noActiveOrUnknown(deps, args, "update");
@@ -412,41 +414,6 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
   return {
     success: true,
     output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}${vacuousNote}`,
-    display,
-  };
-}
-
-function bulkUpdate(deps: PlanToolDeps, args: Record<string, unknown>): ToolResult {
-  const tracker = deps.trackerRef.current;
-  if (!tracker) {
-    return { success: false, output: t("plan.no_active") };
-  }
-  // Rebuilding a plan that already has progress silently discards
-  // every status (ses_mt4fn58c: the model sent its whole step list
-  // with ✅-emoji statuses expecting progress marks and got a fresh
-  // plan back). A not-yet-started plan is safe to rebuild.
-  const progressed = tracker.getPlan().steps.some((s) => s.status !== "pending");
-  if (progressed) {
-    return { success: false, output: t("plan.bulk_update_rejected") };
-  }
-  const title = String(args.title || tracker.getPlan().title);
-  // Диспетчер вызывает bulkUpdate только когда steps — непустой массив, но
-  // внутри отдельной функции сужение теряется — восстанавливаем безопасно.
-  const steps = Array.isArray(args.steps) ? args.steps.map(String) : [];
-  const parsed = deps.parseKinds(args, steps);
-  if (parsed.error) {
-    return { success: false, output: parsed.error };
-  }
-  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? []);
-  deps.setPlan(plan);
-  const display = deps.trackerRef.current?.toPromptBlock();
-  const output = t("plan.updated", {
-    title,
-    steps: String(steps.length),
-  });
-  return {
-    success: true,
-    output,
     display,
   };
 }

@@ -585,7 +585,7 @@ export const bashTool: ToolDefinition = {
 
       return {
         success: false,
-        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}\nHint: Use the "workdir" parameter to run commands in a specific directory instead of "cd dir && cmd". Run one command per tool call.`,
+        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}\nHint: run one plain command per tool call. For output redirection write the file with write_file; for chaining run separate calls; use the "workdir" parameter instead of "cd dir && cmd". Do NOT write a wrapper script (.bat/.cmd/.sh/.ps1) to bypass this — the same rule applies when that script runs.`,
       };
     }
 

@@ -156,6 +156,7 @@ export class ExecutionModule implements AgentModule {
     stuckNotified: false,
     lastStuckWarnKey: "",
     lastStuckWarnIter: -STUCK_WARN_REPEAT_EVERY,
+    escalationDirectiveSent: false,
     depsGateHints: new Map<number, number>(),
     mutationsWithoutPlan: 0,
     planNudgeSent: false,

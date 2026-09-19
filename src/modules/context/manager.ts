@@ -134,6 +134,14 @@ export class ContextManager {
   private peakTokens = 0;
   private budget: ContextBudget;
   private compactionThreshold: number;
+  /**
+   * Minimum history load (fraction of the history budget) required for the
+   * iteration interval to trigger a compaction. The interval is a cadence
+   * guard, not a trigger: a lightly-loaded context must not be compacted just
+   * because N iterations elapsed (observed: compaction at ~40% of budget wiped
+   * 33-44 useful turns and derailed the run).
+   */
+  private compactionMinLoad: number;
   private facts = new FactExtractor();
   /** Latest real user instruction (skips <system-summary> blocks). */
   private lastUserTask = "";
@@ -163,6 +171,7 @@ export class ContextManager {
   ) {
     this.contextWindow = contextWindow;
     this.compactionThreshold = contextBudget?.compactionThreshold ?? 0.75;
+    this.compactionMinLoad = contextBudget?.compactionMinLoad ?? 0.5;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
     this.tokenCounter = tokenCounter ?? null;
   }
@@ -386,9 +395,15 @@ export class ContextManager {
   }
 
   needsCompaction(): boolean {
-    if (this.iterationsSinceCompaction >= COMPACTION_INTERVAL) return true;
     const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
-    return totalTokens > this.budget.history * this.compactionThreshold;
+    if (totalTokens > this.budget.history * this.compactionThreshold) return true;
+
+    // The iteration interval only compacts once the history is meaningfully
+    // loaded. Compacting a low-load context loses useful working state for no
+    // budget reason (see `compactionMinLoad`).
+    if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
+    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    return load >= this.compactionMinLoad;
   }
 
   compact(): CompactResult | null {

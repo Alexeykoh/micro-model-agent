@@ -3,6 +3,7 @@ import {
   TOOL_RESULT_MAX_TOKENS_RATIO,
   TOOL_RESULT_ABSOLUTE_MAX_CHARS,
   TOOL_ARGS_SUMMARY_MAX_CHARS,
+  TOOL_ARG_VALUE_MAX_CHARS,
 } from "./constants";
 
 /**
@@ -39,20 +40,56 @@ export function truncateToolOutput(
 }
 
 /**
- * JSON-сериализация аргументов тула для <system-summary>, ограниченная по
- * размеру. Большой аргумент (content у write_file) не должен дублироваться в
- * сводке поверх role:"tool" сообщения, которое уже несёт результат.
+ * Компактная сигнатура аргументов тула для <system-summary>.
+ *
+ * Длинные строковые значения (content/new_string/text/…) сворачиваются до
+ * `…(N chars)`: их полный текст уже есть в assistant-сообщении с tool_calls
+ * и в role:"tool" результате, поэтому дублировать тело в сводке не нужно.
+ * Короткие скаляры (path/command/pattern/url) сохраняются как есть.
+ * Реализация не привязана к конкретным тулам — правило общее для любых args.
  */
 export function summarizeToolArgs(args: unknown): string {
-  let s: string;
-  try {
-    s = JSON.stringify(args);
-  } catch {
-    s = String(args);
+  if (args === undefined || args === null) return "";
+  if (typeof args !== "object") {
+    const s = String(args);
+    return s ? ` (${s.slice(0, TOOL_ARGS_SUMMARY_MAX_CHARS)})` : "";
   }
-  if (!s || s === "{}") return "";
+
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
+    let rendered: string;
+    if (typeof value === "string") {
+      rendered =
+        value.length > TOOL_ARG_VALUE_MAX_CHARS
+          ? `${key}:…(${value.length} chars)`
+          : `${key}:${value}`;
+    } else {
+      let json: string;
+      try {
+        json = JSON.stringify(value);
+      } catch {
+        json = String(value);
+      }
+      rendered =
+        json && json.length > TOOL_ARG_VALUE_MAX_CHARS ? `${key}:…` : `${key}:${json}`;
+    }
+    parts.push(rendered);
+    if (parts.join(", ").length > TOOL_ARGS_SUMMARY_MAX_CHARS) break;
+  }
+
+  const s = parts.join(", ");
+  if (!s) return "";
   if (s.length <= TOOL_ARGS_SUMMARY_MAX_CHARS) return ` (${s})`;
   return ` (${s.slice(0, TOOL_ARGS_SUMMARY_MAX_CHARS)}…(${s.length} chars total))`;
+}
+
+/**
+ * Является ли путь исполняемым shell-скриптом (обёрткой). Обобщённо, без
+ * привязки к языку проекта: используется, чтобы заметить попытку обойти
+ * security-блокировку через свежесозданный скрипт.
+ */
+export function isExecutableScriptPath(filePath: string): boolean {
+  return /\.[a-z0-9]+$/i.test(filePath) && /\.(bat|cmd|sh|bash|ps1|zsh|fish)$/i.test(filePath);
 }
 
 /**
