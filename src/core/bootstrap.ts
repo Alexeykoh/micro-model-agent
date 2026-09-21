@@ -376,7 +376,9 @@ export async function bootstrap(
   // session switch). OpenCode Go rejects requests without `x-opencode-session`.
   let activeSessionManager: SessionManager | undefined;
   const getSessionId = (): string | undefined => activeSessionManager?.getActiveMeta()?.id;
-  const llmProvider = buildActiveProvider(config, logger, { getSessionId }).provider;
+  const builtProvider = buildActiveProvider(config, logger, { getSessionId });
+  const providerManager = builtProvider.manager;
+  const llmProvider = builtProvider.provider;
 
   // Resolve reasoning strategy from provider preset + probe
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
@@ -796,6 +798,7 @@ export async function bootstrap(
     config,
     configRef,
     llmProvider,
+    getProviderName: () => providerManager.activeName,
     toolExecutor,
     pluginManager,
     contextManager,

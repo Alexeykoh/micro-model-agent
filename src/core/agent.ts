@@ -137,6 +137,13 @@ export interface AgentDeps {
   planSummary?: () => string | null;
   /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
   runWithMoEOverride?: typeof runWithMoE;
+  /**
+   * Live name of the active provider entry. Needed because transparent
+   * failover (FallbackProvider) switches the manager's active entry without
+   * updating `config.provider.active`; provenance/cost must reflect the
+   * provider that actually served the call.
+   */
+  getProviderName?: () => string;
 }
 
 /**
@@ -236,6 +243,11 @@ export class Agent {
   }
 
   callerProvenance(): { provider: string; model: string } {
+    // Live provider name first: sticky failover switches the manager's active
+    // entry without touching config.provider.active.
+    const live = this.deps.getProviderName?.();
+    if (live) return { provider: live, model: this.deps.config.model };
+
     const p = this.deps.config.provider;
     let providerName = p?.type || "unknown";
     // When provider.entries exist, use the active entry's label for
@@ -656,7 +668,7 @@ export class Agent {
       slog,
       hallucinationDetector,
     });
-    const tokenTracker = new TokenTracker(this.costTracker, () => this.callerProvenance().provider);
+    const tokenTracker = new TokenTracker(this.costTracker, () => this.callerProvenance());
     const reasoningResolver = new ReasoningEffortResolver();
     const toolBatch = new ToolBatchExecutor({
       config,
@@ -1281,10 +1293,12 @@ export class Agent {
 
   async reconfigure(config: AppConfig): Promise<void> {
     const { TokenCounter } = await import("../llm/token-counter");
-    const { provider: newProvider } = buildActiveProvider(config, this.deps.logger, {
+    const built = buildActiveProvider(config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
     });
+    const newProvider = built.provider;
     this.deps.llmProvider = newProvider;
+    this.deps.getProviderName = () => built.manager.activeName;
     this.deps.toolExecutor.updateProvider(newProvider);
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
@@ -1301,6 +1315,7 @@ export class Agent {
     const providerCfg = manager.toConfig();
     this.deps.config.provider = providerCfg;
     this.deps.llmProvider = provider;
+    this.deps.getProviderName = () => manager.activeName;
     this.deps.toolExecutor.updateProvider(provider);
   }
 

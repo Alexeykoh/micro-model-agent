@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Provenance after transparent provider failover** (`src/core/agent.ts`, `src/core/agent/token-tracker.ts`, `src/core/bootstrap.ts`): after `FallbackProvider` switched to another entry, the footer, cost attribution and `llm_usage` still reported the original provider. `callerProvenance()` now reads the live active entry (`getProviderName`), and `TokenTracker.logUsage` passes `provider`/`model` into `llm_usage`. Verified live: `provider failover: dead -> live` → footer `· live`, `llm_usage.provider=live`.
 - **Session encryption config was ignored** (`src/core/bootstrap.ts`): `SessionStore` was constructed without `config.security.sessionEncryption`, so enabling `security.sessionEncryption` silently left `session.jsonl`/`history.jsonl` in plaintext. The config is now passed through; verified live (files written as `salt:iv:authTag:data`).
 - **Certification harness hardening** (`src/modules/certification/`, found by running the full suite on `qwen/qwen3.5-9b`):
   - `syncGlobalManifest` no longer downgrades a fresher local certification with an older bundled manifest — it overwrites a key only when the bundled entry is genuinely newer (`manifest.ts`).

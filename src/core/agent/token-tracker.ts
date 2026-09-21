@@ -20,7 +20,7 @@ import type { LoopState } from "./loop-state";
 export class TokenTracker {
   constructor(
     private readonly costTracker: CostTracker,
-    private readonly getProviderName: () => string,
+    private readonly getProvenance: () => { provider: string; model: string },
   ) {}
 
   /**
@@ -89,7 +89,10 @@ export class TokenTracker {
       state.cacheSource = state.cacheUsage.source;
     }
 
+    const prov = this.getProvenance();
     slog.logLlmUsage(iteration, {
+      provider: prov.provider,
+      model: prov.model,
       promptTokens: prompt,
       completionTokens: completion,
       totalTokens: prompt + completion,
@@ -103,7 +106,7 @@ export class TokenTracker {
     this.costTracker.record(
       prompt,
       completion,
-      this.getProviderName(),
+      prov.provider,
       source === "api" ? state.cacheUsage : undefined,
     );
   }

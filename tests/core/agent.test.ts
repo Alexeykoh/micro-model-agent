@@ -172,6 +172,12 @@ describe("Agent", () => {
     expect(agent.getModule("nope")).toBeUndefined();
   });
 
+  it("callerProvenance prefers the live provider name (post-failover)", () => {
+    const deps = createMockDeps({ getProviderName: () => "live" });
+    const agent = new Agent(deps as any);
+    expect(agent.callerProvenance()).toEqual({ provider: "live", model: "test-model" });
+  });
+
   it("returns text response for simple text LLM output", async () => {
     const deps = createMockDeps();
     const agent = new Agent(deps as any);
