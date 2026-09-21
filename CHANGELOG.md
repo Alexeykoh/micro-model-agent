@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Status voice** (`src/ui/renderer.ts`): thinking phases rotate a few short human labels (`thinking` / `working it out` / `considering`, localized) instead of repeating one word.
 - **Plan checklist restyle** (`src/ui/plan-view.ts`): `◇ title ▰▱ 1/3` header and `✓ / ◇ / ○ / ✗` step marks, dropping the raw plan id and `[x]` brackets.
 - **Category-colored action glyph** (`src/ui/theme.ts`): the single `◇` mark is colored by tool category — recon cyan, mutate magenta, execute blue, meta dim. Per-tool emoji icons are no longer rendered.
-- **Human plan/todo arguments** (`src/ui/renderer.ts`): `plan update` shows `step 2 → done` and `plan create` shows the title instead of raw JSON.
+- **Human tool arguments** (`src/ui/renderer.ts`): raw JSON is replaced by short phrases — `plan update` → `step 2 → done`, `browser scroll down`, `move_file` → `a → b`, `mcp_call` → `server/tool`, `remember`, `enable_tools`, `glob`/`grep`/`subagent`/`set_thinking`/`verify`/`process_log` and more.
 - **Quiet hides structured info logs** (`src/output/channel.ts`): `info`-level log events (`[INFO] [mma] …`) are dropped from the terminal in quiet mode; warn/error and `writeLine` blocks are unaffected.
 
 ### Fixed

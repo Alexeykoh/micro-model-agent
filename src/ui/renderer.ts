@@ -115,9 +115,38 @@ export function summarizeArgs(args: Record<string, unknown>): string {
   return serialized.length > 60 ? `${serialized.slice(0, 57)}…` : serialized;
 }
 
+/** Scalar arg keys shown as-is, in priority order, for ordinary tools. */
+const GENERIC_ARG_KEYS = [
+  "path",
+  "file",
+  "pattern",
+  "query",
+  "url",
+  "command",
+  "name",
+  "task",
+  "level",
+  "id",
+  "source",
+  "step",
+  "key",
+  "value",
+  "text",
+];
+
+function str(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+function truncateArg(text: string, max = 60): string {
+  return text.length > max ? `${text.slice(0, max - 3)}…` : text;
+}
+
 /**
- * Human-readable argument summary. Structural tools (plan/todo) carry raw JSON
- * that would leak into the chat, so they get a short localized phrase instead.
+ * Human-readable argument summary. Structural/action tools carry raw JSON that
+ * would leak into the chat, so they get a short localized phrase instead.
  */
 export function humanArgs(tool: string, args: Record<string, unknown>): string {
   if (tool === "plan") {
@@ -140,6 +169,41 @@ export function humanArgs(tool: string, args: Record<string, unknown>): string {
     const items = Array.isArray(args.items) ? args.items.length : undefined;
     if (action && items !== undefined) return t("ui.todo_action", { action, count: String(items) });
     if (action) return action;
+  }
+  // Generic action-style tools (browser, project_map, lsp_check, …) carry an
+  // `action` plus a few short scalars — render a phrase, not raw JSON.
+  if (typeof args.action === "string" && args.action) {
+    const extras = ["direction", "selector", "key", "name", "path", "url", "query", "text", "id"]
+      .map((k) => (typeof args[k] === "string" && args[k] ? (args[k] as string) : undefined))
+      .filter((v): v is string => Boolean(v));
+    return truncateArg([args.action, ...extras].join(" "));
+  }
+  // Composites where a single key would drop half the meaning.
+  if (tool === "move_file") {
+    const from = str(args.from);
+    const to = str(args.to);
+    if (from && to) return truncateArg(`${from} → ${to}`);
+  }
+  if (tool === "mcp_call") {
+    const server = str(args.server);
+    const name = str(args.tool);
+    if (server && name) return `${server}/${name}`;
+  }
+  if (tool === "remember") {
+    const category = str(args.category);
+    const key = str(args.key);
+    const entry = str(args.entry);
+    const body = key && args.value !== undefined ? `${key} = ${str(args.value)}` : key || entry;
+    const phrase = [category, body].filter(Boolean).join(" · ");
+    if (phrase) return truncateArg(phrase);
+  }
+  if (tool === "enable_tools") {
+    const tags = Array.isArray(args.tags) ? args.tags.map(String).filter(Boolean) : [];
+    if (tags.length) return tags.join(", ");
+  }
+  for (const key of GENERIC_ARG_KEYS) {
+    const value = str(args[key]);
+    if (value) return truncateArg(value);
   }
   return summarizeArgs(args);
 }

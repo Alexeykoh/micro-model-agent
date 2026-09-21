@@ -65,6 +65,31 @@ describe("humanArgs", () => {
     expect(humanArgs("plan", { action: "create", title: "Landing" })).toBe("Landing");
   });
 
+  it("renders action-style tools as a phrase instead of JSON", () => {
+    expect(humanArgs("browser", { action: "scroll", direction: "down" })).toBe("scroll down");
+    expect(humanArgs("browser", { action: "snapshot" })).toBe("snapshot");
+    expect(humanArgs("browser", { action: "scroll", direction: "down" })).not.toContain("{");
+  });
+
+  it("renders common scalar args without JSON", () => {
+    expect(humanArgs("glob", { pattern: "**/*.ts" })).toBe("**/*.ts");
+    expect(humanArgs("grep", { pattern: "TODO" })).toBe("TODO");
+    expect(humanArgs("subagent", { task: "gather assets" })).toBe("gather assets");
+    expect(humanArgs("set_thinking", { level: "high" })).toBe("high");
+    expect(humanArgs("attach_image", { source: "mock.png" })).toBe("mock.png");
+    expect(humanArgs("verify", { step: 2 })).toBe("2");
+    expect(humanArgs("process_log", { id: "4821" })).toBe("4821");
+  });
+
+  it("composes multi-key tools", () => {
+    expect(humanArgs("move_file", { from: "a.png", to: "b.png" })).toBe("a.png → b.png");
+    expect(humanArgs("mcp_call", { server: "fs", tool: "read_file" })).toBe("fs/read_file");
+    expect(humanArgs("enable_tools", { tags: ["browser", "subagent"] })).toBe("browser, subagent");
+    expect(humanArgs("remember", { category: "facts", entry: "hero is 48px" })).toContain(
+      "hero is 48px",
+    );
+  });
+
   it("falls back to the generic summary for ordinary tools", () => {
     expect(humanArgs("read_file", { path: "src/a.ts" })).toBe("src/a.ts");
   });
