@@ -1,0 +1,313 @@
+<style>
+  .chat{background:#0d1117;border:1px solid #21262d;border-radius:12px;padding:14px 16px;overflow-x:auto;height:100%}
+  .chat pre{margin:0;font:10.5px/1.5 ui-monospace,Consolas,"Cascadia Mono",monospace;color:#c9d1d9;white-space:pre}
+  .colhead{font:600 .8rem/1 system-ui;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem}
+  .a{color:#58a6ff}.s{color:#3fb950}.w{color:#d29922}.e{color:#f85149}.d{color:#8b949e}.f{color:#484f58}.t{color:#c9d1d9}.p{color:#d2a8ff}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+  @media (max-width:900px){.two{grid-template-columns:1fr}}
+</style>
+
+<h2>Локализация: EN слева, RU справа</h2>
+<p class="subtitle">Один и тот же поток. Системные имена тулов не показываются ни в одной локали — только <code>tool.friendly.*</code>.</p>
+
+<div class="two">
+  <div>
+    <div class="colhead">English (en)</div>
+    <div class="chat"><pre><span class="f">── START: banner, probe, warnings ──</span>
+<span class="d">qwen3.5-9b · lmstudio · 32K · system prompt 2.1K</span>
+<span class="f">/work/landing · plugins 2 · mcp 1 · session a1f2</span>
+<span class="s">✓</span> <span class="f">lsp: typescript ready</span>
+<span class="w">⚠</span> <span class="f">model loaded at 24K, configured 32K — overflow risk</span>
+<span class="w">⚠</span> <span class="f">primary provider down — using backup</span>
+<span class="w">⚠</span> <span class="f">AGENTS.md ~4.1K tok, budget 3.2K — summarizing</span>
+
+<span class="f">── PROMPT &amp; THINKING ──</span>
+<span class="a">&gt;</span> <span class="t">build a landing, gather assets, check the build</span>
+<span class="p">✦ thinking</span> <span class="f">· 1.8s · </span><span class="d">/reasoning — show</span>
+<span class="p">✦ thinking</span> <span class="d">· first, let me inspect the structure…</span>
+<span class="f">auto→high · level for this turn</span>
+<span class="a">◇</span> <span class="t">Set reasoning level</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 iterations</span>
+<span class="w">⚠</span> <span class="f">mentioned a file that does not exist: src/hero.tsx</span>
+
+<span class="f">── PLAN, TASKS, CHECKS ──</span>
+<span class="a">◇</span> <span class="t">Planning</span> <span class="f">landing · 3 steps</span>
+<span class="f">  1. structure  2. layout  3. build</span>
+<span class="f">  ▰▰▱ 0/3</span>
+<span class="s">✓</span> <span class="f">step 1/3: structure</span> <span class="f">▰▰▱ 1/3</span>
+<span class="w">⚠</span> <span class="f">2 edits without a plan — create a plan first</span>
+<span class="a">◇</span> <span class="t">Updating tasks</span> <span class="f">3 added · ▰▱▱ 1/3</span>
+<span class="a">◇</span> <span class="t">Verifying</span> <span class="f">file index.html exists</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="f">step 3: dependencies missing — install first</span>
+<span class="e">✗</span> <span class="t">step 2 stuck for 6 iterations</span> <span class="d">— need your call</span>
+<span class="f">  ↳ change approach / search / replan / skip</span>
+<span class="w">⚠</span> <span class="f">test edited 4 times in a row — fix code, not the test</span>
+<span class="w">⚠</span> <span class="f">7 reads in a row without writes — time to change things</span>
+<span class="w">⚠</span> <span class="f">plan touches 12 files — review the list</span>
+
+<span class="f">── MoE (multiple experts) ──</span>
+<span class="p">✦ MoE</span> <span class="d">· planning with orchestrator…</span>
+<span class="f">✓ plan valid · 4 subtasks · 2 waves</span>
+<span class="p">✦ MoE</span> <span class="f">wave 1: 3 subtasks…</span>
+<span class="s">✓</span> <span class="f">wave 1: 3/3 · wave 2: 1/1</span>
+<span class="f">replan cycle 1/3 · 2 successes carried over</span>
+<span class="s">✓</span> <span class="f">scope expanded: tests/</span> <span class="d">(or ⛔ rejected)</span>
+<span class="w">⚠</span> <span class="f">3/4 subtasks — returning partial result</span>
+
+<span class="f">── RECON &amp; INDEX ──</span>
+<span class="a">◇</span> <span class="t">Listing files</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 items</span>
+<span class="a">◇</span> <span class="t">Searching files</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 files</span>
+<span class="a">◇</span> <span class="t">Searching content</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 matches</span>
+<span class="a">◇</span> <span class="t">Reading file</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 lines</span>
+<span class="a">◇</span> <span class="t">File info</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
+<span class="a">◇</span> <span class="t">Project map</span> <span class="s">✓</span> <span class="f">18 files · 6 modules</span>
+<span class="d">indexing project… </span><span class="f">▰▰▰▱▱ 62%</span>
+<span class="a">◇</span> <span class="t">Querying chunks</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 chunks</span>
+<span class="f">│ 5 recon actions</span> <span class="s">✓</span> <span class="f">· 1.4s · </span><span class="d">/verbose for the list</span>
+
+<span class="f">── EDITS &amp; FILES ──</span>
+<span class="a">◇</span> <span class="t">Creating directory</span> <span class="f">src/assets</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Writing file</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
+<span class="a">◇</span> <span class="t">Editing file</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
+<span class="f">  13 </span><span class="e">-   padding: 20px;</span>
+<span class="f">  13 </span><span class="s">+   padding: 48px 24px;</span>
+<span class="f">  14 </span><span class="s">+   text-align: center;</span>
+<span class="a">◇</span> <span class="t">Moving file</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Deleting file</span> <span class="f">src/old.css</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="t">.env is protected</span> <span class="d">— confirmation needed</span>
+
+<span class="f">── COMMANDS &amp; PROCESSES ──</span>
+<span class="a">◇</span> <span class="t">Running command</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">exit 0 · 1.2s</span>
+<span class="a">◇</span> <span class="t">Running command</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">background · pid 4821</span>
+<span class="a">◇</span> <span class="t">Listing background processes</span> <span class="s">✓</span> <span class="f">1 active</span>
+<span class="a">◇</span> <span class="t">Process output</span> <span class="f">4821 · last 20</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Stopping process</span> <span class="f">4821</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Running pipeline</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="f">"ls" is not a cmd command; use file listing</span>
+<span class="w">⚠</span> <span class="f">command needs interactive input — run non-interactively</span>
+
+<span class="f">── QUALITY CHECKS ──</span>
+<span class="a">◇</span> <span class="t">Checking code</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 errors</span>
+<span class="a">◇</span> <span class="t">Checking syntax</span> <span class="f">index.html</span> <span class="s">✓</span>
+<span class="s">✓</span> <span class="f">vitest: 12 tests passed</span>
+<span class="f">🔧 auto-fixed 3 type errors</span>
+<span class="e">✗</span> <span class="t">tsc: 2 errors</span>
+<span class="f">  ↳ src/app.ts:14 property 'hero' does not exist</span>
+
+<span class="f">── OUTSIDE WORLD ──</span>
+<span class="a">◇</span> <span class="t">Web search</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
+<span class="a">◇</span> <span class="t">Fetching page</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 lines</span>
+<span class="a">◇</span> <span class="t">Browsing page</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">render ok</span>
+<span class="a">◇</span> <span class="t">Browser</span> <span class="f">screenshot → .mma/browser/shot.png</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Downloading file</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
+
+<span class="f">── MEMORY, KNOWLEDGE, SKILLS ──</span>
+<span class="a">◇</span> <span class="t">Loading skill</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K tok</span>
+<span class="a">◇</span> <span class="t">Remember</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Recall</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 entry</span>
+<span class="a">◇</span> <span class="t">Searching history</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 sessions</span>
+
+<span class="f">── DELEGATION, MCP, SERVICE ──</span>
+<span class="d">sub-agent queued: “gather assets”</span>
+<span class="a">◇</span> <span class="t">Sub-agent task</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 iterations</span>
+<span class="f">  ↳ artifact: .mma/artifacts/sub-a1.md</span>
+<span class="a">◇</span> <span class="t">MCP call</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Session info</span> <span class="s">✓</span> <span class="f">34 messages · 18%</span>
+<span class="a">◇</span> <span class="t">Enable tools</span> <span class="f">browser, subagent</span> <span class="s">✓</span> <span class="f">next turn</span>
+<span class="w">⚠</span> <span class="f">blocked by plugin guard · reason: out of scope</span>
+
+<span class="f">── INTERACTION (no interactive menus) ──</span>
+<span class="a">?</span> <span class="t">Which hero style — minimal or bold?</span>
+<span class="f">  1) minimal  2) bold  3) custom</span>
+<span class="a">↵</span> <span class="t">1 — minimal</span>
+<span class="a">◇</span> <span class="t">Attach image</span> <span class="f">mock.png</span> <span class="s">✓</span>
+
+<span class="f">── ERRORS — GENTLE ──</span>
+<span class="w">⚠</span> <span class="t">command failed</span> <span class="d">(exit 1)</span>
+<span class="f">  ↳ retrying without --frozen-lockfile</span>
+<span class="w">⚠</span> <span class="f">command exceeded 120s — interrupted</span>
+<span class="w">⚠</span> <span class="f">stopped by user</span>
+<span class="w">⚠</span> <span class="t">writing to .env is not allowed</span> <span class="d">— asking for confirmation</span>
+<span class="f">  ↳ details: /verbose</span>
+<span class="e">✗</span> <span class="t">could not build the project</span> <span class="d">— 2 type errors</span>
+<span class="f">  ↳ fix or ask?</span>
+<span class="e">✗</span> <span class="f">edit file: no replacement fragment provided</span>
+
+<span class="f">── CONTEXT, CACHE, COST ──</span>
+<span class="f">context </span><span class="d">▰▰▱▱▱▱▱▱▱▱</span> <span class="f">18%</span>
+<span class="f">⟳ context compacted · 34 → 21 messages</span>
+<span class="f">context +2.4K</span>
+<span class="f">cache 62% hit · saved 0.2¢ · prefix stable 97% (broke: tool set)</span>
+<span class="f">⟡ 6.2K tok · 18% · 0.4¢</span>
+<span class="f">Total: 1.8¢ · tokens 92K · by provider: lmstudio 100%</span>
+
+<span class="f">── REPL COMMANDS ──</span>
+<span class="f">Session: /new /sessions /resume /rename /delete</span>
+<span class="f">Model: /provider /model /reasoning /context</span>
+<span class="f">Other: /status /config /sysprompt /skill /map /lsp /plugins</span>
+<span class="s">✓</span> <span class="t">qwen3.5-9b</span> <span class="f">· 32K · cert: core ✓</span>
+<span class="f">id      name       msgs  updated</span>
+<span class="f">a1f2    landing    34    2 min</span>
+<span class="f">model qwen3.5-9b · provider lmstudio · context 18% · session a1f2</span>
+<span class="f">18 files · 6 modules · lsp ready · 2 plugins</span>
+<span class="w">⚠</span> <span class="f">interrupting… (Esc again to quit)</span>
+
+<span class="f">── CLI OUTSIDE REPL ──</span>
+<span class="f">$ mma "build a landing" --reasoning high</span>
+<span class="f">{"result":"...","usage":{...},"cache":{...},"diagnostics":[]}</span>
+<span class="f">Balance: $4.20 · this session: 1.8¢</span>
+<span class="f">paths ✓ · audit ✓ · encryption ✓</span>
+<span class="f">🎉 mma 1.5.0 available — update?</span>
+</pre></div>
+  </div>
+
+  <div>
+    <div class="colhead">Русский (ru)</div>
+    <div class="chat"><pre><span class="f">── СТАРТ: баннер, probe, предупреждения ──</span>
+<span class="d">qwen3.5-9b · lmstudio · 32K · системный промпт 2.1K</span>
+<span class="f">/work/landing · плагинов 2 · mcp 1 · сессия a1f2</span>
+<span class="s">✓</span> <span class="f">lsp: typescript готов</span>
+<span class="w">⚠</span> <span class="f">модель загружена на 24K, настроено 32K — риск переполнения</span>
+<span class="w">⚠</span> <span class="f">основной провайдер не отвечает — работаю через backup</span>
+<span class="w">⚠</span> <span class="f">AGENTS.md ~4.1K ток, бюджет 3.2K — суммаризирую</span>
+
+<span class="f">── ЗАПРОС И РАЗМЫШЛЕНИЯ ──</span>
+<span class="a">&gt;</span> <span class="t">сделай лендинг, собери ассеты, проверь сборку</span>
+<span class="p">✦ размышляю</span> <span class="f">· 1.8s · </span><span class="d">/reasoning — показать</span>
+<span class="p">✦ размышляю</span> <span class="d">· сначала осмотрю структуру…</span>
+<span class="f">auto→high · уровень для этого хода</span>
+<span class="a">◇</span> <span class="t">Уровень рассуждений</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 итерации</span>
+<span class="w">⚠</span> <span class="f">упомянут файл, которого нет: src/hero.tsx</span>
+
+<span class="f">── ПЛАН, ЗАДАЧИ, ПРОВЕРКИ ──</span>
+<span class="a">◇</span> <span class="t">Планирование</span> <span class="f">лендинг · 3 шага</span>
+<span class="f">  1. структура  2. вёрстка  3. сборка</span>
+<span class="f">  ▰▰▱ 0/3</span>
+<span class="s">✓</span> <span class="f">шаг 1/3: структура</span> <span class="f">▰▰▱ 1/3</span>
+<span class="w">⚠</span> <span class="f">2 правки без плана — сначала составь план</span>
+<span class="a">◇</span> <span class="t">Обновление задач</span> <span class="f">добавлено 3 · ▰▱▱ 1/3</span>
+<span class="a">◇</span> <span class="t">Проверка</span> <span class="f">файл index.html на месте</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="f">шаг 3: зависимости не установлены — сначала установка</span>
+<span class="e">✗</span> <span class="t">шаг 2 завис на 6 итераций</span> <span class="d">— нужно ваше решение</span>
+<span class="f">  ↳ сменить подход / поиск / перепланировать / пропустить</span>
+<span class="w">⚠</span> <span class="f">тест правится 4 раза подряд — чини код, а не тест</span>
+<span class="w">⚠</span> <span class="f">7 чтений подряд без правок — пора делать изменение</span>
+<span class="w">⚠</span> <span class="f">план затронет 12 файлов — проверь список</span>
+
+<span class="f">── MoE (несколько экспертов) ──</span>
+<span class="p">✦ MoE</span> <span class="d">· планирую с оркестратором…</span>
+<span class="f">✓ план валиден · 4 сабтаска · 2 волны</span>
+<span class="p">✦ MoE</span> <span class="f">волна 1: 3 сабтаска…</span>
+<span class="s">✓</span> <span class="f">волна 1: 3/3 · волна 2: 1/1</span>
+<span class="f">цикл переплана 1/3 · 2 успешных перенесены</span>
+<span class="s">✓</span> <span class="f">доступ расширен: tests/</span> <span class="d">(или ⛔ отклонён)</span>
+<span class="w">⚠</span> <span class="f">3/4 сабтасков — возвращаю частичный результат</span>
+
+<span class="f">── РАЗВЕДКА И ИНДЕКС ──</span>
+<span class="a">◇</span> <span class="t">Список файлов</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 объектов</span>
+<span class="a">◇</span> <span class="t">Поиск файлов</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 файла</span>
+<span class="a">◇</span> <span class="t">Поиск по содержимому</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 совпадения</span>
+<span class="a">◇</span> <span class="t">Чтение файла</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 строк</span>
+<span class="a">◇</span> <span class="t">Информация о файле</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
+<span class="a">◇</span> <span class="t">Карта проекта</span> <span class="s">✓</span> <span class="f">18 файлов · 6 модулей</span>
+<span class="d">индексирую проект… </span><span class="f">▰▰▰▱▱ 62%</span>
+<span class="a">◇</span> <span class="t">Запрос чанков</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 чанков</span>
+<span class="f">│ 5 действий разведки</span> <span class="s">✓</span> <span class="f">· 1.4s · </span><span class="d">/verbose для списка</span>
+
+<span class="f">── ПРАВКИ И ФАЙЛЫ ──</span>
+<span class="a">◇</span> <span class="t">Создание папки</span> <span class="f">src/assets</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Запись файла</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
+<span class="a">◇</span> <span class="t">Редактирование файла</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
+<span class="f">  13 </span><span class="e">-   padding: 20px;</span>
+<span class="f">  13 </span><span class="s">+   padding: 48px 24px;</span>
+<span class="f">  14 </span><span class="s">+   text-align: center;</span>
+<span class="a">◇</span> <span class="t">Перемещение файла</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Удаление файла</span> <span class="f">src/old.css</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="t">.env защищён</span> <span class="d">— нужно подтверждение</span>
+
+<span class="f">── КОМАНДЫ И ПРОЦЕССЫ ──</span>
+<span class="a">◇</span> <span class="t">Выполнение команды</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">код 0 · 1.2s</span>
+<span class="a">◇</span> <span class="t">Выполнение команды</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">фоновый · pid 4821</span>
+<span class="a">◇</span> <span class="t">Список фоновых процессов</span> <span class="s">✓</span> <span class="f">1 активный</span>
+<span class="a">◇</span> <span class="t">Вывод процесса</span> <span class="f">4821 · последние 20</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Остановка процесса</span> <span class="f">4821</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Запуск пайплайна</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
+<span class="w">⚠</span> <span class="f">"ls" — не cmd-команда; используй список файлов</span>
+<span class="w">⚠</span> <span class="f">команде нужен интерактивный ввод — запусти неинтерактивно</span>
+
+<span class="f">── ПРОВЕРКА КАЧЕСТВА ──</span>
+<span class="a">◇</span> <span class="t">Проверка кода</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 ошибок</span>
+<span class="a">◇</span> <span class="t">Проверка синтаксиса</span> <span class="f">index.html</span> <span class="s">✓</span>
+<span class="s">✓</span> <span class="f">vitest: 12 тестов прошли</span>
+<span class="f">🔧 авто-исправлено 3 ошибки типов</span>
+<span class="e">✗</span> <span class="t">tsc: 2 ошибки</span>
+<span class="f">  ↳ src/app.ts:14 свойство 'hero' не существует</span>
+
+<span class="f">── ВНЕШНИЙ МИР ──</span>
+<span class="a">◇</span> <span class="t">Поиск в интернете</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
+<span class="a">◇</span> <span class="t">Загрузка страницы</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 строк</span>
+<span class="a">◇</span> <span class="t">Просмотр страницы</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">рендер ок</span>
+<span class="a">◇</span> <span class="t">Браузер</span> <span class="f">скриншот → .mma/browser/shot.png</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Скачивание файла</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
+
+<span class="f">── ПАМЯТЬ, ЗНАНИЯ, СКИЛЛЫ ──</span>
+<span class="a">◇</span> <span class="t">Загрузка скилла</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K ток</span>
+<span class="a">◇</span> <span class="t">Запомнить</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Вспомнить</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 запись</span>
+<span class="a">◇</span> <span class="t">Поиск в истории</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 сессии</span>
+
+<span class="f">── ДЕЛЕГИРОВАНИЕ, MCP, СЛУЖЕБНОЕ ──</span>
+<span class="d">сабагент поставлен в очередь: «собери ассеты»</span>
+<span class="a">◇</span> <span class="t">Задача подагенту</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 итерации</span>
+<span class="f">  ↳ артефакт: .mma/artifacts/sub-a1.md</span>
+<span class="a">◇</span> <span class="t">MCP вызов</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
+<span class="a">◇</span> <span class="t">Информация о сессии</span> <span class="s">✓</span> <span class="f">34 сообщения · 18%</span>
+<span class="a">◇</span> <span class="t">Включить тулы</span> <span class="f">браузер, сабагент</span> <span class="s">✓</span> <span class="f">со след. хода</span>
+<span class="w">⚠</span> <span class="f">заблокировано плагином guard · причина: вне scope</span>
+
+<span class="f">── ВЗАИМОДЕЙСТВИЕ (без меню) ──</span>
+<span class="a">?</span> <span class="t">Какой стиль hero — минимал или яркий?</span>
+<span class="f">  1) минимал  2) яркий  3) свой вариант</span>
+<span class="a">↵</span> <span class="t">1 — минимал</span>
+<span class="a">◇</span> <span class="t">Прикрепить изображение</span> <span class="f">mock.png</span> <span class="s">✓</span>
+
+<span class="f">── ОШИБКИ — МЯГКО ──</span>
+<span class="w">⚠</span> <span class="t">команда упала</span> <span class="d">(код 1)</span>
+<span class="f">  ↳ попробую без --frozen-lockfile</span>
+<span class="w">⚠</span> <span class="f">команда превысила 120s — прервал</span>
+<span class="w">⚠</span> <span class="f">остановлено пользователем</span>
+<span class="w">⚠</span> <span class="t">запись в .env запрещена</span> <span class="d">— спрошу подтверждение</span>
+<span class="f">  ↳ детали: /verbose</span>
+<span class="e">✗</span> <span class="t">не смог собрать проект</span> <span class="d">— 2 ошибки типов</span>
+<span class="f">  ↳ исправить или спросить?</span>
+<span class="e">✗</span> <span class="f">правка файла: не задан фрагмент для замены</span>
+
+<span class="f">── КОНТЕКСТ, КЕШ, СТОИМОСТЬ ──</span>
+<span class="f">контекст </span><span class="d">▰▰▱▱▱▱▱▱▱▱</span> <span class="f">18%</span>
+<span class="f">⟳ контекст сжат · 34 → 21 сообщений</span>
+<span class="f">контекст +2.4K</span>
+<span class="f">кеш 62% попаданий · сэкономлено 0.2¢ · префикс стабилен 97% (слом: набор тулов)</span>
+<span class="f">⟡ 6.2K ток · 18% · 0.4¢</span>
+<span class="f">Всего: 1.8¢ · токенов 92K · по провайдерам: lmstudio 100%</span>
+
+<span class="f">── REPL-КОМАНДЫ ──</span>
+<span class="f">Сессия: /new /sessions /resume /rename /delete</span>
+<span class="f">Модель: /provider /model /reasoning /context</span>
+<span class="f">Прочее: /status /config /sysprompt /skill /map /lsp /plugins</span>
+<span class="s">✓</span> <span class="t">qwen3.5-9b</span> <span class="f">· 32K · серт: core ✓</span>
+<span class="f">id      название    сообщ.  обновлено</span>
+<span class="f">a1f2    лендинг     34      2 мин</span>
+<span class="f">модель qwen3.5-9b · провайдер lmstudio · контекст 18% · сессия a1f2</span>
+<span class="f">18 файлов · 6 модулей · lsp готов · 2 плагина</span>
+<span class="w">⚠</span> <span class="f">прерываю… (Esc ещё раз — выйти)</span>
+
+<span class="f">── CLI ВНЕ REPL ──</span>
+<span class="f">$ mma "сделай лендинг" --reasoning high</span>
+<span class="f">{"result":"...","usage":{...},"cache":{...},"diagnostics":[]}</span>
+<span class="f">Баланс: $4.20 · за сессию: 1.8¢</span>
+<span class="f">пути ✓ · аудит ✓ · шифрование ✓</span>
+<span class="f">🎉 доступна mma 1.5.0 — обновить?</span>
+</pre></div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Обе колонки — один поток. Имена тулов скрыты в обеих локалях. Скажи, что убрать/переделать.</p>

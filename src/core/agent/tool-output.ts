@@ -108,3 +108,28 @@ export function compactToolError(output: unknown, max = 200): string {
   }
   return "";
 }
+
+export interface ToolFailureSummary {
+  /** Short, user-facing, localized summary. */
+  text: string;
+  /** `warn` for soft guards (security/protected paths), `error` for real failures. */
+  severity: "warn" | "error";
+}
+
+/**
+ * Turn a model-facing tool failure into a calm, localized user summary.
+ *
+ * Security and protected-path refusals are soft guards — the agent is expected
+ * to ask the user — so they render as warnings, not errors, and the raw
+ * `[SECURITY BLOCKED]` / `[PROTECTED PATH]` markers never reach the chat.
+ */
+export function toolFailureSummary(output: unknown, max = 200): ToolFailureSummary {
+  const text = String(output ?? "");
+  if (text.includes("[SECURITY BLOCKED]")) {
+    return { text: t("tool.ui.security_blocked"), severity: "warn" };
+  }
+  if (text.includes("[PROTECTED PATH]")) {
+    return { text: t("tool.ui.protected_path"), severity: "warn" };
+  }
+  return { text: compactToolError(text, max), severity: "error" };
+}

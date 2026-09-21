@@ -4,6 +4,38 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-09-21
+
+### Added
+
+- **Canonical chat UI style** (`docs/design/ui/STYLE.md`, mockup `docs/design/ui/mockup-chat-en-ru.html`, linked from AGENTS.md as the single correct style): no boxed panels, one shared glyph set, semantic color roles, quiet-by-default with detail on demand.
+- **UI theme module** (`src/ui/theme.ts`): single source for chat glyphs (`◇ ✓ ✗ ⚠ ✦ ? ↵ ↳ │ ▰▱ ⟡ ⟳`), semantic marks and the `Verbosity` type.
+- **Chat verbosity levels** (`ui.verbosity`: `quiet | normal | verbose`, default `quiet`): quiet folds each action into a single `◇ label ✓ ms` line, hides tool bodies and only surfaces the first line of a failed action. New `/verbose [level]` REPL command and `--verbose` plumbing; legacy `ui.verbose` still maps to `verbose`.
+- **Read-only run summaries** (`src/ui/renderer.ts`): in quiet mode a consecutive run of read-only tools (`read_file`, `grep`, `glob`, web, …) collapses into one `│ N actions ✓ · ms · /verbose` line; mutating/executing tools stay visible.
+- **Calm security/protected-path failures** (`src/core/agent/tool-output.ts`, `src/core/agent/tool-batch.ts`, `src/modules/security/protected-paths.ts`): `toolFailureSummary` maps `[SECURITY BLOCKED]` / `[PROTECTED PATH]` refusals to short localized warnings (`⚠`) instead of red walls; raw markers never reach the chat.
+- **`Ctrl+O` action reprint** (`src/ui/action-log.ts`, `src/cli/repl.ts`): the last action's label, args, status and full body are kept and reprinted on demand, so quiet mode stays quiet without losing detail.
+- **Spinner elapsed time** (`src/ui/spinner.ts`): the busy line shows `· Ns` once a tool runs longer than 3 seconds.
+- **Status voice** (`src/ui/renderer.ts`): thinking phases rotate a few short human labels (`thinking` / `working it out` / `considering`, localized) instead of repeating one word.
+- **Plan checklist restyle** (`src/ui/plan-view.ts`): `◇ title ▰▱ 1/3` header and `✓ / ◇ / ○ / ✗` step marks, dropping the raw plan id and `[x]` brackets.
+- **Category-colored action glyph** (`src/ui/theme.ts`): the single `◇` mark is colored by tool category — recon cyan, mutate magenta, execute blue, meta dim. Per-tool emoji icons are no longer rendered.
+- **Human plan/todo arguments** (`src/ui/renderer.ts`): `plan update` shows `step 2 → done` and `plan create` shows the title instead of raw JSON.
+- **Quiet hides structured info logs** (`src/output/channel.ts`): `info`-level log events (`[INFO] [mma] …`) are dropped from the terminal in quiet mode; warn/error and `writeLine` blocks are unaffected.
+
+### Fixed
+
+- **Closing code fence without a trailing newline** (`src/ui/md-formatter.ts`): a final ```` ``` ```` at end of stream was rendered as code content; it now closes the block.
+- **Thought duration inside the answer** (`src/ui/renderer.ts`): the thinking block is closed when the final answer or the next tool starts, so `N.Ns` never lands inside the response text.
+- **Durations over a second** (`src/ui/theme.ts`): rendered as `1.4s` instead of `1400ms`.
+
+### Changed
+
+- **Tool output never shows system names** (`src/ui/renderer.ts`): tool identifiers (`read_file`, `bash`, …) are lookup keys only — the chat renders the localized `tool.friendly.*` label, with a generic localized fallback when a translation is missing.
+- **One action glyph** (`Renderer.toolMarker`): every tool uses `◇` instead of per-category arrows/asterisks.
+- **Calm errors** (`src/ui/renderer.ts`, `src/ui/md-formatter.ts`): `✗` for real failures, `⚠` for soft blocks; `ui.error_prefix` is now `✗ ` in both locales.
+- **No box-drawing grids** (`src/ui/md-formatter.ts`, `src/ui/table.ts`): code blocks use a dim language label plus a `│` gutter; markdown tables render as a bold header + dim rule + aligned columns.
+- **Thinking header and run footer**: `✦ thinking` instead of `→ Thought:`, `⟡ model · provider · ms` instead of `▣`.
+- **Answer has no marker prefix** (`src/ui/renderer.ts`): the final answer starts on a fresh line instead of `- …`, so a response that opens with a code block is not mangled.
+
 ## [1.4.0] - 2026-09-21
 
 ### Added

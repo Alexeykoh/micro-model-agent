@@ -2,6 +2,7 @@ import { pc } from "./colors";
 import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import { formatTable, getTerminalWidth } from "./table";
+import { glyph } from "./theme";
 
 const KW =
   /\b(import|export|from|const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|implements|interface|type|enum|namespace|module|declare|abstract|async|await|yield|throw|try|catch|finally|typeof|instanceof|in|of|as|is|keyof|readonly|static|private|public|protected|get|set|constructor|this|super|void|never|any|unknown|boolean|string|number|symbol|object|true|false|null|undefined|default)\b/g;
@@ -168,8 +169,14 @@ export class FormattingStream {
     }
     if (this.inCodeBlock) {
       if (this.buffer.length > 0) {
-        this.codeLines.push(this.buffer);
-        this.buffer = "";
+        // A closing fence at EOF has no trailing newline; treat it as the
+        // close, not as code content (otherwise "```" leaks into the block).
+        if (this.buffer.trim().startsWith("```")) {
+          this.buffer = "";
+        } else {
+          this.codeLines.push(this.buffer);
+          this.buffer = "";
+        }
       }
       if (this.codeLines.length > 0) {
         this.emitCodeBlock();
@@ -235,13 +242,12 @@ export class FormattingStream {
     if (this.codeLines.length > 0) {
       const code = this.codeLines.join("\n");
       const highlighted = highlight(code, this.codeLang);
-      const lang = this.codeLang ? ` ${this.codeLang} ` : " ";
-      const top = pc.dim(`┌─${lang}${"─".repeat(Math.max(0, this.width - 3 - lang.length))}┐`);
-      this.onWrite(top);
+      // No frame: a dim language label and a left gutter only. Boxed code
+      // blocks are banned by the chat style (docs/design/ui/STYLE.md).
+      if (this.codeLang) this.onWrite(pc.dim(`  ${this.codeLang}`));
       for (const l of highlighted.split("\n")) {
-        this.onWrite(pc.dim("│ ") + l);
+        this.onWrite(pc.dim(`${glyph.group} `) + l);
       }
-      this.onWrite(pc.dim(`└${"─".repeat(Math.max(0, this.width - 1))}┘`));
     }
     this.codeLines = [];
     this.codeLang = "";

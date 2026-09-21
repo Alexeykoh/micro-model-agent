@@ -65,6 +65,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   config: "agent",
   status: "agent",
   reasoning: "agent",
+  verbose: "agent",
   provider: "agent",
   model: "agent",
   context: "agent",
@@ -264,6 +265,29 @@ function registerConfigCommands(ctx: ReplContext): void {
     },
   });
   ctx.registerCommand({
+    name: "verbose",
+    description: t("repl.verbose"),
+    usage: t("repl.verbose_usage"),
+    action: (args: string[]) => {
+      const VALID = ["quiet", "normal", "verbose"];
+      const level = args[0]?.trim().toLowerCase();
+      if (level && !VALID.includes(level)) {
+        ctx.output.writeLine(
+          pc.yellow(t("repl.verbose_invalid_level", { level, valid: VALID.join(", ") })),
+        );
+        return;
+      }
+      const current = ctx.config.ui.verbosity ?? (ctx.config.ui.verbose ? "verbose" : "quiet");
+      const next = (level ?? (current === "verbose" ? "quiet" : "verbose")) as
+        | "quiet"
+        | "normal"
+        | "verbose";
+      ctx.config.ui.verbosity = next;
+      ctx.output.setSuppressInfoLogs(next === "quiet");
+      ctx.output.writeLine(pc.green(t("repl.verbose_set", { level: next })));
+    },
+  });
+  ctx.registerCommand({
     name: "status",
     description: t("repl.status"),
     usage: t("repl.status_usage"),
@@ -277,7 +301,7 @@ function registerConfigCommands(ctx: ReplContext): void {
         );
       } else {
         ctx.output.writeLine(
-          `${t("repl.provider")} ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
+          `${t("repl.provider")} ${ctx.config.provider.type} @ ${pc.dim(ctx.config.provider.baseUrl)}`,
         );
       }
       const meta = ctx.sessionManager?.getActiveMeta();

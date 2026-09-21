@@ -34,37 +34,21 @@ function makeRenderer(): {
 }
 
 describe("toolMarker", () => {
-  it("maps write/edit tools to the edit arrow", () => {
-    expect(toolMarker("write_file")).toBe("←");
-    expect(toolMarker("edit_file")).toBe("←");
-    expect(toolMarker("create_dir")).toBe("←");
-  });
-
-  it("maps read tools to the read arrow", () => {
-    expect(toolMarker("read_file")).toBe("→");
-    expect(toolMarker("list_dir")).toBe("→");
-  });
-
-  it("maps search tools to the asterisk", () => {
-    expect(toolMarker("glob")).toBe("✱");
-    expect(toolMarker("grep")).toBe("✱");
-  });
-
-  it("maps bash to the dollar sign", () => {
-    expect(toolMarker("bash")).toBe("$");
-  });
-
-  it("defaults to gear for unknown tools", () => {
-    expect(toolMarker("web_search")).toBe("⚙");
+  it("uses the shared action glyph for every tool", () => {
+    expect(toolMarker("write_file")).toBe("◇");
+    expect(toolMarker("read_file")).toBe("◇");
+    expect(toolMarker("glob")).toBe("◇");
+    expect(toolMarker("bash")).toBe("◇");
+    expect(toolMarker("web_search")).toBe("◇");
   });
 });
 
 describe("Renderer", () => {
-  it("toolStart prints a header with icon", () => {
+  it("toolStart prints a header with the action glyph", () => {
     const { renderer, capture } = makeRenderer();
     renderer.toolStart("edit_file", { path: "src/foo.ts" });
     const out = capture.text;
-    expect(out).toContain("←");
+    expect(out).toContain("◇");
     expect(out).toContain("src/foo.ts");
   });
 

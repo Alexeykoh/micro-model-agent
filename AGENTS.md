@@ -6,6 +6,8 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 
 > **Literature:** [docs/literature.md](./docs/literature.md) — agent harness engineering best practices audit (Anthropic, OpenAI, LangChain, HuggingFace, deepset, Martin Fowler).
 
+> **UI Style (канонический):** [docs/design/ui/STYLE.md](./docs/design/ui/STYLE.md) — **единственный верный** стиль чат-вывода агента. Мокап: [docs/design/ui/mockup-chat-en-ru.html](./docs/design/ui/mockup-chat-en-ru.html) (EN слева, RU справа). Любой код, конфликтующий со STYLE.md, считается неправильным и подлежит приведению к стилю.
+
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
 
 ## Engineering Principles
@@ -227,7 +229,31 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Правило `PROTECTED PATHS`** в системном промпте (`buildSystemInfo`): модель не трогает такие пути без явного
   подтверждения и не обходит запрет через `bash`. i18n: `file.protected_path_ask` (en+ru).
 
-### Current Version: 1.4.0
+### Chat UI Style (canonical) — 1.5.0
+
+**Единственный верный источник стиля чат-вывода — [docs/design/ui/STYLE.md](./docs/design/ui/STYLE.md)**
+(мокап: [mockup-chat-en-ru.html](./docs/design/ui/mockup-chat-en-ru.html)). Ключевые правила:
+
+- **Никаких boxed-панелей** — только строки, отступы и глифы. Рамки code-block (`┌─┐`) и
+  box-drawing-таблиц (`│─┼`) в чате не рисуются: `md-formatter.ts` (`emitCodeBlock` → `│`-гуттер),
+  `src/ui/table.ts` (bold-заголовок + dim-линейка + выровненные колонки). `box()` (`src/ui/box.ts`)
+  остаётся **только** для мастера первого запуска (`src/cli/setup.ts`), не для чата агента.
+- **Системные имена тулов не показываем никогда** — ни в одной локали. Только `tool.friendly.*`
+  («Чтение файла» / «Reading file»). Аргументы (пути, команды, запросы) — это контент, остаются.
+  Точка: `Renderer.toolStart` (`src/ui/renderer.ts`).
+- **Quiet by default, детали по запросу** — одна строка на действие, метрики раз за ход; детали за
+  `/verbose`, `--verbose`, `Ctrl+O`. Уровни: `quiet | normal | verbose` (расширяет `ui.verbose`).
+- **Единый визуальный язык:** один глиф действия `◇`, цвет которого кодирует категорию
+  (recon cyan / mutate magenta / execute blue / meta dim — `src/ui/theme.ts`); emoji-иконки тулов
+  не рендерятся. Семантические цвета: `✓` зелёный, `⚠` жёлтый, `✗` красный (только реальные сбои),
+  `✦` thinking, `↳` деталь, `⟡` метрики, `▰▱` прогресс.
+- **Тишина:** quiet скрывает `info`-логи (`OutputChannel.setSuppressInfoLogs`), тела тулов и JSON
+  аргументов плана (`plan update` → `step 2 → done`); model-facing recovery-директивы в чат не попадают.
+- **Телосложение без шума:** статусы — короткие человеческие фразы; спиннер/прогресс обновляются in place.
+
+Правило проекта: если рендер расходится со STYLE.md — это баг, привести к стилю.
+
+### Current Version: 1.5.0
 
 ### Changelog
 

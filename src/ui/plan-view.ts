@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { pc } from "./colors";
+import { glyph } from "./theme";
 import type { Plan, PlanStep } from "../modules/execution/planner";
 import { extractFileLikeTokens, stripUrls } from "../modules/hallucination/js-identifiers";
 import { t } from "../i18n/index";
@@ -33,15 +34,15 @@ export function currentStepIndex(plan: Plan): number {
 function stepMark(step: PlanStep): string {
   switch (step.status) {
     case "done":
-      return pc.green("[x]");
+      return pc.green(glyph.success);
     case "in_progress":
-      return pc.yellow("[*]");
+      return pc.cyan(glyph.action);
     case "failed":
-      return pc.red("[!]");
+      return pc.red(glyph.failure);
     case "skipped":
-      return pc.dim("[-]");
+      return pc.dim("–");
     default:
-      return pc.dim("[ ]");
+      return pc.dim("○");
   }
 }
 
@@ -50,12 +51,12 @@ export function formatPlanChecklist(plan: Plan): string[] {
   const total = plan.steps.length;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const cur = currentStepIndex(plan);
-  const barLen = 15;
+  const barLen = 10;
   const filled = Math.round((pct / 100) * barLen);
-  const bar = pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
+  const bar = pc.green("▰".repeat(filled)) + pc.dim("▱".repeat(barLen - filled));
   const title = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
   const lines: string[] = [
-    `${pc.cyan(`[${plan.id}]`)} ${pc.bold(title)}  ${bar} ${pc.dim(`${done}/${total} ${pct}%`)}`,
+    `${pc.cyan(glyph.action)} ${pc.bold(title)}  ${bar} ${pc.dim(`${done}/${total}`)}`,
   ];
   for (let i = 0; i < plan.steps.length; i++) {
     const step = plan.steps[i];
@@ -63,7 +64,7 @@ export function formatPlanChecklist(plan: Plan): string[] {
     const desc = active ? pc.yellow(step.description) : pc.dim(step.description);
     lines.push(`  ${stepMark(step)} ${step.id}. ${desc}`);
     for (const sub of step.subtasks ?? []) {
-      lines.push(`      ${sub.done ? pc.green("[x]") : pc.dim("[ ]")} ${sub.text}`);
+      lines.push(`      ${sub.done ? pc.green(glyph.success) : pc.dim("○")} ${sub.text}`);
     }
   }
   return lines;

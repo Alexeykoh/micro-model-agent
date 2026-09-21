@@ -11,7 +11,7 @@ import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { LoopState } from "./loop-state";
-import { summarizeToolArgs, truncateToolOutput, compactToolError, isExecutableScriptPath } from "./tool-output";
+import { summarizeToolArgs, truncateToolOutput, toolFailureSummary, isExecutableScriptPath } from "./tool-output";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import {
@@ -201,13 +201,18 @@ export class ToolBatchExecutor {
         onMeta?.("\n" + pc.dim(metaOut) + "\n");
       } else {
         // Failed tool: its `output` is model-facing (Hints, recovery
-        // directives, "Do NOT …"). The user only needs the gist — the first
-        // line — not the instructions written for the agent.
-        const line = compactToolError(result.output);
-        const metaOut = line
-          ? pluginManager.runOnMeta({ iteration, logger, contextManager }, line)
+        // directives, "Do NOT …"). The user only needs a calm gist — the first
+        // line — not the instructions written for the agent. Soft guards
+        // (security policy, protected paths) are warnings, not errors.
+        const failure = toolFailureSummary(result.output);
+        const metaOut = failure.text
+          ? pluginManager.runOnMeta({ iteration, logger, contextManager }, failure.text)
           : "";
-        if (metaOut) onMeta?.("\n" + pc.red(metaOut) + "\n");
+        if (metaOut) {
+          const color = failure.severity === "warn" ? pc.yellow : pc.red;
+          const glyph = failure.severity === "warn" ? "⚠" : "✗";
+          onMeta?.("\n" + color(`${glyph} ${metaOut}`) + "\n");
+        }
       }
       if (result.diff) {
         onMeta?.("\n" + result.diff + "\n");

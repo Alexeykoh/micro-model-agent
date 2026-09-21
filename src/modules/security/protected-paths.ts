@@ -78,6 +78,6 @@ export function protectedPathBlock(
   logSecurityBlock(ctx.sessionId, action, `Protected path: ${pattern}`, pathLabel);
   return {
     success: false,
-    output: t("file.protected_path_ask", { path: pathLabel, pattern }),
+    output: `[PROTECTED PATH] ${t("file.protected_path_ask", { path: pathLabel, pattern })}`,
   };
 }

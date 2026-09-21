@@ -40,9 +40,12 @@ describe("formatMarkdown", () => {
   it("should format tables with aligned columns", () => {
     const md = "| Name | Value |\n|---|---|\n| alpha | 42 |";
     const result = formatMarkdown(md);
+    expect(result).toContain("Name");
+    expect(result).toContain("Value");
     expect(result).toContain("alpha");
-    expect(result).toContain("┌");
-    expect(result).toContain("│");
+    // No box-drawing grid — see docs/design/ui/STYLE.md.
+    expect(result).not.toContain("┌");
+    expect(result).not.toContain("│");
   });
 
   it("should format blockquotes", () => {
@@ -130,13 +133,21 @@ describe("FormattingStream.flushPartialNow", () => {
     stream.write("\n```\nprose after\n");
     stream.flush();
     const out = chunks.join("");
-    const boxStart = out.indexOf("┌");
-    const boxEnd = out.lastIndexOf("┘");
-    expect(boxStart).toBeGreaterThanOrEqual(0);
-    const codeBox = out.slice(boxStart, boxEnd + 1);
-    expect(codeBox).toContain("const x = 1");
-    expect(codeBox).not.toContain("prose after");
-    expect(out.indexOf("prose after")).toBeGreaterThan(boxEnd);
+    expect(out).not.toContain("┌");
+    expect(out).not.toContain("┘");
+    const codeIdx = out.indexOf("const x = 1");
+    expect(codeIdx).toBeGreaterThanOrEqual(0);
+    expect(out.indexOf("prose after")).toBeGreaterThan(codeIdx);
+  });
+
+  it("does not leak a closing fence that has no trailing newline", () => {
+    const { chunks, stream } = makeStream();
+    stream.write("text:\n```\n# Title\n```");
+    stream.flush();
+    const out = chunks.join("");
+    expect(out).not.toContain("```");
+    expect(out).toContain("# Title");
+    expect(out).toContain("text:");
   });
 
   it("flushes a pending table buffer", () => {
@@ -144,7 +155,7 @@ describe("FormattingStream.flushPartialNow", () => {
     stream.write("| Name | Value |\n|---|---|\n");
     stream.flushPartialNow();
     const out = chunks.join("");
-    expect(out).toContain("┌");
+    expect(out).not.toContain("┌");
     expect(out).toContain("Name");
     expect(out).toContain("Value");
   });

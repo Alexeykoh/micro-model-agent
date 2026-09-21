@@ -46,23 +46,26 @@ describe("parseAlignments", () => {
 });
 
 describe("formatTable", () => {
-  it("renders a bordered, aligned table", () => {
+  it("renders an aligned table without a box grid", () => {
     const out = formatTable(["| Name | Count |", "|---|---|", "| alpha | 1 |", "| beta | 22 |"], {
       maxWidth: 120,
     });
-    expect(out[0]).toContain("┌");
-    expect(out[0]).toContain("┬");
-    expect(out[0]).toContain("┐");
-    expect(out[out.length - 1]).toContain("┘");
-    expect(out.join("\n")).toContain("alpha");
-    expect(out.join("\n")).toContain("beta");
+    const text = out.join("\n");
+    expect(text).not.toContain("┌");
+    expect(text).not.toContain("┐");
+    expect(text).not.toContain("┘");
+    expect(text).not.toContain("│");
+    expect(out[0]).toContain("Name");
+    expect(out[0]).toContain("Count");
+    expect(text).toContain("alpha");
+    expect(text).toContain("beta");
   });
 
   it("respects right alignment from separator", () => {
     const out = formatTable(["| a | b |", "| :--- | ---: |", "| 1 | 2 |"], {
       maxWidth: 120,
     });
-    const dataRow = out[3];
+    const dataRow = out[out.length - 1];
     expect(dataRow).toContain("2");
   });
 

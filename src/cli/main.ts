@@ -1,7 +1,8 @@
-﻿import { createProgram } from "./commands";
+import { createProgram } from "./commands";
 import { bootstrap, setOneShotMode, applyReasoningCliOverride } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
+import { resolveVerbosity } from "../ui/theme";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
@@ -94,7 +95,12 @@ async function main(): Promise<void> {
   const exitOnComplete = opts.exitOnComplete === true;
   const jsonOpt = opts.json === true;
   const reasoningLevel = opts.reasoning as string | undefined;
+  const verboseOpt = opts.verbose === true;
   const contextLog = opts.contextLog === true;
+
+  // Quiet chat hides structured info logs; --verbose (or a verbose config)
+  // brings them back. Set before bootstrap so its own logs respect it.
+  getDefaultChannel().setSuppressInfoLogs(!verboseOpt);
 
   const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
 
@@ -138,6 +144,10 @@ async function main(): Promise<void> {
       exitOnComplete,
       reasoningLevel,
       contextLog,
+    );
+    if (verboseOpt) config.ui.verbosity = "verbose";
+    getDefaultChannel().setSuppressInfoLogs(
+      !(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose"),
     );
 
     if (legacyDetected) {
@@ -203,6 +213,7 @@ async function main(): Promise<void> {
     const renderer = new Renderer({
       spinner: config.ui?.spinner ?? true,
       baseDir,
+      verbosity: resolveVerbosity(config.ui),
     });
     renderer.showLoader();
     let result;
@@ -295,6 +306,10 @@ async function main(): Promise<void> {
       envReport,
       contextProbe,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel, contextLog);
+    if (verboseOpt) config.ui.verbosity = "verbose";
+    getDefaultChannel().setSuppressInfoLogs(
+      !(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose"),
+    );
 
     const repl = new Repl(
       agent,

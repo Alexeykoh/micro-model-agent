@@ -65,20 +65,20 @@ describe("formatPlanChecklist", () => {
   it("renders progress, marks and the current step", () => {
     const plan = makePlan();
     const lines = formatPlanChecklist(plan);
-    expect(lines[0]).toContain("[plan_abc123]");
+    expect(lines[0]).toContain("◇");
     expect(lines[0]).toContain("1/3");
-    expect(lines[0]).toContain("33%");
-    expect(lines[1]).toContain("[x] 1.");
-    expect(lines[2]).toContain("[ ] 2.");
+    expect(lines[0]).toContain("▰");
+    expect(lines[1]).toContain("✓ 1.");
+    expect(lines[2]).toContain("○ 2.");
     expect(lines[2]).toContain("Fix src/app.tsx errors");
   });
 
-  it("marks in_progress step with [*] and selects it as current", () => {
+  it("marks the in_progress step as the current one", () => {
     const plan = makePlan();
     plan.steps[1] = { id: 2, description: "Fix src/app.tsx errors", status: "in_progress" };
     expect(currentStepIndex(plan)).toBe(1);
     const lines = formatPlanChecklist(plan);
-    expect(lines[2]).toContain("[*] 2.");
+    expect(lines[2]).toContain("◇ 2.");
   });
 
   it("returns -1 when all steps are done", () => {

@@ -702,6 +702,7 @@ export function createProgram(): Command {
     .option("-e, --exit-on-complete", t("cli.exit_on_complete"))
     .option("-j, --json", t("cli.json"))
     .option("--reasoning <level>", t("cli.reasoning_level"), "auto")
+    .option("--verbose", t("cli.verbose"))
     .option("--context-log", t("cli.context_log"));
 
   buildInitCommand(program);

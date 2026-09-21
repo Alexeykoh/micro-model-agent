@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { join, sep } from "path";
 import { tmpdir } from "os";
-import { Renderer, summarizeArgs } from "../../src/ui/renderer";
+import { Renderer, summarizeArgs, humanArgs } from "../../src/ui/renderer";
 import { OutputBus } from "../../src/output/bus";
 import { OutputChannel, resetDefaultChannel } from "../../src/output";
 import { writeWarning } from "../../src/ui/output";
+import { clearLastAction, getLastAction } from "../../src/ui/action-log";
 
 function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   const parts: string[] = [];
@@ -52,15 +53,34 @@ describe("summarizeArgs", () => {
   });
 });
 
+describe("humanArgs", () => {
+  it("renders plan updates without raw JSON", () => {
+    const out = humanArgs("plan", { action: "update", status: "done", step: 2 });
+    expect(out).not.toContain("{");
+    expect(out).toContain("2");
+    expect(out).toContain("done");
+  });
+
+  it("uses the plan title for create", () => {
+    expect(humanArgs("plan", { action: "create", title: "Landing" })).toBe("Landing");
+  });
+
+  it("falls back to the generic summary for ordinary tools", () => {
+    expect(humanArgs("read_file", { path: "src/a.ts" })).toBe("src/a.ts");
+  });
+});
+
 describe("Renderer", () => {
-  it("renders a tool card with icon and footer", () => {
+  it("renders a tool card with the action glyph and footer", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.toolStart("write_file", { path: "src/a.ts" }, undefined, "📝");
     renderer.meta("\ncreated src/a.ts\n");
     renderer.toolEnd("write_file", 12, false);
     renderer.flush();
     const out = text();
-    expect(out).toContain("📝");
+    // Per-tool emoji icons are ignored — the shared glyph is used.
+    expect(out).not.toContain("📝");
+    expect(out).toContain("◇");
     expect(out).toContain("src/a.ts");
     expect(out).toContain("✓");
     expect(out).toContain("12ms");
@@ -119,7 +139,8 @@ describe("Renderer", () => {
     renderer.thinkingEnd();
     renderer.flush();
     const out = text();
-    expect(out).toContain("→ Thought:");
+    expect(out).toContain("✦");
+    expect(out).toContain("thinking");
     expect(out).toContain("ms");
     expect(out).toContain("analyzing the request...");
   });
@@ -129,7 +150,20 @@ describe("Renderer", () => {
     renderer.thinkingStart();
     renderer.thinkingEnd();
     renderer.flush();
-    expect(text()).not.toContain("→ Thought:");
+    expect(text()).not.toContain("✦");
+  });
+
+  it("closes the thought block before the final answer", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.reasoning("weighing options");
+    renderer.text("here is the answer");
+    renderer.flush();
+    const out = text();
+    const durIdx = out.search(/\d+(ms|s)/);
+    expect(durIdx).toBeGreaterThanOrEqual(0);
+    // The duration belongs to the thought line, never inside the answer.
+    expect(out.indexOf("here is the answer")).toBeGreaterThan(durIdx);
   });
 
   it("thinking is cleared by a tool start", () => {
@@ -149,7 +183,7 @@ describe("Renderer", () => {
     renderer.toolEnd("bash", 10, false);
     renderer.flush();
     const out = text();
-    expect(out).toContain("↓");
+    expect(out).toContain("↳");
     expect(out).toContain("step 2: run the build");
   });
 
@@ -196,10 +230,10 @@ describe("Renderer", () => {
     renderer.footer("qwen3.5-9b", "ollama", 2800);
     renderer.flush();
     const out = text();
-    expect(out).toContain("▣");
+    expect(out).toContain("⟡");
     expect(out).toContain("qwen3.5-9b");
     expect(out).toContain("ollama");
-    expect(out).toContain("2800ms");
+    expect(out).toContain("2.8s");
   });
 
   it("flushes a pending markdown partial before a tool header", () => {
@@ -212,13 +246,13 @@ describe("Renderer", () => {
     expect(out).toContain("pending partial\n");
   });
 
-  it("adds text prefix before first chunk", () => {
+  it("starts the answer on a fresh line without a marker prefix", () => {
     const { renderer, text } = makeRenderer({ rich: true });
     renderer.text("hello world");
     renderer.flush();
     const out = text();
-    expect(out).toContain("-");
     expect(out).toContain("hello world");
+    expect(out).not.toContain("- hello world");
   });
 
   describe("relative paths in tool headers", () => {
@@ -328,6 +362,100 @@ describe("Renderer", () => {
       expect(err()).not.toContain("Question to user");
       renderer.toolEnd("question", 1, false);
     });
+  });
+});
+
+describe("Renderer quiet verbosity", () => {
+  function makeQuiet(): { renderer: Renderer; text: () => string } {
+    const out = makeOut();
+    const channel = new OutputChannel(new OutputBus(), {
+      out: out.stream,
+      err: out.stream,
+      color: false,
+    });
+    const renderer = new Renderer({
+      rich: false,
+      spinner: false,
+      channel,
+      width: 60,
+      verbosity: "quiet",
+    });
+    return { renderer, text: out.text };
+  }
+
+  it("folds an action into a single line and hides its body", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    expect(text()).not.toContain("Reading file");
+    renderer.meta("file content that should stay hidden\n");
+    renderer.toolEnd("read_file", 5, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("◇");
+    expect(out).toContain("Reading file");
+    expect(out).toContain("src/a.ts");
+    expect(out).toContain("✓");
+    expect(out).not.toContain("file content that should stay hidden");
+  });
+
+  it("still surfaces the first body line for a failure", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("bash", { command: "false" });
+    renderer.meta("exit code 1: command failed\nmore noise\n");
+    renderer.toolEnd("bash", 5, true);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✗");
+    expect(out).toContain("exit code 1: command failed");
+    expect(out).not.toContain("more noise");
+  });
+
+  it("summarizes a run of read-only actions into one line", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.toolStart("grep", { query: "foo" });
+    renderer.toolEnd("grep", 6, false);
+    renderer.toolStart("list_dir", { path: "src" });
+    renderer.toolEnd("list_dir", 5, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("│");
+    expect(out).toContain("3 actions");
+    expect(out).toContain("✓");
+    // Individual recon lines are folded away.
+    expect(out).not.toContain("Reading file");
+    expect(out).not.toContain("Searching content");
+  });
+
+  it("keeps mutating actions visible and flushes the recon group first", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 8, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("Writing file");
+    // A lone recon action prints as a normal line, not a group.
+    expect(out).not.toContain("actions");
+  });
+
+  it("records the last action (with body) for Ctrl+O reprint", () => {
+    clearLastAction();
+    const { renderer } = makeQuiet();
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.meta("+ created src/a.ts\n+ second line\n");
+    renderer.toolEnd("write_file", 8, false);
+    renderer.flush();
+    const last = getLastAction();
+    expect(last).not.toBeNull();
+    expect(last!.label).toBe("Writing file");
+    expect(last!.args).toBe("src/a.ts");
+    expect(last!.status).toBe("ok");
+    expect(last!.body.join("\n")).toContain("created src/a.ts");
+    expect(last!.body.join("\n")).toContain("second line");
+    clearLastAction();
   });
 });
 

@@ -125,6 +125,7 @@ export const DEFAULTS: AppConfig = {
     showContextStats: false,
     showCompaction: true,
     verbose: false,
+    verbosity: "quiet",
   },
   mcpServers: {
     context7: {

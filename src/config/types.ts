@@ -236,6 +236,13 @@ export interface UiConfig {
    * machine pipeline, not the user.
    */
   verbose?: boolean;
+  /**
+   * Chat verbosity level. `quiet` shows one line per action and hides tool
+   * bodies; `verbose` shows full detail. Defaults to `quiet` for fresh
+   * configs and falls back to `verbose ? "verbose" : "quiet"` when unset.
+   * See `docs/design/ui/STYLE.md`.
+   */
+  verbosity?: "quiet" | "normal" | "verbose";
 }
 
 export interface BashSecurityConfig {

@@ -1,6 +1,8 @@
 import { pc } from "./colors";
 import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
+import { actionMarkFor, failureMark, glyph, successMark, formatDuration, type Verbosity } from "./theme";
+import { recordLastAction } from "./action-log";
 
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
@@ -22,6 +24,8 @@ export interface RendererOptions {
    * paths in tool headers (the agent already knows the root).
    */
   baseDir?: string;
+  /** How much detail to render (see `docs/design/ui/STYLE.md`). */
+  verbosity?: Verbosity;
 }
 
 /** Tools whose `path` argument is shown in the header. */
@@ -46,31 +50,51 @@ function toDisplayPath(baseDir: string | undefined, p: string): string {
 
 const GUTTER = "  ";
 const MAX_OUTPUT_LINES = 50;
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, "");
+}
 
 /** Tools that must NOT get a busy spinner — they block on a user prompt. */
 const SPINNERLESS_TOOLS = new Set(["question", "approve"]);
 
-/** opencode-like leading marker per tool category. */
-export function toolMarker(tool: string): string {
-  switch (tool) {
-    case "write_file":
-    case "edit_file":
-    case "create_dir":
-    case "move_file":
-    case "delete_file":
-      return "←";
-    case "read_file":
-    case "list_dir":
-    case "file_info":
-      return "→";
-    case "glob":
-    case "grep":
-      return "✱";
-    case "bash":
-      return "$";
-    default:
-      return "⚙";
-  }
+/**
+ * Read-only exploration tools. In quiet mode a run of these is summarized into
+ * a single `│ N actions ✓` line; mutating/executing tools always stay visible.
+ */
+const RECON_TOOLS = new Set([
+  "read_file",
+  "list_dir",
+  "glob",
+  "grep",
+  "file_info",
+  "project_map",
+  "chunk_query",
+  "web_search",
+  "web_fetch",
+  "web_browse",
+  "search_history",
+  "recall",
+  "session_info",
+  "process_list",
+  "process_log",
+]);
+
+interface ReconItem {
+  mark: string;
+  label: string;
+  summary: string;
+  duration: number;
+}
+
+/**
+ * Leading marker for every action. The style uses one marker (`◇`) for all
+ * tools — categories are conveyed by the localized label, not by a glyph.
+ * Kept as a function for callers that pass an explicit `icon`.
+ */
+export function toolMarker(_tool: string): string {
+  return glyph.action;
 }
 
 export function isRichTerminal(): boolean {
@@ -91,10 +115,47 @@ export function summarizeArgs(args: Record<string, unknown>): string {
   return serialized.length > 60 ? `${serialized.slice(0, 57)}…` : serialized;
 }
 
+/**
+ * Human-readable argument summary. Structural tools (plan/todo) carry raw JSON
+ * that would leak into the chat, so they get a short localized phrase instead.
+ */
+export function humanArgs(tool: string, args: Record<string, unknown>): string {
+  if (tool === "plan") {
+    const action = typeof args.action === "string" ? args.action : "";
+    if (action === "update") {
+      const step = args.step ?? args.stepId;
+      const status = args.status;
+      if (step !== undefined || status !== undefined) {
+        return t("ui.plan_update", {
+          step: String(step ?? "?"),
+          status: String(status ?? "?"),
+        });
+      }
+    }
+    if (action === "create" && typeof args.title === "string") return args.title;
+    if (action) return action;
+  }
+  if (tool === "todo") {
+    const action = typeof args.action === "string" ? args.action : "";
+    const items = Array.isArray(args.items) ? args.items.length : undefined;
+    if (action && items !== undefined) return t("ui.todo_action", { action, count: String(items) });
+    if (action) return action;
+  }
+  return summarizeArgs(args);
+}
+
+/**
+ * Localized human label for a tool. System tool names (`read_file`, `bash`, …)
+ * are NEVER shown to the user in any locale — see `docs/design/ui/STYLE.md`.
+ * The raw identifier is only a lookup key; when no friendly translation exists
+ * we fall back to a generic localized label, never to the identifier itself.
+ */
 function friendlyTool(tool: string): string {
   const key = `tool.friendly.${tool}`;
   const value = t(key);
-  return value !== key ? value : tool;
+  if (value !== key) return value;
+  const fallback = t("ui.action_fallback");
+  return fallback !== "ui.action_fallback" ? fallback : "Action";
 }
 
 /**
@@ -109,15 +170,30 @@ export class Renderer {
   private channel: OutputChannel;
   private width: number;
   private baseDir?: string;
+  private verbosity: Verbosity;
   private card: {
     tool: string;
     args: Record<string, unknown>;
     start: number;
+    label: string;
+    summary: string;
+    /** Leading mark for the action line (◇ or a caller-supplied icon). */
+    mark: string;
+    /** In quiet mode the header is deferred and folded into the footer line. */
+    deferred: boolean;
+    /** First non-empty body line, kept for failure reporting in quiet mode. */
+    firstBody: string;
+    /** Full captured body lines (for Ctrl+O reprint). */
+    body: string[];
   } | null = null;
   private thoughtStarted = false;
   private thoughtStartMs = 0;
   private thoughtHeaderPrinted = false;
+  /** Rotates short human labels so repeated thinking phases do not feel robotic. */
+  private thinkingCount = 0;
+  private thinkingLabel = "";
   private textStarted = false;
+  private reconBuffer: ReconItem[] = [];
   private outputLineCount = 0;
   private outputSuppressed = false;
 
@@ -125,6 +201,7 @@ export class Renderer {
     this.rich = opts.rich ?? isRichTerminal();
     this.width = opts.width ?? getTerminalWidth();
     this.baseDir = opts.baseDir;
+    this.verbosity = opts.verbosity ?? "normal";
     this.channel = opts.channel ?? getDefaultChannel();
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
@@ -147,10 +224,14 @@ export class Renderer {
   /** Final answer streamed from the model (markdown-formatted). */
   text(chunk: string): void {
     this.endCard();
+    this.flushRecon();
+    this.closeThought();
     this.spinner.stop();
     if (!this.textStarted) {
       this.textStarted = true;
-      this.channel.writeRaw(`\n${pc.dim("-")} `);
+      // The answer is already introduced by the REPL's divider/label; a leading
+      // marker would clash with a code block that opens the response.
+      this.channel.writeRaw("\n");
     }
     this.fmt.write(chunk);
   }
@@ -160,13 +241,14 @@ export class Renderer {
     this.spinner.stop();
     if (this.thoughtStarted) {
       if (!this.thoughtHeaderPrinted) {
-        this.channel.writeRaw(`\n${pc.dim("→")} Thought: `);
+        this.channel.writeRaw(`\n${pc.magenta(glyph.thinking)} ${pc.dim(this.thinkingLabel)} `);
         this.thoughtHeaderPrinted = true;
       }
       this.channel.writeRaw(pc.dim(chunk));
     } else if (this.card) {
       this.writeInlineBody(chunk);
     } else {
+      this.flushRecon();
       this.channel.writeRaw(chunk);
     }
   }
@@ -175,6 +257,16 @@ export class Renderer {
   private writeInlineBody(chunk: string): void {
     for (const line of chunk.split("\n")) {
       if (line.trim() === "") continue;
+      const plain = stripAnsi(line).trim();
+      if (this.card) {
+        if (this.card.body.length < MAX_OUTPUT_LINES) this.card.body.push(plain);
+        if (!this.card.firstBody) this.card.firstBody = plain;
+      }
+      if (this.verbosity === "quiet") {
+        // Keep the first line so a failure still has a short explanation, but
+        // do not flood the chat — details are available via /verbose and Ctrl+O.
+        continue;
+      }
       this.outputLineCount++;
       if (this.outputLineCount > MAX_OUTPUT_LINES) {
         this.outputSuppressed = true;
@@ -187,8 +279,9 @@ export class Renderer {
   /** Dimmed reasoning stream (already colored by the agent). */
   reasoning(chunk: string): void {
     this.spinner.stop();
+    this.flushRecon();
     if (this.thoughtStarted && !this.thoughtHeaderPrinted) {
-      this.channel.writeRaw(`\n${pc.dim("→")} Thought: `);
+      this.channel.writeRaw(`\n${pc.magenta(glyph.thinking)} ${pc.dim(this.thinkingLabel)} `);
       this.thoughtHeaderPrinted = true;
     }
     this.channel.writeRaw(pc.dim(chunk));
@@ -196,18 +289,40 @@ export class Renderer {
 
   /** Model is loading / generating — record start time. */
   thinkingStart(): void {
+    this.flushRecon();
     this.thoughtStarted = true;
     this.thoughtStartMs = Date.now();
     this.thoughtHeaderPrinted = false;
+    this.thinkingLabel = this.nextThinkingLabel();
     this.spinner.start(t("ui.thinking"));
+  }
+
+  /**
+   * Rotate a few short, human labels across thinking phases. The first phase
+   * always uses the canonical `ui.thinking_label` (stable in tests/screens).
+   */
+  private nextThinkingLabel(): string {
+    const index = this.thinkingCount++;
+    const key = index === 0 ? "ui.thinking_label" : `ui.thinking_label_${(index % 3) + 1}`;
+    const value = t(key);
+    return value !== key ? value : t("ui.thinking_label");
   }
 
   /** LLM call finished; print duration and close the thought block. */
   thinkingEnd(): void {
     this.spinner.stop();
+    this.closeThought();
+  }
+
+  /**
+   * Close an open thought block, printing its duration. Safe to call multiple
+   * times — the final answer and the next tool both need the block closed so
+   * the duration never lands inside the answer text.
+   */
+  private closeThought(): void {
     if (this.thoughtStarted && this.thoughtHeaderPrinted) {
       const duration = Date.now() - this.thoughtStartMs;
-      this.channel.writeRaw(pc.dim(` ${duration}ms\n`));
+      this.channel.writeRaw(pc.dim(` ${formatDuration(duration)}\n`));
     }
     this.thoughtStarted = false;
     this.thoughtHeaderPrinted = false;
@@ -217,25 +332,42 @@ export class Renderer {
     tool: string,
     args: Record<string, unknown>,
     stepContext?: string | null,
-    icon?: string,
+    _icon?: string,
   ): void {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
+    this.closeThought();
     this.outputLineCount = 0;
     this.outputSuppressed = false;
     const displayArgs =
       PATH_TOOLS.has(tool) && typeof args.path === "string"
         ? { ...args, path: toDisplayPath(this.baseDir, args.path) }
         : args;
-    const summary = summarizeArgs(displayArgs);
-    const marker = icon || toolMarker(tool);
+    const summary = humanArgs(tool, displayArgs);
     const label = friendlyTool(tool);
-    this.card = { tool, args, start: Date.now() };
-    if (stepContext) {
-      this.channel.writeRaw(`\n${pc.dim("↓")} ${pc.cyan(stepContext)}\n`);
+    // One glyph, colored by category — per-tool emoji icons are not used.
+    const mark = actionMarkFor(tool);
+    const deferred = this.verbosity === "quiet";
+    this.card = {
+      tool,
+      args,
+      start: Date.now(),
+      label,
+      summary,
+      mark,
+      deferred,
+      firstBody: "",
+      body: [],
+    };
+    if (stepContext && !deferred) {
+      this.channel.writeRaw(`\n${pc.dim(glyph.detail)} ${pc.cyan(stepContext)}\n`);
     }
-    this.channel.writeRaw(`${pc.dim(marker)} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`);
+    if (!deferred) {
+      this.channel.writeRaw(
+        `${mark} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+      );
+    }
     // Busy indicator while the tool actually runs — read/write/edit/bash can
     // take seconds; without this the chat looks frozen until the footer.
     if (!SPINNERLESS_TOOLS.has(tool)) {
@@ -243,11 +375,35 @@ export class Renderer {
     }
   }
 
+  /** Change how much detail is rendered (used by `/verbose`). */
+  setVerbosity(verbosity: Verbosity): void {
+    this.verbosity = verbosity;
+  }
+
+  /** Emit a buffered run of read-only actions (quiet mode). */
+  private flushRecon(): void {
+    if (this.reconBuffer.length === 0) return;
+    const items = this.reconBuffer;
+    this.reconBuffer = [];
+    if (items.length === 1) {
+      const it = items[0];
+      const head = `${it.mark} ${it.label}${it.summary ? ` ${pc.dim(it.summary)}` : ""}`;
+      this.channel.writeRaw(`${head}  ${successMark()} ${pc.dim(formatDuration(it.duration))}\n`);
+      return;
+    }
+    const total = items.reduce((a, b) => a + b.duration, 0);
+    const label = t("ui.actions_summary", { count: String(items.length) });
+    this.channel.writeRaw(
+      `${pc.dim(glyph.group)} ${label} ${successMark()} ${pc.dim(`· ${formatDuration(total)}`)} ${pc.dim("· /verbose")}\n`,
+    );
+  }
+
   /** Live plan checklist — prints the plan block as-is (already colored). */
   planBlock(lines: string[]): void {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
+    this.flushRecon();
     for (const line of lines) {
       this.channel.writeRaw(`${line}\n`);
     }
@@ -263,22 +419,66 @@ export class Renderer {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     if (!this.card) return;
-    const marker = error ? pc.red("✗") : pc.green("✓");
-    let footer = `${GUTTER}${marker} ${pc.dim(`${duration}ms`)}`;
+    const { label, summary, mark: leadMark, deferred, firstBody } = this.card;
+    const mark = error ? failureMark() : successMark();
+    let tail = `${mark} ${pc.dim(formatDuration(duration))}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {
       const deltaStr = ctxDelta > 0 ? pc.green(`+${ctxDelta}`) : pc.yellow(`${ctxDelta} ↓`);
-      footer += `  ${pc.dim("ctx")} ${deltaStr}`;
+      tail += `  ${pc.dim("ctx")} ${deltaStr}`;
     }
     if (costUsd !== undefined && costUsd > 0) {
-      footer += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
+      tail += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
     }
-    this.channel.writeRaw(`${footer}\n`);
-    if (this.outputSuppressed) {
-      this.channel.writeRaw(
-        `${GUTTER}${pc.dim(`... (${this.outputLineCount - MAX_OUTPUT_LINES} more lines)`)}\n`,
-      );
+    if (deferred) {
+      // Quiet mode: fold the deferred header into a single action line.
+      // A run of successful read-only tools is buffered and summarized.
+      if (!error && RECON_TOOLS.has(this.card.tool)) {
+        this.reconBuffer.push({ mark: leadMark, label, summary, duration });
+        this.recordLast(label, summary, error, duration);
+        this.card = null;
+        return;
+      }
+      this.flushRecon();
+      const head = `${leadMark} ${label}${summary ? ` ${pc.dim(summary)}` : ""}`;
+      this.channel.writeRaw(`${head}  ${tail}\n`);
+      if (error && firstBody) {
+        const soft = firstBody.startsWith("⚠");
+        const color = soft ? pc.yellow : pc.red;
+        this.channel.writeRaw(`${GUTTER}${pc.dim(glyph.detail)} ${color(firstBody)}\n`);
+      }
+    } else {
+      const footer = `${GUTTER}${tail}`;
+      this.channel.writeRaw(`${footer}\n`);
+      if (this.outputSuppressed) {
+        this.channel.writeRaw(
+          `${GUTTER}${pc.dim(`... (${this.outputLineCount - MAX_OUTPUT_LINES} more lines)`)}\n`,
+        );
+      }
     }
+    this.recordLast(label, summary, error, duration);
     this.card = null;
+  }
+
+  /** Remember the action for `Ctrl+O` reprint (survives the run). */
+  private recordLast(
+    label: string,
+    summary: string,
+    error: boolean | undefined,
+    duration: number,
+  ): void {
+    const firstBody = this.card?.firstBody ?? "";
+    const status: "ok" | "warn" | "error" = !error
+      ? "ok"
+      : firstBody.startsWith("⚠")
+        ? "warn"
+        : "error";
+    recordLastAction({
+      label,
+      args: summary,
+      status,
+      durationMs: duration,
+      body: this.card?.body ?? [],
+    });
   }
 
   /** Raw pre-formatted text (diff blocks, warnings). */
@@ -286,6 +486,7 @@ export class Renderer {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
+    this.flushRecon();
     this.channel.writeRaw(text);
   }
 
@@ -293,11 +494,13 @@ export class Renderer {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     this.endCard();
-    this.channel.writeRaw(`${pc.red(text)}\n`, "stderr");
+    this.flushRecon();
+    this.channel.writeRaw(`${failureMark()} ${pc.red(text)}\n`, "stderr");
   }
 
   flush(): void {
     this.endCard();
+    this.flushRecon();
     this.spinner.stop();
     this.fmt.flushPartialNow();
     this.fmt.flush();
@@ -306,8 +509,9 @@ export class Renderer {
 
   /** Footer with model, provider, and total duration. */
   footer(model: string, provider: string, durationMs: number): void {
+    this.flushRecon();
     this.channel.writeRaw(
-      `\n${pc.dim("▣")} ${model} · ${provider} · ${pc.dim(`${durationMs}ms`)}\n`,
+      `\n${pc.dim(glyph.metric)} ${model} · ${provider} · ${pc.dim(formatDuration(durationMs))}\n`,
     );
   }
 

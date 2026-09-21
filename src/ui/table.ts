@@ -96,9 +96,9 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
   }
 
   const maxWidth = opts.maxWidth ?? getTerminalWidth();
+  const GAP = "  ";
   const contentWidth = widths.reduce((a, b) => a + b, 0);
-  const borderWidth = columnCount * 3 + 1;
-  const totalWidth = contentWidth + borderWidth;
+  const totalWidth = contentWidth + GAP.length * Math.max(0, columnCount - 1);
   if (totalWidth > maxWidth) {
     const over = totalWidth - maxWidth;
     let remaining = over;
@@ -118,26 +118,21 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
     for (let c = 0; c < columnCount; c++) {
       const raw = row[c] ?? "";
       const cell = truncate(raw, widths[c]);
-      const a = isHeader && align[c] === undefined ? "center" : (align[c] ?? "left");
+      const a = isHeader && align[c] === undefined ? "left" : (align[c] ?? "left");
       cells.push(pad(cell, widths[c], a));
     }
-    const content = cells.map((c) => pc.dim("│ ") + c).join("") + pc.dim("│");
+    const content = cells.join(GAP);
     return isHeader ? pc.bold(content) : content;
   };
 
-  const border = (l: string, m: string, r: string): string => {
-    const seg = widths.map((w) => "─".repeat(w + 2)).join(m);
-    return pc.dim(l + seg + r);
-  };
-
+  // No box-drawing grid: a bold header, a dim rule, aligned columns.
   const out: string[] = [];
-  out.push(border("┌", "┬", "┐"));
   out.push(renderRow(headerRow, true));
-  out.push(border("├", "┼", "┤"));
+  const ruleWidth = widths.reduce((a, b) => a + b, 0) + GAP.length * Math.max(0, columnCount - 1);
+  out.push(pc.dim("─".repeat(Math.max(3, Math.min(ruleWidth, maxWidth - 1)))));
   for (const row of dataRows) {
     out.push(renderRow(row, false));
   }
-  out.push(border("└", "┴", "┘"));
   return out;
 }
 

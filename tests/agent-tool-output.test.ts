@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { toolOutputCharLimit, compactToolError, summarizeToolArgs, isExecutableScriptPath } from "../src/core/agent/tool-output";
+import {
+  toolOutputCharLimit,
+  compactToolError,
+  toolFailureSummary,
+  summarizeToolArgs,
+  isExecutableScriptPath,
+} from "../src/core/agent/tool-output";
 
 describe("toolOutputCharLimit", () => {
   it("never truncates a tool that declares boundedOutput regardless of remaining budget", () => {
@@ -36,6 +42,27 @@ describe("compactToolError", () => {
     expect(compactToolError("")).toBe("");
     expect(compactToolError(undefined)).toBe("");
     expect(compactToolError("\n  \n")).toBe("");
+  });
+});
+
+describe("toolFailureSummary", () => {
+  it("maps a security block to a calm warning without the raw marker", () => {
+    const out = toolFailureSummary("[SECURITY BLOCKED] Command is not allowed: rm -rf\nHint: ...");
+    expect(out.severity).toBe("warn");
+    expect(out.text).not.toContain("[SECURITY BLOCKED]");
+    expect(out.text.length).toBeGreaterThan(0);
+  });
+
+  it("maps a protected-path refusal to a warning", () => {
+    const out = toolFailureSummary('[PROTECTED PATH] Protected path ".env" (matches .env*). Do NOT modify it.');
+    expect(out.severity).toBe("warn");
+    expect(out.text).not.toContain("[PROTECTED PATH]");
+  });
+
+  it("keeps a real failure as an error and returns the first line", () => {
+    const out = toolFailureSummary("Error: file not found\nHint: run list_dir first");
+    expect(out.severity).toBe("error");
+    expect(out.text).toBe("Error: file not found");
   });
 });
 

@@ -155,7 +155,7 @@ describe("REPL terminal ownership", () => {
     await repl.runAgent("hi");
 
     const label = t("repl.agent");
-    expect(capture.out.data).toContain(`${label}\n- `);
+    expect(capture.out.data).toContain(`${label}\n`);
     expect(capture.out.data).not.toContain(`${label}\n\n`);
   });
 

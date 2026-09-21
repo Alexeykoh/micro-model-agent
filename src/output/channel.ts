@@ -37,6 +37,12 @@ export class OutputChannel {
   private blockLines: string[] | null = null;
   private blockFlushScheduled = false;
   private readonly unsub: () => void;
+  /**
+   * Drop `info`-level log events from the human terminal. Structured logs are
+   * diagnostics, not chat — quiet mode keeps only warn/error. `writeLine`
+   * blocks (help, status, command output) are unaffected.
+   */
+  private suppressInfoLogs = false;
 
   constructor(
     private bus: OutputBus = defaultOutputBus,
@@ -114,6 +120,11 @@ export class OutputChannel {
     }
   }
 
+  /** Hide `info`-level structured logs from the terminal (warn/error remain). */
+  setSuppressInfoLogs(suppress: boolean): void {
+    this.suppressInfoLogs = suppress;
+  }
+
   writeRaw(text: string, stream: OutputStream = "stdout"): void {
     // Raw output must never jump ahead of queued block lines.
     this.flushBlocks();
@@ -156,6 +167,8 @@ export class OutputChannel {
 
   private onEvent(ev: OutputEvent): void {
     if (this.mode === "quiet") return;
+    // Structured info logs are diagnostics, not chat: quiet mode hides them.
+    if (this.suppressInfoLogs && ev.kind === "log" && ev.level === "info") return;
     if (this.mode === "modal") {
       this.queue.push(ev);
       return;

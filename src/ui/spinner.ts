@@ -31,6 +31,7 @@ export class Spinner {
   private stream: NodeJS.WritableStream;
   private intervalMs: number;
   private width: number;
+  private startedAt = 0;
 
   constructor(opts: SpinnerOptions = {}) {
     this.channel = opts.channel;
@@ -49,6 +50,7 @@ export class Spinner {
     this.stop();
     this.message = this.truncate(message);
     this.frame = 0;
+    this.startedAt = Date.now();
     this.timer = setInterval(() => this.tick(), this.intervalMs);
     this.tick();
   }
@@ -82,7 +84,11 @@ export class Spinner {
     if (!this.timer) return;
     const frame = FRAMES[this.frame % FRAMES.length];
     this.frame++;
-    const text = "\r" + pc.cyan(frame) + " " + this.message + "\x1b[K";
+    // Show elapsed seconds only once the wait is noticeable — a quiet hint
+    // that the tool is still working, not just fast output.
+    const elapsed = Date.now() - this.startedAt;
+    const suffix = elapsed >= 3000 ? pc.dim(` · ${Math.floor(elapsed / 1000)}s`) : "";
+    const text = "\r" + pc.cyan(frame) + " " + this.message + suffix + "\x1b[K";
     if (this.channel) this.channel.writeOverlay(text);
     else this.stream.write(text);
   }

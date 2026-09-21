@@ -14,6 +14,8 @@ import {
   ModelArgProvider,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
+import { resolveVerbosity, glyph } from "../ui/theme";
+import { getLastAction } from "../ui/action-log";
 import { divider } from "../ui/box";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
@@ -592,7 +594,35 @@ export class Repl implements ReplContext {
       this.pasteClipboardImage();
       return true;
     }
+    if (key.ctrl && key.name === "o" && !this.agentRunning) {
+      this.reprintLastAction();
+      return true;
+    }
     return false;
+  }
+
+  /** Ctrl+O — reprint the full detail of the most recent action. */
+  private reprintLastAction(): void {
+    const last = getLastAction();
+    if (!last) {
+      this.output.writeLine(pc.dim(t("repl.last_action_none")));
+      return;
+    }
+    const mark =
+      last.status === "error"
+        ? pc.red(glyph.failure)
+        : last.status === "warn"
+          ? pc.yellow(glyph.warning)
+          : pc.green(glyph.success);
+    const head = `${pc.cyan(glyph.action)} ${last.label}${
+      last.args ? ` ${pc.dim(last.args)}` : ""
+    }  ${mark} ${pc.dim(`${last.durationMs}ms`)}`;
+    const lines = [head, ...last.body.map((l) => `  ${l}`)];
+    this.output.writeLine(`\n${lines.join("\n")}`);
+    if (this.rl instanceof LineEditor) {
+      this.rl.reset();
+      this.rl.prompt();
+    }
   }
 
   private async pasteClipboardImage(): Promise<void> {
@@ -659,14 +689,15 @@ export class Repl implements ReplContext {
       }
       this.output.beginStreaming();
       // Divider + agent label, written raw (no trailing newline): the next
-      // Renderer.text() chunk adds its own leading "\n" ("- ..."), so a
-      // writeLine here would insert a blank line ("Agent:\n\n- ...").
+      // Renderer.text() chunk adds its own leading "\n" so a writeLine here
+      // would insert a blank line ("Agent:\n\n...").
       this.output.writeRaw(`\r${divider()}\n${pc.green(t("repl.agent"))}`);
 
       const renderer = new Renderer({
         spinner: this.config.ui?.spinner ?? true,
         baseDir: this.baseDir,
         channel: this.output,
+        verbosity: resolveVerbosity(this.config.ui),
       });
       renderer.showLoader();
       const result = await this.agent.run(
