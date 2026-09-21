@@ -183,4 +183,19 @@ describe("session-logger sanitization", () => {
     expect(assistant.content).toBe(long);
     expect(tool.content).toBe(long);
   });
+
+  it("logToolCall does not throw when sanitizer corrupts the arg JSON", () => {
+    // Санитайзер режет закрывающую кавычку в `password=secret"`, из-за чего
+    // JSON.parse падал и запись tool_call терялась. Запись обязана выжить.
+    const { logger, logs } = makeLogger();
+    expect(() =>
+      logger.logToolCall(
+        { id: "t1", name: "bash", arguments: { cmd: "mysql -p password=secret" } },
+        1,
+      ),
+    ).not.toThrow();
+    const entry = logs.find((l) => l.type === "tool_call");
+    expect(entry).toBeDefined();
+    expect(entry.tool).toBe("bash");
+  });
 });

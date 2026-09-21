@@ -119,6 +119,9 @@ export class ToolBatchExecutor {
     // Информационные read-only тулы, чей "фейл" — ожидаемое поведение
     // (file_info "Not found" после delete_file) — исключены из учёта неудач.
     const infoTools = new Set(["file_info"]);
+    // Флаг блока безопасности действует в пределах текущего пакета вызовов:
+    // иначе старый блок влиял бы на nudge через десятки итераций.
+    state.sawSecurityBlock = false;
 
     for (const call of toolCalls) {
       this.deps.setScope();
@@ -136,6 +139,9 @@ export class ToolBatchExecutor {
       slog?.logToolCall(call, iteration);
 
       const tokensBeforeTool = contextManager.getEstimatedTokens();
+      // Снимок стоимости ДО тула: рендеру нужна стоимость именно этого вызова
+      // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
+      const costBeforeTool = this.deps.costTracker.total;
       let result;
       try {
         result = await this.deps.toolExecutor.execute(call, this.deps.getAbortSignal());
@@ -227,6 +233,7 @@ export class ToolBatchExecutor {
       answeredToolCallIds.add(call.id);
 
       const tokensAfterTool = contextManager.getEstimatedTokens();
+      const costAfterTool = this.deps.costTracker.total;
       onTool?.({
         type: "end",
         tool: call.name,
@@ -234,7 +241,10 @@ export class ToolBatchExecutor {
         duration,
         error: !result.success,
         ctxDelta: tokensAfterTool - tokensBeforeTool,
-        costUsd: this.deps.costTracker.total,
+        costUsd:
+          costBeforeTool !== undefined && costAfterTool !== undefined
+            ? costAfterTool - costBeforeTool
+            : undefined,
       });
 
       summaries.push(

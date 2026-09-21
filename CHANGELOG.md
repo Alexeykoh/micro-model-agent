@@ -4,6 +4,48 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-09-21
+
+### Added
+
+- **Protected-path confirmation guard** (`src/modules/security/protected-paths.ts`): file-mutating tools (`write_file`, `edit_file`, `delete_file`, `move_file`, `create_dir`) now refuse paths under VCS internals (`.git/`, `.hg/`, `.svn/`) and secret/env files (`.env*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.crt`, `*.secret`, `*.token`, `.npmrc`, `.netrc`, `.git-credentials`, `.gitconfig`) with a directive to ask the user for explicit confirmation. The guard is **always on** (independent of `security.paths.enabled`) and never hard-blocks — the user can still approve. Verified live on `qwen/qwen3.5-9b`: the model recognized the rule from the prompt, refused, and asked the user.
+- **System-prompt `PROTECTED PATHS` rule** (`src/core/bootstrap.ts`): the model is told up front not to modify VCS/secret/env paths without explicit user confirmation, and to stop and ask if a tool reports one (no `bash` workarounds).
+
+## [1.3.1] - 2026-09-21
+
+### Added
+
+- **Code style guide** (`docs/agents/code-style.md`, AGENTS.md/architecture rules #18): formatting, ban on `as any`/`as unknown as X` (except annotated test seams), `import type`, explicit export return types, abortable waits, no silent `catch`, Russian comments, and a phased tsconfig-strictness ladder.
+
+### Fixed
+
+- **False-positive repeated-tool hard stop** (`src/core/agent.ts`): under `--exit-on-complete` an identical repeated tool call was stopped after two repeats even when it was a legitimate request ("run `echo tick` four times"), ending the run with an empty answer. The hard stop now applies only to loop-prone status tools (`session_info`/`process_list`/`process_log`/`file_info`/`project_map`); side-effecting tools (e.g. `bash`) stay nudge-only. Verified live on `qwen/qwen3.5-9b`.
+- **False hallucination warning for filenames with spaces** (`src/modules/hallucination/factual.ts`): `отчёт 1.txt` was tokenized as `1.txt` and flagged as a missing file. `bareNameExists` now also matches a known/indexed name ending in `" <token>"`. Verified live.
+- **`tool_call` args JSON sanitization** (`src/core/session-logger.ts`): `logToolCall` no longer loses the whole entry when the data sanitizer corrupts the arg JSON (e.g. `password=secret"` loses a closing quote) — falls back to a raw string and warns.
+- **Invalid tool-call arguments** (`src/core/agent.ts`): a malformed `tool_call.arguments` JSON no longer silently becomes `{}`; it is logged (`tool_args_parse_error`) and a `system-summary` tells the model to re-issue the call with valid JSON.
+- **MoE plan mutation** (`src/modules/execution/moe-executor.ts`): `resolveScopeAndRetry` expands scope on a local copy, so the original plan stays intact for verification/re-plan.
+- **Browser session race in MoE** (`src/tools/browser.ts`): concurrent waves are serialized via a promise chain instead of clobbering the shared Playwright session; `closeBrowserSession` waits for the in-flight action; missing cookie dir is created; close failures are logged. Screenshot vision detection broadened (`modelSupportsVision`).
+- **Security-block nudge scope** (`src/core/agent/tool-batch.ts`): `sawSecurityBlock` is reset per tool batch, so a stale block cannot trigger the wrapper-script nudge much later.
+- **Per-tool cost** (`src/core/agent/tool-batch.ts`): the tool-end event now reports the delta (`total_after - total_before`) instead of the cumulative session cost.
+- **`edit_file` argument guard** (`src/tools/edit-file.ts`): non-string `old`/`new` are rejected with a clear error instead of being coerced to `"null"`/`"[object Object]"`; unreadable files return a localized message.
+- **Bash failure counters scoped to the session** (`src/tools/bash.ts`): the module-level `FAILING_FIRST_WORDS` map is reset when the session id changes, so failures from a previous session do not trigger a bogus hard-stop later.
+- **Migration backup skip is logged** (`src/migration/backup.ts`): a pre-existing `.bak` directory is reported at debug level instead of being skipped silently.
+- **File I/O error handling** (`src/tools/write-file.ts`, `src/tools/read-file.ts`): `writeFileSync`/`readFileSync` failures (ENOSPC/EPERM, file vanished between `existsSync` and read) now return a localized message with the path and reason instead of throwing a bare Node error; numeric `offset`/`limit` are validated instead of cast.
+- **`listModels` typed parsing** (`src/llm/openai-compat.ts`): provider responses are parsed via a narrowing helper (no `as any`), tolerating both `{data:[…]}` and bare arrays.
+- **Nested markdown emphasis** (`src/ui/md-formatter.ts`): `***bold italic***` renders as bold+italic without leaving a stray asterisk.
+
+### Changed
+
+- **MoE messages localized** (`src/core/agent-moe.ts`, i18n `moe.*` en+ru): planning/fallback/auto-fix/no-orchestrator/plan-failed strings go through `t()`.
+- **MoE typing** (`src/core/agent-moe.ts`, `src/llm/types.ts`): `verifyAndMerge` is typed as `OrchestratorResult`/`VerifyInput`, `getUsageByTag` is part of `MoEExecutorLike` (no duck-typed cast), orchestrator override is properly optional.
+- **Provider cache** (`src/modules/providers/manager.ts`): `setModel()` clears the build cache so providers for old models do not accumulate.
+- **Input-from budget** (`src/modules/execution/input-from.ts`): aggregate cap (`maxChars * 4`) with an `omitted` marker; `as any` narrowing removed.
+- **Observability** (`src/core/bootstrap.ts`, `src/core/agent.ts`): ContextLogger init failure and `getProviderFor` build failure are logged with i18n keys; log level is validated (`normalizeLogLevel`) instead of `as any`.
+- **SIGINT force-exit** (`src/cli/repl.ts`): grace period 2s → 5s with a localized notice.
+- **i18n diagnostics** (`src/i18n/index.ts`, `src/core/bootstrap.ts`): a missing key is reported via an optional debug reporter (`setMissingKeyReporter`, wired to `logger.debug`); `loadLocale` cast removed.
+- **Type cleanup** (`src/tools/*`): removed redundant `(ctx as any).fileOperationsCount` casts in 5 files.
+- **Abortable retry sleep** (`src/modules/execution/moe-executor.ts`): retry `sleep` honors the abort signal; stuck detector receives the real attempt number.
+
 ## [1.3.0] - 2026-09-19
 
 ### Added

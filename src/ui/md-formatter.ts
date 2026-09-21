@@ -296,6 +296,9 @@ export class FormattingStream {
       return `\u0000${codeSpans.length - 1}\u0000`;
     });
 
+    // `***text***` (bold+italic) до одиночных `**`/`*`, иначе вложенность
+    // рвётся и во вложении остаётся висящая звёздочка.
+    result = result.replace(/\*\*\*(.+?)\*\*\*/g, (_, s) => pc.bold(pc.italic(s)));
     result = result.replace(/\*\*(.+?)\*\*/g, (_, s) => pc.bold(s));
     result = result.replace(/~~(.+?)~~/g, (_, s) => pc.strikethrough(s));
     result = result.replace(/\*([^*]+)\*/g, (_, s) => pc.italic(s));

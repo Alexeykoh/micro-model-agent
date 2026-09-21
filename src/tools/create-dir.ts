@@ -6,6 +6,7 @@ import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { safeResolvePath } from "./path-utils";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 
 export const createDirTool: ToolDefinition = {
   name: "create_dir",
@@ -56,12 +57,16 @@ export const createDirTool: ToolDefinition = {
       };
     }
 
+    // Protected paths (.git/, .env dirs, …) — always ask the user.
+    const protectedBlock = protectedPathBlock(ctx, resolved, path);
+    if (protectedBlock) return protectedBlock;
+
     if (!existsSync(resolved)) {
       mkdirSync(resolved, { recursive: true });
     }
 
     // Increment file operations counter
-    (ctx as any).fileOperationsCount = currentCount + 1;
+    ctx.fileOperationsCount = currentCount + 1;
 
     // Log directory creation
     logFileWrite(ctx.sessionId, path, true, "Directory created");

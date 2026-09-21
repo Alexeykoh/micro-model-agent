@@ -45,4 +45,23 @@ describe("write_file", () => {
     const result = await writeFileTool.handler(ctx, { path: "../outside.txt", content: "x" });
     expect(result.success).toBe(false);
   });
+
+  it("refuses to overwrite a protected file and tells the model to ask", async () => {
+    const envPath = join(tmpDir, ".env");
+    writeFileSync(envPath, "SECRET=1");
+    const result = await writeFileTool.handler(ctx, { path: envPath, content: "SECRET=2" });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Protected path");
+    // Содержимое не изменено.
+    expect(readFileSync(envPath, "utf-8")).toBe("SECRET=1");
+  });
+
+  it("refuses to modify files under .git/", async () => {
+    const result = await writeFileTool.handler(ctx, {
+      path: join(tmpDir, ".git", "config"),
+      content: "x",
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain(".git/");
+  });
 });

@@ -88,6 +88,21 @@ The security module provides multiple layers of protection:
   - Automatic removal of sensitive data (API keys, tokens, passwords) from logs
   - Applied to all log messages and audit entries
 
+#### Always-on: Protected-path confirmation (`src/modules/security/protected-paths.ts`)
+
+Independent of `security.paths.enabled`, all file-mutating tools (`write_file`, `edit_file`,
+`delete_file`, `move_file`, `create_dir`) refuse protected paths and return a directive telling the
+model to **ask the user** for explicit confirmation:
+
+- VCS internals: `.git/`, `.hg/`, `.svn/`
+- Secrets/env: `.env*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.crt`, `*.secret`, `*.token`,
+  `.npmrc`, `.netrc`, `.git-credentials`, `.gitconfig`
+
+This is a **soft guard, not a hard block**: the user can still approve. The system prompt carries a
+matching `PROTECTED PATHS` rule so the model asks before attempting the call (and does not work
+around it with `bash`). Rationale: irreversibly deleting `.git/config` or rewriting `.env`/keys is a
+data-loss risk even with the opt-in security module disabled.
+
 #### Configuration
 
 Security settings are part of `AppConfig` in `src/config/types.ts`:
@@ -333,6 +348,7 @@ const body = { model, messages, stream: false, max_tokens };
     - **Тесты:** если примитив не поддерживается ОС (права, ФС), тест должен **скипаться**, а не падать; уборка ресурсов — с ветвлением по платформе.
     - Учитывать регистрозависимость имён файлов (Linux) и переводы строк CRLF/LF.
 17. **Диспетчеризация подкоманд — через карту хендлеров** — REPL/CLI-команды с несколькими подкомандами (`/provider`, `/model`, `/skill`, `mma provider …`) НЕ строятся на цепочке `if (subcmd === "…")`: она не масштабируется, дублирует вывод `usage` и легко теряет `return`. Используй карту `Record<string, (args: string[]) => void | Promise<void>>` и единый резолв (`subcmd ? handlers[subcmd] : handlers[<default>]`), а общий парсинг аргументов и `usage`-фолбэк держи в одном месте. Разовое ветвление по флагу допустимо, длинная цепочка подкоманд — нет. Пример: `registerProviderCommands` (`src/cli/repl-commands.ts`).
+18. **Стиль кода — по `docs/agents/code-style.md`** — единый стандарт: запрет `as any`/`as unknown as X` (кроме test seams с комментарием), `import type`, явные типы возврата у экспортов, прерываемые ожидания с проверкой `abort`, никаких молчаливых `catch`, комментарии на русском (#15), постепенное ужесточение tsconfig. Отклонения — только с комментарием-обоснованием.
 
 ## Project Structure
 

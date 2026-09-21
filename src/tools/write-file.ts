@@ -9,6 +9,8 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
+import { errMsg } from "../utils";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
@@ -27,6 +29,10 @@ export const writeFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
+
+    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
+    const protectedBlock = protectedPathBlock(ctx, resolved, path);
+    if (protectedBlock) return protectedBlock;
 
     // Check path permissions using the resolved path
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
@@ -100,14 +106,23 @@ export const writeFileTool: ToolDefinition = {
 
     const fileExists = existsSync(resolved);
     let oldContent = "";
-    if (fileExists) {
-      oldContent = readFileSync(resolved, "utf-8");
+    try {
+      if (fileExists) {
+        oldContent = readFileSync(resolved, "utf-8");
+      }
+      writeFileSync(resolved, content, "utf-8");
+    } catch (err) {
+      // Ошибка ФС (ENOSPC/EPERM/…) должна вернуть путь и причину, а не
+      // вылететь голым Node-исключением в цикл агента.
+      return {
+        success: false,
+        output: t("file.write_failed", { path, error: errMsg(err) }),
+      };
     }
-    writeFileSync(resolved, content, "utf-8");
     const diff = fileExists ? generateDiff(oldContent, content) : generateNewFileDiff(content);
 
     // Increment file operations counter
-    (ctx as any).fileOperationsCount = currentCount + 1;
+    ctx.fileOperationsCount = currentCount + 1;
 
     // Log successful file write
     logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? "updated" : "created"}`);

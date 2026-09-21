@@ -8,6 +8,7 @@ import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validato
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
 import type { MoEPlan, SubtaskResult, PlanResult } from "../modules/execution/types";
+import type { VerifyInput, OrchestratorResult } from "../llm/types";
 import { newAbortError, type TagUsage } from "../modules/execution/moe-executor";
 import { t } from "../i18n/index";
 
@@ -25,7 +26,7 @@ export interface MoEEvent {
 export interface MoEOrchestratorLike {
   isEnabled(): boolean;
   plan(input: string, context?: string, signal?: AbortSignal): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
-  verifyAndMerge(input: any, signal?: AbortSignal): Promise<any>;
+  verifyAndMerge(input: VerifyInput, signal?: AbortSignal): Promise<OrchestratorResult>;
   resolveScopeRequest(
     subtaskId: string,
     request: { files: string[]; read_only: boolean; reason: string },
@@ -41,6 +42,7 @@ export interface MoEExecutorLike {
     plan: MoEPlan,
     opts?: { skipIds?: ReadonlySet<string>; carriedResults?: SubtaskResult[] },
   ): Promise<PlanResult>;
+  getUsageByTag?(): Record<string, TagUsage>;
 }
 
 export interface MoEVerifierLike {
@@ -101,7 +103,7 @@ export async function runWithMoE(
 
   ensureNotAborted();
 
-  let orchestrator: MoEOrchestratorLike = deps.orchestratorOverride as MoEOrchestratorLike;
+  let orchestrator: MoEOrchestratorLike | undefined = deps.orchestratorOverride;
   if (!orchestrator) {
     orchestrator = new OrchestratorClient(
       {
@@ -121,19 +123,17 @@ export async function runWithMoE(
   if (!orchestrator.isEnabled()) {
     // Visible at default log level: a user who enabled moe.enabled must be
     // able to tell why MoE never kicked in (missing orchestrator.model).
-    logger.warn(
-      "MoE enabled but no orchestrator model configured — falling back to single-agent. Set orchestrator.model to activate MoE.",
-    );
+    logger.warn(t("moe.no_orchestrator"));
     return fallback();
   }
 
-  status("🤖 Planning with MoE mode...\n");
+  status(t("moe.planning"));
   onPhase?.("thinking");
   const planResult = await orchestrator.plan(input, undefined, signal);
   onPhase?.("done");
 
   if ("error" in planResult) {
-    logger.warn(`MoE plan failed: ${planResult.error} — falling back to single-agent`);
+    logger.warn(t("moe.plan_failed", { error: planResult.error }));
     emit("moe_plan", { status: "error", error: planResult.error });
     return fallback();
   }
@@ -171,14 +171,14 @@ export async function runWithMoE(
       if (!retry.valid) {
         logger.warn(`MoE plan validation failed: ${retry.errors.join("; ")}`);
         if (cycle === 1) {
-          status(`⚠️ Plan validation failed. Falling back to single-agent mode.\n`);
+          status(t("moe.plan_fallback"));
           return fallback();
         }
         return partialFailure(mergedResults, retry.errors.join("; "));
       }
       currentPlan = applied;
       if (validation.autoFixes.length > 0) {
-        status(`🔧 Auto-fixed ${validation.autoFixes.length} plan issues.\n`);
+        status(t("moe.plan_autofixed", { count: String(validation.autoFixes.length) }));
       }
     }
 
@@ -231,9 +231,7 @@ export async function runWithMoE(
 
     const planResults = await executor.executePlan(currentPlan, { skipIds, carriedResults });
     ensureNotAborted();
-    const cycleUsage = (
-      executor as { getUsageByTag?: () => Record<string, TagUsage> }
-    ).getUsageByTag?.();
+    const cycleUsage = executor.getUsageByTag?.();
     if (cycleUsage) {
       for (const [tag, usage] of Object.entries(cycleUsage)) {
         const agg = usageByTag[tag] ?? {
@@ -265,7 +263,7 @@ export async function runWithMoE(
 
     onPhase?.("thinking");
     ensureNotAborted();
-    let verifyResult: Awaited<ReturnType<typeof orchestrator.verifyAndMerge>>;
+    let verifyResult: OrchestratorResult;
     try {
       verifyResult = await orchestrator.verifyAndMerge({
         plan: currentPlan,

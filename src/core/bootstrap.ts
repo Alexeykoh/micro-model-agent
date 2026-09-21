@@ -1,5 +1,6 @@
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
+import type { LogLevel } from "../logger/app-logger";
 import { buildActiveProvider } from "../modules/providers/factory";
 import { BUILTIN_PROVIDERS } from "../modules/providers/presets";
 import type { LLMProvider } from "../llm/provider";
@@ -26,7 +27,7 @@ import { IndexerModule } from "../modules/indexer/index";
 import { MCPModule } from "../modules/mcp/index";
 import { MemoryModule } from "../modules/memory/module";
 import { MemoryStore } from "../modules/memory/store";
-import { t, setLocale } from "../i18n/index";
+import { t, setLocale, setMissingKeyReporter } from "../i18n/index";
 import { Agent } from "./agent";
 import { ContextLogger } from "./agent/context-log";
 import { homedir } from "os";
@@ -38,6 +39,7 @@ import type { PromptBlock } from "./types";
 import type { AppConfig } from "../config/types";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
+import { errMsg } from "../utils";
 import { dryRunOverflow, overflowHint } from "./prompt-overflow";
 import { getLoadedContextLength, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
@@ -116,6 +118,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+const VALID_LOG_LEVELS: readonly string[] = ["debug", "info", "warn", "error"];
+
+/** Нормализует строку из конфига в LogLevel (без `as any`); неизвестное → info. */
+function normalizeLogLevel(value: string | undefined): LogLevel {
+  return value && VALID_LOG_LEVELS.includes(value) ? (value as LogLevel) : "info";
+}
+
 export function buildSystemInfo(
   config: AppConfig,
   baseDir: string,
@@ -130,6 +139,7 @@ export function buildSystemInfo(
     `ARTIFACTS: when the user asks for a document or file (specification, design, README, plan file, config, script, report), CREATE it as a real file in the workspace — a plan described only in chat or held in your reasoning is NOT the artifact. Use the format and stack the user requested, and do not add libraries/tools that were not agreed or listed; if the request is silent on a needed choice, ask or search before adding dependencies.`,
     `SCOPE DISCIPLINE: do ONLY what the user explicitly asked — no extra features, files, refactors, "improvements", or fixes beyond the request. Read-only requests ("расскажи", "покажи", "объясни", "check") mean READ-ONLY: inspect and answer, never create/modify/delete anything. If the task is ambiguous (what to create, where, which variant) or the request implies action on something you could not find — STOP and ask the user a short clarifying question in plain text instead of guessing.`,
     `INPUT PRIORITY: the current user message outranks stored memory/preferences/facts. Never override, reinterpret, or "correct" an explicit value the user states now (city, path, name, language, choice) because a stored preference disagrees — follow the user's current message. If they truly conflict or look like a typo, ask the user instead of assuming.`,
+    `PROTECTED PATHS: never write/edit/delete/move VCS internals (.git/, .hg/, .svn/) or secret/env files (.env*, *.key, *.pem, *.p12, *.pfx, *.crt, *.secret, *.token, .npmrc, .netrc, .git-credentials, .gitconfig) without explicit user confirmation. If a file tool reports a protected path, STOP and ask the user in plain text whether to proceed, then wait — do not retry around it or work around it with bash.`,
     `NOT FOUND ≠ MISSING PROJECT: a "not found" tool result means the PATH was wrong (typo, different location), not that the project does not exist. Before creating or scaffolding ANY project/files: first run list_dir on the working directory to see what is already there; if a user-named path is not found, list its parent directory to locate the real path. NEVER create a new project when the user asked about an existing one — inspect first, create only after confirming the workspace is empty AND the user asked for creation.`,
   ];
 
@@ -268,6 +278,7 @@ export async function bootstrap(
   applyReasoningCliOverride(config, reasoningLevel);
 
   // Update global audit notifier with config
+  let auditNotifyError: string | undefined;
   try {
     const { globalAuditNotifier } = await import("../modules/security/audit-notifier");
     if (config.security?.auditNotifier) {
@@ -275,12 +286,18 @@ export async function bootstrap(
         config.security.auditNotifier as Partial<typeof config.security.auditNotifier>,
       );
     }
-  } catch {
-    // Ignore if audit notifier is not available
+  } catch (err) {
+    // Logger ещё не создан — запомним и залогируем после его инициализации.
+    auditNotifyError = errMsg(err);
   }
 
-  const logger = new Logger(config.logLevel as any);
+  const logger = new Logger(normalizeLogLevel(config.logLevel));
   logger.setLogDir(join(dir, "logs"));
+  // Диагностика опечаток в ключах i18n — видна только на debug-уровне.
+  setMissingKeyReporter((key) => logger.debug(`Missing i18n key: ${key}`));
+  if (auditNotifyError) {
+    logger.debug(`Audit notifier config skipped: ${auditNotifyError}`);
+  }
   logger.debug("MMA bootstrap", {
     version: config.version,
     model: config.model,
@@ -506,7 +523,8 @@ export async function bootstrap(
           contextWindow: config.contextWindow,
           redact: config.contextLog?.redact !== false,
         });
-      } catch {
+      } catch (err) {
+        logger.warn(t("error.context_log_init", { error: errMsg(err) }));
         contextLogger = undefined;
       }
     }

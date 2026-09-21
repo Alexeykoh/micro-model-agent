@@ -121,6 +121,10 @@ export class ProviderManager {
   /** Rebuild the active provider with a new model. */
   setModel(model: string): LLMProvider {
     this.model = model;
+    // Кэш ключуется `${name}|${model}`; старые записи под прежнюю модель
+    // бесполезны и копятся. Сбрасываем — провайдер пересоберётся под новый
+    // model при следующем обращении к `active`.
+    this.resetCache();
     return this.active;
   }
 

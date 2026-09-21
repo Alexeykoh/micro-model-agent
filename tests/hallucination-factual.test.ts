@@ -17,6 +17,7 @@ describe("FactualCheck", () => {
     writeFileSync(join(dir, "src", "utils", "helper.ts"), "export const y = 2");
     writeFileSync(join(dir, "src", "data", "bikes.json"), "{}");
     writeFileSync(join(dir, "SECURITY.md"), "# Security");
+    writeFileSync(join(dir, "report 1.txt"), "ok");
   });
 
   afterAll(() => {
@@ -53,6 +54,13 @@ describe("FactualCheck", () => {
   it("does not flag technology names like Node.js", () => {
     const check = new FactualCheck(dir);
     const result = check.validate("Used Node.js runtime for the build");
+    expect(result.status).toBe("pass");
+  });
+
+  it("does not warn when a filename contains a space", () => {
+    // «report 1.txt» извлекается токеном «1.txt» — файл существует.
+    const check = new FactualCheck(dir);
+    const result = check.validate("Created report 1.txt successfully");
     expect(result.status).toBe("pass");
   });
 

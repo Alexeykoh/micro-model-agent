@@ -149,6 +149,18 @@ describe("providers module", () => {
       expect(m.activeModel).toBe("model-b");
     });
 
+    it("setModel clears the build cache so old model providers do not accumulate", () => {
+      const m = new ProviderManager(
+        { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+        opts,
+      );
+      const a1 = m.setModel("model-a");
+      expect(m.setModel("model-b")).not.toBe(a1);
+      // Возврат к прежней модели пересобирает провайдер (кэш сброшен).
+      const a2 = m.setModel("model-a");
+      expect(a2).not.toBe(a1);
+    });
+
     it("throws on unknown provider switch", () => {
       const m = new ProviderManager(
         { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },

@@ -178,6 +178,26 @@ describe("MoEExecutor scope_request handling", () => {
     expect(calls[1].allowed_files).toContain("src/extra.ts");
   });
 
+  it("does not mutate the original plan's subtask when scope is expanded", async () => {
+    const executor = makeExecutor(
+      handlerScript([
+        SCOPE_FAIL,
+        { success: true, output: "Sub-agent completed:\ndone with extra.ts" },
+      ]),
+      async () => ({ action: "approve", write: ["src/extra.ts"], read: [] }),
+    );
+    const plan = {
+      title: "t",
+      subtasks: [sub("a")],
+      shared_context: { rules: [], refs: [] },
+    };
+    await executor.executePlan(plan);
+
+    // Расширение scope применяется к копии, оригинальный план для
+    // verifier/re-plan должен остаться неизменным.
+    expect(plan.subtasks[0].allowed_files).toEqual([]);
+  });
+
   it("marks the subtask failed when the router rejects", async () => {
     const executor = makeExecutor(handlerScript([SCOPE_FAIL]), async () => ({
       action: "reject",

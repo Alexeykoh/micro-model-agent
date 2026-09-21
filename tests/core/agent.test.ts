@@ -288,6 +288,44 @@ describe("Agent", () => {
     expect(result.text).toBe("Done! check-env works");
   });
 
+  it("surfaces invalid tool_call arguments and warns instead of silently using {}", async () => {
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(
+          (async function* () {
+            yield {
+              type: "tool_call" as const,
+              toolCall: { id: "t1", name: "bash", arguments: "not-json{{" },
+            };
+            yield { type: "done" as const, finishReason: "tool_calls" as const };
+          })(),
+        )
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "recovered" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const deps = createMockDeps({ llmProvider: mockProvider, exitOnComplete: true });
+    const agent = new Agent(deps as any);
+    await agent.run("do it");
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid JSON in tool_call arguments"),
+    );
+    const addMessage = deps.contextManager.addMessage as any;
+    const nudge = addMessage.mock.calls.find(
+      (c: any[]) =>
+        typeof c[0]?.content === "string" && c[0].content.includes("invalid JSON arguments"),
+    );
+    expect(nudge).toBeDefined();
+  });
+
   it("exitOnComplete does not bypass the audit gate on a retry-flagged answer", async () => {
     const bashCall = {
       type: "tool_call" as const,
@@ -430,6 +468,46 @@ describe("Agent", () => {
       ),
     ).toBe(true);
     expect(result.text).toBe("All done now");
+  });
+
+  it("does not hard-stop a legitimate repeated non-status tool under exitOnComplete", async () => {
+    // Пользователь может явно попросить выполнить одну команду несколько раз;
+    // повторный bash не должен обрывать прогон пустым ответом (регрессия:
+    // запрос «run echo tick 4 times» завершался без вывода).
+    const bashCall = {
+      type: "tool_call" as const,
+      toolCall: { id: "t1", name: "bash", arguments: '{"command":"echo tick"}' },
+    };
+    const gen = () =>
+      (async function* () {
+        yield bashCall;
+        yield { type: "done" as const, finishReason: "tool_calls" as const };
+      })();
+    const mockProvider = {
+      model: "test-model",
+      contextWindow: 4096,
+      chat: vi
+        .fn()
+        .mockReturnValueOnce(gen())
+        .mockReturnValueOnce(gen())
+        .mockReturnValueOnce(gen())
+        .mockReturnValueOnce(
+          (async function* () {
+            yield { type: "text" as const, content: "ran 3 times" };
+            yield { type: "done" as const, finishReason: "stop" as const };
+          })(),
+        ),
+      countTokens: vi.fn().mockReturnValue(10),
+    };
+    const deps = createMockDeps({
+      llmProvider: mockProvider,
+      exitOnComplete: true,
+      config: { ...createMockDeps().config, maxToolIterations: 20 },
+    });
+    const agent = new Agent(deps as any);
+    const result = await agent.run("run echo tick 3 times");
+    expect(mockProvider.chat).toHaveBeenCalledTimes(4);
+    expect(result.text).toBe("ran 3 times");
   });
 
   it("nudges the model after a repeated tool call even without exitOnComplete", async () => {

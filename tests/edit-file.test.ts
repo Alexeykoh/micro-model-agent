@@ -53,4 +53,27 @@ describe("edit_file", () => {
     const result = await editFileTool.handler(ctx, { path: "../outside.txt", old: "x", new: "y" });
     expect(result.success).toBe(false);
   });
+
+  it("treats regex replacement tokens in `new` literally (no $& expansion)", async () => {
+    writeFileSync(join(tmpDir, "tpl.txt"), "price is 100");
+    const result = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "tpl.txt"),
+      old: "price is 100",
+      new: "cost is $& $1 $' literally",
+    });
+    expect(result.success).toBe(true);
+    expect(readFileSync(join(tmpDir, "tpl.txt"), "utf-8")).toBe("cost is $& $1 $' literally");
+  });
+
+  it("rejects non-string old/new instead of coercing to 'null'/'undefined'", async () => {
+    const result = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "test.txt"),
+      old: null,
+      new: { nested: true },
+    });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("old");
+    // Файл не должен быть изменён.
+    expect(readFileSync(join(tmpDir, "test.txt"), "utf-8")).toBe("hello world");
+  });
 });

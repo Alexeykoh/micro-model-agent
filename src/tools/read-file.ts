@@ -6,6 +6,7 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
+import { errMsg } from "../utils";
 
 /**
  * Default lines per read_file call. Deliberately much larger than
@@ -111,12 +112,11 @@ export const readFileTool: ToolDefinition = {
     const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
 
     if (!scopeCheck.allowed) {
-      const pathStr = path as string;
       logSecurityBlock(
         ctx.sessionId || undefined,
         "file_read",
         scopeCheck.reason || "Path not allowed",
-        pathStr,
+        path,
       );
       return {
         success: false,
@@ -137,22 +137,31 @@ export const readFileTool: ToolDefinition = {
           : t("file.notfound", { path });
       return { success: false, output };
     }
-    const offset = (args.offset as number) || 1;
-    const limit = (args.limit as number) || DEFAULT_LIMIT;
+    const offset = typeof args.offset === "number" ? args.offset : 1;
+    const limit = typeof args.limit === "number" ? args.limit : DEFAULT_LIMIT;
 
     let lines: string[];
     let total: number;
     let selected: string;
-    if (statSync(resolved).size > LARGE_FILE_BYTES) {
-      const slice = readLineSlice(resolved, offset, limit);
-      total = slice.total;
-      selected = slice.selected;
-    } else {
-      const content = readFileSync(resolved, "utf-8");
-      lines = content.split("\n");
-      total = lines.length;
-      const end = Math.min(offset - 1 + limit, total);
-      selected = lines.slice(offset - 1, end).join("\n");
+    try {
+      if (statSync(resolved).size > LARGE_FILE_BYTES) {
+        const slice = readLineSlice(resolved, offset, limit);
+        total = slice.total;
+        selected = slice.selected;
+      } else {
+        const content = readFileSync(resolved, "utf-8");
+        lines = content.split("\n");
+        total = lines.length;
+        const end = Math.min(offset - 1 + limit, total);
+        selected = lines.slice(offset - 1, end).join("\n");
+      }
+    } catch (err) {
+      // Файл мог исчезнуть между existsSync и чтением (TOCTOU) или оказаться
+      // директорией — возвращаем понятную ошибку, а не голый throw.
+      return {
+        success: false,
+        output: t("file.read_failed", { path, error: errMsg(err) }),
+      };
     }
     const end = Math.min(offset - 1 + limit, total);
     const ext = extname(resolved) || "(no extension)";

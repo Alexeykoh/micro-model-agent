@@ -5,7 +5,7 @@ import { FileLogWriter, type FileLogLevel } from "./file-log";
 import { defaultOutputBus, type OutputSink } from "../output";
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
-type LogLevel = keyof typeof LEVELS;
+export type LogLevel = keyof typeof LEVELS;
 
 export class Logger {
   private level: LogLevel;

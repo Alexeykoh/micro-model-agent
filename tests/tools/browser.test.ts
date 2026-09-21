@@ -1,8 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import {
   createBrowserTool,
   formatScreenshotResult,
   formatScreenshotForTextModel,
+  modelSupportsVision,
+  setBrowserSessionFactoryForTest,
 } from "../../src/tools/browser";
 
 describe("createBrowserTool", () => {
@@ -49,5 +54,50 @@ describe("formatScreenshotResult", () => {
     expect(result).not.toContain("data:image");
     expect(result).toContain("Screenshot captured");
     expect(result).toContain(snapshot);
+  });
+});
+
+describe("modelSupportsVision", () => {
+  it("matches vision families and rejects text-only models", () => {
+    expect(modelSupportsVision("qwen/qwen2.5-vl-7b")).toBe(true);
+    expect(modelSupportsVision("gpt-4o")).toBe(true);
+    expect(modelSupportsVision("gemini-2.5-pro")).toBe(true);
+    expect(modelSupportsVision("llava:13b")).toBe(true);
+    expect(modelSupportsVision("qwen/qwen3.5-9b")).toBe(false);
+  });
+});
+
+describe("browser action serialization (MoE parallel waves)", () => {
+  it("never runs two actions concurrently", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "mma-browser-serial-"));
+    let active = 0;
+    let maxActive = 0;
+    const fakeSession = {
+      execute: async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 10));
+        active--;
+        return { success: true, output: "ok" };
+      },
+      close: async () => {},
+    };
+    setBrowserSessionFactoryForTest(() => fakeSession as any);
+    try {
+      const tool = createBrowserTool();
+      const ctx = {
+        config: { model: "qwen/qwen3.5-9b", browser: {} },
+        baseDir: tmpDir,
+      } as any;
+      await Promise.all([
+        tool.handler(ctx, { action: "snapshot" }),
+        tool.handler(ctx, { action: "snapshot" }),
+        tool.handler(ctx, { action: "snapshot" }),
+      ]);
+      expect(maxActive).toBe(1);
+    } finally {
+      setBrowserSessionFactoryForTest(undefined);
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

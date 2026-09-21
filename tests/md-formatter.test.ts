@@ -79,6 +79,12 @@ describe("formatMarkdown", () => {
     const result = formatMarkdown("Use `**x**` here");
     expect(result).toContain("**x**");
   });
+
+  it("renders ***bold italic*** without a stray asterisk", () => {
+    const result = formatMarkdown("***bold italic***");
+    expect(result).toContain("bold italic");
+    expect(result).not.toContain("*");
+  });
 });
 
 function makeStream(): { chunks: string[]; stream: FormattingStream } {

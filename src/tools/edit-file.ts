@@ -9,6 +9,8 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { generateDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
+import { errMsg } from "../utils";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
@@ -61,9 +63,33 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    const content = readFileSync(resolved, "utf-8");
-    const oldStr = String(args.old);
-    const newStr = String(args.new);
+    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
+    const protectedBlock = protectedPathBlock(ctx, resolved, path);
+    if (protectedBlock) return protectedBlock;
+
+    // Строковые аргументы обязательны: String(null) дало бы "null" и молча
+    // испортило файл. Явно отклоняем не-строки с понятной ошибкой.
+    if (typeof args.old !== "string" || typeof args.new !== "string") {
+      return {
+        success: false,
+        output: t("file.edit_args_invalid", {
+          oldType: typeof args.old,
+          newType: typeof args.new,
+        }),
+      };
+    }
+    const oldStr = args.old;
+    const newStr = args.new;
+
+    let content: string;
+    try {
+      content = readFileSync(resolved, "utf-8");
+    } catch (err) {
+      return {
+        success: false,
+        output: t("file.read_failed", { path, error: errMsg(err) }),
+      };
+    }
     if (!content.includes(oldStr)) {
       return {
         success: false,
@@ -108,7 +134,7 @@ export const editFileTool: ToolDefinition = {
     const diff = generateDiff(content, updated);
 
     // Increment file operations counter
-    (ctx as any).fileOperationsCount = currentCount + 1;
+    ctx.fileOperationsCount = currentCount + 1;
 
     // Log successful file edit
     logFileWrite(ctx.sessionId, path, true, "File edited");

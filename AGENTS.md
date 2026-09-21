@@ -8,6 +8,16 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
 
+## Engineering Principles
+
+**Правило (обязательно на каждом этапе):** при **анализе**, **проектировании**, **разработке**, **рефакторинге** и **тестировании** решения всегда учитывай три измерения интеграции:
+
+1. **Реальный пользователь** — как человек (REPL/CLI/`--json`) воспримет поведение: UX, понятность сообщений (`i18n`), предсказуемость, обратимость, отсутствие сюрпризов, читаемый вывод и ошибки.
+2. **ИИ-модель** — как маленькая модель (Qwen3.5-9B, 32K-64K) увидит это в контексте: формулировки тулов/промптов, объём и структура tool-output, устранимость ошибок, отсутствие ловушек для слабого reasoning, влияние на бюджет контекста.
+3. **Смежные модули и системы** — как изменение сказывается на соседних модулях, провайдерах, сессиях, плагинах, security-модуле, внешних API и контрактах (типы, события, конфиг, `session.jsonl`); не ломает ли оно существующие интеграции и не требует ли синхронного обновления.
+
+Ни одно изменение не считается завершённым, пока эти три аспекта не проверены явно.
+
 ## Tech Stack
 
 - **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
@@ -54,6 +64,7 @@ All detailed documentation lives in `docs/agents/`:
 | Document                                         | Description                                                                                                             |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | [architecture.md](./docs/agents/architecture.md) | Architecture, Security Module, LLM Provider Contract, Key Design Rules, Project Structure                               |
+| [code-style.md](./docs/agents/code-style.md)    | Code Style Guide: formatting, typing (no `as any`), async/error rules, naming, i18n, gradual tsconfig strictness        |
 | [tools.md](./docs/agents/tools.md)               | Question Tool, Browser Tool, Image Handling, Tool Set Narrowing, Process Management                                     |
 | [modules.md](./docs/agents/modules.md)           | Session Management, Project Map, UI Rendering, Plugins, Context Budget, Cost Tracking, Auto-Update                      |
 | [execution.md](./docs/agents/execution.md)       | Execution Guarantees, Agent Loop States, Orchestrator, RLM-Inspired Features, Hallucination Detection, Migration Safety |
@@ -207,7 +218,16 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Сводка аргументов тулов без тел** (`summarizeToolArgs` сворачивает длинные значения в `…(N chars)`).
 - **Артефакт-правило в промпте**: запрошенный документ/артефакт создаётся файлом; неоговорённые библиотеки не добавляются.
 
-### Current Version: 1.3.0
+### Protected Paths (1.4.0)
+
+- **Always-onguard** (`src/modules/security/protected-paths.ts`): `write_file`/`edit_file`/`delete_file`/`move_file`/`create_dir`
+  отказывают на `.git/`, `.hg/`, `.svn/`, `.env*`, `*.key`/`*.pem`/`*.p12`/`*.pfx`/`*.crt`/`*.secret`/`*.token`,
+  `.npmrc`/`.netrc`/`.git-credentials`/`.gitconfig` — **независимо** от `security.paths.enabled`. Это soft-guard:
+  возвращает директиву «спроси пользователя», не жёсткий блок.
+- **Правило `PROTECTED PATHS`** в системном промпте (`buildSystemInfo`): модель не трогает такие пути без явного
+  подтверждения и не обходит запрет через `bash`. i18n: `file.protected_path_ask` (en+ru).
+
+### Current Version: 1.4.0
 
 ### Changelog
 

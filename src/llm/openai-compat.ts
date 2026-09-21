@@ -770,9 +770,23 @@ export class OpenAICompatProvider implements LLMProvider {
         throw new Error(`HTTP ${response.status} from ${url}`);
       }
 
-      const data = (await response.json()) as any;
-      const models = (data.data || data || [])
-        .map((m: any) => m.id || m.name || m.model || "")
+      const data: unknown = await response.json();
+      const rawList: unknown[] = Array.isArray(data)
+        ? data
+        : data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).data)
+          ? ((data as Record<string, unknown>).data as unknown[])
+          : [];
+      const models = rawList
+        .map((m) => {
+          if (m && typeof m === "object") {
+            const obj = m as Record<string, unknown>;
+            for (const key of ["id", "name", "model"]) {
+              const v = obj[key];
+              if (typeof v === "string" && v) return v;
+            }
+          }
+          return "";
+        })
         .filter(Boolean);
       return models;
     } catch (err) {

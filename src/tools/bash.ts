@@ -37,6 +37,9 @@ export function setBashGraceMs(ms: number): void {
  */
 const FAILING_FIRST_WORDS = new Map<string, number>();
 const HARD_BLOCK_THRESHOLD = 3;
+// Module-level Map живёт весь процесс: при смене сессии (REPL /new, /resume)
+// сбрасываем счётчики, чтобы старые падения не влияли на новую задачу.
+let lastFailureSessionId: string | undefined;
 
 /** Test hook: clear the consecutive-failure tracking state. */
 export function resetBashFailureTracking(): void {
@@ -430,6 +433,10 @@ function decorateCommandOutput(opts: {
   // what UNIX_TO_WIN_HINTS knows about. Keying on the translated word left
   // `cat` invisible to the hint/block (observed: model ran cat 4+ times).
   if (platform() === "win32") {
+    if (ctx.sessionId !== lastFailureSessionId) {
+      lastFailureSessionId = ctx.sessionId;
+      FAILING_FIRST_WORDS.clear();
+    }
     const originalFirstWord = originalCommand.trim().split(/\s+/)[0]?.split(/[\\/]/).pop();
     if (originalFirstWord && originalFirstWord in UNIX_TO_WIN_HINTS) {
       if (code === 0) {

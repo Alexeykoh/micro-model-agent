@@ -153,7 +153,7 @@ async function executeSubtask(
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    stuckDetector.recordIteration(1);
+    stuckDetector.recordIteration(attempt);
     try {
       const allowedFiles = subtask.allowed_files || [];
       const readOnlyFiles = subtask.read_only_files || [];
@@ -262,7 +262,7 @@ async function executeSubtask(
         deps.logger.debug(
           `Retrying subtask "${subtask.id}" (attempt ${attempt}/${maxAttempts}) after ${delay}ms: transient error`,
         );
-        await sleep(delay);
+        await sleep(delay, deps.signal);
         continue;
       }
 
@@ -293,7 +293,7 @@ async function executeSubtask(
         deps.logger.debug(
           `Retrying subtask "${subtask.id}" (attempt ${attempt}/${maxAttempts}) after ${delay}ms: ${lastError}`,
         );
-        await sleep(delay);
+        await sleep(delay, deps.signal);
         continue;
       }
 
@@ -505,6 +505,10 @@ export class MoEExecutor {
     sharedContext?: { rules: string[]; refs: string[] },
   ): Promise<SubtaskResult> {
     let current = failed;
+    // Расширение scope применяем к ЛОКАЛЬНОЙ копии: оригинальный объект плана
+    // остаётся неизменным для verifier/re-plan (иначе верификация видит scope,
+    // которого не было в утверждённом плане).
+    let scoped = subtask;
     for (let cycle = 0; cycle < MAX_SCOPE_EXPANSION_CYCLES; cycle++) {
       const req = current.scopeRequest;
       if (!req) return current;
@@ -520,14 +524,17 @@ export class MoEExecutor {
         };
       }
 
-      subtask.allowed_files = uniq([...(subtask.allowed_files || []), ...decision.write]);
-      subtask.read_only_files = uniq([...(subtask.read_only_files || []), ...decision.read]);
+      scoped = {
+        ...scoped,
+        allowed_files: uniq([...(scoped.allowed_files || []), ...decision.write]),
+        read_only_files: uniq([...(scoped.read_only_files || []), ...decision.read]),
+      };
       this.deps.logger.info?.(
         `MoE: approved scope expansion for "${subtask.id}": +write [${decision.write.join(", ")}] +read [${decision.read.join(", ")}]`,
       );
 
       const retry = await executeSubtask(
-        subtask,
+        scoped,
         this.deps,
         depResults,
         sharedContext,

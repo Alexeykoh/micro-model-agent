@@ -2,31 +2,78 @@ import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 import { BrowserSession } from "../modules/browser/session";
 import { DEFAULT_BROWSER_CONFIG } from "../modules/browser/types";
 import { t } from "../i18n/index";
+import { defaultOutputBus } from "../output";
+import { errMsg } from "../utils";
 import { join } from "path";
+import { mkdirSync } from "fs";
 
 let session: BrowserSession | null = null;
+
+/**
+ * Тестовый seam: подмена фабрики сессии без `vi.mock` (в Bun он глобален на
+ * процесс). Используется только в тестах сериализации действий.
+ */
+let sessionFactory: ((ctx: ToolContext) => BrowserSession) | undefined;
+
+/** @internal */
+export function setBrowserSessionFactoryForTest(
+  factory?: (ctx: ToolContext) => BrowserSession,
+): void {
+  sessionFactory = factory;
+  session = null;
+}
+
+/**
+ * Сериализация действий. В MoE параллельные волны делят module-level сессию:
+ * одновременный `execute()` перетирает состояние страницы, а `close()` одного
+ * субагента убивает сессию остальных. Promise-chain гарантирует, что в браузере
+ * одновременно выполняется ровно одно действие.
+ */
+let actionChain: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(fn: () => Promise<T>): Promise<T> {
+  const run = actionChain.then(fn, fn);
+  actionChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 function getSession(ctx: ToolContext): BrowserSession {
   if (!session) {
     const cookieDir = join(ctx.baseDir, ".mma", "browser");
-    session = new BrowserSession({
-      ...DEFAULT_BROWSER_CONFIG,
-      headless: ctx.config.browser?.headless ?? true,
-      maxElements: ctx.config.browser?.maxElements ?? 30,
-      maxContentChars: ctx.config.browser?.maxContentChars ?? 2500,
-      maxConsoleEntries: ctx.config.browser?.maxConsoleEntries ?? 40,
-      maxConsoleLineChars: ctx.config.browser?.maxConsoleLineChars ?? 400,
-      navigationTimeout: ctx.config.browser?.navigationTimeout ?? 15000,
-      viewportWidth: ctx.config.browser?.viewportWidth ?? 1280,
-      viewportHeight: ctx.config.browser?.viewportHeight ?? 720,
-      cookieDir,
-    });
+    mkdirSync(cookieDir, { recursive: true });
+    session = sessionFactory
+      ? sessionFactory(ctx)
+      : new BrowserSession({
+          ...DEFAULT_BROWSER_CONFIG,
+          headless: ctx.config.browser?.headless ?? true,
+          maxElements: ctx.config.browser?.maxElements ?? 30,
+          maxContentChars: ctx.config.browser?.maxContentChars ?? 2500,
+          maxConsoleEntries: ctx.config.browser?.maxConsoleEntries ?? 40,
+          maxConsoleLineChars: ctx.config.browser?.maxConsoleLineChars ?? 400,
+          navigationTimeout: ctx.config.browser?.navigationTimeout ?? 15000,
+          viewportWidth: ctx.config.browser?.viewportWidth ?? 1280,
+          viewportHeight: ctx.config.browser?.viewportHeight ?? 720,
+          cookieDir,
+        });
   }
   return session;
 }
 
 export function formatScreenshotForTextModel(snapshot: string): string {
   return `${t("tool.screenshot_unavailable")}\n\n${snapshot}`;
+}
+
+/**
+ * Эвристика vision-поддержки по имени модели (полноценные capabilities у
+ * провайдера есть не всегда). Покрывает распространённые vision-семейства;
+ * при появлении `model.info`-capabilities предпочтительнее использовать их.
+ */
+export function modelSupportsVision(model: string): boolean {
+  const m = model.toLowerCase();
+  return /vision|\bvl\b|qwen.*vl|gpt-4|claude|gemini|llava|pixtral/.test(m);
 }
 
 export function formatScreenshotResult(
@@ -104,12 +151,9 @@ export function createBrowserTool(): ToolDefinition {
       }
 
       const s = getSession(ctx);
-      const result = await s.execute(action, args);
+      const result = await serialize(() => s.execute(action, args));
 
-      const supportsVision =
-        ctx.config.model.includes("vision") ||
-        ctx.config.model.includes("gpt-4o") ||
-        ctx.config.model.includes("claude");
+      const supportsVision = modelSupportsVision(ctx.config.model);
 
       if (result.screenshot) {
         return {
@@ -124,8 +168,13 @@ export function createBrowserTool(): ToolDefinition {
 }
 
 export function closeBrowserSession(): void {
-  if (session) {
-    session.close().catch(() => {});
-    session = null;
-  }
+  const s = session;
+  session = null;
+  if (!s) return;
+  // Дожидаемся текущего действия, чтобы не закрыть браузер во время навигации.
+  actionChain = actionChain.then(() =>
+    s.close().catch((err) => {
+      defaultOutputBus.log("warn", "browser", `Failed to close browser session: ${errMsg(err)}`);
+    }),
+  );
 }

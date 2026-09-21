@@ -1,6 +1,7 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { t } from "../i18n/index";
+import { defaultOutputBus } from "../output";
 import type { AppConfig } from "../config/types";
 
 export class BackupManager {
@@ -20,7 +21,16 @@ export class BackupManager {
 
   backupAll(): void {
     const bakDir = this.configDir + ".bak";
-    if (existsSync(bakDir)) return;
+    if (existsSync(bakDir)) {
+      // Повторная миграция не перезаписывает бэкап — фиксируем в логе, чтобы
+      // «нет бэкапа за этот запуск» не выглядело как потеря данных.
+      defaultOutputBus.log(
+        "debug",
+        "migration",
+        `Backup already exists at ${bakDir}; keeping the previous state (not overwritten).`,
+      );
+      return;
+    }
 
     if (existsSync(this.configDir)) {
       cpSync(this.configDir, bakDir, { recursive: true });

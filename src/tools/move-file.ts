@@ -7,6 +7,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
@@ -84,6 +85,12 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
+    // Protected paths on either side (.git/, .env, keys/secrets) — ask user.
+    const fromProtected = protectedPathBlock(ctx, fromResolved, fromPath);
+    if (fromProtected) return fromProtected;
+    const toProtected = protectedPathBlock(ctx, toResolved, toPath);
+    if (toProtected) return toProtected;
+
     if (!existsSync(fromResolved)) {
       return {
         success: false,
@@ -98,7 +105,7 @@ export const moveFileTool: ToolDefinition = {
     const diff = generateMoveDiff(fromPath, toPath);
 
     // Increment file operations counter
-    (ctx as any).fileOperationsCount = currentCount + 1;
+    ctx.fileOperationsCount = currentCount + 1;
 
     // Log file move
     logFileWrite(ctx.sessionId, `${fromPath} -> ${toPath}`, true, "File moved");

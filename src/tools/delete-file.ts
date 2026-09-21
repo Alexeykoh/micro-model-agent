@@ -7,6 +7,7 @@ import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
@@ -57,6 +58,10 @@ export const deleteFileTool: ToolDefinition = {
       };
     }
 
+    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
+    const protectedBlock = protectedPathBlock(ctx, resolved, path, "file_delete");
+    if (protectedBlock) return protectedBlock;
+
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };
     }
@@ -68,7 +73,7 @@ export const deleteFileTool: ToolDefinition = {
     const diff = generateDeleteDiff(content);
 
     // Increment file operations counter
-    (ctx as any).fileOperationsCount = currentCount + 1;
+    ctx.fileOperationsCount = currentCount + 1;
 
     // Log successful file deletion
     logFileDelete(ctx.sessionId, path, true);

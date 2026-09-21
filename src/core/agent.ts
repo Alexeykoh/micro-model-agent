@@ -15,6 +15,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
+import { errMsg } from "../utils";
 import { join } from "path";
 import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
@@ -774,6 +775,7 @@ export class Agent {
       const toolCalls: ToolCall[] = [];
       let sawToolCall = false;
       let emittedReasoning = false;
+      let malformedToolArgs = 0;
 
       this.emitPhase(state.iteration, "thinking", onPhase);
       const llmStart = Date.now();
@@ -842,7 +844,17 @@ export class Agent {
             try {
               parsedArgs = JSON.parse(chunk.toolCall.arguments);
             } catch {
+              // Битый JSON аргументов раньше молча превращался в `{}` —
+              // модель звала тул с пустыми параметрами и не понимала причины.
+              // Логируем и сообщаем модели, чтобы она повторила вызов.
               parsedArgs = {};
+              malformedToolArgs++;
+              logger.warn(
+                `Invalid JSON in tool_call arguments for "${chunk.toolCall.name}" (${chunk.toolCall.arguments.length} chars) — passing {}`,
+              );
+              slog.logError(
+                `tool_args_parse_error: tool="${chunk.toolCall.name}" tool_call_id="${chunk.toolCall.id}" chars=${chunk.toolCall.arguments.length}`,
+              );
             }
             toolCalls.push({
               id: chunk.toolCall.id,
@@ -939,6 +951,15 @@ export class Agent {
         break;
       }
 
+      // Сообщаем модели, что её аргументы тула были невалидным JSON: иначе она
+      // видит лишь «пустой» вызов и не знает, что нужно повторить корректно.
+      if (malformedToolArgs > 0) {
+        contextManager.addMessage({
+          role: "user",
+          content: `<system-summary>${malformedToolArgs} tool call(s) in your last response had invalid JSON arguments and were executed with empty parameters. Re-issue them with valid JSON.</system-summary>`,
+        });
+      }
+
       let llmResponse: LLMResponse | null = null;
       if (sawToolCall) {
         llmResponse = { type: "tool_call", calls: toolCalls };
@@ -987,14 +1008,19 @@ export class Agent {
             content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
           });
           state.repeatedToolCount++;
+          // Жёсткий стоп — только для status-тулов, которые не могут
+          // прогрессировать от повтора. Мутирующие/побочные тулы (например,
+          // bash) остаются nudge-only: пользователь мог явно попросить
+          // выполнить команду несколько раз, и обрыв дал бы пустой ответ.
+          const allStatusTools = toolCalls.every((tc) => LOOP_PRONE_STATUS_TOOLS.has(tc.name));
           if (this.deps.exitOnComplete) {
-            if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS) {
-              logger.debug("Exit-on-complete: repeated identical tool call, stopping");
+            if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS && allStatusTools) {
+              logger.debug("Exit-on-complete: repeated identical status tool call, stopping");
               break;
             }
           } else if (
             state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS_INTERACTIVE &&
-            toolCalls.every((tc) => LOOP_PRONE_STATUS_TOOLS.has(tc.name))
+            allStatusTools
           ) {
             logger.warn(
               `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
@@ -1305,7 +1331,8 @@ export class Agent {
       manager.setModel(this.deps.config.model);
       manager.switch(name);
       return manager.active;
-    } catch {
+    } catch (err) {
+      this.deps.logger.warn(t("error.provider_build", { name, error: errMsg(err) }));
       return undefined;
     }
   }

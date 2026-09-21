@@ -490,6 +490,8 @@ export class Repl implements ReplContext {
     }
 
     let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
+    // Запас на очистку (сессия, MCP, дочерние процессы) после второго Ctrl+C.
+    const FORCE_EXIT_MS = 5000;
 
     // Idempotent registration: a second Repl in the same process must not add
     // another global SIGINT handler. Leaked handlers from REPL instances
@@ -504,7 +506,10 @@ export class Repl implements ReplContext {
         this.agent.shutdown();
         this.agentRunning = false;
         if (forceExitTimer) clearTimeout(forceExitTimer);
-        forceExitTimer = setTimeout(() => process.exit(1), 2000).unref();
+        forceExitTimer = setTimeout(() => {
+          this.output.writeLine(pc.yellow(t("repl.force_exit")));
+          process.exit(1);
+        }, FORCE_EXIT_MS).unref();
       } else {
         process.exit(0);
       }

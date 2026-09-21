@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DEFAULTS } from "../../../src/config/defaults";
 import type { MoEPlan } from "../../../src/modules/execution/types";
 import { MoEExecutor } from "../../../src/modules/execution/moe-executor";
+import { buildInputSection } from "../../../src/modules/execution/input-from";
 import { validatePlan, applyAutoFixes } from "../../../src/modules/execution/plan-validator";
 import { ToolRegistry } from "../../../src/tools/registry";
 import type { ToolDefinition } from "../../../src/tools/types";
@@ -136,6 +137,25 @@ describe("MoE input_from data flow", () => {
     const injected = bPrompt.split("Input from previous tasks:\n")[1]?.split("\n")[0] ?? "";
     expect(injected.length).toBeLessThanOrEqual(200); // "- a: " + truncation marker + 50 chars
     expect(injected).toContain("…");
+  });
+});
+
+describe("buildInputSection aggregate cap", () => {
+  it("omits inputs once the total budget is reached", () => {
+    const subtask = sub("b", { input_from: ["a", "c", "d", "e", "f"] });
+    const depResults = new Map(
+      ["a", "c", "d", "e", "f"].map((id) => [
+        id,
+        { subtaskId: id, success: true, summary: "", result: "y".repeat(50), error: "" } as any,
+      ]),
+    );
+    // maxChars=30 → агрегатный кап 120; влезает лишь часть строк.
+    const section = buildInputSection(subtask, depResults, 30);
+    expect(section).toContain("omitted");
+    const contentLines = section
+      .split("\n")
+      .filter((l) => l.startsWith("- ") && !l.includes("omitted"));
+    expect(contentLines.length).toBe(3);
   });
 });
 

@@ -1,7 +1,7 @@
 import en from "./en.json";
 import ru from "./ru.json";
 
-const locales: Record<string, Record<string, string>> = { en, ru };
+const locales: Record<string, Record<string, unknown>> = { en, ru };
 
 let currentLocale = "en";
 
@@ -34,21 +34,37 @@ export function setLocale(locale: string): void {
 }
 
 export function loadLocale(name: string, dict: Record<string, unknown>): void {
-  locales[name] = dict as any;
+  locales[name] = dict;
   flat[name] = flatten(dict);
+}
+
+/**
+ * Опциональный репортёр отсутствующих ключей (debug-диагностика). Wire-ится
+ * из bootstrap на logger.debug, чтобы не тянуть logger в i18n (циклы).
+ */
+let missingKeyReporter: ((key: string) => void) | undefined;
+
+export function setMissingKeyReporter(reporter?: (key: string) => void): void {
+  missingKeyReporter = reporter;
 }
 
 export function t(key: string, params?: Record<string, string | number>): string {
   const localeDict = flat[currentLocale];
   const enDict = flat["en"];
-  let template = localeDict?.[key] ?? enDict?.[key] ?? key;
+  const template = localeDict?.[key] ?? enDict?.[key];
 
+  if (template === undefined) {
+    missingKeyReporter?.(key);
+    return key;
+  }
   if (!template) return key;
 
   if (params) {
+    let result = template;
     for (const [k, v] of Object.entries(params)) {
-      template = template.replaceAll(`{${k}}`, String(v));
+      result = result.replaceAll(`{${k}}`, String(v));
     }
+    return result;
   }
 
   return template;

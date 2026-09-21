@@ -29,10 +29,11 @@ export class SessionLogger {
   }
 
   private bindSessionDir(): void {
-    const meta = this.session?.getActiveMeta();
-    if (!meta) return;
+    const session = this.session;
+    const meta = session?.getActiveMeta();
+    if (!session || !meta) return;
 
-    const dir = this.session!.getSessionDirectory(meta.id);
+    const dir = session.getSessionDirectory(meta.id);
 
     if (this.logger) {
       this.logger.setSessionDir(dir);
@@ -131,9 +132,32 @@ export class SessionLogger {
       type: "tool_call",
       tool: call.name,
       tool_call_id: call.id,
-      args: JSON.parse(sanitizeLogMessage(JSON.stringify(call.arguments))),
+      args: this.sanitizeArgs(call.arguments),
       iteration,
     });
+  }
+
+  /**
+   * Сериализует аргументы тула для лога. Санитайзер может испортить JSON
+   * (например, режет закрывающую кавычку в `password=secret"`), поэтому при
+   * ошибке парсинга пишем сырую санитизированную строку и предупреждаем —
+   * запись tool_call не должна теряться.
+   */
+  private sanitizeArgs(args: unknown): Record<string, unknown> {
+    const raw = JSON.stringify(args ?? {});
+    const sanitized = sanitizeLogMessage(raw);
+    try {
+      const parsed: unknown = JSON.parse(sanitized);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return { raw: sanitized };
+    } catch {
+      this.logger?.warn(
+        `tool_call args sanitization broke JSON; storing raw string (${raw.length} chars)`,
+      );
+      return { raw: sanitized };
+    }
   }
 
   logToolResult(

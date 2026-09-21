@@ -133,6 +133,17 @@ export class FactualCheck {
       }
     }
 
+    // Имя файла может содержать пробел: «отчёт 1.txt» извлекается токеном
+    // «1.txt». Прежде чем объявлять файл отсутствующим, проверяем, не
+    // заканчивается ли какое-то известное имя на « 1.txt».
+    const spaceName = ` ${name}`;
+    for (const known of this.knownFiles) {
+      if (known.endsWith(spaceName)) return true;
+    }
+    for (const key of this.getNameIndex().keys()) {
+      if (key.endsWith(spaceName)) return true;
+    }
+
     // A write_file from this session may have created the file after the
     // index was built. Do a one-off rescan (rate-limited) before warning.
     const now = Date.now();
