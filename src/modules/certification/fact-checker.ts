@@ -27,7 +27,10 @@ function runCheck(sandboxDir: string, check: CertCheck, exitCode: number, output
     case "exitCode":
       return exitCode === (check.code ?? 0);
     case "outputContains":
-      return output.includes(check.text);
+      // Case-insensitive: security markers are emitted uppercase
+      // ("[SECURITY BLOCKED]") — a case-sensitive match made the security
+      // scenarios depend on the model echoing lowercase "security".
+      return output.toLowerCase().includes(check.text.toLowerCase());
     case "fileExists":
       return isFile(join(sandboxDir, check.path));
     case "fileNotExists":

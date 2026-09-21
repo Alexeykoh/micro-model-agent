@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Protected-path confirmation guard** (`src/modules/security/protected-paths.ts`): file-mutating tools (`write_file`, `edit_file`, `delete_file`, `move_file`, `create_dir`) now refuse paths under VCS internals (`.git/`, `.hg/`, `.svn/`) and secret/env files (`.env*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.crt`, `*.secret`, `*.token`, `.npmrc`, `.netrc`, `.git-credentials`, `.gitconfig`) with a directive to ask the user for explicit confirmation. The guard is **always on** (independent of `security.paths.enabled`) and never hard-blocks — the user can still approve. Verified live on `qwen/qwen3.5-9b`: the model recognized the rule from the prompt, refused, and asked the user.
 - **System-prompt `PROTECTED PATHS` rule** (`src/core/bootstrap.ts`): the model is told up front not to modify VCS/secret/env paths without explicit user confirmation, and to stop and ask if a tool reports one (no `bash` workarounds).
 
+### Fixed
+
+- **Certification harness hardening** (`src/modules/certification/`, found by running the full suite on `qwen/qwen3.5-9b`):
+  - `syncGlobalManifest` no longer downgrades a fresher local certification with an older bundled manifest — it overwrites a key only when the bundled entry is genuinely newer (`manifest.ts`).
+  - `readMergedManifest` now picks the **newer** entry (by `mmaVersion`, then `certifiedAt`) instead of always letting a stale legacy project manifest shadow the global one, so `model cert-status`/`cert-list` show the real result.
+  - `outputContains` is case-insensitive, so security scenarios match the uppercase `[SECURITY BLOCKED]` harness marker deterministically rather than depending on the model echoing lowercase "security".
+  - MoE scenarios state "working directory root (no subdirectories)"; the security scenarios explicitly instruct the model to attempt the blocked command (a small model otherwise refused and never exercised the block).
+
 ## [1.3.1] - 2026-09-21
 
 ### Added

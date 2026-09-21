@@ -8,3 +8,4 @@ blog_api_test/
 multi-*.txt
 _testing/
 images*.jpg
+certification/report-*.json

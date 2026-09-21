@@ -30,10 +30,6 @@ export const writeFileTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
-    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
-    const protectedBlock = protectedPathBlock(ctx, resolved, path);
-    if (protectedBlock) return protectedBlock;
-
     // Check path permissions using the resolved path
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
@@ -45,6 +41,10 @@ export const writeFileTool: ToolDefinition = {
         }),
       };
     }
+
+    // Always-on fallback (security disabled): protected paths ask the user.
+    const protectedBlock = protectedPathBlock(ctx, resolved, path);
+    if (protectedBlock) return protectedBlock;
 
     // Get session-specific security config
     const securityConfig = ctx.sessionContext

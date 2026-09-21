@@ -58,13 +58,18 @@ export function saveGlobalManifest(m: CertManifest, override?: string): void {
 const certKey = (e: CertificationEntry): string => `${e.model}::${e.providerUrl}`;
 
 /**
- * Global + project manifests merged by (model, providerUrl).
- * Project entries win over global ones on the same key.
+ * Global + project manifests merged by (model, providerUrl). The NEWER entry
+ * wins (by mmaVersion, then certifiedAt); a legacy project manifest no longer
+ * shadows a fresher global certification.
  */
 export function readMergedManifest(projectDir: string, override?: string): CertManifest {
   const merged = new Map<string, CertificationEntry>();
   for (const e of readGlobalManifest(override).certifications) merged.set(certKey(e), e);
-  for (const e of readManifest(projectDir).certifications) merged.set(certKey(e), e);
+  for (const e of readManifest(projectDir).certifications) {
+    const key = certKey(e);
+    const existing = merged.get(key);
+    if (!existing || isEntryNewer(e, existing)) merged.set(key, e);
+  }
   return { version: 1, certifications: [...merged.values()] };
 }
 
@@ -111,6 +116,32 @@ export function removeCertification(
 
 export function isStale(entry: CertificationEntry, currentVersion: string): boolean {
   return entry.mmaVersion !== currentVersion;
+}
+
+/** Numeric semver-ish comparison; non-numeric/missing parts count as 0. */
+function compareVersions(a: string, b: string): number {
+  const pa = String(a ?? "").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b ?? "").split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+/**
+ * Is `candidate` genuinely newer than `current` (by mmaVersion, then
+ * certifiedAt)? Used to avoid downgrading a fresher certification — both when
+ * syncing the bundled manifest and when merging the legacy project manifest.
+ */
+function isEntryNewer(candidate: CertificationEntry, current: CertificationEntry): boolean {
+  const v = compareVersions(candidate.mmaVersion, current.mmaVersion);
+  if (v !== 0) return v > 0;
+  const ec = Date.parse(candidate.certifiedAt ?? "");
+  const ee = Date.parse(current.certifiedAt ?? "");
+  if (!Number.isNaN(ec) && !Number.isNaN(ee)) return ec > ee;
+  return false;
 }
 
 export function isFullyPassed(entry: CertificationEntry): boolean {
@@ -178,7 +209,14 @@ export function syncGlobalManifest(
     const current = readGlobalManifest(override);
     const merged = new Map<string, CertificationEntry>();
     for (const e of current.certifications) merged.set(certKey(e), e);
-    for (const e of bundled.certifications ?? []) merged.set(certKey(e), e);
+    for (const e of bundled.certifications ?? []) {
+      const key = certKey(e);
+      const existing = merged.get(key);
+      // Не перезаписываем более свежую пользовательскую сертификацию старой
+      // bundled-копией (иначе запуск CLI затирает только что сделанный certify).
+      if (existing && !isEntryNewer(e, existing)) continue;
+      merged.set(key, e);
+    }
     saveGlobalManifest({ version: 1, certifications: [...merged.values()] }, override);
     mkdirSync(globalManifestDir(override), { recursive: true });
     writeFileSync(snapshotPath, raw, "utf-8");

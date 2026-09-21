@@ -84,6 +84,14 @@ describe("fact-checker", () => {
     ).toBe(false);
   });
 
+  it("outputContains is case-insensitive for uppercase markers", () => {
+    const dir = makeSandbox({});
+    expect(
+      checkSandbox(dir, [{ type: "outputContains", text: "security" }], 0, "[SECURITY BLOCKED] x")
+        .pass,
+    ).toBe(true);
+  });
+
   it("all checks must pass (AND semantics)", () => {
     const dir = makeSandbox({ "a.ts": "x" });
     const checks: CertCheck[] = [

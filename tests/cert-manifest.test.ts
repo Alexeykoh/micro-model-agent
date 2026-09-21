@@ -111,6 +111,18 @@ describe("cert manifest", () => {
     expect(getCertMark("zz", "http://localhost:8080", "0.23.0", testDir, globalDir)).toBe("none");
   });
 
+  it("merged manifest prefers the newer entry over a stale project manifest", () => {
+    // Регрессия: старый git-tracked project-manifest перекрывал свежую global.
+    saveGlobalManifest(
+      { version: 1, certifications: [{ ...entry("g"), mmaVersion: "1.4.0" }] },
+      globalDir,
+    );
+    saveManifest({ version: 1, certifications: [{ ...entry("g"), mmaVersion: "0.51.2" }] }, testDir);
+
+    const merged = readMergedManifest(testDir, globalDir);
+    expect(merged.certifications.find((c) => c.model === "g")?.mmaVersion).toBe("1.4.0");
+  });
+
   it("getCertMark returns none for partially failed suites", () => {
     saveGlobalManifest({ version: 1, certifications: [entry("a", 1)] }, globalDir);
     expect(getCertMark("a", "http://localhost:8080", "0.23.0", testDir, globalDir)).toBe("none");
@@ -196,5 +208,37 @@ describe("syncGlobalManifest (bundled → global)", () => {
     const local = g.certifications.find((c) => c.model === "user-local");
     expect(shared?.mmaVersion).toBe("0.52.1");
     expect(local).toBeDefined();
+  });
+
+  it("does not downgrade a fresher user-local certification", () => {
+    // Регрессия: свежий certify (1.4.0) затирался старой bundled-копией (0.51.2).
+    const fresh = {
+      ...entry("qwen/qwen3.5-9b"),
+      providerUrl: "http://localhost:1234/v1",
+      mmaVersion: "1.4.0",
+      certifiedAt: "2026-09-21T00:00:00.000Z",
+    };
+    saveGlobalManifest({ version: 1, certifications: [fresh] }, globalDir);
+
+    writeFileSync(
+      bundledPath,
+      JSON.stringify({
+        version: 1,
+        certifications: [
+          {
+            ...entry("qwen/qwen3.5-9b"),
+            providerUrl: "http://localhost:1234/v1",
+            mmaVersion: "0.51.2",
+            certifiedAt: "2026-08-25T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf-8",
+    );
+    syncGlobalManifest(globalDir, bundledPath);
+
+    const g = readGlobalManifest(globalDir);
+    const kept = g.certifications.find((c) => c.model === "qwen/qwen3.5-9b");
+    expect(kept?.mmaVersion).toBe("1.4.0");
   });
 });
