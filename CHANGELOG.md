@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Session encryption config was ignored** (`src/core/bootstrap.ts`): `SessionStore` was constructed without `config.security.sessionEncryption`, so enabling `security.sessionEncryption` silently left `session.jsonl`/`history.jsonl` in plaintext. The config is now passed through; verified live (files written as `salt:iv:authTag:data`).
 - **Certification harness hardening** (`src/modules/certification/`, found by running the full suite on `qwen/qwen3.5-9b`):
   - `syncGlobalManifest` no longer downgrades a fresher local certification with an older bundled manifest — it overwrites a key only when the bundled entry is genuinely newer (`manifest.ts`).
   - `readMergedManifest` now picks the **newer** entry (by `mmaVersion`, then `certifiedAt`) instead of always letting a stale legacy project manifest shadow the global one, so `model cert-status`/`cert-list` show the real result.

@@ -43,6 +43,28 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
+  it("wires security.sessionEncryption into the session store", async () => {
+    // Регрессия: SessionStore создавался без config.security.sessionEncryption,
+    // поэтому включённое шифрование сессий молча игнорировалось.
+    const dir = tempDir();
+    try {
+      mkdirSync(join(dir, "config"), { recursive: true });
+      writeFileSync(
+        join(dir, "config", "security.json"),
+        JSON.stringify({
+          security: {
+            sessionEncryption: { enabled: true, keyPath: join(dir, ".session-key") },
+          },
+        }),
+        "utf-8",
+      );
+      const result = await bootstrap(dir, dir);
+      expect(result.sessionManager.isEncryptionEnabled()).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("exposes live sessionId/sessionContext that follow a session switch", async () => {
     // Regression (ses_msyghz8w): toolCtx.sessionId was captured once at
     // bootstrap, so after a REPL /new or /resume the new session's audit

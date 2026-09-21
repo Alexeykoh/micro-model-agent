@@ -473,7 +473,7 @@ export async function bootstrap(
   };
 
   const sessionDir = join(dir, "sessions");
-  const sessionStore = new SessionStore(sessionDir);
+  const sessionStore = new SessionStore(sessionDir, config.security?.sessionEncryption);
   sessionStore.init();
   const sessionManager = new SessionManager(sessionStore, {
     model: config.model,
