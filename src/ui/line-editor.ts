@@ -79,6 +79,18 @@ export class LineEditor implements LineInput {
   private pasteLastWasCR = false;
   private lastWasCR = false;
   private questionCb: ((answer: string) => void) | null = null;
+  /** Active Tab-completion cycle. While set, ↑/↓/Tab cycle candidates and
+   *  Esc restores `original`; any other key drops the session. */
+  private completionSession: {
+    items: CompletionItem[];
+    index: number;
+    /** UTF-16 index in the current buffer line where the completed token begins. */
+    from: number;
+    /** The original partial that was replaced. */
+    original: string;
+    /** The currently inserted candidate value. */
+    inserted: string;
+  } | null = null;
   private rawMode = false;
   private listeners: EditorListeners = {};
   /** stdin handlers registered in the constructor — removed in close() so
@@ -243,6 +255,7 @@ export class LineEditor implements LineInput {
     this.col = 0;
     this.historyIndex = -1;
     this.stash = null;
+    this.completionSession = null;
     this.invalidateAnchor();
     if (this.input.isTTY) this.render();
   }
@@ -253,6 +266,7 @@ export class LineEditor implements LineInput {
     this.lines = [""];
     this.row = 0;
     this.col = 0;
+    this.completionSession = null;
     this.invalidateAnchor();
     if (this.input.isTTY) this.render();
   }
@@ -315,6 +329,32 @@ export class LineEditor implements LineInput {
       return;
     }
     if (this.onKeyInput && this.onKeyInput(str, key)) return;
+
+    // While a completion session is active, ↑/↓/Tab cycle the candidates and
+    // Esc restores the original partial. Enter accepts (session cleared, the
+    // buffer already holds the chosen candidate, so normal submit runs). Any
+    // other key drops the session and is processed normally.
+    if (this.completionSession) {
+      const ck = key as { name?: string };
+      if (ck?.name === "down") {
+        this.cycleCompletion(1);
+        return;
+      }
+      if (ck?.name === "up") {
+        this.cycleCompletion(-1);
+        return;
+      }
+      if (ck?.name === "tab") {
+        this.cycleCompletion(1);
+        return;
+      }
+      if (ck?.name === "escape") {
+        this.cancelCompletion();
+        return;
+      }
+      this.completionSession = null;
+      // fall through: return submits, every other key edits normally
+    }
 
     const k = key as {
       name?: string;
@@ -507,6 +547,7 @@ export class LineEditor implements LineInput {
   }
 
   private submit(): void {
+    this.completionSession = null;
     if (this.questionCb) {
       const cb = this.questionCb;
       this.questionCb = null;
@@ -562,6 +603,7 @@ export class LineEditor implements LineInput {
     this.lines = [""];
     this.row = 0;
     this.col = 0;
+    this.completionSession = null;
     this.invalidateAnchor();
     this.render();
     if (this.onInterrupt) {
@@ -822,6 +864,7 @@ export class LineEditor implements LineInput {
   }
 
   private applyHistoryEntry(): void {
+    this.completionSession = null;
     const entry = this.history[this.history.length - 1 - this.historyIndex];
     this.lines = entry.split("\n");
     if (this.lines.length === 0) this.lines = [""];
@@ -831,6 +874,52 @@ export class LineEditor implements LineInput {
   }
 
   // ---- completion / misc ----
+
+  /** Replace the UTF-16 range `[from, from + removeText.length)` on the
+   *  current buffer line with `insertText`, placing the cursor right after. */
+  private replaceCompletionToken(from: number, removeText: string, insertText: string): void {
+    const line = this.lines[this.row];
+    const head = line.slice(0, from);
+    const tail = line.slice(from + removeText.length);
+    this.lines[this.row] = head + insertText + tail;
+    this.col = charLen(head) + charLen(insertText);
+  }
+
+  /** Position of `partial` under the cursor (fallback: last in the line), or
+   *  -1 when not found. */
+  private partialStart(line: string, partial: string): number {
+    const chars = Array.from(line);
+    const beforeCursor = chars.slice(0, this.col).join("");
+    let from = beforeCursor.lastIndexOf(partial);
+    if (from === -1) from = line.lastIndexOf(partial);
+    return from;
+  }
+
+  private applyCompletionCandidate(index: number): void {
+    const s = this.completionSession;
+    if (!s) return;
+    const chosen = s.items[index].value;
+    this.replaceCompletionToken(s.from, s.inserted, chosen);
+    s.index = index;
+    s.inserted = chosen;
+    this.render();
+  }
+
+  private cycleCompletion(delta: number): void {
+    const s = this.completionSession;
+    if (!s) return;
+    const n = s.items.length;
+    const next = (s.index + delta + n) % n;
+    this.applyCompletionCandidate(next);
+  }
+
+  private cancelCompletion(): void {
+    const s = this.completionSession;
+    if (!s) return;
+    this.replaceCompletionToken(s.from, s.inserted, s.original);
+    this.completionSession = null;
+    this.render();
+  }
 
   private tabComplete(): void {
     if (!this.completer) return;
@@ -844,19 +933,18 @@ export class LineEditor implements LineInput {
       // Complete the partial under the CURSOR, not the last occurrence in
       // the whole line — with the cursor mid-line, lastIndexOf() inserted
       // at the line's end instead.
-      const chars = Array.from(line);
-      const beforeCursor = chars.slice(0, this.col).join("");
-      let from = beforeCursor.lastIndexOf(partial);
-      if (from === -1) from = line.lastIndexOf(partial);
+      const from = this.partialStart(line, partial);
       if (from === -1) {
         this.output.write("\x07");
         return;
       }
-      const head = line.slice(0, from);
-      const tail = line.slice(from + partial.length);
-      this.lines[this.row] = head + matches[0].value + tail;
-      this.col = charLen(head) + charLen(matches[0].value);
+      this.replaceCompletionToken(from, partial, matches[0].value);
       this.render();
+      return;
+    }
+    const from = this.partialStart(line, partial);
+    if (from === -1) {
+      this.output.write("\x07");
       return;
     }
     const width = this.columns();
@@ -884,6 +972,17 @@ export class LineEditor implements LineInput {
     // redraws the frame in place — otherwise its relative up-move starts
     // above the frame and paints garbage over the just-printed list.
     this.prevCursorRow += rows.length + 1;
+
+    // Start a cycling session with the first candidate in the buffer:
+    // ↑/↓/Tab cycle through the printed list in place.
+    this.completionSession = {
+      items: matches,
+      index: 0,
+      from,
+      original: partial,
+      inserted: matches[0].value,
+    };
+    this.replaceCompletionToken(from, partial, matches[0].value);
     this.render();
   }
 
