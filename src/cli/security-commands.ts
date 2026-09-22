@@ -62,7 +62,7 @@ export function createSecurityCommand(program: Command): void {
         `  ${t("cli.security.bash_enabled")}: ${bash.blacklist?.length > 0 ? t("cli.yes") : t("cli.no")}`,
       );
       getDefaultChannel().writeLine(
-        `  ${t("cli.security.path_validation")}: ${paths.denied?.length > 0 ? t("cli.yes") : t("cli.no")}`,
+        `  ${t("cli.security.path_validation")}: ${paths.enabled ? t("cli.yes") : t("cli.no")}`,
       );
       getDefaultChannel().writeLine(
         `  ${t("cli.security.network_validation")}: ${network.deniedDomains?.length > 0 || network.allowedDomains?.length > 0 ? t("cli.yes") : t("cli.no")}`,
