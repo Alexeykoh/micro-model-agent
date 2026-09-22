@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
 import { runSetup } from "./setup";
+import { applyAnswersToConfig } from "./setup-order";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { join, dirname } from "path";
@@ -34,48 +35,7 @@ function buildInitCommand(program: Command): void {
       const answers = await runSetup();
       const configPath = join(homedir(), ".mma", "config.json");
       const { config } = await bootstrap();
-      config.provider.type = answers.provider;
-      config.provider.baseUrl = answers.apiBase;
-      config.provider.apiKey = answers.apiKey;
-      config.model = answers.model;
-      config.contextWindow = answers.contextWindow;
-      config.maxToolIterations = answers.maxToolIterations;
-      config.locale = answers.locale;
-      // Apply security settings from wizard.
-      // Security is enabled by default (balanced); wizard answers only tighten it.
-      if (config.security) {
-        config.security.enabled = true;
-        config.security.bash.enabled = true;
-        config.security.bash.blockDangerousFlags =
-          answers.securityFlagsBlock || config.security.bash.blockDangerousFlags;
-        if (answers.securityBashBlock) {
-          config.security.bash.blacklist = [
-            ...new Set([
-              ...config.security.bash.blacklist,
-              "rm",
-              "dd",
-              "chmod",
-              "wget",
-              "curl",
-              "scp",
-              "ssh",
-              "nc",
-              "netcat",
-              "sudo",
-              "su",
-              "kill",
-              "pkill",
-              "killall",
-              "shutdown",
-              "reboot",
-            ]),
-          ];
-        }
-        config.security.paths.enabled = answers.securityPathsRestrict;
-        if (!answers.securityPathsRestrict) {
-          config.security.paths.denied = [];
-        }
-      }
+      applyAnswersToConfig(config, answers);
       saveConfig(config, configPath, dirname(configPath));
       getDefaultChannel().writeLine(t("cli.config_saved"));
     });

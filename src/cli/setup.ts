@@ -249,8 +249,8 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
     securityFlagsBlock =
       (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() === "y";
-    securityPathsRestrict =
-      (await ask(rl, t("setup.security_paths_restrict"), "Y")).toLowerCase() !== "n";
+    const pathsAnswer = (await ask(rl, t("setup.security_paths_restrict"), "Y")).toLowerCase();
+    securityPathsRestrict = pathsAnswer !== "n" && pathsAnswer !== "no";
   }
 
   if (ownRl) {
