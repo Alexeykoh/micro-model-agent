@@ -323,20 +323,30 @@ function registerConfigCommands(ctx: ReplContext): void {
       await ctx.withExclusiveInput(async () => {
         const answers = await runSetup(ctx.rl);
         const configPath = join(ctx.configDir, "config.json");
-        // Multi-entry configs resolve the active provider from `entries[]`, so
-        // a fresh single entry must replace them for the wizard choice to win.
         const hadEntries = (ctx.config.provider.entries?.length ?? 0) > 0;
         applyAnswersToConfig(ctx.config, answers);
         if (hadEntries) {
-          ctx.config.provider.entries = [
-            {
-              type: answers.provider,
-              label: answers.provider,
-              baseUrl: answers.apiBase,
-              apiKey: answers.apiKey,
-            },
-          ];
-          ctx.config.provider.active = answers.provider;
+          // Multi-entry configs resolve the active provider from `entries[]`, so
+          // the wizard choice must be written onto the active entry — without
+          // dropping the other providers or the entry's tuning (contextWindow,
+          // cache, retry, rateLimits).
+          const entries = ctx.config.provider.entries ?? [];
+          const activeName =
+            ctx.config.provider.active || entries[0]?.label || entries[0]?.type;
+          const idx = entries.findIndex(
+            (e) => e.label === activeName || e.type === activeName,
+          );
+          const target = idx >= 0 ? idx : 0;
+          const updated = {
+            ...entries[target],
+            type: answers.provider,
+            baseUrl: answers.apiBase,
+            apiKey: answers.apiKey,
+          };
+          const next = entries.slice();
+          next[target] = updated;
+          ctx.config.provider.entries = next;
+          ctx.config.provider.active = updated.label || updated.type;
         }
         saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
