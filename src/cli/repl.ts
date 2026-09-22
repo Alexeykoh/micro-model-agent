@@ -13,6 +13,10 @@ import {
   ProviderArgProvider,
   ModelArgProvider,
   FilePathProvider,
+  ConfigKeyProvider,
+  ConfigValueProvider,
+  FlagProvider,
+  CommandArgProvider,
   buildSlashCompletions,
   type CompletionItem,
 } from "./completer";
@@ -31,6 +35,7 @@ import type { HostBridge } from "../modules/types";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
+import { captureConfigSnapshot } from "../config/registry";
 import { probeLspServers } from "../modules/lsp/probe";
 import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
@@ -104,6 +109,8 @@ export function createHostBridge(opts: {
 export class Repl implements ReplContext {
   private completer: Completer = new Completer();
   private modelCache: string[] = [];
+  /** Boot snapshot of managed config keys — `/config reset` restores from it. */
+  private configSnapshot: ReadonlyMap<string, unknown> = new Map();
   private running = false;
   private agentRunning = false;
   private inputLocked = false;
@@ -259,6 +266,7 @@ export class Repl implements ReplContext {
     this.agent.setPromptIO?.(this.promptIO);
 
     registerAllCommands(this);
+    this.configSnapshot = captureConfigSnapshot(this.config);
     this.setupCompleter();
     this.setupListeners();
 
@@ -367,18 +375,83 @@ export class Repl implements ReplContext {
     this.completer.registerProvider(new SlashCommandProvider(slashCommands));
     if (this.sessionManager) {
       this.completer.registerProvider(
-        new SessionNameProvider(() => this.sessionManager!.list().map((s) => s.name)),
+        new SessionNameProvider(() => this.sessionManager!.list().map((s) => s.name), [
+          "/resume",
+          "/delete",
+          "/export",
+        ]),
       );
     }
     if (this.skillsModule) {
       this.completer.registerProvider(
-        new SubcommandProvider("skill", ["list", "loaded", "load", "unload", "search"]),
+        new SubcommandProvider("skill", [
+          { name: "list", description: t("skill.sub_list") },
+          { name: "loaded", description: t("skill.sub_loaded") },
+          { name: "load", description: t("skill.sub_load") },
+          { name: "unload", description: t("skill.sub_unload") },
+          { name: "search", description: t("skill.sub_search") },
+        ]),
       );
       this.completer.registerProvider(new SkillNameProvider(this.skillsModule));
     }
     // Subcommand + argument completion for provider/model management.
-    this.completer.registerProvider(new SubcommandProvider("provider", ["list", "use", "add"]));
-    this.completer.registerProvider(new SubcommandProvider("model", ["list", "use"]));
+    this.completer.registerProvider(
+      new SubcommandProvider("provider", [
+        { name: "list", description: t("provider.sub_list") },
+        { name: "use", description: t("provider.sub_use") },
+        { name: "add", description: t("provider.sub_add") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("model", [
+        { name: "list", description: t("model.sub_list") },
+        { name: "use", description: t("model.sub_use") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("map", [
+        { name: "summary", description: t("map.sub_summary") },
+        { name: "refresh", description: t("map.sub_refresh") },
+        { name: "find", description: t("map.sub_find") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("context", [
+        { name: "system", description: t("context.sub_system") },
+        { name: "reserve", description: t("context.sub_reserve") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("lsp", [
+        { name: "status", description: t("lsp.sub_status") },
+        { name: "restart", description: t("lsp.sub_restart") },
+        { name: "check", description: t("lsp.sub_check") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("reasoning", [
+        { name: "show", description: t("reasoning.sub_show") },
+        { name: "hide", description: t("reasoning.sub_hide") },
+        { name: "level", description: t("reasoning.sub_level") },
+      ]),
+    );
+    this.completer.registerProvider(
+      new SubcommandProvider("verbose", [
+        { name: "quiet", description: t("verbose.sub_quiet") },
+        { name: "normal", description: t("verbose.sub_normal") },
+        { name: "verbose", description: t("verbose.sub_verbose") },
+      ]),
+    );
+    this.completer.registerProvider(new ConfigKeyProvider());
+    this.completer.registerProvider(new ConfigValueProvider());
+    this.completer.registerProvider(new FlagProvider());
+    this.completer.registerProvider(
+      new CommandArgProvider(() =>
+        Array.from(this.commands.entries())
+          .filter(([key, cmd]) => key === cmd.name)
+          .map(([, cmd]) => cmd.name),
+      ),
+    );
     const entryLabels = this.config.provider?.entries?.map((e) => e.label || e.type) ?? [];
     if (entryLabels.length > 0) {
       this.completer.registerProvider(new ProviderArgProvider(entryLabels));
@@ -388,6 +461,23 @@ export class Repl implements ReplContext {
     this.completer.registerProvider(new FilePathProvider(this.baseDir));
     // Warm the model cache in the background (free listModels call).
     this.refreshModelCache();
+  }
+
+  /** Rebuild the registry + completer — used after `/config locale` changes. */
+  public reregisterCommands(): void {
+    this.commands.clear();
+    registerAllCommands(this);
+    this.setupCompleter();
+  }
+
+  /** Boot snapshot of managed config keys for `/config reset`. */
+  public getConfigSnapshot(): ReadonlyMap<string, unknown> {
+    return this.configSnapshot;
+  }
+
+  /** Cached model ids from the active provider (may be empty while offline). */
+  public knownModels(): string[] {
+    return this.modelCache;
   }
 
   /**
@@ -863,7 +953,17 @@ export class Repl implements ReplContext {
 
     const cmd = this.commands.get(name);
     if (!cmd) {
-      this.output.writeLine(`${pc.red(t("cli.unknown_cmd", { name }))} ${t("cli.help_hint")}`);
+      // Former aliases that moved to a subcommand — point the user at the new
+      // syntax instead of a bare "unknown command".
+      const formerAliases: Record<string, string> = { use: "resume" };
+      const suggestion = formerAliases[name];
+      if (suggestion) {
+        this.output.writeLine(
+          pc.red(t("cli.unknown_command", { input: `/${name}`, suggestion: `/${suggestion}` })),
+        );
+      } else {
+        this.output.writeLine(`${pc.red(t("cli.unknown_cmd", { name }))} ${t("cli.help_hint")}`);
+      }
       return;
     }
 
@@ -881,8 +981,29 @@ export class Repl implements ReplContext {
     }
   }
 
-  public showHelp(): void {
+  public showHelp(command?: string): void {
     const { COMMAND_GROUPS } = require("./repl-commands") as typeof import("./repl-commands");
+
+    if (command) {
+      const name = command.replace(/^\//, "");
+      const cmd = this.commands.get(name);
+      if (!cmd) {
+        this.output.writeLine(pc.red(t("repl.help_unknown", { name })));
+        return;
+      }
+      this.output.writeLine(pc.bold(pc.cyan("/" + cmd.name)));
+      this.output.writeLine(`  ${cmd.description}`);
+      if (cmd.usage) this.output.writeLine(`  ${pc.dim(cmd.usage)}`);
+      if (cmd.aliases?.length) {
+        this.output.writeLine(pc.dim(`  ${t("repl.help_aliases", { names: cmd.aliases.join(", ") })}`));
+      }
+      if (cmd.examples?.length) {
+        this.output.writeLine(pc.dim(`  ${t("repl.help_examples")}`));
+        for (const ex of cmd.examples) this.output.writeLine(pc.dim(`    ${ex}`));
+      }
+      return;
+    }
+
     const order = ["general", "agent", "session", "skill"];
     const seen = new Set<string>();
 

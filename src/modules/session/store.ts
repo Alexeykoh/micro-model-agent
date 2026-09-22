@@ -8,7 +8,7 @@ import {
   appendFileSync,
 } from "fs";
 import { join } from "path";
-import { gzipSync } from "zlib";
+import { gzipSync, gunzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
@@ -287,6 +287,31 @@ export class SessionStore {
           .filter((m): m is SessionMessage => m !== null);
       }
       return lines.map(parseLine).filter((m): m is SessionMessage => m !== null);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Read the history of a rotated session from `<baseDir>/<id>.jsonl.gz`.
+   * Returns [] when the gz file is absent or unreadable.
+   */
+  loadRotatedHistory(id: string): SessionMessage[] {
+    const gzPath = join(this.baseDir, `${id}.jsonl.gz`);
+    if (!existsSync(gzPath)) return [];
+    try {
+      const content = gunzipSync(readFileSync(gzPath)).toString("utf-8");
+      return content
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          try {
+            return JSON.parse(line) as SessionMessage;
+          } catch {
+            return null;
+          }
+        })
+        .filter((m): m is SessionMessage => m !== null);
     } catch {
       return [];
     }

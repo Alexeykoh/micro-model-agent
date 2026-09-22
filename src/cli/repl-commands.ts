@@ -1,16 +1,36 @@
 import { pc } from "../ui/colors";
+import { resolveVerbosity } from "../ui/theme";
 import { readMmaVersion } from "../core/version";
 import { renderTable } from "../ui/table";
-import { t } from "../i18n/index";
+import { t, setLocale } from "../i18n/index";
 import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
 import { saveConfig } from "../config/config";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
-import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
+import { budgetBreakdownLines } from "../config/budget";
+import {
+  setConfigValue,
+  getConfigValue,
+  resolveConfigKey,
+  canonicalKeys,
+  keysForGroup,
+  configDefs,
+  formatConfigValue,
+  type ConfigKeyDef,
+  type ConfigSetResult,
+} from "../config/registry";
+import {
+  formatExport,
+  redactExport,
+  sanitizeFileName,
+  extensionFor,
+  type ExportFormat,
+} from "../modules/session/export";
 import { getMessageText } from "../llm/provider";
 import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { homedir } from "os";
 import { fileURLToPath } from "url";
 import type { LineInput } from "../ui/line-editor";
 import type { Agent } from "../core/agent";
@@ -31,6 +51,8 @@ export interface SlashCommand {
   description: string;
   aliases?: string[];
   usage?: string;
+  /** Short worked examples shown by `/help <command>`. */
+  examples?: string[];
   action(args: string[]): void | Promise<void>;
 }
 
@@ -48,7 +70,13 @@ export interface ReplContext {
   registerCommand(cmd: SlashCommand): void;
   runAgent(input: string): Promise<void>;
   withExclusiveInput(fn: () => Promise<void>): Promise<void>;
-  showHelp(): void;
+  showHelp(command?: string): void;
+  /** Rebuild the command registry + completer (used after a locale change). */
+  reregisterCommands(): void;
+  /** Boot snapshot of managed config keys for `/config reset`. */
+  getConfigSnapshot(): ReadonlyMap<string, unknown>;
+  /** Cached model ids from the active provider (may be empty when offline). */
+  knownModels(): string[];
   setupCompleter(): void;
   refreshModelCache(): void;
   attachHostBridge(pluginManager?: PluginManager): void;
@@ -80,6 +108,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   resume: "session",
   rename: "session",
   delete: "session",
+  export: "session",
   skill: "skill",
   plugins: "agent",
 };
@@ -96,7 +125,8 @@ function registerBuiltinCommands(ctx: ReplContext): void {
     name: "help",
     description: t("repl.help"),
     usage: t("repl.help_usage"),
-    action: () => ctx.showHelp(),
+    examples: ["/help", "/help config"],
+    action: (args: string[]) => ctx.showHelp(args[0]),
   });
   ctx.registerCommand({
     name: "exit",
@@ -111,6 +141,7 @@ function registerBuiltinCommands(ctx: ReplContext): void {
     usage: t("repl.clear_usage"),
     action: () => {
       ctx.output.clearScreen();
+      ctx.output.writeLine(pc.dim(t("repl.clear_hint")));
     },
   });
 }
@@ -196,49 +227,327 @@ function registerRunCommands(ctx: ReplContext): void {
   });
 }
 
+const SUGAR_HINTS: Record<string, string> = {
+  model: "/model use <name>",
+  "provider.active": "/provider use <name>",
+  contextWindow: "/context <size>",
+  "contextBudget.systemPrompt": "/context system <share>",
+  "contextBudget.responseReserve": "/context reserve <share>",
+  showReasoning: "/reasoning show | hide",
+  "reasoning.mode": "/reasoning level <level>",
+  "ui.verbosity": "/verbose <level>",
+};
+
+function changeHint(def: ConfigKeyDef): string {
+  if (def.readOnly) return t("config.read_only_hint");
+  return SUGAR_HINTS[def.key] ?? `/config ${def.key} <value>`;
+}
+
+function configValueHint(def?: ConfigKeyDef): string {
+  if (!def) return "";
+  switch (def.valueType) {
+    case "enum":
+      return t("config.hint_enum", { values: (def.enumValues ?? []).join(", ") });
+    case "bool":
+      return t("config.hint_bool");
+    case "share":
+      return t("config.hint_share");
+    case "int":
+      return t("config.hint_int", { min: String(def.min ?? 1) });
+    default:
+      return t("config.hint_string");
+  }
+}
+
+function editDistance(a: string, b: string): number {
+  const dp: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(
+        dp[j] + 1,
+        dp[j - 1] + 1,
+        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      prev = tmp;
+    }
+  }
+  return dp[b.length];
+}
+
+function nearestConfigKey(input: string): string | null {
+  const names = canonicalKeys();
+  let best: { name: string; dist: number } | null = null;
+  for (const name of names) {
+    const d = editDistance(input.toLowerCase(), name.toLowerCase());
+    if (best === null || d < best.dist) best = { name, dist: d };
+  }
+  if (!best) return null;
+  const threshold = Math.max(2, Math.floor(best.name.length / 3));
+  return best.dist <= threshold ? best.name : null;
+}
+
+function renderConfigError(
+  ctx: ReplContext,
+  result: { reason: string; input: string; key?: string; def?: ConfigKeyDef },
+): void {
+  const key = result.key ?? result.input;
+  switch (result.reason) {
+    case "unknown-key": {
+      const suggestion = nearestConfigKey(result.input);
+      const suffix = suggestion
+        ? t("config.suggest", { name: suggestion })
+        : t("config.valid_keys", { keys: canonicalKeys().join(", ") });
+      ctx.output.writeLine(
+        pc.yellow(t("config.unknown_key", { key: result.input, suggestion: suffix })),
+        "stderr",
+      );
+      return;
+    }
+    case "read-only":
+      ctx.output.writeLine(pc.yellow(t("config.read_only", { key })), "stderr");
+      return;
+    case "range":
+      ctx.output.writeLine(pc.yellow(t("config.range", { key })), "stderr");
+      return;
+    case "combined":
+      ctx.output.writeLine(pc.yellow(t("config.combined")), "stderr");
+      return;
+    default:
+      ctx.output.writeLine(
+        pc.yellow(t("config.invalid_value", { key, hint: configValueHint(result.def) })),
+        "stderr",
+      );
+  }
+}
+
+function applyConfigSideEffects(
+  ctx: ReplContext,
+  result: ConfigSetResult & { ok: true },
+): void {
+  if (result.key === "ui.verbosity") {
+    ctx.output.setSuppressInfoLogs((result.value as string) === "quiet");
+  } else if (result.key === "reasoning.mode") {
+    ctx.agent.setReasoningLevel(result.value as "auto" | "default" | "none" | "low" | "medium" | "high" | "max");
+  } else if (result.key === "locale") {
+    setLocale(result.value as string);
+  }
+}
+
+function persistConfig(ctx: ReplContext): void {
+  const configPath = join(ctx.configDir, "config.json");
+  saveConfig(ctx.config, configPath, dirname(configPath));
+}
+
+/**
+ * The single write path for every settings mutation. Sugar commands must call
+ * this too, so validation, side effects, persistence and reconfigure never
+ * drift apart.
+ */
+async function mutateConfig(
+  ctx: ReplContext,
+  key: string,
+  raw: string,
+): Promise<ConfigSetResult> {
+  const result = setConfigValue(ctx.config, key, raw);
+  if (!result.ok) return result;
+  applyConfigSideEffects(ctx, result);
+  persistConfig(ctx);
+  if (result.reconfigure) await ctx.agent.reconfigure(ctx.config);
+  if (result.key === "locale") ctx.reregisterCommands();
+  return result;
+}
+
+function reportSaved(ctx: ReplContext, result: ConfigSetResult & { ok: true }): void {
+  ctx.output.writeLine(pc.green(t("config.saved", { key: result.key })));
+}
+
+function rawFromValue(value: unknown): string {
+  if (typeof value === "boolean") return value ? "on" : "off";
+  return String(value);
+}
+
+function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
+  const list = defs ?? configDefs();
+  const rows = list.map((def) => [
+    def.key,
+    formatConfigValue(def.get(ctx.config)),
+    def.domain,
+    changeHint(def),
+  ]);
+  ctx.output.writeLine(pc.bold(t("config.header")));
+  for (const line of renderTable(
+    [
+      t("config.col_setting"),
+      t("config.col_value"),
+      t("config.col_domain"),
+      t("config.col_change"),
+    ],
+    rows,
+  )) {
+    ctx.output.writeLine(line);
+  }
+  const meta = ctx.sessionManager?.getActiveMeta();
+  if (meta) {
+    ctx.output.writeLine(
+      pc.dim(
+        t("config.session_line", {
+          name: meta.name,
+          id: meta.id,
+          count: String(meta.messageCount),
+        }),
+      ),
+    );
+  }
+  ctx.output.writeLine(pc.dim(t("config.usage_hint")));
+}
+
+function confirm(ctx: ReplContext, prompt: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    void ctx.withExclusiveInput(async () => {
+      await new Promise<void>((done) => {
+        ctx.rl.question(prompt, (answer) => {
+          resolve(/^y(es)?$/i.test(answer.trim()));
+          done();
+        });
+      });
+    });
+  });
+}
+
+async function runConfigReset(ctx: ReplContext, rest: string[]): Promise<void> {
+  const snapshot = ctx.getConfigSnapshot();
+  const yes = rest.includes("--yes");
+  const all = rest.includes("--all");
+  const target = rest.find((a) => !a.startsWith("--"));
+
+  if (all) {
+    const changed = canonicalKeys().filter((k) => {
+      const def = resolveConfigKey(k);
+      if (!def || !snapshot.has(k)) return false;
+      return rawFromValue(def.get(ctx.config)) !== rawFromValue(snapshot.get(k));
+    });
+    if (changed.length === 0) {
+      ctx.output.writeLine(t("config.reset_none"));
+      return;
+    }
+    if (!yes) {
+      if (!process.stdin.isTTY) {
+        ctx.output.writeLine(pc.yellow(t("config.reset_all_needs_yes")), "stderr");
+        return;
+      }
+      const ok = await confirm(
+        ctx,
+        t("config.reset_all_confirm", { count: String(changed.length) }),
+      );
+      if (!ok) {
+        ctx.output.writeLine(t("config.reset_cancelled"));
+        return;
+      }
+    }
+    let anyReconfig = false;
+    let localeChanged = false;
+    for (const k of changed) {
+      const result = setConfigValue(ctx.config, k, rawFromValue(snapshot.get(k)));
+      if (result.ok) {
+        applyConfigSideEffects(ctx, result);
+        anyReconfig = anyReconfig || result.reconfigure;
+        localeChanged = localeChanged || result.key === "locale";
+      }
+    }
+    persistConfig(ctx);
+    if (anyReconfig) await ctx.agent.reconfigure(ctx.config);
+    if (localeChanged) ctx.reregisterCommands();
+    ctx.output.writeLine(
+      pc.green(t("config.reset_all_done", { count: String(changed.length) })),
+    );
+    return;
+  }
+
+  if (!target) {
+    ctx.output.writeLine(t("config.reset_usage"));
+    return;
+  }
+  const def = resolveConfigKey(target);
+  if (!def) {
+    renderConfigError(ctx, { reason: "unknown-key", input: target });
+    return;
+  }
+  if (def.readOnly || !snapshot.has(def.key)) {
+    ctx.output.writeLine(t("config.reset_unchanged", { key: def.key }));
+    return;
+  }
+  if (rawFromValue(def.get(ctx.config)) === rawFromValue(snapshot.get(def.key))) {
+    ctx.output.writeLine(t("config.reset_unchanged", { key: def.key }));
+    return;
+  }
+  const result = await mutateConfig(ctx, def.key, rawFromValue(snapshot.get(def.key)));
+  if (!result.ok) {
+    renderConfigError(ctx, result);
+    return;
+  }
+  ctx.output.writeLine(
+    pc.green(t("config.reset_ok", { key: result.key, value: result.display })),
+  );
+}
+
+function printReasoningStatus(ctx: ReplContext): void {
+  const display = ctx.config.showReasoning ? t("repl.show") : t("repl.hide");
+  const mode = ctx.config.reasoning?.mode ?? "auto";
+  const auto = mode === "auto" ? t("reasoning.auto_on") : t("reasoning.auto_off");
+  ctx.output.writeLine(t("reasoning.status", { display, level: mode, auto }));
+}
+
 function registerConfigCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "config",
     description: t("repl.config"),
     usage: t("repl.config_usage"),
-    action: (args: string[]) => {
+    examples: ["/config", "/config model", "/config reasoning.mode high", "/config reset ui.verbosity"],
+    action: async (args: string[]) => {
       // Subcommand routing: `/config migrate`. A separate registration with
       // a space in the name was unreachable — the dispatcher splits input on
       // whitespace, so "/config migrate" always resolved to plain "config".
       if ((args[0] ?? "").trim().toLowerCase() === "migrate") {
         return runConfigMigrate(ctx);
       }
-      const cfg = ctx.config;
-      const ctxW = cfg.contextWindow;
-      const sys = Math.floor(ctxW * cfg.contextBudget.systemPrompt);
-      const res = Math.floor(ctxW * cfg.contextBudget.responseReserve);
-      ctx.output.writeLine(`${t("repl.model")}       ${cfg.model}`);
-      const providers = ctx.agent.listProviders();
-      const active = providers.find((p) => p.active);
-      if (active) {
-        ctx.output.writeLine(
-          `${t("repl.provider")}    ${active.label} (${pc.dim(active.type)})  →  ${pc.dim(active.baseUrl)}`,
-        );
-      } else {
-        ctx.output.writeLine(
-          `${t("repl.provider")}    ${cfg.provider.type}  →  ${cfg.provider.baseUrl}`,
-        );
+      if (args.length === 0) {
+        printConfigTable(ctx);
+        return;
       }
-      ctx.output.writeLine(
-        `${t("repl.context")}     ${ctxW}  (sys:${sys}  res:${res}  hist:${ctxW - sys - res})`,
-      );
-      ctx.output.writeLine(`${t("repl.max_iters")}   ${cfg.maxToolIterations}`);
-      ctx.output.writeLine(`${t("repl.stuck_thresh")} ${cfg.stuckThreshold}`);
-      ctx.output.writeLine(
-        `${t("repl.reasoning_label")}   ${cfg.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"))}`,
-      );
-      ctx.output.writeLine(`${t("repl.log_level")}   ${cfg.logLevel}`);
-      ctx.output.writeLine(`${t("repl.locale")}      ${cfg.locale}`);
-      const meta = ctx.sessionManager?.getActiveMeta();
-      if (meta) {
-        ctx.output.writeLine(
-          `${t("repl.session_label")}     ${meta.name} (${meta.id})  —  ${meta.messageCount} msgs`,
-        );
+      if (args[0] === "reset") {
+        await runConfigReset(ctx, args.slice(1));
+        return;
+      }
+      const name = args[0];
+      if (args.length === 1) {
+        const group = keysForGroup(name);
+        if (group.length > 0) {
+          printConfigTable(ctx, group);
+          return;
+        }
+        const got = getConfigValue(ctx.config, name);
+        if (!got.ok) {
+          renderConfigError(ctx, got);
+          return;
+        }
+        ctx.output.writeLine(`${got.key} = ${got.display}`);
+        return;
+      }
+      const raw = args.slice(1).join(" ");
+      const result = await mutateConfig(ctx, name, raw);
+      if (!result.ok) {
+        renderConfigError(ctx, result);
+        return;
+      }
+      reportSaved(ctx, result);
+      if (result.key === "model") {
+        const known = ctx.knownModels();
+        if (known.length > 0 && !known.includes(String(result.value))) {
+          ctx.output.writeLine(pc.yellow(t("model.not_in_list", { name: String(result.value) })));
+        }
       }
     },
   });
@@ -246,46 +555,65 @@ function registerConfigCommands(ctx: ReplContext): void {
     name: "reasoning",
     description: t("repl.reasoning"),
     usage: t("repl.reasoning_usage"),
-    action: (args: string[]) => {
-      const level = args[0]?.trim().toLowerCase();
-      const VALID_LEVELS = ["auto", "none", "low", "medium", "high", "max"];
-      if (!level) {
-        // Toggle show/hide reasoning content
-        ctx.config.showReasoning = !ctx.config.showReasoning;
-        const status = ctx.config.showReasoning ? pc.green(t("repl.show")) : pc.dim(t("repl.hide"));
-        ctx.output.writeLine(t("repl.reasoning_status", { status }));
-      } else if (VALID_LEVELS.includes(level)) {
-        // Set reasoning effort level
-        ctx.agent.setReasoningLevel(level as any);
-        ctx.output.writeLine(pc.green(t("repl.reasoning_level_set", { level })));
-      } else {
-        ctx.output.writeLine(
-          pc.yellow(t("repl.reasoning_invalid_level", { level, valid: VALID_LEVELS.join(", ") })),
-        );
+    examples: ["/reasoning", "/reasoning show", "/reasoning level high"],
+    action: async (args: string[]) => {
+      const sub = args[0]?.trim().toLowerCase();
+      if (!sub) {
+        printReasoningStatus(ctx);
+        return;
       }
+      if (sub === "show" || sub === "on" || sub === "hide" || sub === "off") {
+        const on = sub === "show" || sub === "on";
+        const result = await mutateConfig(ctx, "showReasoning", on ? "on" : "off");
+        if (!result.ok) {
+          renderConfigError(ctx, result);
+          return;
+        }
+        ctx.output.writeLine(
+          pc.green(
+            t("reasoning.display_set", { state: on ? t("repl.show") : t("repl.hide") }),
+          ),
+        );
+        return;
+      }
+      if (sub === "level") {
+        const lvl = args[1]?.trim().toLowerCase();
+        if (!lvl) {
+          ctx.output.writeLine(t("repl.reasoning_usage"));
+          return;
+        }
+        const result = await mutateConfig(ctx, "reasoning.mode", lvl);
+        if (!result.ok) {
+          renderConfigError(ctx, result);
+          return;
+        }
+        ctx.output.writeLine(pc.green(t("repl.reasoning_level_set", { level: lvl })));
+        if (lvl !== "auto") ctx.output.writeLine(pc.dim(t("reasoning.auto_off_hint")));
+        return;
+      }
+      ctx.output.writeLine(pc.yellow(t("reasoning.unknown_sub", { sub })));
+      ctx.output.writeLine(t("repl.reasoning_usage"));
     },
   });
   ctx.registerCommand({
     name: "verbose",
     description: t("repl.verbose"),
     usage: t("repl.verbose_usage"),
-    action: (args: string[]) => {
-      const VALID = ["quiet", "normal", "verbose"];
+    examples: ["/verbose", "/verbose normal"],
+    action: async (args: string[]) => {
       const level = args[0]?.trim().toLowerCase();
-      if (level && !VALID.includes(level)) {
+      if (!level) {
         ctx.output.writeLine(
-          pc.yellow(t("repl.verbose_invalid_level", { level, valid: VALID.join(", ") })),
+          t("verbose.status", { level: resolveVerbosity(ctx.config.ui) }),
         );
         return;
       }
-      const current = ctx.config.ui.verbosity ?? (ctx.config.ui.verbose ? "verbose" : "quiet");
-      const next = (level ?? (current === "verbose" ? "quiet" : "verbose")) as
-        | "quiet"
-        | "normal"
-        | "verbose";
-      ctx.config.ui.verbosity = next;
-      ctx.output.setSuppressInfoLogs(next === "quiet");
-      ctx.output.writeLine(pc.green(t("repl.verbose_set", { level: next })));
+      const result = await mutateConfig(ctx, "ui.verbosity", level);
+      if (!result.ok) {
+        renderConfigError(ctx, result);
+        return;
+      }
+      ctx.output.writeLine(pc.green(t("repl.verbose_set", { level: result.display })));
     },
   });
   ctx.registerCommand({
@@ -295,22 +623,12 @@ function registerConfigCommands(ctx: ReplContext): void {
     action: () => {
       const providers = ctx.agent.listProviders();
       const active = providers.find((p) => p.active);
-      ctx.output.writeLine(`${t("repl.model")} ${ctx.config.model}`);
-      if (active) {
-        ctx.output.writeLine(
-          `${t("repl.provider")} ${active.label} (${pc.dim(active.type)}) @ ${pc.dim(active.baseUrl)}`,
-        );
-      } else {
-        ctx.output.writeLine(
-          `${t("repl.provider")} ${ctx.config.provider.type} @ ${pc.dim(ctx.config.provider.baseUrl)}`,
-        );
-      }
+      const providerLabel = active ? active.label : ctx.config.provider.type;
+      const parts = [ctx.config.model, providerLabel];
       const meta = ctx.sessionManager?.getActiveMeta();
-      if (meta) {
-        ctx.output.writeLine(
-          `${t("repl.session_label")} ${meta.name} (${meta.id}) — ${meta.messageCount} messages`,
-        );
-      }
+      if (meta) parts.push(`${meta.name} (${meta.messageCount} ${t("repl.msgs")})`);
+      parts.push(`${ctx.config.contextWindow} tok`);
+      ctx.output.writeLine(parts.join(pc.dim(" · ")));
     },
   });
   ctx.registerCommand({
@@ -333,15 +651,12 @@ function registerConfigCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "sysprompt",
     description: t("repl.sysprompt_desc"),
-    usage: t("repl.sysprompt_desc"),
-    action: () => {
+    usage: t("repl.sysprompt_usage"),
+    examples: ["/sysprompt", "/sysprompt --full"],
+    action: (args: string[]) => {
       const info = ctx.agent.getSystemPromptInfo();
+      const full = args.includes("--full");
       ctx.output.writeLine(pc.bold(t("repl.sysprompt_tokens", { count: String(info.tokenCount) })));
-      ctx.output.writeLine(pc.dim("─".repeat(60)));
-      for (const line of info.text.split("\n")) {
-        ctx.output.writeLine(line);
-      }
-      ctx.output.writeLine(pc.dim("─".repeat(60)));
       if (info.excluded.length > 0) {
         ctx.output.writeLine(
           pc.yellow(t("repl.excluded_blocks", { count: String(info.excluded.length) })),
@@ -349,6 +664,15 @@ function registerConfigCommands(ctx: ReplContext): void {
         for (const e of info.excluded) {
           ctx.output.writeLine(pc.dim(`  - ${e.slice(0, 80)}${e.length > 80 ? "..." : ""}`));
         }
+      }
+      if (full) {
+        ctx.output.writeLine(pc.dim("─".repeat(60)));
+        for (const line of info.text.split("\n")) {
+          ctx.output.writeLine(line);
+        }
+        ctx.output.writeLine(pc.dim("─".repeat(60)));
+      } else {
+        ctx.output.writeLine(pc.dim(t("repl.sysprompt_full_hint")));
       }
     },
   });
@@ -391,13 +715,14 @@ function registerProviderCommands(ctx: ReplContext): void {
       ctx.output.writeLine(t("repl.provider_usage"));
       return;
     }
-    try {
-      await ctx.agent.setProvider(name);
-      ctx.refreshModelCache();
-      ctx.output.writeLine(pc.green(t("repl.provider_set", { name })));
-    } catch (e: any) {
-      ctx.output.writeLine(pc.red(e.message), "stderr");
+    const result = await mutateConfig(ctx, "provider.active", name);
+    if (!result.ok) {
+      renderConfigError(ctx, result);
+      return;
     }
+    ctx.refreshModelCache();
+    ctx.output.writeLine(pc.green(t("repl.provider_set", { name })));
+    reportSaved(ctx, result);
   };
 
   const add = async (args: string[]): Promise<void> => {
@@ -423,6 +748,16 @@ function registerProviderCommands(ctx: ReplContext): void {
     if (!name) {
       ctx.output.writeLine(t("repl.provider_usage"));
       return;
+    }
+    for (const flag of ["priority", "context-window", "rpm", "parallel"]) {
+      const v = flags[flag];
+      if (v !== undefined && !Number.isFinite(Number(v))) {
+        ctx.output.writeLine(
+          pc.red(t("repl.provider_add_invalid_number", { flag: `--${flag}`, value: v })),
+          "stderr",
+        );
+        return;
+      }
     }
     const entries = Array.isArray(ctx.config.provider.entries) ? ctx.config.provider.entries : [];
     if (entries.length === 0) {
@@ -459,8 +794,7 @@ function registerProviderCommands(ctx: ReplContext): void {
     });
     ctx.config.provider.entries = entries;
     ctx.config.provider.active = ctx.config.provider.active || ctx.config.provider.type;
-    const configPath = join(ctx.configDir, "config.json");
-    saveConfig(ctx.config, configPath, dirname(configPath));
+    persistConfig(ctx);
     await ctx.agent.reconfigure(ctx.config);
     ctx.output.writeLine(pc.green(t("cli.provider_added", { name })));
     ctx.output.writeLine(t("repl.provider_switch_hint", { name }));
@@ -476,10 +810,12 @@ function registerProviderCommands(ctx: ReplContext): void {
     name: "provider",
     description: t("repl.provider_list"),
     usage: t("repl.provider_usage"),
+    examples: ["/provider list", "/provider use openrouter", "/provider add openai --key sk-..."],
     action: async (args: string[]) => {
       const subcmd = args[0];
       const handler = subcmd ? handlers[subcmd] : handlers.list;
       if (!handler) {
+        ctx.output.writeLine(pc.yellow(t("repl.unknown_sub", { cmd: "provider", sub: subcmd })));
         ctx.output.writeLine(t("repl.provider_usage"));
         return;
       }
@@ -537,11 +873,17 @@ function registerProviderCommands(ctx: ReplContext): void {
       ctx.output.writeLine(t("repl.model_usage"));
       return;
     }
-    ctx.config.model = name;
-    const configPath = join(ctx.configDir, "config.json");
-    saveConfig(ctx.config, configPath, dirname(configPath));
-    await ctx.agent.reconfigure(ctx.config);
+    const result = await mutateConfig(ctx, "model", name);
+    if (!result.ok) {
+      renderConfigError(ctx, result);
+      return;
+    }
     ctx.output.writeLine(pc.green(t("repl.model_set", { name })));
+    const known = ctx.knownModels();
+    if (known.length > 0 && !known.includes(name)) {
+      ctx.output.writeLine(pc.yellow(t("model.not_in_list", { name })));
+    }
+    reportSaved(ctx, result);
   };
 
   const modelHandlers: Record<string, (args: string[]) => void | Promise<void>> = {
@@ -553,10 +895,12 @@ function registerProviderCommands(ctx: ReplContext): void {
     name: "model",
     description: t("repl.model_list"),
     usage: t("repl.model_usage"),
+    examples: ["/model list", "/model use qwen/qwen3.5-9b"],
     action: async (args: string[]) => {
       const subcmd = args[0];
       const handler = subcmd ? modelHandlers[subcmd] : modelHandlers.list;
       if (!handler) {
+        ctx.output.writeLine(pc.yellow(t("repl.unknown_sub", { cmd: "model", sub: subcmd })));
         ctx.output.writeLine(t("repl.model_usage"));
         return;
       }
@@ -567,13 +911,8 @@ function registerProviderCommands(ctx: ReplContext): void {
     name: "context",
     description: t("cli.manage_context"),
     usage: t("repl.context_usage"),
+    examples: ["/context", "/context 64000", "/context system 10%", "/context reserve 0.2"],
     action: async (args: string[]) => {
-      const save = async () => {
-        const configPath = join(ctx.configDir, "config.json");
-        saveConfig(ctx.config, configPath, dirname(configPath));
-        await ctx.agent.reconfigure(ctx.config);
-      };
-
       if (args.length === 0) {
         for (const line of budgetBreakdownLines(ctx.config)) ctx.output.writeLine(line);
         ctx.output.writeLine(pc.dim(t("repl.context_usage")));
@@ -581,25 +920,38 @@ function registerProviderCommands(ctx: ReplContext): void {
       }
 
       if (args[0] === "system" || args[0] === "reserve") {
-        const key = args[0] as "system" | "reserve";
-        const value = Number(args[1]);
-        if (setBudgetShare(ctx.config, key, value) !== null) {
-          ctx.output.writeLine(pc.yellow(t("cli.context_invalid_fraction")));
+        const raw = args[1];
+        if (!raw) {
+          ctx.output.writeLine(t("repl.context_usage"));
           return;
         }
-        await save();
-        ctx.output.writeLine(pc.green(t("cli.context_fraction_set", { key, value })));
+        const key =
+          args[0] === "system"
+            ? "contextBudget.systemPrompt"
+            : "contextBudget.responseReserve";
+        const result = await mutateConfig(ctx, key, raw);
+        if (!result.ok) {
+          renderConfigError(ctx, result);
+          return;
+        }
+        ctx.output.writeLine(
+          pc.green(t("cli.context_fraction_set", { key: args[0], value: result.display })),
+        );
         return;
       }
 
-      const size = parseInt(args[0], 10);
-      if (isNaN(size) || size < 1024) {
-        ctx.output.writeLine(t("cli.invalid_context_size"));
+      if (!/^\d+$/.test(args[0])) {
+        ctx.output.writeLine(pc.yellow(t("context.unknown_arg", { arg: args[0] })));
+        ctx.output.writeLine(t("repl.context_usage"));
         return;
       }
-      ctx.config.contextWindow = size;
-      await save();
-      ctx.output.writeLine(pc.green(t("cli.context_set", { size })));
+      const result = await mutateConfig(ctx, "contextWindow", args[0]);
+      if (!result.ok) {
+        renderConfigError(ctx, result);
+        return;
+      }
+      ctx.output.writeLine(pc.green(t("cli.context_set", { size: String(result.value) })));
+      reportSaved(ctx, result);
     },
   });
 }
@@ -666,19 +1018,17 @@ function registerLspCommands(ctx: ReplContext): void {
     name: "lsp",
     description: t("repl.lsp"),
     usage: t("repl.lsp_usage"),
+    examples: ["/lsp status", "/lsp restart", "/lsp check src/index.ts"],
     action: async (args: string[]) => {
-      const subcommand = args[0] || "status";
-
       // Access LSP module via the agent's module registry
       const lspModule = ctx.agent.getModule<LspModule>("lsp");
-
       if (!lspModule) {
         ctx.output.writeLine(pc.yellow(t("repl.lsp_not_available")));
         return;
       }
 
-      switch (subcommand) {
-        case "status": {
+      const handlers: Record<string, (rest: string[]) => void | Promise<void>> = {
+        status: () => {
           const disabled = lspModule.getDisabledServers();
           const failures = lspModule.getFailureCounts();
           const config = ctx.config.lsp;
@@ -704,18 +1054,16 @@ function registerLspCommands(ctx: ReplContext): void {
           if (disabled.length === 0 && failures.size === 0) {
             ctx.output.writeLine(pc.green(t("repl.lsp_all_ok")));
           }
-          break;
-        }
+        },
 
-        case "restart": {
+        restart: () => {
           ctx.output.writeLine(pc.yellow(t("repl.lsp_restarting")));
           lspModule.resetDisabledServers();
           ctx.output.writeLine(pc.green(t("repl.lsp_restarted")));
-          break;
-        }
+        },
 
-        case "check": {
-          const path = args[1];
+        check: async (rest: string[]) => {
+          const path = rest[0];
           if (!path) {
             ctx.output.writeLine(pc.yellow(t("repl.lsp_check_usage")));
             return;
@@ -730,14 +1078,19 @@ function registerLspCommands(ctx: ReplContext): void {
           } catch (e) {
             ctx.output.writeLine(pc.red(t("repl.lsp_check_error", { error: errMsg(e) })), "stderr");
           }
-          break;
-        }
+        },
+      };
 
-        default: {
-          ctx.output.writeLine(pc.dim(t("repl.lsp_usage")));
-          break;
-        }
+      const subcommand = args[0] || "status";
+      const handler = handlers[subcommand];
+      if (!handler) {
+        ctx.output.writeLine(
+          pc.yellow(t("repl.unknown_sub", { cmd: "lsp", sub: subcommand })),
+        );
+        ctx.output.writeLine(pc.dim(t("repl.lsp_usage")));
+        return;
       }
+      await handler(args.slice(1));
     },
   });
 }
@@ -808,8 +1161,9 @@ function registerSessionCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "resume",
     description: t("repl.resume"),
-    aliases: ["switch", "use"],
+    aliases: ["switch"],
     usage: t("repl.resume_usage"),
+    examples: ["/resume", "/resume my-session"],
     action: (args: string[]) => {
       const query = args.join(" ");
       const sessions = ctx.sessionManager!.list();
@@ -908,6 +1262,91 @@ function registerSessionCommands(ctx: ReplContext): void {
       }
       ctx.sessionManager!.delete(match.id);
       ctx.output.writeLine(`${t("session.deleted", { id: match.id })}: ${match.name}`);
+    },
+  });
+
+  ctx.registerCommand({
+    name: "export",
+    description: t("repl.export"),
+    usage: t("repl.export_usage"),
+    examples: [
+      "/export",
+      "/export my-session --format md",
+      "/export --format json --out -",
+    ],
+    action: async (args: string[]) => {
+      let format: ExportFormat = "md";
+      let out: string | undefined;
+      let redact = true;
+      const positional: string[] = [];
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a === "--format") {
+          const v = args[++i];
+          if (!v) {
+            ctx.output.writeLine(t("export.missing_value", { flag: a }));
+            return;
+          }
+          format = v as ExportFormat;
+        } else if (a === "--out") {
+          const v = args[++i];
+          if (v === undefined) {
+            ctx.output.writeLine(t("export.missing_value", { flag: a }));
+            return;
+          }
+          out = v;
+        } else if (a === "--no-redact") {
+          redact = false;
+        } else {
+          positional.push(a);
+        }
+      }
+      if (format !== "md" && format !== "json" && format !== "jsonl") {
+        ctx.output.writeLine(pc.yellow(t("export.invalid_format", { format })), "stderr");
+        return;
+      }
+      const query = positional.join(" ");
+      const sessions = ctx.sessionManager!.list();
+      const match = query
+        ? sessions.find(
+            (s) =>
+              s.id === query ||
+              s.id.startsWith(query) ||
+              s.name.toLowerCase().includes(query.toLowerCase()),
+          )
+        : sessions.find((s) => s.id === ctx.sessionManager!.getActive());
+      if (!match) {
+        ctx.output.writeLine(
+          query ? t("session.no_match", { query }) : t("session.no_active"),
+        );
+        return;
+      }
+      const messages = ctx.sessionManager!.getHistory(match.id);
+      const log = ctx.sessionManager!.loadSessionLog(match.id);
+      if (format === "jsonl" ? log.length === 0 : messages.length === 0) {
+        ctx.output.writeLine(pc.yellow(t("export.empty")));
+        return;
+      }
+      const text = redactExport(
+        formatExport({ meta: match, messages, log }, format),
+        redact,
+      );
+      if (out === "-") {
+        ctx.output.writeLine(text);
+        return;
+      }
+      const baseDir = out ? dirname(out) : join(homedir(), ".mma", "exports");
+      const path =
+        out ?? join(baseDir, `${sanitizeFileName(match.name)}-${match.id.slice(0, 8)}.${extensionFor(format)}`);
+      try {
+        mkdirSync(baseDir, { recursive: true });
+        writeFileSync(path, text, "utf-8");
+      } catch (e) {
+        ctx.output.writeLine(pc.red(t("export.write_failed", { error: errMsg(e) })), "stderr");
+        return;
+      }
+      ctx.output.writeLine(pc.green(t("export.written", { path })));
+      ctx.output.writeLine(pc.dim(redact ? t("export.redacted") : t("export.raw")));
     },
   });
 }
@@ -1016,7 +1455,7 @@ function registerSkillCommands(ctx: ReplContext): void {
       const subcmd = args[0];
       const handler = subcmd ? skillHandlers[subcmd] : skillHandlers.list;
       if (!handler) {
-        ctx.output.writeLine(pc.red(t("repl.skill_unknown_sub", { subcmd })), "stderr");
+        ctx.output.writeLine(pc.yellow(t("repl.unknown_sub", { cmd: "skill", sub: subcmd })));
         ctx.output.writeLine(t("repl.skill_usage"));
         return;
       }
