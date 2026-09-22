@@ -859,9 +859,17 @@ export class LineEditor implements LineInput {
       this.render();
       return;
     }
-    const rows = matches.map((m) =>
-      m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`,
-    );
+    const width = this.columns();
+    const rows = matches.map((m) => {
+      const plain = m.description ? `  ${m.value}  ${m.description}` : `  ${m.value}`;
+      const chars = Array.from(plain);
+      // Keep every row one column short of the terminal so it cannot wrap
+      // (a wrapped row would desync the cursor bookkeeping below).
+      if (chars.length > width - 1) {
+        return chars.slice(0, Math.max(0, width - 2)).join("") + "…";
+      }
+      return m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`;
+    });
     this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
     // The printed list moved the cursor (rows.length + 1) visual rows down
     // from its frame position. Account for those rows so the next render

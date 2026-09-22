@@ -21,6 +21,20 @@ export interface CompletionProvider {
   complete(ctx: CompletionContext): CompletionItem[];
 }
 
+/**
+ * Build slash-completion items from the command registry. `commands` is keyed
+ * by canonical name AND aliases, so every alias becomes a completable token
+ * carrying its command's description.
+ */
+export function buildSlashCompletions(
+  commands: Map<string, { name: string; description: string }>,
+): Array<{ name: string; description: string }> {
+  return Array.from(commands.entries()).map(([name, cmd]) => ({
+    name,
+    description: cmd.description,
+  }));
+}
+
 export class SlashCommandProvider implements CompletionProvider {
   name = "slash-commands";
   private commands: Array<{ name: string; description?: string }>;

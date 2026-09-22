@@ -297,6 +297,29 @@ describe("LineEditor", () => {
     editor.close();
   });
 
+  it("clamps multi-match rows to the terminal width (no wrapping)", async () => {
+    const { editor, input, output } = makeEditor({
+      completer: () => [
+        [
+          { value: "/verylongcommand", description: "x".repeat(200) },
+          { value: "/other", description: "y".repeat(200) },
+        ],
+        "/",
+      ],
+    });
+    input.pushData("/");
+    input.pushData("\t");
+    await tick();
+    const rows = output.data
+      .split("\r\n")
+      .filter((l) => l.includes("…"));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(stripAnsi(row).length).toBeLessThanOrEqual(80);
+    }
+    editor.close();
+  });
+
   it("answers questions through question()", async () => {
     const { editor, input } = makeEditor();
     let answer = "";
