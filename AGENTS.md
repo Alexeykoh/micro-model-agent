@@ -253,7 +253,15 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 Правило проекта: если рендер расходится со STYLE.md — это баг, привести к стилю.
 
-### Current Version: 1.5.0
+### UI/UX Audit Fixes (1.6.0)
+
+- **Security-paths wizard answer** (`src/cli/setup.ts`, `src/cli/setup-order.ts`): the question was inverted and a no-op; reworded to **restrict** semantics and `security.paths.enabled` is now applied.
+- **First-run wizard suppression** (`src/config/config.ts`, `src/cli/main.ts`): `loadConfig` no longer persists a default config on first load (subcommands/one-shots used to create it, so the next interactive `mma` skipped the wizard); a virgin one-shot now **warns** instead of silently using defaults.
+- **`/wizard` gaps** (`src/cli/repl-commands.ts`, `src/cli/setup-order.ts`): security answers are applied centrally via `applyAnswersToConfig`, and a multi-entry `provider.entries[]` config updates the active entry instead of being ignored.
+- **`mma config show` redaction** (`src/cli/commands.ts`, `src/config/redact.ts`): secrets are redacted by default; `--show-secrets` opts out. `configForDisplay` is the pure, tested helper behind it.
+- **Tab completion** (`src/cli/completer.ts`, `src/ui/line-editor.ts`): completions carry descriptions, file-path completion is registered in the REPL, and `↑`/`↓`/Tab cycle candidates with Esc restoring the original partial.
+
+### Current Version: 1.6.0
 
 ### Changelog
 

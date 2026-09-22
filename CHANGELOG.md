@@ -4,6 +4,20 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-09-22
+
+### Added
+
+- **Tab completion descriptions & navigation** (`src/cli/completer.ts`, `src/ui/line-editor.ts`): completions carry descriptions, file-path completion is registered in the REPL, arrow keys/Tab cycle candidates, Esc restores.
+- **`redactConfigSecrets`** (`src/config/redact.ts`): deep secret redaction for config display.
+
+### Fixed
+
+- **Security-paths wizard answer** (`src/cli/setup.ts`, `src/cli/setup-order.ts`): the question was inverted and a no-op; reworded to restrict semantics and `security.paths.enabled` is now applied.
+- **First-run wizard suppression** (`src/config/config.ts`, `src/cli/main.ts`): `loadConfig` no longer persists default config on first load; one-shot runs warn instead of silently using defaults.
+- **`/wizard` dropped security answers and ignored `provider.entries[]`** (`src/cli/repl-commands.ts`, `src/cli/setup-order.ts`): applies answers centrally and updates the active entry.
+- **`mma config show` leaked secrets** (`src/cli/commands.ts`): secrets redacted by default, `--show-secrets` opts out.
+
 ## [1.5.0] - 2026-09-21
 
 ### Added

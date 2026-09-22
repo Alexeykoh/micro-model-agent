@@ -24,8 +24,14 @@ import {
   extractChangelogRange,
 } from "../modules/updater/changelog-reader";
 import { getDefaultChannel, writeMachineJson } from "../output";
+import { redactConfigSecrets } from "../config/redact";
 
 const version = readMmaVersion();
+
+/** Config as shown by `mma config show`: secrets redacted unless explicitly requested. */
+export function configForDisplay<T>(config: T, showSecrets?: boolean): T {
+  return showSecrets ? config : redactConfigSecrets(config);
+}
 
 function buildInitCommand(program: Command): void {
   program
@@ -72,8 +78,7 @@ function buildConfigCommands(program: Command): void {
     .option("--show-secrets", "Print secrets (API keys, tokens) unredacted")
     .action(async (opts: { showSecrets?: boolean }) => {
       const { config } = await bootstrap();
-      const { redactConfigSecrets } = await import("../config/redact");
-      writeMachineJson(opts.showSecrets ? config : redactConfigSecrets(config));
+      writeMachineJson(configForDisplay(config, opts.showSecrets));
     });
   configCmd
     .command("migrate")
