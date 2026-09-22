@@ -494,7 +494,7 @@ async function runConfigReset(ctx: ReplContext, rest: string[]): Promise<void> {
 }
 
 function printReasoningStatus(ctx: ReplContext): void {
-  const display = ctx.config.showReasoning ? t("repl.show") : t("repl.hide");
+  const display = ctx.config.showReasoning ? t("reasoning.on") : t("reasoning.off");
   const mode = ctx.config.reasoning?.mode ?? "auto";
   const auto = mode === "auto" ? t("reasoning.auto_on") : t("reasoning.auto_off");
   ctx.output.writeLine(t("reasoning.status", { display, level: mode, auto }));
@@ -571,7 +571,7 @@ function registerConfigCommands(ctx: ReplContext): void {
         }
         ctx.output.writeLine(
           pc.green(
-            t("reasoning.display_set", { state: on ? t("repl.show") : t("repl.hide") }),
+            t("reasoning.display_set", { state: on ? t("reasoning.on") : t("reasoning.off") }),
           ),
         );
         return;

@@ -567,6 +567,8 @@
   "config.alias_label": "алиас",
   "config.group_label": "группа",
   "reasoning.status": "Рассуждения: показ {display} · усилие {level} {auto}",
+  "reasoning.on": "вкл",
+  "reasoning.off": "выкл",
   "reasoning.auto_on": "(авто-политика)",
   "reasoning.auto_off": "(авто-политика выключена)",
   "reasoning.auto_off_hint": "Авто-политика выключена. Вернуть: /config reset reasoning.mode",

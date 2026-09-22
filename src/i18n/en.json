@@ -573,6 +573,8 @@
   "config.alias_label": "alias of",
   "config.group_label": "group",
   "reasoning.status": "Reasoning: display {display} · effort {level} {auto}",
+  "reasoning.on": "on",
+  "reasoning.off": "off",
   "reasoning.auto_on": "(auto policy)",
   "reasoning.auto_off": "(auto policy off)",
   "reasoning.auto_off_hint": "Auto policy off. Restore with: /config reset reasoning.mode",
