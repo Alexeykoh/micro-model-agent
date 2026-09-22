@@ -358,9 +358,13 @@ export class Repl implements ReplContext {
     // Rebuild from scratch: /reload calls this again after bootstrap, and
     // re-registering without a reset would duplicate every provider.
     this.completer.reset();
-    const slashCommands = Array.from(this.commands.entries())
-      .filter(([name, cmd]) => !cmd.aliases?.includes(name))
-      .map(([, cmd]) => ({ name: cmd.name, description: cmd.description }));
+    // `this.commands` is keyed by canonical name AND aliases; iterating its
+    // entries yields every completable token, each with its command's
+    // description.
+    const slashCommands = Array.from(this.commands.entries()).map(([name, cmd]) => ({
+      name,
+      description: cmd.description,
+    }));
     this.completer.registerProvider(new SlashCommandProvider(slashCommands));
     if (this.sessionManager) {
       this.completer.registerProvider(
