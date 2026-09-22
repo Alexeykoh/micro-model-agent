@@ -71,7 +71,8 @@ function buildInitCommand(program: Command): void {
             ]),
           ];
         }
-        if (!answers.securityPathsDeny) {
+        config.security.paths.enabled = answers.securityPathsRestrict;
+        if (!answers.securityPathsRestrict) {
           config.security.paths.denied = [];
         }
       }

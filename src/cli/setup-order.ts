@@ -54,7 +54,8 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
         ...new Set([...config.security.bash.blacklist, ...SECURITY_BASH_BLOCKLIST]),
       ];
     }
-    if (!a.securityPathsDeny) config.security.paths.denied = [];
+    config.security.paths.enabled = a.securityPathsRestrict;
+    if (!a.securityPathsRestrict) config.security.paths.denied = [];
   }
   return config;
 }

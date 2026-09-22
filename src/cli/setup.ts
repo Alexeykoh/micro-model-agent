@@ -16,7 +16,7 @@ export interface SetupAnswers {
   locale: string;
   securityBashBlock: boolean;
   securityFlagsBlock: boolean;
-  securityPathsDeny: boolean;
+  securityPathsRestrict: boolean;
 }
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
@@ -244,12 +244,13 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   const configureSecurity = await ask(rl, t("setup.security_configure"), "n");
   let securityBashBlock = false;
   let securityFlagsBlock = false;
-  let securityPathsDeny = true;
+  let securityPathsRestrict = true;
   if (configureSecurity.toLowerCase() === "y" || configureSecurity.toLowerCase() === "yes") {
     securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
     securityFlagsBlock =
       (await ask(rl, t("setup.security_flags_block"), "n")).toLowerCase() === "y";
-    securityPathsDeny = (await ask(rl, t("setup.security_paths_deny"), "Y")).toLowerCase() !== "n";
+    securityPathsRestrict =
+      (await ask(rl, t("setup.security_paths_restrict"), "Y")).toLowerCase() !== "n";
   }
 
   if (ownRl) {
@@ -268,7 +269,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     locale,
     securityBashBlock,
     securityFlagsBlock,
-    securityPathsDeny,
+    securityPathsRestrict,
   };
 
   getDefaultChannel().writeLine(pc.green(pc.bold(t("setup.complete"))));

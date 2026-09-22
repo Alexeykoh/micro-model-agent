@@ -16,7 +16,7 @@ function makeAnswers(overrides: Partial<SetupAnswers> = {}): SetupAnswers {
     locale: "en",
     securityBashBlock: false,
     securityFlagsBlock: false,
-    securityPathsDeny: true,
+    securityPathsRestrict: true,
     ...overrides,
   };
 }
@@ -65,10 +65,20 @@ describe("applyAnswersToConfig", () => {
     expect(config.security.bash.enabled).toBe(true);
   });
 
-  it("clears denied paths when securityPathsDeny=false", () => {
+  it("enables path policy with defaults when securityPathsRestrict=true", () => {
+    const config = makeConfig();
+    applyAnswersToConfig(config, makeAnswers({ securityPathsRestrict: true }));
+
+    expect(config.security.paths.enabled).toBe(true);
+    expect(config.security.paths.denied.length).toBeGreaterThan(0);
+  });
+
+  it("disables path policy and clears denied paths when securityPathsRestrict=false", () => {
     const config = makeConfig();
     expect(config.security.paths.denied.length).toBeGreaterThan(0);
-    applyAnswersToConfig(config, makeAnswers({ securityPathsDeny: false }));
+    applyAnswersToConfig(config, makeAnswers({ securityPathsRestrict: false }));
+
+    expect(config.security.paths.enabled).toBe(false);
     expect(config.security.paths.denied).toEqual([]);
   });
 
