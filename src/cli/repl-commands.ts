@@ -3,6 +3,7 @@ import { readMmaVersion } from "../core/version";
 import { renderTable } from "../ui/table";
 import { t } from "../i18n/index";
 import { runSetup } from "./setup";
+import { applyAnswersToConfig } from "./setup-order";
 import { saveConfig } from "../config/config";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { budgetBreakdownLines, setBudgetShare } from "../config/budget";
@@ -322,13 +323,21 @@ function registerConfigCommands(ctx: ReplContext): void {
       await ctx.withExclusiveInput(async () => {
         const answers = await runSetup(ctx.rl);
         const configPath = join(ctx.configDir, "config.json");
-        ctx.config.provider.type = answers.provider;
-        ctx.config.provider.baseUrl = answers.apiBase;
-        ctx.config.provider.apiKey = answers.apiKey;
-        ctx.config.model = answers.model;
-        ctx.config.contextWindow = answers.contextWindow;
-        ctx.config.maxToolIterations = answers.maxToolIterations;
-        ctx.config.locale = answers.locale;
+        // Multi-entry configs resolve the active provider from `entries[]`, so
+        // a fresh single entry must replace them for the wizard choice to win.
+        const hadEntries = (ctx.config.provider.entries?.length ?? 0) > 0;
+        applyAnswersToConfig(ctx.config, answers);
+        if (hadEntries) {
+          ctx.config.provider.entries = [
+            {
+              type: answers.provider,
+              label: answers.provider,
+              baseUrl: answers.apiBase,
+              apiKey: answers.apiKey,
+            },
+          ];
+          ctx.config.provider.active = answers.provider;
+        }
         saveConfig(ctx.config, configPath, dirname(configPath));
         await ctx.agent.reconfigure(ctx.config);
         ctx.output.writeLine(pc.green(t("cli.config_saved")));
