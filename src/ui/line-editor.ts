@@ -328,12 +328,10 @@ export class LineEditor implements LineInput {
       }
       return;
     }
-    if (this.onKeyInput && this.onKeyInput(str, key)) return;
-
-    // While a completion session is active, ↑/↓/Tab cycle the candidates and
-    // Esc restores the original partial. Enter accepts (session cleared, the
-    // buffer already holds the chosen candidate, so normal submit runs). Any
-    // other key drops the session and is processed normally.
+    // Completion session takes precedence over host key hooks: Esc must
+    // restore the original partial instead of triggering the host's Esc
+    // handling, and arrow/Tab must cycle. Any other key drops the session
+    // and is processed normally (host hook included).
     if (this.completionSession) {
       const ck = key as { name?: string };
       if (ck?.name === "down") {
@@ -353,8 +351,9 @@ export class LineEditor implements LineInput {
         return;
       }
       this.completionSession = null;
-      // fall through: return submits, every other key edits normally
     }
+
+    if (this.onKeyInput && this.onKeyInput(str, key)) return;
 
     const k = key as {
       name?: string;

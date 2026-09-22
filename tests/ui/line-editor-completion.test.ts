@@ -98,6 +98,29 @@ describe("LineEditor tab completion cycling", () => {
     editor.close();
   });
 
+  it("restores the original partial on Escape even when the host hook consumes Esc", async () => {
+    const { editor, input } = makeEditor({ completer: threeMatches });
+    const captured: string[] = [];
+    editor.onKeyInput = (_str, key) => {
+      if ((key as { name?: string })?.name === "escape") {
+        captured.push("escape");
+        return true;
+      }
+      return false;
+    };
+    input.pushData("/");
+    input.pushData("\t");
+    await tick();
+    expect(editor["lines"][0]).toBe("/alpha");
+
+    input.pushData("\x1b"); // escape
+    await escapeTick();
+    expect(editor["lines"][0]).toBe("/");
+    expect(editor["completionSession"]).toBeNull();
+    expect(captured).toEqual([]);
+    editor.close();
+  });
+
   it("clears the session and inserts a printable key", async () => {
     const { editor, input } = makeEditor({ completer: threeMatches });
     input.pushData("/");
