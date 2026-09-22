@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`/wizard` dropped security answers and ignored `provider.entries[]`** (`src/cli/repl-commands.ts`, `src/cli/setup-order.ts`): applies answers centrally and updates the active entry.
 - **`mma config show` leaked secrets** (`src/cli/commands.ts`): secrets redacted by default, `--show-secrets` opts out.
 
+### Changed
+
+- **Chat UI: tool-label accent & separators** (`src/ui/theme.ts`, `src/ui/renderer.ts`, `docs/design/ui/STYLE.md`): the action glyph and the localized tool label now share the category color (`toolAccent`), and a dim `·` separates a status label from its content (reasoning label from reasoning text, tool label from arguments) — the rotating status verb no longer blurs into the model's own words. `Ctrl+O` reprint follows the same accent.
+
 ## [1.5.0] - 2026-09-21
 
 ### Added
