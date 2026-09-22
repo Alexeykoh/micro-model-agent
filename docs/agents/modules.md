@@ -27,8 +27,11 @@ Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`,
 ```bash
 mma session list              # List all sessions
 mma session show <id>         # Show session details
+mma session export <id>       # Export a session (--format md|json|jsonl, --out <path>, --no-redact)
 mma session delete <id>       # Delete a session
 ```
+
+REPL equivalents include `/export [<id|name>] [--format md|json|jsonl] [--out <path>] [--no-redact]` (default file `~/.mma/exports/<name>-<id8>.<ext>`, secrets redacted).
 
 ### Data layout
 
@@ -174,7 +177,7 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 - **Dedup by name** in `PluginManager.register(plugin, source?)`: the higher `version` wins (unversioned = "0.0.0"); the loser is dropped and the caller is notified via the `RegisterResult` (`registered` / `skipped_older` / `duplicate`). Applies across global + project dirs.
 - **Compatibility gate** in `PluginLoader`: when `minMmaVersion` > current MMA version the plugin is skipped with a `plugin.incompatible` warning (reuses the existing `plugin.skipped` machinery). Bootstrap passes `mmaVersion` (from `readMmaVersion()` in `src/core/version.ts`) and `source` (`global` / `project`).
 - **Source tracking**: `PluginInfo { plugin, source }` via `PluginManager.getPluginInfos()`. `getAllPlugins()` stays backward-compatible.
-- **CLI:** `mma plugins list` (external plugins only; `--all` includes builtins) and `mma plugins list --all`; REPL `/status` shows version + `[source]` per non-builtin plugin.
+- **CLI:** `mma plugins list` (external plugins only; `--all` includes builtins) and `mma plugins list --all`; REPL `/plugins` shows version + `[source]` per non-builtin plugin.
 - `lint-on-write` and `notify` are marked `isBuiltin = true`.
 
 ### Example plugin: `trace-server` (live browser trace)

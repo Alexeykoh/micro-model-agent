@@ -7,7 +7,14 @@ import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { join, dirname } from "path";
 import { homedir } from "os";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import {
+  formatExport,
+  redactExport,
+  sanitizeFileName,
+  extensionFor,
+  type ExportFormat,
+} from "../modules/session/export";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
@@ -616,6 +623,56 @@ function buildSessionCommands(program: Command): void {
           );
         }
       }
+    });
+  session
+    .command("export")
+    .argument("<id>", "Session id (or name prefix)")
+    .description(t("cli.export_session"))
+    .option("--format <format>", t("cli.export_format"), "md")
+    .option("--out <path>", t("cli.export_out"))
+    .option("--no-redact", t("cli.export_no_redact"))
+    .action(async (id: string, opts: { format: string; out?: string; redact: boolean }) => {
+      const { sessionManager } = await bootstrap();
+      const meta =
+        sessionManager.get(id) ??
+        sessionManager.list().find((s) => s.id.startsWith(id)) ??
+        sessionManager.list().find((s) => s.name.toLowerCase().includes(id.toLowerCase()));
+      if (!meta) {
+        getDefaultChannel().writeLine(t("session.not_found", { id }));
+        return;
+      }
+      const format = opts.format as ExportFormat;
+      if (format !== "md" && format !== "json" && format !== "jsonl") {
+        getDefaultChannel().writeLine(t("export.invalid_format", { format }));
+        return;
+      }
+      const messages = sessionManager.getHistory(meta.id);
+      const log = sessionManager.loadSessionLog(meta.id);
+      if (format === "jsonl" ? log.length === 0 : messages.length === 0) {
+        getDefaultChannel().writeLine(t("export.empty"));
+        return;
+      }
+      const text = redactExport(formatExport({ meta, messages, log }, format), opts.redact);
+      if (opts.out === "-") {
+        getDefaultChannel().writeLine(text);
+        return;
+      }
+      const baseDir = opts.out ? dirname(opts.out) : join(homedir(), ".mma", "exports");
+      const path =
+        opts.out ??
+        join(
+          baseDir,
+          `${sanitizeFileName(meta.name)}-${meta.id.slice(0, 8)}.${extensionFor(format)}`,
+        );
+      try {
+        mkdirSync(baseDir, { recursive: true });
+        writeFileSync(path, text, "utf-8");
+      } catch (e) {
+        getDefaultChannel().writeLine(t("export.write_failed", { error: String(e) }));
+        return;
+      }
+      getDefaultChannel().writeLine(t("export.written", { path }));
+      getDefaultChannel().writeLine(t(opts.redact ? "export.redacted" : "export.raw"));
     });
   session
     .command("delete")

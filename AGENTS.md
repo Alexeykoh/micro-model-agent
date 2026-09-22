@@ -20,6 +20,10 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 
 Ни одно изменение не считается завершённым, пока эти три аспекта не проверены явно.
 
+## Git & Branching
+
+**Правило (обязательно):** любая задача — фича, фикс, рефакторинг, документация — выполняется в **отдельной ветке**, созданной от актуального `master`. В `master` напрямую не коммитим и не пушим. Имя ветки — `<type>/<краткое-описание>` (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`). Ветка завершается только после ревью и зелёных `bun test` + `tsc --noEmit`; интеграция в `master` — через merge/PR. Дизайн-спека задачи (если есть) коммитится в той же ветке.
+
 ## Tech Stack
 
 - **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
@@ -273,7 +277,20 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Browser screenshot** (`src/tools/browser.ts`): при `ctx.capabilities.vision` возвращает `image_url`-part (ресайз ≤800px через `bufferToDataUrl`), иначе — текстовый snapshot с пометкой. Имя модели больше не влияет.
 - Конфиг: `modelCapabilities: Record<string, { vision?, tools? }>` (домен `provider`, `DEFAULTS` → `{}`).
 
-### Current Version: 1.7.1
+### REPL Commands UX Redesign (2.0.0)
+
+Дизайн: [docs/specs/2026-09-22-repl-commands-ux-design.md](./docs/specs/2026-09-22-repl-commands-ux-design.md).
+
+- **`/config` — единая точка настроек** (`src/config/registry.ts`): ключи = буквальные пути `config.json` (`model`, `provider.active`, `contextWindow`, `contextBudget.systemPrompt`, `showReasoning`, `reasoning.mode`, `ui.verbosity`, …) + короткие алиасы (`context.window`, `context.system`, `reasoning.show`, `reasoning.level`, `verbosity`). `/config <ключ>` читает, `/config <ключ> <значение>` пишет и сохраняет, `/config reset <ключ>`/`--all [--yes]` возвращает к boot-snapshot (значения на старте сессии; `--all` только изменённые). Валидация: enum/bool/int/share (доли принимают `0.1` и `10%`, `system+reserve ≤ 0.95`), read-only `version`, подсказка ближайшего ключа, мягкое предупреждение для неизвестной модели.
+- **Профильные команды — чистый сахар** над `setConfigValue` (`repl-commands.mutateConfig`): `/context`, `/verbose`, `/reasoning`, `/model use`, `/provider use`. Один путь записи, один `reconfigure`-контракт (per-key таблица в реестре: `model/provider.active/contextWindow/contextBudget.*/reasoning.mode` → reconfigure; `showReasoning/ui.verbosity/logLevel/locale/maxToolIterations/stuckThreshold` — живьём).
+- **Никаких скрытых тогглов**: `/reasoning` и `/verbose` без аргумента — статус (не переключают). `/reasoning show|hide|level <...>` (алиасы `on|off`; уровень печатает «auto policy off»); `/verbose quiet|normal|verbose`.
+- **Персистентность единообразна**: любая правка сохраняет `config.json` и печатает `saved · reset: /config reset <key>`. `/config locale ru` перерегистрирует команды и completer (иначе `t()`-описания, вычисленные при регистрации, остались бы на старом языке).
+- **`showReasoning` приоритетнее `ui.verbosity=quiet`** (явный показ сильнее ambient-quiet).
+- **Экспорт сессии** (`src/modules/session/export.ts`): `/export` и `mma session export` → `md` (default) / `json` / `jsonl`; дефолт `~/.mma/exports/<имя>-<id8>.<ext>`, `--out -` в stdout; секреты редакторятся (`redactContextSecrets`, `--no-redact`); пустая сессия не пишется; повёрнутые `.jsonl.gz` поддержаны.
+- **Автокомплит** (`src/cli/completer.ts`): dotted-ключи и enum-значения `/config`, флаги `/provider add`, имена команд для `/help`, имена сессий для `/delete`/`/export`, подкоманды с описаниями (`map/context/lsp/reasoning/verbose`).
+- **Унификация**: общий `repl.unknown_sub` + usage у `provider/model/skill/lsp`; `/help <command>` (usage + алиасы + примеры); незнакомые бывшие алиасы (`/use`) → `cli.unknown_command` с подсказкой; `/lsp` переведён на handler-map (правило #17); `/status` — компактная строка; `/sysprompt [--full]`; `/clear` — только экран.
+
+### Current Version: 2.0.0
 
 ### Changelog
 

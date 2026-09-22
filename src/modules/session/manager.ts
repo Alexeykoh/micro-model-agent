@@ -161,6 +161,17 @@ export class SessionManager {
   }
 
   /**
+   * History of any session, including rotated ones (falls back to the
+   * `<id>.jsonl.gz` archive when the live history file is gone). Used by
+   * `session export` / `/export`.
+   */
+  getHistory(id: string): SessionMessage[] {
+    const live = this.store.loadHistory(id);
+    if (live.length > 0) return live;
+    return this.store.loadRotatedHistory(id);
+  }
+
+  /**
    * Get the session context for the active session
    */
   getSessionContext(): SessionContext | undefined {

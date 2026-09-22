@@ -4,6 +4,33 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-09-22
+
+### Added
+
+- **`/config` get/set/reset** (`src/config/registry.ts`, `src/cli/repl-commands.ts`): one settings surface. Keys are literal `config.json` paths (`contextWindow`, `contextBudget.systemPrompt`, `showReasoning`, `reasoning.mode`, `ui.verbosity`, …) with short aliases, tab completion for keys/values, and `/config reset <key>` / `--all` restoring the session-start (boot) snapshot.
+- **Session export** (`src/modules/session/export.ts`): `/export` and `mma session export` write `md` (default), `json`, or `jsonl`; default path `~/.mma/exports/`; secrets redacted by default (`--no-redact`); rotated `.jsonl.gz` supported.
+- **Tab completion** (`src/cli/completer.ts`): config keys/values, `/provider add` flags, command names for `/help`, session names for `/delete` and `/export`, subcommands with descriptions for `map`/`context`/`lsp`/`reasoning`/`verbose`.
+- **`/help <command>`**: per-command usage, aliases and examples.
+- **Unified unknown-subcommand errors** across `provider`/`model`/`skill`/`lsp` and config-key suggestions ("did you mean …").
+
+### Changed
+
+- **`/reasoning`** (`src/cli/repl-commands.ts`): with no argument it now shows status (display + effort) instead of toggling; use `/reasoning show|hide` (aliases `on|off`) and `/reasoning level <auto|default|none|low|medium|high|max>`. Setting a level warns that the auto policy is off.
+- **`/verbose`**: with no argument it shows the current level instead of toggling; all changes persist.
+- **Uniform persistence**: `/provider use`, `/model use`, `/verbose`, `/reasoning` now save `config.json` immediately and print `saved · reset: /config reset <key>`.
+- **`/context`**: accepts fractions (`0.1`) and percentages (`10%`); unknown arguments yield a clear error instead of a bogus size error.
+- **`/sysprompt`**: default output is token count + block list; the full prompt prints only with `--full`.
+- **`/status`**: now a compact one-line summary (model · provider · session · context).
+- **`/provider add` usage** documents every flag; flag values are validated.
+- **`/config locale`** re-registers commands and completion, so `/help`/usage switch language without a restart.
+- **`showReasoning`** overrides `ui.verbosity=quiet` for reasoning lines.
+
+### Removed
+
+- **`use` alias of `/resume`** (ambiguous with `/model use`, `/provider use`); an unknown `/use` now suggests `/resume`.
+- **`/reasoning` and `/verbose` bare-argument toggles** (replaced by explicit status behavior).
+
 ## [1.7.1] - 2026-09-22
 
 ### Changed

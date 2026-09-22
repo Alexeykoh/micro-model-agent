@@ -1,6 +1,8 @@
 import type { SkillsModule } from "../modules/skills/module";
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
+import { allConfigNames, canonicalKeys, resolveConfigKey } from "../config/registry";
+import { t } from "../i18n/index";
 
 export interface CompletionContext {
   line: string;
@@ -161,13 +163,15 @@ export class ProviderArgProvider implements CompletionProvider {
 export class SessionNameProvider implements CompletionProvider {
   name = "session-names";
   private getNames: () => string[];
+  private commands: string[];
 
-  constructor(getNames: () => string[]) {
+  constructor(getNames: () => string[], commands: string[] = ["/resume"]) {
     this.getNames = getNames;
+    this.commands = commands;
   }
 
   match(ctx: CompletionContext): boolean {
-    return ctx.tokenIndex >= 1 && ctx.tokens[0] === "/resume";
+    return ctx.tokenIndex >= 1 && this.commands.includes(ctx.tokens[0]);
   }
 
   complete(ctx: CompletionContext): CompletionItem[] {
@@ -207,6 +211,94 @@ export class SkillNameProvider implements CompletionProvider {
       ? names
       : names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
     return filtered.map((n) => ({ value: n }));
+  }
+}
+
+/**
+ * Completes `/config` keys, canonical and aliases. A partial with no dot lists
+ * top-level groups plus matching keys; a partial with a dot lists the next
+ * segment from the dotted key tree (e.g. `contextBudget.` → systemPrompt).
+ */
+export class ConfigKeyProvider implements CompletionProvider {
+  name = "config-keys";
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex === 1 && ctx.tokens[0] === "/config";
+  }
+
+  complete(ctx: CompletionContext): CompletionItem[] {
+    const partial = ctx.partial;
+    const items: CompletionItem[] = allConfigNames().map(({ name, def, alias }) => ({
+      value: name,
+      description: alias ? `${t("config.alias_label")} ${def.key}` : def.domain,
+    }));
+    if (!partial.includes(".")) {
+      const groups = [...new Set(canonicalKeys().filter((k) => k.includes(".")).map((k) => k.split(".")[0]))];
+      const groupItems: CompletionItem[] = groups.map((g) => ({
+        value: g,
+        description: t("config.group_label"),
+      }));
+      return [...groupItems, ...items].filter((i) => i.value.startsWith(partial));
+    }
+    return items.filter((i) => i.value.startsWith(partial));
+  }
+}
+
+/** Completes enum values at the value position of `/config <key> <value>`. */
+export class ConfigValueProvider implements CompletionProvider {
+  name = "config-values";
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex === 2 && ctx.tokens[0] === "/config";
+  }
+
+  complete(ctx: CompletionContext): CompletionItem[] {
+    const def = resolveConfigKey(ctx.tokens[1]);
+    if (!def?.enumValues) return [];
+    return def.enumValues
+      .filter((v) => v.startsWith(ctx.partial))
+      .map((v) => ({ value: v }));
+  }
+}
+
+/** Completes `/provider add` flags. */
+export class FlagProvider implements CompletionProvider {
+  name = "provider-add-flags";
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokens[0] === "/provider" && ctx.tokens[1] === "add" && ctx.tokenIndex >= 2;
+  }
+
+  complete(ctx: CompletionContext): CompletionItem[] {
+    const flags: CompletionItem[] = [
+      { value: "--url", description: t("repl.provider_flag_url") },
+      { value: "--key", description: t("repl.provider_flag_key") },
+      { value: "--priority", description: t("repl.provider_flag_priority") },
+      { value: "--context-window", description: t("repl.provider_flag_context_window") },
+      { value: "--rpm", description: t("repl.provider_flag_rpm") },
+      { value: "--parallel", description: t("repl.provider_flag_parallel") },
+    ];
+    return flags.filter((f) => f.value.startsWith(ctx.partial));
+  }
+}
+
+/** Completes command names for `/help <command>`. */
+export class CommandArgProvider implements CompletionProvider {
+  name = "help-command-args";
+  private getNames: () => string[];
+
+  constructor(getNames: () => string[]) {
+    this.getNames = getNames;
+  }
+
+  match(ctx: CompletionContext): boolean {
+    return ctx.tokenIndex === 1 && ctx.tokens[0] === "/help";
+  }
+
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.getNames()
+      .filter((n) => n.startsWith(ctx.partial))
+      .map((n) => ({ value: n }));
   }
 }
 
