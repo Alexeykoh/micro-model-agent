@@ -32,6 +32,9 @@ const SECURITY_BASH_BLOCKLIST = [
  * the wizard's provider/URL/key. Replacing the object keeps the override's
  * stale identity intact, so only the env key is stripped and our answers are
  * persisted.
+ *
+ * Also rewrites the active `provider.entries[]` entry (type/baseUrl/apiKey and
+ * the context window) while preserving sibling providers and their tuning.
  */
 export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppConfig {
   config.provider = {
@@ -45,20 +48,24 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
   config.maxToolIterations = a.maxToolIterations;
   config.locale = a.locale;
   // Multi-entry configs resolve the active provider from `entries[]`, so the
-  // answer must be written onto the active entry — without dropping the other
-  // providers or the entry's tuning (contextWindow, cache, retry, rateLimits).
+  // answers must be written onto the active entry — without dropping the other
+  // providers or the entry's tuning (cache, retry, rateLimits). A deliberate
+  // custom label is preserved; a generic/default one is replaced.
   if ((config.provider.entries?.length ?? 0) > 0) {
     const entries = config.provider.entries ?? [];
     const activeName =
       config.provider.active || entries[0]?.label || entries[0]?.type;
     const idx = entries.findIndex((e) => e.label === activeName || e.type === activeName);
     const target = idx >= 0 ? idx : 0;
+    const current = entries[target];
+    const keepLabel = Boolean(current.label && current.label !== current.type);
     const updated = {
-      ...entries[target],
+      ...current,
       type: a.provider,
-      label: a.provider,
       baseUrl: a.apiBase,
       apiKey: a.apiKey,
+      contextWindow: a.contextWindow,
+      ...(keepLabel ? {} : { label: a.provider }),
     };
     const next = entries.slice();
     next[target] = updated;

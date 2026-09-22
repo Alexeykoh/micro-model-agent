@@ -132,16 +132,39 @@ describe("applyAnswersToConfig", () => {
     expect(out.provider.entries).toHaveLength(2);
     expect(out.provider.entries![0]).toMatchObject({
       type: "anthropic",
-      label: "anthropic",
+      label: "local",
       baseUrl: "https://api.anthropic.com",
       apiKey: "k",
-      contextWindow: 65536,
+      contextWindow: 32768,
     });
     expect(out.provider.entries![1].label).toBe("cloud");
-    expect(out.provider.active).toBe("anthropic");
+    expect(out.provider.active).toBe("local");
   });
 
-  it("leaves a single/legacy provider without entries untouched", () => {
+  it("replaces a generic active label with the chosen provider", () => {
+    const config = makeConfig();
+    config.provider.entries = [
+      { type: "openai-compat", label: "openai-compat", baseUrl: "http://localhost:1234/v1", contextWindow: 65536 },
+    ];
+    config.provider.active = "openai-compat";
+    const answers = makeAnswers({
+      provider: "anthropic",
+      apiBase: "https://api.anthropic.com",
+      apiKey: "k",
+      contextWindow: 32768,
+    });
+    const out = applyAnswersToConfig(config, answers);
+
+    expect(out.provider.entries![0]).toMatchObject({
+      type: answers.provider,
+      label: answers.provider,
+      baseUrl: answers.apiBase,
+      contextWindow: answers.contextWindow,
+    });
+    expect(out.provider.active).toBe(answers.provider);
+  });
+
+  it("keeps a legacy provider flat (no entries synthesized)", () => {
     const config = makeConfig();
     config.provider.entries = undefined;
     const out = applyAnswersToConfig(
