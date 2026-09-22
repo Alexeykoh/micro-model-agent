@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Readable } from "stream";
+import stringWidth from "string-width";
 import { LineEditor } from "../../src/ui/line-editor";
 import {
   wrapLine,
@@ -315,7 +316,15 @@ describe("LineEditor", () => {
       .filter((l) => l.includes("…"));
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
-      expect(stripAnsi(row).length).toBeLessThanOrEqual(80);
+      expect(stringWidth(stripAnsi(row))).toBeLessThan(80);
+    }
+    // Every emitted row — ellipsis or not — must stay strictly narrower than
+    // the terminal so an off-by-one clamp cannot wrap.
+    const listRows = output.data
+      .split("\r\n")
+      .filter((l) => l.includes("/"));
+    for (const row of listRows) {
+      expect(stringWidth(stripAnsi(row))).toBeLessThan(80);
     }
     editor.close();
   });

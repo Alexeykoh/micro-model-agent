@@ -860,15 +860,23 @@ export class LineEditor implements LineInput {
       return;
     }
     const width = this.columns();
+    const limit = width - 1;
     const rows = matches.map((m) => {
       const plain = m.description ? `  ${m.value}  ${m.description}` : `  ${m.value}`;
-      const chars = Array.from(plain);
-      // Keep every row one column short of the terminal so it cannot wrap
-      // (a wrapped row would desync the cursor bookkeeping below).
-      if (chars.length > width - 1) {
-        return chars.slice(0, Math.max(0, width - 2)).join("") + "…";
+      if (limit <= 0) return "";
+      if (stringWidth(plain) <= limit) {
+        return m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`;
       }
-      return m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`;
+      // Truncate by display columns (code points alone are wrong for CJK/emoji).
+      let acc = "";
+      let w = 0;
+      for (const ch of plain) {
+        const cw = stringWidth(ch);
+        if (w + cw > limit - 1) break;
+        acc += ch;
+        w += cw;
+      }
+      return acc + "…";
     });
     this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
     // The printed list moved the cursor (rows.length + 1) visual rows down
