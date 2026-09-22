@@ -1,5 +1,6 @@
 import * as readline from "readline";
 import stringWidth from "string-width";
+import { pc } from "./colors";
 import {
   buildLayout,
   layoutIndexFor,
@@ -21,6 +22,11 @@ export interface LineInput {
   on(event: "close", listener: () => void): this;
 }
 
+export interface CompletionItem {
+  value: string;
+  description?: string;
+}
+
 export interface LineEditorOptions {
   input: NodeJS.ReadableStream & {
     isTTY?: boolean;
@@ -28,7 +34,7 @@ export interface LineEditorOptions {
   };
   output: NodeJS.WritableStream & { columns?: number };
   prompt?: string;
-  completer?: (line: string) => [string[], string];
+  completer?: (line: string) => [CompletionItem[], string];
   history?: string[];
   historySize?: number;
   tabSize?: number;
@@ -54,7 +60,7 @@ export class LineEditor implements LineInput {
   private onInterrupt?: () => void;
 
   private promptStr: string;
-  private completer?: (line: string) => [string[], string];
+  private completer?: (line: string) => [CompletionItem[], string];
   private history: string[];
   private historySize: number;
   private lines: string[] = [""];
@@ -848,12 +854,14 @@ export class LineEditor implements LineInput {
       }
       const head = line.slice(0, from);
       const tail = line.slice(from + partial.length);
-      this.lines[this.row] = head + matches[0] + tail;
-      this.col = charLen(head) + charLen(matches[0]);
+      this.lines[this.row] = head + matches[0].value + tail;
+      this.col = charLen(head) + charLen(matches[0].value);
       this.render();
       return;
     }
-    const rows = matches.map((m) => "  " + m);
+    const rows = matches.map((m) =>
+      m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`,
+    );
     this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
     // The printed list moved the cursor (rows.length + 1) visual rows down
     // from its frame position. Account for those rows so the next render

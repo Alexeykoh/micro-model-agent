@@ -12,6 +12,7 @@ import {
   SkillNameProvider,
   ProviderArgProvider,
   ModelArgProvider,
+  type CompletionItem,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
 import { resolveVerbosity, glyph } from "../ui/theme";
@@ -190,10 +191,15 @@ export class Repl implements ReplContext {
     this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
-    const editorCompleter = (line: string): [string[], string] => {
+    const editorCompleter = (line: string): [CompletionItem[], string] => {
       const [matches, partial] = this.completer.complete(line);
       if (matches.length > 0) return [matches, partial];
       return [[], line];
+    };
+    // Node readline's completer only understands plain string matches.
+    const readlineCompleter = (line: string): [string[], string] => {
+      const [items, partial] = editorCompleter(line);
+      return [items.map((i) => i.value), partial];
     };
 
     if (process.stdin.isTTY) {
@@ -213,7 +219,7 @@ export class Repl implements ReplContext {
         history: this.history,
         historySize: this.maxHistory,
         tabSize: 2,
-        completer: editorCompleter,
+        completer: readlineCompleter,
       });
     }
 
@@ -352,7 +358,9 @@ export class Repl implements ReplContext {
     // Rebuild from scratch: /reload calls this again after bootstrap, and
     // re-registering without a reset would duplicate every provider.
     this.completer.reset();
-    const slashCommands = Array.from(this.commands.keys());
+    const slashCommands = Array.from(this.commands.entries())
+      .filter(([name, cmd]) => !cmd.aliases?.includes(name))
+      .map(([, cmd]) => ({ name: cmd.name, description: cmd.description }));
     this.completer.registerProvider(new SlashCommandProvider(slashCommands));
     if (this.sessionManager) {
       this.completer.registerProvider(

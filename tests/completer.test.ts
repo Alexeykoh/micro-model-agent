@@ -4,18 +4,24 @@ import { Completer, SlashCommandProvider, SubcommandProvider } from "../src/cli/
 describe("Completer", () => {
   it("should complete slash commands", () => {
     const completer = new Completer();
-    completer.registerProvider(new SlashCommandProvider(["help", "model", "config", "exit"]));
+    completer.registerProvider(
+      new SlashCommandProvider([{ name: "help" }, { name: "model" }, { name: "config" }, { name: "exit" }]),
+    );
     const [results] = completer.complete("/");
-    expect(results).toContain("/help");
-    expect(results).toContain("/model");
+    const values = results.map((r) => r.value);
+    expect(values).toContain("/help");
+    expect(values).toContain("/model");
   });
 
   it("should filter by partial input", () => {
     const completer = new Completer();
-    completer.registerProvider(new SlashCommandProvider(["help", "model", "config", "exit"]));
+    completer.registerProvider(
+      new SlashCommandProvider([{ name: "help" }, { name: "model" }, { name: "config" }, { name: "exit" }]),
+    );
     const [results] = completer.complete("/mo");
-    expect(results).toContain("/model");
-    expect(results).not.toContain("/help");
+    const values = results.map((r) => r.value);
+    expect(values).toContain("/model");
+    expect(values).not.toContain("/help");
   });
 
   it("should complete subcommands", () => {
@@ -23,8 +29,9 @@ describe("Completer", () => {
     const subProvider = new SubcommandProvider("model", ["list", "use", "info"]);
     completer.registerProvider(subProvider);
     const [results] = completer.complete("/model ");
-    expect(results).toContain("list");
-    expect(results).toContain("use");
+    const values = results.map((r) => r.value);
+    expect(values).toContain("list");
+    expect(values).toContain("use");
   });
 
   it("should return empty array for no match", () => {

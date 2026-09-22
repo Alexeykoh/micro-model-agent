@@ -32,7 +32,9 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 
 function makeEditor(opts?: {
   prompt?: string;
-  completer?: (line: string) => [string[], string];
+  completer?: (
+    line: string,
+  ) => [Array<{ value: string; description?: string }>, string];
   history?: string[];
 }) {
   const input = new FakeInput();
@@ -268,13 +270,31 @@ describe("LineEditor", () => {
 
   it("completes with a single match", async () => {
     const { input, lines } = makeEditor({
-      completer: () => [["/sessions"], "/s"],
+      completer: () => [[{ value: "/sessions" }], "/s"],
     });
     input.pushData("/s");
     input.pushData("\t");
     input.pushData("\r");
     await tick();
     expect(lines).toEqual(["/sessions"]);
+  });
+
+  it("renders descriptions in the multi-match list", async () => {
+    const { editor, input, output } = makeEditor({
+      completer: () => [
+        [
+          { value: "/help", description: "Show help" },
+          { value: "/health", description: "Check health" },
+        ],
+        "/h",
+      ],
+    });
+    input.pushData("/h");
+    input.pushData("\t");
+    await tick();
+    expect(output.data).toContain("/help  Show help");
+    expect(output.data).toContain("/health  Check health");
+    editor.close();
   });
 
   it("answers questions through question()", async () => {

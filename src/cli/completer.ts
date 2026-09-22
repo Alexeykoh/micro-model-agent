@@ -10,17 +10,22 @@ export interface CompletionContext {
   tokenIndex: number;
 }
 
+export interface CompletionItem {
+  value: string;
+  description?: string;
+}
+
 export interface CompletionProvider {
   name: string;
   match(ctx: CompletionContext): boolean;
-  complete(ctx: CompletionContext): string[];
+  complete(ctx: CompletionContext): CompletionItem[];
 }
 
 export class SlashCommandProvider implements CompletionProvider {
   name = "slash-commands";
-  private commands: string[];
+  private commands: Array<{ name: string; description?: string }>;
 
-  constructor(commands: string[]) {
+  constructor(commands: Array<{ name: string; description?: string }>) {
     this.commands = commands;
   }
 
@@ -28,27 +33,34 @@ export class SlashCommandProvider implements CompletionProvider {
     return ctx.tokenIndex === 0 && ctx.line.startsWith("/");
   }
 
-  complete(ctx: CompletionContext): string[] {
-    return this.commands.filter((c) => c.startsWith(ctx.partial.slice(1))).map((c) => `/${c}`);
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.commands
+      .filter((c) => c.name.startsWith(ctx.partial.slice(1)))
+      .map((c) => ({ value: `/${c.name}`, description: c.description }));
   }
 }
 
 export class SubcommandProvider implements CompletionProvider {
   name = "subcommands";
   private command: string;
-  private subcommands: string[];
+  private subcommands: Array<{ name: string; description?: string }>;
 
-  constructor(command: string, subcommands: string[]) {
+  constructor(
+    command: string,
+    subcommands: Array<{ name: string; description?: string }> | string[],
+  ) {
     this.command = command;
-    this.subcommands = subcommands;
+    this.subcommands = subcommands.map((s) => (typeof s === "string" ? { name: s } : s));
   }
 
   match(ctx: CompletionContext): boolean {
     return ctx.tokenIndex === 1 && ctx.tokens[0] === `/${this.command}`;
   }
 
-  complete(ctx: CompletionContext): string[] {
-    return this.subcommands.filter((s) => s.startsWith(ctx.partial));
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.subcommands
+      .filter((s) => s.name.startsWith(ctx.partial))
+      .map((s) => ({ value: s.name, description: s.description }));
   }
 }
 
@@ -64,8 +76,10 @@ export class ModelArgProvider implements CompletionProvider {
     return ctx.tokenIndex === 2 && ctx.tokens[0] === "/model" && ctx.tokens[1] === "use";
   }
 
-  complete(ctx: CompletionContext): string[] {
-    return this.getModels().filter((m) => m.startsWith(ctx.partial));
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.getModels()
+      .filter((m) => m.startsWith(ctx.partial))
+      .map((m) => ({ value: m }));
   }
 }
 
@@ -81,8 +95,8 @@ export class ConfigKeyProvider implements CompletionProvider {
     return ctx.tokenIndex >= 1 && ctx.tokens[0] === "/config" && ctx.tokens[1] === "set";
   }
 
-  complete(ctx: CompletionContext): string[] {
-    return this.keys.filter((k) => k.startsWith(ctx.partial));
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.keys.filter((k) => k.startsWith(ctx.partial)).map((k) => ({ value: k }));
   }
 }
 
@@ -93,7 +107,7 @@ export class FilePathProvider implements CompletionProvider {
     return ctx.partial.includes("/") || ctx.partial.includes("\\");
   }
 
-  complete(ctx: CompletionContext): string[] {
+  complete(ctx: CompletionContext): CompletionItem[] {
     try {
       const cwd = process.cwd();
       const partialPath = ctx.partial;
@@ -115,7 +129,7 @@ export class FilePathProvider implements CompletionProvider {
         }
       }
 
-      return matches.slice(0, 20);
+      return matches.slice(0, 20).map((m) => ({ value: m }));
     } catch {
       return [];
     }
@@ -134,8 +148,8 @@ export class ProviderArgProvider implements CompletionProvider {
     return ctx.tokenIndex === 2 && ctx.tokens[0] === "/provider" && ctx.tokens[1] === "use";
   }
 
-  complete(ctx: CompletionContext): string[] {
-    return this.providers.filter((p) => p.startsWith(ctx.partial));
+  complete(ctx: CompletionContext): CompletionItem[] {
+    return this.providers.filter((p) => p.startsWith(ctx.partial)).map((p) => ({ value: p }));
   }
 }
 
@@ -151,10 +165,12 @@ export class SessionNameProvider implements CompletionProvider {
     return ctx.tokenIndex >= 1 && ctx.tokens[0] === "/resume";
   }
 
-  complete(ctx: CompletionContext): string[] {
+  complete(ctx: CompletionContext): CompletionItem[] {
     const names = this.getNames();
-    if (!ctx.partial) return names;
-    return names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
+    const filtered = !ctx.partial
+      ? names
+      : names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
+    return filtered.map((n) => ({ value: n }));
   }
 }
 
@@ -174,7 +190,7 @@ export class SkillNameProvider implements CompletionProvider {
     );
   }
 
-  complete(ctx: CompletionContext): string[] {
+  complete(ctx: CompletionContext): CompletionItem[] {
     const sources: Record<string, () => string[]> = {
       load: () => this.skillsModule.getAvailable().map((s) => s.name),
       unload: () => this.skillsModule.getLoaded().map((s) => s.name),
@@ -182,8 +198,10 @@ export class SkillNameProvider implements CompletionProvider {
     const source = sources[ctx.tokens[1]];
     if (!source) return [];
     const names = source();
-    if (!ctx.partial) return names;
-    return names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
+    const filtered = !ctx.partial
+      ? names
+      : names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
+    return filtered.map((n) => ({ value: n }));
   }
 }
 
@@ -200,7 +218,7 @@ export class Completer {
     this.providers = [];
   }
 
-  complete(line: string): [string[], string] {
+  complete(line: string): [CompletionItem[], string] {
     const cursor = line.length;
     const tokens = line.split(/\s+/);
     const partial = tokens[tokens.length - 1] || "";

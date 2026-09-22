@@ -12,7 +12,7 @@ describe("ProviderArgProvider", () => {
       tokenIndex: 2,
     };
 
-    const matches = provider.complete(ctx);
+    const matches = provider.complete(ctx).map((m) => m.value);
 
     expect(matches).toContain("openai-compat");
     expect(matches).toContain("ollama");

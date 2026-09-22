@@ -22,7 +22,7 @@ describe("FilePathProvider", () => {
       tokenIndex: 1,
     };
 
-    const matches = provider.complete(ctx);
+    const matches = provider.complete(ctx).map((m) => m.value);
 
     process.chdir(originalCwd);
     rmSync(tempDir, { recursive: true, force: true });
