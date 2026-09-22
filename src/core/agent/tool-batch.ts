@@ -11,13 +11,16 @@ import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { LoopState } from "./loop-state";
-import { summarizeToolArgs, truncateToolOutput, toolFailureSummary, isExecutableScriptPath } from "./tool-output";
+import {
+  summarizeToolArgs,
+  truncateToolOutput,
+  toolFailureSummary,
+  isExecutableScriptPath,
+} from "./tool-output";
+import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import {
-  MAX_CONSECUTIVE_TOOL_FAILURES,
-  MIN_REPEATED_TOOL_FAILURES,
-} from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES } from "./constants";
 
 export interface ToolBatchDeps {
   config: AppConfig;
@@ -237,6 +240,11 @@ export class ToolBatchExecutor {
       });
       answeredToolCallIds.add(call.id);
 
+      // Изображения тула (browser screenshot и т.п.) встают в очередь и
+      // прицепятся к следующему user-сообщению — обычно к <system-summary>
+      // в конце этого же batch'а. В role:"tool" строку base64 не пишем.
+      queueToolImages(contextManager, result.images);
+
       const tokensAfterTool = contextManager.getEstimatedTokens();
       const costAfterTool = this.deps.costTracker.total;
       onTool?.({
@@ -257,10 +265,7 @@ export class ToolBatchExecutor {
       );
 
       // Security block seen? Remember it for the wrapper-script heuristic.
-      if (
-        typeof result.output === "string" &&
-        result.output.includes("[SECURITY BLOCKED]")
-      ) {
+      if (typeof result.output === "string" && result.output.includes("[SECURITY BLOCKED]")) {
         state.sawSecurityBlock = true;
       }
       // Wrapper-script workaround: after a security block, writing a shell

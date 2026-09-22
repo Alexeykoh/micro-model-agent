@@ -36,12 +36,13 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
-import type { AppConfig } from "../config/types";
+import type { AppConfig, ModelCapabilities } from "../config/types";
+import { resolveModelCapabilities } from "../modules/providers/capabilities";
 import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
 import { errMsg } from "../utils";
 import { dryRunOverflow, overflowHint } from "./prompt-overflow";
-import { getLoadedContextLength, type ContextProbeResult } from "../llm/model-loader";
+import { probeModel, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
 import type { ReasoningLevel } from "../config/types";
 
@@ -50,7 +51,10 @@ import type { ReasoningLevel } from "../config/types";
  * (приоритет: CLI > config > default). "auto" пропускается — полагаемся
  * на конфиг. Строка CLI приводится к типизированному ReasoningLevel.
  */
-export function applyReasoningCliOverride(config: AppConfig, reasoningLevel: string | undefined): void {
+export function applyReasoningCliOverride(
+  config: AppConfig,
+  reasoningLevel: string | undefined,
+): void {
   if (!reasoningLevel || reasoningLevel === "auto") return;
   if (!config.reasoning) {
     config.reasoning = {
@@ -189,24 +193,36 @@ export function buildSystemInfo(
   // blacklist cannot blow the system budget.
   const sec = config.security;
   if (sec?.enabled) {
-    const secLines: string[] = [`SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them):`];
+    const secLines: string[] = [
+      `SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them):`,
+    ];
     if (sec.bash?.enabled && sec.bash.blacklist.length > 0) {
       const cmds = sec.bash.blacklist.slice(0, 15).join(", ");
-      secLines.push(`Forbidden bash commands: ${cmds}${sec.bash.blacklist.length > 15 ? ", …" : ""}.`);
+      secLines.push(
+        `Forbidden bash commands: ${cmds}${sec.bash.blacklist.length > 15 ? ", …" : ""}.`,
+      );
       if (sec.bash.whitelist.length > 0) {
-        secLines.push(`Only whitelisted bash commands are allowed: ${sec.bash.whitelist.slice(0, 15).join(", ")}.`);
+        secLines.push(
+          `Only whitelisted bash commands are allowed: ${sec.bash.whitelist.slice(0, 15).join(", ")}.`,
+        );
       }
       if (sec.bash.blockDangerousFlags) {
-        secLines.push(`Pipes/redirects/chaining (| > >> ; &&) in bash are blocked — one plain command per call.`);
+        secLines.push(
+          `Pipes/redirects/chaining (| > >> ; &&) in bash are blocked — one plain command per call.`,
+        );
       }
     }
     if (sec.paths?.enabled && sec.paths.denied.length > 0) {
       const paths = sec.paths.denied.slice(0, 10).join(", ");
-      secLines.push(`Denied paths (read/write): ${paths}${sec.paths.denied.length > 10 ? ", …" : ""}.`);
+      secLines.push(
+        `Denied paths (read/write): ${paths}${sec.paths.denied.length > 10 ? ", …" : ""}.`,
+      );
     }
     if (sec.network?.enabled && sec.network.deniedDomains.length > 0) {
       const domains = sec.network.deniedDomains.slice(0, 10).join(", ");
-      secLines.push(`Denied network domains: ${domains}${sec.network.deniedDomains.length > 10 ? ", …" : ""}.`);
+      secLines.push(
+        `Denied network domains: ${domains}${sec.network.deniedDomains.length > 10 ? ", …" : ""}.`,
+      );
     }
     if (secLines.length > 1) {
       lines.push(...secLines);
@@ -331,7 +347,9 @@ export async function bootstrap(
     } else if (loadResult.alreadyLoaded) {
       logger.debug(`Model ${config.model} already loaded`);
     } else {
-      logger.info(t("env.model_loaded", { model: config.model, seconds: String(loadResult.loadTime) }));
+      logger.info(
+        t("env.model_loaded", { model: config.model, seconds: String(loadResult.loadTime) }),
+      );
     }
   }
 
@@ -339,24 +357,36 @@ export async function bootstrap(
   // the context length the model is ACTUALLY loaded with and compare it with
   // the configured contextWindow. Never blocks the banner; null = probe not
   // applicable (not LM Studio / model not loaded / transient error).
+  // Живой источник возможностей модели для тулов (browser vision и т.п.).
+  // Пресет и конфиг-оверрайд известны сразу, native-probe уточняет их
+  // асинхронно и записывает сюда, не блокируя старт. Геттер на toolCtx
+  // резолвит итог при каждом обращении, поэтому смена модели/провайдера
+  // через reconfigure видна тулам без пересборки контекста.
+  const capabilitiesRef: { probe?: ModelCapabilities } = {};
+
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
-      const probe = await getLoadedContextLength(config.provider.baseUrl, config.model);
+      const probe = await probeModel(config.provider.baseUrl, config.model);
       if (!probe) return null;
-      if (probe.actual < config.contextWindow) {
+      if (probe.capabilities) capabilitiesRef.probe = probe.capabilities;
+      const contextProbe: ContextProbeResult = { model: probe.model, actual: probe.contextLength };
+      if (probe.contextLength < config.contextWindow) {
         logger.logSilent(
           "warn",
-          `Context probe: model "${probe.model}" is loaded with ${probe.actual} tokens, but contextWindow is configured as ${config.contextWindow} — overflow/429 risk. Lower contextWindow or reload the model with a larger context.`,
+          `Context probe: model "${probe.model}" is loaded with ${probe.contextLength} tokens, but contextWindow is configured as ${config.contextWindow} — overflow/429 risk. Lower contextWindow or reload the model with a larger context.`,
         );
-      } else if (probe.actual > config.contextWindow) {
+      } else if (probe.contextLength > config.contextWindow) {
         logger.logSilent(
           "info",
-          `Context probe: model "${probe.model}" supports ${probe.actual} tokens — consider "mma context ${probe.actual}" to use the full window.`,
+          `Context probe: model "${probe.model}" supports ${probe.contextLength} tokens — consider "mma context ${probe.contextLength}" to use the full window.`,
         );
       } else {
-        logger.logSilent("debug", `Context probe: configured contextWindow matches loaded context (${probe.actual})`);
+        logger.logSilent(
+          "debug",
+          `Context probe: configured contextWindow matches loaded context (${probe.contextLength})`,
+        );
       }
-      return probe;
+      return contextProbe;
     } catch {
       return null;
     }
@@ -393,10 +423,14 @@ export async function bootstrap(
   if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
     reasoningProbePromise = (async () => {
       try {
-        const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } = await import("../modules/reasoning/probe");
+        const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } =
+          await import("../modules/reasoning/probe");
         const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
         const cached = getCachedProbeResult(cacheK);
-        const passed = cached !== undefined ? cached : await probeReasoningSupport(llmProvider, reasoningStrategy);
+        const passed =
+          cached !== undefined
+            ? cached
+            : await probeReasoningSupport(llmProvider, reasoningStrategy);
         // Only cache a definitive result — a transient probe error (null) must
         // NOT pin "reasoning not supported" for the 24h TTL.
         if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
@@ -619,6 +653,22 @@ export async function bootstrap(
     get: () => sessionManager,
     configurable: true,
   });
+  // Возможности активной модели — LIVE: пресет провайдера + native-probe +
+  // конфиг-оверрайд пересчитываются при каждом обращении тула, поэтому
+  // инструменты (browser и т.п.) видят актуальный vision/tools после
+  // смены модели или /provider use.
+  Object.defineProperty(toolCtx, "capabilities", {
+    get: () => {
+      const cfg = configRef.current;
+      const spec = BUILTIN_PROVIDERS.find((p) => p.type === cfg.provider.type);
+      return resolveModelCapabilities(
+        spec?.capabilities,
+        capabilitiesRef.probe,
+        cfg.modelCapabilities?.[cfg.model],
+      );
+    },
+    configurable: true,
+  });
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;
@@ -739,7 +789,8 @@ export async function bootstrap(
 
   const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
 
-  const promptBlocks: PromptBlock[] = [    systemInfoPrompt,
+  const promptBlocks: PromptBlock[] = [
+    systemInfoPrompt,
     ...moduleRegistry.collectPromptBlocks(["indexer", "session"]),
     ...agentsMdBlocks,
     // Static plan reminder: always present so the model knows to check for an

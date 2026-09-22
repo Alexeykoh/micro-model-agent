@@ -135,7 +135,7 @@ Playwright-based headless browser for web navigation, form filling, and page int
 | `scroll`     | `direction` (up/down/top/bottom) | Scroll page                                  |
 | `back`       | —                                | Go back in history                           |
 | `forward`    | —                                | Go forward in history                        |
-| `screenshot` | —                                | Capture page screenshot (vision models only) |
+| `screenshot` | —                                | Capture page screenshot (delivered by capability) |
 | `snapshot`   | —                                | Re-read current page elements                |
 | `wait`       | `ms`                             | Wait for page changes                        |
 | `close`      | —                                | Close browser session                        |
@@ -155,10 +155,15 @@ URL: https://example.com
 
 Model interacts using element numbers (e.g., `click(target: 1)`).
 
-### Vision Fallback
+### Vision Delivery (capability-based)
 
-- **Vision models** (gpt-4o, claude, etc.): receive screenshot as base64 image
-- **Text-only models** (qwen3.5-9b, etc.): receive text-only message + snapshot
+Whether a screenshot reaches the model is decided by **resolved model capabilities**, not by the model name:
+
+- `resolveModelCapabilities` (`src/modules/providers/capabilities.ts`) merges, highest wins: user override (`config.modelCapabilities[model]`) → live native probe (`capabilities.vision` from LM Studio `/api/v1/models`, via `probeModel`) → provider preset.
+- **Vision model**: the tool returns the screenshot as a real `image_url` content part (`ToolResult.images`). Fanned out by `queueToolImages` (`src/core/agent/tool-images.ts`) onto the next user message — the base64 never enters a `role:"tool"` string (not portable, and budget-truncated).
+- **Text-only / unknown**: the tool returns the text snapshot plus a "screenshot unavailable" note. No base64 in context.
+
+Screenshot buffers are resized by `bufferToDataUrl` (≤800px, JPEG) before encoding.
 
 ### Stuck Detection
 

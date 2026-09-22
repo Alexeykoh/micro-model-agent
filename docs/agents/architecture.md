@@ -319,6 +319,16 @@ const body = { model, messages, stream: false, max_tokens };
 
 ---
 
+### Model capabilities (single source of truth)
+
+A model's `vision`/`tools` abilities are DATA, never guessed from the model name (rule #10). `resolveModelCapabilities` (`src/modules/providers/capabilities.ts`) merges, highest wins:
+
+1. `config.modelCapabilities[model]` — manual override;
+2. live native probe — `probeModel` (`src/llm/model-loader.ts`) reads `capabilities` from LM Studio `/api/v1/models`;
+3. provider preset — `providers/presets.ts`.
+
+Tools read the resolved value via the live `ToolContext.capabilities` getter (recomputed per access, so model/provider switches are visible without rebuilding the context). Tool-produced images (`ToolResult.images`) are delivered to the model as `image_url` parts through `queueToolImages` — never as base64 text inside `role:"tool"` content.
+
 ## Key Design Rules
 
 1. **No file >300 lines** — split when approaching limit

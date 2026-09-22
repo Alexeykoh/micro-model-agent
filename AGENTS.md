@@ -264,7 +264,16 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`mma config show` redaction** (`src/cli/commands.ts`, `src/config/redact.ts`): secrets are redacted by default; `--show-secrets` opts out. `configForDisplay` is the pure, tested helper behind it.
 - **Tab completion** (`src/cli/completer.ts`, `src/ui/line-editor.ts`): completions carry descriptions, file-path completion is registered in the REPL, and `↑`/`↓`/Tab cycle candidates with Esc restoring the original partial.
 
-### Current Version: 1.6.0
+### Model Capabilities & Tool Images (1.7.0)
+
+- **Резолвер возможностей модели** (`src/modules/providers/capabilities.ts`): `resolveModelCapabilities(preset, probe, override)` — единый источник правды `vision`/`tools`. Приоритет: `config.modelCapabilities[model]` (ручной override) → живой native-probe → пресет провайдера. Всегда новый объект.
+- **Probe** (`src/llm/model-loader.ts`): `probeModel(baseUrl, model)` читает из LM Studio `/api/v1/models` и контекст (`loaded_instances[].config.context_length` / `max_context_length`), и `capabilities` (`vision`, `trained_for_tool_use`). `getLoadedContextLength` — тонкая проекция для баннера. Не-LM-Studio → `null` (тихо).
+- **Тулы видят capabilities** через LIVE-геттер `ToolContext.capabilities` в `bootstrap.ts` (пресет + probe + override пересчитываются на каждое обращение, поэтому `/model use`/`/provider use` видны без пересборки). `modelSupportsVision` (regex по имени) удалён — правило #10.
+- **Канал изображений из тулов** (`ToolResult.images` → `queueToolImages` в `src/core/agent/tool-images.ts`): картинки тула встают в pending-очередь контекста и прикрепляются к следующему user-сообщению (обычно к `<system-summary>` в конце batch'а). В `role:"tool"` идёт только текст — base64 туда не пишется (не портируемо + режется бюджетом).
+- **Browser screenshot** (`src/tools/browser.ts`): при `ctx.capabilities.vision` возвращает `image_url`-part (ресайз ≤800px через `bufferToDataUrl`), иначе — текстовый snapshot с пометкой. Имя модели больше не влияет.
+- Конфиг: `modelCapabilities: Record<string, { vision?, tools? }>` (домен `provider`, `DEFAULTS` → `{}`).
+
+### Current Version: 1.7.0
 
 ### Changelog
 

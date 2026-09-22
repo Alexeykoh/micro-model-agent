@@ -1,4 +1,5 @@
 import type { Logger } from "../logger/app-logger";
+import type { ModelCapabilities } from "../config/types";
 
 export interface ModelLoadConfig {
   model: string;
@@ -23,18 +24,31 @@ export interface ContextProbeResult {
   actual: number;
 }
 
+/** Result of the native model probe: context window + advertised capabilities. */
+export interface ModelProbeResult {
+  model: string;
+  /** Context length of the loaded instance (tokens). */
+  contextLength: number;
+  /** Advertised capabilities, when the backend reports them (LM Studio). */
+  capabilities?: ModelCapabilities;
+}
+
 /**
- * Ask LM Studio's native API which context length the model is currently
- * loaded with. Prefers the running instance (`loaded_instances[].config.
- * context_length`), falls back to the model's `max_context_length`. Returns
- * null when the endpoint is unavailable (not LM Studio), the model is not
- * found/loaded, or the request fails — the caller must degrade silently.
+ * Ask the backend's native API (LM Studio `/api/v1/models`) for the loaded
+ * model's context length AND advertised capabilities. Context length prefers
+ * the running instance (`loaded_instances[].config.context_length`), falling
+ * back to `max_context_length`. Capabilities are read from `capabilities`
+ * (`vision`, `trained_for_tool_use`) when present — this is the single source
+ * of truth that replaces name-based vision guessing.
+ *
+ * Returns null when the endpoint is unavailable (not LM Studio), the model is
+ * not found/loaded, or the request fails — the caller must degrade silently.
  */
-export async function getLoadedContextLength(
+export async function probeModel(
   baseUrl: string,
   model: string,
   timeoutMs = 3000,
-): Promise<ContextProbeResult | null> {
+): Promise<ModelProbeResult | null> {
   const base = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
   try {
     const response = await fetch(`${base}/api/v1/models`, {
@@ -46,12 +60,35 @@ export async function getLoadedContextLength(
     const found = models.find((m) => m.key === model || m.name === model || model.includes(m.key));
     if (!found) return null;
     const loadedInstance = (found.loaded_instances ?? [])[0];
-    const actual = loadedInstance?.config?.context_length ?? found.max_context_length;
-    if (typeof actual !== "number" || actual <= 0) return null;
-    return { model: found.key ?? found.name ?? model, actual };
+    const contextLength = loadedInstance?.config?.context_length ?? found.max_context_length;
+    if (typeof contextLength !== "number" || contextLength <= 0) return null;
+
+    const raw = found.capabilities;
+    let capabilities: ModelCapabilities | undefined;
+    if (raw && typeof raw.vision === "boolean") {
+      capabilities = { vision: raw.vision };
+      if (typeof raw.trained_for_tool_use === "boolean") {
+        capabilities.tools = raw.trained_for_tool_use;
+      }
+    }
+
+    return { model: found.key ?? found.name ?? model, contextLength, capabilities };
   } catch {
     return null;
   }
+}
+
+/**
+ * Thin context-only projection of {@link probeModel}. Kept for callers that
+ * only need the context window (banner, context-probe diagnostics).
+ */
+export async function getLoadedContextLength(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+): Promise<ContextProbeResult | null> {
+  const probe = await probeModel(baseUrl, model, timeoutMs);
+  return probe ? { model: probe.model, actual: probe.contextLength } : null;
 }
 
 export class ModelLoader {
