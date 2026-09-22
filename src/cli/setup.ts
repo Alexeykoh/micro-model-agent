@@ -244,7 +244,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   const configureSecurity = await ask(rl, t("setup.security_configure"), "n");
   let securityBashBlock = false;
   let securityFlagsBlock = false;
-  let securityPathsRestrict = true;
+  let securityPathsRestrict = false;
   if (configureSecurity.toLowerCase() === "y" || configureSecurity.toLowerCase() === "yes") {
     securityBashBlock = (await ask(rl, t("setup.security_bash_block"), "n")).toLowerCase() === "y";
     securityFlagsBlock =

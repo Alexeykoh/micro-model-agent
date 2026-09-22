@@ -73,13 +73,13 @@ describe("applyAnswersToConfig", () => {
     expect(config.security.paths.denied.length).toBeGreaterThan(0);
   });
 
-  it("disables path policy and clears denied paths when securityPathsRestrict=false", () => {
+  it("disables path policy but keeps the default deny list when securityPathsRestrict=false", () => {
     const config = makeConfig();
     expect(config.security.paths.denied.length).toBeGreaterThan(0);
     applyAnswersToConfig(config, makeAnswers({ securityPathsRestrict: false }));
 
     expect(config.security.paths.enabled).toBe(false);
-    expect(config.security.paths.denied).toEqual([]);
+    expect(config.security.paths.denied.length).toBeGreaterThan(0);
   });
 
   it("extends the bash blacklist when securityBashBlock=true", () => {

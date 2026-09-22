@@ -83,7 +83,6 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
       ];
     }
     config.security.paths.enabled = a.securityPathsRestrict;
-    if (!a.securityPathsRestrict) config.security.paths.denied = [];
   }
   return config;
 }
