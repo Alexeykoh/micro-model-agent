@@ -271,7 +271,7 @@
   "cli.config_key": "Ключ конфига (напр., model, provider.baseUrl)",
   "cli.set_value": "Установить значение",
   "cli.set_done": "Установлено {key}={value}",
-  "cli.show_config": "Показать текущий конфиг",
+  "cli.show_config": "Показать действующую конфигурацию (секреты скрыты; используйте --show-secrets)",
   "cli.migrate_config": "Мигрировать legacy config.json в domain-формат",
   "cli.manage_models": "Управление моделями",
   "cli.list_models": "Список доступных моделей",

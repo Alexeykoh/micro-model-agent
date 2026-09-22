@@ -273,7 +273,7 @@
   "cli.config_key": "Config key (e.g., model, provider.baseUrl)",
   "cli.set_value": "Set a config value",
   "cli.set_done": "Set {key}={value}",
-  "cli.show_config": "Show current config",
+  "cli.show_config": "Show the effective configuration (secrets redacted; use --show-secrets to reveal)",
   "cli.migrate_config": "Migrate legacy config.json to domain format",
   "cli.manage_models": "Manage models",
   "cli.list_models": "List available models",

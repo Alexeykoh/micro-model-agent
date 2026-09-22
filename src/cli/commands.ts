@@ -69,9 +69,11 @@ function buildConfigCommands(program: Command): void {
   configCmd
     .command("show")
     .description(t("cli.show_config"))
-    .action(async () => {
+    .option("--show-secrets", "Print secrets (API keys, tokens) unredacted")
+    .action(async (opts: { showSecrets?: boolean }) => {
       const { config } = await bootstrap();
-      writeMachineJson(config);
+      const { redactConfigSecrets } = await import("../config/redact");
+      writeMachineJson(opts.showSecrets ? config : redactConfigSecrets(config));
     });
   configCmd
     .command("migrate")
