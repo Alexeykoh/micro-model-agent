@@ -348,6 +348,7 @@
   "cli.show_details": "Show session details",
   "cli.delete_session": "Delete a session",
   "cli.first_run": "First run detected. Running setup wizard...",
+  "cli.first_run_oneshot": "No configuration found — running with defaults. Run `mma` (no arguments) once to set up the wizard.",
   "cli.setup_saved_restart": "Settings saved. Restarting with the new configuration...",
   "cli.unknown_cmd": "Unknown command: {name}.",
   "cli.unknown_command": "Unknown command \"{input}\". Did you mean \"{suggestion}\"?",

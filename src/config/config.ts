@@ -12,7 +12,7 @@ import { MigrationDetector } from "../migration/detect";
 import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
-import { loadDomainFiles, saveDomainFiles, hasDomainFiles } from "./domains";
+import { loadDomainFiles, saveDomainFiles } from "./domains";
 import { defaultOutputBus } from "../output";
 
 // ── Centralized path constants ──────────────────────────────────────────
@@ -252,7 +252,8 @@ export interface LoadConfigResult {
  *   6. Env vars
  *   7. Decrypt
  *
- * On first run (no config.json, no domain files), auto-creates domain files.
+ * On first run (no config.json, no domain files) the result is DEFAULTS;
+ * nothing is written — persistence happens only through `saveConfig`.
  */
 export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const globalPath = join(options.configDir, "config.json");
@@ -287,14 +288,14 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   let config: AppConfig = structuredClone(DEFAULTS);
   let legacyDetected = false;
 
-  // Step 1: legacy config.json (fallback)
+  // Step 2: legacy config.json (fallback)
   const globalData = loadJSON(globalPath);
   if (globalData) {
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
   }
 
-  // Step 2: domain files (override legacy)
+  // Step 3: domain files (override legacy)
   const domainConfig = loadDomainFiles(options.configDir);
   if (domainConfig) {
     config = deepMerge(config, domainConfig);

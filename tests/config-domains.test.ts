@@ -266,6 +266,8 @@ describe("loadConfig — domain file integration", () => {
     expect(config.locale).toBe(DEFAULTS.locale);
     expect(legacyDetected).toBe(false);
     expect(hasDomainFiles(tmpDir)).toBe(false);
+    expect(existsSync(join(tmpDir, "config"))).toBe(false);
+    expect(existsSync(join(tmpDir, "config.json"))).toBe(false);
   });
 
   it("legacy config.json: reads it, sets legacyDetected", () => {

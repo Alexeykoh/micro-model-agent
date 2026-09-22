@@ -137,6 +137,9 @@ async function main(): Promise<void> {
     const jsonSink = jsonOpt ? new JsonOutputSink(defaultOutputBus) : undefined;
 
     const prompt = program.args.join(" ");
+    const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+    const { hasDomainFiles } = await import("../config/domains");
+    const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
     const { agent, config, baseDir, legacyDetected, contextProbe } = await bootstrap(
       undefined,
       projectDir,
@@ -152,6 +155,10 @@ async function main(): Promise<void> {
 
     if (legacyDetected) {
       getDefaultChannel().writeLine(pc.yellow(`  ${t("config.legacy_hint")}`), "stderr");
+    }
+
+    if (virgin && !jsonOpt) {
+      getDefaultChannel().writeLine(pc.yellow(`  ${t("cli.first_run_oneshot")}`), "stderr");
     }
 
     // Surface the loaded-vs-configured context mismatch in one-shot mode too
