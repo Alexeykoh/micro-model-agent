@@ -1,6 +1,8 @@
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
+import type { ImageUrlPart } from "../llm/provider";
 import { BrowserSession } from "../modules/browser/session";
 import { DEFAULT_BROWSER_CONFIG } from "../modules/browser/types";
+import { bufferToDataUrl } from "../llm/image-utils";
 import { t } from "../i18n/index";
 import { defaultOutputBus } from "../output";
 import { errMsg } from "../utils";
@@ -67,25 +69,13 @@ export function formatScreenshotForTextModel(snapshot: string): string {
 }
 
 /**
- * Эвристика vision-поддержки по имени модели (полноценные capabilities у
- * провайдера есть не всегда). Покрывает распространённые vision-семейства;
- * при появлении `model.info`-capabilities предпочтительнее использовать их.
+ * Превращает PNG-буфер скриншота в image-part для доставки модели. Размер
+ * ограничивается `bufferToDataUrl` (ресайз ≤800px, JPEG) — иначе base64
+ * раздул бы контекст малыша (32K).
  */
-export function modelSupportsVision(model: string): boolean {
-  const m = model.toLowerCase();
-  return /vision|\bvl\b|qwen.*vl|gpt-4|claude|gemini|llava|pixtral/.test(m);
-}
-
-export function formatScreenshotResult(
-  snapshot: string,
-  screenshot: Buffer,
-  supportsVision: boolean,
-): string {
-  if (!supportsVision) {
-    return formatScreenshotForTextModel(snapshot);
-  }
-  const base64 = screenshot.toString("base64");
-  return `${snapshot}\n\n[Screenshot: data:image/png;base64,${base64}]`;
+export async function screenshotToImagePart(screenshot: Buffer): Promise<ImageUrlPart> {
+  const { dataUrl } = await bufferToDataUrl(screenshot);
+  return { type: "image_url", image_url: { url: dataUrl } };
 }
 
 export function createBrowserTool(): ToolDefinition {
@@ -153,13 +143,18 @@ export function createBrowserTool(): ToolDefinition {
       const s = getSession(ctx);
       const result = await serialize(() => s.execute(action, args));
 
-      const supportsVision = modelSupportsVision(ctx.config.model);
-
       if (result.screenshot) {
-        return {
-          success: result.success,
-          output: formatScreenshotResult(result.output, result.screenshot, supportsVision),
-        };
+        // vision берётся из резолвера возможностей активной модели
+        // (пресет + native-probe + конфиг), а не из эвристики по имени.
+        // Без vision отдаём текстовый snapshot — base64 в контекст не льём.
+        if (ctx.capabilities?.vision) {
+          return {
+            success: result.success,
+            output: result.output,
+            images: [await screenshotToImagePart(result.screenshot)],
+          };
+        }
+        return { success: result.success, output: formatScreenshotForTextModel(result.output) };
       }
 
       return { success: result.success, output: result.output };

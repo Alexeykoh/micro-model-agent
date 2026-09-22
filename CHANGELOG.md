@@ -4,6 +4,22 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-09-22
+
+### Added
+
+- **Model capability resolution** (`src/modules/providers/capabilities.ts`, `src/config/types.ts`): a single source of truth for a model's `vision`/`tools` abilities, merged from user override (`config.modelCapabilities[model]`) → live native probe (LM Studio `/api/v1/models` `capabilities`, read by `probeModel` in `src/llm/model-loader.ts`) → provider preset. Exposed to tools via the live `ToolContext.capabilities` getter.
+- **First-class tool image channel** (`src/tools/types.ts` `ToolResult.images`, `src/core/agent/tool-images.ts`): tools can return images; the agent loop queues them onto the next user message (`queueToolImages`), keeping `role:"tool"` content text-only and portable.
+
+### Fixed
+
+- **Vision misdetection for non-`-vl` models** (`src/tools/browser.ts`): the `qwen3.5-9b`-style models report `vision: true` in LM Studio but the name-based `modelSupportsVision` heuristic returned `false`, so screenshots were silently downgraded to a text notice. Name matching is removed; the browser tool now reads `ctx.capabilities.vision`.
+- **Browser screenshots never reached the model** (`src/tools/browser.ts`): screenshots were embedded as base64 text inside the `role:"tool"` output, which backends never decode and the budget truncates. They are now delivered as `image_url` parts; text-only models get the snapshot instead.
+
+### Changed
+
+- **Browser module prompt** (`src/modules/browser/module.ts`): no longer asks the model to self-assess vision support — screenshot delivery is automatic.
+
 ## [1.6.0] - 2026-09-22
 
 ### Added

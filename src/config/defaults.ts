@@ -57,6 +57,10 @@ export const DEFAULTS: AppConfig = {
       description: "browser + file reading for visual tasks",
     },
   },
+  // Per-model capability overrides (keyed by model id). Empty by default —
+  // the live native probe (LM Studio) and the provider preset are the primary
+  // sources; this map is the manual escape hatch when both get a model wrong.
+  modelCapabilities: {},
   contextWindow: 32768,
   contextBudget: {
     systemPrompt: 0.1,

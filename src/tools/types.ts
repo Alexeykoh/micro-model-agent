@@ -44,6 +44,12 @@ export interface ToolContext {
   llmProvider?: import("../llm/provider").LLMProvider;
   toolExecutor?: import("./executor").ToolExecutor;
   contextManager?: import("../modules/context/manager").ContextManager;
+  /**
+   * Resolved capabilities of the ACTIVE model (preset + live probe + config
+   * override). Tools that depend on model abilities (browser vision, image
+   * attachment) must read this instead of guessing from the model name.
+   */
+  capabilities?: import("../config/types").ModelCapabilities;
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>;
   };
@@ -98,13 +104,23 @@ export interface ToolContext {
    * Test seam — factory for the sub-agent instance (Bun module mocks are
    * process-global, so vi.mock cannot be used for the Agent class).
    */
-  agentFactory?: (deps: unknown) => { run(task: string): Promise<import("../core/types").AgentResult> };
+  agentFactory?: (deps: unknown) => {
+    run(task: string): Promise<import("../core/types").AgentResult>;
+  };
   /**
    * Session manager — exposes active session metadata to tools.
    * Added for session_info tool; kept minimal to avoid circular deps.
    */
   sessionManager?: {
-    getActiveMeta(): { id: string; name: string; model?: string; contextWindow?: number; messageCount: number; createdAt: string; updatedAt: string } | null;
+    getActiveMeta(): {
+      id: string;
+      name: string;
+      model?: string;
+      contextWindow?: number;
+      messageCount: number;
+      createdAt: string;
+      updatedAt: string;
+    } | null;
   };
   /**
    * Terminal-agnostic prompt surface for interactive tools. The REPL installs
@@ -120,6 +136,13 @@ export interface ToolResult {
   toolCallId?: string;
   display?: string;
   diff?: string;
+  /**
+   * Изображения, произведённые тулом (например, browser screenshot или
+   * будущий рендер графика). Доставляются модели отдельным user-сообщением
+   * (см. `queueToolImages`), а НЕ строкой base64 внутри `output`: в
+   * `role:"tool"` content по контракту OpenAI/Jinja — только текст.
+   */
+  images?: import("../llm/provider").ImageUrlPart[];
   /**
    * True when a plugin's `onBeforeTool` refused the call before the tool ran.
    * Such a result is `success:false`, but it is NOT evidence the action is

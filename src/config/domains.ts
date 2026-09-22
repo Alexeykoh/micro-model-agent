@@ -26,7 +26,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "reasoning",
     "hallucination",
   ],
-  provider: ["provider", "orchestrator", "retry", "pricing"],
+  provider: ["provider", "orchestrator", "retry", "pricing", "modelCapabilities"],
   moe: ["moe", "experts"],
   security: ["security"],
   browser: ["browser"],

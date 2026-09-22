@@ -6,12 +6,7 @@ export type CacheMechanism = "auto" | "explicit" | "local" | "none";
  * `openai` покрывает OpenAI, LM Studio, llama.cpp, vLLM, OpenRouter, Zen/Go и
  * Gemini/xAI — все через OpenAI-совместимую форму.
  */
-export type CacheReportFormat =
-  | "openai"
-  | "deepseek"
-  | "anthropic"
-  | "ollama"
-  | "none";
+export type CacheReportFormat = "openai" | "deepseek" | "anthropic" | "ollama" | "none";
 
 /**
  * Возможность кеширования промпта у провайдера. Описывает, КАК работает кеш и
@@ -39,6 +34,19 @@ export interface CacheCapability {
    * включая LM Studio, не отдают usage/`cached_tokens` в стриме).
    */
   requestStreamUsage: boolean;
+}
+
+/**
+ * Возможности конкретной модели, уточняющие пресет провайдера. Единый
+ * источник правды для тулов (например, browser/screenshot) вместо эвристики
+ * по имени модели. Поля необязательны: слой может уточнять только часть.
+ * Приоритет резолва — см. `resolveModelCapabilities`.
+ */
+export interface ModelCapabilities {
+  /** Модель принимает изображения (image парты в сообщениях). */
+  vision?: boolean;
+  /** Модель умеет вызывать инструменты. */
+  tools?: boolean;
 }
 
 /** A single configured provider (one of possibly many). */
@@ -435,6 +443,12 @@ export interface AppConfig {
   orchestrator: OrchestratorConfig;
   moe: MoeConfig;
   experts: Record<string, ExpertConfig>;
+  /**
+   * Per-model capability overrides keyed by model id. Highest-priority source
+   * in `resolveModelCapabilities` — wins over the live probe and the provider
+   * preset. Lets a user pin vision/tools for a model the preset/probe get wrong.
+   */
+  modelCapabilities?: Record<string, ModelCapabilities>;
   tools: ToolsConfig;
   contextWindow: number;
   contextBudget: ContextBudget;
