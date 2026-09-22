@@ -616,25 +616,25 @@ git commit -m "feat(cli): register file-path completion, drop dead config-key pr
 - Modify: `src/ui/line-editor.ts`
 - Test: `tests/ui/line-editor-completion.test.ts` (create)
 
-**Design:** After `tabComplete` with >1 match, enter a menu mode: the editor prints the item list once with the first item highlighted; `↑`/`↓` move the highlight, `Enter` accepts, `Esc`/`Tab` dismisses, any printable char leaves the menu and inserts the char. This is raw-mode state on the editor; no new dependency.
+**Design:** After `tabComplete` with >1 match, the editor prints the item list once and enters a **buffer-cycling** session: the first candidate is inserted into the input line in place of the partial (cursor after it). While the session is active, `↑`/`↓`/`Tab` cycle through candidates with wrap-around, rewriting the token in the buffer each time; `Enter` accepts the currently inserted candidate (normal submit); `Esc` restores the original partial. Any other key drops the session and is processed normally. The session replaces only the completed token range, so text after the cursor is preserved. This is raw-mode state on the editor; no new dependency.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/ui/line-editor-completion.test.ts` driving `onKey` with synthetic keypresses (mirroring the existing `tests/ui/line-editor*.test.ts` patterns) and asserting: Tab opens the menu; `down` moves selection; `return` inserts the selected value; `escape` closes without inserting.
+Create `tests/ui/line-editor-completion.test.ts` driving `onKey` with synthetic keypresses (mirroring the existing `tests/ui/line-editor*.test.ts` patterns) and asserting: Tab inserts the first candidate and starts the session; `down` cycles to the next; `return` submits the currently inserted candidate; `escape` restores the original partial. Include a mid-line case (cursor inside the line) proving only the token is replaced and trailing text is preserved.
 
 ```ts
 // Sketch — follow the existing line-editor test harness for constructing the editor.
-it("selects a completion with arrow keys", () => {
+it("cycles a completion with arrow keys", () => {
   // editor.completer returns [{value:"aaa"},{value:"aab"},{value:"aac"}]
-  // press tab -> menu open, selection index 0
-  // press down -> index 1
-  // press return -> buffer becomes "aab"
+  // press tab -> buffer "aaa", session index 0
+  // press down -> buffer "aab", index 1
+  // press return -> submits "aab"
 });
 ```
 
-- [ ] **Step 2: Implement the menu state**
+- [ ] **Step 2: Implement the completion cycling session**
 
-Add fields: `private completionMenu: { items: {value:string;description?:string}[]; index: number; line: string; from: number; partial: string } | null = null;`. In `onKey`, before normal handling, if `completionMenu` is active, intercept `up`/`down`/`return`/`escape`/`tab` and any printable input per the design, then `return`. In `tabComplete`, when `matches.length > 1`, store the menu state, print the list with the current item highlighted (reverse video or `>` marker), and do not return to normal typing until accepted/dismissed.
+Add the field `private completionSession: { items: CompletionItem[]; index: number; from: number; original: string; inserted: string } | null = null;`, where `from` is the UTF-16 index of the completed token on the current line, `original` the replaced partial, and `inserted` the candidate currently in the buffer. In `tabComplete`, when `matches.length > 1`, print the list, store the session with `index: 0`, and insert `matches[0].value` in place of `partial` (cursor lands after it). Add helpers `applyCompletionCandidate(index)` (replace `inserted` with the chosen value on the current line), `cycleCompletion(delta)` (wrap `(index + delta + n) % n`; guard `n === 0`), and `cancelCompletion()` (restore `original`). In `onKey`, before normal handling, if `completionSession` is set: unmodified `up`/`down` cycle, `tab` cycles forward, `escape` restores; any other key clears the session and falls through to normal handling (host hook included). Clear the session in `insertText` so external `write()` inserts cannot leave stale `from`/`inserted`.
 
 - [ ] **Step 3: Run**
 Run: `bun test tests/ui/line-editor-completion.test.ts`

@@ -84,6 +84,27 @@ describe("LineEditor tab completion cycling", () => {
     editor.close();
   });
 
+  it("cycles a mid-line token and preserves the trailing text", async () => {
+    const { editor, input } = makeEditor({ completer: threeMatches });
+    input.pushData("/");
+    input.pushData("foo");
+    await tick();
+    input.pushData("\x1b[D"); // left
+    input.pushData("\x1b[D"); // left
+    input.pushData("\x1b[D"); // left -> cursor sits right after "/"
+    await tick();
+    input.pushData("\t");
+    await tick();
+    expect(editor["lines"][0]).toBe("/alphafoo");
+    expect(editor["completionSession"]).not.toBeNull();
+
+    input.pushData("\x1b[B"); // down -> replaces only the token
+    await tick();
+    expect(editor["lines"][0]).toBe("/betafoo");
+
+    editor.close();
+  });
+
   it("restores the original partial on Escape", async () => {
     const { editor, input } = makeEditor({ completer: threeMatches });
     input.pushData("/");

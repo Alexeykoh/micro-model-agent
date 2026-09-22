@@ -333,12 +333,13 @@ export class LineEditor implements LineInput {
     // handling, and arrow/Tab must cycle. Any other key drops the session
     // and is processed normally (host hook included).
     if (this.completionSession) {
-      const ck = key as { name?: string };
-      if (ck?.name === "down") {
+      const ck = key as { name?: string; ctrl?: boolean; meta?: boolean };
+      const plain = !ck.ctrl && !ck.meta;
+      if (ck?.name === "down" && plain) {
         this.cycleCompletion(1);
         return;
       }
-      if (ck?.name === "up") {
+      if (ck?.name === "up" && plain) {
         this.cycleCompletion(-1);
         return;
       }
@@ -636,6 +637,7 @@ export class LineEditor implements LineInput {
   }
 
   private insertText(text: string): void {
+    this.completionSession = null;
     const sanitized = text.replace(/\r\n/g, "\n").replace(/\r/g, "");
     const chars = this.currentChars();
     const t = Array.from(sanitized);
@@ -908,6 +910,7 @@ export class LineEditor implements LineInput {
     const s = this.completionSession;
     if (!s) return;
     const n = s.items.length;
+    if (n === 0) return;
     const next = (s.index + delta + n) % n;
     this.applyCompletionCandidate(next);
   }
