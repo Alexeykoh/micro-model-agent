@@ -301,11 +301,6 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     legacyDetected = false;
   }
 
-  // Step 3: first run — auto-create domain files instead of config.json
-  if (!globalData && !domainConfig) {
-    saveDomainFiles(config, options.configDir);
-  }
-
   // Step 4: project .mmrc (overrides everything)
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {

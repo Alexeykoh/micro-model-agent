@@ -256,7 +256,7 @@ describe("loadConfig — domain file integration", () => {
     return d;
   }
 
-  it("first run: creates domain files, returns defaults", () => {
+  it("first run: returns defaults without creating files", () => {
     const tmpDir = makeTempDir();
     const { config, legacyDetected } = loadConfig({
       configDir: tmpDir,
@@ -265,7 +265,7 @@ describe("loadConfig — domain file integration", () => {
     expect(config.model).toBe(DEFAULTS.model);
     expect(config.locale).toBe(DEFAULTS.locale);
     expect(legacyDetected).toBe(false);
-    expect(hasDomainFiles(tmpDir)).toBe(true);
+    expect(hasDomainFiles(tmpDir)).toBe(false);
   });
 
   it("legacy config.json: reads it, sets legacyDetected", () => {
