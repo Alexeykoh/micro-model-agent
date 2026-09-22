@@ -24,9 +24,29 @@ describe("redactConfigSecrets", () => {
   });
 
   it("redacts webhook urls", () => {
-    const input = { security: { audit: { webhookUrl: "https://hook/secret" } } };
+    const input = { security: { auditNotifier: { webhookUrl: "https://hook/secret" } } };
     const out = redactConfigSecrets(input) as any;
-    expect(out.security.audit.webhookUrl).toBe("***");
+    expect(out.security.auditNotifier.webhookUrl).toBe("***");
+  });
+
+  it("redacts env map values", () => {
+    const input = { mcpServers: { s: { env: { API_TOKEN: "abc", PLAIN: "x" } } } };
+    const out = redactConfigSecrets(input) as any;
+    expect(out.mcpServers.s.env.API_TOKEN).toBe("***");
+    expect(out.mcpServers.s.env.PLAIN).toBe("***");
+  });
+
+  it("redacts string elements of a secret-keyed array", () => {
+    const input = { provider: { tokens: ["a", "b"] } };
+    const out = redactConfigSecrets(input) as any;
+    expect(out.provider.tokens).toEqual(["***", "***"]);
+  });
+
+  it("passes RegExp values through untouched", () => {
+    const re = /dangerous/gi;
+    const input = { security: { contentScan: { dangerousPatterns: [re] } } };
+    const out = redactConfigSecrets(input) as any;
+    expect(out.security.contentScan.dangerousPatterns[0]).toBe(re);
   });
 
   it("leaves non-secret values intact", () => {
@@ -34,9 +54,12 @@ describe("redactConfigSecrets", () => {
     expect(redactConfigSecrets(input)).toEqual(input);
   });
 
-  it("does not mutate the input", () => {
-    const input = { provider: { apiKey: "sk-x" } };
-    redactConfigSecrets(input);
+  it("does not mutate the input and returns a distinct copy", () => {
+    const input = { provider: { apiKey: "sk-x", entries: [{ apiKey: "y" }] } };
+    const out = redactConfigSecrets(input) as any;
+    expect(out).not.toBe(input);
+    expect(out.provider).not.toBe((input as any).provider);
+    expect(out.provider.entries).not.toBe((input as any).provider.entries);
     expect((input as any).provider.apiKey).toBe("sk-x");
   });
 });
