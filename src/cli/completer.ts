@@ -106,7 +106,10 @@ export class FilePathProvider implements CompletionProvider {
   }
 
   match(ctx: CompletionContext): boolean {
-    return ctx.partial.includes("/") || ctx.partial.includes("\\");
+    return (
+      ctx.tokenIndex >= 1 &&
+      (ctx.partial.includes("/") || ctx.partial.includes("\\"))
+    );
   }
 
   complete(ctx: CompletionContext): CompletionItem[] {

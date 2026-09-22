@@ -50,4 +50,30 @@ describe("FilePathProvider", () => {
 
     expect(matches).toContain("src/test.ts");
   });
+
+  it("should not match a slash partial in the first token position", () => {
+    const provider = new FilePathProvider();
+    const ctx = {
+      line: "/mod",
+      cursor: 4,
+      tokens: ["/mod"],
+      partial: "/mod",
+      tokenIndex: 0,
+    };
+
+    expect(provider.match(ctx)).toBe(false);
+  });
+
+  it("should match a slash partial in an argument position", () => {
+    const provider = new FilePathProvider();
+    const ctx = {
+      line: "read src/",
+      cursor: 9,
+      tokens: ["read", "src/"],
+      partial: "src/",
+      tokenIndex: 1,
+    };
+
+    expect(provider.match(ctx)).toBe(true);
+  });
 });
