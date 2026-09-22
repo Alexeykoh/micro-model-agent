@@ -100,6 +100,60 @@ describe("applyAnswersToConfig", () => {
 
     expect(config.security.bash.blacklist.filter((c) => c === "rm")).toHaveLength(1);
   });
+
+  it("updates the active entry in place, preserving other providers and tuning", () => {
+    const config = makeConfig();
+    config.provider.entries = [
+      {
+        type: "openai-compat",
+        label: "local",
+        baseUrl: "http://localhost:1234/v1",
+        contextWindow: 65536,
+      },
+      { type: "openrouter", label: "cloud", baseUrl: "https://openrouter.ai/api/v1" },
+    ];
+    config.provider.active = "local";
+    const out = applyAnswersToConfig(
+      config,
+      makeAnswers({
+        provider: "anthropic",
+        apiBase: "https://api.anthropic.com",
+        apiKey: "k",
+        model: "m",
+        contextWindow: 32768,
+        maxToolIterations: 10,
+        locale: "en",
+        securityBashBlock: false,
+        securityFlagsBlock: false,
+        securityPathsRestrict: true,
+      }),
+    );
+
+    expect(out.provider.entries).toHaveLength(2);
+    expect(out.provider.entries![0]).toMatchObject({
+      type: "anthropic",
+      label: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      contextWindow: 65536,
+    });
+    expect(out.provider.entries![1].label).toBe("cloud");
+    expect(out.provider.active).toBe("anthropic");
+  });
+
+  it("leaves a single/legacy provider without entries untouched", () => {
+    const config = makeConfig();
+    config.provider.entries = undefined;
+    const out = applyAnswersToConfig(
+      config,
+      makeAnswers({ provider: "openrouter", apiBase: "https://openrouter.ai/api/v1" }),
+    );
+
+    expect(out.provider.entries).toBeUndefined();
+    expect(out.provider.type).toBe("openrouter");
+    expect(out.provider.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(out.provider.apiKey).toBe("secret-key");
+  });
 });
 
 describe("applyReasoningCliOverride", () => {

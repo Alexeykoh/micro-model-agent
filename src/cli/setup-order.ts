@@ -44,6 +44,27 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
   config.contextWindow = a.contextWindow;
   config.maxToolIterations = a.maxToolIterations;
   config.locale = a.locale;
+  // Multi-entry configs resolve the active provider from `entries[]`, so the
+  // answer must be written onto the active entry — without dropping the other
+  // providers or the entry's tuning (contextWindow, cache, retry, rateLimits).
+  if ((config.provider.entries?.length ?? 0) > 0) {
+    const entries = config.provider.entries ?? [];
+    const activeName =
+      config.provider.active || entries[0]?.label || entries[0]?.type;
+    const idx = entries.findIndex((e) => e.label === activeName || e.type === activeName);
+    const target = idx >= 0 ? idx : 0;
+    const updated = {
+      ...entries[target],
+      type: a.provider,
+      label: a.provider,
+      baseUrl: a.apiBase,
+      apiKey: a.apiKey,
+    };
+    const next = entries.slice();
+    next[target] = updated;
+    config.provider.entries = next;
+    config.provider.active = updated.label || updated.type;
+  }
   if (config.security) {
     config.security.enabled = true;
     config.security.bash.enabled = true;
