@@ -60,7 +60,7 @@ export interface ProviderEntry {
   contextWindow?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Completion token cap sent as max_tokens (default 4096). Raise for
+  /** Completion token cap sent as max_tokens (default 8192). Raise for
    *  reasoning-heavy models that truncate tool_call arguments. */
   maxCompletionTokens?: number;
   /** Fallback order (lower = tried first). */

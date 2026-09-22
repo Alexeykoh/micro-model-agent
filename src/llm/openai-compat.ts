@@ -22,6 +22,8 @@ export interface RetryConfig {
 const REQUEST_TIMEOUT_MS = 120000;
 /** Max wait (ms) for a self-inflicted rate-limit slot before giving up. */
 const MAX_RATE_WAIT_MS = 30_000;
+/** Completion token cap sent as max_tokens when unset in config. */
+const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 
 /**
  * Client identity header. OpenCode Go asks clients to identify themselves with
@@ -300,7 +302,7 @@ export class OpenAICompatProvider implements LLMProvider {
     onEmit: () => void,
     idleTimeoutMs: number,
   ): AsyncGenerator<Chunk, boolean> {
-    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096;
+    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     const body = buildRequestBody({
       model: this.model,
       messages,
@@ -645,7 +647,7 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): Promise<Chunk[]> {
-    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? 4096;
+    const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     const body = buildRequestBody({
       model: this.model,
       messages,

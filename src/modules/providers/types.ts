@@ -31,7 +31,7 @@ export interface ProviderOptions {
   contextWindow: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Per-call completion cap (max_tokens). Default 4096 in openai-compat. */
+  /** Per-call completion cap (max_tokens). Default 8192 in openai-compat. */
   maxCompletionTokens?: number;
   capabilities?: Partial<ProviderCapabilities>;
   /** Live conversation id, sent as `x-opencode-session` when present. */

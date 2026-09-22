@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.1] - 2026-09-22
+
+### Changed
+
+- **Default completion token cap** (`src/llm/openai-compat.ts`): `max_tokens` fallback doubled from 4096 to 8192 (`DEFAULT_MAX_COMPLETION_TOKENS`), so long answers are less likely to be cut by the generation limit. Still overridable via `provider.maxCompletionTokens`.
+
 ## [1.7.0] - 2026-09-22
 
 ### Added
