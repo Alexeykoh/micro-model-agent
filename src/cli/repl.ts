@@ -12,6 +12,7 @@ import {
   SkillNameProvider,
   ProviderArgProvider,
   ModelArgProvider,
+  FilePathProvider,
   buildSlashCompletions,
   type CompletionItem,
 } from "./completer";
@@ -383,6 +384,8 @@ export class Repl implements ReplContext {
       this.completer.registerProvider(new ProviderArgProvider(entryLabels));
     }
     this.completer.registerProvider(new ModelArgProvider(() => this.modelCache));
+    // File-path completion anchored to the agent workspace, not process.cwd().
+    this.completer.registerProvider(new FilePathProvider(this.baseDir));
     // Warm the model cache in the background (free listModels call).
     this.refreshModelCache();
   }

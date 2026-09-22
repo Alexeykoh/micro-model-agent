@@ -30,4 +30,24 @@ describe("FilePathProvider", () => {
     expect(matches.length).toBeGreaterThan(0);
     expect(matches.some((m) => m.includes("src"))).toBe(true);
   });
+
+  it("should complete paths from an explicit root without chdir", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "mma-completer-root-"));
+    mkdirSync(join(tempDir, "src"));
+    writeFileSync(join(tempDir, "src", "test.ts"), "");
+
+    const provider = new FilePathProvider(tempDir);
+    const ctx = {
+      line: "read src/",
+      cursor: 9,
+      tokens: ["read", "src/"],
+      partial: "src/",
+      tokenIndex: 1,
+    };
+
+    const matches = provider.complete(ctx).map((m) => m.value);
+    rmSync(tempDir, { recursive: true, force: true });
+
+    expect(matches).toContain("src/test.ts");
+  });
 });

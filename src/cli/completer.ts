@@ -97,25 +97,13 @@ export class ModelArgProvider implements CompletionProvider {
   }
 }
 
-export class ConfigKeyProvider implements CompletionProvider {
-  name = "config-keys";
-  private keys: string[];
-
-  constructor(keys: string[]) {
-    this.keys = keys;
-  }
-
-  match(ctx: CompletionContext): boolean {
-    return ctx.tokenIndex >= 1 && ctx.tokens[0] === "/config" && ctx.tokens[1] === "set";
-  }
-
-  complete(ctx: CompletionContext): CompletionItem[] {
-    return this.keys.filter((k) => k.startsWith(ctx.partial)).map((k) => ({ value: k }));
-  }
-}
-
 export class FilePathProvider implements CompletionProvider {
   name = "file-paths";
+  private root?: string;
+
+  constructor(root?: string) {
+    this.root = root;
+  }
 
   match(ctx: CompletionContext): boolean {
     return ctx.partial.includes("/") || ctx.partial.includes("\\");
@@ -123,7 +111,7 @@ export class FilePathProvider implements CompletionProvider {
 
   complete(ctx: CompletionContext): CompletionItem[] {
     try {
-      const cwd = process.cwd();
+      const cwd = this.root ?? process.cwd();
       const partialPath = ctx.partial;
       const lastSlash = Math.max(partialPath.lastIndexOf("/"), partialPath.lastIndexOf("\\"));
       const dirPath = lastSlash > 0 ? partialPath.slice(0, lastSlash) : ".";
