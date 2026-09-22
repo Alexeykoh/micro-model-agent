@@ -117,21 +117,28 @@ export function toolCategory(tool: string): ToolCategory {
 }
 
 /**
- * Action mark colored by tool category. Colors stay off the semantic success/
- * warning/error set so a colored glyph never reads as an outcome.
+ * Accent color function for a tool category. The same color is applied to the
+ * action glyph **and** the localized tool label, so they read as one unit
+ * (see `docs/design/ui/STYLE.md`). Colors stay off the semantic success/warning/
+ * error set so a colored label never reads as an outcome.
  */
-export function actionMarkFor(tool: string): string {
+export function toolAccent(tool: string): (text: string) => string {
   switch (toolCategory(tool)) {
     case "recon":
-      return pc.cyan(glyph.action);
+      return pc.cyan;
     case "mutate":
-      return pc.magenta(glyph.action);
+      return pc.magenta;
     case "execute":
-      return pc.blue(glyph.action);
+      return pc.blue;
     case "meta":
     default:
-      return pc.dim(glyph.action);
+      return pc.dim;
   }
+}
+
+/** Action mark colored by tool category. */
+export function actionMarkFor(tool: string): string {
+  return toolAccent(tool)(glyph.action);
 }
 
 /** Green success mark. */

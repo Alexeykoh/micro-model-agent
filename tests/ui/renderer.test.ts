@@ -167,7 +167,16 @@ describe("Renderer", () => {
     expect(out).toContain("✦");
     expect(out).toContain("thinking");
     expect(out).toContain("ms");
-    expect(out).toContain("analyzing the request...");
+    // Label separated from the model's own words by a dim `·`.
+    expect(out).toContain("✦ thinking · analyzing the request...");
+  });
+
+  it("separates the tool label from its arguments with `·`", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.flush();
+    expect(text()).toContain("Reading file · src/a.ts");
   });
 
   it("does not render empty thought block", () => {
@@ -475,6 +484,7 @@ describe("Renderer quiet verbosity", () => {
     renderer.flush();
     const last = getLastAction();
     expect(last).not.toBeNull();
+    expect(last!.tool).toBe("write_file");
     expect(last!.label).toBe("Writing file");
     expect(last!.args).toBe("src/a.ts");
     expect(last!.status).toBe("ok");

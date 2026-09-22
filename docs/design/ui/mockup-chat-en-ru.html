@@ -2,7 +2,7 @@
   .chat{background:#0d1117;border:1px solid #21262d;border-radius:12px;padding:14px 16px;overflow-x:auto;height:100%}
   .chat pre{margin:0;font:10.5px/1.5 ui-monospace,Consolas,"Cascadia Mono",monospace;color:#c9d1d9;white-space:pre}
   .colhead{font:600 .8rem/1 system-ui;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem}
-  .a{color:#58a6ff}.s{color:#3fb950}.w{color:#d29922}.e{color:#f85149}.d{color:#8b949e}.f{color:#484f58}.t{color:#c9d1d9}.p{color:#d2a8ff}
+  .a{color:#58a6ff}.s{color:#3fb950}.w{color:#d29922}.e{color:#f85149}.d{color:#8b949e}.f{color:#484f58}.t{color:#c9d1d9}.p{color:#d2a8ff}.recon{color:#39c5cf}.mutate{color:#d2a8ff}.execute{color:#58a6ff}.meta{color:#8b949e}.sep{color:#6e7681}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
   @media (max-width:900px){.two{grid-template-columns:1fr}}
 </style>
@@ -26,17 +26,17 @@
 <span class="p">✦ thinking</span> <span class="f">· 1.8s · </span><span class="d">/reasoning — show</span>
 <span class="p">✦ thinking</span> <span class="d">· first, let me inspect the structure…</span>
 <span class="f">auto→high · level for this turn</span>
-<span class="a">◇</span> <span class="t">Set reasoning level</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 iterations</span>
+<span class="meta">◇</span> <span class="meta">Set reasoning level</span> <span class="sep">·</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 iterations</span>
 <span class="w">⚠</span> <span class="f">mentioned a file that does not exist: src/hero.tsx</span>
 
 <span class="f">── PLAN, TASKS, CHECKS ──</span>
-<span class="a">◇</span> <span class="t">Planning</span> <span class="f">landing · 3 steps</span>
+<span class="meta">◇</span> <span class="meta">Planning</span> <span class="sep">·</span> <span class="f">landing · 3 steps</span>
 <span class="f">  1. structure  2. layout  3. build</span>
 <span class="f">  ▰▰▱ 0/3</span>
 <span class="s">✓</span> <span class="f">step 1/3: structure</span> <span class="f">▰▰▱ 1/3</span>
 <span class="w">⚠</span> <span class="f">2 edits without a plan — create a plan first</span>
-<span class="a">◇</span> <span class="t">Updating tasks</span> <span class="f">3 added · ▰▱▱ 1/3</span>
-<span class="a">◇</span> <span class="t">Verifying</span> <span class="f">file index.html exists</span> <span class="s">✓</span>
+<span class="meta">◇</span> <span class="meta">Updating tasks</span> <span class="sep">·</span> <span class="f">3 added · ▰▱▱ 1/3</span>
+<span class="meta">◇</span> <span class="meta">Verifying</span> <span class="sep">·</span> <span class="f">file index.html exists</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="f">step 3: dependencies missing — install first</span>
 <span class="e">✗</span> <span class="t">step 2 stuck for 6 iterations</span> <span class="d">— need your call</span>
 <span class="f">  ↳ change approach / search / replan / skip</span>
@@ -54,72 +54,72 @@
 <span class="w">⚠</span> <span class="f">3/4 subtasks — returning partial result</span>
 
 <span class="f">── RECON &amp; INDEX ──</span>
-<span class="a">◇</span> <span class="t">Listing files</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 items</span>
-<span class="a">◇</span> <span class="t">Searching files</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 files</span>
-<span class="a">◇</span> <span class="t">Searching content</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 matches</span>
-<span class="a">◇</span> <span class="t">Reading file</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 lines</span>
-<span class="a">◇</span> <span class="t">File info</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
-<span class="a">◇</span> <span class="t">Project map</span> <span class="s">✓</span> <span class="f">18 files · 6 modules</span>
+<span class="recon">◇</span> <span class="recon">Listing files</span> <span class="sep">·</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 items</span>
+<span class="recon">◇</span> <span class="recon">Searching files</span> <span class="sep">·</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 files</span>
+<span class="recon">◇</span> <span class="recon">Searching content</span> <span class="sep">·</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 matches</span>
+<span class="recon">◇</span> <span class="recon">Reading file</span> <span class="sep">·</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 lines</span>
+<span class="recon">◇</span> <span class="recon">File info</span> <span class="sep">·</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
+<span class="recon">◇</span> <span class="recon">Project map</span> <span class="s">✓</span> <span class="f">18 files · 6 modules</span>
 <span class="d">indexing project… </span><span class="f">▰▰▰▱▱ 62%</span>
-<span class="a">◇</span> <span class="t">Querying chunks</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 chunks</span>
+<span class="recon">◇</span> <span class="recon">Querying chunks</span> <span class="sep">·</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 chunks</span>
 <span class="f">│ 5 recon actions</span> <span class="s">✓</span> <span class="f">· 1.4s · </span><span class="d">/verbose for the list</span>
 
 <span class="f">── EDITS &amp; FILES ──</span>
-<span class="a">◇</span> <span class="t">Creating directory</span> <span class="f">src/assets</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Writing file</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
-<span class="a">◇</span> <span class="t">Editing file</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
+<span class="mutate">◇</span> <span class="mutate">Creating directory</span> <span class="sep">·</span> <span class="f">src/assets</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Writing file</span> <span class="sep">·</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
+<span class="mutate">◇</span> <span class="mutate">Editing file</span> <span class="sep">·</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
 <span class="f">  13 </span><span class="e">-   padding: 20px;</span>
 <span class="f">  13 </span><span class="s">+   padding: 48px 24px;</span>
 <span class="f">  14 </span><span class="s">+   text-align: center;</span>
-<span class="a">◇</span> <span class="t">Moving file</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Deleting file</span> <span class="f">src/old.css</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Moving file</span> <span class="sep">·</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Deleting file</span> <span class="sep">·</span> <span class="f">src/old.css</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="t">.env is protected</span> <span class="d">— confirmation needed</span>
 
 <span class="f">── COMMANDS &amp; PROCESSES ──</span>
-<span class="a">◇</span> <span class="t">Running command</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">exit 0 · 1.2s</span>
-<span class="a">◇</span> <span class="t">Running command</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">background · pid 4821</span>
-<span class="a">◇</span> <span class="t">Listing background processes</span> <span class="s">✓</span> <span class="f">1 active</span>
-<span class="a">◇</span> <span class="t">Process output</span> <span class="f">4821 · last 20</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Stopping process</span> <span class="f">4821</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Running pipeline</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Running command</span> <span class="sep">·</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">exit 0 · 1.2s</span>
+<span class="execute">◇</span> <span class="execute">Running command</span> <span class="sep">·</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">background · pid 4821</span>
+<span class="recon">◇</span> <span class="recon">Listing background processes</span> <span class="s">✓</span> <span class="f">1 active</span>
+<span class="recon">◇</span> <span class="recon">Process output</span> <span class="sep">·</span> <span class="f">4821 · last 20</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Stopping process</span> <span class="sep">·</span> <span class="f">4821</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Running pipeline</span> <span class="sep">·</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="f">"ls" is not a cmd command; use file listing</span>
 <span class="w">⚠</span> <span class="f">command needs interactive input — run non-interactively</span>
 
 <span class="f">── QUALITY CHECKS ──</span>
-<span class="a">◇</span> <span class="t">Checking code</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 errors</span>
-<span class="a">◇</span> <span class="t">Checking syntax</span> <span class="f">index.html</span> <span class="s">✓</span>
+<span class="meta">◇</span> <span class="meta">Checking code</span> <span class="sep">·</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 errors</span>
+<span class="meta">◇</span> <span class="meta">Checking syntax</span> <span class="sep">·</span> <span class="f">index.html</span> <span class="s">✓</span>
 <span class="s">✓</span> <span class="f">vitest: 12 tests passed</span>
 <span class="f">🔧 auto-fixed 3 type errors</span>
 <span class="e">✗</span> <span class="t">tsc: 2 errors</span>
 <span class="f">  ↳ src/app.ts:14 property 'hero' does not exist</span>
 
 <span class="f">── OUTSIDE WORLD ──</span>
-<span class="a">◇</span> <span class="t">Web search</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
-<span class="a">◇</span> <span class="t">Fetching page</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 lines</span>
-<span class="a">◇</span> <span class="t">Browsing page</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">render ok</span>
-<span class="a">◇</span> <span class="t">Browser</span> <span class="f">screenshot → .mma/browser/shot.png</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Downloading file</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
+<span class="recon">◇</span> <span class="recon">Web search</span> <span class="sep">·</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
+<span class="recon">◇</span> <span class="recon">Fetching page</span> <span class="sep">·</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 lines</span>
+<span class="recon">◇</span> <span class="recon">Browsing page</span> <span class="sep">·</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">render ok</span>
+<span class="execute">◇</span> <span class="execute">Browser</span> <span class="sep">·</span> <span class="f">screenshot → .mma/browser/shot.png</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Downloading file</span> <span class="sep">·</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
 
 <span class="f">── MEMORY, KNOWLEDGE, SKILLS ──</span>
-<span class="a">◇</span> <span class="t">Loading skill</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K tok</span>
-<span class="a">◇</span> <span class="t">Remember</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Recall</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 entry</span>
-<span class="a">◇</span> <span class="t">Searching history</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 sessions</span>
+<span class="meta">◇</span> <span class="meta">Loading skill</span> <span class="sep">·</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K tok</span>
+<span class="meta">◇</span> <span class="meta">Remember</span> <span class="sep">·</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
+<span class="recon">◇</span> <span class="recon">Recall</span> <span class="sep">·</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 entry</span>
+<span class="recon">◇</span> <span class="recon">Searching history</span> <span class="sep">·</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 sessions</span>
 
 <span class="f">── DELEGATION, MCP, SERVICE ──</span>
 <span class="d">sub-agent queued: “gather assets”</span>
-<span class="a">◇</span> <span class="t">Sub-agent task</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 iterations</span>
+<span class="execute">◇</span> <span class="execute">Sub-agent task</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 iterations</span>
 <span class="f">  ↳ artifact: .mma/artifacts/sub-a1.md</span>
-<span class="a">◇</span> <span class="t">MCP call</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Session info</span> <span class="s">✓</span> <span class="f">34 messages · 18%</span>
-<span class="a">◇</span> <span class="t">Enable tools</span> <span class="f">browser, subagent</span> <span class="s">✓</span> <span class="f">next turn</span>
+<span class="execute">◇</span> <span class="execute">MCP call</span> <span class="sep">·</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
+<span class="recon">◇</span> <span class="recon">Session info</span> <span class="s">✓</span> <span class="f">34 messages · 18%</span>
+<span class="meta">◇</span> <span class="meta">Enable tools</span> <span class="sep">·</span> <span class="f">browser, subagent</span> <span class="s">✓</span> <span class="f">next turn</span>
 <span class="w">⚠</span> <span class="f">blocked by plugin guard · reason: out of scope</span>
 
 <span class="f">── INTERACTION (no interactive menus) ──</span>
 <span class="a">?</span> <span class="t">Which hero style — minimal or bold?</span>
 <span class="f">  1) minimal  2) bold  3) custom</span>
 <span class="a">↵</span> <span class="t">1 — minimal</span>
-<span class="a">◇</span> <span class="t">Attach image</span> <span class="f">mock.png</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Attach image</span> <span class="sep">·</span> <span class="f">mock.png</span> <span class="s">✓</span>
 
 <span class="f">── ERRORS — GENTLE ──</span>
 <span class="w">⚠</span> <span class="t">command failed</span> <span class="d">(exit 1)</span>
@@ -175,17 +175,17 @@
 <span class="p">✦ размышляю</span> <span class="f">· 1.8s · </span><span class="d">/reasoning — показать</span>
 <span class="p">✦ размышляю</span> <span class="d">· сначала осмотрю структуру…</span>
 <span class="f">auto→high · уровень для этого хода</span>
-<span class="a">◇</span> <span class="t">Уровень рассуждений</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 итерации</span>
+<span class="meta">◇</span> <span class="meta">Уровень рассуждений</span> <span class="sep">·</span> <span class="f">high</span> <span class="s">✓</span> <span class="f">3 итерации</span>
 <span class="w">⚠</span> <span class="f">упомянут файл, которого нет: src/hero.tsx</span>
 
 <span class="f">── ПЛАН, ЗАДАЧИ, ПРОВЕРКИ ──</span>
-<span class="a">◇</span> <span class="t">Планирование</span> <span class="f">лендинг · 3 шага</span>
+<span class="meta">◇</span> <span class="meta">Планирование</span> <span class="sep">·</span> <span class="f">лендинг · 3 шага</span>
 <span class="f">  1. структура  2. вёрстка  3. сборка</span>
 <span class="f">  ▰▰▱ 0/3</span>
 <span class="s">✓</span> <span class="f">шаг 1/3: структура</span> <span class="f">▰▰▱ 1/3</span>
 <span class="w">⚠</span> <span class="f">2 правки без плана — сначала составь план</span>
-<span class="a">◇</span> <span class="t">Обновление задач</span> <span class="f">добавлено 3 · ▰▱▱ 1/3</span>
-<span class="a">◇</span> <span class="t">Проверка</span> <span class="f">файл index.html на месте</span> <span class="s">✓</span>
+<span class="meta">◇</span> <span class="meta">Обновление задач</span> <span class="sep">·</span> <span class="f">добавлено 3 · ▰▱▱ 1/3</span>
+<span class="meta">◇</span> <span class="meta">Проверка</span> <span class="sep">·</span> <span class="f">файл index.html на месте</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="f">шаг 3: зависимости не установлены — сначала установка</span>
 <span class="e">✗</span> <span class="t">шаг 2 завис на 6 итераций</span> <span class="d">— нужно ваше решение</span>
 <span class="f">  ↳ сменить подход / поиск / перепланировать / пропустить</span>
@@ -203,72 +203,72 @@
 <span class="w">⚠</span> <span class="f">3/4 сабтасков — возвращаю частичный результат</span>
 
 <span class="f">── РАЗВЕДКА И ИНДЕКС ──</span>
-<span class="a">◇</span> <span class="t">Список файлов</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 объектов</span>
-<span class="a">◇</span> <span class="t">Поиск файлов</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 файла</span>
-<span class="a">◇</span> <span class="t">Поиск по содержимому</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 совпадения</span>
-<span class="a">◇</span> <span class="t">Чтение файла</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 строк</span>
-<span class="a">◇</span> <span class="t">Информация о файле</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
-<span class="a">◇</span> <span class="t">Карта проекта</span> <span class="s">✓</span> <span class="f">18 файлов · 6 модулей</span>
+<span class="recon">◇</span> <span class="recon">Список файлов</span> <span class="sep">·</span> <span class="f">src/</span> <span class="s">✓</span> <span class="f">7 объектов</span>
+<span class="recon">◇</span> <span class="recon">Поиск файлов</span> <span class="sep">·</span> <span class="f">*.{html,css}</span> <span class="s">✓</span> <span class="f">4 файла</span>
+<span class="recon">◇</span> <span class="recon">Поиск по содержимому</span> <span class="sep">·</span> <span class="f">section</span> <span class="s">✓</span> <span class="f">2 совпадения</span>
+<span class="recon">◇</span> <span class="recon">Чтение файла</span> <span class="sep">·</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="f">120 строк</span>
+<span class="recon">◇</span> <span class="recon">Информация о файле</span> <span class="sep">·</span> <span class="f">src/logo.svg</span> <span class="s">✓</span> <span class="f">2.1 KB</span>
+<span class="recon">◇</span> <span class="recon">Карта проекта</span> <span class="s">✓</span> <span class="f">18 файлов · 6 модулей</span>
 <span class="d">индексирую проект… </span><span class="f">▰▰▰▱▱ 62%</span>
-<span class="a">◇</span> <span class="t">Запрос чанков</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 чанков</span>
+<span class="recon">◇</span> <span class="recon">Запрос чанков</span> <span class="sep">·</span> <span class="f">router</span> <span class="s">✓</span> <span class="f">5 чанков</span>
 <span class="f">│ 5 действий разведки</span> <span class="s">✓</span> <span class="f">· 1.4s · </span><span class="d">/verbose для списка</span>
 
 <span class="f">── ПРАВКИ И ФАЙЛЫ ──</span>
-<span class="a">◇</span> <span class="t">Создание папки</span> <span class="f">src/assets</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Запись файла</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
-<span class="a">◇</span> <span class="t">Редактирование файла</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
+<span class="mutate">◇</span> <span class="mutate">Создание папки</span> <span class="sep">·</span> <span class="f">src/assets</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Запись файла</span> <span class="sep">·</span> <span class="f">src/index.html</span> <span class="s">✓</span> <span class="s">+48</span>
+<span class="mutate">◇</span> <span class="mutate">Редактирование файла</span> <span class="sep">·</span> <span class="f">src/app.css</span> <span class="s">✓</span> <span class="s">+6</span> <span class="e">-2</span>
 <span class="f">  13 </span><span class="e">-   padding: 20px;</span>
 <span class="f">  13 </span><span class="s">+   padding: 48px 24px;</span>
 <span class="f">  14 </span><span class="s">+   text-align: center;</span>
-<span class="a">◇</span> <span class="t">Перемещение файла</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Удаление файла</span> <span class="f">src/old.css</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Перемещение файла</span> <span class="sep">·</span> <span class="f">hero.png → assets/hero.png</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Удаление файла</span> <span class="sep">·</span> <span class="f">src/old.css</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="t">.env защищён</span> <span class="d">— нужно подтверждение</span>
 
 <span class="f">── КОМАНДЫ И ПРОЦЕССЫ ──</span>
-<span class="a">◇</span> <span class="t">Выполнение команды</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">код 0 · 1.2s</span>
-<span class="a">◇</span> <span class="t">Выполнение команды</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">фоновый · pid 4821</span>
-<span class="a">◇</span> <span class="t">Список фоновых процессов</span> <span class="s">✓</span> <span class="f">1 активный</span>
-<span class="a">◇</span> <span class="t">Вывод процесса</span> <span class="f">4821 · последние 20</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Остановка процесса</span> <span class="f">4821</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Запуск пайплайна</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Выполнение команды</span> <span class="sep">·</span> <span class="f">bun run build</span> <span class="s">✓</span> <span class="f">код 0 · 1.2s</span>
+<span class="execute">◇</span> <span class="execute">Выполнение команды</span> <span class="sep">·</span> <span class="f">bun run dev</span> <span class="s">✓</span> <span class="f">фоновый · pid 4821</span>
+<span class="recon">◇</span> <span class="recon">Список фоновых процессов</span> <span class="s">✓</span> <span class="f">1 активный</span>
+<span class="recon">◇</span> <span class="recon">Вывод процесса</span> <span class="sep">·</span> <span class="f">4821 · последние 20</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Остановка процесса</span> <span class="sep">·</span> <span class="f">4821</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Запуск пайплайна</span> <span class="sep">·</span> <span class="f">build-and-deploy</span> <span class="s">✓</span>
 <span class="w">⚠</span> <span class="f">"ls" — не cmd-команда; используй список файлов</span>
 <span class="w">⚠</span> <span class="f">команде нужен интерактивный ввод — запусти неинтерактивно</span>
 
 <span class="f">── ПРОВЕРКА КАЧЕСТВА ──</span>
-<span class="a">◇</span> <span class="t">Проверка кода</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 ошибок</span>
-<span class="a">◇</span> <span class="t">Проверка синтаксиса</span> <span class="f">index.html</span> <span class="s">✓</span>
+<span class="meta">◇</span> <span class="meta">Проверка кода</span> <span class="sep">·</span> <span class="f">src/app.ts</span> <span class="s">✓</span> <span class="f">0 ошибок</span>
+<span class="meta">◇</span> <span class="meta">Проверка синтаксиса</span> <span class="sep">·</span> <span class="f">index.html</span> <span class="s">✓</span>
 <span class="s">✓</span> <span class="f">vitest: 12 тестов прошли</span>
 <span class="f">🔧 авто-исправлено 3 ошибки типов</span>
 <span class="e">✗</span> <span class="t">tsc: 2 ошибки</span>
 <span class="f">  ↳ src/app.ts:14 свойство 'hero' не существует</span>
 
 <span class="f">── ВНЕШНИЙ МИР ──</span>
-<span class="a">◇</span> <span class="t">Поиск в интернете</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
-<span class="a">◇</span> <span class="t">Загрузка страницы</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 строк</span>
-<span class="a">◇</span> <span class="t">Просмотр страницы</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">рендер ок</span>
-<span class="a">◇</span> <span class="t">Браузер</span> <span class="f">скриншот → .mma/browser/shot.png</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Скачивание файла</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
+<span class="recon">◇</span> <span class="recon">Поиск в интернете</span> <span class="sep">·</span> <span class="f">hero best practices</span> <span class="s">✓</span> <span class="f">8</span>
+<span class="recon">◇</span> <span class="recon">Загрузка страницы</span> <span class="sep">·</span> <span class="f">example.com</span> <span class="s">✓</span> <span class="f">12K · 340 строк</span>
+<span class="recon">◇</span> <span class="recon">Просмотр страницы</span> <span class="sep">·</span> <span class="f">localhost:3000</span> <span class="s">✓</span> <span class="f">рендер ок</span>
+<span class="execute">◇</span> <span class="execute">Браузер</span> <span class="sep">·</span> <span class="f">скриншот → .mma/browser/shot.png</span> <span class="s">✓</span>
+<span class="execute">◇</span> <span class="execute">Скачивание файла</span> <span class="sep">·</span> <span class="f">logo.png</span> <span class="s">✓</span> <span class="f">img/png · 18 KB</span>
 
 <span class="f">── ПАМЯТЬ, ЗНАНИЯ, СКИЛЛЫ ──</span>
-<span class="a">◇</span> <span class="t">Загрузка скилла</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K ток</span>
-<span class="a">◇</span> <span class="t">Запомнить</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Вспомнить</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 запись</span>
-<span class="a">◇</span> <span class="t">Поиск в истории</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 сессии</span>
+<span class="meta">◇</span> <span class="meta">Загрузка скилла</span> <span class="sep">·</span> <span class="f">frontend-design</span> <span class="s">✓</span> <span class="f">1.2K ток</span>
+<span class="meta">◇</span> <span class="meta">Запомнить</span> <span class="sep">·</span> <span class="f">hero → 48px</span> <span class="s">✓</span>
+<span class="recon">◇</span> <span class="recon">Вспомнить</span> <span class="sep">·</span> <span class="f">hero</span> <span class="s">✓</span> <span class="f">1 запись</span>
+<span class="recon">◇</span> <span class="recon">Поиск в истории</span> <span class="sep">·</span> <span class="f">landing</span> <span class="s">✓</span> <span class="f">3 сессии</span>
 
 <span class="f">── ДЕЛЕГИРОВАНИЕ, MCP, СЛУЖЕБНОЕ ──</span>
 <span class="d">сабагент поставлен в очередь: «собери ассеты»</span>
-<span class="a">◇</span> <span class="t">Задача подагенту</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 итерации</span>
+<span class="execute">◇</span> <span class="execute">Задача подагенту</span> <span class="d">…</span> <span class="s">✓</span> <span class="f">4 итерации</span>
 <span class="f">  ↳ артефакт: .mma/artifacts/sub-a1.md</span>
-<span class="a">◇</span> <span class="t">MCP вызов</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
-<span class="a">◇</span> <span class="t">Информация о сессии</span> <span class="s">✓</span> <span class="f">34 сообщения · 18%</span>
-<span class="a">◇</span> <span class="t">Включить тулы</span> <span class="f">браузер, сабагент</span> <span class="s">✓</span> <span class="f">со след. хода</span>
+<span class="execute">◇</span> <span class="execute">MCP вызов</span> <span class="sep">·</span> <span class="f">fs/read_file src/x.ts</span> <span class="s">✓</span>
+<span class="recon">◇</span> <span class="recon">Информация о сессии</span> <span class="s">✓</span> <span class="f">34 сообщения · 18%</span>
+<span class="meta">◇</span> <span class="meta">Включить тулы</span> <span class="sep">·</span> <span class="f">браузер, сабагент</span> <span class="s">✓</span> <span class="f">со след. хода</span>
 <span class="w">⚠</span> <span class="f">заблокировано плагином guard · причина: вне scope</span>
 
 <span class="f">── ВЗАИМОДЕЙСТВИЕ (без меню) ──</span>
 <span class="a">?</span> <span class="t">Какой стиль hero — минимал или яркий?</span>
 <span class="f">  1) минимал  2) яркий  3) свой вариант</span>
 <span class="a">↵</span> <span class="t">1 — минимал</span>
-<span class="a">◇</span> <span class="t">Прикрепить изображение</span> <span class="f">mock.png</span> <span class="s">✓</span>
+<span class="mutate">◇</span> <span class="mutate">Прикрепить изображение</span> <span class="sep">·</span> <span class="f">mock.png</span> <span class="s">✓</span>
 
 <span class="f">── ОШИБКИ — МЯГКО ──</span>
 <span class="w">⚠</span> <span class="t">команда упала</span> <span class="d">(код 1)</span>

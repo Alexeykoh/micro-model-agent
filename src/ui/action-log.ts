@@ -6,6 +6,8 @@
  * authoritative transcript lives in the session log.
  */
 export interface LastAction {
+  /** Tool id — used to color the reprint with the category accent. */
+  tool: string;
   label: string;
   args: string;
   status: "ok" | "warn" | "error";

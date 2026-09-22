@@ -1,7 +1,15 @@
 import { pc } from "./colors";
 import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
-import { actionMarkFor, failureMark, glyph, successMark, formatDuration, type Verbosity } from "./theme";
+import {
+  actionMarkFor,
+  failureMark,
+  glyph,
+  successMark,
+  formatDuration,
+  toolAccent,
+  type Verbosity,
+} from "./theme";
 import { recordLastAction } from "./action-log";
 
 import { getTerminalWidth } from "./table";
@@ -82,6 +90,7 @@ const RECON_TOOLS = new Set([
 ]);
 
 interface ReconItem {
+  tool: string;
   mark: string;
   label: string;
   summary: string;
@@ -304,10 +313,7 @@ export class Renderer {
   meta(chunk: string): void {
     this.spinner.stop();
     if (this.thoughtStarted) {
-      if (!this.thoughtHeaderPrinted) {
-        this.channel.writeRaw(`\n${pc.magenta(glyph.thinking)} ${pc.dim(this.thinkingLabel)} `);
-        this.thoughtHeaderPrinted = true;
-      }
+      this.writeThoughtHeader();
       this.channel.writeRaw(pc.dim(chunk));
     } else if (this.card) {
       this.writeInlineBody(chunk);
@@ -344,11 +350,21 @@ export class Renderer {
   reasoning(chunk: string): void {
     this.spinner.stop();
     this.flushRecon();
-    if (this.thoughtStarted && !this.thoughtHeaderPrinted) {
-      this.channel.writeRaw(`\n${pc.magenta(glyph.thinking)} ${pc.dim(this.thinkingLabel)} `);
-      this.thoughtHeaderPrinted = true;
-    }
+    this.writeThoughtHeader();
     this.channel.writeRaw(pc.dim(chunk));
+  }
+
+  /**
+   * Open a thought block: `✦ <accent label> · ` — label keeps the reasoning
+   * accent, the separator and the body stay dim, so the status verb never
+   * blurs into the model's own words.
+   */
+  private writeThoughtHeader(): void {
+    if (!this.thoughtStarted || this.thoughtHeaderPrinted) return;
+    this.channel.writeRaw(
+      `\n${pc.magenta(glyph.thinking)} ${pc.magenta(this.thinkingLabel)} ${pc.dim("·")} `,
+    );
+    this.thoughtHeaderPrinted = true;
   }
 
   /** Model is loading / generating — record start time. */
@@ -412,6 +428,7 @@ export class Renderer {
     const label = friendlyTool(tool);
     // One glyph, colored by category — per-tool emoji icons are not used.
     const mark = actionMarkFor(tool);
+    const accent = toolAccent(tool);
     const deferred = this.verbosity === "quiet";
     this.card = {
       tool,
@@ -429,7 +446,7 @@ export class Renderer {
     }
     if (!deferred) {
       this.channel.writeRaw(
-        `${mark} ${label}${summary ? ` ${pc.dim(summary)}` : ""}\n`,
+        `${mark} ${accent(label)}${summary ? ` ${pc.dim("·")} ${pc.dim(summary)}` : ""}\n`,
       );
     }
     // Busy indicator while the tool actually runs — read/write/edit/bash can
@@ -451,7 +468,8 @@ export class Renderer {
     this.reconBuffer = [];
     if (items.length === 1) {
       const it = items[0];
-      const head = `${it.mark} ${it.label}${it.summary ? ` ${pc.dim(it.summary)}` : ""}`;
+      const accent = toolAccent(it.tool);
+      const head = `${it.mark} ${accent(it.label)}${it.summary ? ` ${pc.dim("·")} ${pc.dim(it.summary)}` : ""}`;
       this.channel.writeRaw(`${head}  ${successMark()} ${pc.dim(formatDuration(it.duration))}\n`);
       return;
     }
@@ -497,13 +515,21 @@ export class Renderer {
       // Quiet mode: fold the deferred header into a single action line.
       // A run of successful read-only tools is buffered and summarized.
       if (!error && RECON_TOOLS.has(this.card.tool)) {
-        this.reconBuffer.push({ mark: leadMark, label, summary, duration });
+        this.reconBuffer.push({
+          tool: this.card.tool,
+          mark: leadMark,
+          label,
+          summary,
+          duration,
+        });
         this.recordLast(label, summary, error, duration);
         this.card = null;
         return;
       }
       this.flushRecon();
-      const head = `${leadMark} ${label}${summary ? ` ${pc.dim(summary)}` : ""}`;
+      const head = `${leadMark} ${toolAccent(this.card.tool)(label)}${
+        summary ? ` ${pc.dim("·")} ${pc.dim(summary)}` : ""
+      }`;
       this.channel.writeRaw(`${head}  ${tail}\n`);
       if (error && firstBody) {
         const soft = firstBody.startsWith("⚠");
@@ -537,6 +563,7 @@ export class Renderer {
         ? "warn"
         : "error";
     recordLastAction({
+      tool: this.card?.tool ?? "",
       label,
       args: summary,
       status,

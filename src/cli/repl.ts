@@ -17,7 +17,7 @@ import {
   type CompletionItem,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
-import { resolveVerbosity, glyph } from "../ui/theme";
+import { resolveVerbosity, glyph, toolAccent } from "../ui/theme";
 import { getLastAction } from "../ui/action-log";
 import { divider } from "../ui/box";
 import { t } from "../i18n/index";
@@ -627,8 +627,9 @@ export class Repl implements ReplContext {
         : last.status === "warn"
           ? pc.yellow(glyph.warning)
           : pc.green(glyph.success);
-    const head = `${pc.cyan(glyph.action)} ${last.label}${
-      last.args ? ` ${pc.dim(last.args)}` : ""
+    const accent = toolAccent(last.tool);
+    const head = `${accent(glyph.action)} ${accent(last.label)}${
+      last.args ? ` ${pc.dim("·")} ${pc.dim(last.args)}` : ""
     }  ${mark} ${pc.dim(`${last.durationMs}ms`)}`;
     const lines = [head, ...last.body.map((l) => `  ${l}`)];
     this.output.writeLine(`\n${lines.join("\n")}`);

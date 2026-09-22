@@ -75,6 +75,10 @@ The action glyph `◇` keeps one shape; its **color encodes the tool category**
 
 Per-tool emoji icons are not rendered.
 
+The category color is applied to **both** the action glyph and the localized tool
+label — they form one unit (`◇ Reading file`), never a colored glyph followed by
+neutral text. Arguments after the separator stay dim.
+
 Security blocks and protected-path prompts are **warnings (yellow)**, not errors.
 Raw `[SECURITY BLOCKED]` text is model-facing and must not reach the chat.
 
@@ -91,6 +95,11 @@ in the model context and never renders in the chat; only a one-line summary does
 
 ## Message patterns
 
+A dim separator `·` always separates a status/label from the content that follows
+it: the reasoning label from the reasoning text, and a tool label from its arguments.
+Without it, the rotating reasoning label (`размышляю`/`прикидываю`, `thinking`/`working it out`)
+reads as the first words of the model's own text.
+
 ```
 start:    qwen3.5-9b · lmstudio · 32K · system prompt 2.1K
           /work/landing · plugins 2 · mcp 1 · session a1f2
@@ -98,13 +107,21 @@ start:    qwen3.5-9b · lmstudio · 32K · system prompt 2.1K
 prompt:   > <user text>
 
 thinking: ✦ thinking · 1.8s · /reasoning — show
-action:   ◇ <label> <args> ✓ <meta>
+reasoning:✦ thinking · <dim: first line of reasoning…>
+action:   ◇ <category-colored label> · <dim args> ✓ <meta>
 detail:     ↳ <detail>
 metric:   ⟡ 6.2K tok · 18% · 0.4¢
 warn:     ⚠ <what> — <hint>
 error:    ✗ <what> — <short cause>
           ↳ <one actionable hint>
 ```
+
+- **thinking** — label colored with the reasoning accent (violet), separator dim,
+  duration dim.
+- **reasoning** — the label keeps the accent color, the reasoning text is dim, so the
+  status verb and the model's own words never blur together.
+- **action** — glyph and label share the category color; the separator and arguments
+  are dim. Meta (`✓`, duration) closes the line.
 
 ## Localization
 
