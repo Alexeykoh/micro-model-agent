@@ -2066,18 +2066,20 @@
     }
     const list = el("div", "settings-list");
     state.skills.forEach((s) => {
-      const line = el("div", "list-line");
-      line.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
+      const item = el("div", "skill-item");
+      const head = el("div", "skill-head");
+      head.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
       const nameEl = el("span", "name", s.name);
       nameEl.title = s.name;
-      line.appendChild(nameEl);
+      head.appendChild(nameEl);
+      head.appendChild(el("span", "st", s.enabled ? t("web.settings.enabled") : t("web.settings.available")));
+      item.appendChild(head);
       if (s.source) {
-        const src = el("span", "src", s.source);
+        const src = el("div", "skill-src", s.source);
         src.title = s.source;
-        line.appendChild(src);
+        item.appendChild(src);
       }
-      line.appendChild(el("span", "st", s.enabled ? t("web.settings.enabled") : t("web.settings.available")));
-      list.appendChild(line);
+      list.appendChild(item);
     });
     container.appendChild(list);
   }
