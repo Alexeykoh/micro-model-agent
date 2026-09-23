@@ -20,6 +20,20 @@ export interface WebCommandOptions {
   projectDir?: string;
 }
 
+/**
+ * Parse and validate the `--port` flag. `undefined`/blank → `undefined` (random
+ * port). Non-numeric and out-of-range values throw instead of silently falling
+ * back to a random port, so `--port abc` cannot masquerade as a working bind.
+ */
+export function parsePort(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error(`invalid --port "${raw}": expected an integer between 1 and 65535`);
+  }
+  return n;
+}
+
 export async function runWeb(opts: WebCommandOptions): Promise<void> {
   // The transport reads these at startup (server/state): port has no config
   // field, so the CLI flag maps onto the env var the server already honours.

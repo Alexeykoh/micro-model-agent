@@ -10,6 +10,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import type { WebUiState } from "./state";
+import { broadcast, releaseBusy, reserveBusy } from "./state";
 
 /** Max bytes accepted for a POST body (32KB text or 3×~6MB images + JSON overhead). */
 export const MAX_BODY_BYTES = 24 * 1024 * 1024;
@@ -122,6 +123,83 @@ export function parseMessageBody(
  */
 export function scrubError(err: unknown): string {
   return redactContextSecrets(errMsg(err));
+}
+
+/** Map a body-read failure to a response; oversized bodies get a flush-safe 413. */
+export function readBodyError(
+  req: IncomingMessage,
+  res: ServerResponse,
+  err: unknown,
+): void {
+  if (err instanceof BodyTooLargeError) {
+    res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
+    // Destroy the request only after the 413 is flushed; destroying first makes
+    // the client see a socket error instead of the status.
+    res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
+    return;
+  }
+  sendJson(res, 400, { error: "bad request" });
+}
+
+/**
+ * `POST /api/message`: reserve the single-flight slot and forward to the host.
+ *
+ * Single-flight invariant: the busy pre-check and {@link reserveBusy} happen in
+ * ONE synchronous tick (no `await` between them), so two concurrent POSTs can
+ * never both pass. `bridge.isBusy()` tracks an actually-running turn
+ * (`agentRunning`), distinct from this UI reservation (`s.busy`) — that is what
+ * lets the owner's `submit` clear the host's own `isBusy()` guard. The
+ * forwarder's `turn_end` is the sole reset for a turn that started;
+ * `releaseBusy` covers a submit that never started.
+ */
+export function handleMessagePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: WebUiState,
+): void {
+  if (!s.bridge) {
+    sendJson(res, 503, { error: "no_bridge" });
+    return;
+  }
+  if (s.busy || s.bridge.isBusy()) {
+    sendJson(res, 409, { error: "busy" });
+    return;
+  }
+  if (s.minPostIntervalMs > 0 && Date.now() - s.lastPostTs < s.minPostIntervalMs) {
+    sendJson(res, 429, { error: "rate_limited" });
+    return;
+  }
+  const bridge = s.bridge;
+  const token = reserveBusy(s);
+  broadcast({ type: "state", ts: Date.now(), busy: true }, s);
+  readBody(req, s.maxBodyBytes)
+    .then((raw) => {
+      const body = parseMessageBody(raw);
+      if ("error" in body) {
+        if (releaseBusy(s, token)) {
+          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
+        }
+        sendJson(res, 400, { error: body.error });
+        return;
+      }
+      s.lastPostTs = Date.now();
+      const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
+      run.catch((err: unknown) => {
+        // Broadcast the failure either way; only the owning reservation may
+        // clear `busy` (a started turn is reset by the forwarder's turn_end).
+        broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
+        if (releaseBusy(s, token)) {
+          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
+        }
+      });
+      sendJson(res, 202, { ok: true });
+    })
+    .catch((err: unknown) => {
+      if (releaseBusy(s, token)) {
+        broadcast({ type: "state", ts: Date.now(), busy: false }, s);
+      }
+      readBodyError(req, res, err);
+    });
 }
 
 /** Best-effort open of the UI in the default browser (MMA_WEBUI_OPEN=0 disables). */

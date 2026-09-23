@@ -24,7 +24,21 @@ export interface WebUiState {
   token: string | null;
   clients: Set<ServerResponse>;
   bridge: Host | null;
+  /**
+   * Single-flight reservation for the UI (`/api/message`). Owned by the server:
+   * set synchronously when a submit is accepted and reset by the forwarder's
+   * `turn_end` (or by {@link releaseBusy} if the turn never started).
+   */
   busy: boolean;
+  /**
+   * Whether an agent turn is actually executing. Kept separate from {@link busy}
+   * so `WebHost.submit`'s own `isBusy()` guard is NOT tripped by the server's
+   * reservation (which happens before `submit` is invoked). Set when `runAgent`
+   * starts, reset by the forwarder's `turn_end`.
+   */
+  agentRunning: boolean;
+  /** Ownership token for {@link busy}; see {@link reserveBusy}/{@link releaseBusy}. */
+  turnToken: object | null;
   lastPostTs: number;
   minPostIntervalMs: number;
   historyTail: number;
@@ -42,6 +56,8 @@ export function createWebUiState(): WebUiState {
     clients: new Set(),
     bridge: null,
     busy: false,
+    agentRunning: false,
+    turnToken: null,
     lastPostTs: 0,
     minPostIntervalMs: 500,
     historyTail: 200,
@@ -69,4 +85,31 @@ export function broadcast(ev: SseEvent, s: WebUiState): void {
       s.clients.delete(client);
     }
   }
+}
+
+/**
+ * Atomically reserve the single-flight slot and return its ownership token.
+ *
+ * MUST be called synchronously in the same tick as the busy pre-check: any
+ * `await` between check and reserve lets two concurrent submits both win. The
+ * token makes the reset owner explicit — a late failure callback from a
+ * previous turn can never clear a newer turn's reservation.
+ */
+export function reserveBusy(s: WebUiState): object {
+  const token = {};
+  s.turnToken = token;
+  s.busy = true;
+  return token;
+}
+
+/**
+ * Release the slot only if `token` still owns it. Returns whether the caller
+ * was the owner (so it can skip a duplicate `state` broadcast when the
+ * forwarder's `turn_end` already reset the flag).
+ */
+export function releaseBusy(s: WebUiState, token: object): boolean {
+  if (s.turnToken !== token) return false;
+  s.turnToken = null;
+  s.busy = false;
+  return true;
 }

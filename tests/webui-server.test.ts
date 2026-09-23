@@ -5,6 +5,7 @@ import { connect } from "node:net";
 import { handleRequest, startServer, stopServer } from "../src/modules/webui/server";
 import { BodyTooLargeError, readBody } from "../src/modules/webui/util";
 import { createWebUiState } from "../src/modules/webui/state";
+import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -235,6 +236,102 @@ describe("webui server", () => {
         "GET / HTTP/1.1\r\nHost: bad host\r\nConnection: close\r\n\r\n",
       );
       expect(response).toContain("400");
+    });
+  });
+
+  it("single-flight: concurrent POSTs run exactly one; reset only on turn_end", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    let release: (() => void) | null = null;
+    const started: string[] = [];
+    const bridge: Host = {
+      isBusy: () => s.agentRunning,
+      submit: (text) => {
+        started.push(text);
+        return new Promise<void>((r) => {
+          release = r;
+        });
+      },
+      interrupt: () => {},
+      getState: () => ({ busy: s.busy }),
+      executeCommand: () => Promise.resolve(),
+    };
+    s.bridge = bridge;
+    const fwd = makeForwarder(s, () => {});
+
+    await withServer(s, async (base) => {
+      const post = () =>
+        doFetch(base + "/api/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: "hi" }),
+        });
+
+      // Both POSTs pass the same pre-check only if reservation is not atomic.
+      const [a, b] = await Promise.all([post(), post()]);
+      expect([a.status, b.status].sort()).toEqual([202, 409]);
+      expect(started).toHaveLength(1);
+      expect(s.busy).toBe(true);
+
+      // The forwarder's turn_end is the sole reset for a started turn.
+      release?.();
+      await new Promise((r) => setTimeout(r, 0));
+      fwd.onTurnEnd({ success: true });
+      expect(s.busy).toBe(false);
+
+      const c = await post();
+      expect(c.status).toBe(202);
+      expect(started).toHaveLength(2);
+    });
+  });
+
+  it("interrupt does not clear busy; the turn_end reset owns it", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    let release: (() => void) | null = null;
+    let interrupted = 0;
+    const bridge: Host = {
+      isBusy: () => s.agentRunning,
+      submit: () =>
+        new Promise<void>((r) => {
+          release = r;
+        }),
+      interrupt: () => {
+        interrupted++;
+      },
+      getState: () => ({ busy: s.busy }),
+      executeCommand: () => Promise.resolve(),
+    };
+    s.bridge = bridge;
+    const fwd = makeForwarder(s, () => {});
+
+    await withServer(s, async (base) => {
+      const started = await doFetch(base + "/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "hi" }),
+      });
+      expect(started.status).toBe(202);
+      expect(s.busy).toBe(true);
+
+      const res = await doFetch(base + "/api/interrupt", { method: "POST" });
+      expect(res.status).toBe(200);
+      expect(interrupted).toBe(1);
+      // The aborted turn is still unwinding: busy must NOT be cleared here.
+      expect(s.busy).toBe(true);
+
+      release?.();
+      fwd.onTurnEnd({ success: true, interrupted: true });
+      expect(s.busy).toBe(false);
+    });
+  });
+
+  it("interrupt returns 409 when idle", async () => {
+    const s = createWebUiState();
+    s.bridge = makeBridge();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/interrupt", { method: "POST" });
+      expect(res.status).toBe(409);
     });
   });
 });

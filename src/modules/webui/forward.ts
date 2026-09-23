@@ -95,9 +95,14 @@ export function makeForwarder(
       });
     },
     onTurnEnd(summary) {
-      // Ownership: the forwarder is the single emitter of `turn_end` and the single busy-reset.
+      // Ownership: the forwarder is the single emitter of `turn_end` and the
+      // single busy-reset for any turn that actually started. It also clears
+      // the reservation token so a late `submit` failure callback cannot clear
+      // a newer turn's slot.
       flush();
       s.busy = false;
+      s.agentRunning = false;
+      s.turnToken = null;
       sink({ type: "turn_end", ts: Date.now(), ...summary });
     },
     flushNow: flush,

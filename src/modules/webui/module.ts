@@ -6,9 +6,11 @@
  * the resulting `Host` to the server.
  *
  * Single-flight (correction #2): the `WebUiState` is created FIRST so the
- * `WebHost`'s busy predicate (`isBusy: () => state.busy`) and the server share
- * ONE flag. The server reserves `busy = true` on submit; the forwarder resets it
- * on `turn_end`.
+ * `WebHost`'s busy predicate and the server share ONE state object. The server
+ * reserves `busy = true` synchronously on submit; `runAgent` marks
+ * `agentRunning = true` once the turn actually starts; the forwarder resets
+ * both on `turn_end`. The host guard uses `agentRunning` (not `busy`) so the
+ * owner's `submit` is not rejected by the server's own reservation.
  */
 import type { Agent } from "../../core/agent";
 import type { AppConfig } from "../../config/types";
@@ -79,7 +81,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     pendingIds.set(tool, stack);
     return id;
   };
-  const endId = (tool: string): string => pendingIds.get(tool)?.pop() ?? startId(tool);
+  const endId = (tool: string): string => pendingIds.get(tool)?.pop() ?? `t-stray-${++toolSeq}`;
   const callFor = (ev: ToolEvent, id: string): ToolCall => ({
     id,
     name: ev.tool,
@@ -96,6 +98,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const runAgent = async (text: string): Promise<unknown> => {
     interrupted = false;
     toolCalls = 0;
+    state.agentRunning = true;
     try {
       const result = await deps.agent.run(
         text,
@@ -125,7 +128,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   };
 
   const host = new WebHost({
-    isBusy: () => state.busy,
+    isBusy: () => state.agentRunning,
     runAgent,
     interrupt: () => {
       interrupted = true;

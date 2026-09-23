@@ -5,7 +5,7 @@ import { Renderer } from "../ui/renderer";
 import { resolveVerbosity } from "../ui/theme";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
-import { runWeb } from "./web-command";
+import { runWeb, parsePort } from "./web-command";
 import { applyAnswersToConfig } from "./setup-order";
 import { relaunchCli } from "./relaunch";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
@@ -119,8 +119,15 @@ async function main(): Promise<void> {
       token?: string;
       open?: boolean;
     };
+    let port: number | undefined;
+    try {
+      port = parsePort(webOpts.port);
+    } catch (err) {
+      getDefaultChannel().writeLine(pc.red(`  ${errMsg(err)}`), "stderr");
+      process.exit(2);
+    }
     await runWeb({
-      port: webOpts.port ? Number(webOpts.port) : undefined,
+      port,
       host: webOpts.host,
       token: webOpts.token,
       noOpen: webOpts.open === false,

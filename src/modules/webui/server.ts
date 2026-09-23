@@ -7,15 +7,14 @@
  * Transport helpers live in `./util`.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { broadcast, createWebUiState } from "./state";
+import { createWebUiState } from "./state";
 import {
-  BodyTooLargeError,
   checkAuth,
+  handleMessagePost,
   isLoopback,
-  parseMessageBody,
   readBody,
+  readBodyError,
   sameOrigin,
-  scrubError,
   sendJson,
 } from "./util";
 import type { WebUiState, WebUiAssets } from "./state";
@@ -95,45 +94,7 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
 
   if (reqUrl.pathname === "/api/message" && req.method === "POST") {
-    if (!s.bridge) {
-      sendJson(res, 503, { error: "no_bridge" });
-      return;
-    }
-    if (s.busy || s.bridge.isBusy()) {
-      sendJson(res, 409, { error: "busy" });
-      return;
-    }
-    if (s.minPostIntervalMs > 0 && Date.now() - s.lastPostTs < s.minPostIntervalMs) {
-      sendJson(res, 429, { error: "rate_limited" });
-      return;
-    }
-    const bridge = s.bridge;
-    readBody(req, s.maxBodyBytes)
-      .then((raw) => {
-        const body = parseMessageBody(raw);
-        if ("error" in body) {
-          sendJson(res, 400, { error: body.error });
-          return;
-        }
-        s.lastPostTs = Date.now();
-        // Reserve the single-flight slot. `WebHost.submit` checks `isBusy()`
-        // (== `s.busy`) synchronously, so the reservation must be set AFTER
-        // submit is invoked — setting it first would make submit reject every
-        // message against its own reservation. The forwarder clears `busy` on
-        // `turn_end`; the catch below covers a rejected submit.
-        const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
-        s.busy = true;
-        broadcast({ type: "state", ts: Date.now(), busy: true }, s);
-        run.catch((err: unknown) => {
-          s.busy = false;
-          broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
-          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
-        });
-        sendJson(res, 202, { ok: true });
-      })
-      .catch((err: unknown) => {
-        readBodyError(req, res, err);
-      });
+    handleMessagePost(req, res, s);
     return;
   }
 
@@ -166,28 +127,17 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
       sendJson(res, 409, { error: "idle" });
       return;
     }
-    // Interrupt BEFORE clearing busy: `WebHost.interrupt` guards on `isBusy()`
-    // (== `s.busy`), so clearing first would swallow the interrupt. The
-    // forwarder resets busy on the resulting `turn_end` anyway.
+    // Do NOT clear `busy` here: the forwarder's `onTurnEnd` owns the reset for
+    // any turn that actually started. Clearing now would unlock the UI while the
+    // aborted turn is still unwinding and let a second submit slip in. If the
+    // host is not actually running (reservation only), `interrupt()` is a no-op
+    // and the pending submit path releases the slot.
     s.bridge?.interrupt();
-    s.busy = false;
     sendJson(res, 200, { ok: true });
     return;
   }
 
   sendJson(res, 404, { error: "not found" });
-}
-
-/** Map a body-read failure to a response; oversized bodies get a flush-safe 413. */
-function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
-  if (err instanceof BodyTooLargeError) {
-    res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
-    // Destroy the request only after the 413 is flushed; destroying first makes
-    // the client see a socket error instead of the status.
-    res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
-    return;
-  }
-  sendJson(res, 400, { error: "bad request" });
 }
 
 export function handleRequest(
@@ -296,5 +246,7 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
   }
   s.starting = null;
   s.busy = false;
+  s.agentRunning = false;
+  s.turnToken = null;
   s.lastPostTs = 0;
 }
