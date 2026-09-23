@@ -1218,6 +1218,45 @@ export class Repl implements ReplContext {
     this.rl.prompt();
     this.promptPresented = true;
 
+    if (process.env.MMA_START_MEET === "1" || process.env.MMA_START_INIT === "1") {
+      const mode = process.env.MMA_START_MEET === "1" ? "meet" : "init";
+      delete process.env.MMA_START_MEET;
+      delete process.env.MMA_START_INIT;
+      this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
+      if (mode === "meet") {
+        const { runMeet } = await import("../modules/onboarding/meet");
+        await runMeet(this);
+      } else {
+        const { runInit } = await import("../modules/onboarding/init");
+        await runInit(this);
+      }
+    } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
+      const { preflightFromConfig } = await import("../modules/providers/preflight");
+      const pre = await preflightFromConfig(this);
+      if (pre.ok) {
+        this.output.writeLine(pc.dim(`${t("repl.meet_offer")} ${t("repl.meet_offer_hint")}`));
+        const answer = (
+          await new Promise<string>((resolve) => this.rl.question("[Y/n] ", resolve))
+        )
+          .trim()
+          .toLowerCase();
+        const yes =
+          answer === "" ||
+          answer === "y" ||
+          answer === "yes" ||
+          answer === "да" ||
+          answer === "д";
+        if (yes) {
+          this.slog.logOnboarding("meet_start", { model: this.config.model });
+          const { runMeet } = await import("../modules/onboarding/meet");
+          await runMeet(this, { preflight: async () => pre });
+        }
+      } else {
+        this.output.writeLine(pc.yellow(t("onboarding.provider_down", { cmd: "meet" })));
+        this.output.writeLine(t("onboarding.provider_down_hint", { cmd: "meet" }));
+      }
+    }
+
     if (lspEnabled) {
       this.probeLspBanner()
         .then((lspSummary) => {
