@@ -949,6 +949,7 @@
   "web.topbar.settings": "настройки",
   "web.topbar.all_sessions": "все сессии",
   "web.topbar.close": "закрыть",
+  "web.conn.reconnecting": "переподключение…",
   "web.sidebar.plan": "план",
   "web.sidebar.session": "сессия",
   "web.sidebar.usage": "использование",

@@ -16,6 +16,7 @@
   const attachStrip = document.getElementById("attachStrip");
   const attachErr = document.getElementById("attachErr");
   const imgPicker = document.getElementById("imgPicker");
+  const connStatus = document.getElementById("connStatus");
 
   const LABELS = {
     read_file: "Reading file",
@@ -1445,9 +1446,41 @@
     renderSessionsDropdown();
   }
 
+  // Connection-state banner: shown while the SSE stream is down. The server
+  // never replays events, so a reconnect only resyncs state — the feed keeps
+  // whatever the live session already rendered (no duplication).
+  function setConnStatus(disconnected) {
+    if (!connStatus) return;
+    connStatus.hidden = !disconnected;
+    connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
+  }
+
+  function resyncAfterReconnect() {
+    refresh();
+    const tab = tabs.find((x) => x.id === activeTabId);
+    if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
+      tab.historyLoaded = false;
+      loadHistory(tab);
+    }
+  }
+
   function connectSSE() {
     const sseUrl = "/events" + (token ? "?token=" + encodeURIComponent(token) : "");
     const es = new EventSource(sseUrl);
+    let dropped = false;
+    es.onopen = () => {
+      if (!dropped) return;
+      dropped = false;
+      setConnStatus(false);
+      resyncAfterReconnect();
+    };
+    es.onerror = (e) => {
+      // A server-sent `event: error` also lands here but carries `data`; only a
+      // real transport drop has none. Don't flag a live stream as disconnected.
+      if (e && typeof e.data === "string") return;
+      dropped = true;
+      setConnStatus(true);
+    };
     const parse = (e) => {
       try {
         return JSON.parse(e.data);
@@ -1919,6 +1952,7 @@
     renderSelectors();
     renderSessionsDropdown();
     if (msgs.querySelector(".empty")) showEmptyFeed();
+    if (connStatus && !connStatus.hidden) setConnStatus(true);
   }
 
   const overlay = document.getElementById("overlay");

@@ -15,7 +15,7 @@ Start-up path is phased: core lands as a supported mode alongside the REPL; noth
 
 - No multi-user / remote-auth product (token-on-non-loopback only).
 - No WebSocket (SSE only — matches prior web-ui decisions).
-- No framework SPA: zero-runtime TS bundled to a single JS file (esbuild/tsc), CSS variables for themes.
+- No framework SPA: zero-runtime plain JS served verbatim, CSS variables for themes.
 - No change to `session.jsonl` schema, `--json` machine contract, or STYLE.md glyph vocabulary.
 - Terminal REPL remains fully supported and unchanged in behavior.
 
@@ -112,7 +112,9 @@ Security (inherited from proven `examples/plugins/web-ui` design):
 
 ## Frontend
 
-**Stack:** TypeScript, no framework, esbuild → single `app.js`; CSS custom properties for themes; static assets copied by `copy-assets` in `build:prod`. Target: instant load, no runtime deps.
+**Stack:** no framework, plain JavaScript (`assets/app.js`) served verbatim; CSS custom properties for themes; static assets copied by `copy-assets` in `build:prod`. Target: instant load, no runtime deps.
+
+**Implementation note (bundling decision):** the original sketch proposed a TypeScript frontend bundled with esbuild. The shipped implementation is **plain zero-dependency JS, no bundler**. Rationale: the browser asset is already the single shipped file (`assets/app.js`), it has no framework or runtime dependencies to resolve, and `scripts/copy-assets.ts` copies it verbatim into `dist/assets` for the bundle. A bundler would add build tooling and a source map/transpile step with no runtime benefit, so none is used. `app.js` is the canonical source and the served artifact (no generated intermediate).
 
 **Layout (canonical: `mockups/layout-v6.html`):**
 
