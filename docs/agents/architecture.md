@@ -58,9 +58,12 @@ mode needs (slash commands, sidebar/topbar snapshot).
   `runAgent` path as terminal input — rendering, session logging and the
   single-flight guard are shared, never duplicated.
 - **WebUi module** (`src/modules/webui/`): `state.ts` (shared mutable state +
-  single-flight reservation), `server.ts` (SSE `/events` + REST `/api/*` +
+  single-flight reservation), `server.ts` (SSE `/events` + REST routing +
   static assets), `forward.ts` (agent callbacks → SSE), `module.ts` (the only
-  place that knows about `Agent`; builds `WebHost`), `assets.ts`, `util.ts`.
+  place that knows about `Agent`; builds `WebHost`), `commands.ts` +
+  `memory-commands.ts` (browser slash-command handler map), `config-api.ts`,
+  `settings-api.ts` (memory/skills/plugins), `sessions-api.ts`, `history-api.ts`
+  (REST route handlers), `assets.ts`, `util.ts`.
   App creation is separated from `listen()` (rule #13), so tests bind no port.
 
 ### Security Module

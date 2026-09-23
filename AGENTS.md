@@ -319,16 +319,18 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
-### Browser Mode (`mma web`) (2.2.0)
+### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.3.0)
 
 Дизайн: [docs/specs/2026-09-23-mma-web/design.md](./docs/specs/2026-09-23-mma-web/design.md).
 
-- **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/` (state/server/forward/module/assets). Терминальный REPL не меняется; терминал и веб — отдельные процессы.
+- **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
-- **Transport:** SSE `GET /events`; REST `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`; static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов.
-- **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим. Диспетчер slash-команд из браузера (`/api/command`) — задокументированный no-op (Phase 3).
+- **Transport:** SSE `GET /events` (`state, text, meta, phase, tool_start, tool_end, turn_end, plan, command, error`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`; static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов.
+- **UI:** паритет с каноническим мокапом — topbar (`+`/`☰`/tabs/`⚙`), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
+- **Slash-команды в браузере:** `/help` `/status` `/config` `/model` `/provider` `/memory` (handler map); `/clear` и `/new` — клиентские; terminal-only команды вне scope.
+- **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
-### Current Version: 2.2.0
+### Current Version: 2.3.0
 
 ### Changelog
 

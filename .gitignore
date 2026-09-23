@@ -9,3 +9,4 @@ multi-*.txt
 _testing/
 images*.jpg
 certification/report-*.json
+.superpowers/
