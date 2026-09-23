@@ -269,9 +269,9 @@ The `question` tool's human rendering currently diverges from STYLE.md (`src/too
 
 ### 8.1 Preflight
 
-- Shared helper (extract `testChat`/health logic): `preflightProvider(config, { timeoutMs })`.
-- Steps: `listModels` (free) → if empty/failed, provider is down; if models exist, minimal chat probe `max_tokens=1` to confirm the selected model is loaded and responds.
-- Default timeout 3s (env override, e.g. `MMA_PREFLIGHT_TIMEOUT`); runs with a spinner; never a billed-heavy call.
+- Shared helper: `preflightProvider(config, { timeoutMs })` (`src/modules/providers/preflight.ts`).
+- Probe: a single minimal chat call (`max_tokens=1`) with the selected model. This is a strictly stronger signal than `listModels` — it proves reachability, auth and that the model is loaded. Non-ok HTTP → `unreachable`; empty 200 body → `no-model`; abort/timeout → `timeout`. `listModels` is intentionally not used.
+- Default timeout 3s; never a billed-heavy call (1 output token). Runs with a spinner.
 - Used by: the post-setup offer gate, `/meet`, `mma meet`. Not by `/init` beyond the normal agent needs.
 
 ### 8.2 Failure matrix
