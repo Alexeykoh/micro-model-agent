@@ -41,6 +41,7 @@ import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { errMsg } from "../utils";
 import { SessionLogger } from "../core/session-logger";
+import { isMeetDone } from "../modules/onboarding/mode";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
@@ -874,6 +875,23 @@ export class Repl implements ReplContext {
         // Piped/non-TTY fallback has no frame to resume; present the readline
         // prompt here to preserve the old post-run behavior.
         this.presentPrompt();
+      }
+      try {
+        if (this.toolCtx.onboarding && isMeetDone(this)) {
+          const { exitMeetMode } = await import("../modules/onboarding/mode");
+          const { SessionLogger } = await import("../core/session-logger");
+          exitMeetMode(this);
+          new SessionLogger(this.sessionManager, this.logger, () => ({
+            provider: this.config.provider?.active ?? "",
+            model: this.config.model,
+          })).logOnboarding(
+            "meet_done",
+            { model: this.config.model },
+          );
+          this.output.writeLine(pc.dim(t("repl.meet_done")));
+        }
+      } catch {
+        // No shared toolCtx (e.g. a fake agent in tests) — nothing to do.
       }
       this.runHandledPrompt = true;
     }
