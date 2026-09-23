@@ -1,6 +1,6 @@
 # MMA v2 — Micro Models Agent
 
-AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1.
+General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1. **Not a coding-only agent** — see Positioning below.
 
 > **Design spec:** [docs/specs/2025-07-28-mma-v2-design.md](./docs/specs/2025-07-28-mma-v2-design.md) — architecture, modules, tools, CLI, config, data flow.
 
@@ -9,6 +9,17 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 > **UI Style (канонический):** [docs/design/ui/STYLE.md](./docs/design/ui/STYLE.md) — **единственный верный** стиль чат-вывода агента. Мокап: [docs/design/ui/mockup-chat-en-ru.html](./docs/design/ui/mockup-chat-en-ru.html) (EN слева, RU справа). Любой код, конфликтующий со STYLE.md, считается неправильным и подлежит приведению к стилю.
 
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
+
+## Positioning: universal agent, not code-only
+
+**Правило:** MMA — **общий** агент-харнесс для маленьких моделей, а **не** «агент для разработки кода». Пользователь может применять его для чего угодно: разработка, поиск погоды, умный дом, автоматизация, работа с API, настройка компьютера, персональный ассистент, поиск в интернете и любые другие задачи.
+
+Следствие (учитывать при проектировании тулов, промптов, онбординга и UX):
+
+- Формулировки системного промпта, описания тулов и их тултипы **не предполагают**, что задача — про репозиторий с кодом.
+- Набор тулов и дефолты не должны быть code-centric; кодовые сценарии (файлы, bash, LSP) — **частный случай**, а не центр.
+- Онбординг («Познакомимся») и `init` спрашивают о **профиле использования и домене**, а не только о языке/фреймворке.
+- Универсальность и «легкость» важнее узкой оптимизации под программирование.
 
 ## Engineering Principles
 

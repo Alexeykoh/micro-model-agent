@@ -13,6 +13,7 @@
 - The **memory module** already exists (`src/modules/memory/`): global `~/.mma/memory/{conventions,decisions,errors,facts}.md` + `preferences.json`, injected into the system prompt as "User preferences". There is no command surface to inspect or edit it.
 - opencode `/init`: scans important repo files, asks targeted questions, creates **or improves in place** `AGENTS.md`; project + global scope.
 - "Познакомимся" is a first-run onboarding interview: it introduces the user to the agent and records answers into memory for future sessions.
+- MMA is a **general-purpose** agent harness, not a coding-only agent (see project spec §1.1). Users may apply it to development, weather, smart home, automation, API work, computer setup, personal assistance, web search, etc. Onboarding and `init` must therefore be **domain-neutral**, not framework-centric.
 
 ## 2. Goals
 
@@ -22,6 +23,7 @@
 4. A `/memory` surface to view and edit persisted memory.
 5. Graceful, non-hanging failure when the provider is unreachable or the model is not loaded.
 6. Full `en`+`ru` parity, output styled per STYLE.md, reversible writes.
+7. **Domain-neutral:** neither command assumes a code repository; both work for any usage profile or workspace.
 
 ## 3. Non-goals
 
@@ -30,6 +32,7 @@
 - No TUI / alternate renderer; `box()` remains wizard-only.
 - No auto-run of `meet`/`init` without user intent.
 - No migration shim for the old `mma init` behavior (hard MAJOR rename, per D8 of the 2.0.0 spec).
+- `init` is **not** code-only: it does not require a repository, a lockfile or a build system, and it never assumes programming is the user's goal.
 
 ## 4. Decisions (locked)
 
@@ -48,6 +51,7 @@
 | O11 | No new required config; onboarding has sane defaults. Optional knobs may be added later. |
 | O12 | Onboarding sessions are logged to `session.jsonl` as `onboarding_*` events for observability. |
 | O13 | `MEET_SYSTEM_PROMPT` is a **semi-script**: the guide owns topic coverage and a preference-key whitelist; the model owns wording and light follow-ups. Keys outside the whitelist are not written. |
+| O14 | Onboarding is **domain-neutral**: `meet` asks about the user's usage profile/domain (not only a tech stack), and `init` works for any workspace (docs, configs, notes) — code is just one case. No code-centric wording in prompts, labels or offers. |
 
 ## 5. Command surface
 
@@ -68,7 +72,7 @@
 
 1. **Entry:** (a) `[Y/n]` offer after first-run setup (REPL process, `MMA_POST_SETUP=1`, TTY); (b) `/meet`; (c) `mma meet`.
 2. **Preflight** (§8). Fail → calm hint, stop, nothing written.
-3. **Interview session** with `MEET_SYSTEM_PROMPT`: the agent asks 1–3 questions per turn, adapts to answers, and persists each answer with the `remember` tool. Topics: name & reply language, tone/verbosity, tech stack & experience, working habits, hard "do not" rules (git, tests), goals.
+3. **Interview session** with `MEET_SYSTEM_PROMPT`: the agent asks 1–3 questions per turn, adapts to answers, and persists each answer with the `remember` tool. Topics: name & reply language, tone/verbosity, **usage profile & domain** (what they will use the agent for — development, weather, smart home, automation, API work, computer setup, personal assistant, web search, …), tools & experience, working habits, hard "do not" rules, goals.
 4. **End:** when topics are covered or the user stops. Agent prints a compact `✓` summary of what was remembered.
 5. **Bounds:** turn cap (default 8), `Esc` ends early (AbortError propagates, no fallback), user may answer empty to skip a question.
 
@@ -96,23 +100,24 @@ Semi-script. The guide defines coverage and the memory slots; the model only phr
 
 | Topic | Target memory slot |
 |---|---|
+| usage profile / domain | `preferences.domain` / `facts` |
 | name | `preferences.name` |
 | reply language | `preferences.language` |
 | response style | `preferences.response_style` (`concise\|balanced\|detailed`) |
-| stack / experience | `facts` (free-form) |
+| tools & experience | `facts` (free-form) |
 | working habits | `facts` |
-| "do not without asking" | `preferences.git_autocommit` / `facts` |
-| code / commit language | `preferences.code_language` |
+| "do not without asking" | `preferences.autonomy` (`ask\|act`) / `facts` |
+| code / commit language *(only if development is a use case)* | `preferences.code_language` |
 
-Rules baked into the prompt: 1–3 questions per turn; closed questions via the `question` tool (options), open questions as plain text; ask in the user's language; stop once topics are covered; **do not invent keys outside the whitelist**; never ask about the repository/code.
+Rules baked into the prompt: ask about the **domain first**, then adapt; 1–3 questions per turn; closed questions via the `question` tool (options), open questions as plain text; ask in the user's language; stop once topics are covered; **do not invent keys outside the whitelist**; never assume the user is a programmer.
 
 ## 7. `init` — `AGENTS.md`
 
 ### 7.1 Flow
 
-1. **Scan** the repo: project map / indexer (`mma map`) + key files (`package.json`, `tsconfig`, lockfile, CI configs, `README`, existing Cursor/Copilot rules, current `AGENTS.md`).
-2. **Targeted questions** via `question` when the codebase cannot answer (e.g. non-obvious conventions, gotchas).
-3. **Compose** sections: build/lint/test commands, architecture & non-obvious structure, project conventions, setup quirks/gotchas, references to existing instruction sources.
+1. **Scan the workspace** — any directory, not necessarily a code repo: project map / indexer (`mma map`) + whatever is relevant (`README`, docs, notes, configs, manifests/lockfiles *if present*, existing Cursor/Copilot rules, current `AGENTS.md`). Detect the workspace nature (code / docs / notes / config / mixed) and adapt.
+2. **Targeted questions** via `question` when the files cannot answer (purpose, conventions, gotchas, preferred workflows).
+3. **Compose** sections: purpose & usage profile, key structure, how to run/use things (if applicable), conventions, setup quirks/gotchas, references to existing instruction sources.
 4. **Write**:
    - No `AGENTS.md` → create `<baseDir>/AGENTS.md`.
    - Existing `AGENTS.md` → **improve in place**: produce a proposed version, show a **diff**, ask for confirmation, then write. Never overwrite without confirmation.
@@ -121,7 +126,7 @@ Rules baked into the prompt: 1–3 questions per turn; closed questions via the 
 ### 7.2 Tools
 
 - Allowed: `read_file`, `list_dir`, `glob`, `grep`, `project_map`, `question`, `write_file`, `edit_file`.
-- Denied: `bash`, `delete_file`, `move_file`, network tools. `init` never runs project commands to "discover" them; it reads declared scripts.
+- Denied: `bash`, `delete_file`, `move_file`, network tools. `init` never runs commands to "discover" things; it reads what is there. It does not assume a build system, lockfile or programming language.
 
 ### 7.3 Output
 
