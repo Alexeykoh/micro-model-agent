@@ -70,16 +70,18 @@ export class MemoryStore {
     return true;
   }
 
-  /** Remove the nth (1-based) append-only entry from a category file. */
+  /** Remove the nth (1-based) append-only entry (its full block) from a category file. */
   deleteEntry(name: string, n: number): boolean {
     const path = join(this.memoryDir, `${name}.md`);
     if (!existsSync(path)) return false;
     const lines = readFileSync(path, "utf-8").split(/\r?\n/);
-    const indexes = lines
+    const starts = lines
       .map((l, i) => (l.startsWith("- ") ? i : -1))
       .filter((i) => i >= 0);
-    if (n < 1 || n > indexes.length) return false;
-    lines.splice(indexes[n - 1], 1);
+    if (n < 1 || n > starts.length) return false;
+    const start = starts[n - 1];
+    const end = n < starts.length ? starts[n] : lines.length;
+    lines.splice(start, end - start);
     writeFileSync(path, lines.join("\n"), "utf-8");
     return true;
   }

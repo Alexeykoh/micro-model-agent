@@ -34,18 +34,19 @@ export function applyMemoryCommand(store: MemoryStore, args: string[]): string[]
     }
     case "find": {
       const query = rest.join(" ");
+      if (!query) return [t("repl.memory_usage")];
       const hits = store.search(query);
       return hits.length ? hits.map((h) => `${pc.dim(h.file)}  ${h.match}`) : [t("repl.memory_empty")];
     }
     case "forget": {
       const [category, nRaw] = rest;
-      if (!category || !CATEGORIES.includes(category as never)) return [t("repl.memory_usage")];
+      if (!category || !(CATEGORIES as readonly string[]).includes(category)) return [t("repl.memory_usage")];
       const n = parseInt(nRaw ?? "0", 10);
       const ok = n > 0 && store.deleteEntry(category, n);
       return [
         ok
           ? t("repl.memory_forgotten", { category, n: String(n) })
-          : pc.yellow(t("repl.memory_not_found", { key: `${category} #${nRaw}` })),
+          : pc.yellow(t("repl.memory_entry_not_found", { category, n: String(nRaw ?? n) })),
       ];
     }
     default:
@@ -61,14 +62,12 @@ function renderOverview(store: MemoryStore): string[] {
   if (entries.length === 0) out.push(pc.dim(t("repl.memory_empty")));
   for (const [k, v] of entries) out.push(`  ${k} = ${v}`);
   for (const cat of CATEGORIES) {
-    const tail = store
-      .read(cat)
-      .split(/\r?\n/)
-      .filter((l) => l.startsWith("- "))
-      .slice(-3);
-    if (tail.length === 0) continue;
+    const all = store.read(cat).split(/\r?\n/);
+    const idxs = all.map((l, i) => (l.startsWith("- ") ? i : -1)).filter((i) => i >= 0);
+    const shown = idxs.slice(-3);
+    if (shown.length === 0) continue;
     out.push(pc.dim(`[${cat}]`));
-    for (const l of tail) out.push(`  ${l}`);
+    for (const i of shown) out.push(`  [${idxs.indexOf(i) + 1}] ${all[i]}`);
   }
   return out;
 }
@@ -87,9 +86,7 @@ export function registerOnboardingCommands(ctx: ReplContext): void {
     description: t("repl.memory_usage"),
     usage: t("repl.memory_usage"),
     action: async (args: string[]) => {
-      for (const l of args.length ? applyMemoryCommand(store(), args) : renderOverview(store())) {
-        ctx.output.writeLine(l);
-      }
+      for (const l of applyMemoryCommand(store(), args)) ctx.output.writeLine(l);
     },
   });
 

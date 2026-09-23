@@ -351,6 +351,7 @@
   "repl.memory_set": "Сохранено {key}={value}",
   "repl.memory_unset": "Удалено {key}",
   "repl.memory_not_found": "Нет предпочтения \"{key}\"",
+  "repl.memory_entry_not_found": "Нет записи {n} в {category}",
   "repl.memory_forgotten": "Удалена запись {n} из {category}",
   "repl.meet_offer": "Познакомимся? Задам несколько вопросов и запомню, как тебе удобнее работать.",
   "repl.meet_offer_hint": "Можно пропустить и вызвать /meet позже.",
