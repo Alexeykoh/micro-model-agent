@@ -37,7 +37,8 @@ export interface SessionLogEntry {
     | "moe_subtask"
     | "moe_replan"
     | "moe_verify"
-    | "output";
+    | "output"
+    | `onboarding_${string}`;
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
