@@ -3,6 +3,8 @@
 
   const token = new URLSearchParams(location.search).get("token") || "";
   const THEME_KEY = "mma-theme";
+  const MAX_IMAGES = 3;
+  const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
   const msgs = document.getElementById("msgs");
   const inp = document.getElementById("inp");
@@ -11,6 +13,9 @@
   const planCountEl = document.getElementById("planCount");
   const usageEl = document.getElementById("usage");
   const saveIndicator = document.getElementById("saveIndicator");
+  const attachStrip = document.getElementById("attachStrip");
+  const attachErr = document.getElementById("attachErr");
+  const imgPicker = document.getElementById("imgPicker");
 
   const LABELS = {
     read_file: "Reading file",
@@ -90,6 +95,8 @@
   let activeTabId = null;
   let liveTabId = null;
   let newSeq = 0;
+  let attachments = [];
+  let attachErrTimer = null;
 
   let curText = null;
   let curTextNodes = [];
@@ -859,9 +866,147 @@
     if (tog) tog.textContent = hidden ? "▸ show" : "▾ hide";
   });
 
+  function setAttachError(msg) {
+    if (!attachErr) return;
+    attachErr.textContent = msg;
+    attachErr.hidden = false;
+    clearTimeout(attachErrTimer);
+    attachErrTimer = setTimeout(() => {
+      attachErr.hidden = true;
+    }, 4000);
+  }
+
+  function renderAttachments() {
+    if (!attachStrip) return;
+    attachStrip.textContent = "";
+    attachStrip.hidden = attachments.length === 0;
+    attachments.forEach((src, i) => {
+      const thumb = el("div", "thumb");
+      const img = document.createElement("img");
+      img.alt = "";
+      img.src = src;
+      thumb.appendChild(img);
+      const rm = el("span", "rm", "✕");
+      rm.title = "remove";
+      rm.addEventListener("click", () => {
+        attachments.splice(i, 1);
+        renderAttachments();
+      });
+      thumb.appendChild(rm);
+      attachStrip.appendChild(thumb);
+    });
+  }
+
+  function clearAttachments() {
+    attachments = [];
+    renderAttachments();
+  }
+
+  function readAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = () => reject(fr.error || new Error("read failed"));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  async function addFiles(files) {
+    let err = "";
+    for (const file of files) {
+      if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
+        err = "only images can be attached";
+        continue;
+      }
+      if (attachments.length >= MAX_IMAGES) {
+        err = "too many images (max " + MAX_IMAGES + ")";
+        break;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        err = "image too large (max 6 MB)";
+        continue;
+      }
+      try {
+        const url = await readAsDataUrl(file);
+        if (url.indexOf("data:image/") !== 0) {
+          err = "invalid image";
+          continue;
+        }
+        if (attachments.length >= MAX_IMAGES) {
+          err = "too many images (max " + MAX_IMAGES + ")";
+          break;
+        }
+        attachments.push(url);
+      } catch (e) {
+        err = "could not read image";
+      }
+    }
+    renderAttachments();
+    if (err) setAttachError(err);
+  }
+
+  function userMessageNode(text, images) {
+    const node = el("div", "u", text);
+    (images || []).forEach((src) => {
+      const img = document.createElement("img");
+      img.className = "uimg";
+      img.alt = "";
+      img.src = src;
+      node.appendChild(img);
+    });
+    return node;
+  }
+
+  if (imgPicker) {
+    imgPicker.addEventListener("change", () => {
+      addFiles(Array.from(imgPicker.files || []));
+      imgPicker.value = "";
+    });
+  }
+  const attachBtn = document.getElementById("attachBtn");
+  if (attachBtn && imgPicker) {
+    attachBtn.addEventListener("click", () => imgPicker.click());
+  }
+  inp.addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files = [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      addFiles(files);
+    }
+  });
+
+  const inputArea = document.querySelector(".input-area");
+  if (inputArea) {
+    ["dragenter", "dragover"].forEach((ev) => {
+      inputArea.addEventListener(ev, (e) => {
+        e.preventDefault();
+        inputArea.classList.add("dragover");
+      });
+    });
+    inputArea.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && inputArea.contains(e.relatedTarget)) return;
+      inputArea.classList.remove("dragover");
+    });
+    inputArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      inputArea.classList.remove("dragover");
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length) addFiles(Array.from(dt.files));
+    });
+  }
+
   async function send() {
     const text = inp.value.trim();
-    if (!text || state.busy) return;
+    const images = attachments.slice();
+    if ((!text && !images.length) || state.busy) return;
     const feed = liveFeed() || activeFeed();
     clearEmpty(feed);
     curText = null;
@@ -891,12 +1036,16 @@
       banner.appendChild(document.createTextNode(" · " + (state.host.provider || (state.config && state.config.provider && state.config.provider.active) || "—") + " · " + contextLabel() + (state.host.sessionId ? " · session " + String(state.host.sessionId).slice(0, 4) : "")));
       feed.insertBefore(banner, feed.firstChild);
     }
-    appendTo(feed, el("div", "u", text));
+    appendTo(feed, userMessageNode(text, images));
     inp.value = "";
-    const r = await api("/api/message", { method: "POST", body: { text } });
+    const body = { text };
+    if (images.length) body.images = images;
+    const r = await api("/api/message", { method: "POST", body });
     if (!r.ok) {
       const msg = (r.data && r.data.error) || r.status;
       appendTo(feed, el("div", "warnline", "⚠ " + msg));
+    } else if (images.length) {
+      clearAttachments();
     }
   }
 

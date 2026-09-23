@@ -44,9 +44,13 @@
           <button id="selContextBtn">context: <b>—</b> ▾</button>
           <div class="menu" id="selContextMenu"></div>
         </div>
+        <button class="attach-btn" id="attachBtn" title="attach image">🖼</button>
       </div>
+      <input type="file" id="imgPicker" accept="image/*" multiple hidden>
+      <div class="attach-strip" id="attachStrip" hidden></div>
+      <div class="attach-err" id="attachErr" hidden></div>
       <textarea class="inp" id="inp" rows="2" placeholder="ввод сообщения… (/ — команды)"></textarea>
-      <div class="inp-meta"><span>Enter — отправить</span><span>Shift+Enter — новая строка</span><span>Esc — стоп</span></div>
+      <div class="inp-meta"><span>Enter — отправить</span><span>Shift+Enter — новая строка</span><span>Esc — стоп</span><span>🖼 / Ctrl+V — вложение</span></div>
     </div>
   </div>
 
