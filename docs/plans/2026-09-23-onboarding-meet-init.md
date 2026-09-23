@@ -713,16 +713,36 @@ export function isMeetDone(ctx: ReplContext): boolean {
 }
 ```
 
-- [ ] **Step 4: Expose `toolCtx` on `ReplContext`**
+- [ ] **Step 4: Expose `toolCtx` on `ReplContext` (without touching the `Repl` constructor)**
 
-In `src/cli/repl-commands.ts`, add to `ReplContext` (near `agent`):
+`Repl` is constructed in 7 test files; do NOT add a constructor parameter. Route the shared `ToolContext` through `AgentDeps` instead:
 
+1. `src/core/agent.ts` — add to `AgentDeps`:
+```ts
+  /** Shared ToolContext (mode-scoped state: allowlist, onboarding). */
+  toolCtx?: import("../tools/types").ToolContext;
+```
+and a getter on `Agent`:
+```ts
+  get toolContext(): import("../tools/types").ToolContext {
+    if (!this.deps.toolCtx) throw new Error("toolCtx not provided to Agent");
+    return this.deps.toolCtx;
+  }
+```
+2. `src/core/bootstrap.ts` — add `toolCtx` to the `agentDeps` object before `const agent = new Agent(agentDeps);` (line ~905; `toolCtx` is built at line ~596).
+3. `src/cli/repl-commands.ts` — add to `ReplContext`:
 ```ts
   /** Shared tool context — carries mode-scoped state (allowlist, onboarding). */
   readonly toolCtx: import("../tools/types").ToolContext;
 ```
+4. `src/cli/repl.ts` — satisfy the interface with a getter (no constructor change):
+```ts
+  get toolCtx(): import("../tools/types").ToolContext {
+    return this.agent.toolContext;
+  }
+```
 
-Wiring of `toolCtx` onto the `Repl` instance is done in Task 12 (the `Repl` class implements `ReplContext`). Until then `tsc` will flag the missing field — expected.
+After this step `bunx tsc --noEmit` must stay clean (the interface field is satisfied by the getter).
 
 - [ ] **Step 5: Run tests + typecheck**
 
@@ -1185,18 +1205,9 @@ git commit -m "feat(session): log onboarding lifecycle events"
 - Modify: `src/cli/repl.ts` (after each agent turn, check `isMeetDone`)
 - Test: covered by mode/meet tests; manual scenario in Task 16.
 
-- [ ] **Step 1: Expose `toolCtx` on the `Repl` instance**
+- [ ] **Step 1: Confirm `this.toolCtx` is available**
 
-`Repl` must implement `ReplContext`, which now requires `toolCtx`. The `Repl` constructor receives `agent` but not `toolCtx`; get it from `agent` via a new getter. Add to `src/core/agent.ts`:
-
-```ts
-  /** Shared tool context (mode-scoped state: allowlist, onboarding). */
-  get toolContext(): import("../tools/types").ToolContext {
-    return this.deps.toolExecutor["ctx"] as import("../tools/types").ToolContext;
-  }
-```
-
-If reaching through the executor is not viable, extend `AgentDeps` with `toolCtx?: ToolContext` and pass `bootstrap`'s `toolCtx` into the `Agent` constructor in `bootstrap.ts` (search `new Agent({`), then expose it here. Prefer the explicit `AgentDeps.toolCtx` route.
+Task 6 already wired `ReplContext.toolCtx` (via `AgentDeps.toolCtx` + `Agent.toolContext` + a `toolCtx` getter on `Repl`). No new wiring needed here; just use `this.toolCtx`.
 
 - [ ] **Step 2: After each completed turn, exit meet mode if the sentinel fired**
 
