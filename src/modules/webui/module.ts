@@ -26,6 +26,7 @@ import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
+import { cancelPendingQuestions, installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
 import {
   broadcast,
@@ -47,6 +48,8 @@ export interface WebUiDeps {
   skills?: WebSkillsModule;
   /** Plugin manager (from bootstrap) backing the settings "Plugins · MCP" page. */
   plugins?: WebPluginManager;
+  toolRegistry?: PromptIORegistry;
+  toolCtx?: { exitOnComplete?: boolean };
   /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
   configDir?: string;
   /** Model ids known to the active provider (defaults to a background cache). */
@@ -149,6 +152,14 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
   state.reconfigure = (config) => deps.agent.reconfigure(config);
 
+  // Web-only interactive tools: `question`/`approve` run over SSE + `/api/answer`.
+  installWebPromptIO({
+    state,
+    agent: deps.agent,
+    registry: deps.toolRegistry,
+    toolCtx: deps.toolCtx,
+  });
+
   // Model list cache: the endpoint is synchronous, the provider call is not.
   // Refresh once at startup (best-effort) and serve the cache thereafter.
   const modelCache: string[] = [];
@@ -159,8 +170,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     void (async () => {
       try {
         const cfg = deps.config;
-        const name =
-          cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
+        const name = cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
         const provider = deps.agent.getProviderFor(name);
         if (!provider) return;
         const models = await provider.listModels();
@@ -248,6 +258,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     runAgent,
     interrupt: () => {
       interrupted = true;
+      // Unblock any tool waiting on a browser answer before the turn unwinds.
+      cancelPendingQuestions(state);
       deps.agent.shutdown();
     },
     // Slash commands run through the shared handler map; output streams over
@@ -280,6 +292,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     forwarder,
     url,
     stop: () => {
+      cancelPendingQuestions(state);
       forwarder.flushNow();
       stopServer(state);
     },

@@ -1291,22 +1291,94 @@
     if (feed === activeFeed()) scroll();
   }
 
+  // `? ` glyph on the last line, matching the terminal menu (the tool may have
+  // already prefixed it — don't double it).
+  function questionLabel(text) {
+    const lines = String(text).split("\n");
+    const last = lines[lines.length - 1];
+    if (/^\s*\?/.test(last)) return String(text);
+    lines[lines.length - 1] = "? " + last;
+    return lines.join("\n");
+  }
+
   function onQuestion(data) {
     if (!data || typeof data.text !== "string") return;
     const feed = liveFeed();
     if (!feed) return;
     clearEmpty(feed);
-    const block = el("div", "q placeholder");
-    block.appendChild(document.createTextNode("? " + data.text));
-    if (Array.isArray(data.options) && data.options.length) {
+    const promptText = questionLabel(data.text);
+    const block = el("div", "q");
+    block.appendChild(el("div", "qtext", promptText));
+    let answered = false;
+
+    const settle = (value) => {
+      if (answered) return;
+      answered = true;
+      const answer = Array.isArray(value)
+        ? value
+            .map((i) => data.options && data.options[i])
+            .filter((x) => x != null)
+            .join(", ")
+        : String(value == null ? "" : value);
+      block.classList.add("answered");
+      block.textContent = "";
+      block.appendChild(el("div", "qtext", promptText));
+      block.appendChild(el("div", "qans", "↳ " + (answer || t("web.question.answered"))));
+      api("/api/answer", { method: "POST", body: { id: data.id, value } });
+      if (feed === activeFeed()) scroll();
+    };
+
+    if (data.kind === "choice" && Array.isArray(data.options) && data.options.length) {
+      const multiple = !!data.multiple;
       const opts = el("div", "opts");
-      data.options.forEach((o, i) => {
-        if (i > 0) opts.appendChild(document.createTextNode(" \u00a0 "));
-        opts.appendChild(el("span", "", i + 1 + ". " + o));
+      const selected = [];
+      let sendBtn = null;
+      data.options.forEach((label, i) => {
+        const row = el("div", "qopt", i + 1 + ". " + label);
+        row.addEventListener("click", () => {
+          if (answered) return;
+          if (multiple) {
+            const pos = selected.indexOf(i);
+            if (pos === -1) {
+              selected.push(i);
+              row.classList.add("on");
+            } else {
+              selected.splice(pos, 1);
+              row.classList.remove("on");
+            }
+            if (sendBtn) sendBtn.disabled = selected.length === 0;
+          } else {
+            settle([i]);
+          }
+        });
+        opts.appendChild(row);
       });
       block.appendChild(opts);
+      if (multiple) {
+        sendBtn = el("button", "qsend", t("web.question.send"));
+        sendBtn.disabled = true;
+        sendBtn.addEventListener("click", () => {
+          if (!answered && selected.length) {
+            settle(selected.slice().sort((a, b) => a - b));
+          }
+        });
+        block.appendChild(sendBtn);
+      }
+    } else {
+      const input = el("input", "qinput");
+      input.type = "text";
+      input.placeholder = t("web.question.placeholder");
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          settle(input.value);
+        }
+      });
+      block.appendChild(input);
+      if (feed === activeFeed()) setTimeout(() => input.focus(), 0);
     }
     appendTo(feed, block);
+    if (feed === activeFeed()) scroll();
   }
 
   function usageRow(label, value, cls) {

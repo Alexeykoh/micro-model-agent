@@ -143,6 +143,13 @@ export interface WebUiState {
    * MCP servers are read from `config.mcpServers`.
    */
   plugins?: WebPluginManager;
+  /**
+   * In-flight interactive questions (`question`/`approve` tools) keyed by the
+   * SSE `question` id. The web `PromptIO` registers a resolver here and
+   * `POST /api/answer` settles it; `cancelPendingQuestions` drains the map on
+   * interrupt/shutdown so a blocked tool never hangs the turn.
+   */
+  pendingQuestions: Map<string, (value: unknown) => void>;
 }
 
 export function createWebUiState(): WebUiState {
@@ -161,6 +168,7 @@ export function createWebUiState(): WebUiState {
     minPostIntervalMs: 500,
     historyTail: 200,
     maxBodyBytes: MAX_BODY_BYTES,
+    pendingQuestions: new Map(),
   };
 }
 

@@ -253,6 +253,9 @@ export interface BootstrapResult {
   /** Shared ToolContext; `sessionId`/`sessionContext` are live getters over
    *  the session manager, so a session switch is always reflected. */
   toolCtx: ToolContext;
+  /** Live tool registry. Web mode registers interactive tools (question/approve)
+   *  into it after bootstrap without touching terminal behavior. */
+  toolRegistry: ToolRegistry;
   configDir: string;
   baseDir: string;
   noAgentsMd: boolean;
@@ -930,6 +933,7 @@ export async function bootstrap(
     pluginManager,
     execModule,
     toolCtx,
+    toolRegistry,
     configDir: dir,
     baseDir,
     noAgentsMd: noAgentsMd === true,

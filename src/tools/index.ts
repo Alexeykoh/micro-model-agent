@@ -28,10 +28,11 @@ import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { webBrowseTool } from "./web-browse";
 import { downloadFileTool } from "./download-file";
-// questionTool and approveTool removed — interactive menus are too disruptive for small models.
-// The model should ask questions as plain text in its response instead.
-// import { questionTool } from './question'
-// import { approveTool } from './approve'
+// questionTool and approveTool are NOT registered by default — interactive menus are too
+// disruptive for small models. The model should ask questions as plain text in its response
+// instead. Web mode (`mma web`) registers them explicitly after bootstrap.
+import { questionTool } from "./question";
+import { approveTool } from "./approve";
 import { createLoadSkillTool } from "./load-skill";
 import { pipelineRunTool } from "./pipeline-run";
 import { mcpCallTool } from "./mcp-call";
@@ -80,6 +81,8 @@ export {
   attachImageTool,
   enableToolsTool,
   sessionInfoTool,
+  questionTool,
+  approveTool,
 };
 
 export function registerAllTools(

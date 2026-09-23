@@ -1052,5 +1052,9 @@
   "web.card.screenshot": "screenshot",
   "web.card.attached_image": "attached image",
   "web.card.browser_viewport": "browser · viewport",
+  "web.question.placeholder": "type your answer…",
+  "web.question.send": "send",
+  "web.question.answered": "answered",
+  "web.question.multi_hint": "select one or more",
   "web.misc.command_unavailable": "command unavailable"
 }

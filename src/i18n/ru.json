@@ -1052,5 +1052,9 @@
   "web.card.screenshot": "снимок экрана",
   "web.card.attached_image": "прикреплённое изображение",
   "web.card.browser_viewport": "браузер · область просмотра",
+  "web.question.placeholder": "введи ответ…",
+  "web.question.send": "отправить",
+  "web.question.answered": "отвечено",
+  "web.question.multi_hint": "выбери один или несколько",
   "web.misc.command_unavailable": "команда недоступна"
 }

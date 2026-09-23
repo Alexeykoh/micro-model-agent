@@ -19,6 +19,7 @@ import {
 } from "./util";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
 import { handleI18nGet } from "./i18n-api";
+import { handleAnswerPost } from "./answer-api";
 import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
 import type { WebUiState, WebUiAssets } from "./state";
@@ -109,6 +110,11 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
 
   if (reqUrl.pathname === "/api/config" && req.method === "POST") {
     handleConfigPost(req, res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/answer" && req.method === "POST") {
+    handleAnswerPost(req, res, s);
     return;
   }
 

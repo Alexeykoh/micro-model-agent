@@ -68,6 +68,8 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     memoryStore,
     skillsModule,
     pluginManager,
+    toolRegistry,
+    toolCtx,
   } = await bootstrap(...webBootstrapArgs(opts));
 
   if (virgin) {
@@ -82,6 +84,8 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     memory: memoryStore,
     skills: skillsModule,
     plugins: pluginManager,
+    toolRegistry,
+    toolCtx,
     configDir,
     host: opts.host,
     token: opts.token,

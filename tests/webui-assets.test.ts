@@ -18,10 +18,11 @@ describe("webui assets", () => {
     expect(a.css).toContain(".planblock");
   });
 
-  it("wires the question event to the .q placeholder", () => {
+  it("wires the question event to an interactive .q block posting /api/answer", () => {
     const a = loadAssets();
     expect(a.js).toContain('addEventListener("question"');
-    expect(a.js).toContain('"q placeholder"');
-    expect(a.css).toContain(".q.placeholder");
+    expect(a.js).toContain("/api/answer");
+    expect(a.js).toContain("qopt");
+    expect(a.css).toContain(".q .qopt");
   });
 });
