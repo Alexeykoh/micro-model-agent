@@ -89,6 +89,7 @@
   let newSeq = 0;
 
   let curText = null;
+  let curTextNodes = [];
   let curMeta = null;
   let runCount = 0;
   let runFails = 0;
@@ -267,6 +268,58 @@
     runFails = 0;
   }
 
+  function parseFences(text) {
+    const lines = String(text).split("\n");
+    const parts = [];
+    let textBuf = [];
+    let codeBuf = [];
+    let inCode = false;
+    const flushText = () => {
+      if (textBuf.length) {
+        parts.push({ type: "text", content: textBuf.join("\n") });
+        textBuf = [];
+      }
+    };
+    for (const line of lines) {
+      if (/^\s*```/.test(line)) {
+        if (!inCode) {
+          flushText();
+          inCode = true;
+          codeBuf = [];
+        } else {
+          parts.push({ type: "code", content: codeBuf.join("\n") });
+          inCode = false;
+          codeBuf = [];
+        }
+        continue;
+      }
+      if (inCode) codeBuf.push(line);
+      else textBuf.push(line);
+    }
+    if (inCode) parts.push({ type: "code", content: codeBuf.join("\n") });
+    else flushText();
+    return parts;
+  }
+
+  function renderTextSegment(feed, raw) {
+    curTextNodes.forEach((n) => n.remove());
+    curTextNodes = [];
+    parseFences(raw).forEach((part) => {
+      if (part.type === "code") {
+        const code = el("div", "code");
+        code.textContent = part.content;
+        feed.appendChild(code);
+        curTextNodes.push(code);
+      } else if (part.content) {
+        const ans = el("div", "ans");
+        ans.textContent = part.content;
+        feed.appendChild(ans);
+        curTextNodes.push(ans);
+      }
+    });
+    if (feed === activeFeed()) scroll();
+  }
+
   function onText(chunk) {
     clearBusy();
     const feed = liveFeed();
@@ -275,12 +328,13 @@
     if (curMeta) {
       finishMeta();
     }
-    if (!curText) {
+    if (curText == null) {
       flushRun();
-      curText = appendTo(feed, el("div", "ans"));
+      curText = "";
+      curTextNodes = [];
     }
-    curText.textContent += chunk;
-    if (feed === activeFeed()) scroll();
+    curText += chunk;
+    renderTextSegment(feed, curText);
   }
 
   function finishMeta() {
@@ -355,6 +409,19 @@
     runCount++;
   }
 
+  function safeUrl(url) {
+    if (typeof url !== "string" || !url) return null;
+    try {
+      const u = new URL(url, location.href);
+      if (u.protocol === "http:" || u.protocol === "https:" || u.protocol === "file:") {
+        return u.href;
+      }
+    } catch (err) {
+      return null;
+    }
+    return null;
+  }
+
   function cardFor(name, args) {
     const feed = liveFeed();
     if (!feed) return;
@@ -372,15 +439,21 @@
     if (LINK_TOOLS.indexOf(name) !== -1 && args.url) {
       const line = el("div", "linkline");
       line.appendChild(document.createTextNode("↳ "));
-      const a = el("a", "", args.url);
-      a.href = args.url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      line.appendChild(a);
-      try {
-        line.appendChild(el("span", "dom", " · " + new URL(args.url).hostname));
-      } catch (err) {
-        /* relative url */
+      const safe = safeUrl(args.url);
+      if (safe) {
+        const a = el("a", "", args.url);
+        a.href = safe;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        line.appendChild(a);
+        try {
+          const host = new URL(safe).hostname;
+          if (host) line.appendChild(el("span", "dom", " · " + host));
+        } catch (err) {
+          /* no hostname */
+        }
+      } else {
+        line.appendChild(el("span", "", args.url));
       }
       appendTo(feed, line);
       return;
@@ -451,7 +524,7 @@
           closeTab(t.id);
           return;
         }
-        openTab(t.id, t.name, t.kind, false);
+        openTab(t.id, t.name, t.kind, true);
       });
       tabstripEl.appendChild(tab);
     });
@@ -668,6 +741,12 @@
     btn.appendChild(document.createTextNode(" ▾"));
   }
 
+  function closeAllMenus() {
+    document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
+    const dd = document.getElementById("sessDD");
+    if (dd) dd.classList.remove("open");
+  }
+
   function menuItem(label, sub, active, onClick) {
     const mi = el("div", "mi" + (active ? " on" : ""));
     mi.appendChild(el("span", "", label));
@@ -675,6 +754,7 @@
     mi.addEventListener("click", (e) => {
       e.stopPropagation();
       onClick();
+      closeAllMenus();
     });
     return mi;
   }
@@ -697,6 +777,7 @@
     const refresh = el("div", "mi", "↻ refresh list");
     refresh.addEventListener("click", (e) => {
       e.stopPropagation();
+      closeAllMenus();
       loadModels().then(renderSelectors);
     });
     modelMenu.appendChild(refresh);
@@ -724,6 +805,7 @@
     const custom = el("div", "mi", "custom…");
     custom.addEventListener("click", (e) => {
       e.stopPropagation();
+      closeAllMenus();
       const raw = window.prompt("context window (tokens)", String(cfg.contextWindow || 32768));
       if (raw == null) return;
       const n = Number(raw.trim());
