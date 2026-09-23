@@ -107,6 +107,8 @@ export interface AgentDeps {
     summary: string;
   } | null>;
   sessionManager?: SessionManager;
+  /** Shared ToolContext (mode-scoped state: allowlist, onboarding). */
+  toolCtx?: import("../tools/types").ToolContext;
   /** Opt-in git-style context logger (--context-log). Null/undefined disables it. */
   contextLogger?: ContextLogger;
   memoryStore?: MemoryStore;
@@ -287,6 +289,36 @@ export class Agent {
    */
   setPromptIO(io?: import("../tools/prompt-io").PromptIO): void {
     this.deps.toolExecutor.setPromptIO(io);
+  }
+
+  /**
+   * Append a system-prompt block for the current run (onboarding guide).
+   * Identity-based removal via `removePromptBlock`. Prompt blocks are read on
+   * every `buildSystemPrompt`, so the block takes effect on the next turn.
+   */
+  pushPromptBlock(block: PromptBlock): void {
+    this.deps.promptBlocks.push(block);
+  }
+
+  /** Remove a previously pushed block (by reference). */
+  removePromptBlock(block: PromptBlock): void {
+    const i = this.deps.promptBlocks.indexOf(block);
+    if (i >= 0) this.deps.promptBlocks.splice(i, 1);
+  }
+
+  /** Test-only view of the current prompt blocks. */
+  getPromptBlocksForTest(): PromptBlock[] {
+    return this.deps.promptBlocks;
+  }
+
+  get toolContext(): import("../tools/types").ToolContext {
+    if (!this.deps.toolCtx) throw new Error("toolCtx not provided to Agent");
+    return this.deps.toolCtx;
+  }
+
+  /** Non-throwing variant of `toolContext` for optional/lifecycle checks. */
+  tryToolContext(): import("../tools/types").ToolContext | undefined {
+    return this.deps.toolCtx;
   }
 
   private buildSystemPrompt(): {

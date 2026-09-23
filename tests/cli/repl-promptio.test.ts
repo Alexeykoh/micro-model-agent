@@ -41,6 +41,7 @@ function makeAgent(overrides?: Record<string, unknown>) {
     run: async () => ({ success: true, text: "ok" }),
     shutdown: () => {},
     getProviderFor: () => undefined,
+    tryToolContext: () => undefined,
     ...overrides,
   } as never;
 }

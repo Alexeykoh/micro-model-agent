@@ -407,4 +407,14 @@ export class SessionLogger {
       ...data,
     });
   }
+
+  /** Log an onboarding lifecycle event (meet/init) for post-mortem analysis. */
+  logOnboarding(event: string, data: Record<string, unknown> = {}): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: `onboarding_${event}`,
+      content: event,
+      ...data,
+    });
+  }
 }

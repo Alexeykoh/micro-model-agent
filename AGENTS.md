@@ -1,6 +1,6 @@
 # MMA v2 — Micro Models Agent
 
-AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1.
+General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete rewrite from MMA v1. **Not a coding-only agent** — see Positioning below.
 
 > **Design spec:** [docs/specs/2025-07-28-mma-v2-design.md](./docs/specs/2025-07-28-mma-v2-design.md) — architecture, modules, tools, CLI, config, data flow.
 
@@ -9,6 +9,17 @@ AI coding agent harness for small models (Qwen3.5-9B, 32K-64K context). Complete
 > **UI Style (канонический):** [docs/design/ui/STYLE.md](./docs/design/ui/STYLE.md) — **единственный верный** стиль чат-вывода агента. Мокап: [docs/design/ui/mockup-chat-en-ru.html](./docs/design/ui/mockup-chat-en-ru.html) (EN слева, RU справа). Любой код, конфликтующий со STYLE.md, считается неправильным и подлежит приведению к стилю.
 
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
+
+## Positioning: universal agent, not code-only
+
+**Правило:** MMA — **общий** агент-харнесс для маленьких моделей, а **не** «агент для разработки кода». Пользователь может применять его для чего угодно: разработка, поиск погоды, умный дом, автоматизация, работа с API, настройка компьютера, персональный ассистент, поиск в интернете и любые другие задачи.
+
+Следствие (учитывать при проектировании тулов, промптов, онбординга и UX):
+
+- Формулировки системного промпта, описания тулов и их тултипы **не предполагают**, что задача — про репозиторий с кодом.
+- Набор тулов и дефолты не должны быть code-centric; кодовые сценарии (файлы, bash, LSP) — **частный случай**, а не центр.
+- Онбординг («Познакомимся») и `init` спрашивают о **профиле использования и домене**, а не только о языке/фреймворке.
+- Универсальность и «легкость» важнее узкой оптимизации под программирование.
 
 ## Engineering Principles
 
@@ -54,6 +65,11 @@ tsc --noEmit
 
 # Test a single file
 bun test tests/<name>.test.ts
+
+# Onboarding
+bun run mma setup        # provider setup wizard (was: mma init)
+bun run mma meet         # «Познакомимся» — interview, writes global memory
+bun run mma init         # generate/improve AGENTS.md for the workspace
 
 # Session management
 bun run mma session list
@@ -290,7 +306,19 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Автокомплит** (`src/cli/completer.ts`): dotted-ключи и enum-значения `/config`, флаги `/provider add`, имена команд для `/help`, имена сессий для `/delete`/`/export`, подкоманды с описаниями (`map/context/lsp/reasoning/verbose`).
 - **Унификация**: общий `repl.unknown_sub` + usage у `provider/model/skill/lsp`; `/help <command>` (usage + алиасы + примеры); незнакомые бывшие алиасы (`/use`) → `cli.unknown_command` с подсказкой; `/lsp` переведён на handler-map (правило #17); `/status` — компактная строка; `/sysprompt [--full]`; `/clear` — только экран.
 
-### Current Version: 2.0.0
+### Onboarding Commands (3.0.0)
+
+Дизайн: [docs/specs/2026-09-23-onboarding-meet-init-design.md](./docs/specs/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
+
+- **`meet` / «Познакомимся»** (`src/modules/onboarding/meet.ts`, `mode.ts`, `prompts.ts`) — LLM-интервью о профиле использования (домен, имя, язык, стиль ответов, привычки, «не делать без спроса»), пишет **только в глобальную память** (`~/.mma/memory/preferences.json`, `facts.md`) через `remember`. REPL-режим: вход по `[Y/n]` после setup, `/meet` (алиас `/познакомимся`) или `mma meet`; выход — по sentinel-тулу `meet_done`. Домен-нейтрально (разработка, умный дом, ассистент, …), 1–3 вопроса за ход, turn cap, `Esc` — выход без записи.
+- **`init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
+- **Строгий allowlist** (`ToolContext.toolAllowlist`, `src/tools/executor.ts`): `meet` — `remember`/`question`/`meet_done`; `init` — `read_file`/`list_dir`/`glob`/`grep`/`project_map`/`question`/`write_file`/`edit_file`. `alwaysOn` и теги allowlist **не обходят**; `meet` не трогает репозиторий.
+- **Preflight** (`src/modules/providers/preflight.ts`): `preflightProvider`/`preflightFromConfig` — минимальный chat-запрос (`max_tokens=1`, timeout 3s), гейтит LLM-зависимые входы (`[Y/n]`-оффер, `/meet`, `mma meet`); при недоступности — спокойная подсказка, ничего не пишется.
+- **`/memory`** (`src/cli/onboarding-commands.ts`, handler map): overview + `get/set/unset/find/forget`; единая точка просмотра/правки памяти. `mma setup` — переименованный мастер провайдера (бывший `mma init`, алиаса нет).
+- **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
+- **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
+
+### Current Version: 3.0.0
 
 ### Changelog
 

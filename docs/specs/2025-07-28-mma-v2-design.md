@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-MMA v2 — modular AI coding agent designed for 9B parameter models with 32K context.
+MMA v2 — modular **general-purpose** AI agent designed for 9B parameter models with 32K context. Not a coding-only agent; software development is one use case among many.
 Complete rewrite from MMA v1. Key differences:
 
 - **KISS** — simple state machine loop, no god objects
@@ -19,6 +19,17 @@ Complete rewrite from MMA v1. Key differences:
 - **Small files** — no file >300 lines (target)
 - **Composable prompt** — system prompt built from module blocks
 - **No TUI** — minimal CLI + REPL with markdown formatting
+
+### 1.1 Positioning — universal, not code-only
+
+MMA is a **general-purpose agent harness**, not a "coding agent". A user may employ it for software development, weather lookup, smart-home control, automation, working with APIs, computer setup, as a personal assistant, web search, and any other task.
+
+Design consequences:
+
+- System-prompt wording, tool descriptions and tooltips **must not assume** a code repository or a programming task.
+- The default tool set and defaults must not be code-centric; code scenarios (files, bash, LSP) are a **special case**, not the center.
+- Onboarding ("Познакомимся") and `init` ask about the **usage profile and domain**, not only language/framework.
+- Universality and lightness outrank narrow optimization for programming.
 
 ---
 

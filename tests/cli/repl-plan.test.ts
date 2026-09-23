@@ -6,7 +6,7 @@ import { makeCaptureChannel } from "./capture-channel";
 function makeRepl(execModule?: ExecutionModule): Repl {
   const { channel } = makeCaptureChannel();
   return new Repl(
-    { shutdown: () => {}, run: async () => ({}) } as any,
+    { shutdown: () => {}, run: async () => ({}), tryToolContext: () => undefined } as any,
     { ui: {} } as any,
     undefined,
     undefined,

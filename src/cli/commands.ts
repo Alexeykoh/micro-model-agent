@@ -40,10 +40,10 @@ export function configForDisplay<T>(config: T, showSecrets?: boolean): T {
   return showSecrets ? config : redactConfigSecrets(config);
 }
 
-function buildInitCommand(program: Command): void {
+function buildSetupCommand(program: Command): void {
   program
-    .command("init")
-    .description(t("cli.init"))
+    .command("setup")
+    .description(t("cli.setup"))
     .action(async () => {
       const answers = await runSetup();
       const configPath = join(homedir(), ".mma", "config.json");
@@ -52,6 +52,14 @@ function buildInitCommand(program: Command): void {
       saveConfig(config, configPath, dirname(configPath));
       getDefaultChannel().writeLine(t("cli.config_saved"));
     });
+}
+
+function buildMeetCommand(program: Command): void {
+  program.command("meet").description(t("cli.meet")).action(() => {});
+}
+
+function buildInitCommand(program: Command): void {
+  program.command("init").description(t("cli.init")).action(() => {});
 }
 
 function buildConfigCommands(program: Command): void {
@@ -730,6 +738,8 @@ export function createProgram(): Command {
     .option("--verbose", t("cli.verbose"))
     .option("--context-log", t("cli.context_log"));
 
+  buildSetupCommand(program);
+  buildMeetCommand(program);
   buildInitCommand(program);
   buildConfigCommands(program);
   buildModelCommands(program);
@@ -771,7 +781,14 @@ export function createProgram(): Command {
     });
     for (const sub of cmd.commands) attachOneShotExit(sub);
   };
-  for (const cmd of program.commands) attachOneShotExit(cmd);
+  // `meet`/`init` are not one-shot: their empty actions only mark intent, and
+  // main.ts falls through to the interactive REPL. The exit hook would fire
+  // during program.parse() and kill the process before the REPL branch runs.
+  const onboardingCommands = new Set(["meet", "init"]);
+  for (const cmd of program.commands) {
+    if (onboardingCommands.has(cmd.name())) continue;
+    attachOneShotExit(cmd);
+  }
 
   return program;
 }

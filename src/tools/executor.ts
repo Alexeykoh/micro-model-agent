@@ -50,7 +50,25 @@ export class ToolExecutor {
     return this.registry.has(name);
   }
 
+  /**
+   * Allowlisted tool names as a set, or `null` when unrestricted.
+   * `undefined` means no restriction; `[]` means block everything.
+   */
+  private allowedNames(): Set<string> | null {
+    const allow = this.ctx.toolAllowlist;
+    return allow ? new Set(allow) : null;
+  }
+
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
+    const allow = this.allowedNames();
+    if (allow && !allow.has(call.name)) {
+      return {
+        success: false,
+        output: t("tool.not_allowed", { name: call.name }),
+        toolCallId: call.id,
+      };
+    }
+
     const tool = this.registry.get(call.name);
     if (!tool) {
       return {
@@ -197,6 +215,18 @@ export class ToolExecutor {
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
+    const allow = this.allowedNames();
+    if (allow) {
+      return this.registry
+        .getAll()
+        .filter((t) => allow.has(t.name))
+        .map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+          boundedOutput: t.boundedOutput,
+        }));
+    }
     return this.registry.getAllForLLM(tags);
   }
 

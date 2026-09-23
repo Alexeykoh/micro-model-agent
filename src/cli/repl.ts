@@ -41,6 +41,7 @@ import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { errMsg } from "../utils";
 import { SessionLogger } from "../core/session-logger";
+import { exitMeetMode } from "../modules/onboarding/mode";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
 import { formatCost } from "../modules/pricing/prices";
@@ -164,6 +165,10 @@ export class Repl implements ReplContext {
   private promptSink: PromptSink;
   /** Terminal-aware PromptIO installed on the agent's tool executor. */
   private promptIO: PromptIO;
+
+  get toolCtx(): import("../tools/types").ToolContext {
+    return this.agent.toolContext;
+  }
 
   constructor(
     agent: Agent,
@@ -635,6 +640,15 @@ export class Repl implements ReplContext {
     this.promptPresented = true;
   }
 
+  /** Restore the normal input prompt after a startup question, if a LineEditor is active. */
+  private restoreStartupPrompt(): void {
+    if (this.rl instanceof LineEditor) {
+      this.rl.setPrompt(this.inputPrompt());
+      this.rl.prompt();
+      this.promptPresented = true;
+    }
+  }
+
   /**
    * Reasoning label shown in the input prompt. In `auto` mode the effective
    * level is normally decided per iteration by the policy, so we show only the
@@ -870,6 +884,12 @@ export class Repl implements ReplContext {
         // Piped/non-TTY fallback has no frame to resume; present the readline
         // prompt here to preserve the old post-run behavior.
         this.presentPrompt();
+      }
+      const onboardingCtx = this.agent.tryToolContext();
+      if (onboardingCtx?.onboarding?.done) {
+        exitMeetMode(this);
+        this.slog.logOnboarding("meet_done", { model: this.config.model });
+        this.output.writeLine(pc.dim(t("repl.meet_done")));
       }
       this.runHandledPrompt = true;
     }
@@ -1206,6 +1226,53 @@ export class Repl implements ReplContext {
     // plainly (promptPresented was false), so no frame needs erasing here.
     this.rl.prompt();
     this.promptPresented = true;
+
+    try {
+      if (process.env.MMA_START_MEET === "1" || process.env.MMA_START_INIT === "1") {
+        const mode = process.env.MMA_START_MEET === "1" ? "meet" : "init";
+        delete process.env.MMA_START_MEET;
+        delete process.env.MMA_START_INIT;
+        this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
+        if (mode === "meet") {
+          const { runMeet } = await import("../modules/onboarding/meet");
+          await runMeet(this);
+        } else {
+          const { runInit } = await import("../modules/onboarding/init");
+          await runInit(this);
+          this.slog.logOnboarding("init_done", { model: this.config.model });
+        }
+      } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
+        const { preflightFromConfig } = await import("../modules/providers/preflight");
+        const pre = await preflightFromConfig(this);
+        if (pre.ok) {
+          this.output.writeLine(pc.dim(`${t("repl.meet_offer")} ${t("repl.meet_offer_hint")}`));
+          const answer = (
+            await new Promise<string>((resolve) => this.rl.question("[Y/n] ", resolve))
+          )
+            .trim()
+            .toLowerCase();
+          const yes =
+            answer === "" ||
+            answer === "y" ||
+            answer === "yes" ||
+            answer === "да" ||
+            answer === "д";
+          if (yes) {
+            this.slog.logOnboarding("meet_start", { model: this.config.model });
+            const { runMeet } = await import("../modules/onboarding/meet");
+            await runMeet(this, { preflight: async () => pre });
+          } else {
+            this.restoreStartupPrompt();
+          }
+        } else {
+          this.output.writeLine(pc.yellow(t("onboarding.provider_down", { cmd: "meet" })));
+          this.output.writeLine(t("onboarding.provider_down_hint", { cmd: "meet" }));
+        }
+      }
+    } catch (err) {
+      this.logger?.debug(`Onboarding startup skipped: ${String(err)}`);
+      this.restoreStartupPrompt();
+    }
 
     if (lspEnabled) {
       this.probeLspBanner()

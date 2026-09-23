@@ -51,9 +51,9 @@ describe("formatMenu", () => {
 
   it("renders question with numbered options", () => {
     const menu = formatMenu("Pick a framework", options);
-    expect(menu).toContain("Pick a framework");
-    expect(menu).toContain("[1] React — Library from Meta");
-    expect(menu).toContain("[2] Vue — Progressive framework");
+    expect(menu.split("\n")[0]).toBe("? Pick a framework");
+    expect(menu).toContain("  [1] React — Library from Meta");
+    expect(menu).toContain("  [2] Vue — Progressive framework");
     expect(menu).not.toContain("[3]");
   });
 

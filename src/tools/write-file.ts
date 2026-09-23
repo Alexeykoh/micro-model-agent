@@ -30,6 +30,21 @@ export const writeFileTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
+    if (ctx.writePathAllowlist) {
+      const ok = ctx.writePathAllowlist.some(
+        (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
+      );
+      if (!ok) {
+        return {
+          success: false,
+          output: t("file.path_not_allowed", {
+            path: `${path} — ${t("onboarding.write_restricted")}`,
+            reason: t("onboarding.write_restricted"),
+          }),
+        };
+      }
+    }
+
     // Check path permissions using the resolved path
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {

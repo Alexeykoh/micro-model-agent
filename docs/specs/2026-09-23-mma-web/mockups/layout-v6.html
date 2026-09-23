@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MMA Web — v6</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #0a0c10; color: #c9d1d9;
+    font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  body.light { background: #f6f8fa; color: #1f2328; }
+
+  .bar-top {
+    display: flex; gap: 14px; align-items: center;
+    padding: 8px 14px; background: #0d1117; border-bottom: 1px solid #161b22;
+    color: #8b949e; font-size: 12.5px; position: relative; z-index: 40;
+  }
+  body.light .bar-top { background: #ffffff; border-color: #d0d7de; color: #57606a; }
+  .icon-btn {
+    cursor: pointer; color: #8b949e; padding: 3px 8px; border: none; background: none;
+    font: inherit; font-size: 14px; border-radius: 4px; line-height: 1.2;
+  }
+  body.light .icon-btn { color: #57606a; }
+  .icon-btn:hover { background: #161b22; color: #c9d1d9; }
+  body.light .icon-btn:hover { background: #eaeef2; color: #1f2328; }
+  .icon-btn.primary { color: #58a6ff; }
+  body.light .icon-btn.primary { color: #0969da; }
+  .tabstrip { display: flex; gap: 4px; align-items: center; overflow-x: auto; flex: 1; min-width: 0; }
+  .tabstrip::-webkit-scrollbar { height: 0; }
+  .stab {
+    display: flex; gap: 8px; align-items: center; white-space: nowrap;
+    padding: 4px 8px 4px 11px; border-radius: 5px 5px 0 0; cursor: pointer;
+    color: #6e7681; font-size: 12.5px; background: #0b0e13;
+    border: 1px solid transparent; border-bottom: none; max-width: 220px;
+  }
+  body.light .stab { background: #f6f8fa; color: #57606a; }
+  .stab:hover { color: #c9d1d9; }
+  body.light .stab:hover { color: #1f2328; }
+  .stab.on { background: #0a0c10; color: #c9d1d9; border-color: #161b22; }
+  body.light .stab.on { background: #ffffff; color: #1f2328; border-color: #d0d7de; }
+  .stab .sid { color: #484f58; font-size: 11px; }
+  .stab .x { color: #484f58; padding: 0 2px; border-radius: 3px; }
+  .stab .x:hover { color: #f85149; background: #1b2129; }
+  body.light .stab .x:hover { background: #eaeef2; }
+  .stab.dirty .x { color: #d29922; }
+  .btn {
+    cursor: pointer; color: #8b949e; padding: 3px 9px;
+    border-radius: 4px; border: none; background: none; font: inherit;
+  }
+  .btn:hover { background: #161b22; color: #c9d1d9; }
+  body.light .btn { color: #57606a; }
+  body.light .btn:hover { background: #eaeef2; color: #1f2328; }
+  .btn.primary { color: #58a6ff; }
+  body.light .btn.primary { color: #0969da; }
+  .model-name { color: #d2a8ff; }
+  body.light .model-name { color: #8250df; }
+
+  /* sessions dropdown */
+  .dd { position: relative; }
+  .dd-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    background: #0d1117; border: 1px solid #1b2129; border-radius: 6px;
+    min-width: 300px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,.55);
+  }
+  body.light .dd-menu { background: #ffffff; border-color: #d0d7de; box-shadow: 0 12px 32px rgba(140,149,159,.25); }
+  .dd.open .dd-menu { display: block; }
+  .dd-menu .h { color: #484f58; font-size: 11.5px; padding: 4px 8px; text-transform: uppercase; letter-spacing: .04em; }
+  .dd-menu .si {
+    display: flex; gap: 10px; align-items: baseline; padding: 7px 8px; border-radius: 4px;
+    cursor: pointer; color: #8b949e; font-size: 12.5px;
+  }
+  body.light .dd-menu .h { color: #8c959f; }
+  body.light .dd-menu .si { color: #57606a; }
+  .dd-menu .si:hover { background: #161b22; color: #c9d1d9; }
+  body.light .dd-menu .si:hover { background: #f6f8fa; color: #1f2328; }
+  .dd-menu .si.on { background: #12233a; color: #58a6ff; }
+  body.light .dd-menu .si.on { background: #ddf4ff; color: #0969da; }
+  .dd-menu .si .id { color: #484f58; }
+  .dd-menu .si .meta { margin-left: auto; color: #484f58; font-size: 11.5px; }
+  .dd-menu .si .del { color: #484f58; padding: 0 4px; }
+  .dd-menu .si .del:hover { color: #f85149; }
+  .dd-menu .sep { height: 1px; background: #1b2129; margin: 5px 0; }
+  body.light .dd-menu .sep { background: #d0d7de; }
+  .dd-menu .act { padding: 7px 8px; border-radius: 4px; cursor: pointer; color: #58a6ff; font-size: 12.5px; }
+  .dd-menu .act:hover { background: #12233a; }
+  body.light .dd-menu .act { color: #0969da; }
+  body.light .dd-menu .act:hover { background: #ddf4ff; }
+
+  .layout { flex: 1; display: flex; min-height: 0; }
+
+  /* chat */
+  .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .msgs { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 11px; }
+  .msgs > * { flex-shrink: 0; min-height: fit-content; }
+  .u {
+    color: #79c0ff; background: #111a26; border-left: 2px solid #388bfd;
+    padding: 7px 12px; border-radius: 0 4px 4px 0; margin-top: 6px;
+    user-select: text;
+  }
+  body.light .u { color: #0550ae; background: #ddf4ff; border-color: #0969da; }
+  .u::before { content: "> "; color: #388bfd; }
+  body.light .u::before { color: #0969da; }
+  /* agent text = calmer, dimmer than user block */
+  .ans { color: #a5adb6; }
+  body.light .ans { color: #424a53; }
+  .think-h { color: #8b7bb8; cursor: pointer; user-select: none; display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+  body.light .think-h { color: #8c959f; }
+  .think-h .dur, .think-h .tog { color: #484f58; }
+  .think-h .tog:hover { color: #6e7681; }
+  .think-body { color: #484f58; padding-left: 18px; white-space: pre-wrap; font-size: 12.5px; }
+  body.light .think-body { color: #8c959f; }
+  .act { display: flex; gap: 8px; }
+  .act.recon .g, .act.recon .lab { color: #39c5cf; }
+  .act.mut .g, .act.mut .lab { color: #d2a8ff; }
+  .act.exe .g, .act.exe .lab { color: #58a6ff; }
+  .act.meta .g, .act.meta .lab { color: #6e7681; }
+  .act .sep, .act .args { color: #6e7681; }
+  .act .ok { color: #3fb950; }
+  body.light .act.recon .g, body.light .act.recon .lab { color: #116329; }
+  body.light .act.mut .g, body.light .act.mut .lab { color: #8250df; }
+  body.light .act.exe .g, body.light .act.exe .lab { color: #0969da; }
+  body.light .act.meta .g, body.light .act.meta .lab { color: #57606a; }
+  body.light .act .sep, body.light .act .args { color: #656d76; }
+  body.light .act .ok { color: #1a7f37; }
+  .detail { color: #6e7681; padding-left: 26px; }
+  .metric { color: #6e7681; }
+  .warnline { color: #d29922; }
+  body.light .warnline { color: #9a6700; }
+  .q { color: #d29922; }
+  .q .opts { color: #58a6ff; padding-left: 18px; }
+  .q .opts span { cursor: pointer; }
+  .q .opts span:hover { text-decoration: underline; }
+  body.light .q { color: #9a6700; }
+  body.light .q .opts { color: #0969da; }
+  .code {
+    background: #10141b; color: #c9d1d9; padding: 8px 12px; border-radius: 4px;
+    white-space: pre; overflow-x: auto; color-scheme: dark;
+    flex-shrink: 0; max-height: 240px; overflow-y: auto;
+    font-size: 12.5px; line-height: 1.55;
+  }
+  body.light .code { background: #f6f8fa; color: #1f2328; border: 1px solid #d0d7de; }
+
+  /* tool payload cards in chat */
+  .imgcard {
+    margin-left: 26px; max-width: 360px; border-radius: 4px; overflow: hidden;
+    background: #10141b; border: 1px solid #1b2129;
+  }
+  body.light .imgcard { background: #f6f8fa; border-color: #d0d7de; }
+  .imgcard .ph {
+    height: 150px; display: flex; align-items: center; justify-content: center;
+    color: #484f58; font-size: 12px;
+    background:
+      linear-gradient(45deg, #131920 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(-45deg, #131920 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #131920 75%) -8px 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #131920 75%) -8px 0/16px 16px,
+      #0d1117;
+  }
+  body.light .imgcard .ph { background: #eaeef2; color: #8c959f; }
+  .imgcard .cap { padding: 6px 10px; color: #6e7681; font-size: 12px; }
+  .filecard {
+    margin-left: 26px; padding: 7px 12px; border-radius: 4px;
+    background: #10141b; border: 1px solid #1b2129; color: #8b949e;
+    display: flex; gap: 10px; align-items: baseline; font-size: 12.5px;
+    max-width: 480px;
+  }
+  body.light .filecard { background: #f6f8fa; border-color: #d0d7de; color: #57606a; }
+  .filecard .g { color: #39c5cf; }
+  .filecard .name { color: #c9d1d9; }
+  body.light .filecard .name { color: #1f2328; }
+  .filecard .meta { color: #484f58; margin-left: auto; }
+  .linkline { margin-left: 26px; }
+  .linkline a { color: #58a6ff; text-decoration: none; }
+  .linkline a:hover { text-decoration: underline; }
+  body.light .linkline a { color: #0969da; }
+  .linkline .dom { color: #484f58; }
+  .planblock {
+    margin-left: 26px; padding: 8px 12px; border-radius: 4px;
+    background: #10141b; border: 1px solid #1b2129; font-size: 12.5px;
+    max-width: 480px;
+  }
+  body.light .planblock { background: #f6f8fa; border-color: #d0d7de; }
+  .planblock .ph2 { color: #6e7681; margin-bottom: 5px; }
+  .planblock .st { padding: 2px 0 2px 14px; position: relative; color: #8b949e; }
+  .planblock .st.done { color: #3fb950; }
+  .planblock .st.cur { color: #58a6ff; }
+  body.light .planblock .st { color: #57606a; }
+  body.light .planblock .st.done { color: #1a7f37; }
+  body.light .planblock .st.cur { color: #0969da; }
+
+  /* extra chat patterns */
+  .startbanner { color: #484f58; }
+  .startbanner b { font-weight: 400; color: #6e7681; }
+  .errline { color: #ff7b72; }
+  body.light .errline { color: #cf222e; }
+  .errline .hint { color: #6e7681; padding-left: 26px; display: block; }
+  .grouped { color: #6e7681; padding-left: 8px; }
+  .grouped .pipe { color: #30363d; }
+  .busy { color: #8b7bb8; display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+  .busy .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progline { color: #6e7681; display: flex; gap: 8px; align-items: center; }
+  .progline .pb { color: #3fb950; letter-spacing: -1px; }
+  .sec-rule { color: #30363d; user-select: none; }
+  body.light .sec-rule { color: #d0d7de; }
+  .uimg {
+    display: inline-block; width: 72px; height: 52px; border-radius: 3px;
+    vertical-align: middle; margin-left: 8px;
+    background:
+      linear-gradient(45deg, #1b2129 25%, transparent 25%) -4px 0/8px 8px,
+      linear-gradient(-45deg, #1b2129 25%, transparent 25%) -4px 0/8px 8px,
+      linear-gradient(45deg, transparent 75%, #1b2129 75%) -4px 0/8px 8px,
+      linear-gradient(-45deg, transparent 75%, #1b2129 75%) -4px 0/8px 8px,
+      #0d1117;
+    border: 1px solid #30363d;
+  }
+  .cmdout { color: #8b949e; padding-left: 26px; white-space: pre-wrap; }
+  .sysline { color: #484f58; }
+  body.light .sysline { color: #8c959f; }
+  .empty {
+    color: #484f58; text-align: center; margin-top: 18vh; line-height: 2;
+  }
+  .empty .g { color: #3fb950; }
+
+  /* input */
+  .input-area { margin: 14px 22px 16px; }
+  .selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .sel { position: relative; }
+  .sel > button {
+    font: inherit; font-size: 12.5px; cursor: pointer;
+    background: #10141b; color: #8b949e; border: none; border-radius: 4px;
+    padding: 4px 10px;
+  }
+  body.light .sel > button { background: #f6f8fa; color: #57606a; border: 1px solid #d0d7de; }
+  .sel > button b { font-weight: 400; color: #d2a8ff; }
+  body.light .sel > button b { color: #8250df; }
+  .menu {
+    display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
+    background: #0d1117; border: 1px solid #1b2129; border-radius: 6px;
+    min-width: 200px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  body.light .menu { background: #ffffff; border-color: #d0d7de; }
+  .sel.open .menu { display: block; }
+  .menu .mi {
+    padding: 6px 10px; border-radius: 4px; cursor: pointer; color: #8b949e;
+    display: flex; justify-content: space-between; gap: 16px; font-size: 12.5px;
+  }
+  body.light .menu .mi { color: #57606a; }
+  .menu .mi:hover { background: #161b22; color: #c9d1d9; }
+  body.light .menu .mi:hover { background: #f6f8fa; color: #1f2328; }
+  .menu .mi.on { background: #12233a; color: #58a6ff; }
+  body.light .menu .mi.on { background: #ddf4ff; color: #0969da; }
+  .menu .sep { height: 1px; background: #1b2129; margin: 4px 0; }
+  body.light .menu .sep { background: #d0d7de; }
+
+  .inp {
+    width: 100%; padding: 12px 14px; resize: none; display: block;
+    background: #131a24; border: 1px solid #2ea04355; border-radius: 6px;
+    color: #c9d1d9; font: inherit; font-size: 13.5px; outline: none;
+    line-height: 1.5; min-height: 46px;
+  }
+  .inp:focus { border-color: #2ea043; box-shadow: 0 0 0 2px #2ea04333; }
+  body.light .inp { background: #ffffff; border-color: #1a7f37; color: #1f2328; }
+  .inp::placeholder { color: #6e7681; }
+  .inp-meta { display: flex; gap: 14px; margin-top: 6px; color: #484f58; font-size: 11.5px; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* sidebar — sections with independent scroll */
+  .sb {
+    width: 280px; min-width: 280px; display: flex; flex-direction: column;
+    border-left: 1px solid #161b22; background: #0b0e13; min-height: 0;
+  }
+  body.light .sb { background: #ffffff; border-color: #d0d7de; }
+  .sec {
+    display: flex; flex-direction: column; min-height: 0;
+    border-bottom: 1px solid #161b22;
+  }
+  body.light .sec { border-color: #d0d7de; }
+  .sec:last-child { border-bottom: none; }
+  .sec-h {
+    color: #6e7681; cursor: pointer; user-select: none;
+    display: flex; gap: 6px; align-items: center; font-size: 12.5px;
+    padding: 10px 16px 8px; flex-shrink: 0;
+  }
+  body.light .sec-h { color: #57606a; }
+  .sec-h:hover { color: #8b949e; }
+  .sec-h .n { margin-left: auto; color: #484f58; }
+  .sec-body {
+    overflow-y: auto; padding: 0 16px 12px;
+    min-height: 0;
+  }
+  .sec-body.collapsed { display: none; }
+  /* plan section takes the lion's share and scrolls */
+  .sec.plan-sec { flex: 1 1 auto; }
+  .sec.usage-sec { flex: 0 1 auto; max-height: 45%; }
+
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #1b2129; border-radius: 4px; }
+  body.light ::-webkit-scrollbar-thumb { background: #d0d7de; }
+
+  .plan-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #8b949e; font-size: 12px; }
+  .pbar { flex: 1; height: 6px; background: #161b22; border-radius: 3px; overflow: hidden; }
+  body.light .pbar { background: #eaeef2; }
+  .pbar i { display: block; height: 100%; background: #238636; transition: width .2s; }
+  .plan-step { padding: 4px 0 4px 16px; position: relative; color: #8b949e; }
+  .plan-step.done { color: #3fb950; }
+  .plan-step.cur { color: #58a6ff; }
+  .plan-step::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px; background: #1b2129; }
+  body.light .plan-step { color: #57606a; }
+  body.light .plan-step::before { background: #d0d7de; }
+  body.light .plan-step.done { color: #1a7f37; }
+  body.light .plan-step.cur { color: #0969da; }
+  .plan-step .sub { display: block; color: #484f58; font-size: 11.5px; padding-left: 0; }
+
+  .kv { display: flex; justify-content: space-between; padding: 2px 0; color: #8b949e; }
+  body.light .kv { color: #57606a; }
+  .kv b { font-weight: 400; color: #c9d1d9; }
+  body.light .kv b { color: #1f2328; }
+  .kv .dim { color: #6e7681; }
+  .kv .wn { color: #d29922; }
+  body.light .kv .wn { color: #9a6700; }
+  .bar { height: 4px; background: #161b22; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  body.light .bar { background: #eaeef2; }
+  .bar i { display: block; height: 100%; width: 36%; background: #238636; }
+
+  /* settings modal */
+  .overlay {
+    display: none; position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.55); align-items: center; justify-content: center;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    width: min(880px, 92vw); height: min(640px, 88vh);
+    background: #0d1117; border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  body.light .modal { background: #ffffff; }
+  .modal-top {
+    display: flex; align-items: center; padding: 10px 16px;
+    border-bottom: 1px solid #161b22; color: #c9d1d9; font-size: 13.5px;
+  }
+  body.light .modal-top { border-color: #d0d7de; color: #1f2328; }
+  .modal-top .x { margin-left: auto; cursor: pointer; color: #6e7681; }
+  .modal-top .x:hover { color: #c9d1d9; }
+  .modal-body { flex: 1; display: flex; min-height: 0; }
+  .menu-col {
+    width: 200px; min-width: 200px; padding: 12px 8px;
+    border-right: 1px solid #161b22; overflow-y: auto;
+  }
+  body.light .menu-col { border-color: #d0d7de; }
+  .menu-col .mi {
+    padding: 7px 12px; border-radius: 4px; cursor: pointer;
+    color: #8b949e; margin-bottom: 2px; font-size: 13px;
+  }
+  body.light .menu-col .mi { color: #57606a; }
+  .menu-col .mi:hover { background: #161b22; color: #c9d1d9; }
+  body.light .menu-col .mi:hover { background: #f6f8fa; color: #1f2328; }
+  .menu-col .mi.on { background: #12233a; color: #58a6ff; }
+  body.light .menu-col .mi.on { background: #ddf4ff; color: #0969da; }
+  .content-col { flex: 1; padding: 18px 22px; overflow-y: auto; }
+  .panel { display: none; }
+  .panel.on { display: block; }
+  .panel h3 { font-size: 14px; font-weight: 400; color: #c9d1d9; margin-bottom: 14px; }
+  body.light .panel h3 { color: #1f2328; }
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; border-bottom: 1px solid #131920; font-size: 13px; color: #8b949e;
+  }
+  body.light .row { border-color: #d8dee4; color: #57606a; }
+  .row:last-child { border-bottom: none; }
+  .row .val { color: #c9d1d9; }
+  body.light .row .val { color: #1f2328; }
+  .row .val.accent { color: #d2a8ff; }
+  body.light .row .val.accent { color: #8250df; }
+  .row .val.dim { color: #6e7681; }
+  .row .edit { color: #58a6ff; cursor: pointer; }
+  body.light .row .edit { color: #0969da; }
+  .toggle {
+    width: 34px; height: 18px; border-radius: 9px; background: #21262d;
+    position: relative; cursor: pointer;
+  }
+  body.light .toggle { background: #d0d7de; }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #8b949e; transition: .15s;
+  }
+  .toggle.on { background: #238636; }
+  .toggle.on::after { left: 18px; background: #fff; }
+  .seg { display: flex; gap: 4px; }
+  .seg button {
+    font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+    background: #10141b; color: #8b949e; border: none; border-radius: 4px;
+  }
+  body.light .seg button { background: #f6f8fa; color: #57606a; }
+  .seg button.on { background: #12233a; color: #58a6ff; }
+  body.light .seg button.on { background: #ddf4ff; color: #0969da; }
+  .list-line {
+    display: flex; gap: 8px; padding: 6px 0; color: #8b949e; font-size: 12.5px;
+    border-bottom: 1px solid #131920;
+  }
+  body.light .list-line { color: #57606a; border-color: #d8dee4; }
+  .list-line .g { color: #3fb950; }
+  .searchbox {
+    width: 100%; padding: 7px 10px; margin-bottom: 10px;
+    background: #10141b; border: 1px solid #1b2129; border-radius: 4px;
+    color: #c9d1d9; font: inherit; font-size: 12.5px;
+  }
+  body.light .searchbox { background: #f6f8fa; border-color: #d0d7de; color: #1f2328; }
+</style>
+</head>
+<body>
+
+<div class="bar-top">
+  <button class="icon-btn primary" id="newChat" title="new chat">+</button>
+  <button class="icon-btn" id="openSettings" title="settings">⚙</button>
+  <div class="dd" id="sessDD">
+    <button class="icon-btn" id="sessBtn" title="all sessions">☰</button>
+    <div class="dd-menu">
+      <div class="h">active</div>
+      <div class="si on"><span class="id">a1f2</span> лендинг <span class="meta">сейчас</span><span class="del" title="delete">✕</span></div>
+      <div class="h">recent</div>
+      <div class="si"><span class="id">b3c4</span> рефактор <span class="meta">вчера</span><span class="del">✕</span></div>
+      <div class="si"><span class="id">d5e6</span> research <span class="meta">2 дня</span><span class="del">✕</span></div>
+      <div class="si"><span class="id">f7a8</span> deploy fix <span class="meta">5 дней</span><span class="del">✕</span></div>
+      <div class="si"><span class="id">c9d0</span> docs i18n <span class="meta">неделю</span><span class="del">✕</span></div>
+      <div class="sep"></div>
+      <div class="act">+ new session</div>
+      <div class="act">↻ refresh</div>
+    </div>
+  </div>
+  <div class="tabstrip" id="tabstrip"></div>
+</div>
+
+<div class="layout">
+  <div class="chat">
+    <div class="msgs" id="msgs"></div>
+
+    <div class="input-area">
+      <div class="selectors">
+        <div class="sel" data-sel>
+          <button>model: <b>qwen3.5-9b</b> ▾</button>
+          <div class="menu">
+            <div class="mi on">qwen3.5-9b <span class="sub">32K</span></div>
+            <div class="mi">llama-3.1-8b <span class="sub">128K</span></div>
+            <div class="mi">phi-4-mini <span class="sub">16K</span></div>
+            <div class="mi">mistral-7b <span class="sub">32K</span></div>
+            <div class="sep"></div>
+            <div class="mi">↻ refresh list</div>
+          </div>
+        </div>
+        <div class="sel" data-sel>
+          <button>provider: <b>lmstudio</b> ▾</button>
+          <div class="menu">
+            <div class="mi on">lmstudio <span class="sub">local</span></div>
+            <div class="mi">openrouter <span class="sub">api</span></div>
+            <div class="mi">zen <span class="sub">api</span></div>
+            <div class="sep"></div>
+            <div class="mi">+ add provider…</div>
+          </div>
+        </div>
+        <div class="sel" data-sel>
+          <button>context: <b>32K</b> ▾</button>
+          <div class="menu">
+            <div class="mi on">32K <span class="sub">current</span></div>
+            <div class="mi">16K <span class="sub">экономно</span></div>
+            <div class="mi">8K <span class="sub">minimum</span></div>
+            <div class="sep"></div>
+            <div class="mi">custom…</div>
+          </div>
+        </div>
+      </div>
+      <textarea class="inp" id="inp" rows="2" placeholder="ввод сообщения… (/ — команды)"></textarea>
+      <div class="inp-meta"><span>Enter — отправить</span><span>Shift+Enter — новая строка</span><span>Esc — стоп</span></div>
+    </div>
+  </div>
+
+  <div class="sb">
+    <div class="sec plan-sec">
+      <div class="sec-h" data-collapse>▾ plan <span class="n">2 / 8</span></div>
+      <div class="sec-body">
+        <div class="plan-bar"><span class="pbar"><i style="width:25%"></i></span><span>25%</span></div>
+        <div class="plan-step done">✓ setup scaffold</div>
+        <div class="plan-step done">✓ write landing index</div>
+        <div class="plan-step cur">▸ write styles<span class="sub">в процессе · style.css</span></div>
+        <div class="plan-step">○ hero section</div>
+        <div class="plan-step">○ features grid</div>
+        <div class="plan-step">○ pricing block</div>
+        <div class="plan-step">○ faq accordion</div>
+        <div class="plan-step">○ responsive pass</div>
+        <div class="plan-step">○ final build + check links</div>
+        <div class="plan-step">○ deploy to gh-pages</div>
+      </div>
+    </div>
+
+    <div class="sec usage-sec">
+      <div class="sec-h" data-collapse>▾ session · usage</div>
+      <div class="sec-body">
+        <div class="kv"><span>session</span><b>a1f2</b></div>
+        <div class="kv"><span>context</span><b>11.4K / 32K</b></div>
+        <div class="bar"><i></i></div>
+        <div class="kv"><span>cache</span><b>24% hit</b></div>
+        <div class="kv"><span>cost</span><b>0.7¢</b></div>
+        <div class="kv"><span>compactions</span><b class="wn">⟳ 2</b></div>
+        <div class="kv"><span>quality</span><b>91%</b></div>
+        <div class="kv"><span>probe</span><b class="dim">32K ok</b></div>
+        <div class="kv"><span>tools</span><b>12 this turn</b></div>
+        <div class="kv"><span>plugins</span><b class="dim">2 · mcp 1</b></div>
+        <div class="kv"><span>memory</span><b class="dim">3 entries</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- settings modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-top">⚙ settings <span class="x" id="closeSettings">✕ close</span></div>
+    <div class="modal-body">
+      <div class="menu-col" id="setMenu">
+        <div class="mi on" data-p="general">General</div>
+        <div class="mi" data-p="model">Model &amp; Provider</div>
+        <div class="mi" data-p="context">Context</div>
+        <div class="mi" data-p="reasoning">Reasoning</div>
+        <div class="mi" data-p="ui">UI &amp; Theme</div>
+        <div class="mi" data-p="memory">Memory</div>
+        <div class="mi" data-p="skills">Skills</div>
+        <div class="mi" data-p="plugins">Plugins · MCP</div>
+        <div class="mi" data-p="security">Security</div>
+        <div class="mi" data-p="advanced">Advanced</div>
+      </div>
+      <div class="content-col">
+        <div class="panel on" id="p-general">
+          <h3>General</h3>
+          <div class="row"><span>locale</span><span class="val">en ▾</span></div>
+          <div class="row"><span>verbosity</span><span class="seg"><button>quiet</button><button class="on">normal</button><button>verbose</button></span></div>
+          <div class="row"><span>max tool iterations</span><span class="val">50</span></div>
+          <div class="row"><span>stuck threshold</span><span class="val">3</span></div>
+          <div class="row"><span>auto-update</span><span class="toggle on"></span></div>
+        </div>
+        <div class="panel" id="p-model">
+          <h3>Model &amp; Provider</h3>
+          <input class="searchbox" placeholder="search models…">
+          <div class="row"><span class="val accent">qwen3.5-9b</span><span class="val">32K · lmstudio ✓</span></div>
+          <div class="row"><span>llama-3.1-8b</span><span class="edit">use</span></div>
+          <div class="row"><span>phi-4-mini</span><span class="edit">use</span></div>
+          <div class="row"><span>mistral-7b</span><span class="edit">use</span></div>
+          <div class="row" style="margin-top:14px;"><span>active provider</span><span class="val">lmstudio ▾</span></div>
+          <div class="row"><span>priority</span><span class="val">1</span></div>
+          <div class="row"><span>rpm / parallel</span><span class="val">60 / 2</span></div>
+          <div class="row"><span>add provider</span><span class="edit">+ add</span></div>
+        </div>
+        <div class="panel" id="p-context">
+          <h3>Context</h3>
+          <div class="row"><span>context window</span><span class="seg"><button>8K</button><button>16K</button><button class="on">32K</button><button>64K</button></span></div>
+          <div class="row"><span>system prompt share</span><span class="val">10%</span></div>
+          <div class="row"><span>reserve</span><span class="val">15%</span></div>
+          <div class="row"><span>compaction min load</span><span class="val">0.5</span></div>
+          <div class="row"><span>instructions summarize</span><span class="toggle on"></span></div>
+          <div class="row"><span>context log</span><span class="toggle"></span></div>
+          <div class="row"><span>probe (LM Studio)</span><span class="val">32K ok</span></div>
+        </div>
+        <div class="panel" id="p-reasoning">
+          <h3>Reasoning</h3>
+          <div class="row"><span>show reasoning</span><span class="toggle on"></span></div>
+          <div class="row"><span>mode</span><span class="seg"><button class="on">auto</button><button>on</button><button>off</button></span></div>
+          <div class="row"><span>collapsed by default</span><span class="toggle"></span></div>
+          <div class="row"><span>budget</span><span class="val">auto</span></div>
+        </div>
+        <div class="panel" id="p-ui">
+          <h3>UI &amp; Theme</h3>
+          <div class="row"><span>theme</span><span class="seg" id="themeSeg"><button class="on">dark</button><button>light</button><button>auto</button></span></div>
+          <div class="row"><span>font size</span><span class="seg"><button>s</button><button class="on">m</button><button>l</button></span></div>
+          <div class="row"><span>sidebar default</span><span class="seg"><button>open</button><button class="on">remember</button></span></div>
+          <div class="row"><span>stream partials</span><span class="toggle on"></span></div>
+          <div class="row"><span>animations</span><span class="toggle on"></span></div>
+        </div>
+        <div class="panel" id="p-memory">
+          <h3>Memory</h3>
+          <input class="searchbox" placeholder="search memory…">
+          <div class="list-line"><span class="g">◆</span> user prefers RU docs <span style="margin-left:auto;">edit · del</span></div>
+          <div class="list-line"><span class="g">◆</span> deploy via gh-pages <span style="margin-left:auto;">edit · del</span></div>
+          <div class="list-line"><span class="g">◆</span> stack: vite + ts strict <span style="margin-left:auto;">edit · del</span></div>
+          <div class="row" style="margin-top:12px;"><span>add entry</span><span class="edit">+ remember…</span></div>
+          <div class="row"><span>export / import</span><span class="edit">json</span></div>
+        </div>
+        <div class="panel" id="p-skills">
+          <h3>Skills</h3>
+          <div class="row"><span>tdd</span><span class="toggle on"></span></div>
+          <div class="row"><span>code-review</span><span class="toggle on"></span></div>
+          <div class="row"><span>brainstorming</span><span class="toggle"></span></div>
+          <div class="row"><span>git-expert</span><span class="toggle on"></span></div>
+          <div class="row"><span>reload skill registry</span><span class="edit">↻</span></div>
+        </div>
+        <div class="panel" id="p-plugins">
+          <h3>Plugins · MCP</h3>
+          <div class="row"><span>plugin: trace-server</span><span class="toggle on"></span></div>
+          <div class="row"><span>plugin: web-ui</span><span class="toggle on"></span></div>
+          <div class="row"><span>mcp: fs</span><span class="val">connected</span></div>
+          <div class="row"><span>mcp: github</span><span class="val dim">off</span></div>
+          <div class="row"><span>reload plugins</span><span class="edit">↻</span></div>
+        </div>
+        <div class="panel" id="p-security">
+          <h3>Security</h3>
+          <div class="row"><span>protected paths</span><span class="toggle on"></span></div>
+          <div class="row"><span>restricted mode</span><span class="toggle"></span></div>
+          <div class="row"><span>approve bash</span><span class="seg"><button>always</button><button class="on">risky</button><button>never</button></span></div>
+          <div class="row"><span>web token</span><span class="val">•••••• <span class="edit">regen</span></span></div>
+          <div class="row"><span>bind host</span><span class="val">127.0.0.1 ▾</span></div>
+        </div>
+        <div class="panel" id="p-advanced">
+          <h3>Advanced</h3>
+          <div class="row"><span>log level</span><span class="val">info ▾</span></div>
+          <div class="row"><span>empty response retries</span><span class="val">2</span></div>
+          <div class="row"><span>rate limits</span><span class="val">defaults</span></div>
+          <div class="row"><span>config.json</span><span class="edit">open raw</span></div>
+          <div class="row"><span>reset section</span><span class="edit" style="color:#f85149;">reset</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- long chat transcript (rendered / cleared by new chat) ----
+  const transcript = `
+    <div class="startbanner">start: <b>qwen3.5-9b</b> · lmstudio · 32K · system prompt 2.1K · session a1f2</div>
+    <div class="u">собери лендинг про AI-инструменты</div>
+    <div class="think-h">✦ thinking <span class="dur">· 1.8s</span> <span class="tog">▾ hide</span></div>
+    <div class="think-body">✦ прикидываю структуру: hero, features, pricing, faq. Беру Vite + vanilla TS, шрифт system mono, тёмная тема по умолчанию…</div>
+    <div class="planblock">
+      <div class="ph2">◇ План · 5 шагов</div>
+      <div class="st cur">▸ setup scaffold</div>
+      <div class="st">○ write landing</div>
+      <div class="st">○ pricing + faq</div>
+      <div class="st">○ responsive</div>
+      <div class="st">○ final build</div>
+    </div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">package.json</span><span class="ok">✓</span></div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">src/app.ts</span><span class="ok">✓</span></div>
+    <div class="detail">↳ 84 строки · vite 5.4, без зависимостей</div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Создание папки</span><span class="sep">·</span><span class="args">landing/</span><span class="ok">✓</span></div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Запись файла</span><span class="sep">·</span><span class="args">landing/index.html</span><span class="ok">✓</span></div>
+    <div class="detail">↳ 128 строк · +2.1K</div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Запись файла</span><span class="sep">·</span><span class="args">landing/style.css</span><span class="ok">✓</span></div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Выполнение</span><span class="sep">·</span><span class="args">npm run build</span><span class="ok">✓ 2.1s</span></div>
+    <div class="code">vite v5.4.2 building for production...
+✓ 14 modules transformed
+dist/index.html   4.21 kB │ gzip: 1.42 kB</div>
+    <div class="grouped"><span class="pipe">│</span> 8 действий ✓</div>
+    <div class="ans">Каркас готов: index + стили + сборка зелёная.</div>
+    <div class="metric">⟡ 3.1K tok · 12% · 0.2¢ · 8.4s</div>
+    <div class="sec-rule">· · · · · · · · · · · · · · · · · · · · · · · ·</div>
+    <div class="u">/status</div>
+    <div class="cmdout">model qwen3.5-9b · provider lmstudio · context 11.4K/32K
+session a1f2 · plugins 2 · mcp 1 · skills 4 · verbosity normal</div>
+    <div class="sec-rule">· · · · · · · · · · · · · · · · · · · · · · · ·</div>
+    <div class="u">вот макет с мобилки <span class="uimg"></span></div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Изображение принято</span><span class="sep">·</span><span class="args">photo-mock.png</span><span class="ok">✓ 1024×768</span></div>
+    <div class="q">? Нужен блок pricing?
+      <div class="opts"><span>1. Да, три тира</span> &nbsp; <span>2. Только CTA</span> &nbsp; <span>3. Пропустить</span></div>
+    </div>
+    <div class="u">да, три тира, и добавь секцию FAQ</div>
+    <div class="think-h">✦ thinking <span class="dur">· 0.9s</span> <span class="tog">▾ hide</span></div>
+    <div class="think-body">✦ добавляю pricing (3 колонки) и FAQ (details/summary), без новых зависимостей…</div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">landing/index.html</span><span class="ok">✓</span></div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Правка файла</span><span class="sep">·</span><span class="args">landing/index.html</span><span class="ok">✓</span></div>
+    <div class="detail">↳ +64 строки · pricing, faq</div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Выполнение</span><span class="sep">·</span><span class="args">npm run build</span><span class="ok">✓ 1.8s</span></div>
+    <div class="act meta"><span class="g">◇</span><span class="lab">Загрузка скилла</span><span class="sep">·</span><span class="args">tdd</span><span class="ok">✓</span></div>
+    <div class="act meta"><span class="g">◇</span><span class="lab">Память</span><span class="sep">·</span><span class="args">remember deploy=gh-pages</span><span class="ok">✓</span></div>
+    <div class="warnline">⚠ compaction · история сжата · quality 91%</div>
+    <div class="warnline">⚠ защищённый путь .env — нужен явный запрос пользователя</div>
+    <div class="progline">▰▰▰▰▰▱▱▱▱▱ browser · навигация <span style="color:#484f58;">42%</span></div>
+    <div class="u">проверь ссылки в навигации</div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">landing/index.html</span><span class="ok">✓</span></div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Поиск</span><span class="sep">·</span><span class="args">href="#…"</span><span class="ok">✓ 6 found</span></div>
+    <div class="filecard"><span class="g">◇</span><span class="name">landing/index.html</span><span>html · 192 строки</span><span class="meta">view ↗</span></div>
+    <div class="linkline">↳ <a href="#">https://vitejs.dev/guide/</a> <span class="dom">· vitejs.dev</span></div>
+    <div class="ans">Ссылки в порядке: hero / features / pricing / faq — все якоря существуют. Одна ссылка на #team вела в никуда — убрал. Для деталей — <a href="#" style="color:#58a6ff;">docs Vite</a>.</div>
+    <div class="metric">⟡ 4.0K tok · 15% · 0.3¢ · 3.1s</div>
+    <div class="u">сделай hero покрупнее и добавь кнопку CTA</div>
+    <div class="think-h">✦ thinking <span class="dur">· 1.2s</span> <span class="tog">▾ hide</span></div>
+    <div class="think-body">✦ увеличиваю шрифт hero до clamp(2rem, 5vw, 3.5rem), кнопка — accent-зелёный, focus-ring…</div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">landing/style.css</span><span class="ok">✓</span></div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Правка файла</span><span class="sep">·</span><span class="args">landing/style.css</span><span class="ok">✓</span></div>
+    <div class="detail">↳ +18 строк · .hero, .cta</div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Правка файла</span><span class="sep">·</span><span class="args">landing/index.html</span><span class="ok">✓</span></div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Выполнение</span><span class="sep">·</span><span class="args">npm run build</span><span class="ok">✓ 1.7s</span></div>
+    <div class="ans">Hero увеличен, CTA-кнопка «Get started» с focus-ring и hover-подсветкой.</div>
+    <div class="metric">⟡ 5.6K tok · 18% · 0.4¢ · 2.8s</div>
+    <div class="u">а теперь responsive: проверь на 360px</div>
+    <div class="think-h">✦ thinking <span class="dur">· 2.3s</span> <span class="tog">▾ hide</span></div>
+    <div class="think-body">✦ прогоняю через browser tool с viewport 360×640, смотрю переполнения и горизонтальный скролл…</div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Браузер</span><span class="sep">·</span><span class="args">screenshot 360px</span><span class="ok">✓</span></div>
+    <div class="imgcard">
+      <div class="ph">◧ screenshot · 360×640</div>
+      <div class="cap">landing · viewport 360px · before fix</div>
+    </div>
+    <div class="detail">↳ найдено: pricing-grid не складывается, длинный h2 переполняет</div>
+    <div class="act mut"><span class="g">◇</span><span class="lab">Правка файла</span><span class="sep">·</span><span class="args">landing/style.css</span><span class="ok">✓</span></div>
+    <div class="detail">↳ +12 строк · @media (max-width: 480px)</div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Браузер</span><span class="sep">·</span><span class="args">screenshot 360px</span><span class="ok">✓</span></div>
+    <div class="imgcard">
+      <div class="ph">◧ screenshot · 360×640</div>
+      <div class="cap">landing · viewport 360px · after fix</div>
+    </div>
+    <div class="ans">На 360px всё складывается: сетки в 1 колонку, горизонтального скролла нет.</div>
+    <div class="metric">⟡ 8.9K tok · 21% · 0.6¢ · 12.4s</div>
+    <div class="u">отлично, собери финальный билд и дай ссылку</div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Выполнение</span><span class="sep">·</span><span class="args">npm run build</span><span class="ok">✓ 1.9s</span></div>
+    <div class="act exe"><span class="g">◇</span><span class="lab">Выполнение</span><span class="sep">·</span><span class="args">./deploy.sh</span><span class="ok" style="color:#ff7b72;">✗ exit 1</span></div>
+    <div class="errline">✗ Деплой не удался — deploy.sh завершился с exit 1
+      <span class="hint">↳ посмотри вывод выше; обычно не хватает SSH-ключа</span>
+    </div>
+    <div class="progline">▰▰▰▰▱▱▱▱▱▱ gh-pages · push <span style="color:#484f58;">40%</span></div>
+    <div class="busy"><span class="spin">✦</span> думаю <span style="color:#6e7681;">· 3.2s · Esc — стоп</span></div>
+    <div class="act recon"><span class="g">◇</span><span class="lab">Чтение файла</span><span class="sep">·</span><span class="args">dist/index.html</span><span class="ok">✓</span></div>
+    <div class="ans">Проблема в деплое — нет SSH-ключа в окружении. Локальный билд готов, gh-pages отложим.</div>
+    <div class="filecard"><span class="g">◇</span><span class="name">dist/index.html</span><span>built · 4.21 kB · gzip 1.42 kB</span><span class="meta">view ↗</span></div>
+    <div class="linkline">↳ <a href="#">file:///…/landing/dist/index.html</a> <span class="dom">· local preview</span></div>
+    <div class="metric">⟡ 11.4K tok · 24% · 0.7¢ · 6.4s</div>
+    <div class="sysline">— turn end · ok · tools 12 —</div>
+  `;
+  const emptyView = `
+    <div class="empty">
+      <span class="g">✦</span> новый чат<br>
+      <span style="color:#6e7681;">введи сообщение ниже · / — команды · модель и контекст выбираются над полем</span>
+    </div>
+  `;
+  const msgs = document.getElementById("msgs");
+  let hasTranscript = false;
+  function loadTranscript() {
+    msgs.innerHTML = transcript;
+    hasTranscript = true;
+    msgs.scrollTop = 99999;
+    bindThink();
+  }
+  function bindThink() {
+    msgs.querySelectorAll(".think-h").forEach(h => {
+      if (h.dataset.bound) return;
+      h.dataset.bound = "1";
+      h.addEventListener("click", () => {
+        const body = h.nextElementSibling;
+        const hidden = body.style.display === "none";
+        body.style.display = hidden ? "" : "none";
+        h.querySelector(".tog").textContent = hidden ? "▾ hide" : "▸ show";
+      });
+    });
+  }
+  loadTranscript();
+
+  // ---- session tabs (browser-like) ----
+  const tabstrip = document.getElementById("tabstrip");
+  let tabs = [{ id: "a1f2", name: "лендинг" }];
+  let activeTab = "a1f2";
+  const transcriptFor = (id) => (id === "a1f2" ? transcript : emptyView);
+
+  function renderTabs() {
+    tabstrip.innerHTML = "";
+    tabs.forEach(t => {
+      const el = document.createElement("div");
+      el.className = "stab" + (t.id === activeTab ? " on" : "");
+      el.innerHTML = `<span>${t.name}</span><span class="sid">${t.id}</span><span class="x" title="close">✕</span>`;
+      el.addEventListener("click", (e) => {
+        if (e.target.classList.contains("x")) { closeTab(t.id); return; }
+        activateTab(t.id);
+      });
+      tabstrip.appendChild(el);
+    });
+  }
+  function activateTab(id) {
+    activeTab = id;
+    const t = tabs.find(x => x.id === id);
+    msgs.innerHTML = t ? transcriptFor(id) : emptyView;
+    hasTranscript = id === "a1f2";
+    msgs.scrollTop = 99999;
+    bindThink();
+    renderTabs();
+  }
+  function closeTab(id) {
+    const i = tabs.findIndex(t => t.id === id);
+    tabs = tabs.filter(t => t.id !== id);
+    if (activeTab === id) {
+      const next = tabs[Math.min(i, tabs.length - 1)];
+      if (next) activateTab(next.id); else { activeTab = null; msgs.innerHTML = emptyView; hasTranscript = false; renderTabs(); }
+    } else renderTabs();
+  }
+  function openTab(id, name) {
+    if (!tabs.find(t => t.id === id)) tabs.push({ id, name });
+    activateTab(id);
+  }
+  renderTabs();
+
+  // new chat — opens a fresh tab
+  let newSeq = 0;
+  document.getElementById("newChat").addEventListener("click", () => {
+    newSeq++;
+    openTab("new" + newSeq, "новый чат");
+  });
+  // real input: Enter sends, Shift+Enter newline, Esc clears
+  const inp = document.getElementById("inp");
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const text = inp.value.trim();
+      if (!text) return;
+      if (msgs.querySelector(".empty")) msgs.innerHTML = "";
+      const u = document.createElement("div");
+      u.className = "u";
+      u.textContent = text;
+      msgs.appendChild(u);
+      const met = document.createElement("div");
+      met.className = "metric";
+      met.textContent = "⟡ … · … · …";
+      msgs.appendChild(met);
+      inp.value = "";
+      msgs.scrollTop = 99999;
+    }
+    if (e.key === "Escape") inp.value = "";
+  });
+
+  // sessions dropdown
+  const dd = document.getElementById("sessDD");
+  document.getElementById("sessBtn").addEventListener("click", e => {
+    e.stopPropagation();
+    document.querySelectorAll(".sel").forEach(s => s.classList.remove("open"));
+    dd.classList.toggle("open");
+  });
+  dd.querySelectorAll(".si").forEach(si => {
+    si.addEventListener("click", e => {
+      if (e.target.classList.contains("del")) {
+        si.style.opacity = ".3";
+        e.stopPropagation();
+        return;
+      }
+      const id = si.querySelector(".id").textContent;
+      const name = si.childNodes[1] ? si.childNodes[1].textContent.trim() : id;
+      dd.querySelectorAll(".si").forEach(x => x.classList.remove("on"));
+      si.classList.add("on");
+      dd.classList.remove("open");
+      openTab(id, name);
+    });
+  });
+  dd.querySelectorAll(".act").forEach(a => a.addEventListener("click", e => {
+    e.stopPropagation();
+    if (a.textContent.includes("new")) {
+      newSeq++;
+      openTab("new" + newSeq, "новый чат");
+    }
+    dd.classList.remove("open");
+  }));
+
+  // selector dropdowns
+  document.querySelectorAll("[data-sel]").forEach(sel => {
+    const btn = sel.querySelector("button");
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      dd.classList.remove("open");
+      document.querySelectorAll("[data-sel]").forEach(s => { if (s !== sel) s.classList.remove("open"); });
+      sel.classList.toggle("open");
+    });
+    sel.querySelectorAll(".mi").forEach(mi => {
+      mi.addEventListener("click", e => {
+        e.stopPropagation();
+        if (mi.classList.contains("on")) { sel.classList.remove("open"); return; }
+        const label = btn.textContent.replace(/[\s:▾]+$/,"").split(":")[0] + ": ";
+        const text = mi.childNodes[0].textContent.trim();
+        btn.innerHTML = label + "<b>" + text + "</b> ▾";
+        sel.querySelectorAll(".mi").forEach(x => x.classList.remove("on"));
+        mi.classList.add("on");
+        sel.classList.remove("open");
+      });
+    });
+  });
+  document.addEventListener("click", () => {
+    document.querySelectorAll("[data-sel]").forEach(s => s.classList.remove("open"));
+    dd.classList.remove("open");
+  });
+
+  // collapse sidebar sections
+  document.querySelectorAll("[data-collapse]").forEach(h => {
+    h.addEventListener("click", () => {
+      const body = h.nextElementSibling;
+      body.classList.toggle("collapsed");
+      h.textContent = (body.classList.contains("collapsed") ? "▸ " : "▾ ") + h.textContent.slice(2);
+    });
+  });
+
+  // settings modal
+  const overlay = document.getElementById("overlay");
+  document.getElementById("openSettings").addEventListener("click", () => overlay.classList.add("open"));
+  document.getElementById("closeSettings").addEventListener("click", () => overlay.classList.remove("open"));
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.classList.remove("open"); });
+  document.querySelectorAll("#setMenu .mi").forEach(mi => {
+    mi.addEventListener("click", () => {
+      document.querySelectorAll("#setMenu .mi").forEach(x => x.classList.remove("on"));
+      document.querySelectorAll(".content-col .panel").forEach(x => x.classList.remove("on"));
+      mi.classList.add("on");
+      document.getElementById("p-" + mi.dataset.p).classList.add("on");
+    });
+  });
+
+  // theme via settings segment
+  const themeSeg = document.getElementById("themeSeg");
+  themeSeg.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    document.body.classList.toggle("light", b.textContent === "light");
+  }));
+
+  // toggles / segments inside settings
+  document.querySelectorAll(".toggle").forEach(t => t.addEventListener("click", () => t.classList.toggle("on")));
+  document.querySelectorAll(".seg").forEach(seg => {
+    if (seg.id === "themeSeg") return;
+    seg.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+      seg.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+    }));
+  });
+</script>
+</body>
+</html>

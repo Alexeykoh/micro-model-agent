@@ -4,6 +4,7 @@ import { Spinner } from "../ui/spinner";
 import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
 import { getDefaultChannel } from "../output";
+import { probeChat } from "../modules/providers/preflight";
 import { SetupPrompt, type PromptInput } from "./setup-prompt";
 
 export interface SetupAnswers {
@@ -118,28 +119,7 @@ async function fetchModels(apiBase: string, apiKey: string): Promise<string[]> {
 
 async function testChat(apiBase: string, apiKey: string, model: string): Promise<boolean> {
   try {
-    const url = `${apiBase.replace(/\/+$/, "")}/chat/completions`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: 'Say "ok"' }],
-        max_tokens: 20,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) return false;
-    const data = (await resp.json()) as any;
-    const msg = data.choices?.[0]?.message;
-    const text = msg?.content || msg?.reasoning_content || "";
-    return text.length > 0;
+    return (await probeChat({ baseUrl: apiBase, apiKey, model }, 10000)) !== "";
   } catch {
     return false;
   }

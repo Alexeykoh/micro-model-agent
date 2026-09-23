@@ -30,6 +30,21 @@ export const editFileTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
+    if (ctx.writePathAllowlist) {
+      const ok = ctx.writePathAllowlist.some(
+        (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
+      );
+      if (!ok) {
+        return {
+          success: false,
+          output: t("file.path_not_allowed", {
+            path: `${path} — ${t("onboarding.write_restricted")}`,
+            reason: t("onboarding.write_restricted"),
+          }),
+        };
+      }
+    }
+
     // Get session-specific security config
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)

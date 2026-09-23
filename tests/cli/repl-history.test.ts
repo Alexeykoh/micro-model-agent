@@ -37,6 +37,7 @@ describe("REPL persistent history", () => {
     const mockAgent = {
       run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
       shutdown: () => {},
+      tryToolContext: () => undefined,
     } as any;
 
     const { channel } = makeCaptureChannel();
@@ -79,6 +80,7 @@ describe("REPL persistent history", () => {
     const mockAgent = {
       run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
       shutdown: () => {},
+      tryToolContext: () => undefined,
     } as any;
 
     const { channel } = makeCaptureChannel();

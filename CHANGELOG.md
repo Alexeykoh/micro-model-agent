@@ -4,6 +4,26 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-09-23
+
+### Added
+
+- **`meet` / «Познакомимся»** (`src/modules/onboarding/`): LLM-driven interview that records the user's usage profile, preferences and facts to global memory (`~/.mma/memory/preferences.json`, `facts.md`), domain-neutral (development, smart home, assistant, …).
+- **`init`** (`src/modules/onboarding/init.ts`): LLM generation/improvement of `AGENTS.md` for any workspace (code, docs, notes, configs); an existing file is improved in place with a diff and confirmation, never blindly replaced.
+- **REPL**: `/meet` (alias `/познакомимся`), `/init`, `/memory` (get/set/unset/find/forget), and a post-setup `[Y/n]` meet offer.
+- **CLI**: `mma meet`, `mma init` interactive entrypoints.
+- **Tools**: strict `ToolContext.toolAllowlist` enforced by the executor; `meet_done` sentinel tool; `question` rendering aligned with STYLE.md (`?` glyph, indented options, `>` prompt).
+- **Providers**: shared `preflightProvider`/`preflightFromConfig` (cheap `max_tokens=1` chat probe) gating LLM-dependent entry points.
+
+### Changed
+
+- **CLI**: the provider wizard is now `mma setup`; `mma init` generates/updates `AGENTS.md`.
+- **Agent**: universal positioning reaffirmed — onboarding and prompts are domain-neutral, not code-only.
+
+### Removed
+
+- **CLI**: `mma init` no longer configures a provider (hard rename, no alias).
+
 ## [2.0.0] - 2026-09-22
 
 ### Added

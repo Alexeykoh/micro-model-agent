@@ -38,6 +38,7 @@ import { mcpCallTool } from "./mcp-call";
 import { searchHistoryTool } from "./search-history";
 import { rememberTool } from "./remember";
 import { recallTool } from "./recall";
+import { meetDoneTool } from "./meet-done";
 import { createBrowserTool } from "./browser";
 import { attachImageTool } from "./attach-image";
 import { enableToolsTool } from "./enable-tools";
@@ -74,6 +75,7 @@ export {
   searchHistoryTool,
   rememberTool,
   recallTool,
+  meetDoneTool,
   createBrowserTool,
   attachImageTool,
   enableToolsTool,
@@ -111,6 +113,7 @@ export function registerAllTools(
     searchHistoryTool,
     attachImageTool,
     sessionInfoTool,
+    meetDoneTool,
   ];
 
   // On-demand tool activation is the default. When explicitly disabled
