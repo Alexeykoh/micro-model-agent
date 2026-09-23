@@ -97,6 +97,7 @@
   "tool.executed": "Executed {name}",
   "tool.failed": "Tool {name} failed: {error}",
   "tool.unknown": "Unknown tool: {name}",
+  "tool.not_allowed": "Tool not allowed in this mode: {name}",
   "tool.blocked": "Blocked by plugin: {plugin}",
   "tool.ui.security_blocked": "Blocked by security policy",
   "tool.ui.protected_path": "Protected path — confirmation needed",

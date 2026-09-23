@@ -51,6 +51,15 @@ export class ToolExecutor {
   }
 
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
+    const allow = this.ctx.toolAllowlist;
+    if (allow && !allow.includes(call.name)) {
+      return {
+        success: false,
+        output: t("tool.not_allowed", { name: call.name }),
+        toolCallId: call.id,
+      };
+    }
+
     const tool = this.registry.get(call.name);
     if (!tool) {
       return {
@@ -197,6 +206,19 @@ export class ToolExecutor {
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
+    const allow = this.ctx.toolAllowlist;
+    if (allow) {
+      const set = new Set(allow);
+      return this.registry
+        .getAll()
+        .filter((t) => set.has(t.name))
+        .map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+          boundedOutput: t.boundedOutput,
+        }));
+    }
     return this.registry.getAllForLLM(tags);
   }
 

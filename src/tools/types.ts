@@ -95,6 +95,19 @@ export interface ToolContext {
    */
   activeToolTags?: string[];
   /**
+   * Strict tool allowlist for the current turn/session. When set, ONLY these
+   * tool names are exposed to the LLM and executable — `alwaysOn` and tags do
+   * NOT bypass it. Used by onboarding so the agent cannot touch the repo.
+   * Undefined = normal tag-based selection.
+   */
+  toolAllowlist?: string[];
+  /**
+   * Shared onboarding state. Set by the `meet_done` sentinel tool and read by
+   * the REPL to leave meet mode. Carries the active guide block so the REPL
+   * can remove it on exit. Undefined outside an onboarding session.
+   */
+  onboarding?: { done: boolean; block?: import("../core/types").PromptBlock };
+  /**
    * Optional cleanup callback invoked by the executor when the tool times
    * out or is aborted. Used by subagent to restore the parent's scope even
    * when the agent's `finally` block never runs (abandoned promise).
