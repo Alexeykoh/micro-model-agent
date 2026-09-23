@@ -14,6 +14,9 @@ import type { WebUiState, WebUiAssets } from "./state";
 /** Max bytes accepted for a POST body (32KB text or 3×~6MB images + JSON overhead). */
 const MAX_BODY_BYTES = 24 * 1024 * 1024;
 
+/** Hard cap on a single message's text, independent of the transport body cap. */
+const MAX_MESSAGE_CHARS = 32 * 1024;
+
 const MAX_CLIENTS = Number(process.env.MMA_WEBUI_MAX_CLIENTS) || 5;
 
 /** Static routes served verbatim (never template-processed). */
@@ -77,21 +80,21 @@ function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
   });
 }
 
-/** Pull `{ text, images }` out of a parsed body; empty message → null. */
-function parseMessageBody(raw: string): { text: string; images: string[] } | null {
+/** Pull `{ text, images }` out of a parsed body; invalid JSON and empty are distinct. */
+function parseMessageBody(raw: string): { text: string; images: string[] } | { error: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { error: "invalid JSON" };
   }
   const rec =
     typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  const text = typeof rec.text === "string" ? rec.text : "";
+  const text = (typeof rec.text === "string" ? rec.text : "").slice(0, MAX_MESSAGE_CHARS);
   const images = Array.isArray(rec.images)
     ? rec.images.filter((i): i is string => typeof i === "string")
     : [];
-  if (text.trim().length === 0 && images.length === 0) return null;
+  if (text.trim().length === 0 && images.length === 0) return { error: "empty" };
   return { text, images };
 }
 
@@ -146,8 +149,8 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
     readBody(req)
       .then((raw) => {
         const body = parseMessageBody(raw);
-        if (!body) {
-          sendJson(res, 400, { error: "empty message" });
+        if ("error" in body) {
+          sendJson(res, 400, { error: body.error });
           return;
         }
         s.lastPostTs = Date.now();
