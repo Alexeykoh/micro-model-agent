@@ -41,6 +41,8 @@ export interface ConfigKeyDef {
   enumValues?: readonly string[];
   min?: number;
   max?: number;
+  /** Granularity hint for numeric UIs (e.g. token counts step by 1024). */
+  step?: number;
   reconfigure: boolean;
   readOnly?: boolean;
   get(config: AppConfig): unknown;
@@ -61,6 +63,9 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
     aliases: [`context.${key}`],
     domain: "budget",
     valueType: "share",
+    min: MIN_SHARE,
+    max: MAX_SHARE,
+    step: 0.01,
     reconfigure: true,
     get: (c) => c.contextBudget[field],
     set: (c, v) => setBudgetShare(c, key, v as number),
@@ -108,6 +113,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "budget",
     valueType: "int",
     min: 1024,
+    step: 1024,
     reconfigure: true,
     get: (c) => c.contextWindow,
     set: (c, v) => {
@@ -158,6 +164,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "agent",
     valueType: "int",
     min: 1,
+    step: 1,
     reconfigure: false,
     get: (c) => c.maxToolIterations,
     set: (c, v) => {
@@ -170,6 +177,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "agent",
     valueType: "int",
     min: 1,
+    step: 1,
     reconfigure: false,
     get: (c) => c.stuckThreshold,
     set: (c, v) => {

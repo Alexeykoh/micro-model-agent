@@ -757,9 +757,19 @@
     renderSessionsDropdown();
   }
 
-  function newChatTab() {
+  async function newChatTab() {
+    const r = await api("/api/sessions", { method: "POST", body: {} });
+    if (r.ok && r.data && r.data.session && r.data.session.id) {
+      const meta = r.data.session;
+      openTab(meta.id, meta.name || String(meta.id), "session", false);
+      await loadSessions();
+      return;
+    }
+    // Server-side creation failed (no manager / offline): keep a local-only tab
+    // so the user is not blocked, but surface the failure.
     newSeq++;
     openTab("new" + newSeq, "новый чат", "new", false);
+    setIndicator("session create failed", true);
   }
 
   document.getElementById("newChat").addEventListener("click", newChatTab);
@@ -1295,6 +1305,8 @@
     if (def.valueType === "int") {
       input.type = "number";
       if (def.min != null) input.min = String(def.min);
+      if (def.max != null) input.max = String(def.max);
+      if (def.step != null) input.step = String(def.step);
       input.value = value == null ? "" : String(value);
     } else if (def.valueType === "share") {
       input.value = value == null ? "" : Math.round(Number(value) * 100) + "%";

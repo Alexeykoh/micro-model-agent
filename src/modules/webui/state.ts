@@ -27,6 +27,12 @@ export interface WebSessionManager {
   getActive(): string | null;
   setActive(id: string): void;
   delete(id: string): void;
+  /**
+   * Create a new session (optionally named) and return its meta. Optional so
+   * list/activate/delete-only stubs stay valid; the create endpoint answers 503
+   * when a wired manager does not implement it.
+   */
+  create?(name?: string): SessionMeta;
   loadSessionLog?(id: string): SessionLogEntry[];
   getHistory?(id: string): SessionMessage[];
 }

@@ -17,7 +17,8 @@ import {
   sameOrigin,
   sendJson,
 } from "./util";
-import { handleConfigGet, handleConfigPost, handleModelsGet, handleSessionsApi } from "./config-api";
+import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
+import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
 import type { WebUiState, WebUiAssets } from "./state";
 

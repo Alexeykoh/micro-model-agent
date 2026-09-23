@@ -49,6 +49,7 @@ function meta(id: string, name: string, active: boolean): SessionMeta {
 function fakeSessions(initial: SessionMeta[], activeId: string | null): WebSessionManager {
   const store = new Map(initial.map((m) => [m.id, m]));
   let active = activeId;
+  let seq = initial.length;
   return {
     list: () => [...store.values()],
     get: (id) => store.get(id) ?? null,
@@ -56,6 +57,13 @@ function fakeSessions(initial: SessionMeta[], activeId: string | null): WebSessi
     setActive: (id) => {
       if (!store.has(id)) throw new Error("not found");
       active = id;
+    },
+    create: (name) => {
+      seq++;
+      const m = meta("s" + seq, name || "new", false);
+      store.set(m.id, m);
+      active = m.id;
+      return m;
     },
     delete: (id) => {
       if (!store.has(id)) throw new Error("not found");
@@ -245,6 +253,63 @@ describe("webui config/session/model REST", () => {
 
       const unknownDel = await doFetch(base + "/api/sessions/ghost", { method: "DELETE" });
       expect(unknownDel.status).toBe(404);
+    });
+  });
+
+  it("GET /api/config registry carries numeric min/max/step where applicable", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/config");
+      const body = (await res.json()) as {
+        registry: Array<{ key: string; min?: number; max?: number; step?: number }>;
+      };
+      const byKey = new Map(body.registry.map((e) => [e.key, e]));
+      expect(byKey.get("contextWindow")?.min).toBe(1024);
+      expect(byKey.get("contextWindow")?.step).toBe(1024);
+      const system = byKey.get("contextBudget.systemPrompt");
+      expect(system?.min).toBe(0.05);
+      expect(system?.max).toBe(0.9);
+      const reserve = byKey.get("contextBudget.responseReserve");
+      expect(reserve?.min).toBe(0.05);
+      expect(reserve?.max).toBe(0.9);
+      expect(byKey.get("model")?.min).toBeUndefined();
+    });
+  });
+
+  it("POST /api/sessions creates a session and returns its meta", async () => {
+    const s = createWebUiState();
+    s.sessionManager = fakeSessions([meta("s1", "one", true)], "s1");
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/sessions", { name: "brand new" });
+      expect(res.status).toBe(201);
+      expect(res.json.ok).toBe(true);
+      const session = res.json.session as Record<string, unknown>;
+      expect(typeof session.id).toBe("string");
+      expect(session.name).toBe("brand new");
+      expect(session.messageCount).toBe(1);
+      expect(s.sessionManager?.get(String(session.id))?.name).toBe("brand new");
+    });
+  });
+
+  it("POST /api/sessions accepts an empty body and defaults the name", async () => {
+    const s = createWebUiState();
+    s.sessionManager = fakeSessions([], null);
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/sessions", { method: "POST" });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { session: Record<string, unknown> };
+      expect(typeof body.session.id).toBe("string");
+      expect(body.session.name).toBe("new");
+    });
+  });
+
+  it("POST /api/sessions returns 503 without a manager", async () => {
+    const s = createWebUiState();
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/sessions", {});
+      expect(res.status).toBe(503);
+      expect(res.json.error).toBe("sessions_unavailable");
     });
   });
 
