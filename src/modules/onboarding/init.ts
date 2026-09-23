@@ -3,7 +3,7 @@ import type { ReplContext } from "../../cli/repl-commands";
 import type { PromptBlock } from "../../core/types";
 import { estimateTokens } from "../../llm/token-counter";
 import type { PreflightResult } from "../providers/preflight";
-import { preflightProvider, resolveProviderTarget } from "../providers/preflight";
+import { preflightFromConfig } from "../providers/preflight";
 import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "./prompts";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
@@ -24,16 +24,7 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
     return false;
   }
 
-  const check =
-    opts.preflight ??
-    (() => {
-      const target = resolveProviderTarget(ctx.config.provider);
-      return preflightProvider({
-        baseUrl: target.baseUrl,
-        apiKey: target.apiKey,
-        model: ctx.config.model,
-      });
-    });
+  const check = opts.preflight ?? (() => preflightFromConfig(ctx));
 
   const pre = await check();
   if (!pre.ok) {

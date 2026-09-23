@@ -1,6 +1,6 @@
 import type { ReplContext } from "../../cli/repl-commands";
 import type { PreflightResult } from "../providers/preflight";
-import { preflightProvider, resolveProviderTarget } from "../providers/preflight";
+import { preflightFromConfig } from "../providers/preflight";
 import { enterMeetMode } from "./mode";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
@@ -22,16 +22,7 @@ export async function runMeet(ctx: ReplContext, opts: RunMeetOptions = {}): Prom
     return true;
   }
 
-  const check =
-    opts.preflight ??
-    (() => {
-      const target = resolveProviderTarget(ctx.config.provider);
-      return preflightProvider({
-        baseUrl: target.baseUrl,
-        apiKey: target.apiKey,
-        model: ctx.config.model,
-      });
-    });
+  const check = opts.preflight ?? (() => preflightFromConfig(ctx));
 
   const pre = await check();
   if (!pre.ok) {

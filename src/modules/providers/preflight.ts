@@ -1,3 +1,4 @@
+import type { ProviderConfig } from "../../config/types";
 import { errMsg } from "../../utils";
 
 export interface PreflightConfig {
@@ -38,6 +39,21 @@ export function resolveProviderTarget(provider: {
     return { baseUrl: entry.baseUrl, apiKey: entry.apiKey ?? "" };
   }
   return { baseUrl: provider.baseUrl, apiKey: provider.apiKey ?? "" };
+}
+
+/** Minimal shape needed to preflight the configured active provider. */
+export interface PreflightContext {
+  config: { provider: ProviderConfig; model: string };
+}
+
+/** Resolve the active provider from config, then preflight it. */
+export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightResult> {
+  const target = resolveProviderTarget(ctx.config.provider);
+  return preflightProvider({
+    baseUrl: target.baseUrl,
+    apiKey: target.apiKey,
+    model: ctx.config.model,
+  });
 }
 
 /** Minimal, cheap chat probe: confirms the selected model is loaded. */

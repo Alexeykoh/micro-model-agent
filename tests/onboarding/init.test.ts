@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { runInit } from "../../src/modules/onboarding/init";
-import { INIT_TOOLS } from "../../src/modules/onboarding/prompts";
+import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "../../src/modules/onboarding/prompts";
 
 function fakeCtx() {
   return {
@@ -19,13 +19,20 @@ function fakeCtx() {
 describe("runInit", () => {
   it("sets an init allowlist, runs once, then restores state", async () => {
     const ctx = fakeCtx();
+    let captured: string[] | undefined;
+    ctx.runAgent = vi.fn(async () => {
+      captured = [...ctx.toolCtx.toolAllowlist];
+    });
     const ok = await runInit(ctx, { preflight: async () => ({ ok: true, reason: "ok", ms: 1 }) });
     expect(ok).toBe(true);
+    expect(captured).toEqual([...INIT_TOOLS]);
     expect(ctx.runAgent).toHaveBeenCalledOnce();
     expect(ctx.agent.pushPromptBlock).toHaveBeenCalledOnce();
+    expect(ctx.agent.pushPromptBlock).toHaveBeenCalledWith(
+      expect.objectContaining({ content: INIT_SYSTEM_PROMPT }),
+    );
     expect(ctx.agent.removePromptBlock).toHaveBeenCalledOnce();
     expect(ctx.toolCtx.toolAllowlist).toBeUndefined();
-    expect(ctx.toolCtx.onboarding).toBeUndefined();
   });
 
   it("refuses when preflight fails", async () => {
@@ -46,11 +53,19 @@ describe("runInit", () => {
 
   it("uses the full init allowlist and removes the block on failure", async () => {
     const ctx = fakeCtx();
-    ctx.runAgent = vi.fn(async () => { throw new Error("boom"); });
+    let captured: string[] | undefined;
+    ctx.runAgent = vi.fn(async () => {
+      captured = [...ctx.toolCtx.toolAllowlist];
+      throw new Error("boom");
+    });
     await expect(
       runInit(ctx, { preflight: async () => ({ ok: true, reason: "ok", ms: 1 }) }),
     ).rejects.toThrow("boom");
+    expect(captured).toEqual([...INIT_TOOLS]);
     expect(ctx.toolCtx.toolAllowlist).toBeUndefined();
-    expect(ctx.agent.removePromptBlock).toHaveBeenCalled();
+    expect(ctx.agent.removePromptBlock).toHaveBeenCalledOnce();
+    const block = ctx.agent.pushPromptBlock.mock.calls[0]?.[0];
+    expect(block.content).toBe(INIT_SYSTEM_PROMPT);
+    expect(block.kind).toBeUndefined();
   });
 });
