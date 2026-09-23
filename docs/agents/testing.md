@@ -64,12 +64,12 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
    - `/memory forget facts 1` удаляет одну запись и сообщает об этом; повторный вызов на
      пустой категории даёт мягкое `memory_entry_not_found`.
 
-5. **`mma init` — AGENTS.md.**
-   - Песочница **без** `AGENTS.md`: `bun run mma init -d _testing/init-new` → файл создан в
+5. **`mma agents init` — AGENTS.md.**
+   - Песочница **без** `AGENTS.md`: `bun run mma agents init -d _testing/init-new` → файл создан в
      `_testing/init-new/AGENTS.md`, содержимое осмысленно и не про выдуманные фреймворки.
    - Песочница **с** существующим `AGENTS.md`: запусти снова → агент показывает diff
      предлагаемой версии, **спрашивает подтверждение** и улучшает файл in place (не затирает вслепую).
-   - Не-кодовый workspace (папка заметок/конфигов): `init` не требует lockfile/сборки.
+   - Не-кодовый workspace (папка заметок/конфигов): `agents init` не требует lockfile/сборки.
 
 6. **Прерывание и выход из режима.**
    - `Esc` посреди `meet` прерывает **только текущий ход** — режим знакомства остаётся активным,

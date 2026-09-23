@@ -99,7 +99,7 @@ bun run build:prod
 bun run mma setup
 ```
 
-Сканирует локальные порты, находит модель, тестирует соединение и записывает конфиг.
+Сканирует локальные порты, находит модель, тестирует соединение и записывает конфиг. Устаревший алиас: `bun run mma init`.
 
 ### 3. Используйте агента
 
@@ -122,8 +122,9 @@ bun run mma "<prompt>"
 
 # Подкоманды
 bun run mma setup                      # Интерактивный мастер настройки
+bun run mma init                       # Устаревший алиас mma setup (мастер провайдера)
 bun run mma meet                       # «Познакомимся» — интервью, пишет в память
-bun run mma init                       # Создать/улучшить AGENTS.md для workspace
+bun run mma agents init                # Создать/улучшить AGENTS.md для workspace
 bun run mma config set model qwen/qwen3.5-9b
 bun run mma config show
 bun run mma model list                 # Список доступных моделей (✔ = сертифицирована)

@@ -40,18 +40,18 @@ export function configForDisplay<T>(config: T, showSecrets?: boolean): T {
   return showSecrets ? config : redactConfigSecrets(config);
 }
 
+/** Shared body of the provider setup wizard (`mma setup` and deprecated `mma init`). */
+async function runWizardCommand(): Promise<void> {
+  const answers = await runSetup();
+  const configPath = join(homedir(), ".mma", "config.json");
+  const { config } = await bootstrap();
+  applyAnswersToConfig(config, answers);
+  saveConfig(config, configPath, dirname(configPath));
+  getDefaultChannel().writeLine(t("cli.config_saved"));
+}
+
 function buildSetupCommand(program: Command): void {
-  program
-    .command("setup")
-    .description(t("cli.setup"))
-    .action(async () => {
-      const answers = await runSetup();
-      const configPath = join(homedir(), ".mma", "config.json");
-      const { config } = await bootstrap();
-      applyAnswersToConfig(config, answers);
-      saveConfig(config, configPath, dirname(configPath));
-      getDefaultChannel().writeLine(t("cli.config_saved"));
-    });
+  program.command("setup").description(t("cli.setup")).action(runWizardCommand);
 }
 
 function buildMeetCommand(program: Command): void {
@@ -59,7 +59,21 @@ function buildMeetCommand(program: Command): void {
 }
 
 function buildInitCommand(program: Command): void {
-  program.command("init").description(t("cli.init")).action(() => {});
+  program
+    .command("init")
+    .description(t("cli.init"))
+    .action(async () => {
+      getDefaultChannel().writeLine(pc.yellow(t("cli.init_deprecated")));
+      await runWizardCommand();
+    });
+}
+
+function buildAgentsCommand(program: Command): void {
+  const agents = program.command("agents").description(t("cli.agents"));
+  agents
+    .command("init")
+    .description(t("cli.agents_init"))
+    .action(() => {});
 }
 
 function buildConfigCommands(program: Command): void {
@@ -741,6 +755,7 @@ export function createProgram(): Command {
   buildSetupCommand(program);
   buildMeetCommand(program);
   buildInitCommand(program);
+  buildAgentsCommand(program);
   buildConfigCommands(program);
   buildModelCommands(program);
   buildContextCommand(program);
@@ -781,10 +796,11 @@ export function createProgram(): Command {
     });
     for (const sub of cmd.commands) attachOneShotExit(sub);
   };
-  // `meet`/`init` are not one-shot: their empty actions only mark intent, and
+  // `meet`/`agents` are not one-shot: their empty actions only mark intent, and
   // main.ts falls through to the interactive REPL. The exit hook would fire
   // during program.parse() and kill the process before the REPL branch runs.
-  const onboardingCommands = new Set(["meet", "init"]);
+  // `mma init`/`mma setup` ARE one-shot wizards and must exit after running.
+  const onboardingCommands = new Set(["meet", "agents"]);
   for (const cmd of program.commands) {
     if (onboardingCommands.has(cmd.name())) continue;
     attachOneShotExit(cmd);

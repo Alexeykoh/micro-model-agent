@@ -14,8 +14,8 @@
 
 | Version Part      | When to Bump                                                                                                                    | Examples                                                                               |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **MAJOR** (X.0.0) | Breaking changes: API changes, config schema changes, removed commands/tools, architecture rewrites                             | v1.0.0 → v2.0.0 (MMA v1→v2 rewrite), config version field change                       |
-| **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands                                      | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook       |
+| **MAJOR** (X.0.0) | Real breakage with **no compatibility path**: incompatible config schema, unreadable old sessions, removing a command/tool/module that shipped **without an alias**, breaking `LLMProvider`/plugin/`--json` contract, behavior-contract rewrite | v1.0.0 → v2.0.0 (MMA v1→v2 rewrite), config version field change                       |
+| **MINOR** (0.Y.0) | New features, new commands, new tools, new modules, new REPL commands, new CLI subcommands, new behavior; **renaming with a working deprecation alias**; additive `--json` fields | Add `/reload`, `mma model list`, new security policy, new skill, new plugin hook       |
 | **PATCH** (0.0.Z) | Bug fixes, typo fixes, i18n additions, doc updates, performance improvements, test additions, dependency updates (non-breaking) | Fix crash in `bash` tool, add ru translation, update README, fix typo in error message |
 
 ### Release Process
@@ -60,14 +60,24 @@
 
 ### Commands that require MAJOR bump
 
-- Removing/renaming CLI commands
-- Changing config schema (breaking)
-- Removing tools/modules
-- Changing Agent loop state machine
-- Changing LLMProvider interface (breaking)
-- Architecture rewrites
+Only **real breakage with no compatibility path**:
 
-### Current Version: 1.0.1
+- Removing/renaming a CLI command, tool or module that shipped in a published release **without a deprecation alias**
+- Changing the config schema so existing config becomes invalid/unreadable
+- Changing session/data format so old sessions can no longer be read
+- Changing `LLMProvider` / plugin API / `--json` contract in a breaking way
+- Architecture rewrites that change behavior contracts
+
+Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
+
+### Rules of restraint
+
+1. A MAJOR bump requires at least one entry under `### Removed` or `### Changed (breaking)` in `CHANGELOG.md` — otherwise it is not MAJOR.
+2. Prefer **alias + MINOR** over a hard rename + MAJOR.
+3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
+4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
+
+### Current Version: 2.1.0
 
 - **80** = REPL `/provider add` + subcommand handler maps (user request: «как через команду добавить провайдера? … можно прямо в агенте?»): (1) **`/provider add`** (`src/cli/repl-commands.ts`) — зеркало `mma provider add` без выхода из REPL (`--url/--key/--priority/--context-window/--rpm/--parallel`): сидит legacy-провайдера в `provider.entries`, сохраняет конфиг и вызывает `agent.reconfigure()`; подсказка переключения `/provider use <name>`; в completer добавлен `add`; i18n `repl.provider_add_missing_value`/`repl.provider_switch_hint` (en+ru). (2) **Handler-map dispatch** — `/provider`, `/model`, `/skill` и `SkillNameProvider.complete` переведены с цепочек `if (subcmd === …)` на карты `Record<string, handler>`; зафиксировано правилом архитектуры #17. Version: **0.63.0** (MINOR — new REPL subcommand).
 

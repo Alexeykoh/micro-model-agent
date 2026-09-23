@@ -1632,17 +1632,17 @@ git commit -m "feat(repl): post-setup [Y/n] meet offer + env entrypoints"
 ## Task 16: Docs, version, changelog
 
 **Files:**
-- Modify: `package.json` (`version` → `3.0.0`)
-- Modify: `CHANGELOG.md` (new `## [3.0.0] - 2026-09-23`)
+- Modify: `package.json` (`version` → `2.1.0`)
+- Modify: `CHANGELOG.md` (new `## [2.1.0] - 2026-09-23`)
 - Modify: `AGENTS.md` (commands table, Quick Reference)
 - Modify: `docs/agents/testing.md` (onboarding scenarios)
 
-- [ ] **Step 1: Bump version** in `package.json` to `3.0.0`.
+- [ ] **Step 1: Bump version** in `package.json` to `2.1.0`.
 
 - [ ] **Step 2: CHANGELOG** — add:
 
 ```markdown
-## [3.0.0] - 2026-09-23
+## [2.1.0] - 2026-09-23
 
 ### Added
 - **onboarding**: `meet` («Познакомимся») — LLM interview that records user preferences/facts to global memory (`preferences.json`, `facts.md`).
@@ -1672,7 +1672,7 @@ Expected: all tests pass, no type errors.
 
 ```bash
 git add package.json CHANGELOG.md AGENTS.md docs/agents/testing.md
-git commit -m "docs+release: onboarding commands (3.0.0)"
+git commit -m "docs+release: onboarding commands (2.1.0)"
 ```
 
 ---

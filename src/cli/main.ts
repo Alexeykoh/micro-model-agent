@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     break;
   }
   const onboardingStart =
-    firstPositional === "meet" ? "meet" : firstPositional === "init" ? "init" : null;
+    firstPositional === "meet" ? "meet" : firstPositional === "agents" ? "init" : null;
   if (
     firstPositional &&
     !onboardingStart &&
