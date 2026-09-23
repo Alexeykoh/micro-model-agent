@@ -640,6 +640,15 @@ export class Repl implements ReplContext {
     this.promptPresented = true;
   }
 
+  /** Restore the normal input prompt after a startup question, if a LineEditor is active. */
+  private restoreStartupPrompt(): void {
+    if (this.rl instanceof LineEditor) {
+      this.rl.setPrompt(this.inputPrompt());
+      this.rl.prompt();
+      this.promptPresented = true;
+    }
+  }
+
   /**
    * Reasoning label shown in the input prompt. In `auto` mode the effective
    * level is normally decided per iteration by the policy, so we show only the
@@ -1218,43 +1227,50 @@ export class Repl implements ReplContext {
     this.rl.prompt();
     this.promptPresented = true;
 
-    if (process.env.MMA_START_MEET === "1" || process.env.MMA_START_INIT === "1") {
-      const mode = process.env.MMA_START_MEET === "1" ? "meet" : "init";
-      delete process.env.MMA_START_MEET;
-      delete process.env.MMA_START_INIT;
-      this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
-      if (mode === "meet") {
-        const { runMeet } = await import("../modules/onboarding/meet");
-        await runMeet(this);
-      } else {
-        const { runInit } = await import("../modules/onboarding/init");
-        await runInit(this);
-      }
-    } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
-      const { preflightFromConfig } = await import("../modules/providers/preflight");
-      const pre = await preflightFromConfig(this);
-      if (pre.ok) {
-        this.output.writeLine(pc.dim(`${t("repl.meet_offer")} ${t("repl.meet_offer_hint")}`));
-        const answer = (
-          await new Promise<string>((resolve) => this.rl.question("[Y/n] ", resolve))
-        )
-          .trim()
-          .toLowerCase();
-        const yes =
-          answer === "" ||
-          answer === "y" ||
-          answer === "yes" ||
-          answer === "да" ||
-          answer === "д";
-        if (yes) {
-          this.slog.logOnboarding("meet_start", { model: this.config.model });
+    try {
+      if (process.env.MMA_START_MEET === "1" || process.env.MMA_START_INIT === "1") {
+        const mode = process.env.MMA_START_MEET === "1" ? "meet" : "init";
+        delete process.env.MMA_START_MEET;
+        delete process.env.MMA_START_INIT;
+        this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
+        if (mode === "meet") {
           const { runMeet } = await import("../modules/onboarding/meet");
-          await runMeet(this, { preflight: async () => pre });
+          await runMeet(this);
+        } else {
+          const { runInit } = await import("../modules/onboarding/init");
+          await runInit(this);
         }
-      } else {
-        this.output.writeLine(pc.yellow(t("onboarding.provider_down", { cmd: "meet" })));
-        this.output.writeLine(t("onboarding.provider_down_hint", { cmd: "meet" }));
+      } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
+        const { preflightFromConfig } = await import("../modules/providers/preflight");
+        const pre = await preflightFromConfig(this);
+        if (pre.ok) {
+          this.output.writeLine(pc.dim(`${t("repl.meet_offer")} ${t("repl.meet_offer_hint")}`));
+          const answer = (
+            await new Promise<string>((resolve) => this.rl.question("[Y/n] ", resolve))
+          )
+            .trim()
+            .toLowerCase();
+          const yes =
+            answer === "" ||
+            answer === "y" ||
+            answer === "yes" ||
+            answer === "да" ||
+            answer === "д";
+          if (yes) {
+            this.slog.logOnboarding("meet_start", { model: this.config.model });
+            const { runMeet } = await import("../modules/onboarding/meet");
+            await runMeet(this, { preflight: async () => pre });
+          } else {
+            this.restoreStartupPrompt();
+          }
+        } else {
+          this.output.writeLine(pc.yellow(t("onboarding.provider_down", { cmd: "meet" })));
+          this.output.writeLine(t("onboarding.provider_down_hint", { cmd: "meet" }));
+        }
       }
+    } catch (err) {
+      this.logger?.debug(`Onboarding startup skipped: ${String(err)}`);
+      this.restoreStartupPrompt();
     }
 
     if (lspEnabled) {
