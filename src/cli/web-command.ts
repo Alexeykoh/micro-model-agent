@@ -18,6 +18,7 @@ export interface WebCommandOptions {
   token?: string;
   noOpen?: boolean;
   projectDir?: string;
+  noAgentsMd?: boolean;
 }
 
 /**
@@ -34,6 +35,17 @@ export function parsePort(raw: string | undefined): number | undefined {
   return n;
 }
 
+/**
+ * Bootstrap arguments used by `runWeb`. Extracted so the CLI-flag forwarding
+ * (notably `--no-agents-md`) is unit-testable without booting the real agent —
+ * Bun module mocks are process-global, so a spy on `bootstrap` would leak.
+ */
+export function webBootstrapArgs(
+  opts: WebCommandOptions,
+): [undefined, string | undefined, boolean | undefined, true] {
+  return [undefined, opts.projectDir, opts.noAgentsMd, true];
+}
+
 export async function runWeb(opts: WebCommandOptions): Promise<void> {
   // The transport reads these at startup (server/state): port has no config
   // field, so the CLI flag maps onto the env var the server already honours.
@@ -48,10 +60,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
 
   // exitOnComplete=true: no interactive prompt owns stdin in web mode.
   const { agent, config, sessionManager, execModule, configDir } = await bootstrap(
-    undefined,
-    opts.projectDir,
-    undefined,
-    true,
+    ...webBootstrapArgs(opts),
   );
 
   if (virgin) {

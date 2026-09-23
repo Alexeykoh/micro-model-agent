@@ -97,7 +97,9 @@ async function main(): Promise<void> {
 
   const cmdNames = new Set(program.commands.map((c) => c.name()));
   const opts = program.opts();
-  const noAgentsMd = opts.noAgentsMd === true;
+  // commander turns `--no-agents-md` into the negatable `agentsMd` boolean
+  // (default true); there is no `noAgentsMd` key.
+  const noAgentsMd = opts.agentsMd === false;
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
   const jsonOpt = opts.json === true;
@@ -132,6 +134,7 @@ async function main(): Promise<void> {
       token: webOpts.token,
       noOpen: webOpts.open === false,
       projectDir,
+      noAgentsMd,
     });
     process.exit(0);
   }
