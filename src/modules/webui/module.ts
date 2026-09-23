@@ -97,6 +97,19 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
   return usage;
 }
 
+/**
+ * Resolve the plan snapshot to broadcast after a tool ends. Only `plan`/`todo`
+ * tools mutate the active plan, so any other tool yields `null` (no event).
+ * Pure so the hook is testable without booting the agent/server.
+ */
+export function planEventFor(
+  toolName: string,
+  execModule?: Pick<ExecutionModule, "getActivePlan">,
+): HostStateSnapshot["plan"] | null {
+  if (toolName !== "plan" && toolName !== "todo") return null;
+  return planSnapshotFromModule(adaptActivePlan(execModule?.getActivePlan()));
+}
+
 /** Build the host snapshot from live module state (correction #6). */
 export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSnapshot {
   const meta = deps.sessionManager?.getActiveMeta();
@@ -204,6 +217,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           } else {
             toolCalls++;
             forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
+            // A finished `plan`/`todo` tool refreshes the feed's plan card; the
+            // sidebar keeps its own `/api/state` projection.
+            const plan = planEventFor(ev.tool, deps.execModule);
+            if (plan) forwarder.onPlan(plan);
           }
         },
         (phase) => forwarder.onPhase(phase),

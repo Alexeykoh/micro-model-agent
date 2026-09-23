@@ -221,6 +221,8 @@
   function clearFeed(feed) {
     if (!feed) return;
     feed.replaceChildren(emptyView());
+    const t = tabs.find((x) => x.feed === feed);
+    if (t) t.planCard = null;
     if (feed === activeFeed()) scroll();
   }
 
@@ -520,6 +522,8 @@
     finishMeta();
     curText = null;
     flushRun();
+    const live = tabs.find((x) => x.id === liveTabId);
+    if (live) live.planCard = null;
     const feed = liveFeed();
     if (!feed) return;
     if (data.success === false) {
@@ -711,6 +715,7 @@
         feed: makeFeed(),
         historyLoaded: false,
         historyLoading: false,
+        planCard: null,
       };
       tabs.push(t);
     } else if (name) {
@@ -1072,6 +1077,49 @@
     });
   }
 
+  function onPlan(data) {
+    const feed = liveFeed();
+    if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
+    clearEmpty(feed);
+    const t = tabs.find((x) => x.id === liveTabId);
+    let card = t ? t.planCard : null;
+    if (!card || card.parentNode !== feed) {
+      card = el("div", "planblock");
+      appendTo(feed, card);
+      if (t) t.planCard = card;
+    }
+    card.textContent = "";
+    const total = data.steps.length;
+    const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
+    card.appendChild(el("div", "ph2", "◇ План · " + total + " шагов"));
+    data.steps.forEach((step, i) => {
+      const status =
+        step.status === "done" ? "done" : step.status === "failed" ? "fail" : i === cur ? "cur" : "";
+      const glyph =
+        step.status === "done" ? "✓ " : step.status === "failed" ? "✗ " : i === cur ? "▸ " : "○ ";
+      card.appendChild(el("div", ("st " + status).trim(), glyph + step.text));
+    });
+    if (feed === activeFeed()) scroll();
+  }
+
+  function onQuestion(data) {
+    if (!data || typeof data.text !== "string") return;
+    const feed = liveFeed();
+    if (!feed) return;
+    clearEmpty(feed);
+    const block = el("div", "q placeholder");
+    block.appendChild(document.createTextNode("? " + data.text));
+    if (Array.isArray(data.options) && data.options.length) {
+      const opts = el("div", "opts");
+      data.options.forEach((o, i) => {
+        if (i > 0) opts.appendChild(document.createTextNode(" \u00a0 "));
+        opts.appendChild(el("span", "", i + 1 + ". " + o));
+      });
+      block.appendChild(opts);
+    }
+    appendTo(feed, block);
+  }
+
   function usageRow(label, value, cls) {
     const row = el("div", "kv");
     row.appendChild(el("span", "", label));
@@ -1165,6 +1213,14 @@
     es.addEventListener("tool_end", (e) => {
       const d = parse(e);
       if (d) onToolEnd(d);
+    });
+    es.addEventListener("plan", (e) => {
+      const d = parse(e);
+      if (d) onPlan(d);
+    });
+    es.addEventListener("question", (e) => {
+      const d = parse(e);
+      if (d) onQuestion(d);
     });
     es.addEventListener("turn_end", (e) => {
       const d = parse(e);

@@ -230,6 +230,8 @@ body {
 .q .opts { color: var(--accent); padding-left: 18px; }
 .q .opts span { cursor: pointer; }
 .q .opts span:hover { text-decoration: underline; }
+.q.placeholder { color: var(--dim-a); }
+.q.placeholder .opts { color: var(--dim-b); }
 .code {
   background: var(--surface); color: var(--fg); padding: 8px 12px; border-radius: 4px;
   white-space: pre; overflow-x: auto; color-scheme: dark;
@@ -282,6 +284,7 @@ body.light .imgcard .ph { background: var(--ph-light); }
 .planblock .st { padding: 2px 0 2px 14px; position: relative; color: var(--muted); }
 .planblock .st.done { color: var(--green); }
 .planblock .st.cur { color: var(--accent); }
+.planblock .st.fail { color: var(--err); }
 
 /* extra chat patterns */
 .startbanner { color: var(--dim-b); }

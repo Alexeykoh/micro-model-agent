@@ -14,7 +14,14 @@ import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import type { ToolCall, ToolResult } from "../../tools/types";
+import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
+
+/**
+ * Non-null plan snapshot carried by the dedicated SSE `plan` event. Reuses the
+ * host contract so the browser card and the sidebar render the same shape.
+ */
+export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
 
 /**
  * Redact credential-shaped strings anywhere inside a tool-argument object,
@@ -79,6 +86,8 @@ export interface Forwarder {
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
+  /** Dedicated plan snapshot event (emitted after a `plan`/`todo` tool ends). */
+  onPlan(plan: PlanSnapshot): void;
   onTurnEnd(summary: TurnEndSummary): void;
   flushNow(): void;
 }
@@ -143,6 +152,15 @@ export function makeForwarder(
         success: result.success,
         durationMs,
         output: redactContextSecrets(clipToolOutput(call.name, result.output || "")),
+      });
+    },
+    onPlan(plan) {
+      flush();
+      sink({
+        type: "plan",
+        ts: Date.now(),
+        steps: plan.steps,
+        currentIndex: plan.currentIndex,
       });
     },
     onTurnEnd(summary) {
