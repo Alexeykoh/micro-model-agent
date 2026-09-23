@@ -59,6 +59,8 @@ export interface SlashCommand {
 export interface ReplContext {
   readonly config: AppConfig;
   readonly agent: Agent;
+  /** Shared tool context — carries mode-scoped state (allowlist, onboarding). */
+  readonly toolCtx: import("../tools/types").ToolContext;
   readonly rl: LineInput;
   readonly sessionManager?: SessionManager;
   readonly skillsModule?: SkillsModule;

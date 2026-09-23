@@ -165,6 +165,10 @@ export class Repl implements ReplContext {
   /** Terminal-aware PromptIO installed on the agent's tool executor. */
   private promptIO: PromptIO;
 
+  get toolCtx(): import("../tools/types").ToolContext {
+    return this.agent.toolContext;
+  }
+
   constructor(
     agent: Agent,
     config: AppConfig,

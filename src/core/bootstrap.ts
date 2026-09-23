@@ -900,6 +900,7 @@ export async function bootstrap(
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
     planSummary: () => execModule.getPlanSummary(),
+    toolCtx,
   };
 
   const agent = new Agent(agentDeps);

@@ -107,6 +107,8 @@ export interface AgentDeps {
     summary: string;
   } | null>;
   sessionManager?: SessionManager;
+  /** Shared ToolContext (mode-scoped state: allowlist, onboarding). */
+  toolCtx?: import("../tools/types").ToolContext;
   /** Opt-in git-style context logger (--context-log). Null/undefined disables it. */
   contextLogger?: ContextLogger;
   memoryStore?: MemoryStore;
@@ -307,6 +309,11 @@ export class Agent {
   /** Test-only view of the current prompt blocks. */
   getPromptBlocksForTest(): PromptBlock[] {
     return this.deps.promptBlocks;
+  }
+
+  get toolContext(): import("../tools/types").ToolContext {
+    if (!this.deps.toolCtx) throw new Error("toolCtx not provided to Agent");
+    return this.deps.toolCtx;
   }
 
   private buildSystemPrompt(): {
