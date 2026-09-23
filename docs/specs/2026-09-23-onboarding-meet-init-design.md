@@ -122,7 +122,7 @@ Rendering below reflects §6.7 (question tool aligned to STYLE). Reasoning lines
 **A — domain "development":**
 
 ```
-  mma 3.0.0 · qwen3.5-9b · lmstudio · 32K · system prompt 2.1K
+  mma 2.1.0 · qwen3.5-9b · lmstudio · 32K · system prompt 2.1K
   /work/landing · session a1f2
 
 ? Познакомимся? Задам несколько вопросов и запомню, как тебе удобнее
