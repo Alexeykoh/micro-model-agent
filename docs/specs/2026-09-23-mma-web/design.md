@@ -28,7 +28,7 @@ mma web [--port N] [--host H] [--no-open] [--token T]
 bootstrap()  →  Agent + modules (identical to REPL path)
         │
         ▼
-WebHost (new: src/cli/web-host.ts)
+WebHost (new: src/core/web-host.ts)
   · implements Host interface (see below)
   · PromptIO — web impl: pending question → SSE event → POST /api/answer
   · OutputChannel stays quiet (no TTY); no LineEditor

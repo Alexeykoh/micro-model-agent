@@ -23,7 +23,7 @@
 | `src/modules/webui/assets/index.html` | Chat page markup |
 | `src/modules/webui/assets/styles.css` | Theme (CSS variables, dark/light) |
 | `src/modules/webui/assets/app.js` | SSE client + rendering + input |
-| `src/cli/web-host.ts` | `WebHost implements Host` (submit/interrupt/executeCommand/state/PromptIO) |
+| `src/core/web-host.ts` | `WebHost implements Host` (submit/interrupt/executeCommand/state/PromptIO) |
 | `src/cli/web-command.ts` | `mma web` subcommand: bootstrap → WebHost → WebUiModule → block |
 | `src/cli/commands.ts` | Register `web` subcommand |
 | `src/cli/main.ts` | Dispatch `web` before REPL/one-shot branches |
@@ -772,7 +772,7 @@ git commit -m "feat(webui): agent-loop → SSE forwarder with coalescing"
 ### Task 7: `WebHost` (implements `Host`)
 
 **Files:**
-- Create: `src/cli/web-host.ts`
+- Create: `src/core/web-host.ts`
 - Test: `tests/web-host.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -780,7 +780,7 @@ git commit -m "feat(webui): agent-loop → SSE forwarder with coalescing"
 ```ts
 // tests/web-host.test.ts
 import { describe, it, expect } from "vitest";
-import { WebHost } from "../src/cli/web-host";
+import { WebHost } from "../src/core/web-host";
 
 describe("WebHost", () => {
   it("delegates submit to runAgent and guards busy", async () => {
@@ -817,7 +817,7 @@ describe("WebHost", () => {
 Run: `bun test tests/web-host.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Create `src/cli/web-host.ts`**
+- [ ] **Step 3: Create `src/core/web-host.ts`**
 
 ```ts
 import type { Host, HostStateSnapshot } from "../core/host";
@@ -870,7 +870,7 @@ Expected: PASS (2 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/cli/web-host.ts tests/web-host.test.ts
+git add src/core/web-host.ts tests/web-host.test.ts
 git commit -m "feat(web-host): Host implementation for mma web"
 ```
 

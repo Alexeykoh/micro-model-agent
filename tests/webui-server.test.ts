@@ -3,7 +3,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { Readable } from "node:stream";
 import { connect } from "node:net";
 import { handleRequest, startServer, stopServer } from "../src/modules/webui/server";
-import { BodyTooLargeError, readBody } from "../src/modules/webui/util";
+import {
+  BodyTooLargeError,
+  MAX_IMAGE_DATA_URL_BYTES,
+  parseMessageBody,
+  readBody,
+} from "../src/modules/webui/util";
 import { createWebUiState } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
@@ -156,6 +161,48 @@ describe("webui server", () => {
     expect(events).toContain("boom");
     expect(events).toContain('"busy":false');
     expect(events).not.toContain("turn_end");
+    expect(s.busy).toBe(false);
+  });
+
+  it("does not double-report a failed turn: the forwarder's turn_end owns the error", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    const fwd = makeForwarder(s); // default sink broadcasts to s.clients
+    const chunks: string[] = [];
+    const fake = {
+      write: (chunk: string) => {
+        chunks.push(chunk);
+        return true;
+      },
+      end: () => {},
+    };
+    s.clients.add(fake as unknown as ServerResponse);
+    s.bridge = {
+      isBusy: () => s.agentRunning,
+      // Realistic failed turn: the agent's catch emits turn_end {success:false}
+      // (which clears the reservation) and THEN rethrows.
+      submit: () => {
+        fwd.onTurnEnd({ success: false });
+        return Promise.reject(new Error("boom"));
+      },
+      interrupt: () => {},
+      getState: () => ({ busy: s.busy }),
+      executeCommand: () => Promise.resolve(),
+    };
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "hi" }),
+      });
+      expect(res.status).toBe(202);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const events = chunks.join("");
+    expect(events).toContain("event: turn_end");
+    expect(events).not.toContain("event: error");
     expect(s.busy).toBe(false);
   });
 
@@ -333,5 +380,32 @@ describe("webui server", () => {
       const res = await doFetch(base + "/api/interrupt", { method: "POST" });
       expect(res.status).toBe(409);
     });
+  });
+});
+
+describe("webui message body validation", () => {
+  const img = (n = 16) => "data:image/png;base64," + "A".repeat(n);
+
+  it("accepts up to 3 data-url images", () => {
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images: [img(), img(), img()] }));
+    expect(body).toEqual({ text: "hi", images: [img(), img(), img()] });
+  });
+
+  it("rejects more than 3 images", () => {
+    const body = parseMessageBody(
+      JSON.stringify({ text: "hi", images: [img(), img(), img(), img()] }),
+    );
+    expect(body).toEqual({ error: "too many images" });
+  });
+
+  it("rejects a non-data-url image", () => {
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images: ["http://x/y.png"] }));
+    expect(body).toEqual({ error: "invalid image" });
+  });
+
+  it("rejects an oversized image", () => {
+    const big = "data:image/png;base64," + "A".repeat(MAX_IMAGE_DATA_URL_BYTES);
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images: [big] }));
+    expect(body).toEqual({ error: "image too large" });
   });
 });

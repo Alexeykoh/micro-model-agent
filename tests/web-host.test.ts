@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WebHost } from "../src/cli/web-host";
+import { WebHost } from "../src/core/web-host";
 
 describe("WebHost", () => {
   it("delegates submit to runAgent and guards busy", async () => {

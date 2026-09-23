@@ -1,4 +1,4 @@
-import type { Host, HostStateSnapshot } from "../core/host";
+import type { Host, HostStateSnapshot } from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";

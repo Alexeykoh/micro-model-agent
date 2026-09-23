@@ -267,9 +267,6 @@
     const rows = [
       ["session", state.sessionId ? String(state.sessionId).slice(0, 8) : "—"],
       ["model", state.model || "—"],
-      ["context", state.contextUsed != null ? state.contextUsed + " / " + (state.contextLimit ?? "?") : "—"],
-      ["cost", state.costUsd != null ? "$" + Number(state.costUsd).toFixed(4) : "—"],
-      ["compactions", state.compactionCount != null ? "⟳ " + state.compactionCount : "⟳ 0"],
     ];
     for (const [key, value] of rows) {
       const row = el("div", "kv");

@@ -5,9 +5,26 @@ import type { WebUiAssets } from "./state";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Candidate directories, checked in order. In source, `here` is
+ * `src/modules/webui` so the first entry is the real asset dir. In the bundle
+ * (`dist/main.js`) `here` is `<dist>`, where `build:prod` copies the assets to
+ * `assets/` (see `scripts/copy-assets.ts`); the remaining entries cover layouts
+ * where the bundle sits elsewhere but the source tree is still present.
+ */
+const ASSET_DIR_CANDIDATES = [
+  join(here, "assets"),
+  join(here, "modules", "webui", "assets"),
+  join(here, "..", "src", "modules", "webui", "assets"),
+  join(here, "..", "..", "src", "modules", "webui", "assets"),
+];
+
+const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "index.html")));
+
 export function loadAssets(): WebUiAssets {
   const read = (name: string, fallback: string) => {
-    const p = join(here, "assets", name);
+    if (!ASSET_DIR) return fallback;
+    const p = join(ASSET_DIR, name);
     return existsSync(p) ? readFileSync(p, "utf8") : fallback;
   };
   return {

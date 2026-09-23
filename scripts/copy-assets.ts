@@ -17,6 +17,15 @@ await mkdir(i18nDir, { recursive: true });
 await cp(join(root, "src", "i18n", "en.json"), join(i18nDir, "en.json"));
 await cp(join(root, "src", "i18n", "ru.json"), join(i18nDir, "ru.json"));
 
+// `mma web` browser assets — served verbatim by the webui server. In the bundle
+// (`dist/main.js`) `import.meta.url` resolves to `<dist>/main.js`, so
+// `loadAssets()` reads `<dist>/assets/{index.html,styles.css,app.js}`.
+const webuiSrc = join(root, "src", "modules", "webui", "assets");
+const webuiDest = join(root, "dist", "assets");
+await rm(webuiDest, { recursive: true, force: true });
+await mkdir(webuiDest, { recursive: true });
+await cp(webuiSrc, webuiDest, { recursive: true });
+
 const bridgeSrc = join(root, "src", "modules", "browser", "bridge-server.mjs");
 const bridgeDest = join(root, "dist", "modules", "browser");
 await mkdir(bridgeDest, { recursive: true });

@@ -46,7 +46,7 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
 
 ### Host Seam (REPL / Web)
 
-> **Source:** `src/core/host.ts`, `src/cli/web-host.ts`, `src/modules/webui/`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
+> **Source:** `src/core/host.ts`, `src/core/web-host.ts`, `src/modules/webui/`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
 
 `Host` (`src/core/host.ts`) extends the plugin-facing `HostBridge`
 (`{isBusy, submit(text,{images}), interrupt, subscribeOutput}`) with
@@ -54,7 +54,7 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
 mode needs (slash commands, sidebar/topbar snapshot).
 
 - **Two implementations over one `Agent`:** `Repl` (terminal, owns `LineEditor`)
-  and `WebHost` (`src/cli/web-host.ts`, no TTY). Both submit through the SAME
+  and `WebHost` (`src/core/web-host.ts`, no TTY). Both submit through the SAME
   `runAgent` path as terminal input — rendering, session logging and the
   single-flight guard are shared, never duplicated.
 - **WebUi module** (`src/modules/webui/`): `state.ts` (shared mutable state +

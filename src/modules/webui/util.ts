@@ -18,6 +18,12 @@ export const MAX_BODY_BYTES = 24 * 1024 * 1024;
 /** Hard cap on a single message's text, independent of the transport body cap. */
 export const MAX_MESSAGE_CHARS = 32 * 1024;
 
+/** Max images per message (matches the design's ≤3 intent). */
+export const MAX_IMAGES = 3;
+
+/** Max size of a single `data:image/...` URL (design: ~6MB each). */
+export const MAX_IMAGE_DATA_URL_BYTES = 6 * 1024 * 1024;
+
 /** Thrown by readBody when the payload exceeds the cap (maps to HTTP 413). */
 export class BodyTooLargeError extends Error {
   constructor() {
@@ -109,9 +115,18 @@ export function parseMessageBody(
   const rec =
     typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   const text = (typeof rec.text === "string" ? rec.text : "").slice(0, MAX_MESSAGE_CHARS);
-  const images = Array.isArray(rec.images)
-    ? rec.images.filter((i): i is string => typeof i === "string")
-    : [];
+  const rawImages = Array.isArray(rec.images) ? rec.images : [];
+  if (rawImages.length > MAX_IMAGES) return { error: "too many images" };
+  const images: string[] = [];
+  for (const img of rawImages) {
+    if (typeof img !== "string" || !img.startsWith("data:image/")) {
+      return { error: "invalid image" };
+    }
+    if (Buffer.byteLength(img, "utf8") > MAX_IMAGE_DATA_URL_BYTES) {
+      return { error: "image too large" };
+    }
+    images.push(img);
+  }
   if (text.trim().length === 0 && images.length === 0) return { error: "empty" };
   return { text, images };
 }
@@ -126,11 +141,7 @@ export function scrubError(err: unknown): string {
 }
 
 /** Map a body-read failure to a response; oversized bodies get a flush-safe 413. */
-export function readBodyError(
-  req: IncomingMessage,
-  res: ServerResponse,
-  err: unknown,
-): void {
+export function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
   if (err instanceof BodyTooLargeError) {
     res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
     // Destroy the request only after the 413 is flushed; destroying first makes
@@ -152,11 +163,7 @@ export function readBodyError(
  * forwarder's `turn_end` is the sole reset for a turn that started;
  * `releaseBusy` covers a submit that never started.
  */
-export function handleMessagePost(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: WebUiState,
-): void {
+export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (!s.bridge) {
     sendJson(res, 503, { error: "no_bridge" });
     return;
@@ -185,10 +192,13 @@ export function handleMessagePost(
       s.lastPostTs = Date.now();
       const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
       run.catch((err: unknown) => {
-        // Broadcast the failure either way; only the owning reservation may
-        // clear `busy` (a started turn is reset by the forwarder's turn_end).
-        broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
+        // Single error owner: for any turn that actually started, the forwarder
+        // emits `turn_end {success:false}` and clears the reservation first, so
+        // `releaseBusy` returns false here and we must NOT broadcast a second
+        // `error` (the browser would show two lines). Only a submit rejected
+        // before the turn began (reservation still ours) reports `error`.
         if (releaseBusy(s, token)) {
+          broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
           broadcast({ type: "state", ts: Date.now(), busy: false }, s);
         }
       });

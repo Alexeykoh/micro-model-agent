@@ -12,8 +12,33 @@
  */
 import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
+import { redactContextSecrets } from "../../core/agent/context-log";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { TurnSummary } from "../types";
+
+/**
+ * Redact credential-shaped strings anywhere inside a tool-argument object,
+ * preserving its shape (the browser renders `args` as a structured object).
+ * Reuses the same point-redaction as {@link scrubError} — generic scrubbing
+ * would mangle ordinary arguments.
+ */
+function scrubValue(value: unknown): unknown {
+  if (typeof value === "string") return redactContextSecrets(value);
+  if (Array.isArray(value)) return value.map(scrubValue);
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) out[key] = scrubValue(val);
+    return out;
+  }
+  return value;
+}
+
+export function scrubToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const scrubbed = scrubValue(args);
+  return scrubbed !== null && typeof scrubbed === "object"
+    ? (scrubbed as Record<string, unknown>)
+    : {};
+}
 
 /**
  * SSE wire subset of {@link TurnSummary} — `textLength` is not sent to clients.
@@ -80,7 +105,7 @@ export function makeForwarder(
         ts: Date.now(),
         toolCallId: call.id,
         name: call.name,
-        args: call.arguments,
+        args: scrubToolArgs(call.arguments),
       });
     },
     onToolEnd(call, result, durationMs) {

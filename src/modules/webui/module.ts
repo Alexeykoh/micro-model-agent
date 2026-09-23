@@ -20,7 +20,7 @@ import type { Host, HostStateSnapshot } from "../../core/host";
 import type { ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
-import { WebHost } from "../../cli/web-host";
+import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeForwarder, type Forwarder } from "./forward";
 import { startServer, stopServer } from "./server";

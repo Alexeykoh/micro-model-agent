@@ -205,12 +205,12 @@ Unlike trace-server (read-only), web-ui is **bidirectional**: the browser sends 
 
 ## Web mode (`mma web`)
 
-> **Source:** `src/modules/webui/` (`state.ts`, `server.ts`, `forward.ts`, `module.ts`, `assets.ts`, `util.ts`) + `src/cli/web-command.ts`, `src/cli/web-host.ts`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
+> **Source:** `src/modules/webui/` (`state.ts`, `server.ts`, `forward.ts`, `module.ts`, `assets.ts`, `util.ts`) + `src/cli/web-command.ts`, `src/core/web-host.ts`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
 
 `mma web [--port N] [--host H] [--token T] [--no-open]` runs the agent **without a TTY**, as a full alternative to the terminal REPL: same `bootstrap()`, same `Agent`, same config and sessions, a second renderer (browser) instead of `LineEditor`. The terminal REPL stays fully supported and unchanged; terminal and web are separate processes (separate sessions if run at once).
 
 - **Config via env** (CLI flags map onto them): `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (default `127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0` (no browser auto-open), `MMA_WEBUI_MAX_CLIENTS` (SSE client cap).
-- **Transport:** SSE `GET /events` (phase/text/meta/tool_start/tool_end/question/turn_end/plan/usage/session/output); REST `GET /api/state` (full snapshot for reconnect resync), `POST /api/message` (`{text, images?}` → `Host.submit`, 409 busy), `POST /api/interrupt`, `POST /api/command` (`{line}` → slash-command map), static `GET /`, `/app.js`, `/styles.css`.
+- **Transport:** SSE `GET /events` — `state`, `text`, `meta`, `phase`, `tool_start`, `tool_end`, `turn_end`, `error`. Plan/usage/session are **not** streamed; the client polls `GET /api/state` (full snapshot for reconnect resync) every 2s. `question`/`output` are future phases (not emitted yet). REST: `POST /api/message` (`{text, images?}` → `Host.submit`, 409 busy), `POST /api/interrupt`, `POST /api/command` (`{line}` → slash-command map), static `GET /`, `/app.js`, `/styles.css`.
 - **Auth & caps:** binds loopback by default; a non-loopback bind **requires** a token (`--token` or `MMA_WEBUI_TOKEN`), checked on `/events` and `/api/*`; writes pass a same-origin check; body size and SSE client caps apply.
 - **Relation to the `examples/plugins/web-ui` plugin** (above): that plugin remains an **example**; `mma web` is the first-class, core mode — same proven transport/auth design, but wired to the shared `Host` seam (`src/core/host.ts`) and `WebUiModule` instead of a plugin hook bridge.
 - **Phase 3 note:** slash-command dispatch from the browser (`POST /api/command`) is a documented **no-op** for now — the endpoint exists and is authed, but `WebHost.executeCommand` does nothing until the shared handler map is wired.

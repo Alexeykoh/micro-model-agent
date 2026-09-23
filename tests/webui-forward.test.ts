@@ -85,4 +85,27 @@ describe("webui forwarder", () => {
       durationMs: 12,
     });
   });
+
+  it("redacts secret-looking tool arguments before broadcasting", () => {
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    const call = {
+      id: "1",
+      name: "bash",
+      arguments: {
+        command: "curl -H 'Authorization: Bearer sk-1234567890abcdefghij'",
+        nested: { token: "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" },
+        count: 3,
+      },
+    };
+    fwd.onToolStart(call);
+    expect(seen).toHaveLength(1);
+    const args = seen[0].args as Record<string, unknown>;
+    const json = JSON.stringify(args);
+    expect(json).not.toContain("sk-1234567890abcdefghij");
+    expect(json).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    expect(json).toContain("[REDACTED]");
+    expect(args.count).toBe(3);
+  });
 });
