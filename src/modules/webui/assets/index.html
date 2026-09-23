@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MMA Web</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="bar-top">
+    <button class="icon-btn primary" id="newChat" title="New chat">+</button>
+    <div class="dd" id="sessDD">
+      <button class="icon-btn" id="sessBtn" title="Sessions">☰</button>
+      <div class="dd-menu">
+        <div class="h">sessions</div>
+        <div class="si on"><span class="id">—</span> current</div>
+        <div class="sep"></div>
+        <div class="act">session switching coming soon</div>
+      </div>
+    </div>
+    <div class="tabstrip" id="tabstrip"></div>
+    <span class="model-name" id="modelName"></span>
+    <span class="dim" id="sessionName"></span>
+    <button class="icon-btn" id="openSettings" title="Settings (coming soon)">⚙</button>
+  </header>
+
+  <main class="layout">
+    <section class="chat">
+      <div class="msgs" id="msgs">
+        <div class="empty" id="empty">
+          <span class="g">✦</span> new chat
+          <div class="hint">type a message below · / for commands · Esc to stop</div>
+        </div>
+      </div>
+      <div class="input-area">
+        <textarea class="inp" id="inp" rows="2" placeholder="message… (/ for commands)"></textarea>
+        <div class="inp-meta"><span>Enter — send</span><span>Shift+Enter — newline</span><span>Esc — stop</span></div>
+      </div>
+    </section>
+
+    <aside class="sb">
+      <div class="sec plan-sec">
+        <div class="sec-h" data-collapse>▾ plan</div>
+        <div class="sec-body" id="plan"></div>
+      </div>
+      <div class="sec usage-sec">
+        <div class="sec-h" data-collapse>▾ session · usage</div>
+        <div class="sec-body" id="usage"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
