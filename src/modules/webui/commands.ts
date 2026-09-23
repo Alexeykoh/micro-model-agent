@@ -12,14 +12,13 @@
  * deliberately out of scope — see `HELP` for the supported subset.
  */
 import type { AppConfig } from "../../config/types";
-import { canonicalKeys, getConfigValue, setConfigValue } from "../../config/registry";
+import { canonicalKeys, getConfigValue } from "../../config/registry";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import { errMsg } from "../../utils/error";
 import { memoryLines } from "./memory-commands";
+import { makeSettingsHandlers } from "./commands-settings";
+import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
 import { broadcast, type WebUiState } from "./state";
-
-type Out = (line: string) => void;
-type Handler = (args: string[], out: Out) => void | Promise<void>;
 
 /** Supported subset, surfaced by `/help` (one line each). */
 const HELP: Array<{ usage: string; desc: string }> = [
@@ -28,6 +27,11 @@ const HELP: Array<{ usage: string; desc: string }> = [
   { usage: "/config <key> [value]", desc: "read or write a config key" },
   { usage: "/model list | /model use <name>", desc: "list or switch model" },
   { usage: "/provider list | /provider use <name>", desc: "list or switch provider" },
+  { usage: "/reasoning [show|hide|on|off|level <lvl>]", desc: "reasoning display and level" },
+  { usage: "/verbose <quiet|normal|verbose>", desc: "set UI verbosity" },
+  { usage: "/context [<tokens>]", desc: "show or set the context window" },
+  { usage: "/session list | /session use <id>", desc: "list or activate a session" },
+  { usage: "/export [md|json|jsonl]", desc: "export the active session to a file" },
   { usage: "/memory [get|set|unset|find|forget]", desc: "inspect or edit global memory" },
   { usage: "/clear", desc: "clear the feed (browser-side)" },
   { usage: "/new", desc: "open a new chat tab (browser-side)" },
@@ -56,6 +60,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
     model: (args, o) => withConfig(state, o, (cfg) => modelCmd(cfg, args, o, state)),
     provider: (args, o) => withConfig(state, o, (cfg) => providerCmd(cfg, args, o, state)),
     memory: (args, o) => memoryCmd(state, args, o),
+    ...makeSettingsHandlers(state),
   };
 
   return async (line) => {
@@ -77,24 +82,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
   };
 }
 
-/** Run `fn` only when a config collaborator is wired; otherwise emit a hint. */
-function withConfig(
-  state: WebUiState,
-  out: Out,
-  fn: (cfg: AppConfig) => void | Promise<void>,
-): void | Promise<void> {
-  if (!state.config) {
-    out("↳ config unavailable");
-    return;
-  }
-  return fn(state.config);
-}
-
-function activeMeta(state: WebUiState) {
-  const id = state.sessionManager?.getActive();
-  return id ? (state.sessionManager?.get(id) ?? null) : null;
-}
-
+/** One-line status: model · provider · context · session · verbosity. */
 function status(cfg: AppConfig, state: WebUiState, out: Out): void {
   const provider = cfg.provider.active ?? cfg.provider.type;
   const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
@@ -106,50 +94,6 @@ function status(cfg: AppConfig, state: WebUiState, out: Out): void {
 }
 
 /** Persist + reconfigure after a successful registry write, then report. */
-async function applyConfigWrite(
-  cfg: AppConfig,
-  name: string,
-  value: string,
-  out: Out,
-  state: WebUiState,
-): Promise<void> {
-  const result = setConfigValue(cfg, name, value);
-  if (!result.ok) {
-    out(`↳ ${configErrorText(result.reason, result.input, result.key)}`);
-    return;
-  }
-  let note = "saved";
-  try {
-    state.saveConfig?.(cfg);
-  } catch {
-    note = "not persisted";
-  }
-  if (result.reconfigure && state.reconfigure) {
-    try {
-      await state.reconfigure(cfg);
-    } catch {
-      note = `${note}; reconfigure failed`;
-    }
-  }
-  out(`${result.key} = ${result.display} · ${note}`);
-}
-
-function configErrorText(reason: string, input: string, key?: string): string {
-  const target = key ?? input;
-  switch (reason) {
-    case "unknown-key":
-      return `unknown key: ${input}`;
-    case "read-only":
-      return `${target} is read-only`;
-    case "range":
-      return `value out of range for ${target}`;
-    case "combined":
-      return "shares exceed the combined limit";
-    default:
-      return `invalid value for ${target}`;
-  }
-}
-
 async function configCmd(
   cfg: AppConfig,
   args: string[],
