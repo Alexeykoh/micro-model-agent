@@ -86,6 +86,9 @@ async function main(): Promise<void> {
     setOneShotMode(true);
   }
 
+  const onboardingStart =
+    firstPositional === "meet" ? "meet" : firstPositional === "init" ? "init" : null;
+
   program.parse(process.argv);
 
   const cmdNames = new Set(program.commands.map((c) => c.name()));
@@ -102,7 +105,8 @@ async function main(): Promise<void> {
   // brings them back. Set before bootstrap so its own logs respect it.
   getDefaultChannel().setSuppressInfoLogs(!verboseOpt);
 
-  const isSubcommand = program.args.length > 0 && cmdNames.has(program.args[0]);
+  const isSubcommand =
+    program.args.length > 0 && cmdNames.has(program.args[0]) && !onboardingStart;
 
   if (isSubcommand) {
     return;
@@ -111,7 +115,7 @@ async function main(): Promise<void> {
   // Typo guard: a misspelled subcommand must not be silently sent to the LLM
   // as a prompt ("mma sesion list" → chat). Warn and exit when args[0] is a
   // near-miss of a known command; free-form prompts never look like that.
-  if (program.args.length > 0) {
+  if (program.args.length > 0 && !onboardingStart) {
     const suggestion = closestCommand(program.args[0], [...cmdNames]);
     if (suggestion && suggestion !== program.args[0]) {
       getDefaultChannel().writeLine(
@@ -122,7 +126,7 @@ async function main(): Promise<void> {
     }
   }
 
-  if (program.args.length > 0) {
+  if (program.args.length > 0 && !onboardingStart) {
     // `--json` owns stdout for ONE-SHOT runs only: silence the human channel
     // before bootstrap so config warnings cannot pollute the machine-readable
     // document, and subscribe the sink BEFORE bootstrap so warn/error events
@@ -267,6 +271,8 @@ async function main(): Promise<void> {
     await updater?.waitForIdle();
     process.exit(exitCode);
   } else {
+    if (onboardingStart === "meet") process.env.MMA_START_MEET = "1";
+    if (onboardingStart === "init") process.env.MMA_START_INIT = "1";
     const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
     const legacyConfigPath = join(mmaDir, "config.json");
     let hasAnyConfig = existsSync(legacyConfigPath);
