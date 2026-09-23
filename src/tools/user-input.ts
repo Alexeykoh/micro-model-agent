@@ -49,13 +49,13 @@ export function parseSelection(
   return indexes.length ? indexes : null;
 }
 
-/** Render question + numbered option list as a single string. */
+/** Render `? <question>` + indented options per STYLE.md. */
 export function formatMenu(
   question: string,
   options: InputOption[],
   opts: AskChoiceOptions = {},
 ): string {
-  const lines: string[] = [question];
+  const lines: string[] = [`? ${question}`];
   options.forEach((opt, i) => {
     lines.push(`  [${i + 1}] ${opt.label} — ${opt.description}`);
   });
@@ -65,10 +65,10 @@ export function formatMenu(
   return lines.join("\n");
 }
 
-/** Prompt text for the choice input. */
+/** `>` prompt marker for a selection, per STYLE.md. */
 export function choicePrompt(optionCount: number, multiple: boolean): string {
   return multiple
-    ? t("tool.user_input.choice_multiple")
+    ? t("tool.user_input.choice_multiple", { max: optionCount })
     : t("tool.user_input.choice_single", { max: optionCount });
 }
 
@@ -141,11 +141,12 @@ export async function askUser(
   io?: PromptIO,
 ): Promise<string[]> {
   const header = [opts.progress, opts.header].filter(Boolean).join(" — ");
-  const text = header ? `${header}\n${question}` : question;
   if (!opts.options || opts.options.length === 0) {
+    const text = header ? `${header}\n? ${question}` : `? ${question}`;
     const answer = io ? await io.askText(text) : await askText(text);
     return answer ? [answer] : [];
   }
+  const text = header ? `${header}\n${question}` : question;
   const allowCustom = opts.custom ?? true;
   const indexes = io
     ? await io.askChoice(text, opts.options, { multiple: opts.multiple, allowCustom })
