@@ -68,6 +68,15 @@ Include numeric `min`/`max`/`step` in `GET /api/config` registry entries so nume
 
 Frontend: attach images (paste/drag/file input) → send as `images[]` data URLs (already supported by `/api/message`), respecting caps (≤3, ≤6MB each) with a dim error on violation.
 
+## Task L — Web UI localization (locale switching works)
+
+Changing `locale` in settings currently updates config but neither the server `t()` nor the web UI switches.
+
+- Backend: `GET /api/i18n` → `{ locale, dicts: { en: {...}, ru: {...} } }` (flattened), exported from `src/i18n/index.ts` (add a `getFlatDicts()` helper).
+- On `POST /api/config` success for `locale`, call `setLocale(config.locale)` so server-side `t()` (tool labels, etc.) updates.
+- Frontend: implement `t(key)` in `app.js` using the served dicts; move the web chrome strings to `web.*` keys in `src/i18n/{en,ru}.json` (topbar titles, sidebar section headers, settings section names, input hints, buttons, empty state, save indicator, placeholders). Re-render static labels when locale changes (after a locale write or on config poll).
+- Agent/tool output is already localized server-side; ensure it follows the new locale too.
+
 ## Task K — Docs, changelog, version
 
 - Update `docs/agents/modules.md` with the new endpoints and the supported command subset.
