@@ -42,7 +42,7 @@ export async function probeChat(
       }),
       signal: controller.signal,
     });
-    if (!resp.ok) return "";
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = (await resp.json()) as {
       choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     };
