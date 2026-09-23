@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **web mode parity** (`src/modules/webui/`): the browser UI is rebuilt to match the canonical mockup — topbar with `+`/`☰`/session tabs/`⚙`, chat feed (start banner, user blocks, colored `◇` tool lines, `↳` details, `⟡` metrics, `✦` reasoning toggle, plan/file/link/image cards, `/command` output), model/provider/context selectors, independently collapsible sidebar (scrollable plan + session·usage), and a wide settings modal (General / Model / Context / Reasoning / UI / Memory / Skills / Plugins·MCP / Security / Advanced) with dark/light/auto theme.
 - **web REST** (`config-api.ts`, `settings-api.ts`, `sessions-api.ts`, `history-api.ts`): `GET/POST /api/config`, `GET /api/models`, `GET /api/memory` + `POST` + `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`.
 - **web slash commands** (`commands.ts`): `/help`, `/status`, `/config`, `/model`, `/provider`, `/memory` run in the browser via a handler map, streaming output over the SSE `command` event; `/clear` and `/new` are client-side. Terminal-only commands stay out of scope.
+- **web slash commands (extended)**: `/reasoning`, `/verbose`, `/context`, `/session list|use`, `/export [md|json|jsonl]` in the browser (same registry/session machinery as the REPL).
+- **web questions** (`src/modules/webui/prompt-io.ts`): the `question`/`approve` tools are registered in web mode with a `PromptIO` over SSE (`question` event) + `POST /api/answer`, so the agent can ask the user interactively in the browser; terminal mode keeps them unregistered.
+- **web i18n** (`GET /api/i18n`, `web.*` keys): the browser chrome is localized and switches live when `locale` changes.
+- **web resilience**: SSE reconnect with state resync; `Cache-Control: no-store` on static assets (no stale UI after restart).
+- **fix**: `--no-agents-md` is now honored on all paths (commander exposes the negatable option as `agentsMd`).
 - **web live data**: real usage metrics in the sidebar, clipped tool output in `tool_end`, plan card, image attachments (paste/drag/file, ≤3 × ≤6MB), and new-session creation from `+`.
 
 ## [2.2.0] - 2026-09-23
