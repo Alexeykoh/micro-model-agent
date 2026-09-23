@@ -120,6 +120,8 @@ describe("webui config/session/model REST", () => {
       expect(res.status).toBe(200);
       expect(res.json.ok).toBe(true);
       expect(res.json.value).toBe("new-model");
+      expect(res.json.persisted).toBe(true);
+      expect(res.json.warning).toBeUndefined();
       expect(s.config?.model).toBe("new-model");
       expect(saved).toHaveLength(1);
       expect(saved[0].model).toBe("new-model");
@@ -140,6 +142,39 @@ describe("webui config/session/model REST", () => {
       const intRes = await postJson(base, "/api/config", { key: "maxToolIterations", value: 5 });
       expect(intRes.status).toBe(200);
       expect(s.config?.maxToolIterations).toBe(5);
+    });
+  });
+
+  it("POST /api/config reports not-persisted when saveConfig throws", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.saveConfig = () => {
+      throw new Error("disk full");
+    };
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "model", value: "new-model" });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(true);
+      expect(res.json.persisted).toBe(false);
+      expect(typeof res.json.warning).toBe("string");
+      // The in-memory config is still updated for this session.
+      expect(s.config?.model).toBe("new-model");
+    });
+  });
+
+  it("POST /api/config warns (without throwing) when reconfigure rejects", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.saveConfig = () => {};
+    s.reconfigure = () => Promise.reject(new Error("provider down"));
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "model", value: "new-model" });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(true);
+      expect(res.json.persisted).toBe(true);
+      expect(typeof res.json.warning).toBe("string");
     });
   });
 

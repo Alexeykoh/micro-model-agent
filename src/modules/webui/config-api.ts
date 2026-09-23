@@ -93,22 +93,33 @@ export function handleConfigPost(
         return;
       }
 
-      // Persist first, then reconfigure: a failed write must not leave the
-      // running agent pointing at settings that were never saved.
+      // Persist first, then reconfigure. Neither failure is swallowed: the UI
+      // needs `persisted`/`warning` to tell "saved" from "changed in memory
+      // only". A failed write must not leave the agent pointing at settings
+      // that were never saved; a failed reconfigure leaves it inconsistent.
+      let persisted = true;
+      let warning: string | undefined;
       try {
         s.saveConfig?.(config);
       } catch {
-        // A persistence failure must not turn a validated change into a 5xx;
-        // the in-memory config is still updated for this session.
+        persisted = false;
+        warning = "config not persisted";
       }
       if (result.reconfigure && s.reconfigure) {
         try {
           await s.reconfigure(config);
         } catch {
-          // Reconfigure is best-effort: the value is already applied + saved.
+          warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
         }
       }
-      sendJson(res, 200, { ok: true, value: result.value, display: result.display });
+      const body: Record<string, unknown> = {
+        ok: true,
+        value: result.value,
+        display: result.display,
+        persisted,
+      };
+      if (warning) body.warning = warning;
+      sendJson(res, 200, body);
     })
     .catch((err: unknown) => {
       readBodyError(req, res, err);
