@@ -4,6 +4,7 @@ import { handleRequest } from "../src/modules/webui/server";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
 import { DEFAULTS } from "../src/config/defaults";
 import { getFlatDicts, setLocale, t } from "../src/i18n";
+import { configDefs } from "../src/config/registry";
 import type { AppConfig } from "../src/config/types";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -97,6 +98,29 @@ describe("webui i18n", () => {
     const ruKeys = Object.keys(dicts.ru).filter((k) => k.startsWith("web."));
     expect(enKeys.length).toBeGreaterThan(0);
     expect([...enKeys].sort()).toEqual([...ruKeys].sort());
+  });
+
+  it("keeps en/ru parity for every config.* key", () => {
+    const dicts = getFlatDicts();
+    const isConfig = (k: string) => k.startsWith("config.key.") || k.startsWith("config.enum.");
+    const enKeys = Object.keys(dicts.en).filter(isConfig);
+    const ruKeys = Object.keys(dicts.ru).filter(isConfig);
+    expect(enKeys.length).toBeGreaterThan(0);
+    expect([...enKeys].sort()).toEqual([...ruKeys].sort());
+  });
+
+  it("translates every registry key and enum value in both locales", () => {
+    const dicts = getFlatDicts();
+    for (const def of configDefs()) {
+      const key = "config.key." + def.key;
+      expect(typeof dicts.en[key], key + " (en)").toBe("string");
+      expect(typeof dicts.ru[key], key + " (ru)").toBe("string");
+      for (const value of def.enumValues ?? []) {
+        const ek = "config.enum." + value;
+        expect(typeof dicts.en[ek], ek + " (en)").toBe("string");
+        expect(typeof dicts.ru[ek], ek + " (ru)").toBe("string");
+      }
+    }
   });
 
   it("returns 503-free empty locale when config is not wired", async () => {

@@ -82,6 +82,7 @@
   const state = {
     config: null,
     registry: [],
+    webToken: null,
     models: [],
     sessions: [],
     host: {},
@@ -1447,6 +1448,7 @@
     if (!r.ok || !r.data) return;
     state.config = r.data.config || {};
     state.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
+    state.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
     renderSelectors();
     renderSettings();
   }
@@ -1564,8 +1566,30 @@
     general: ["locale", "ui.verbosity", "maxToolIterations", "stuckThreshold"],
     context: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"],
     reasoning: ["showReasoning", "reasoning.mode"],
+    security: [
+      "security.enabled",
+      "security.paths.enabled",
+      "security.contentScan.enabled",
+      "security.sessionEncryption.enabled",
+    ],
     advanced: ["logLevel", "version"],
   };
+
+  // Localized label for a registry key: `config.key.<canonical>`, falling back
+  // to the raw key when no translation exists (so a new key is never blank).
+  function configLabel(def) {
+    const k = "config.key." + def.key;
+    const tr = t(k);
+    return tr === k ? def.key : tr;
+  }
+
+  // Localized enum value: `config.enum.<value>`, falling back to the raw value.
+  // The raw value is still what gets POSTed — only the label is translated.
+  function enumLabel(v) {
+    const k = "config.enum." + v;
+    const tr = t(k);
+    return tr === k ? v : tr;
+  }
 
   function defFor(key) {
     return state.registry.find((d) => d.key === key) || null;
@@ -1598,7 +1622,7 @@
     if (def.valueType === "enum") {
       const seg = el("span", "seg");
       (def.enum || []).forEach((v) => {
-        const b = el("button", v === value ? "on" : "", v);
+        const b = el("button", v === value ? "on" : "", enumLabel(v));
         b.addEventListener("click", () => {
           seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");
@@ -1638,7 +1662,7 @@
     keys.forEach((key) => {
       const def = defFor(key);
       if (!def) return;
-      container.appendChild(row(key, configControl(def, key)));
+      container.appendChild(row(configLabel(def), configControl(def, key)));
     });
   }
 
@@ -1722,19 +1746,24 @@
       seg.appendChild(b);
     });
     container.appendChild(row(t("web.settings.theme"), seg));
-    container.appendChild(row(t("web.settings.font_size"), el("span", "val dim", "—")));
-    container.appendChild(row(t("web.settings.sidebar_default"), el("span", "val dim", "—")));
-    container.appendChild(row(t("web.settings.stream_partials"), el("span", "val dim", "—")));
   }
 
-  function renderPlaceholderPanel(name, note) {
-    const container = document.querySelector('[data-panel="' + name + '"]');
+  function renderSecurityPanel() {
+    const container = document.querySelector('[data-panel="security"]');
     if (!container) return;
     container.textContent = "";
-    const p = el("div", "placeholder");
-    p.appendChild(el("span", "tag", t("web.settings.pending")));
-    p.appendChild(document.createTextNode(" " + note));
-    container.appendChild(p);
+    SECTION_KEYS.security.forEach((key) => {
+      const def = defFor(key);
+      if (!def) return;
+      container.appendChild(row(configLabel(def), configControl(def, key)));
+    });
+    container.appendChild(
+      row(t("web.settings.web_token"), el("span", "val dim", state.webToken || t("web.settings.web_token_none"))),
+    );
+    const note = el("div", "placeholder");
+    note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
+    note.appendChild(document.createTextNode(" " + t("web.settings.security_note")));
+    container.appendChild(note);
   }
 
   function placeholderFor(data, empty) {
@@ -1965,7 +1994,7 @@
     renderMemoryPanel();
     renderSkillsPanel();
     renderPluginsPanel();
-    renderPlaceholderPanel("security", t("web.settings.security_note"));
+    renderSecurityPanel();
     renderGenericPanel("advanced", SECTION_KEYS.advanced);
   }
 

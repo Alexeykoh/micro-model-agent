@@ -277,6 +277,62 @@ describe("webui config/session/model REST", () => {
     });
   });
 
+  it("GET /api/config exposes security toggles and read-only version", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/config");
+      const body = (await res.json()) as {
+        registry: Array<{ key: string; valueType: string; group: string; readOnly?: boolean }>;
+      };
+      const byKey = new Map(body.registry.map((e) => [e.key, e]));
+      expect(byKey.get("security.enabled")?.valueType).toBe("bool");
+      expect(byKey.get("security.enabled")?.group).toBe("security");
+      expect(byKey.get("security.paths.enabled")?.valueType).toBe("bool");
+      expect(byKey.get("security.contentScan.enabled")?.valueType).toBe("bool");
+      expect(byKey.get("security.sessionEncryption.enabled")?.valueType).toBe("bool");
+      expect(byKey.get("version")?.readOnly).toBe(true);
+    });
+  });
+
+  it("POST /api/config toggles security booleans", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.saveConfig = () => {};
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "security.enabled", value: true });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(true);
+      expect(s.config?.security?.enabled).toBe(true);
+
+      const paths = await postJson(base, "/api/config", { key: "security.paths.enabled", value: true });
+      expect(paths.status).toBe(200);
+      expect(s.config?.security?.paths.enabled).toBe(true);
+    });
+  });
+
+  it("GET /api/config returns a masked web token, or null when unset", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.token = "supersecrettoken";
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/config", {
+        headers: { "x-mma-token": "supersecrettoken" },
+      });
+      const body = (await res.json()) as { webToken: string | null };
+      expect(body.webToken).toBe("••••oken");
+      expect(body.webToken).not.toContain("supersecret");
+    });
+
+    const s2 = createWebUiState();
+    s2.config = testConfig();
+    await withServer(s2, async (base) => {
+      const res = await doFetch(base + "/api/config");
+      const body = (await res.json()) as { webToken: string | null };
+      expect(body.webToken).toBeNull();
+    });
+  });
+
   it("POST /api/sessions creates a session and returns its meta", async () => {
     const s = createWebUiState();
     s.sessionManager = fakeSessions([meta("s1", "one", true)], "s1");

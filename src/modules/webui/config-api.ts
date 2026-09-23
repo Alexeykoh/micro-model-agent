@@ -33,6 +33,8 @@ export interface ConfigRegistryEntry {
   min?: number;
   max?: number;
   step?: number;
+  /** `version` and similar keys render as a non-editable value in the UI. */
+  readOnly?: boolean;
 }
 
 /** Serialize the registry in registry order (canonical keys only). */
@@ -48,8 +50,15 @@ export function buildConfigRegistry(): ConfigRegistryEntry[] {
     if (def.min !== undefined) entry.min = def.min;
     if (def.max !== undefined) entry.max = def.max;
     if (def.step !== undefined) entry.step = def.step;
+    if (def.readOnly) entry.readOnly = true;
     return entry;
   });
+}
+
+/** Mask a secret for display: keep the last 4 chars, hide the rest. */
+function maskToken(token: string | null): string | null {
+  if (!token) return null;
+  return token.length <= 4 ? "••••" : "••••" + token.slice(-4);
 }
 
 /** `GET /api/config` — redacted live config + key registry. */
@@ -61,6 +70,7 @@ export function handleConfigGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, {
     config: redactConfigSecrets(s.config),
     registry: buildConfigRegistry(),
+    webToken: maskToken(s.token),
   });
 }
 

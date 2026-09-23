@@ -1,5 +1,6 @@
 import type { AppConfig, ReasoningMode } from "./types";
 import { DEFAULTS } from "./defaults";
+import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
 
 /**
@@ -73,6 +74,32 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
       const n = v as number;
       const total = n + c.contextBudget[other];
       return total > MAX_COMBINED ? "combined" : null;
+    },
+  };
+}
+
+/** Top-level + nested security toggles, all read live by the tools. */
+type SecurityToggle = "enabled" | "paths" | "contentScan" | "sessionEncryption";
+
+function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef {
+  return {
+    key: canonical,
+    aliases: [],
+    domain: "security",
+    valueType: "bool",
+    // Tools read `config.security` live; no agent rebuild is required. Session
+    // encryption is snapshotted into the store at bootstrap, so it only takes
+    // full effect on the next run — reconfigure would not rebuild it either.
+    reconfigure: false,
+    get: (c) => {
+      const sec = c.security;
+      if (!sec) return false;
+      return field === "enabled" ? sec.enabled : sec[field].enabled;
+    },
+    set: (c, v) => {
+      if (!c.security) c.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      if (field === "enabled") c.security.enabled = v as boolean;
+      else c.security[field].enabled = v as boolean;
     },
   };
 }
@@ -217,6 +244,10 @@ const DEFINITIONS: ConfigKeyDef[] = [
     readOnly: true,
     get: (c) => c.version,
   },
+  securityToggle("enabled", "security.enabled"),
+  securityToggle("paths", "security.paths.enabled"),
+  securityToggle("contentScan", "security.contentScan.enabled"),
+  securityToggle("sessionEncryption", "security.sessionEncryption.enabled"),
 ];
 
 const BY_NAME = new Map<string, ConfigKeyDef>();
