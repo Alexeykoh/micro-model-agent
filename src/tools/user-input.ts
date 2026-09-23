@@ -55,7 +55,9 @@ export function formatMenu(
   options: InputOption[],
   opts: AskChoiceOptions = {},
 ): string {
-  const lines: string[] = [`? ${question}`];
+  const parts = question.split("\n");
+  parts[parts.length - 1] = `? ${parts[parts.length - 1]}`;
+  const lines: string[] = [...parts];
   options.forEach((opt, i) => {
     lines.push(`  [${i + 1}] ${opt.label} — ${opt.description}`);
   });
@@ -68,7 +70,7 @@ export function formatMenu(
 /** `>` prompt marker for a selection, per STYLE.md. */
 export function choicePrompt(optionCount: number, multiple: boolean): string {
   return multiple
-    ? t("tool.user_input.choice_multiple", { max: optionCount })
+    ? t("tool.user_input.choice_multiple")
     : t("tool.user_input.choice_single", { max: optionCount });
 }
 
