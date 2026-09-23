@@ -343,6 +343,7 @@
   "repl.meet_start_prompt": "Let's get acquainted. Start the interview now.",
   "repl.meet_unavailable": "Can't start: the provider is not responding ({reason}).",
   "repl.meet_unavailable_hint": "Start the model and try /meet again — nothing was saved.",
+  "onboarding.already": "Already running.",
   "cli.list_providers": "List providers",
   "cli.current_provider": "Current provider:",
   "cli.base_url": "Base URL:",

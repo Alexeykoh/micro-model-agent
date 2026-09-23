@@ -337,6 +337,7 @@
   "repl.meet_start_prompt": "Давай познакомимся. Начни интервью.",
   "repl.meet_unavailable": "Не могу начать: провайдер не отвечает ({reason}).",
   "repl.meet_unavailable_hint": "Запусти модель и повтори /meet — ничего не записано.",
+  "onboarding.already": "Уже выполняется.",
   "cli.list_providers": "Список провайдеров",
   "cli.current_provider": "Текущий провайдер:",
   "cli.base_url": "Базовый URL:",

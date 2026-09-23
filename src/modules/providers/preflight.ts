@@ -20,6 +20,26 @@ export interface PreflightOptions {
   probe?: (cfg: PreflightConfig, timeoutMs: number) => Promise<string>;
 }
 
+/** Resolve the active provider's base URL + key (entries-first, legacy fallback). */
+export function resolveProviderTarget(provider: {
+  active?: string;
+  entries?: Array<{ label?: string; type: string; baseUrl: string; apiKey?: string }>;
+  type: string;
+  baseUrl: string;
+  apiKey?: string;
+}): { baseUrl: string; apiKey: string } {
+  const entries = provider.entries ?? [];
+  if (entries.length > 0) {
+    const active = provider.active;
+    const entry =
+      entries.find((e) => (e.label ?? e.type) === active) ??
+      entries.find((e) => e.type === active) ??
+      entries[0];
+    return { baseUrl: entry.baseUrl, apiKey: entry.apiKey ?? "" };
+  }
+  return { baseUrl: provider.baseUrl, apiKey: provider.apiKey ?? "" };
+}
+
 /** Minimal, cheap chat probe: confirms the selected model is loaded. */
 export async function probeChat(
   cfg: PreflightConfig,
