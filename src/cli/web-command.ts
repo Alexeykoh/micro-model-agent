@@ -47,7 +47,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
 
   // exitOnComplete=true: no interactive prompt owns stdin in web mode.
-  const { agent, config, sessionManager, execModule } = await bootstrap(
+  const { agent, config, sessionManager, execModule, configDir } = await bootstrap(
     undefined,
     opts.projectDir,
     undefined,
@@ -63,6 +63,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     config,
     sessionManager,
     execModule,
+    configDir,
     host: opts.host,
     token: opts.token,
   });

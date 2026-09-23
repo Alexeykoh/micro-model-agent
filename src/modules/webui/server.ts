@@ -17,6 +17,14 @@ import {
   sameOrigin,
   sendJson,
 } from "./util";
+import {
+  handleConfigGet,
+  handleConfigPost,
+  handleModelsGet,
+  handleSessionActivate,
+  handleSessionDelete,
+  handleSessionsGet,
+} from "./config-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
@@ -95,6 +103,37 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
 
   if (reqUrl.pathname === "/api/message" && req.method === "POST") {
     handleMessagePost(req, res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/config" && req.method === "GET") {
+    handleConfigGet(res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/config" && req.method === "POST") {
+    handleConfigPost(req, res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/sessions" && req.method === "GET") {
+    handleSessionsGet(res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/sessions/activate" && req.method === "POST") {
+    handleSessionActivate(req, res, s);
+    return;
+  }
+
+  if (reqUrl.pathname.startsWith("/api/sessions/") && req.method === "DELETE") {
+    const id = decodeURIComponent(reqUrl.pathname.slice("/api/sessions/".length));
+    handleSessionDelete(res, id, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/models" && req.method === "GET") {
+    handleModelsGet(res, s);
     return;
   }
 

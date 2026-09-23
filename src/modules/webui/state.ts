@@ -8,7 +8,22 @@
  */
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
+import type { AppConfig } from "../../config/types";
+import type { SessionMeta } from "../../modules/session/types";
 import { MAX_BODY_BYTES } from "./util";
+
+/**
+ * Structural subset of `SessionManager` the web REST surface needs. Keeping it
+ * narrow lets the real manager satisfy it implicitly while tests stub it
+ * without casts.
+ */
+export interface WebSessionManager {
+  list(): SessionMeta[];
+  get(id: string): SessionMeta | null;
+  getActive(): string | null;
+  setActive(id: string): void;
+  delete(id: string): void;
+}
 
 export interface WebUiAssets {
   html: string;
@@ -44,6 +59,16 @@ export interface WebUiState {
   historyTail: number;
   /** Transport cap for a POST body; overridable in tests to exercise 413. */
   maxBodyBytes: number;
+  /**
+   * Bootstrap collaborators for the config/session/model REST surface. Wired by
+   * `module.ts`; optional so tests can drive individual endpoints in isolation
+   * (a missing one yields 503, never a crash).
+   */
+  config?: AppConfig;
+  sessionManager?: WebSessionManager;
+  saveConfig?: (config: AppConfig) => void;
+  reconfigure?: (config: AppConfig) => void | Promise<void>;
+  knownModels?: () => string[];
 }
 
 export function createWebUiState(): WebUiState {

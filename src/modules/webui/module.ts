@@ -20,6 +20,7 @@ import type { Host, HostStateSnapshot } from "../../core/host";
 import type { ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
+import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeForwarder, type Forwarder } from "./forward";
@@ -31,6 +32,10 @@ export interface WebUiDeps {
   config: AppConfig;
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
+  /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
+  configDir?: string;
+  /** Model ids known to the active provider (defaults to a background cache). */
+  knownModels?: () => string[];
   /** Bind address override (default: state default / env). */
   host?: string;
   /** Token override (mandatory for a non-loopback bind). */
@@ -66,6 +71,36 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const state = createWebUiState();
   if (deps.host) state.host = deps.host;
   if (deps.token) state.token = deps.token;
+
+  // Collaborators for the config/session/model REST surface. `state.config`
+  // aliases the live config object, so `/api/config` writes mutate the same
+  // object the agent reads after `reconfigure`.
+  state.config = deps.config;
+  state.sessionManager = deps.sessionManager;
+  state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
+  state.reconfigure = (config) => deps.agent.reconfigure(config);
+
+  // Model list cache: the endpoint is synchronous, the provider call is not.
+  // Refresh once at startup (best-effort) and serve the cache thereafter.
+  const modelCache: string[] = [];
+  if (deps.knownModels) {
+    state.knownModels = deps.knownModels;
+  } else {
+    state.knownModels = () => modelCache;
+    void (async () => {
+      try {
+        const cfg = deps.config;
+        const name =
+          cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
+        const provider = deps.agent.getProviderFor(name);
+        if (!provider) return;
+        const models = await provider.listModels();
+        if (models.length > 0) modelCache.splice(0, modelCache.length, ...models.sort());
+      } catch {
+        // Offline provider: serve an empty list rather than failing startup.
+      }
+    })();
+  }
 
   const forwarder = makeForwarder(state);
 
