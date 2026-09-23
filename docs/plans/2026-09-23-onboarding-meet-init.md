@@ -224,9 +224,9 @@ describe("Agent prompt-block runtime methods", () => {
   it("pushes and removes a block by identity", () => {
     const agent = makeAgent();
     const block: PromptBlock = {
-      kind: "onboarding", content: "guide", priority: "high",
+      content: "guide", priority: "high",
       essential: true, estimatedTokens: 10,
-    } as PromptBlock;
+    };
     agent.pushPromptBlock(block);
     expect(agent.getPromptBlocksForTest()).toContain(block);
     agent.removePromptBlock(block);
@@ -689,7 +689,6 @@ import { MEET_SYSTEM_PROMPT, MEET_TOOLS } from "./prompts";
  */
 export function enterMeetMode(ctx: ReplContext): void {
   const block: PromptBlock = {
-    kind: "onboarding",
     content: MEET_SYSTEM_PROMPT,
     priority: "high",
     essential: true,
@@ -950,7 +949,6 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
   }
 
   const block: PromptBlock = {
-    kind: "onboarding",
     content: INIT_SYSTEM_PROMPT,
     priority: "high",
     essential: true,
