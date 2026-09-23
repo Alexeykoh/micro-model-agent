@@ -32,7 +32,9 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import { createHostBridge } from "../core/host";
-import type { HostStateSnapshot } from "../core/host";
+import type { Host, HostStateSnapshot } from "../core/host";
+import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
+import type { OutputEvent } from "../output/types";
 import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
@@ -85,7 +87,7 @@ function formatContextBar(
 
 export { createHostBridge };
 
-export class Repl implements ReplContext {
+export class Repl implements ReplContext, Host {
   private completer: Completer = new Completer();
   private modelCache: string[] = [];
   /** Boot snapshot of managed config keys — `/config reset` restores from it. */
@@ -125,6 +127,11 @@ export class Repl implements ReplContext {
   public pluginManager?: PluginManager;
   public logger?: Logger;
   private slog: SessionLogger;
+  /**
+   * Shared HostBridge instance (plugin-facing, also the engine behind the
+   * `Host` surface). Lazily built when no PluginManager was attached.
+   */
+  private hostBridge?: HostBridge;
   /**
    * Persists `data.persist === true` output events to the active session.
    * Inert until a SessionManager exists; re-bound by `/reload`.
@@ -265,19 +272,29 @@ export class Repl implements ReplContext {
   public attachHostBridge(pm?: PluginManager): void {
     const manager = pm ?? this.pluginManager;
     if (!manager) return;
-    manager.setHostBridge(
-      createHostBridge({
-        isBusy: () => this.agentRunning,
-        addPendingImage: (url) => {
-          this.agent.contextManager?.addPendingImage?.({
-            type: "image_url",
-            image_url: { url },
-          });
-        },
-        runAgent: (text) => this.runAgent(text),
-        interruptRun: () => this.agent.shutdown(),
-      }),
-    );
+    this.hostBridge = this.buildHostBridge();
+    manager.setHostBridge(this.hostBridge);
+  }
+
+  /** Build the HostBridge over this REPL's normal run path. */
+  private buildHostBridge(): HostBridge {
+    return createHostBridge({
+      isBusy: () => this.agentRunning,
+      addPendingImage: (url) => {
+        this.agent.contextManager?.addPendingImage?.({
+          type: "image_url",
+          image_url: { url },
+        });
+      },
+      runAgent: (text) => this.runAgent(text),
+      interruptRun: () => this.agent.shutdown(),
+    });
+  }
+
+  /** Lazily resolve the shared bridge so `Host` methods work without plugins. */
+  private getHostBridge(): HostBridge {
+    this.hostBridge ??= this.buildHostBridge();
+    return this.hostBridge;
   }
 
   /** (Re)bind the session output sink after construction or `/reload`. */
@@ -938,6 +955,26 @@ export class Repl implements ReplContext {
       }
       this.output.endModal();
     }
+  }
+
+  /** Host/HostBridge: true while the agent is processing a turn. */
+  public isBusy(): boolean {
+    return this.agentRunning;
+  }
+
+  /** Host/HostBridge: submit through the shared bridge (same run path). */
+  public submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown> {
+    return this.getHostBridge().submit(text, opts);
+  }
+
+  /** Host/HostBridge: interrupt the current run (no-op when idle). */
+  public interrupt(): void {
+    this.getHostBridge().interrupt();
+  }
+
+  /** Host/HostBridge: subscribe to the shared output bus. */
+  public subscribeOutput(fn: (ev: OutputEvent) => void): () => void {
+    return defaultOutputBus.subscribe(fn);
   }
 
   /** Host: run a slash command through the same handler map as typed input. */
