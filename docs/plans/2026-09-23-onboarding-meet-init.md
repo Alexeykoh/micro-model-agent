@@ -1157,44 +1157,40 @@ git commit -m "feat(i18n): onboarding, memory and setup command strings (en+ru)"
 ## Task 11: Session logging
 
 **Files:**
-- Modify: `src/core/session-logger.ts` (add `logOnboarding` near `logMoE`, `:399`)
-- Modify: `src/cli/repl.ts` (log at meet/init start and meet exit)
+- Modify: `src/core/session-logger.ts` (add `logOnboarding` next to `logMoE`, `:399`)
+- Test: `tests/onboarding/session-logging.test.ts`
+
+Wiring `logOnboarding` calls into the REPL lifecycle is done in Task 12 (meet) and Task 15 (init), where those lifecycle points are created. This task only adds the method + test.
 
 - [ ] **Step 1: Add `logOnboarding` to `SessionLogger`**
 
-Read `logMoE` at `src/core/session-logger.ts:399` and reuse its internal writer. Add:
+`logMoE` (`src/core/session-logger.ts:399`) writes via `this.session?.appendLog({ ts, type, content, ...data })`. Add the same-shaped method:
 
 ```ts
   /** Log an onboarding lifecycle event (meet/init) for post-mortem analysis. */
   logOnboarding(event: string, data: Record<string, unknown> = {}): void {
-    this.logEntry({ type: `onboarding_${event}`, ...data } as never);
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: `onboarding_${event}`,
+      content: event,
+      ...data,
+    });
   }
 ```
 
-Use the same private write helper `logMoE` calls (rename/reuse it — do not invent a new one).
+- [ ] **Step 2: Write the test** `tests/onboarding/session-logging.test.ts`
 
-- [ ] **Step 2: Log from the REPL lifecycle**
+Create a `SessionLogger` with a fake `SessionManager` whose `appendLog` is a `vi.fn()`; assert `logOnboarding("meet_start", { model: "m" })` calls `appendLog` once with `type: "onboarding_meet_start"`, `content: "meet_start"`, `model: "m"`, and a `ts` string. Also assert it does not throw when the session manager is `undefined`.
 
-In `src/cli/repl.ts`, where Meet/Init start and where meet mode exits (Task 12), emit:
+Model the fake after the existing `SessionManager` usage in `tests/core/session-logger.test.ts` if present (`rg -n "new SessionLogger" tests`).
 
-```ts
-    new SessionLogger(this.sessionManager, this.logger, () => ({})).logOnboarding("meet_start", {
-      model: this.config.model,
-    });
-```
-
-and `"meet_done"` / `"init_start"` / `"init_done"` at the corresponding points. Import `SessionLogger` from `../core/session-logger`. (`this.sessionManager` and `this.logger` are already REPL fields from the constructor.)
-
-- [ ] **Step 3: Typecheck**
-
-Run: `tsc --noEmit`
-Expected: PASS.
+- [ ] **Step 3: Run** `bun test tests/onboarding/session-logging.test.ts` and `bunx tsc --noEmit`; both pass.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/core/session-logger.ts src/cli/repl.ts
-git commit -m "feat(session): log onboarding lifecycle events"
+git add src/core/session-logger.ts tests/onboarding/session-logging.test.ts
+git commit -m "feat(session): add logOnboarding"
 ```
 
 ---
