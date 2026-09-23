@@ -39,6 +39,12 @@ export interface CreateHostBridgeOptions {
   interruptRun: () => void;
 }
 
+/**
+ * Build the HostBridge exposed to plugins as `ctx.hostBridge`. Web clients
+ * (and any other plugin) submit messages through the SAME runAgent path as
+ * terminal input — rendering, session logging and single-flight guard are
+ * shared, never duplicated.
+ */
 export function createHostBridge(opts: CreateHostBridgeOptions): HostBridge {
   return {
     isBusy: opts.isBusy,

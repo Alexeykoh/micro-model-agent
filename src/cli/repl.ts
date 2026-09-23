@@ -31,7 +31,7 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
-import type { HostBridge } from "../modules/types";
+import { createHostBridge } from "../core/host";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
@@ -81,31 +81,7 @@ function formatContextBar(
   return line;
 }
 
-/**
- * Build the HostBridge exposed to plugins as `ctx.hostBridge`. Web clients
- * (and any other plugin) submit messages through the SAME runAgent path as
- * terminal input — rendering, session logging and single-flight guard are
- * shared, never duplicated.
- */
-export function createHostBridge(opts: {
-  isBusy: () => boolean;
-  addPendingImage: (dataUrl: string) => void;
-  runAgent: (text: string) => Promise<unknown>;
-  interruptRun: () => void;
-}): HostBridge {
-  return {
-    isBusy: opts.isBusy,
-    async submit(text, o) {
-      if (opts.isBusy()) throw new Error("agent is busy");
-      for (const url of o?.images ?? []) opts.addPendingImage(url);
-      return opts.runAgent(text);
-    },
-    interrupt() {
-      if (opts.isBusy()) opts.interruptRun();
-    },
-    subscribeOutput: (fn) => defaultOutputBus.subscribe(fn),
-  };
-}
+export { createHostBridge };
 
 export class Repl implements ReplContext {
   private completer: Completer = new Completer();
