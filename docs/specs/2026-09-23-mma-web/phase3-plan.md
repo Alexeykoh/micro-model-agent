@@ -33,13 +33,46 @@ Faithfully reproduce `mockups/layout-v6.html`:
 - dark/light via CSS variables; lighten-dark palette matching the mockup.
 - zero-dependency vanilla JS; `textContent` for model/tool output (no XSS).
 
-## Task C — Memory + skills/plugins pages
+## Task C — Memory + skills/plugins pages (settings)
 
-Wire settings sections to real data: memory (list/add/forget via existing memory module/tools), skills registry, plugins/MCP status.
+Wire the settings sections to real data:
+- **Memory**: list / add / forget entries (the `MemoryStore` is already exposed via `BootstrapResult.memoryStore` → `WebUiState.memory`).
+- **Skills**: list loaded skills (name, source, enabled) from `SkillsModule`.
+- **Plugins · MCP**: list plugins (name, source, version) and MCP servers (name, status).
+- Endpoints: `GET /api/memory`, `POST /api/memory` (add), `DELETE /api/memory/:category/:n` (forget); `GET /api/skills`; `GET /api/plugins` (MCP merged). Authed + same-origin; missing collaborator → 503, never crash.
 
 ## Task D — Chat cards + questions
 
-Render tool payload cards from `tool_end` (image/file/link/plan), and a `?` question block when the web PromptIO lands (Phase 5).
+- Render the **plan block** card in the feed when a `plan`/`todo` tool runs (matching the mockup).
+- Render a `?` **question** block when the web PromptIO lands (Phase 5); until then render nothing or a dim placeholder.
+- Ensure file/link/image/code cards render from real data where available.
+
+## Task F — Usage metrics in the sidebar
+
+Populate `HostStateSnapshot` (`contextUsed/contextLimit/costUsd/compactionCount/cache`) from `AgentResult`/context snapshot after a turn; limit from `config.contextWindow`. Frontend renders them (no more `—` when data exists).
+
+## Task G — Tool output in `tool_end`
+
+Include a clipped tool result body (`output`, capped per tool) in the `tool_end` SSE event; render it as a code/detail block in the feed so live bash/file output is visible.
+
+## Task H — New-session creation
+
+- Backend: `POST /api/sessions` → `sessionManager.create(name?)` returning the meta.
+- Frontend: `+ new chat` creates a server session and opens it as a tab.
+
+## Task I — Config registry min/max
+
+Include numeric `min`/`max`/`step` in `GET /api/config` registry entries so numeric inputs render bounds.
+
+## Task J — Image attachments from the browser
+
+Frontend: attach images (paste/drag/file input) → send as `images[]` data URLs (already supported by `/api/message`), respecting caps (≤3, ≤6MB each) with a dim error on violation.
+
+## Task K — Docs, changelog, version
+
+- Update `docs/agents/modules.md` with the new endpoints and the supported command subset.
+- CHANGELOG entry + MINOR version bump per `docs/agents/versioning.md`; update `AGENTS.md` "Current Version" and synced version refs.
+- Add `.superpowers/` to `.gitignore`.
 
 ## Task E — Slash-command execution from the browser
 
