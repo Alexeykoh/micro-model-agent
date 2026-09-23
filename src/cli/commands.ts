@@ -68,6 +68,20 @@ function buildInitCommand(program: Command): void {
     });
 }
 
+function buildWebCommand(program: Command): void {
+  program
+    .command("web")
+    .description(t("cli.web.description"))
+    .option("-p, --port <n>", t("cli.web.port"))
+    .option("--host <addr>", t("cli.web.host"))
+    .option("--token <t>", t("cli.web.token"))
+    .option("--no-open", t("cli.web.no_open"))
+    .action(() => {
+      /* Dispatched by main.ts after program.parse() — the web server is
+         long-running and must not be cut short by the one-shot exit hook. */
+    });
+}
+
 function buildAgentsCommand(program: Command): void {
   const agents = program.command("agents").description(t("cli.agents"));
   agents
@@ -756,6 +770,7 @@ export function createProgram(): Command {
   buildMeetCommand(program);
   buildInitCommand(program);
   buildAgentsCommand(program);
+  buildWebCommand(program);
   buildConfigCommands(program);
   buildModelCommands(program);
   buildContextCommand(program);
@@ -797,12 +812,13 @@ export function createProgram(): Command {
     for (const sub of cmd.commands) attachOneShotExit(sub);
   };
   // `meet`/`agents` are not one-shot: their empty actions only mark intent, and
-  // main.ts falls through to the interactive REPL. The exit hook would fire
-  // during program.parse() and kill the process before the REPL branch runs.
+  // main.ts falls through to the interactive REPL. `web` is long-running (its
+  // server is started by main.ts after parse). The exit hook would fire during
+  // program.parse() and kill the process before the branch runs.
   // `mma init`/`mma setup` ARE one-shot wizards and must exit after running.
-  const onboardingCommands = new Set(["meet", "agents"]);
+  const longRunningCommands = new Set(["meet", "agents", "web"]);
   for (const cmd of program.commands) {
-    if (onboardingCommands.has(cmd.name())) continue;
+    if (longRunningCommands.has(cmd.name())) continue;
     attachOneShotExit(cmd);
   }
 

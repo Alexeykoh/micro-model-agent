@@ -5,6 +5,7 @@ import { Renderer } from "../ui/renderer";
 import { resolveVerbosity } from "../ui/theme";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
+import { runWeb } from "./web-command";
 import { applyAnswersToConfig } from "./setup-order";
 import { relaunchCli } from "./relaunch";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
@@ -107,6 +108,26 @@ async function main(): Promise<void> {
   // Quiet chat hides structured info logs; --verbose (or a verbose config)
   // brings them back. Set before bootstrap so its own logs respect it.
   getDefaultChannel().setSuppressInfoLogs(!verboseOpt);
+
+  // `web` is long-running: its command action is a no-op and the server is
+  // started here, after parse, so it survives the one-shot exit hook (which is
+  // intentionally not attached to `web` in commands.ts).
+  if (program.args[0] === "web") {
+    const webOpts = (program.commands.find((c) => c.name() === "web")?.opts() ?? {}) as {
+      port?: string;
+      host?: string;
+      token?: string;
+      open?: boolean;
+    };
+    await runWeb({
+      port: webOpts.port ? Number(webOpts.port) : undefined,
+      host: webOpts.host,
+      token: webOpts.token,
+      noOpen: webOpts.open === false,
+      projectDir,
+    });
+    process.exit(0);
+  }
 
   const isSubcommand =
     program.args.length > 0 && cmdNames.has(program.args[0]) && !onboardingStart;

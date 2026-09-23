@@ -116,12 +116,15 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
           return;
         }
         s.lastPostTs = Date.now();
+        // Reserve the single-flight slot. `WebHost.submit` checks `isBusy()`
+        // (== `s.busy`) synchronously, so the reservation must be set AFTER
+        // submit is invoked — setting it first would make submit reject every
+        // message against its own reservation. The forwarder clears `busy` on
+        // `turn_end`; the catch below covers a rejected submit.
+        const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
         s.busy = true;
         broadcast({ type: "state", ts: Date.now(), busy: true }, s);
-        // Fire-and-forget: the turn streams over SSE; errors surface there.
-        // Ownership: the forwarder owns `turn_end`; on submit rejection we only
-        // clear busy and surface an `error` + `state`, never a second `turn_end`.
-        bridge.submit(body.text, { images: body.images }).catch((err: unknown) => {
+        run.catch((err: unknown) => {
           s.busy = false;
           broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
           broadcast({ type: "state", ts: Date.now(), busy: false }, s);
@@ -134,13 +137,40 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
     return;
   }
 
+  if (reqUrl.pathname === "/api/command" && req.method === "POST") {
+    const bridge = s.bridge;
+    readBody(req, s.maxBodyBytes)
+      .then((raw) => {
+        let line = "";
+        try {
+          const parsed = JSON.parse(raw) as { line?: unknown };
+          if (typeof parsed.line === "string") line = parsed.line;
+        } catch {
+          // Malformed body is not worth a 400: command dispatch is a Phase-3
+          // no-op and the front-end only shows its own message on non-2xx.
+        }
+        // Phase 3: slash-command dispatch through a shared handler map is not
+        // wired for web yet. Keep the endpoint authed and a no-op so the UI's
+        // `/` path stays functional; a host error must never become a 5xx.
+        Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
+        sendJson(res, 200, { ok: true });
+      })
+      .catch((err: unknown) => {
+        readBodyError(req, res, err);
+      });
+    return;
+  }
+
   if (reqUrl.pathname === "/api/interrupt" && req.method === "POST") {
     if (!s.busy && !s.bridge?.isBusy()) {
       sendJson(res, 409, { error: "idle" });
       return;
     }
-    s.busy = false;
+    // Interrupt BEFORE clearing busy: `WebHost.interrupt` guards on `isBusy()`
+    // (== `s.busy`), so clearing first would swallow the interrupt. The
+    // forwarder resets busy on the resulting `turn_end` anyway.
     s.bridge?.interrupt();
+    s.busy = false;
     sendJson(res, 200, { ok: true });
     return;
   }
