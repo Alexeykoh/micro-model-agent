@@ -50,9 +50,18 @@ export class ToolExecutor {
     return this.registry.has(name);
   }
 
-  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
+  /**
+   * Allowlisted tool names as a set, or `null` when unrestricted.
+   * `undefined` means no restriction; `[]` means block everything.
+   */
+  private allowedNames(): Set<string> | null {
     const allow = this.ctx.toolAllowlist;
-    if (allow && !allow.includes(call.name)) {
+    return allow ? new Set(allow) : null;
+  }
+
+  async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
+    const allow = this.allowedNames();
+    if (allow && !allow.has(call.name)) {
       return {
         success: false,
         output: t("tool.not_allowed", { name: call.name }),
@@ -206,12 +215,11 @@ export class ToolExecutor {
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
-    const allow = this.ctx.toolAllowlist;
+    const allow = this.allowedNames();
     if (allow) {
-      const set = new Set(allow);
       return this.registry
         .getAll()
-        .filter((t) => set.has(t.name))
+        .filter((t) => allow.has(t.name))
         .map((t) => ({
           name: t.name,
           description: t.description,

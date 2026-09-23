@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ToolExecutor } from "../../src/tools/executor";
 import { ToolRegistry } from "../../src/tools/registry";
 import type { ToolContext } from "../../src/tools/types";
@@ -40,10 +40,22 @@ describe("tool allowlist", () => {
     executor = new ToolExecutor(registry, ctx, { getAllPlugins: () => [] });
   });
 
-  it("exposes every allowlisted tool regardless of tags or alwaysOn", () => {
+  it("includes an alwaysOn tool when it is in the allowlist", () => {
+    ctx.toolAllowlist = ["project_map"];
+    const names = executor.getToolDefinitions().map((t) => t.name);
+    expect(names).toContain("project_map");
+  });
+
+  it("returns only registered allowlisted tools", () => {
     ctx.toolAllowlist = ["remember", "question"];
     const names = executor.getToolDefinitions(["code"]).map((t) => t.name);
     expect(names).toEqual(["remember"]);
+  });
+
+  it("drops allowlist entries that are not registered", () => {
+    ctx.toolAllowlist = ["remember", "question"];
+    const names = executor.getToolDefinitions().map((t) => t.name);
+    expect(names).not.toContain("question");
   });
 
   it("excludes alwaysOn tools not in the allowlist", () => {
@@ -55,6 +67,26 @@ describe("tool allowlist", () => {
   it("rejects execution of a tool outside the allowlist", async () => {
     ctx.toolAllowlist = ["remember"];
     const res = await executor.execute({ id: "c1", name: "bash", arguments: {} });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("not allowed");
+  });
+
+  it("never invokes the handler of a non-allowlisted tool", async () => {
+    const handler = vi.fn(async () => ({ success: true, output: "ran" }));
+    registry.register({
+      name: "danger", description: "", parameters: { type: "object", properties: {} },
+      handler,
+    });
+    ctx.toolAllowlist = ["remember"];
+    const res = await executor.execute({ id: "c1", name: "danger", arguments: {} });
+    expect(res.success).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("exposes nothing and rejects everything when the allowlist is empty", async () => {
+    ctx.toolAllowlist = [];
+    expect(executor.getToolDefinitions()).toEqual([]);
+    const res = await executor.execute({ id: "c1", name: "remember", arguments: {} });
     expect(res.success).toBe(false);
     expect(res.output).toContain("not allowed");
   });
