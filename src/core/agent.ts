@@ -316,6 +316,11 @@ export class Agent {
     return this.deps.toolCtx;
   }
 
+  /** Non-throwing variant of `toolContext` for optional/lifecycle checks. */
+  tryToolContext(): import("../tools/types").ToolContext | undefined {
+    return this.deps.toolCtx;
+  }
+
   private buildSystemPrompt(): {
     prompt: string;
     excluded: string[];

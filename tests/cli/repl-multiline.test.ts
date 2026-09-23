@@ -7,6 +7,7 @@ describe("REPL multi-line input", () => {
     const mockAgent = {
       run: async () => ({ success: true, text: "ok", iterationCount: 1 }),
       shutdown: () => {},
+      tryToolContext: () => undefined,
     } as any;
     const mockConfig = {
       model: "test",
