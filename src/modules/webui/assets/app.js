@@ -114,6 +114,25 @@
     return node;
   }
 
+  // Render raw memory text (`- **date** -- **pattern:** body`) as safe DOM nodes:
+  // `**…**` spans become <b>, everything else stays a text node. Never uses
+  // innerHTML, so untrusted/model-written content cannot inject markup.
+  function inlineTextNodes(text) {
+    const frag = document.createDocumentFragment();
+    const raw = String(text == null ? "" : text).replace(/^-\s*/, "");
+    raw.split("**").forEach((part, i) => {
+      if (part === "") return;
+      if (i % 2 === 1) {
+        const b = document.createElement("b");
+        b.textContent = part;
+        frag.appendChild(b);
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+    });
+    return frag;
+  }
+
   function setPath(obj, path, value) {
     const parts = path.split(".");
     let cur = obj;
@@ -1555,8 +1574,13 @@
   function row(label, control) {
     const r = el("div", "row");
     r.appendChild(el("span", "", label));
-    if (typeof control === "string") r.appendChild(el("span", "val", control));
-    else if (control) r.appendChild(control);
+    if (typeof control === "string") {
+      const v = el("span", "val", control);
+      v.title = control;
+      r.appendChild(v);
+    } else if (control) {
+      r.appendChild(control);
+    }
     return r;
   }
 
@@ -1584,7 +1608,11 @@
       });
       return seg;
     }
-    if (def.readOnly) return el("span", "val dim", value == null ? "—" : String(value));
+    if (def.readOnly) {
+      const ro = el("span", "val dim", value == null ? "—" : String(value));
+      if (value != null) ro.title = String(value);
+      return ro;
+    }
     const input = el("input");
     if (def.valueType === "int") {
       input.type = "number";
@@ -1637,7 +1665,9 @@
       models.forEach((m) => {
         const active = m === cfg.model;
         const r = el("div", "row");
-        r.appendChild(el("span", active ? "val accent" : "", m));
+        const nameEl = el("span", active ? "val accent" : "", m);
+        nameEl.title = m;
+        r.appendChild(nameEl);
         if (active) {
           r.appendChild(el("span", "val dim", contextLabel() + " · " + t("web.settings.active_check")));
         } else {
@@ -1654,12 +1684,17 @@
     const entries = Array.isArray(provider.entries) && provider.entries.length
       ? provider.entries
       : [{ label: provider.active || provider.type, type: provider.type }];
-    container.appendChild(row(t("web.settings.active_provider"), el("span", "val", provider.active || provider.type || "—")));
+    const activeName = provider.active || provider.type || "—";
+    const activeVal = el("span", "val", activeName);
+    activeVal.title = activeName;
+    container.appendChild(row(t("web.settings.active_provider"), activeVal));
     entries.forEach((entry) => {
       const name = entry.label || entry.type;
       if (!name) return;
       const r = el("div", "row");
-      r.appendChild(el("span", "", t("web.settings.provider_label", { name })));
+      const labelEl = el("span", "", t("web.settings.provider_label", { name }));
+      labelEl.title = name;
+      r.appendChild(labelEl);
       if (name === (provider.active || provider.type)) {
         r.appendChild(el("span", "val dim", t("web.settings.active")));
       } else {
@@ -1728,13 +1763,12 @@
     }
     const data = state.memory;
 
-    const addRow = el("div", "row");
-    addRow.appendChild(el("span", "", t("web.settings.add_entry")));
+    const addRow = el("div", "mem-add");
     const catSel = el("select");
     MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
     catSel.value = "facts";
     addRow.appendChild(catSel);
-    const textIn = el("input", "grow");
+    const textIn = el("input");
     textIn.placeholder = t("web.settings.new_memory");
     addRow.appendChild(textIn);
     const addBtn = el("span", "edit", t("web.settings.add"));
@@ -1758,6 +1792,27 @@
     const list = el("div", "settings-list");
     container.appendChild(list);
 
+    const categoryHeader = (label, count) => {
+      const head = el("div", "mem-cat");
+      head.appendChild(el("span", "", label));
+      if (count != null) head.appendChild(el("span", "n", String(count)));
+      return head;
+    };
+
+    const entryBlock = (text, onForget) => {
+      const block = el("div", "mem-entry");
+      const body = el("span", "mem-text");
+      body.appendChild(inlineTextNodes(text));
+      body.title = String(text == null ? "" : text);
+      block.appendChild(body);
+      if (onForget) {
+        const del = el("span", "mem-del", t("web.settings.forget"));
+        del.addEventListener("click", onForget);
+        block.appendChild(del);
+      }
+      return block;
+    };
+
     const draw = () => {
       list.textContent = "";
       const q = search.value.trim().toLowerCase();
@@ -1768,31 +1823,26 @@
         );
         if (!entries.length) return;
         any = true;
-        list.appendChild(groupHeader(cat.name, entries.length));
+        list.appendChild(categoryHeader(cat.name, entries.length));
         entries.forEach((e) => {
-          const line = el("div", "list-line");
-          line.appendChild(el("span", "name", String(e.text).replace(/^- /, "")));
-          const del = el("span", "edit", t("web.settings.forget"));
-          del.addEventListener("click", async () => {
-            const r = await api(
-              "/api/memory/" + encodeURIComponent(cat.name) + "/" + e.n,
-              { method: "DELETE" },
-            );
-            if (r.ok) await loadMemory();
-            else setIndicator(t("web.settings.forget_failed"), true);
-          });
-          line.appendChild(del);
-          list.appendChild(line);
+          list.appendChild(
+            entryBlock(e.text, async () => {
+              const r = await api(
+                "/api/memory/" + encodeURIComponent(cat.name) + "/" + e.n,
+                { method: "DELETE" },
+              );
+              if (r.ok) await loadMemory();
+              else setIndicator(t("web.settings.forget_failed"), true);
+            }),
+          );
         });
       });
       const prefs = Object.entries(data.preferences || {});
       if (prefs.length && !q) {
         any = true;
-        list.appendChild(groupHeader(t("web.settings.preferences"), prefs.length));
+        list.appendChild(categoryHeader(t("web.settings.preferences"), prefs.length));
         prefs.forEach(([k, v]) => {
-          const line = el("div", "list-line");
-          line.appendChild(el("span", "name", k + " = " + v));
-          list.appendChild(line);
+          list.appendChild(entryBlock(k + " = " + v));
         });
       }
       if (!any) {
@@ -1823,8 +1873,14 @@
     state.skills.forEach((s) => {
       const line = el("div", "list-line");
       line.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
-      line.appendChild(el("span", "name", s.name));
-      if (s.source) line.appendChild(el("span", "src", s.source));
+      const nameEl = el("span", "name", s.name);
+      nameEl.title = s.name;
+      line.appendChild(nameEl);
+      if (s.source) {
+        const src = el("span", "src", s.source);
+        src.title = s.source;
+        line.appendChild(src);
+      }
       line.appendChild(el("span", "st", s.enabled ? t("web.settings.enabled") : t("web.settings.available")));
       list.appendChild(line);
     });
@@ -1850,9 +1906,15 @@
     (data.plugins || []).forEach((p) => {
       const line = el("div", "list-line");
       line.appendChild(el("span", "g", "✓"));
-      line.appendChild(el("span", "name", p.name));
+      const nameEl = el("span", "name", p.name);
+      nameEl.title = p.name;
+      line.appendChild(nameEl);
       if (p.version) line.appendChild(el("span", "src", "v" + p.version));
-      if (p.source) line.appendChild(el("span", "src", p.source));
+      if (p.source) {
+        const src = el("span", "src", p.source);
+        src.title = p.source;
+        line.appendChild(src);
+      }
       line.appendChild(el("span", "st", p.enabled === false ? t("web.settings.disabled") : t("web.settings.enabled")));
       list.appendChild(line);
     });
