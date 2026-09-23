@@ -289,6 +289,26 @@ export class Agent {
     this.deps.toolExecutor.setPromptIO(io);
   }
 
+  /**
+   * Append a system-prompt block for the current run (onboarding guide).
+   * Identity-based removal via `removePromptBlock`. Prompt blocks are read on
+   * every `buildSystemPrompt`, so the block takes effect on the next turn.
+   */
+  pushPromptBlock(block: PromptBlock): void {
+    this.deps.promptBlocks.push(block);
+  }
+
+  /** Remove a previously pushed block (by reference). */
+  removePromptBlock(block: PromptBlock): void {
+    const i = this.deps.promptBlocks.indexOf(block);
+    if (i >= 0) this.deps.promptBlocks.splice(i, 1);
+  }
+
+  /** Test-only view of the current prompt blocks. */
+  getPromptBlocksForTest(): PromptBlock[] {
+    return this.deps.promptBlocks;
+  }
+
   private buildSystemPrompt(): {
     prompt: string;
     excluded: string[];
