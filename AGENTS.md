@@ -330,6 +330,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Slash-команды в браузере:** `/help` `/status` `/config` `/model` `/provider` `/memory` `/reasoning` `/verbose` `/context` `/session list|use` `/export` (handler map); `/clear` и `/new` — клиентские; terminal-only команды вне scope.
 - **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены.
 - **i18n:** `GET /api/i18n` отдаёт словари, chrome веб-UI локализуется и переключается при смене `locale`; SSE-reconnect с ресинком; статика с `Cache-Control: no-store`.
+- **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
 ### Current Version: 2.3.0

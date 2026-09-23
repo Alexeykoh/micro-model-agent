@@ -22,6 +22,8 @@
 
 **Phase 6 — Polish.** SSE reconnect/resync with a dim indicator; localization (`GET /api/i18n`, `web.*` keys, live switch); `Cache-Control: no-store` on assets; skip-safe Playwright smoke; bundling decision documented.
 
+**Phase 7 — Settings & responsiveness fixes.** Responsive settings modal + adaptive layout; clearer Memory page; localized config labels (`config.key.*`) and enum values (`config.enum.*`); read-only `version`; real Security toggles + masked web token; provider add/edit (`GET/POST /api/providers`, `DELETE /api/providers/:name`); MCP enable/disable (`POST /api/mcp/:id`); Plugins read-only with note.
+
 ---
 
 ## Autonomous decisions (rationale)

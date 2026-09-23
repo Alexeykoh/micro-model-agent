@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **web i18n** (`GET /api/i18n`, `web.*` keys): the browser chrome is localized and switches live when `locale` changes.
 - **web resilience**: SSE reconnect with state resync; `Cache-Control: no-store` on static assets (no stale UI after restart).
 - **fix**: `--no-agents-md` is now honored on all paths (commander exposes the negatable option as `agentsMd`).
+- **web settings polish**: responsive settings modal and adaptive layout; localized config labels and enum values (`config.key.*`/`config.enum.*`); read-only `version`; real Security toggles (`security.enabled`, `security.paths.enabled`, `security.contentScan.enabled`, `security.sessionEncryption.enabled`) + masked web token; provider add/edit (`GET/POST /api/providers`, `DELETE /api/providers/:name`); MCP enable/disable (`POST /api/mcp/:id`); clearer Memory page.
 - **web live data**: real usage metrics in the sidebar, clipped tool output in `tool_end`, plan card, image attachments (paste/drag/file, ≤3 × ≤6MB), and new-session creation from `+`.
 
 ## [2.2.0] - 2026-09-23
