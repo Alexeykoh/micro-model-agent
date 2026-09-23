@@ -151,4 +151,5 @@ error:    ✗ <what> — <short cause>
 | REPL banner / status | `src/cli/repl.ts` |
 | Verbosity plumbing | `src/ui/renderer.ts`, `src/cli/repl-commands.ts`, `src/cli/main.ts` |
 | Tool labels | `src/i18n/{en,ru}.json` (`tool.friendly.*`) |
+| Question / user input | `src/tools/user-input.ts` (`formatMenu`/`choicePrompt`), `src/cli/prompt-io` |
 | Tool-name display | `src/ui/renderer.ts` (`toolStart`/`toolEnd`) |

@@ -52,6 +52,7 @@
 | O12 | Onboarding sessions are logged to `session.jsonl` as `onboarding_*` events for observability. |
 | O13 | `MEET_SYSTEM_PROMPT` is a **semi-script**: the guide owns topic coverage and a preference-key whitelist; the model owns wording and light follow-ups. Keys outside the whitelist are not written. |
 | O14 | Onboarding is **domain-neutral**: `meet` asks about the user's usage profile/domain (not only a tech stack), and `init` works for any workspace (docs, configs, notes) — code is just one case. No code-centric wording in prompts, labels or offers. |
+| O15 | The `question` tool is brought into line with STYLE.md (`?` glyph, indented option list, `[N] <custom>`, `>` prompt). This is a **global** change (all tools/REPL), not meet-only — see §6.7. |
 
 ## 5. Command surface
 
@@ -87,6 +88,8 @@
 - Free-form answers → `remember category=facts`.
 - Files: `~/.mma/memory/preferences.json`, `~/.mma/memory/facts.md` (existing `MemoryStore`).
 - No partial/garbage writes: only what the model explicitly confirms via `remember`.
+- **Conventions:** preference keys/values are canonical **English tokens** (`domain=development`, `autonomy=ask`); free-form `facts` are written in the **user's language**. Multi-value preferences use comma-separated tokens without spaces (`domain=development,api`).
+- **A concrete "do not" rule is preserved verbatim in `facts`** (e.g. "не коммить/пушить сам"), not collapsed into the abstract `autonomy` value alone — the preference is a hint, the fact is the detail.
 
 ### 6.4 Output (STYLE.md)
 
@@ -106,10 +109,140 @@ Semi-script. The guide defines coverage and the memory slots; the model only phr
 | response style | `preferences.response_style` (`concise\|balanced\|detailed`) |
 | tools & experience | `facts` (free-form) |
 | working habits | `facts` |
-| "do not without asking" | `preferences.autonomy` (`ask\|act`) / `facts` |
+| "do not without asking" | `preferences.autonomy` (`ask\|act`) **+ the verbatim rule in `facts`** |
 | code / commit language *(only if development is a use case)* | `preferences.code_language` |
 
 Rules baked into the prompt: ask about the **domain first**, then adapt; 1–3 questions per turn; closed questions via the `question` tool (options), open questions as plain text; ask in the user's language; stop once topics are covered; **do not invent keys outside the whitelist**; never assume the user is a programmer.
+
+### 6.6 Examples (paper)
+
+Rendering below reflects §6.7 (question tool aligned to STYLE). Reasoning lines are shown once and omitted afterwards for brevity. Machine preference values are canonical English tokens; `facts` are in the user's language.
+
+**A — domain "development":**
+
+```
+  mma 3.0.0 · qwen3.5-9b · lmstudio · 32K · system prompt 2.1K
+  /work/landing · session a1f2
+
+? Познакомимся? Задам несколько вопросов и запомню, как тебе удобнее
+  работать. Это минута; можно пропустить — позже вызвать /meet.
+  [Y/n] > y
+
+✦ размышляю · 0.9s
+? Для чего ты в основном будешь меня использовать? Например: разработка,
+  работа с API, умный дом, автоматизация, ассистент, веб-поиск.
+> разработка и работа с API
+
+◇ Запоминаю · domain=development,api ✓
+? Понял. Как тебя зовут и на каком языке отвечать?
+> Алексей, по-русски
+
+◇ Запоминаю · 2 записи ✓
+  ↳ name=Алексей, language=ru
+
+? Короткие ответы или подробные?
+  [1] коротко — только суть
+  [2] сбалансированно — по умолчанию
+  [3] подробно — с деталями и примерами
+  [4] Свой ответ
+> 1
+
+◇ Запоминаю · response_style=concise ✓
+? Что за стек и с чем обычно работаешь?
+> TypeScript, Bun, иногда React; API — REST и webhooks
+
+◇ Запоминаю · 2 факта ✓
+  ↳ стек: TypeScript, Bun, React
+  ↳ API: REST, webhooks
+
+? Что мне не делать без спроса?
+> не коммить и не пушить сам
+
+◇ Запоминаю · autonomy=ask ✓
+◇ Запоминаю · факт ✓
+  ↳ не коммить и не пушить самостоятельно
+
+? Код и коммиты — на русском или английском?
+> на английском
+
+◇ Запоминаю · code_language=en ✓
+
+✓ Готово, запомнил:
+  ↳ домен: разработка + API · язык: ru · ответы: кратко
+  ↳ стек: TypeScript, Bun, React · API: REST, webhooks
+  ↳ автономность: спрашивать (не коммить/пушить) · код/коммиты: en
+  Изменить — /meet, посмотреть — /memory
+```
+
+**B — domain "smart home + assistant" (no code questions):**
+
+```
+? Для чего ты в основном будешь меня использовать?
+> умный дом и всякое по мелочи — ассистент, погода, напоминания
+
+◇ Запоминаю · domain=smart-home,assistant ✓
+? Понял. Как тебя зовут и на каком языке отвечать?
+> Алексей, по-русски
+
+◇ Запоминаю · 2 записи ✓
+  ↳ name=Алексей, language=ru
+
+? Расскажи про свой умный дом: какая система, какие устройства?
+> Home Assistant, лампы Hue, датчики температуры
+
+◇ Запоминаю · 2 факта ✓
+  ↳ Home Assistant, лампы Hue
+  ↳ датчики температуры
+
+? Что мне не делать без спроса?
+> не включай/выключай свет сам — только по команде
+
+◇ Запоминаю · autonomy=ask ✓
+◇ Запоминаю · факт ✓
+  ↳ не управлять светом без команды
+
+? Ещё что-то важное для работы?
+> погоду показывай только для Москвы
+
+◇ Запоминаю · факт ✓
+  ↳ погода: город Москва
+
+✓ Готово, запомнил:
+  ↳ домен: умный дом + ассистент · язык: ru
+  ↳ Home Assistant, Hue, датчики температуры
+  ↳ автономность: спрашивать (свет — только по команде) · город: Москва
+  Изменить — /meet, посмотреть — /memory
+```
+
+**C — skipped question (empty answer):**
+
+```
+? Расскажи про свой умный дом: какая система, какие устройства?
+> ⏎
+  пропущено
+? Хорошо, идём дальше. Что мне не делать без спроса?
+```
+
+`пропущено` is a dim line, **not** a `◇` action (no tool ran).
+
+### 6.7 `question` tool — STYLE alignment (global)
+
+The `question` tool's human rendering currently diverges from STYLE.md (`src/tools/user-input.ts` `formatMenu`/`choicePrompt`): no `?` glyph, inline options. Target rendering:
+
+```
+? <question>                         ← ? glyph (accent), question default
+  [1] <label> — <dim description>
+  [2] …
+  [N] <dim: custom answer>
+> <selection>                        ← > prompt (accent)
+```
+
+- Free-text question: `? <question>` then `> `.
+- Multiple questions: dim progress prefix, e.g. `? <dim>[1/3]</dim> <question>`.
+- Applies to every consumer of the tool (meet and all normal agent questions) — hence global, not meet-only.
+- **Non-goal:** no change to the model-facing tool output (`tool.question.answered`) or to the headless fallback (`askText`/`askChoice`); only the human rendering changes.
+- Files: `src/tools/user-input.ts`, `src/cli/prompt-io`/`src/ui/line-editor.ts` (`printAbove`), `src/ui/theme.ts`, i18n. Add `src/tools/user-input.ts` to STYLE.md's implementation touchpoints.
+- Tests: unit for `formatMenu`/`choicePrompt` output; ensure `--json`/non-TTY path unchanged.
 
 ## 7. `init` — `AGENTS.md`
 
@@ -193,6 +326,8 @@ src/modules/onboarding/
 | `src/cli/commands.ts` | Modify — rename `init`→`setup`, add `init` (AGENTS.md) + `meet` |
 | `src/cli/repl-commands.ts` | Modify — `/setup`, `/meet`, `/init`, `/memory` handlers |
 | `src/cli/repl.ts` | Modify — post-setup `[Y/n]` offer, banner hints |
+| `src/tools/user-input.ts` | Modify — `question` rendering per STYLE (§6.7), global |
+| `src/cli/prompt-io` / `src/ui/line-editor.ts` | Modify — `?`/`>` rendering in `printAbove` (if needed) |
 | `src/core/session-logger.ts` | Modify — `logOnboarding` (or generic event) |
 | `src/i18n/{en,ru}.json` | Modify — parity strings |
 | `tests/onboarding-*.test.ts` | Create — unit tests |
@@ -217,8 +352,9 @@ src/modules/onboarding/
 
 1. Unit (fake agent): interview persists prefs/facts; tool allowlist enforced; `init` creates new / improves in place; diff-confirm path; preflight down/up; mid-interview failure keeps confirmed entries.
 2. `/memory` set/get/unset/find/forget round-trip.
-3. `bun test` + `tsc --noEmit`.
-4. Manual scenarios in `docs/agents/testing.md`: first-run offer, provider-down path, `/meet`, `mma init` on a repo with and without `AGENTS.md`.
+3. `question` tool rendering (§6.7): `formatMenu`/`choicePrompt` output; non-TTY/`--json` path unchanged.
+4. `bun test` + `tsc --noEmit`.
+5. Manual scenarios in `docs/agents/testing.md`: first-run offer, provider-down path, `/meet`, `mma init` on a repo with and without `AGENTS.md`.
 
 ## 13. Migration & versioning
 
