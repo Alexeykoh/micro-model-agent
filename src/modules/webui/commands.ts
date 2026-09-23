@@ -1,0 +1,240 @@
+/**
+ * Slash-command dispatcher for `mma web` (Phase 3 Task E).
+ *
+ * The browser's `/` path used to be a documented no-op. This module runs a
+ * supported subset through a handler map (architecture rule #17 — no `if`
+ * chain) and reuses the SAME machinery as the REPL: the config registry
+ * (`getConfigValue`/`setConfigValue`), the host's `saveConfig`/`reconfigure`
+ * hooks and the shared memory store. Output is emitted line-by-line over SSE as
+ * a `command` event and rendered dim in the feed.
+ *
+ * Terminal-only commands (`/meet`, interactive prompts, `/wizard`) are
+ * deliberately out of scope — see `HELP` for the supported subset.
+ */
+import type { AppConfig } from "../../config/types";
+import { canonicalKeys, getConfigValue, setConfigValue } from "../../config/registry";
+import { redactContextSecrets } from "../../core/agent/context-log";
+import { errMsg } from "../../utils/error";
+import { memoryLines } from "./memory-commands";
+import { broadcast, type WebUiState } from "./state";
+
+type Out = (line: string) => void;
+type Handler = (args: string[], out: Out) => void | Promise<void>;
+
+/** Supported subset, surfaced by `/help` (one line each). */
+const HELP: Array<{ usage: string; desc: string }> = [
+  { usage: "/help", desc: "list web commands" },
+  { usage: "/status", desc: "model · provider · context · session · verbosity" },
+  { usage: "/config <key> [value]", desc: "read or write a config key" },
+  { usage: "/model list | /model use <name>", desc: "list or switch model" },
+  { usage: "/provider list | /provider use <name>", desc: "list or switch provider" },
+  { usage: "/memory [get|set|unset|find|forget]", desc: "inspect or edit global memory" },
+  { usage: "/clear", desc: "clear the feed (browser-side)" },
+  { usage: "/new", desc: "open a new chat tab (browser-side)" },
+];
+
+export interface WebCommandDeps {
+  state: WebUiState;
+  /** Capture sink for tests; defaults to an SSE `command` broadcast. */
+  emit?: (text: string) => void;
+}
+
+/** Build the `(line) => Promise<void>` dispatcher wired into `WebHost`. */
+export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise<void> {
+  const { state } = deps;
+  const raw =
+    deps.emit ??
+    ((text: string) => broadcast({ type: "command", ts: Date.now(), text }, state));
+  // Every emitted line passes through point-redaction: config reads can echo a
+  // key the user just set, and the feed is user-visible.
+  const out: Out = (text) => raw(redactContextSecrets(text));
+
+  const handlers: Record<string, Handler> = {
+    help: (_args, o) => HELP.forEach((h) => o(`${h.usage}  ·  ${h.desc}`)),
+    status: (_args, o) => withConfig(state, o, (cfg) => status(cfg, state, o)),
+    config: (args, o) => withConfig(state, o, (cfg) => configCmd(cfg, args, o, state)),
+    model: (args, o) => withConfig(state, o, (cfg) => modelCmd(cfg, args, o, state)),
+    provider: (args, o) => withConfig(state, o, (cfg) => providerCmd(cfg, args, o, state)),
+    memory: (args, o) => memoryCmd(state, args, o),
+  };
+
+  return async (line) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("/")) return;
+    const parts = trimmed.slice(1).trim().split(/\s+/);
+    const name = (parts.shift() ?? "").toLowerCase();
+    if (!name) return;
+    const handler = handlers[name];
+    if (!handler) {
+      out(`↳ unknown command: ${name}`);
+      return;
+    }
+    try {
+      await handler(parts, out);
+    } catch (err) {
+      out(`↳ ${errMsg(err)}`);
+    }
+  };
+}
+
+/** Run `fn` only when a config collaborator is wired; otherwise emit a hint. */
+function withConfig(
+  state: WebUiState,
+  out: Out,
+  fn: (cfg: AppConfig) => void | Promise<void>,
+): void | Promise<void> {
+  if (!state.config) {
+    out("↳ config unavailable");
+    return;
+  }
+  return fn(state.config);
+}
+
+function activeMeta(state: WebUiState) {
+  const id = state.sessionManager?.getActive();
+  return id ? (state.sessionManager?.get(id) ?? null) : null;
+}
+
+function status(cfg: AppConfig, state: WebUiState, out: Out): void {
+  const provider = cfg.provider.active ?? cfg.provider.type;
+  const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
+  const meta = activeMeta(state);
+  if (meta) parts.push(`${meta.name} (${meta.messageCount} msgs)`);
+  const verbosity = getConfigValue(cfg, "ui.verbosity");
+  parts.push(verbosity.ok ? verbosity.display : "—");
+  out(parts.join(" · "));
+}
+
+/** Persist + reconfigure after a successful registry write, then report. */
+async function applyConfigWrite(
+  cfg: AppConfig,
+  name: string,
+  value: string,
+  out: Out,
+  state: WebUiState,
+): Promise<void> {
+  const result = setConfigValue(cfg, name, value);
+  if (!result.ok) {
+    out(`↳ ${configErrorText(result.reason, result.input, result.key)}`);
+    return;
+  }
+  let note = "saved";
+  try {
+    state.saveConfig?.(cfg);
+  } catch {
+    note = "not persisted";
+  }
+  if (result.reconfigure && state.reconfigure) {
+    try {
+      await state.reconfigure(cfg);
+    } catch {
+      note = `${note}; reconfigure failed`;
+    }
+  }
+  out(`${result.key} = ${result.display} · ${note}`);
+}
+
+function configErrorText(reason: string, input: string, key?: string): string {
+  const target = key ?? input;
+  switch (reason) {
+    case "unknown-key":
+      return `unknown key: ${input}`;
+    case "read-only":
+      return `${target} is read-only`;
+    case "range":
+      return `value out of range for ${target}`;
+    case "combined":
+      return "shares exceed the combined limit";
+    default:
+      return `invalid value for ${target}`;
+  }
+}
+
+async function configCmd(
+  cfg: AppConfig,
+  args: string[],
+  out: Out,
+  state: WebUiState,
+): Promise<void> {
+  if (args.length === 0) {
+    for (const key of canonicalKeys()) {
+      const r = getConfigValue(cfg, key);
+      if (r.ok) out(`${key} = ${r.display}`);
+    }
+    return;
+  }
+  const [key, ...rest] = args;
+  if (rest.length === 0) {
+    const r = getConfigValue(cfg, key);
+    out(r.ok ? `${r.key} = ${r.display}` : `↳ unknown key: ${key}`);
+    return;
+  }
+  await applyConfigWrite(cfg, key, rest.join(" "), out, state);
+}
+
+async function modelCmd(
+  cfg: AppConfig,
+  args: string[],
+  out: Out,
+  state: WebUiState,
+): Promise<void> {
+  const [sub, ...rest] = args;
+  if (!sub || sub === "list") {
+    out(`current: ${cfg.model}`);
+    const models = state.knownModels?.() ?? [];
+    if (models.length === 0) {
+      out("↳ no models reported by provider");
+      return;
+    }
+    for (const m of models) out(`${m === cfg.model ? "* " : "  "}${m}`);
+    return;
+  }
+  if (sub === "use") {
+    const name = rest[0];
+    if (!name) {
+      out("usage: /model use <name>");
+      return;
+    }
+    await applyConfigWrite(cfg, "model", name, out, state);
+    return;
+  }
+  out(`↳ unknown subcommand: model ${sub}`);
+}
+
+async function providerCmd(
+  cfg: AppConfig,
+  args: string[],
+  out: Out,
+  state: WebUiState,
+): Promise<void> {
+  const [sub, ...rest] = args;
+  if (!sub || sub === "list") {
+    const active = cfg.provider.active ?? cfg.provider.type;
+    const entries = cfg.provider.entries?.length
+      ? cfg.provider.entries
+      : [{ type: cfg.provider.type, label: active }];
+    for (const e of entries) {
+      const name = e.label ?? e.type;
+      out(`${name === active ? "* " : "  "}${name} (${e.type})`);
+    }
+    return;
+  }
+  if (sub === "use") {
+    const name = rest[0];
+    if (!name) {
+      out("usage: /provider use <name>");
+      return;
+    }
+    await applyConfigWrite(cfg, "provider.active", name, out, state);
+    return;
+  }
+  out(`↳ unknown subcommand: provider ${sub}`);
+}
+
+function memoryCmd(state: WebUiState, args: string[], out: Out): void {
+  if (!state.memory) {
+    out("↳ memory unavailable");
+    return;
+  }
+  for (const line of memoryLines(state.memory, args)) out(line);
+}

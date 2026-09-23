@@ -11,6 +11,7 @@ import type { Host } from "../../core/host";
 import type { AppConfig } from "../../config/types";
 import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
+import type { MemoryStore } from "../memory/store";
 import { MAX_BODY_BYTES } from "./util";
 
 /**
@@ -74,6 +75,12 @@ export interface WebUiState {
   saveConfig?: (config: AppConfig) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /**
+   * Global memory store, shared with the agent (`bootstrap` owns one instance).
+   * Wired by `module.ts`; optional so tests can drive command dispatch without
+   * touching the filesystem — `/memory` then answers "unavailable".
+   */
+  memory?: MemoryStore;
 }
 
 export function createWebUiState(): WebUiState {

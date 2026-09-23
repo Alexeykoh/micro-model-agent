@@ -262,6 +262,9 @@ export interface BootstrapResult {
   /** Background probe of the context length the model is ACTUALLY loaded
    *  with (LM Studio native API). Resolves to null when not applicable. */
   contextProbe: Promise<ContextProbeResult | null>;
+  /** Shared global memory store — the same instance the memory module and the
+   *  agent loop use, so UI consumers (`mma web` `/memory`) read/write live data. */
+  memoryStore: MemoryStore;
 }
 
 /**
@@ -933,5 +936,6 @@ export async function bootstrap(
     envReport,
     legacyDetected,
     contextProbe: contextProbePromise,
+    memoryStore,
   };
 }

@@ -41,6 +41,24 @@ Wire settings sections to real data: memory (list/add/forget via existing memory
 
 Render tool payload cards from `tool_end` (image/file/link/plan), and a `?` question block when the web PromptIO lands (Phase 5).
 
+## Task E — Slash-command execution from the browser
+
+`/api/command` is currently a documented no-op. Make slash commands actually run in web mode.
+
+- New `src/modules/webui/commands.ts`: `makeWebCommands(deps)` returns `(line) => Promise<void>`, reusing the **same** config/session machinery as the REPL (config registry `setConfigValue`/`getConfigValue`, `saveConfig`, `agent.reconfigure`, session manager, memory module). Supported subset (extensible via a handler map, rule #17):
+  - `/help` — list available commands
+  - `/status` — model · provider · context · session · verbosity
+  - `/config <key> [value]` — read/write via the registry (mirrors the settings panel)
+  - `/model use <name>`, `/model list`
+  - `/provider use <name>`, `/provider list`
+  - `/memory` (overview) / `get` / `set` / `unset` / `find` / `forget` where the memory module allows
+  - `/clear` (client-side screen clear), `/new` (new chat tab) — handled by the frontend, no server round-trip
+- Output is emitted over SSE as a `command` event (`{ text }`) and rendered as dim lines in the feed; `/api/command` returns `{ ok, error? }` (202) and the output streams via SSE (keeps the HTTP contract simple).
+- `WebHost.executeCommand` delegates to this dispatcher. Unknown command → a dim `↳ unknown command` line (never a raw error).
+- **Non-goals:** commands that need terminal-only context (e.g. `/meet`, interactive prompts) stay terminal-only; document which subset is supported.
+
+**Status (implemented):** `src/modules/webui/commands.ts` (`makeWebCommands`) runs `/help`, `/status`, `/config`, `/model`, `/provider`, `/memory` through a handler map; output streams as SSE `command` events (`{type,ts,text}`, secrets redacted) and `/api/command` answers `202 {ok:true}`. `/clear` and `/new` are handled browser-side (`assets/app.js`). `/memory` is backed by the shared `MemoryStore` exposed on `BootstrapResult.memoryStore` and wired through `WebUiDeps.memory`. Terminal-only commands remain out of scope.
+
 ## Verify (all tasks)
 - `bun test` + `tsc --noEmit` green.
 - Manual: `bun run mma web --no-open --port 3807`; compare side-by-side with the mockup; check tabs, selectors, settings, theme, reasoning toggle, plan scroll.

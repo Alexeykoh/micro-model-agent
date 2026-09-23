@@ -39,7 +39,7 @@ async function withServer(
 describe("webui auth + limits", () => {
   afterEach(() => stopServer());
 
-  it("401 without a token on /api/state and /api/command; 200 via header or ?token=", async () => {
+  it("401 without a token on /api/state and /api/command; 200/202 via header or ?token=", async () => {
     const s = createWebUiState();
     s.token = "s3cret";
     s.bridge = makeBridge();
@@ -67,7 +67,7 @@ describe("webui auth + limits", () => {
         headers: { "Content-Type": "application/json", "x-mma-token": "s3cret" },
         body: JSON.stringify({ line: "/status" }),
       });
-      expect(cmdHeader.status).toBe(200);
+      expect(cmdHeader.status).toBe(202);
     });
   });
 
@@ -153,7 +153,7 @@ describe("webui auth + limits", () => {
     for (const c of controllers) c.abort();
   });
 
-  it("200 on /api/command with a valid token and dispatches the line to the bridge", async () => {
+  it("202 on /api/command with a valid token and dispatches the line to the bridge", async () => {
     const s = createWebUiState();
     s.token = "s3cret";
     const lines: string[] = [];
@@ -174,7 +174,7 @@ describe("webui auth + limits", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ line: "/status" }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(202);
       expect(await res.json()).toEqual({ ok: true });
       // executeCommand is fire-and-forget; let the microtask run.
       await new Promise((r) => setTimeout(r, 0));

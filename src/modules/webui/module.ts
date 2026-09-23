@@ -16,6 +16,7 @@ import type { Agent } from "../../core/agent";
 import type { AppConfig } from "../../config/types";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
+import type { MemoryStore } from "../../modules/memory/store";
 import type { Host, HostStateSnapshot } from "../../core/host";
 import type { ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
@@ -23,6 +24,7 @@ import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
+import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
 import { startServer, stopServer } from "./server";
 import { createWebUiState, type WebUiState } from "./state";
@@ -32,6 +34,8 @@ export interface WebUiDeps {
   config: AppConfig;
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
+  /** Shared global memory store (from bootstrap) backing `/memory` in web mode. */
+  memory?: MemoryStore;
   /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
   configDir?: string;
   /** Model ids known to the active provider (defaults to a background cache). */
@@ -77,6 +81,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // object the agent reads after `reconfigure`.
   state.config = deps.config;
   state.sessionManager = deps.sessionManager;
+  state.memory = deps.memory;
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
   state.reconfigure = (config) => deps.agent.reconfigure(config);
 
@@ -169,10 +174,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       interrupted = true;
       deps.agent.shutdown();
     },
-    // Phase 3: slash-command dispatch through a shared handler map is not wired
-    // for web yet. The endpoint exists and is authed; keep this a no-op so the
-    // UI only shows its own message on a non-2xx response.
-    executeCommand: async () => {},
+    // Slash commands run through the shared handler map; output streams over
+    // SSE as `command` events (the HTTP POST only acknowledges acceptance).
+    executeCommand: makeWebCommands({ state }),
     getState: () => buildHostState(deps, state.busy),
     addPendingImage: (url) => {
       deps.agent.contextManager?.addPendingImage?.({

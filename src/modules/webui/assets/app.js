@@ -215,6 +215,12 @@
     msgs.replaceChildren(emptyView());
   }
 
+  function clearFeed(feed) {
+    if (!feed) return;
+    feed.replaceChildren(emptyView());
+    if (feed === activeFeed()) scroll();
+  }
+
   function activeFeed() {
     const t = tabs.find((x) => x.id === activeTabId);
     return t ? t.feed : null;
@@ -508,6 +514,15 @@
   function onErrorEvent(data) {
     if (!data || !data.error) return;
     append(el("div", "errline", "✗ " + data.error));
+  }
+
+  function onCommandOutput(text) {
+    const feed = liveFeed() || activeFeed();
+    if (!feed) return;
+    clearEmpty(feed);
+    String(text)
+      .split("\n")
+      .forEach((line) => appendTo(feed, el("div", "cmdout", line)));
   }
 
   function renderAssistantText(feed, text) {
@@ -813,11 +828,18 @@
     if (text.startsWith("/")) {
       appendTo(feed, el("div", "u", text));
       inp.value = "";
+      const name = text.slice(1).split(/\s+/)[0].toLowerCase();
+      if (name === "clear") {
+        clearFeed(feed);
+        return;
+      }
+      if (name === "new") {
+        newChatTab();
+        return;
+      }
       const r = await api("/api/command", { method: "POST", body: { line: text } });
       if (!r.ok) {
         appendTo(feed, el("div", "detail", "↳ command unavailable"));
-      } else {
-        appendTo(feed, el("div", "cmdout", "↳ command dispatch is not wired for web yet"));
       }
       return;
     }
@@ -1119,6 +1141,10 @@
     es.addEventListener("turn_end", (e) => {
       const d = parse(e);
       if (d) onTurnEnd(d);
+    });
+    es.addEventListener("command", (e) => {
+      const d = parse(e);
+      if (d && typeof d.text === "string") onCommandOutput(d.text);
     });
     es.addEventListener("state", (e) => {
       const d = parse(e);

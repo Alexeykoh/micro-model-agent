@@ -127,14 +127,14 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
           const parsed = JSON.parse(raw) as { line?: unknown };
           if (typeof parsed.line === "string") line = parsed.line;
         } catch {
-          // Malformed body is not worth a 400: command dispatch is a Phase-3
-          // no-op and the front-end only shows its own message on non-2xx.
+          // Malformed body: the dispatcher ignores a non-slash line, so this is
+          // a harmless no-op rather than a 400.
         }
-        // Phase 3: slash-command dispatch through a shared handler map is not
-        // wired for web yet. Keep the endpoint authed and a no-op so the UI's
-        // `/` path stays functional; a host error must never become a 5xx.
+        // Dispatch is fire-and-forget: output streams over SSE as `command`
+        // events, so the POST only acknowledges acceptance. A host error must
+        // never become a 5xx.
         Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 202, { ok: true });
       })
       .catch((err: unknown) => {
         readBodyError(req, res, err);
