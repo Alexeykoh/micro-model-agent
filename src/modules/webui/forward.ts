@@ -20,7 +20,7 @@ import type { TurnSummary } from "../types";
  * `success` is always required; the timing/count fields are optional so partial
  * summaries (e.g. interrupted runs) are valid.
  */
-type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
+export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
   Partial<Pick<TurnSummary, "durationMs" | "toolCalls">>;
 
 export interface Forwarder {
@@ -95,6 +95,7 @@ export function makeForwarder(
       });
     },
     onTurnEnd(summary) {
+      // Ownership: the forwarder is the single emitter of `turn_end` and the single busy-reset.
       flush();
       s.busy = false;
       sink({ type: "turn_end", ts: Date.now(), ...summary });

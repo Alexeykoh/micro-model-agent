@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { connect } from "node:net";
 import { handleRequest, startServer, stopServer } from "../src/modules/webui/server";
@@ -116,6 +116,46 @@ describe("webui server", () => {
       expect(submitted).toHaveLength(1);
       expect(submitted[0].length).toBeLessThanOrEqual(32768);
     });
+  });
+
+  it("reports a submit rejection as error + state, never turn_end", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    const chunks: string[] = [];
+    s.bridge = {
+      isBusy: () => false,
+      submit: () => Promise.reject(new Error("boom")),
+      interrupt: () => {},
+      getState: () => ({ busy: false }),
+      executeCommand: () => Promise.resolve(),
+    };
+    // Test seam: broadcast only calls write/end; a full ServerResponse is overkill.
+    const fake = {
+      write: (chunk: string) => {
+        chunks.push(chunk);
+        return true;
+      },
+      end: () => {},
+    };
+    s.clients.add(fake as unknown as ServerResponse);
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "hi" }),
+      });
+      expect(res.status).toBe(202);
+      // Let the fire-and-forget rejection handler run.
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const events = chunks.join("");
+    expect(events).toContain("event: error");
+    expect(events).toContain("boom");
+    expect(events).toContain('"busy":false');
+    expect(events).not.toContain("turn_end");
+    expect(s.busy).toBe(false);
   });
 
   it("distinguishes invalid JSON from an empty message", async () => {

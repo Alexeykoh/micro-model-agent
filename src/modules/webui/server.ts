@@ -119,12 +119,12 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
         s.busy = true;
         broadcast({ type: "state", ts: Date.now(), busy: true }, s);
         // Fire-and-forget: the turn streams over SSE; errors surface there.
+        // Ownership: the forwarder owns `turn_end`; on submit rejection we only
+        // clear busy and surface an `error` + `state`, never a second `turn_end`.
         bridge.submit(body.text, { images: body.images }).catch((err: unknown) => {
           s.busy = false;
-          broadcast(
-            { type: "turn_end", ts: Date.now(), success: false, error: scrubError(err) },
-            s,
-          );
+          broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
+          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
         });
         sendJson(res, 202, { ok: true });
       })

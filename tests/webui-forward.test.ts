@@ -1,28 +1,88 @@
-import { describe, it, expect } from "vitest";
-import { createWebUiState } from "../src/modules/webui/state";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { createWebUiState, type SseEvent } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/forward";
 
 describe("webui forwarder", () => {
-  it("coalesces text chunks and emits on flush", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("coalesces text chunks into one event after the flush window", () => {
+    vi.useFakeTimers();
     const s = createWebUiState();
-    const seen: string[] = [];
-    const fwd = makeForwarder(s, (ev) => seen.push(ev.type), { flushMs: 5 });
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
     fwd.onText("a");
     fwd.onText("b");
-    fwd.flushNow();
-    expect(seen).toContain("text");
+    expect(seen).toHaveLength(0);
+    vi.advanceTimersByTime(350);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe("text");
+    expect(seen[0].chunk).toBe("ab");
   });
 
-  it("maps tool start/end to events", () => {
+  it("coalesces meta chunks the same way", () => {
+    vi.useFakeTimers();
     const s = createWebUiState();
-    const seen: string[] = [];
-    const fwd = makeForwarder(s, (ev) => seen.push(ev.type));
-    fwd.onToolStart({ id: "1", name: "read_file", arguments: { path: "x" } });
-    fwd.onToolEnd(
-      { id: "1", name: "read_file", arguments: { path: "x" } },
-      { success: true, output: "ok" },
-      12,
-    );
-    expect(seen).toEqual(["tool_start", "tool_end"]);
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onMeta("m");
+    fwd.onMeta("n");
+    vi.advanceTimersByTime(350);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe("meta");
+    expect(seen[0].chunk).toBe("mn");
+  });
+
+  it("flushes buffered text before a phase and never duplicates it", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onText("x");
+    fwd.onPhase("done");
+    expect(seen.map((e) => e.type)).toEqual(["text", "phase"]);
+    // The phase flush cleared the pending timer: no second `text` fires later.
+    vi.advanceTimersByTime(350);
+    expect(seen.map((e) => e.type)).toEqual(["text", "phase"]);
+  });
+
+  it("onTurnEnd emits turn_end and clears busy", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    s.busy = true;
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onTurnEnd({ success: true });
+    expect(seen.map((e) => e.type)).toEqual(["turn_end"]);
+    expect(s.busy).toBe(false);
+  });
+
+  it("flushNow cancels the pending timer so no second text event fires", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onText("z");
+    fwd.flushNow();
+    vi.advanceTimersByTime(350);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].chunk).toBe("z");
+  });
+
+  it("maps tool start/end to events with their payloads", () => {
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    const call = { id: "1", name: "read_file", arguments: { path: "x" } };
+    fwd.onToolStart(call);
+    fwd.onToolEnd(call, { success: true, output: "ok" }, 12);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toMatchObject({ type: "tool_start", toolCallId: "1", name: "read_file" });
+    expect(seen[1]).toMatchObject({
+      type: "tool_end",
+      toolCallId: "1",
+      name: "read_file",
+      success: true,
+      durationMs: 12,
+    });
   });
 });
