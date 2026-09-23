@@ -237,6 +237,11 @@ body {
   font-size: 12.5px; line-height: 1.55;
 }
 body.light .code { border: 1px solid var(--border); }
+.toolout { margin: 2px 0 6px 26px; }
+.toolout .code { max-height: 320px; }
+.toolout.collapsed .code { display: none; }
+.toolout .more { color: var(--dim-b); cursor: pointer; font-size: 12px; }
+.toolout .more:hover { color: var(--dim-a); }
 
 /* tool payload cards in chat */
 .imgcard {

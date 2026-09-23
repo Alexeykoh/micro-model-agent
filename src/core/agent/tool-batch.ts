@@ -253,6 +253,7 @@ export class ToolBatchExecutor {
         args: call.arguments,
         duration,
         error: !result.success,
+        output: typeof result.output === "string" ? result.output : undefined,
         ctxDelta: tokensAfterTool - tokensBeforeTool,
         costUsd:
           costBeforeTool !== undefined && costAfterTool !== undefined

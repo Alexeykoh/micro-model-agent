@@ -41,6 +41,31 @@ export function scrubToolArgs(args: Record<string, unknown>): Record<string, unk
 }
 
 /**
+ * Per-tool caps for the tool-result body sent to the browser. Long output
+ * (bash logs, file reads, search hits) is clipped so a single event can never
+ * blow up the socket or the feed; the marker keeps the truncation honest.
+ */
+const TOOL_OUTPUT_CAPS: Record<string, number> = {
+  browser: 8000,
+  web_search: 6000,
+  web_fetch: 4000,
+  web_browse: 4000,
+  bash: 16000,
+  read_file: 12000,
+  list_dir: 4000,
+  grep: 4000,
+  glob: 2000,
+  download_file: 2000,
+};
+const DEFAULT_OUTPUT_CAP = 6000;
+
+export function clipToolOutput(toolName: string, output: string): string {
+  const cap = TOOL_OUTPUT_CAPS[toolName] ?? DEFAULT_OUTPUT_CAP;
+  if (output.length <= cap) return output;
+  return output.slice(0, cap) + `\n… [truncated from ${output.length.toLocaleString()} chars]`;
+}
+
+/**
  * SSE wire subset of {@link TurnSummary} — `textLength` is not sent to clients.
  * `success` is always required; the timing/count fields are optional so partial
  * summaries (e.g. interrupted runs) are valid.
@@ -117,6 +142,7 @@ export function makeForwarder(
         name: call.name,
         success: result.success,
         durationMs,
+        output: redactContextSecrets(clipToolOutput(call.name, result.output || "")),
       });
     },
     onTurnEnd(summary) {

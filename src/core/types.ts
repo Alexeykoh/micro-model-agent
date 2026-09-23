@@ -28,6 +28,8 @@ export interface ToolEvent {
   duration?: number;
   error?: boolean;
   ctxDelta?: number;
+  /** Raw tool-result body on `end`; renderers clip/scrub before display. */
+  output?: string;
   /** Running session cost in USD at the time the tool finished (if pricing known). */
   costUsd?: number;
   /** Provider name that serviced the tool call (multi-provider mode). */

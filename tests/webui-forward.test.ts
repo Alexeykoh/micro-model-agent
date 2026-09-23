@@ -86,6 +86,33 @@ describe("webui forwarder", () => {
     });
   });
 
+  it("includes clipped tool output with a truncation marker for large results", () => {
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    const big = "x".repeat(20_000);
+    fwd.onToolEnd({ id: "1", name: "read_file", arguments: {} }, { success: true, output: big }, 5);
+    expect(seen).toHaveLength(1);
+    const out = String(seen[0].output);
+    expect(out).toContain("truncated from");
+    expect(out.length).toBeLessThan(big.length);
+    expect(out.startsWith("x".repeat(1000))).toBe(true);
+  });
+
+  it("scrubs secrets from the broadcast tool output", () => {
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onToolEnd(
+      { id: "1", name: "bash", arguments: {} },
+      { success: true, output: "curl -H 'Authorization: Bearer sk-1234567890abcdefghij'\nok" },
+      5,
+    );
+    const out = String(seen[0].output);
+    expect(out).not.toContain("sk-1234567890abcdefghij");
+    expect(out).toContain("[REDACTED]");
+  });
+
   it("redacts secret-looking tool arguments before broadcasting", () => {
     const s = createWebUiState();
     const seen: SseEvent[] = [];

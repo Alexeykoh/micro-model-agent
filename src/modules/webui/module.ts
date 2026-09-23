@@ -18,7 +18,7 @@ import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import type { MemoryStore } from "../../modules/memory/store";
 import type { Host, HostStateSnapshot } from "../../core/host";
-import type { ToolEvent } from "../../core/types";
+import type { AgentResult, ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
@@ -27,7 +27,7 @@ import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
 import { startServer, stopServer } from "./server";
-import { createWebUiState, type WebUiState } from "./state";
+import { broadcast, createWebUiState, type UsageSnapshot, type WebUiState } from "./state";
 
 export interface WebUiDeps {
   agent: Agent;
@@ -54,8 +54,40 @@ export interface WebUiHandle {
   stop(): void;
 }
 
+/**
+ * Narrow inputs `buildHostState` reads. Kept separate from {@link WebUiDeps} so
+ * the snapshot projection is testable without constructing a full `Agent`.
+ * `WebUiDeps` satisfies this structurally.
+ */
+export interface HostStateInput {
+  config: AppConfig;
+  sessionManager?: Pick<SessionManager, "getActiveMeta">;
+  execModule?: Pick<ExecutionModule, "getActivePlan">;
+  usage?: UsageSnapshot;
+}
+
+/**
+ * Capture the usage-bearing subset of an `AgentResult` into a
+ * {@link UsageSnapshot}. Undefined fields are omitted so a partial result never
+ * overwrites a previously known value with a blank cell.
+ */
+export function captureUsage(result: AgentResult, fallbackLimit?: number): UsageSnapshot {
+  const usage: UsageSnapshot = {};
+  if (typeof result.contextUsed === "number") usage.contextUsed = result.contextUsed;
+  const limit = typeof result.contextLimit === "number" ? result.contextLimit : fallbackLimit;
+  if (typeof limit === "number") usage.contextLimit = limit;
+  if (typeof result.totalCost === "number") usage.costUsd = result.totalCost;
+  if (typeof result.compactionCount === "number") usage.compactionCount = result.compactionCount;
+  if (result.cache) {
+    if (typeof result.cache.hitRate === "number") usage.cacheHitRate = result.cache.hitRate;
+    if (typeof result.cache.saved === "number") usage.cacheSaved = result.cache.saved;
+  }
+  if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
+  return usage;
+}
+
 /** Build the host snapshot from live module state (correction #6). */
-export function buildHostState(deps: WebUiDeps, busy: boolean): HostStateSnapshot {
+export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSnapshot {
   const meta = deps.sessionManager?.getActiveMeta();
   return {
     busy,
@@ -63,6 +95,12 @@ export function buildHostState(deps: WebUiDeps, busy: boolean): HostStateSnapsho
     sessionName: meta?.name,
     model: deps.config.model,
     provider: deps.config.provider?.active,
+    contextUsed: deps.usage?.contextUsed,
+    contextLimit: deps.usage?.contextLimit,
+    costUsd: deps.usage?.costUsd,
+    compactionCount: deps.usage?.compactionCount,
+    cacheHitRate: deps.usage?.cacheHitRate,
+    contextQuality: deps.usage?.contextQuality,
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };
 }
@@ -127,7 +165,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     name: ev.tool,
     arguments: ev.args,
   });
-  const resultFor = (ev: ToolEvent): ToolResult => ({ success: !ev.error, output: "" });
+  const resultFor = (ev: ToolEvent): ToolResult => ({
+    success: !ev.error,
+    output: ev.output ?? "",
+  });
 
   // `AgentResult` has no `interrupted` field and `agent.shutdown()` may still
   // return `success: true`, so track the interrupt locally. The REPL interrupts
@@ -154,12 +195,17 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         },
         (phase) => forwarder.onPhase(phase),
       );
+      // Capture usage before `onTurnEnd` so a `state` broadcast right after the
+      // turn already carries the fresh sidebar metrics (the client also polls
+      // `/api/state`, so this is an optimization, not the only path).
+      state.usage = captureUsage(result, deps.config.contextWindow);
       forwarder.onTurnEnd({
         success: result.success,
         durationMs: result.durationMs,
         toolCalls,
         interrupted: interrupted || undefined,
       });
+      broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
       return result;
     } catch (err) {
       forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
@@ -177,7 +223,16 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     // Slash commands run through the shared handler map; output streams over
     // SSE as `command` events (the HTTP POST only acknowledges acceptance).
     executeCommand: makeWebCommands({ state }),
-    getState: () => buildHostState(deps, state.busy),
+    getState: () =>
+      buildHostState(
+        {
+          config: deps.config,
+          sessionManager: deps.sessionManager,
+          execModule: deps.execModule,
+          usage: state.usage,
+        },
+        state.busy,
+      ),
     addPendingImage: (url) => {
       deps.agent.contextManager?.addPendingImage?.({
         type: "image_url",

@@ -37,6 +37,21 @@ export interface WebUiAssets {
   js: string;
 }
 
+/**
+ * Last-turn usage metrics captured from `AgentResult` and surfaced through
+ * `HostStateSnapshot`. All fields are optional: a turn that did not report a
+ * value leaves the corresponding sidebar cell at `—`.
+ */
+export interface UsageSnapshot {
+  contextUsed?: number;
+  contextLimit?: number;
+  costUsd?: number;
+  compactionCount?: number;
+  cacheHitRate?: number;
+  cacheSaved?: number;
+  contextQuality?: number;
+}
+
 export interface WebUiState {
   server: Server | null;
   starting: Promise<string> | null;
@@ -65,6 +80,8 @@ export interface WebUiState {
   historyTail: number;
   /** Transport cap for a POST body; overridable in tests to exercise 413. */
   maxBodyBytes: number;
+  /** Usage metrics from the most recent completed turn (see {@link UsageSnapshot}). */
+  usage?: UsageSnapshot;
   /**
    * Bootstrap collaborators for the config/session/model REST surface. Wired by
    * `module.ts`; optional so tests can drive individual endpoints in isolation

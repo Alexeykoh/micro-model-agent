@@ -18,6 +18,10 @@ export interface HostStateSnapshot {
   contextLimit?: number;
   costUsd?: number;
   compactionCount?: number;
+  /** Prompt-cache hit rate for the last turn (0..1); absent when unknown. */
+  cacheHitRate?: number;
+  /** Context quality score for the last turn (0..100); absent when unknown. */
+  contextQuality?: number;
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;

@@ -411,8 +411,29 @@
     const status = el("span", "ok", "");
     line.appendChild(status);
     appendTo(feed, line);
-    toolNodes.set(data.toolCallId, { status });
+    toolNodes.set(data.toolCallId, { status, line });
     runCount++;
+  }
+
+  function renderToolOutput(line, text) {
+    if (typeof text !== "string" || !text) return;
+    const wrap = el("div", "toolout");
+    const code = el("div", "code");
+    code.textContent = text;
+    wrap.appendChild(code);
+    const long = text.length > 600 || text.split("\n").length > 12;
+    if (long) {
+      wrap.classList.add("collapsed");
+      const more = el("span", "more", "▸ output · " + text.length + " chars");
+      more.addEventListener("click", () => {
+        const collapsed = wrap.classList.toggle("collapsed");
+        more.textContent = collapsed ? "▸ output · " + text.length + " chars" : "▾ collapse";
+      });
+      wrap.appendChild(more);
+    }
+    const feed = line && line.parentNode ? null : liveFeed();
+    if (line && line.parentNode) line.parentNode.insertBefore(wrap, line.nextSibling);
+    else appendTo(feed, wrap);
   }
 
   function safeUrl(url) {
@@ -474,6 +495,7 @@
 
   function onToolEnd(data) {
     const node = toolNodes.get(data.toolCallId);
+    const line = node ? node.line : null;
     if (node) {
       const dur = formatMs(data.durationMs);
       node.status.textContent = data.success ? " ✓" + (dur ? " " + dur : "") : " ✗" + (dur ? " " + dur : "");
@@ -486,6 +508,7 @@
     const args = pendingArgs.get(data.toolCallId) || {};
     pendingArgs.delete(data.toolCallId);
     if (data.success) cardFor(data.name, args);
+    renderToolOutput(line, data.output);
   }
 
   function onTurnEnd(data) {
@@ -1068,10 +1091,12 @@
       bar.appendChild(fill);
       usageEl.appendChild(bar);
     }
-    usageEl.appendChild(usageRow("cache", "—", "dim"));
+    const hit = typeof h.cacheHitRate === "number" ? h.cacheHitRate : null;
+    usageEl.appendChild(usageRow("cache", hit != null ? Math.round(hit * 100) + "%" : "—", hit != null ? "" : "dim"));
     usageEl.appendChild(usageRow("cost", typeof h.costUsd === "number" ? "$" + h.costUsd.toFixed(4) : "—"));
     usageEl.appendChild(usageRow("compactions", "⟳ " + (h.compactionCount || 0), h.compactionCount ? "wn" : "dim"));
-    usageEl.appendChild(usageRow("quality", "—", "dim"));
+    const q = typeof h.contextQuality === "number" ? h.contextQuality : null;
+    usageEl.appendChild(usageRow("quality", q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
     usageEl.appendChild(usageRow("probe", "—", "dim"));
   }
 
@@ -1150,6 +1175,10 @@
       const d = parse(e);
       if (d) {
         state.busy = !!d.busy;
+        if (d.usage && typeof d.usage === "object") {
+          state.host = Object.assign({}, state.host, d.usage);
+          renderUsage(state.host);
+        }
       }
     });
     es.addEventListener("error", (e) => {
