@@ -141,6 +141,7 @@
   }
 
   function onText(chunk) {
+    clearBusy();
     showEmpty(false);
     if (!curText || !curText.classList.contains("ans")) {
       curText = append(el("div", "ans"));
