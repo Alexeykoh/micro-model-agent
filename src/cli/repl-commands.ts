@@ -41,6 +41,7 @@ import type { PluginManager } from "../modules/plugins/manager";
 import type { LspModule } from "../modules/lsp/module";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
+import { registerOnboardingCommands } from "./onboarding-commands";
 import { errMsg } from "../utils";
 import type { OutputChannel } from "../output";
 
@@ -102,6 +103,9 @@ export const COMMAND_GROUPS: Record<string, string> = {
   context: "agent",
   reload: "agent",
   wizard: "agent",
+  meet: "agent",
+  init: "agent",
+  memory: "agent",
   sysprompt: "agent",
   map: "agent",
   lsp: "agent",
@@ -118,6 +122,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
 export function registerAllCommands(ctx: ReplContext): void {
   registerBuiltinCommands(ctx);
   registerMmaCommands(ctx);
+  registerOnboardingCommands(ctx);
   registerSessionCommands(ctx);
   registerSkillCommands(ctx);
 }

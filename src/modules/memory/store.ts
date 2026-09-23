@@ -70,6 +70,20 @@ export class MemoryStore {
     return true;
   }
 
+  /** Remove the nth (1-based) append-only entry from a category file. */
+  deleteEntry(name: string, n: number): boolean {
+    const path = join(this.memoryDir, `${name}.md`);
+    if (!existsSync(path)) return false;
+    const lines = readFileSync(path, "utf-8").split(/\r?\n/);
+    const indexes = lines
+      .map((l, i) => (l.startsWith("- ") ? i : -1))
+      .filter((i) => i >= 0);
+    if (n < 1 || n > indexes.length) return false;
+    lines.splice(indexes[n - 1], 1);
+    writeFileSync(path, lines.join("\n"), "utf-8");
+    return true;
+  }
+
   appendRule(category: string, pattern: string, cause: string, solution: string): void {
     const entry = `**pattern:** ${pattern}\n  **cause:** ${cause}\n  **solution:** ${solution}`;
     this.append(category, entry);
