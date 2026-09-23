@@ -4,20 +4,31 @@
  * `handleRequest` is the pure app layer taking an explicit `WebUiState` so tests
  * drive it hermetically (rule #13: app creation separated from `listen()`).
  * `startServer`/`stopServer` default to a lazy process-global state for the CLI.
+ * Transport helpers live in `./util`.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { exec } from "node:child_process";
-import { errMsg } from "../../utils/error";
 import { broadcast, createWebUiState } from "./state";
+import {
+  BodyTooLargeError,
+  checkAuth,
+  isLoopback,
+  parseMessageBody,
+  readBody,
+  sameOrigin,
+  scrubError,
+  sendJson,
+} from "./util";
 import type { WebUiState, WebUiAssets } from "./state";
 
-/** Max bytes accepted for a POST body (32KB text or 3×~6MB images + JSON overhead). */
-const MAX_BODY_BYTES = 24 * 1024 * 1024;
+export { tryOpenBrowser } from "./util";
 
-/** Hard cap on a single message's text, independent of the transport body cap. */
-const MAX_MESSAGE_CHARS = 32 * 1024;
+const MAX_CLIENTS = parseMaxClients(process.env.MMA_WEBUI_MAX_CLIENTS);
 
-const MAX_CLIENTS = Number(process.env.MMA_WEBUI_MAX_CLIENTS) || 5;
+/** Accept only a positive integer; anything malformed falls back to 5. */
+function parseMaxClients(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 5;
+}
 
 /** Static routes served verbatim (never template-processed). */
 const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
@@ -26,79 +37,13 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
 };
 
-/** Thrown by readBody when the payload exceeds the cap (maps to HTTP 413). */
-class BodyTooLargeError extends Error {
-  constructor() {
-    super("body too large");
-    this.name = "BodyTooLargeError";
-  }
-}
-
-function isLoopback(host: string): boolean {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
-/** Token auth for `/api/*` (header `x-mma-token` or `?token=`); no token → allow. */
-export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boolean {
-  if (!s.token) return true;
-  const header = req.headers["x-mma-token"];
-  if (typeof header === "string" && header === s.token) return true;
-  return reqUrl.searchParams.get("token") === s.token;
-}
-
-/** Reject browser-initiated cross-origin writes (CSRF hardening). */
-function sameOrigin(req: IncomingMessage, reqUrl: URL): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true; // curl / same-origin GET
-  try {
-    return new URL(String(origin)).host === reqUrl.host;
-  } catch {
-    return false;
-  }
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(JSON.stringify(body));
-}
-
-function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > cap) {
-        reject(new BodyTooLargeError());
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
-  });
-}
-
-/** Pull `{ text, images }` out of a parsed body; invalid JSON and empty are distinct. */
-function parseMessageBody(raw: string): { text: string; images: string[] } | { error: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { error: "invalid JSON" };
-  }
-  const rec =
-    typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  const text = (typeof rec.text === "string" ? rec.text : "").slice(0, MAX_MESSAGE_CHARS);
-  const images = Array.isArray(rec.images)
-    ? rec.images.filter((i): i is string => typeof i === "string")
-    : [];
-  if (text.trim().length === 0 && images.length === 0) return { error: "empty" };
-  return { text, images };
-}
-
-/** SSE handler: `/events` stream with client cap + heartbeat. */
+/**
+ * SSE handler: `/events` stream with client cap + heartbeat.
+ *
+ * Backpressure: `res.write()` returning false means the socket buffer is full
+ * (slow/stalled reader). We drop the client immediately instead of buffering
+ * events unboundedly — a live view is not worth an OOM.
+ */
 function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.clients.size >= MAX_CLIENTS) {
     sendJson(res, 503, { error: "too many clients" });
@@ -109,20 +54,37 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
   });
-  res.write("retry: 1200\n\n");
-  res.write(`event: state\ndata: ${JSON.stringify({ busy: s.busy })}\n\n`);
+  const greeted =
+    res.write("retry: 1200\n\n") &&
+    res.write(`event: state\ndata: ${JSON.stringify({ busy: s.busy })}\n\n`);
+  if (!greeted) {
+    res.end();
+    return;
+  }
   s.clients.add(res);
   const hb = setInterval(() => {
     try {
-      res.write(`: hb ${Date.now()}\n\n`);
+      if (!res.write(`: hb ${Date.now()}\n\n`)) dropClient(res, s);
     } catch {
-      clearInterval(hb); // клиент отвалился — heartbeat больше не нужен
+      dropClient(res, s); // клиент отвалился — heartbeat больше не нужен
     }
   }, 15_000);
-  req.on("close", () => {
+  const close = (): void => {
     clearInterval(hb);
     s.clients.delete(res);
-  });
+  };
+  req.on("close", close);
+  res.on("close", close);
+}
+
+/** Remove a slow/broken SSE client and end its response. */
+function dropClient(res: ServerResponse, s: WebUiState): void {
+  s.clients.delete(res);
+  try {
+    res.end();
+  } catch {
+    /* already gone */
+  }
 }
 
 /** REST handler for `/api/*`; assumes auth + same-origin already checked. */
@@ -146,7 +108,7 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
       return;
     }
     const bridge = s.bridge;
-    readBody(req)
+    readBody(req, s.maxBodyBytes)
       .then((raw) => {
         const body = parseMessageBody(raw);
         if ("error" in body) {
@@ -159,16 +121,15 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
         // Fire-and-forget: the turn streams over SSE; errors surface there.
         bridge.submit(body.text, { images: body.images }).catch((err: unknown) => {
           s.busy = false;
-          broadcast({ type: "turn_end", ts: Date.now(), success: false, error: errMsg(err) }, s);
+          broadcast(
+            { type: "turn_end", ts: Date.now(), success: false, error: scrubError(err) },
+            s,
+          );
         });
         sendJson(res, 202, { ok: true });
       })
       .catch((err: unknown) => {
-        if (err instanceof BodyTooLargeError) {
-          sendJson(res, 413, { error: "body too large" });
-        } else {
-          sendJson(res, 400, { error: "invalid JSON body" });
-        }
+        readBodyError(req, res, err);
       });
     return;
   }
@@ -187,15 +148,41 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   sendJson(res, 404, { error: "not found" });
 }
 
+/** Map a body-read failure to a response; oversized bodies get a flush-safe 413. */
+function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
+  if (err instanceof BodyTooLargeError) {
+    res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
+    // Destroy the request only after the 413 is flushed; destroying first makes
+    // the client see a socket error instead of the status.
+    res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
+    return;
+  }
+  sendJson(res, 400, { error: "bad request" });
+}
+
 export function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   assets: WebUiAssets,
   s: WebUiState,
 ): void {
-  const reqUrl = new URL(req.url || "/", `http://${req.headers.host || s.host}`);
+  let reqUrl: URL;
+  try {
+    reqUrl = new URL(req.url || "/", `http://${req.headers.host || s.host}`);
+  } catch {
+    // Malformed / hostile `Host` (or absolute-form request URL): don't crash the
+    // listener — reject the request.
+    sendJson(res, 400, { error: "bad request" });
+    return;
+  }
 
   if (reqUrl.pathname === "/events") {
+    // Auth applies to the SSE stream too: a non-loopback bind with a token must
+    // not leak events. `?token=` is accepted because EventSource cannot set headers.
+    if (!checkAuth(req, reqUrl, s)) {
+      sendJson(res, 401, { error: "unauthorized" });
+      return;
+    }
     handleEvents(req, res, s);
     return;
   }
@@ -279,22 +266,5 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
   }
   s.starting = null;
   s.busy = false;
-}
-
-/** Best-effort open of the UI in the default browser (MMA_WEBUI_OPEN=0 disables). */
-export function tryOpenBrowser(url: string): void {
-  if (process.env.MMA_WEBUI_OPEN === "0") return;
-  try {
-    const platform = process.platform;
-    const cmd =
-      platform === "win32"
-        ? `start "" "${url}"`
-        : platform === "darwin"
-          ? `open "${url}"`
-          : `xdg-open "${url}"`;
-    const child = exec(cmd, { windowsHide: true });
-    child.unref?.();
-  } catch {
-    /* best-effort — opening a browser must never break startup */
-  }
+  s.lastPostTs = 0;
 }

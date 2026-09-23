@@ -8,6 +8,7 @@
  */
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
+import { MAX_BODY_BYTES } from "./util";
 
 export interface WebUiAssets {
   html: string;
@@ -27,6 +28,8 @@ export interface WebUiState {
   lastPostTs: number;
   minPostIntervalMs: number;
   historyTail: number;
+  /** Transport cap for a POST body; overridable in tests to exercise 413. */
+  maxBodyBytes: number;
 }
 
 export function createWebUiState(): WebUiState {
@@ -42,6 +45,7 @@ export function createWebUiState(): WebUiState {
     lastPostTs: 0,
     minPostIntervalMs: 500,
     historyTail: 200,
+    maxBodyBytes: MAX_BODY_BYTES,
   };
 }
 
@@ -54,8 +58,13 @@ export interface SseEvent {
 export function broadcast(ev: SseEvent, s: WebUiState): void {
   const payload = `event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`;
   for (const client of s.clients) {
+    // Backpressure: a `false` return means the socket buffer is full (slow or
+    // stalled reader). Drop the client rather than buffering events unboundedly.
     try {
-      client.write(payload);
+      if (!client.write(payload)) {
+        s.clients.delete(client);
+        client.end();
+      }
     } catch {
       s.clients.delete(client);
     }
