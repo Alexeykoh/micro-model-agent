@@ -319,7 +319,16 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
-### Current Version: 2.1.0
+### Browser Mode (`mma web`) (2.2.0)
+
+Дизайн: [docs/specs/2026-09-23-mma-web/design.md](./docs/specs/2026-09-23-mma-web/design.md).
+
+- **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/cli/web-host.ts`) поверх `src/modules/webui/` (state/server/forward/module/assets). Терминальный REPL не меняется; терминал и веб — отдельные процессы.
+- **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
+- **Transport:** SSE `GET /events`; REST `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`; static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов.
+- **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим. Диспетчер slash-команд из браузера (`/api/command`) — задокументированный no-op (Phase 3).
+
+### Current Version: 2.2.0
 
 ### Changelog
 

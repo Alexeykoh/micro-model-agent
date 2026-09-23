@@ -44,6 +44,25 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
   `process.stdout/stderr.write`, except the documented allowlist (crash-handler,
   `output/machine.ts`, browser bridge child process, non-TTY REPL fallback).
 
+### Host Seam (REPL / Web)
+
+> **Source:** `src/core/host.ts`, `src/cli/web-host.ts`, `src/modules/webui/`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
+
+`Host` (`src/core/host.ts`) extends the plugin-facing `HostBridge`
+(`{isBusy, submit(text,{images}), interrupt, subscribeOutput}`) with
+`executeCommand(line)` + `getState(): HostStateSnapshot` — the extra surface web
+mode needs (slash commands, sidebar/topbar snapshot).
+
+- **Two implementations over one `Agent`:** `Repl` (terminal, owns `LineEditor`)
+  and `WebHost` (`src/cli/web-host.ts`, no TTY). Both submit through the SAME
+  `runAgent` path as terminal input — rendering, session logging and the
+  single-flight guard are shared, never duplicated.
+- **WebUi module** (`src/modules/webui/`): `state.ts` (shared mutable state +
+  single-flight reservation), `server.ts` (SSE `/events` + REST `/api/*` +
+  static assets), `forward.ts` (agent callbacks → SSE), `module.ts` (the only
+  place that knows about `Agent`; builds `WebHost`), `assets.ts`, `util.ts`.
+  App creation is separated from `listen()` (rule #13), so tests bind no port.
+
 ### Security Module
 
 > **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
@@ -369,6 +388,7 @@ src/
 │   ├── prompt-builder.ts # Collect PromptBlock[], sort by priority, fit 8K budget
 │   ├── environment.ts  # Startup env report (OS/runtime/engines/tools/playwright) + requirement warnings
 │   ├── crash-handler.ts # Global uncaughtException/unhandledRejection → ~/.mma/logs/crash.jsonl
+│   ├── host.ts         # Host seam (HostBridge + executeCommand/getState) shared by Repl and WebHost
 │   └── types.ts        # AgentState, PromptBlock, ToolCall, ToolResult, LLMResponse
 ├── llm/                # LLM communication layer
 │   ├── provider.ts     # LLMProvider interface (chat, countTokens)
@@ -447,6 +467,7 @@ src/
 │   │   ├── checker.ts  # Updater.check() (registry fetch) + install() (npm install -g)
 │   │   └── module.ts   # UpdaterModule — fire-and-forget background loop, autoInstall
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
+│   ├── webui/          # `mma web` browser mode: state + SSE/REST server + forwarder + module (assets)
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
 │       ├── types.ts    # BrowserConfig, BrowserState, ElementEntry, ActionResult
 │       ├── driver.ts   # BrowserDriver interface + PlaywrightDriver + createBrowserDriver() (direct/Bun-bridge selection)
@@ -462,6 +483,8 @@ src/
 │   ├── commands.ts     # init, config, model, provider, session subcommands
 │   ├── repl.ts         # Readline loop with slash commands
 │   ├── repl-commands.ts # REPL slash command definitions (separate from loop)
+│   ├── web-command.ts  # `mma web` entry point (bootstrap → browser UI → signal wait)
+│   ├── web-host.ts     # WebHost — Host implementation without a TTY
 │   ├── completer.ts    # Provider-based tab completion
 │   └── setup.ts        # Interactive setup wizard (port scan → test)
 ├── config/             # 3-layer config: defaults → global → project + env

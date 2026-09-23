@@ -4,6 +4,13 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-09-23
+
+### Added
+
+- **web mode** (`src/cli/web-command.ts`, `src/modules/webui/`): `mma web [--port N] [--host H] [--token T] [--no-open]` — browser chat (SSE `GET /events` + REST `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, static `/` `/app.js` `/styles.css`) without a TTY; loopback by default, token required for non-loopback binds, same-origin check on writes, body/client caps; env `MMA_WEBUI_PORT/HOST/TOKEN/OPEN/MAX_CLIENTS`.
+- **host seam** (`src/core/host.ts`, `src/cli/web-host.ts`): shared `Host` interface extending the plugin-facing `HostBridge` with `executeCommand`/`getState`; `Repl` and `WebHost` are two implementations over one `Agent`, both submitting through the same `runAgent` path.
+
 ## [2.1.0] - 2026-09-23
 
 ### Added
