@@ -137,6 +137,7 @@
   "tool.friendly.pipeline_run": "Running pipeline",
   "tool.friendly.mcp_call": "MCP call",
   "tool.friendly.lsp_check": "Checking code",
+  "tool.friendly.meet_done": "Interview complete",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "tool.subagent_queued": "Sub-agent task queued: {task}",
   "tool.subagent_artifact": "Sub-agent completed. Full result saved to artifact: {path}\nIterations: {iterations}\nSummary:\n{summary}",

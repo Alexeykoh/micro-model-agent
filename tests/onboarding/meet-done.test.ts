@@ -9,4 +9,10 @@ describe("meet_done", () => {
     expect(res.success).toBe(true);
     expect(ctx.onboarding!.done).toBe(true);
   });
+
+  it("does not throw and succeeds when ctx.onboarding is undefined", async () => {
+    const ctx = {} as ToolContext;
+    const res = await meetDoneTool.handler(ctx, {});
+    expect(res.success).toBe(true);
+  });
 });
