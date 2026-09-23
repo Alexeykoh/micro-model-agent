@@ -3,6 +3,7 @@
   --panel: #171b22;
   --panel-2: #14181f;
   --text: #e6edf3;
+  --agent: #a5adb6;
   --dim: #9198a1;
   --faint: #6e7681;
   --accent: #58a6ff;
@@ -24,6 +25,7 @@ body.light {
   --panel: #ffffff;
   --panel-2: #ffffff;
   --text: #1f2328;
+  --agent: #424a53;
   --dim: #57606a;
   --faint: #8c959f;
   --accent: #0969da;
@@ -171,7 +173,7 @@ body {
 }
 .u::before { content: "> "; color: var(--accent); }
 
-.ans { color: var(--text); white-space: pre-wrap; }
+.ans { color: var(--agent); white-space: pre-wrap; }
 
 .think-h {
   color: var(--think);

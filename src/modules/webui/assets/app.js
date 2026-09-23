@@ -73,6 +73,7 @@
 
   const toolNodes = new Map();
   let curText = null;
+  let curMeta = null;
   let busy = false;
 
   function categoryOf(name) {
@@ -125,10 +126,6 @@
     emptyEl.style.display = show ? "" : "none";
   }
 
-  function lastChild() {
-    return msgs.lastElementChild;
-  }
-
   function clearBusy() {
     const line = document.getElementById("busyline");
     if (line) line.remove();
@@ -143,7 +140,8 @@
   function onText(chunk) {
     clearBusy();
     showEmpty(false);
-    if (!curText || !curText.classList.contains("ans")) {
+    curMeta = null;
+    if (!curText) {
       curText = append(el("div", "ans"));
     }
     curText.textContent += chunk;
@@ -152,19 +150,19 @@
 
   function onMeta(chunk) {
     showEmpty(false);
-    let node = lastChild();
-    if (!node || !node.classList.contains("think")) {
-      node = el("div", "think");
+    curText = null;
+    if (!curMeta) {
+      curMeta = el("div", "think");
       const head = el("div", "think-h");
       head.appendChild(el("span", "g", "✦"));
       head.appendChild(el("span", "lab", "thinking"));
       head.appendChild(el("span", "tog", "▾ hide"));
       const body = el("div", "think-body");
-      node.appendChild(head);
-      node.appendChild(body);
-      append(node);
+      curMeta.appendChild(head);
+      curMeta.appendChild(body);
+      append(curMeta);
     }
-    node.querySelector(".think-body").textContent += chunk;
+    curMeta.querySelector(".think-body").textContent += chunk;
     scroll();
   }
 
@@ -186,6 +184,8 @@
   function onToolStart(data) {
     clearBusy();
     showEmpty(false);
+    curText = null;
+    curMeta = null;
     const line = el("div", "act " + categoryOf(data.name));
     line.appendChild(el("span", "g", "◇"));
     line.appendChild(el("span", "lab", labelOf(data.name)));
@@ -212,8 +212,9 @@
   }
 
   function onTurnEnd(data) {
-    clearBusy();
+    setBusy(false);
     curText = null;
+    curMeta = null;
     if (data.success === false) {
       append(el("div", data.interrupted ? "warnline" : "errline", data.interrupted ? "⚠ stopped" : "✗ turn failed"));
       return;
@@ -327,13 +328,15 @@
     inp.value = "";
     if (text.startsWith("/")) {
       try {
-        await fetch("/api/command", { method: "POST", headers: postHeaders, body: JSON.stringify({ line: text }) });
+        const res = await fetch("/api/command", { method: "POST", headers: postHeaders, body: JSON.stringify({ line: text }) });
+        if (!res.ok) append(el("div", "detail", "↳ command unavailable"));
       } catch {
-        /* endpoint arrives in a later phase */
+        append(el("div", "detail", "↳ command unavailable"));
       }
       return;
     }
     curText = null;
+    curMeta = null;
     clearBusy();
     try {
       const res = await fetch("/api/message", { method: "POST", headers: postHeaders, body: JSON.stringify({ text }) });
@@ -376,6 +379,7 @@
   document.getElementById("newChat").addEventListener("click", () => {
     msgs.querySelectorAll(".ans, .u, .think, .act, .detail, .metric, .warnline, .errline, .busy").forEach((n) => n.remove());
     curText = null;
+    curMeta = null;
     showEmpty(true);
   });
 
