@@ -24,6 +24,11 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
     return false;
   }
 
+  if (process.stdout.isTTY !== true) {
+    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")));
+    return false;
+  }
+
   const check = opts.preflight ?? (() => preflightFromConfig(ctx));
 
   const pre = await check();

@@ -18,8 +18,13 @@ export interface RunMeetOptions {
  */
 export async function runMeet(ctx: ReplContext, opts: RunMeetOptions = {}): Promise<boolean> {
   if (ctx.toolCtx.onboarding) {
-    ctx.output.writeLine(pc.yellow(t("onboarding.already")));
+    ctx.output.writeLine(pc.yellow(t("repl.meet_already_hint")));
     return true;
+  }
+
+  if (process.stdout.isTTY !== true) {
+    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")));
+    return false;
   }
 
   const check = opts.preflight ?? (() => preflightFromConfig(ctx));

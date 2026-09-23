@@ -95,7 +95,18 @@ export function registerOnboardingCommands(ctx: ReplContext): void {
     description: t("cli.meet"),
     aliases: ["познакомимся"],
     usage: t("repl.meet_usage"),
-    action: async () => {
+    action: async (args) => {
+      const sub = args[0];
+      if (sub === "stop" || sub === "end") {
+        if (ctx.toolCtx.onboarding) {
+          const { exitMeetMode } = await import("../modules/onboarding/mode");
+          exitMeetMode(ctx);
+          ctx.output.writeLine(t("repl.meet_stop_done"));
+        } else {
+          ctx.output.writeLine(t("repl.meet_stop_none"));
+        }
+        return;
+      }
       await runMeet(ctx);
     },
   });

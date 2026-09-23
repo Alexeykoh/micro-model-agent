@@ -1,6 +1,19 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { runInit } from "../../src/modules/onboarding/init";
 import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "../../src/modules/onboarding/prompts";
+import { t } from "../../src/i18n/index";
+import { pc } from "../../src/ui/colors";
+
+const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+
+function setTTY(value: boolean | undefined): void {
+  Object.defineProperty(process.stdout, "isTTY", { value, configurable: true });
+}
+
+afterEach(() => {
+  if (originalIsTTY) Object.defineProperty(process.stdout, "isTTY", originalIsTTY);
+  else delete (process.stdout as { isTTY?: boolean }).isTTY;
+});
 
 function fakeCtx() {
   return {
@@ -17,6 +30,10 @@ function fakeCtx() {
 }
 
 describe("runInit", () => {
+  beforeEach(() => {
+    setTTY(true);
+  });
+
   it("sets an init allowlist, runs once, then restores state", async () => {
     const ctx = fakeCtx();
     let captured: string[] | undefined;
@@ -67,5 +84,16 @@ describe("runInit", () => {
     const block = ctx.agent.pushPromptBlock.mock.calls[0]?.[0];
     expect(block.content).toBe(INIT_SYSTEM_PROMPT);
     expect(block.kind).toBeUndefined();
+  });
+
+  it("returns false and does not run when stdout is not a TTY", async () => {
+    setTTY(false);
+    const ctx = fakeCtx();
+    const ok = await runInit(ctx, { preflight: async () => ({ ok: true, reason: "ok", ms: 1 }) });
+    expect(ok).toBe(false);
+    expect(ctx.runAgent).not.toHaveBeenCalled();
+    expect(ctx.output.writeLine).toHaveBeenCalledOnce();
+    expect(ctx.output.writeLine).toHaveBeenCalledWith(pc.yellow(t("onboarding.non_interactive")));
+    expect(ctx.agent.pushPromptBlock).not.toHaveBeenCalled();
   });
 });
