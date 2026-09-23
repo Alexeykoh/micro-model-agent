@@ -19,24 +19,31 @@ describe("CLI commands", () => {
     expect(cmds).toContain("provider");
   });
 
-  it("registers onboarding commands setup/meet/init", () => {
+  it("registers onboarding commands setup/meet/init and agents", () => {
     const program = createProgram();
     const cmds = program.commands.map((c) => c.name());
     expect(cmds).toContain("setup");
     expect(cmds).toContain("meet");
     expect(cmds).toContain("init");
+    expect(cmds).toContain("agents");
+
+    const agents = program.commands.find((c) => c.name() === "agents");
+    expect(agents).toBeDefined();
+    expect(agents!.commands.map((c) => c.name())).toContain("init");
   });
 
-  it("meet/init have no one-shot exit hook; setup does", () => {
+  it("meet/agents have no one-shot exit hook; setup/init (deprecated wizard alias) do", () => {
     const program = createProgram();
     const find = (name: string) => program.commands.find((c) => c.name() === name);
     expect(find("meet")).toBeDefined();
     expect(find("init")).toBeDefined();
     expect(find("setup")).toBeDefined();
+    expect(find("agents")).toBeDefined();
 
     expect(postActionHookCount(find("meet")!)).toBe(0);
-    expect(postActionHookCount(find("init")!)).toBe(0);
+    expect(postActionHookCount(find("agents")!)).toBe(0);
     expect(postActionHookCount(find("setup")!)).toBeGreaterThan(0);
+    expect(postActionHookCount(find("init")!)).toBeGreaterThan(0);
   });
 
   it("config has set and show subcommands", () => {

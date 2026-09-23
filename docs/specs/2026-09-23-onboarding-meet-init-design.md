@@ -2,8 +2,8 @@
 
 - **Date:** 2026-09-23
 - **Status:** Proposed
-- **Scope:** new onboarding module (`src/modules/onboarding/`), REPL commands (`/setup`, `/meet`, `/init`, `/memory`), CLI commands (`mma setup`, `mma meet`, `mma init`), provider preflight, i18n, `AGENTS.md` generation, memory edits.
-- **Versioning:** **MAJOR (3.0.0)** — `mma init` changes meaning (wizard → `AGENTS.md`), wizard renamed to `mma setup`.
+- **Scope:** new onboarding module (`src/modules/onboarding/`), REPL commands (`/setup`, `/meet`, `/init`, `/memory`), CLI commands (`mma setup`, `mma init` deprecated alias, `mma meet`, `mma agents init`), provider preflight, i18n, `AGENTS.md` generation, memory edits.
+- **Versioning:** **MINOR (2.1.0)** — `mma setup` is the preferred wizard name; `mma init` stays as a working **deprecated alias**. `AGENTS.md` generation moves to `mma agents init` (REPL `/init`).
 - **Related:** [STYLE.md](../design/ui/STYLE.md), [memory module design](./2026-08-04-memory-module-design.md), [repl-commands UX](./2026-09-22-repl-commands-ux-design.md), [testing](../agents/testing.md).
 
 ## 1. Context
@@ -31,14 +31,14 @@
 - No project-scoped memory store (memory stays global; project knowledge goes to `AGENTS.md`).
 - No TUI / alternate renderer; `box()` remains wizard-only.
 - No auto-run of `meet`/`init` without user intent.
-- No migration shim for the old `mma init` behavior (hard MAJOR rename, per D8 of the 2.0.0 spec).
+- No breaking change: `mma init` keeps configuring a provider as a **deprecated alias** of `mma setup`; `AGENTS.md` generation is `mma agents init`.
 - `init` is **not** code-only: it does not require a repository, a lockfile or a build system, and it never assumes programming is the user's goal.
 
 ## 4. Decisions (locked)
 
 | # | Decision |
 |---|----------|
-| O1 | `mma init` = `AGENTS.md` generator; wizard renamed to `mma setup`. Hard rename, no alias. |
+| O1 | `mma agents init` = `AGENTS.md` generator; the provider wizard is `mma setup`, with `mma init` kept as a working **deprecated alias** (prints a hint, then runs the wizard). MINOR, not MAJOR. |
 | O2 | Both commands are **LLM-driven**; the agent runs a focused session with a curated prompt. |
 | O3 | `meet` writes **only** to global memory (`preferences.json`, `facts.md`) — never to the repo. |
 | O4 | `init` writes **only** `<baseDir>/AGENTS.md`; existing file is improved **in place** (diff + confirm), never blindly replaced. |
@@ -58,13 +58,14 @@
 
 | Purpose | CLI | REPL |
 |---|---|---|
-| Provider wizard | `mma setup` | `/setup` |
+| Provider wizard | `mma setup` (primary), `mma init` (deprecated alias) | `/setup` |
 | Meet («Познакомимся») | `mma meet` | `/meet`, `/познакомимся` |
-| AGENTS.md init | `mma init` | `/init` |
+| AGENTS.md init | `mma agents init` | `/init` |
 | Memory view/edit | — (optional `mma memory`) | `/memory …` |
 
 - REPL commands register through the handler map (`src/cli/repl-commands.ts`, rule #17), with usage/aliases in `/help`.
-- `mma meet` / `mma init` are one-shot wrappers over the same engine; they require a TTY for the interactive parts and otherwise print a hint (no silent no-op).
+- `mma meet` / `mma agents init` are one-shot wrappers over the same engine; they require a TTY for the interactive parts and otherwise print a hint (no silent no-op).
+- `mma setup` and its deprecated alias `mma init` are one-shot provider wizards that exit after saving.
 - Completion: `/memory` subcommands + preference keys; `/meet`, `/init`, `/setup` command names.
 
 ## 6. `meet` — «Познакомимся»
@@ -331,7 +332,7 @@ src/modules/onboarding/
 | `src/core/session-logger.ts` | Modify — `logOnboarding` (or generic event) |
 | `src/i18n/{en,ru}.json` | Modify — parity strings |
 | `tests/onboarding-*.test.ts` | Create — unit tests |
-| `AGENTS.md`, `CHANGELOG.md` | Modify — document commands; 3.0.0 entry |
+| `AGENTS.md`, `CHANGELOG.md` | Modify — document commands; 2.1.0 entry |
 
 ### 10.1 Test seams
 
@@ -354,11 +355,11 @@ src/modules/onboarding/
 2. `/memory` set/get/unset/find/forget round-trip.
 3. `question` tool rendering (§6.7): `formatMenu`/`choicePrompt` output; non-TTY/`--json` path unchanged.
 4. `bun test` + `tsc --noEmit`.
-5. Manual scenarios in `docs/agents/testing.md`: first-run offer, provider-down path, `/meet`, `mma init` on a repo with and without `AGENTS.md`.
+5. Manual scenarios in `docs/agents/testing.md`: first-run offer, provider-down path, `/meet`, `mma agents init` on a repo with and without `AGENTS.md`.
 
 ## 13. Migration & versioning
 
-- **3.0.0 MAJOR:** `mma init` semantics changed; wizard moved to `mma setup`. `mma init` no longer configures a provider.
+- **2.1.0 MINOR:** `mma setup` is the preferred wizard name; `mma init` remains a working deprecated alias. `AGENTS.md` generation is `mma agents init` (REPL `/init`).
 - CHANGELOG entry (`Added`/`Changed`/`Removed`); AGENTS.md command table + docs updated.
 - No data migration (memory format unchanged; `AGENTS.md` is a new artifact).
 

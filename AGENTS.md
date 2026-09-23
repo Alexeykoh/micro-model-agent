@@ -67,9 +67,10 @@ tsc --noEmit
 bun test tests/<name>.test.ts
 
 # Onboarding
-bun run mma setup        # provider setup wizard (was: mma init)
+bun run mma setup        # provider setup wizard
+bun run mma init         # deprecated alias of mma setup (provider wizard)
 bun run mma meet         # «Познакомимся» — interview, writes global memory
-bun run mma init         # generate/improve AGENTS.md for the workspace
+bun run mma agents init  # generate/improve AGENTS.md for the workspace
 
 # Session management
 bun run mma session list
@@ -306,19 +307,19 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Автокомплит** (`src/cli/completer.ts`): dotted-ключи и enum-значения `/config`, флаги `/provider add`, имена команд для `/help`, имена сессий для `/delete`/`/export`, подкоманды с описаниями (`map/context/lsp/reasoning/verbose`).
 - **Унификация**: общий `repl.unknown_sub` + usage у `provider/model/skill/lsp`; `/help <command>` (usage + алиасы + примеры); незнакомые бывшие алиасы (`/use`) → `cli.unknown_command` с подсказкой; `/lsp` переведён на handler-map (правило #17); `/status` — компактная строка; `/sysprompt [--full]`; `/clear` — только экран.
 
-### Onboarding Commands (3.0.0)
+### Onboarding Commands (2.1.0)
 
 Дизайн: [docs/specs/2026-09-23-onboarding-meet-init-design.md](./docs/specs/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
 
 - **`meet` / «Познакомимся»** (`src/modules/onboarding/meet.ts`, `mode.ts`, `prompts.ts`) — LLM-интервью о профиле использования (домен, имя, язык, стиль ответов, привычки, «не делать без спроса»), пишет **только в глобальную память** (`~/.mma/memory/preferences.json`, `facts.md`) через `remember`. REPL-режим: вход по `[Y/n]` после setup, `/meet` (алиас `/познакомимся`) или `mma meet`; выход — по sentinel-тулу `meet_done`. Домен-нейтрально (разработка, умный дом, ассистент, …), 1–3 вопроса за ход, turn cap, `Esc` — выход без записи.
-- **`init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
+- **`agents init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
 - **Строгий allowlist** (`ToolContext.toolAllowlist`, `src/tools/executor.ts`): `meet` — `remember`/`question`/`meet_done`; `init` — `read_file`/`list_dir`/`glob`/`grep`/`project_map`/`question`/`write_file`/`edit_file`. `alwaysOn` и теги allowlist **не обходят**; `meet` не трогает репозиторий.
 - **Preflight** (`src/modules/providers/preflight.ts`): `preflightProvider`/`preflightFromConfig` — минимальный chat-запрос (`max_tokens=1`, timeout 3s), гейтит LLM-зависимые входы (`[Y/n]`-оффер, `/meet`, `mma meet`); при недоступности — спокойная подсказка, ничего не пишется.
-- **`/memory`** (`src/cli/onboarding-commands.ts`, handler map): overview + `get/set/unset/find/forget`; единая точка просмотра/правки памяти. `mma setup` — переименованный мастер провайдера (бывший `mma init`, алиаса нет).
+- **`/memory`** (`src/cli/onboarding-commands.ts`, handler map): overview + `get/set/unset/find/forget`; единая точка просмотра/правки памяти. `mma setup` — мастер провайдера; `mma init` — его устаревший алиас (печатает подсказку `mma setup`); CLI-генерация `AGENTS.md` — `mma agents init`.
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
-### Current Version: 3.0.0
+### Current Version: 2.1.0
 
 ### Changelog
 
@@ -328,10 +329,21 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 При публикации (`npm publish`) changelog автоматически попадает в пакет и виден пользователям при установке (`npm info micro-models-agent`).
 
-### Commands by Version Bump
+### Versioning Rules
 
-**MINOR** — new CLI/REPL commands, new tools, new modules, new config options, new security features
+Версии — **вехи**, а не счётчик PR. Один MAJOR на пакет ломающих изменений, а не на каждую итерацию.
 
-**PATCH** — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates
+**PATCH** — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates.
 
-**MAJOR** — removed/renamed commands, config schema changes, removed tools/modules, architecture rewrites
+**MINOR** — new CLI/REPL commands, new tools, new modules, new config options, new behavior; **renaming with a working deprecation alias**; additive `--json` fields.
+
+**MAJOR** (редко) — только реальная поломка **без пути совместимости**:
+- несовместимая схема конфига / нечитаемые старые сессии;
+- удаление команды/тула/модуля **без алиаса**, выпущенных в опубликованном релизе;
+- ломающее изменение `LLMProvider` / plugin API / `--json` контракта;
+- architecture rewrite, меняющий контракты поведения.
+
+**Правила сдержанности:**
+1. MAJOR требует хотя бы одной записи в `### Removed` / `### Changed (breaking)` CHANGELOG — иначе не MAJOR.
+2. Предпочитать **алиас + MINOR** вместо жёсткого переименования + MAJOR.
+3. Не более одного MAJOR на пакет ломающих изменений; не бампать MAJOR без явного запроса.

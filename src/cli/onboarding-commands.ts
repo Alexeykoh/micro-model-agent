@@ -113,7 +113,7 @@ export function registerOnboardingCommands(ctx: ReplContext): void {
 
   ctx.registerCommand({
     name: "init",
-    description: t("cli.init"),
+    description: t("repl.init"),
     usage: t("repl.init_usage"),
     action: async () => {
       await runInit(ctx);
