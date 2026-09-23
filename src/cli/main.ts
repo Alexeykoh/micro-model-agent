@@ -82,12 +82,15 @@ async function main(): Promise<void> {
     firstPositional = a;
     break;
   }
-  if (firstPositional && program.commands.some((c) => c.name() === firstPositional)) {
-    setOneShotMode(true);
-  }
-
   const onboardingStart =
     firstPositional === "meet" ? "meet" : firstPositional === "init" ? "init" : null;
+  if (
+    firstPositional &&
+    !onboardingStart &&
+    program.commands.some((c) => c.name() === firstPositional)
+  ) {
+    setOneShotMode(true);
+  }
 
   program.parse(process.argv);
 
