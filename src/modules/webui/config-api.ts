@@ -12,6 +12,7 @@
  * assume the request already passed both checks.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { setLocale } from "../../i18n";
 import { redactConfigSecrets } from "../../config/redact";
 import { configDefs, setConfigValue } from "../../config/registry";
 import { readBody, readBodyError, sendJson } from "./util";
@@ -104,6 +105,11 @@ export function handleConfigPost(
         sendJson(res, 400, { ok: false, error: result.reason });
         return;
       }
+
+      // `locale` has `reconfigure: false` (registry), so nothing else applies it
+      // to the process-wide i18n state. Do it here so server-side output and the
+      // browser's re-fetched dictionary agree immediately.
+      if (key === "locale") setLocale(config.locale);
 
       // Persist first, then reconfigure. Neither failure is swallowed: the UI
       // needs `persisted`/`warning` to tell "saved" from "changed in memory

@@ -156,6 +156,30 @@
     return { ok: res.ok, status: res.status, data };
   }
 
+  const I18N = { locale: "en", dicts: {} };
+
+  function t(key, params) {
+    const dict = I18N.dicts[I18N.locale] || I18N.dicts.en || {};
+    const en = I18N.dicts.en || {};
+    let template = dict[key];
+    if (template === undefined) template = en[key];
+    if (template === undefined) return key;
+    if (params) {
+      Object.keys(params).forEach((k) => {
+        template = template.split("{" + k + "}").join(String(params[k]));
+      });
+    }
+    return template;
+  }
+
+  async function loadI18n() {
+    const r = await api("/api/i18n");
+    if (r.ok && r.data) {
+      I18N.locale = r.data.locale || "en";
+      I18N.dicts = r.data.dicts || {};
+    }
+  }
+
   function categoryOf(name) {
     for (const cat of Object.keys(CATEGORIES)) {
       if (CATEGORIES[cat].indexOf(name) !== -1) return cat;
@@ -207,9 +231,9 @@
   function emptyView() {
     const wrap = el("div", "empty");
     wrap.appendChild(el("span", "g", "✦"));
-    wrap.appendChild(document.createTextNode(" новый чат"));
+    wrap.appendChild(document.createTextNode(" " + t("web.empty.title")));
     wrap.appendChild(document.createElement("br"));
-    const hint = el("span", "", "введи сообщение ниже · / — команды · модель и контекст выбираются над полем");
+    const hint = el("span", "", t("web.empty.hint"));
     hint.style.color = "#9198a1";
     wrap.appendChild(hint);
     return wrap;
@@ -280,7 +304,7 @@
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
     const fails = runFails > 0 ? " · " + runFails + " ✗" : " ✓";
-    line.appendChild(document.createTextNode(" " + runCount + " actions" + fails));
+    line.appendChild(document.createTextNode(" " + t("web.action.actions", { count: runCount }) + fails));
     appendTo(feed, line);
     runCount = 0;
     runFails = 0;
@@ -374,9 +398,9 @@
       const wrap = el("div", "think");
       const head = el("div", "think-h");
       head.appendChild(el("span", "g", "✦"));
-      head.appendChild(el("span", "lab", "thinking"));
+      head.appendChild(el("span", "lab", t("web.action.thinking")));
       head.appendChild(el("span", "dur", ""));
-      head.appendChild(el("span", "tog", "▾ hide"));
+      head.appendChild(el("span", "tog", t("web.action.hide")));
       const body = el("div", "think-body");
       wrap.appendChild(head);
       wrap.appendChild(body);
@@ -395,8 +419,8 @@
       if (!feed.querySelector(".busy")) {
         const line = el("div", "busy");
         line.appendChild(el("span", "spin", "✦"));
-        line.appendChild(el("span", "lab", "думаю"));
-        line.appendChild(el("span", "", "· Esc — стоп"));
+        line.appendChild(el("span", "lab", t("web.action.thinking")));
+        line.appendChild(el("span", "", "· " + t("web.input.esc")));
         appendTo(feed, line);
       }
     } else {
@@ -436,10 +460,11 @@
     const long = text.length > 600 || text.split("\n").length > 12;
     if (long) {
       wrap.classList.add("collapsed");
-      const more = el("span", "more", "▸ output · " + text.length + " chars");
+      const outLabel = "▸ " + t("web.tool.output", { count: text.length });
+      const more = el("span", "more", outLabel);
       more.addEventListener("click", () => {
         const collapsed = wrap.classList.toggle("collapsed");
-        more.textContent = collapsed ? "▸ output · " + text.length + " chars" : "▾ collapse";
+        more.textContent = collapsed ? outLabel : "▾ " + t("web.tool.collapse");
       });
       wrap.appendChild(more);
     }
@@ -471,7 +496,7 @@
       card.appendChild(el("span", "g", "◇"));
       card.appendChild(el("span", "name", path));
       card.appendChild(el("span", "", labelOf(name)));
-      card.appendChild(el("span", "meta", "view ↗"));
+      card.appendChild(el("span", "meta", t("web.card.view")));
       appendTo(feed, card);
       return;
     }
@@ -499,8 +524,8 @@
     }
     if (IMAGE_TOOLS.indexOf(name) !== -1) {
       const card = el("div", "imgcard");
-      card.appendChild(el("div", "ph", "◧ screenshot"));
-      card.appendChild(el("div", "cap", name === "attach_image" ? "attached image" : "browser · viewport"));
+      card.appendChild(el("div", "ph", "◧ " + t("web.card.screenshot")));
+      card.appendChild(el("div", "cap", name === "attach_image" ? t("web.card.attached_image") : t("web.card.browser_viewport")));
       appendTo(feed, card);
     }
   }
@@ -535,16 +560,16 @@
     if (!feed) return;
     if (data.success === false) {
       if (data.interrupted) {
-        appendTo(feed, el("div", "warnline", "⚠ stopped"));
+        appendTo(feed, el("div", "warnline", "⚠ " + t("web.turn.stopped")));
       } else {
-        appendTo(feed, el("div", "errline", "✗ turn failed"));
+        appendTo(feed, el("div", "errline", "✗ " + t("web.turn.failed")));
       }
     } else {
       const parts = [];
       if (typeof data.toolCalls === "number" && data.toolCalls > 0) parts.push(data.toolCalls + " tools");
       if (typeof data.durationMs === "number") parts.push(formatMs(data.durationMs));
       if (parts.length) appendTo(feed, el("div", "metric", "⟡ " + parts.join(" · ")));
-      appendTo(feed, el("div", "sysline", "— turn end · ok · tools " + (data.toolCalls || 0) + " —"));
+      appendTo(feed, el("div", "sysline", "— " + t("web.turn.end", { count: data.toolCalls || 0 }) + " —"));
     }
   }
 
@@ -578,8 +603,8 @@
     const wrap = el("div", "think");
     const head = el("div", "think-h");
     head.appendChild(el("span", "g", "✦"));
-    head.appendChild(el("span", "lab", "thinking"));
-    head.appendChild(el("span", "tog", "▾ hide"));
+    head.appendChild(el("span", "lab", t("web.action.thinking")));
+    head.appendChild(el("span", "tog", t("web.action.hide")));
     const body = el("div", "think-body");
     body.textContent = text || "";
     wrap.appendChild(head);
@@ -662,7 +687,7 @@
   async function loadHistory(t) {
     if (!t || t.historyLoaded || t.historyLoading) return;
     t.historyLoading = true;
-    const placeholder = el("div", "detail", "loading…");
+    const placeholder = el("div", "detail", t("web.history.loading"));
     if (!feedHasContent(t.feed)) {
       clearEmpty(t.feed);
       t.feed.appendChild(placeholder);
@@ -672,13 +697,13 @@
     placeholder.remove();
     t.historyLoaded = true;
     if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
-      if (!feedHasContent(t.feed)) t.feed.appendChild(el("div", "detail", "— history unavailable"));
+      if (!feedHasContent(t.feed)) t.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
       return;
     }
     // A live session already rendered its content over SSE: don't duplicate it.
     if (feedHasContent(t.feed)) return;
     renderHistory(t.feed, r.data.history);
-    if (!r.data.history.length) t.feed.appendChild(el("div", "detail", "— empty session —"));
+    if (!r.data.history.length) t.feed.appendChild(el("div", "detail", t("web.history.empty")));
     if (t.feed === activeFeed()) scroll();
   }
 
@@ -689,7 +714,7 @@
       tab.appendChild(el("span", "name", t.name || t.id));
       if (t.kind === "session") tab.appendChild(el("span", "sid", String(t.id).slice(0, 4)));
       const x = el("span", "x", "✕");
-      x.title = "close";
+      x.title = t("web.topbar.close");
       tab.appendChild(x);
       tab.addEventListener("click", (e) => {
         if (e.target.classList.contains("x")) {
@@ -775,8 +800,8 @@
     // Server-side creation failed (no manager / offline): keep a local-only tab
     // so the user is not blocked, but surface the failure.
     newSeq++;
-    openTab("new" + newSeq, "новый чат", "new", false);
-    setIndicator("session create failed", true);
+    openTab("new" + newSeq, t("web.empty.title"), "new", false);
+    setIndicator(t("web.sessions.create_failed"), true);
   }
 
   document.getElementById("newChat").addEventListener("click", newChatTab);
@@ -811,10 +836,10 @@
       }
     });
     if (!activePlaced) {
-      activeList.appendChild(el("div", "si", "— no active session —"));
+      activeList.appendChild(el("div", "si", t("web.sessions.none_active")));
     }
     if (!recentList.childNodes.length) {
-      recentList.appendChild(el("div", "si", "— none —"));
+      recentList.appendChild(el("div", "si", t("web.sessions.none")));
     }
   }
 
@@ -824,7 +849,7 @@
     row.appendChild(el("span", "name", s.name || String(s.id)));
     row.appendChild(el("span", "meta", relTime(s.updatedAt)));
     const del = el("span", "del", "✕");
-    del.title = "delete";
+    del.title = t("web.sessions.delete");
     row.appendChild(del);
     row.addEventListener("click", (e) => {
       if (e.target.classList.contains("del")) {
@@ -840,7 +865,7 @@
 
   async function deleteSession(id) {
     const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
-    if (!r.ok) setIndicator("delete failed", true);
+    if (!r.ok) setIndicator(t("web.sessions.delete_failed"), true);
     await loadSessions();
   }
 
@@ -887,7 +912,7 @@
       img.src = src;
       thumb.appendChild(img);
       const rm = el("span", "rm", "✕");
-      rm.title = "remove";
+      rm.title = t("web.attach.remove");
       rm.addEventListener("click", () => {
         attachments.splice(i, 1);
         renderAttachments();
@@ -915,30 +940,30 @@
     let err = "";
     for (const file of files) {
       if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
-        err = "only images can be attached";
+        err = t("web.attach.only_images");
         continue;
       }
       if (attachments.length >= MAX_IMAGES) {
-        err = "too many images (max " + MAX_IMAGES + ")";
+        err = t("web.attach.too_many", { max: MAX_IMAGES });
         break;
       }
       if (file.size > MAX_IMAGE_BYTES) {
-        err = "image too large (max 6 MB)";
+        err = t("web.attach.too_large");
         continue;
       }
       try {
         const url = await readAsDataUrl(file);
         if (url.indexOf("data:image/") !== 0) {
-          err = "invalid image";
+          err = t("web.attach.invalid");
           continue;
         }
         if (attachments.length >= MAX_IMAGES) {
-          err = "too many images (max " + MAX_IMAGES + ")";
+          err = t("web.attach.too_many", { max: MAX_IMAGES });
           break;
         }
         attachments.push(url);
       } catch (e) {
-        err = "could not read image";
+        err = t("web.attach.read_failed");
       }
     }
     renderAttachments();
@@ -1025,7 +1050,7 @@
       }
       const r = await api("/api/command", { method: "POST", body: { line: text } });
       if (!r.ok) {
-        appendTo(feed, el("div", "detail", "↳ command unavailable"));
+        appendTo(feed, el("div", "detail", "↳ " + t("web.misc.command_unavailable")));
       }
       return;
     }
@@ -1107,18 +1132,18 @@
     const cfg = state.config || {};
     const provider = cfg.provider || {};
 
-    setSelButton(document.getElementById("selModelBtn"), "model", cfg.model || "—");
+    setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
     const modelMenu = document.getElementById("selModelMenu");
     modelMenu.textContent = "";
     if (!state.models.length) {
-      modelMenu.appendChild(el("div", "mi dim", "no models"));
+      modelMenu.appendChild(el("div", "mi dim", t("web.selectors.no_models")));
     } else {
       state.models.forEach((m) => {
         modelMenu.appendChild(menuItem(m, "", m === cfg.model, () => postConfig("model", m, true)));
       });
     }
     modelMenu.appendChild(el("div", "sep"));
-    const refresh = el("div", "mi", "↻ refresh list");
+    const refresh = el("div", "mi", t("web.selectors.refresh_list"));
     refresh.addEventListener("click", (e) => {
       e.stopPropagation();
       closeAllMenus();
@@ -1126,7 +1151,7 @@
     });
     modelMenu.appendChild(refresh);
 
-    setSelButton(document.getElementById("selProviderBtn"), "provider", provider.active || provider.type || "—");
+    setSelButton(document.getElementById("selProviderBtn"), t("web.selectors.provider"), provider.active || provider.type || "—");
     const provMenu = document.getElementById("selProviderMenu");
     provMenu.textContent = "";
     const entries = Array.isArray(provider.entries) && provider.entries.length
@@ -1138,19 +1163,19 @@
       provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => postConfig("provider.active", name, true)));
     });
 
-    setSelButton(document.getElementById("selContextBtn"), "context", contextLabel());
+    setSelButton(document.getElementById("selContextBtn"), t("web.selectors.context"), contextLabel());
     const ctxMenu = document.getElementById("selContextMenu");
     ctxMenu.textContent = "";
     const sizes = [8192, 16384, 32768, 65536, 131072];
     sizes.forEach((n) => {
-      ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? "current" : "", n === cfg.contextWindow, () => postConfig("contextWindow", n, false)));
+      ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? t("web.selectors.current") : "", n === cfg.contextWindow, () => postConfig("contextWindow", n, false)));
     });
     ctxMenu.appendChild(el("div", "sep"));
-    const custom = el("div", "mi", "custom…");
+    const custom = el("div", "mi", t("web.selectors.custom"));
     custom.addEventListener("click", (e) => {
       e.stopPropagation();
       closeAllMenus();
-      const raw = window.prompt("context window (tokens)", String(cfg.contextWindow || 32768));
+      const raw = window.prompt(t("web.selectors.context_prompt"), String(cfg.contextWindow || 32768));
       if (raw == null) return;
       const n = Number(raw.trim());
       if (Number.isFinite(n) && n >= 1024) postConfig("contextWindow", n, false);
@@ -1184,13 +1209,18 @@
     const r = await api("/api/config", { method: "POST", body: { key, value } });
     if (r.ok && r.data && r.data.ok) {
       const persisted = r.data.persisted !== false;
-      setIndicator(persisted ? "saved" : (r.data.warning || "not persisted"), !persisted);
+      setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
       if (state.config && r.data.value !== undefined) setPath(state.config, key, r.data.value);
+      if (key === "locale") {
+        await loadI18n();
+        applyStaticI18n();
+        renderSettings();
+      }
       renderSelectors();
       if (refreshSettings) renderSettings();
       return true;
     }
-    const err = (r.data && (r.data.error || r.data.reason)) || r.status || "error";
+    const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
     setIndicator(String(err), true);
     return false;
   }
@@ -1213,7 +1243,7 @@
     planEl.textContent = "";
     if (!plan || !Array.isArray(plan.steps) || !plan.steps.length) {
       planCountEl.textContent = "";
-      planEl.appendChild(el("div", "kv dim", "no active plan"));
+      planEl.appendChild(el("div", "kv dim", t("web.plan.none")));
       return;
     }
     const done = plan.steps.filter((s) => s.status === "done").length;
@@ -1250,7 +1280,7 @@
     card.textContent = "";
     const total = data.steps.length;
     const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
-    card.appendChild(el("div", "ph2", "◇ План · " + total + " шагов"));
+    card.appendChild(el("div", "ph2", "◇ " + t("web.plan.heading", { count: total })));
     data.steps.forEach((step, i) => {
       const status =
         step.status === "done" ? "done" : step.status === "failed" ? "fail" : i === cur ? "cur" : "";
@@ -1487,7 +1517,7 @@
     const provider = cfg.provider || {};
 
     const search = el("input", "searchbox");
-    search.placeholder = "search models…";
+    search.placeholder = t("web.settings.search_models");
     container.appendChild(search);
     const list = el("div");
     container.appendChild(list);
@@ -1496,7 +1526,7 @@
       const q = search.value.trim().toLowerCase();
       const models = state.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
       if (!models.length) {
-        list.appendChild(el("div", "placeholder", state.models.length ? "no matches" : "no models reported by provider"));
+        list.appendChild(el("div", "placeholder", state.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
         return;
       }
       models.forEach((m) => {
@@ -1504,9 +1534,9 @@
         const r = el("div", "row");
         r.appendChild(el("span", active ? "val accent" : "", m));
         if (active) {
-          r.appendChild(el("span", "val dim", contextLabel() + " · active ✓"));
+          r.appendChild(el("span", "val dim", contextLabel() + " · " + t("web.settings.active_check")));
         } else {
-          const use = el("span", "edit", "use");
+          const use = el("span", "edit", t("web.settings.use"));
           use.addEventListener("click", () => postConfig("model", m, true));
           r.appendChild(use);
         }
@@ -1519,22 +1549,22 @@
     const entries = Array.isArray(provider.entries) && provider.entries.length
       ? provider.entries
       : [{ label: provider.active || provider.type, type: provider.type }];
-    container.appendChild(row("active provider", el("span", "val", provider.active || provider.type || "—")));
+    container.appendChild(row(t("web.settings.active_provider"), el("span", "val", provider.active || provider.type || "—")));
     entries.forEach((entry) => {
       const name = entry.label || entry.type;
       if (!name) return;
       const r = el("div", "row");
-      r.appendChild(el("span", "", "provider: " + name));
+      r.appendChild(el("span", "", t("web.settings.provider_label", { name })));
       if (name === (provider.active || provider.type)) {
-        r.appendChild(el("span", "val dim", "active"));
+        r.appendChild(el("span", "val dim", t("web.settings.active")));
       } else {
-        const use = el("span", "edit", "use");
+        const use = el("span", "edit", t("web.settings.use"));
         use.addEventListener("click", () => postConfig("provider.active", name, true));
         r.appendChild(use);
       }
       container.appendChild(r);
     });
-    container.appendChild(row("add provider", el("span", "val dim", "use /provider add in the terminal")));
+    container.appendChild(row(t("web.settings.add_provider"), el("span", "val dim", t("web.settings.add_provider_hint"))));
   }
 
   function renderUiPanel() {
@@ -1551,10 +1581,10 @@
       });
       seg.appendChild(b);
     });
-    container.appendChild(row("theme", seg));
-    container.appendChild(row("font size", el("span", "val dim", "—")));
-    container.appendChild(row("sidebar default", el("span", "val dim", "—")));
-    container.appendChild(row("stream partials", el("span", "val dim", "—")));
+    container.appendChild(row(t("web.settings.theme"), seg));
+    container.appendChild(row(t("web.settings.font_size"), el("span", "val dim", "—")));
+    container.appendChild(row(t("web.settings.sidebar_default"), el("span", "val dim", "—")));
+    container.appendChild(row(t("web.settings.stream_partials"), el("span", "val dim", "—")));
   }
 
   function renderPlaceholderPanel(name, note) {
@@ -1562,14 +1592,14 @@
     if (!container) return;
     container.textContent = "";
     const p = el("div", "placeholder");
-    p.appendChild(el("span", "tag", "pending"));
+    p.appendChild(el("span", "tag", t("web.settings.pending")));
     p.appendChild(document.createTextNode(" " + note));
     container.appendChild(p);
   }
 
   function placeholderFor(data, empty) {
     const d = el("div", "placeholder");
-    if (data === undefined) d.textContent = "loading…";
+    if (data === undefined) d.textContent = t("web.settings.loading");
     else d.textContent = empty;
     return d;
   }
@@ -1588,21 +1618,21 @@
     if (!container) return;
     container.textContent = "";
     if (state.memory === undefined || state.memory === null) {
-      container.appendChild(placeholderFor(state.memory, "memory unavailable"));
+      container.appendChild(placeholderFor(state.memory, t("web.settings.memory_unavailable")));
       return;
     }
     const data = state.memory;
 
     const addRow = el("div", "row");
-    addRow.appendChild(el("span", "", "add entry"));
+    addRow.appendChild(el("span", "", t("web.settings.add_entry")));
     const catSel = el("select");
     MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
     catSel.value = "facts";
     addRow.appendChild(catSel);
     const textIn = el("input", "grow");
-    textIn.placeholder = "new memory…";
+    textIn.placeholder = t("web.settings.new_memory");
     addRow.appendChild(textIn);
-    const addBtn = el("span", "edit", "add");
+    const addBtn = el("span", "edit", t("web.settings.add"));
     addBtn.addEventListener("click", async () => {
       const text = textIn.value.trim();
       if (!text) return;
@@ -1611,14 +1641,14 @@
         textIn.value = "";
         await loadMemory();
       } else {
-        setIndicator("add failed", true);
+        setIndicator(t("web.settings.add_failed"), true);
       }
     });
     addRow.appendChild(addBtn);
     container.appendChild(addRow);
 
     const search = el("input", "searchbox");
-    search.placeholder = "search memory…";
+    search.placeholder = t("web.settings.search_memory");
     container.appendChild(search);
     const list = el("div", "settings-list");
     container.appendChild(list);
@@ -1637,14 +1667,14 @@
         entries.forEach((e) => {
           const line = el("div", "list-line");
           line.appendChild(el("span", "name", String(e.text).replace(/^- /, "")));
-          const del = el("span", "edit", "forget");
+          const del = el("span", "edit", t("web.settings.forget"));
           del.addEventListener("click", async () => {
             const r = await api(
               "/api/memory/" + encodeURIComponent(cat.name) + "/" + e.n,
               { method: "DELETE" },
             );
             if (r.ok) await loadMemory();
-            else setIndicator("forget failed", true);
+            else setIndicator(t("web.settings.forget_failed"), true);
           });
           line.appendChild(del);
           list.appendChild(line);
@@ -1653,7 +1683,7 @@
       const prefs = Object.entries(data.preferences || {});
       if (prefs.length && !q) {
         any = true;
-        list.appendChild(groupHeader("preferences", prefs.length));
+        list.appendChild(groupHeader(t("web.settings.preferences"), prefs.length));
         prefs.forEach(([k, v]) => {
           const line = el("div", "list-line");
           line.appendChild(el("span", "name", k + " = " + v));
@@ -1662,7 +1692,7 @@
       }
       if (!any) {
         const empty = el("div", "placeholder");
-        empty.textContent = q ? "no matches" : "no memory entries";
+        empty.textContent = q ? t("web.settings.no_matches") : t("web.settings.no_memory");
         list.appendChild(empty);
       }
     };
@@ -1675,12 +1705,12 @@
     if (!container) return;
     container.textContent = "";
     if (state.skills === undefined || state.skills === null) {
-      container.appendChild(placeholderFor(state.skills, "skills unavailable"));
+      container.appendChild(placeholderFor(state.skills, t("web.settings.skills_unavailable")));
       return;
     }
     if (!state.skills.length) {
       const empty = el("div", "placeholder");
-      empty.textContent = "no skills found";
+      empty.textContent = t("web.settings.no_skills");
       container.appendChild(empty);
       return;
     }
@@ -1690,7 +1720,7 @@
       line.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
       line.appendChild(el("span", "name", s.name));
       if (s.source) line.appendChild(el("span", "src", s.source));
-      line.appendChild(el("span", "st", s.enabled ? "enabled" : "available"));
+      line.appendChild(el("span", "st", s.enabled ? t("web.settings.enabled") : t("web.settings.available")));
       list.appendChild(line);
     });
     container.appendChild(list);
@@ -1701,15 +1731,15 @@
     if (!container) return;
     container.textContent = "";
     if (state.pluginsData === undefined || state.pluginsData === null) {
-      container.appendChild(placeholderFor(state.pluginsData, "plugins unavailable"));
+      container.appendChild(placeholderFor(state.pluginsData, t("web.settings.plugins_unavailable")));
       return;
     }
     const data = state.pluginsData;
     const list = el("div", "settings-list");
-    list.appendChild(groupHeader("plugins", (data.plugins || []).length));
+    list.appendChild(groupHeader(t("web.settings.plugins_header"), (data.plugins || []).length));
     if (!(data.plugins || []).length) {
       const empty = el("div", "placeholder");
-      empty.textContent = "no plugins registered";
+      empty.textContent = t("web.settings.no_plugins");
       list.appendChild(empty);
     }
     (data.plugins || []).forEach((p) => {
@@ -1718,13 +1748,13 @@
       line.appendChild(el("span", "name", p.name));
       if (p.version) line.appendChild(el("span", "src", "v" + p.version));
       if (p.source) line.appendChild(el("span", "src", p.source));
-      line.appendChild(el("span", "st", p.enabled === false ? "disabled" : "enabled"));
+      line.appendChild(el("span", "st", p.enabled === false ? t("web.settings.disabled") : t("web.settings.enabled")));
       list.appendChild(line);
     });
-    list.appendChild(groupHeader("mcp servers", (data.mcp || []).length));
+    list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
     if (!(data.mcp || []).length) {
       const empty = el("div", "placeholder");
-      empty.textContent = "no MCP servers configured";
+      empty.textContent = t("web.settings.no_mcp");
       list.appendChild(empty);
     }
     (data.mcp || []).forEach((m) => {
@@ -1768,8 +1798,55 @@
     renderMemoryPanel();
     renderSkillsPanel();
     renderPluginsPanel();
-    renderPlaceholderPanel("security", "protected paths, restricted mode and web token are managed by the terminal wizard.");
+    renderPlaceholderPanel("security", t("web.settings.security_note"));
     renderGenericPanel("advanced", SECTION_KEYS.advanced);
+  }
+
+  // Re-apply the dictionary to static chrome after a locale switch. Dynamic
+  // feeds (tool output, model text) are localized server-side and untouched.
+  function applyStaticI18n() {
+    const setText = (id, text) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = text;
+    };
+    setText("planHeaderLabel", t("web.sidebar.plan"));
+    setText("usageHeaderLabel", t("web.sidebar.session") + " · " + t("web.sidebar.usage"));
+    setText("settingsTitle", t("web.settings.title"));
+    setText("closeSettings", "✕ " + t("web.topbar.close"));
+    setText("sessActiveHeader", t("web.sessions.active"));
+    setText("sessRecentHeader", t("web.sessions.recent"));
+    setText("sessNew", t("web.sessions.new"));
+    setText("sessRefresh", t("web.sessions.refresh"));
+    setText("hintEnter", t("web.input.enter"));
+    setText("hintShift", t("web.input.shift_enter"));
+    setText("hintEsc", t("web.input.esc"));
+    setText("hintAttach", t("web.input.attach"));
+
+    const titles = {
+      newChat: t("web.topbar.new_chat"),
+      sessBtn: t("web.topbar.all_sessions"),
+      openSettings: t("web.topbar.settings"),
+      attachBtn: t("web.attach.title"),
+    };
+    Object.keys(titles).forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.title = titles[id];
+    });
+    if (inp) inp.placeholder = t("web.input.placeholder");
+
+    document.querySelectorAll("#setMenu .mi").forEach((mi) => {
+      const p = mi.dataset.p;
+      if (p) mi.textContent = t("web.settings." + p);
+    });
+    document.querySelectorAll(".content-col .panel").forEach((panel) => {
+      const h3 = panel.querySelector("h3");
+      const name = panel.id.replace(/^p-/, "");
+      if (h3 && name) h3.textContent = t("web.settings." + name);
+    });
+
+    renderSelectors();
+    renderSessionsDropdown();
+    if (msgs.querySelector(".empty")) showEmptyFeed();
   }
 
   const overlay = document.getElementById("overlay");
@@ -1814,7 +1891,9 @@
   }
 
   async function boot() {
+    await loadI18n();
     applyTheme(currentTheme());
+    applyStaticI18n();
     showEmptyFeed();
     renderSelectors();
     renderSettings();

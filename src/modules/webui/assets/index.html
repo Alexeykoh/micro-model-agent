@@ -13,9 +13,9 @@
   <div class="dd" id="sessDD">
     <button class="icon-btn" id="sessBtn" title="all sessions">☰</button>
     <div class="dd-menu">
-      <div class="h">active</div>
+      <div class="h" id="sessActiveHeader">active</div>
       <div id="sessActiveList"></div>
-      <div class="h">recent</div>
+      <div class="h" id="sessRecentHeader">recent</div>
       <div id="sessRecentList"></div>
       <div class="sep"></div>
       <div class="act" id="sessNew">+ new session</div>
@@ -50,18 +50,18 @@
       <div class="attach-strip" id="attachStrip" hidden></div>
       <div class="attach-err" id="attachErr" hidden></div>
       <textarea class="inp" id="inp" rows="2" placeholder="ввод сообщения… (/ — команды)"></textarea>
-      <div class="inp-meta"><span>Enter — отправить</span><span>Shift+Enter — новая строка</span><span>Esc — стоп</span><span>🖼 / Ctrl+V — вложение</span></div>
+      <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc">Esc — stop</span><span id="hintAttach">🖼 / Ctrl+V — attach</span></div>
     </div>
   </div>
 
   <div class="sb">
     <div class="sec plan-sec">
-      <div class="sec-h" data-collapse><span class="arrow">▾</span> plan <span class="n" id="planCount"></span></div>
+      <div class="sec-h" data-collapse><span class="arrow">▾</span> <span id="planHeaderLabel">plan</span> <span class="n" id="planCount"></span></div>
       <div class="sec-body" id="plan"></div>
     </div>
 
     <div class="sec usage-sec">
-      <div class="sec-h" data-collapse><span class="arrow">▾</span> session · usage</div>
+      <div class="sec-h" data-collapse><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></div>
       <div class="sec-body" id="usage"></div>
     </div>
   </div>
@@ -69,7 +69,7 @@
 
 <div class="overlay" id="overlay">
   <div class="modal">
-    <div class="modal-top">⚙ settings <span class="saved" id="saveIndicator"></span> <span class="x" id="closeSettings">✕ close</span></div>
+    <div class="modal-top">⚙ <span id="settingsTitle">settings</span> <span class="saved" id="saveIndicator"></span> <span class="x" id="closeSettings">✕ close</span></div>
     <div class="modal-body">
       <div class="menu-col" id="setMenu">
         <div class="mi on" data-p="general">General</div>

@@ -33,6 +33,15 @@ export function setLocale(locale: string): void {
   }
 }
 
+/**
+ * Flattened dictionaries keyed by locale name. Used by the `mma web` API to
+ * ship every translation to the browser so it can localize its own chrome.
+ * Read-only by contract — callers must not mutate the returned maps.
+ */
+export function getFlatDicts(): Record<string, Record<string, string>> {
+  return flat;
+}
+
 export function loadLocale(name: string, dict: Record<string, unknown>): void {
   locales[name] = dict;
   flat[name] = flatten(dict);
