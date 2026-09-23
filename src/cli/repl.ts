@@ -272,14 +272,19 @@ export class Repl implements ReplContext, Host {
   public attachHostBridge(pm?: PluginManager): void {
     const manager = pm ?? this.pluginManager;
     if (!manager) return;
-    this.hostBridge = this.buildHostBridge();
+    this.hostBridge ??= this.buildHostBridge();
     manager.setHostBridge(this.hostBridge);
+  }
+
+  /** Single busy predicate shared by the `Host` surface and the bridge. */
+  private isAgentBusy(): boolean {
+    return this.agentRunning;
   }
 
   /** Build the HostBridge over this REPL's normal run path. */
   private buildHostBridge(): HostBridge {
     return createHostBridge({
-      isBusy: () => this.agentRunning,
+      isBusy: () => this.isAgentBusy(),
       addPendingImage: (url) => {
         this.agent.contextManager?.addPendingImage?.({
           type: "image_url",
@@ -959,7 +964,7 @@ export class Repl implements ReplContext, Host {
 
   /** Host/HostBridge: true while the agent is processing a turn. */
   public isBusy(): boolean {
-    return this.agentRunning;
+    return this.isAgentBusy();
   }
 
   /** Host/HostBridge: submit through the shared bridge (same run path). */
