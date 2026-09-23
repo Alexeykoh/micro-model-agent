@@ -208,7 +208,9 @@ export function handleRequest(
 
   const asset = STATIC_ASSETS[reqUrl.pathname === "/" ? "/index.html" : reqUrl.pathname];
   if (asset) {
-    res.writeHead(200, { "Content-Type": asset.type });
+    // Assets are read once at server start; no-store keeps the browser from
+    // caching a stale UI across restarts during development.
+    res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
     res.end(assets[asset.key]);
     return;
   }
