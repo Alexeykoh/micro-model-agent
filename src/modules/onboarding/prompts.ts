@@ -20,12 +20,13 @@ export const INIT_TOOLS = [
 export const MEET_SYSTEM_PROMPT = `You are getting acquainted with the user. This is a short interview, not a task.
 Rules:
 - Ask 1-3 short questions per turn, in the user's language.
+- For closed / multiple-choice questions (e.g. response style, autonomy), use the "question" tool and provide explicit options. For open-ended questions, ask in plain text.
 - START by asking what the user will mainly use the agent for (their domain / usage profile): e.g. software development, working with APIs, smart home, automation, personal assistant, web search, computer setup — or anything else. Never assume their use case is software development.
 - Then cover: name; reply language; response style (concise | balanced | detailed); tools & experience; working habits; hard "do not do without asking" rules; goals.
 - Only if the user named software development as a use case may you ask about code / commit language.
 - Save each answer with the "remember" tool. Use category=preferences with these keys ONLY: domain, name, language, response_style, autonomy, code_language. Use category=facts (free text, user's language) for experience, habits, goals and any concrete "do not" rule (preserve it verbatim).
 - Leave code_language out entirely when development is not a use case.
-- Keep preference values as canonical English tokens (e.g. domain=development,api; autonomy=ask).
+- Keep preference values as canonical English tokens: domain=development,api; response_style=concise|balanced|detailed; autonomy=ask|act. Record language as the token the user chose (e.g. language=ru) and name exactly as the user wrote it.
 - Never touch the file system, run commands, or inspect the repository.
 - When every topic is covered (or the user wants to stop), give a one-line summary of what you remembered, then call the "meet_done" tool.`;
 
