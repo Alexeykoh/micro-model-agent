@@ -32,6 +32,8 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import { createHostBridge } from "../core/host";
+import type { HostStateSnapshot } from "../core/host";
+import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
@@ -938,7 +940,27 @@ export class Repl implements ReplContext {
     }
   }
 
-  private async executeCommand(input: string): Promise<void> {
+  /** Host: run a slash command through the same handler map as typed input. */
+  public async executeCommand(line: string): Promise<void> {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("/")) return;
+    await this.dispatchCommand(trimmed);
+  }
+
+  /** Host: current plan/session/model snapshot for UI surfaces. */
+  public getState(): HostStateSnapshot {
+    const meta = this.sessionManager?.getActiveMeta();
+    return {
+      busy: this.agentRunning,
+      sessionId: meta?.id,
+      sessionName: meta?.name,
+      model: this.config.model,
+      provider: this.config.provider?.active,
+      plan: planSnapshotFromModule(adaptActivePlan(this.execModule?.getActivePlan())),
+    };
+  }
+
+  private async dispatchCommand(input: string): Promise<void> {
     const parts = input.split(/\s+/);
     const name = parts[0].slice(1);
     const args = parts.slice(1);

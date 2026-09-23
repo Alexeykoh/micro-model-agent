@@ -2,6 +2,10 @@ import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
 
+/** Status of a single plan step surfaced to a Host. `skipped` is not part of
+ *  the host contract; execution plans map it onto a settled state. */
+export type PlanStepStatus = "pending" | "in_progress" | "done" | "failed";
+
 /** Snapshot a Host can render into a sidebar/topbar. Fields are best-effort:
  *  absent when the underlying module is not available (e.g. no session yet). */
 export interface HostStateSnapshot {
@@ -15,7 +19,7 @@ export interface HostStateSnapshot {
   costUsd?: number;
   compactionCount?: number;
   plan?: {
-    steps: { text: string; status: "pending" | "in_progress" | "done" | "failed" }[];
+    steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;
   } | null;
 }
