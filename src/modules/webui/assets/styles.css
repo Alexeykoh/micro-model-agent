@@ -306,6 +306,7 @@ body.light .imgcard .ph { background: var(--ph-light); }
 .grouped .pipe { color: var(--pipe); }
 .busy { color: var(--think-const); display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
 .busy .spin { display: inline-block; animation: spin 1s linear infinite; }
+.busy .busytime { color: var(--dim-a); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .progline { color: var(--dim-a); display: flex; gap: 8px; align-items: center; }
 .progline .pb { color: var(--green-const); letter-spacing: -1px; }

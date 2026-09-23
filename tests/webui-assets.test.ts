@@ -25,4 +25,11 @@ describe("webui assets", () => {
     expect(a.js).toContain("qopt");
     expect(a.css).toContain(".q .qopt");
   });
+
+  it("wires the OutputBus log event and the immediate busy indicator", () => {
+    const a = loadAssets();
+    expect(a.js).toContain('addEventListener("log"');
+    expect(a.js).toContain("showBusy(");
+    expect(a.css).toContain(".busy .busytime");
+  });
 });

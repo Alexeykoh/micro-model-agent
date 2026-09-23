@@ -26,6 +26,7 @@ import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
+import { installOutputForwarding } from "./log-forward";
 import { cancelPendingQuestions, installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
 import {
@@ -79,7 +80,6 @@ export interface HostStateInput {
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   usage?: UsageSnapshot;
 }
-
 /**
  * Capture the usage-bearing subset of an `AgentResult` into a
  * {@link UsageSnapshot}. Undefined fields are omitted so a partial result never
@@ -99,7 +99,6 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
   if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
   return usage;
 }
-
 /**
  * Resolve the plan snapshot to broadcast after a tool ends. Only `plan`/`todo`
  * tools mutate the active plan, so any other tool yields `null` (no event).
@@ -131,7 +130,6 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };
 }
-
 /**
  * Start the browser UI. The state is created first, then the `WebHost`, then the
  * server — so the busy flag is shared end-to-end.
@@ -182,6 +180,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
 
   const forwarder = makeForwarder(state);
+  const stopOutputForwarding = installOutputForwarding(state);
 
   // `ToolEvent` is renderer-oriented and carries no id. Synthesize one per
   // `start` and match it on `end` (LIFO per tool name) so the browser can pair
@@ -294,6 +293,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     stop: () => {
       cancelPendingQuestions(state);
       forwarder.flushNow();
+      stopOutputForwarding();
       stopServer(state);
     },
   };

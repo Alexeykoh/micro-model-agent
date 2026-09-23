@@ -122,4 +122,55 @@ describe("webui smoke", () => {
     },
     30_000,
   );
+
+  smoke(
+    "renders a named session tab with a short id once a session is active",
+    async (ctx) => {
+      const { state, dir } = makeState();
+      state.bridge = {
+        isBusy: () => false,
+        submit: () => Promise.resolve(),
+        interrupt: () => {},
+        getState: () => ({ busy: false, sessionId: "abcd1234", sessionName: "My session" }),
+        executeCommand: () => Promise.resolve(),
+      };
+      let browser: Browser | null = null;
+      let started = false;
+      try {
+        const url = await startServer(loadAssets(), state);
+        started = true;
+
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            executablePath: CHROMIUM ?? undefined,
+            timeout: 15_000,
+          });
+        } catch (err) {
+          if (isMissingBrowserError(err)) {
+            ctx.skip();
+            return;
+          }
+          throw err;
+        }
+
+        const page = await browser.newPage();
+        await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.waitForSelector(".stab", { timeout: 5_000 });
+
+        expect(await page.locator(".stab").count()).toBe(1);
+        expect(await page.locator(".stab .name").innerText()).toBe("My session");
+        expect(await page.locator(".stab .sid").innerText()).toBe("abcd");
+
+        const box = await page.locator(".stab").first().boundingBox();
+        expect(box).not.toBeNull();
+        expect(box?.height ?? 0).toBeGreaterThan(15);
+      } finally {
+        if (browser) await browser.close().catch(() => {});
+        if (started) stopServer(state);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });

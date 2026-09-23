@@ -107,6 +107,7 @@
   let curMeta = null;
   let runCount = 0;
   let runFails = 0;
+  let busyTimer = null;
   const pendingArgs = new Map();
   const toolNodes = new Map();
 
@@ -315,10 +316,45 @@
   }
 
   function clearBusy() {
+    if (busyTimer) {
+      clearInterval(busyTimer);
+      busyTimer = null;
+    }
     const feed = liveFeed();
     if (!feed) return;
     const line = feed.querySelector(".busy");
     if (line) line.remove();
+  }
+
+  // Show the in-feed "thinking" line. Called immediately after a successful
+  // `/api/message` POST (202) so the wait during a slow first-run
+  // summarization is visible before the first `phase` event arrives; the
+  // normal event flow (`onText`/`onPhase`/`onTurnEnd`) clears it.
+  function showBusy(feed) {
+    feed = feed || liveFeed();
+    if (!feed) return;
+    clearEmpty(feed);
+    if (feed.querySelector(".busy")) return;
+    if (busyTimer) {
+      clearInterval(busyTimer);
+      busyTimer = null;
+    }
+    const line = el("div", "busy");
+    line.appendChild(el("span", "spin", "✦"));
+    line.appendChild(el("span", "lab", t("web.action.thinking")));
+    const time = el("span", "busytime", "· 0s");
+    line.appendChild(time);
+    line.appendChild(el("span", "", "· " + t("web.input.esc")));
+    appendTo(feed, line);
+    const started = Date.now();
+    busyTimer = setInterval(() => {
+      if (!line.parentNode) {
+        clearInterval(busyTimer);
+        busyTimer = null;
+        return;
+      }
+      time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
+    }, 1000);
   }
 
   function flushRun() {
@@ -436,16 +472,7 @@
 
   function onPhase(phase) {
     if (phase === "thinking") {
-      const feed = liveFeed();
-      if (!feed) return;
-      clearEmpty(feed);
-      if (!feed.querySelector(".busy")) {
-        const line = el("div", "busy");
-        line.appendChild(el("span", "spin", "✦"));
-        line.appendChild(el("span", "lab", t("web.action.thinking")));
-        line.appendChild(el("span", "", "· " + t("web.input.esc")));
-        appendTo(feed, line);
-      }
+      showBusy();
     } else {
       clearBusy();
     }
@@ -610,6 +637,21 @@
       .forEach((line) => appendTo(feed, el("div", "cmdout", line)));
   }
 
+  // Server-forwarded `OutputBus` line (system-prompt overflow, context probe,
+  // summarization). Text is already redacted server-side; render via
+  // `textContent` so nothing untrusted is parsed as HTML.
+  function onLog(data) {
+    if (!data || typeof data.text !== "string" || !data.text) return;
+    const feed = liveFeed() || activeFeed();
+    if (!feed) return;
+    const level = data.level;
+    const cls = level === "error" ? "errline" : level === "warn" ? "warnline" : "detail";
+    const glyph = level === "error" ? "✗ " : level === "warn" ? "⚠ " : "↳ ";
+    const line = el("div", cls);
+    line.textContent = glyph + data.text;
+    appendTo(feed, line);
+  }
+
   function renderAssistantText(feed, text) {
     parseFences(String(text)).forEach((part) => {
       if (part.type === "code") {
@@ -707,44 +749,44 @@
     return !!feed.querySelector(".u, .ans, .code, .act, .think, .errline, .sysline");
   }
 
-  async function loadHistory(t) {
-    if (!t || t.historyLoaded || t.historyLoading) return;
-    t.historyLoading = true;
+  async function loadHistory(tab) {
+    if (!tab || tab.historyLoaded || tab.historyLoading) return;
+    tab.historyLoading = true;
     const placeholder = el("div", "detail", t("web.history.loading"));
-    if (!feedHasContent(t.feed)) {
-      clearEmpty(t.feed);
-      t.feed.appendChild(placeholder);
+    if (!feedHasContent(tab.feed)) {
+      clearEmpty(tab.feed);
+      tab.feed.appendChild(placeholder);
     }
-    const r = await api("/api/sessions/" + encodeURIComponent(t.id) + "/history");
-    t.historyLoading = false;
+    const r = await api("/api/sessions/" + encodeURIComponent(tab.id) + "/history");
+    tab.historyLoading = false;
     placeholder.remove();
-    t.historyLoaded = true;
+    tab.historyLoaded = true;
     if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
-      if (!feedHasContent(t.feed)) t.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
+      if (!feedHasContent(tab.feed)) tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
       return;
     }
     // A live session already rendered its content over SSE: don't duplicate it.
-    if (feedHasContent(t.feed)) return;
-    renderHistory(t.feed, r.data.history);
-    if (!r.data.history.length) t.feed.appendChild(el("div", "detail", t("web.history.empty")));
-    if (t.feed === activeFeed()) scroll();
+    if (feedHasContent(tab.feed)) return;
+    renderHistory(tab.feed, r.data.history);
+    if (!r.data.history.length) tab.feed.appendChild(el("div", "detail", t("web.history.empty")));
+    if (tab.feed === activeFeed()) scroll();
   }
 
   function renderTabstrip() {
     tabstripEl.textContent = "";
-    tabs.forEach((t) => {
-      const tab = el("div", "stab" + (t.id === activeTabId ? " on" : ""));
-      tab.appendChild(el("span", "name", t.name || t.id));
-      if (t.kind === "session") tab.appendChild(el("span", "sid", String(t.id).slice(0, 4)));
+    tabs.forEach((item) => {
+      const tab = el("div", "stab" + (item.id === activeTabId ? " on" : ""));
+      tab.appendChild(el("span", "name", item.name || item.id));
+      if (item.kind === "session") tab.appendChild(el("span", "sid", String(item.id).slice(0, 4)));
       const x = el("span", "x", "✕");
       x.title = t("web.topbar.close");
       tab.appendChild(x);
       tab.addEventListener("click", (e) => {
         if (e.target.classList.contains("x")) {
-          closeTab(t.id);
+          closeTab(item.id);
           return;
         }
-        openTab(t.id, t.name, t.kind, true);
+        openTab(item.id, item.name, item.kind, true);
       });
       tabstripEl.appendChild(tab);
     });
@@ -1092,8 +1134,9 @@
     if (!r.ok) {
       const msg = (r.data && r.data.error) || r.status;
       appendTo(feed, el("div", "warnline", "⚠ " + msg));
-    } else if (images.length) {
-      clearAttachments();
+    } else {
+      if (images.length) clearAttachments();
+      showBusy(feed);
     }
   }
 
@@ -1293,12 +1336,12 @@
     const feed = liveFeed();
     if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
     clearEmpty(feed);
-    const t = tabs.find((x) => x.id === liveTabId);
-    let card = t ? t.planCard : null;
+    const tab = tabs.find((x) => x.id === liveTabId);
+    let card = tab ? tab.planCard : null;
     if (!card || card.parentNode !== feed) {
       card = el("div", "planblock");
       appendTo(feed, card);
-      if (t) t.planCard = card;
+      if (tab) tab.planCard = card;
     }
     card.textContent = "";
     const total = data.steps.length;
@@ -1552,6 +1595,10 @@
     es.addEventListener("command", (e) => {
       const d = parse(e);
       if (d && typeof d.text === "string") onCommandOutput(d.text);
+    });
+    es.addEventListener("log", (e) => {
+      const d = parse(e);
+      if (d) onLog(d);
     });
     es.addEventListener("state", (e) => {
       const d = parse(e);
