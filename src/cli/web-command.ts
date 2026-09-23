@@ -59,9 +59,16 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
 
   // exitOnComplete=true: no interactive prompt owns stdin in web mode.
-  const { agent, config, sessionManager, execModule, configDir, memoryStore } = await bootstrap(
-    ...webBootstrapArgs(opts),
-  );
+  const {
+    agent,
+    config,
+    sessionManager,
+    execModule,
+    configDir,
+    memoryStore,
+    skillsModule,
+    pluginManager,
+  } = await bootstrap(...webBootstrapArgs(opts));
 
   if (virgin) {
     getDefaultChannel().writeLine(pc.yellow(`  ${t("cli.first_run_oneshot")}`), "stderr");
@@ -73,6 +80,8 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     sessionManager,
     execModule,
     memory: memoryStore,
+    skills: skillsModule,
+    plugins: pluginManager,
     configDir,
     host: opts.host,
     token: opts.token,

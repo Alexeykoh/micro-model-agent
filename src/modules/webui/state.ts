@@ -38,6 +38,34 @@ export interface WebUiAssets {
 }
 
 /**
+ * Structural subsets of the skills/plugins modules the settings REST surface
+ * needs. Narrowing lets the real modules satisfy them implicitly while tests
+ * stub them without casts (`SkillsModule`/`PluginManager` are structurally
+ * compatible).
+ */
+export interface WebSkillInfo {
+  name: string;
+  description?: string;
+  sourcePath?: string;
+}
+
+export interface WebSkillsModule {
+  getAvailable(): WebSkillInfo[];
+  getLoaded(): WebSkillInfo[];
+}
+
+export interface WebPluginInfo {
+  name: string;
+  version?: string;
+  isBuiltin?: boolean;
+  source?: string;
+}
+
+export interface WebPluginManager {
+  getPluginInfos(): Array<{ plugin: WebPluginInfo; source?: string }>;
+}
+
+/**
  * Last-turn usage metrics captured from `AgentResult` and surfaced through
  * `HostStateSnapshot`. All fields are optional: a turn that did not report a
  * value leaves the corresponding sidebar cell at `—`.
@@ -98,6 +126,17 @@ export interface WebUiState {
    * touching the filesystem — `/memory` then answers "unavailable".
    */
   memory?: MemoryStore;
+  /**
+   * Skills registry from bootstrap (`BootstrapResult.skillsModule`) backing the
+   * settings "Skills" page. Missing → `GET /api/skills` answers 503.
+   */
+  skills?: WebSkillsModule;
+  /**
+   * Plugin manager from bootstrap (`BootstrapResult.pluginManager`) backing the
+   * settings "Plugins · MCP" page. Missing → `GET /api/plugins` answers 503.
+   * MCP servers are read from `config.mcpServers`.
+   */
+  plugins?: WebPluginManager;
 }
 
 export function createWebUiState(): WebUiState {

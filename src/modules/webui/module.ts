@@ -27,7 +27,14 @@ import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
 import { startServer, stopServer } from "./server";
-import { broadcast, createWebUiState, type UsageSnapshot, type WebUiState } from "./state";
+import {
+  broadcast,
+  createWebUiState,
+  type UsageSnapshot,
+  type WebPluginManager,
+  type WebSkillsModule,
+  type WebUiState,
+} from "./state";
 
 export interface WebUiDeps {
   agent: Agent;
@@ -36,6 +43,10 @@ export interface WebUiDeps {
   execModule?: ExecutionModule;
   /** Shared global memory store (from bootstrap) backing `/memory` in web mode. */
   memory?: MemoryStore;
+  /** Skills registry (from bootstrap) backing the settings "Skills" page. */
+  skills?: WebSkillsModule;
+  /** Plugin manager (from bootstrap) backing the settings "Plugins · MCP" page. */
+  plugins?: WebPluginManager;
   /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
   configDir?: string;
   /** Model ids known to the active provider (defaults to a background cache). */
@@ -120,6 +131,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.config = deps.config;
   state.sessionManager = deps.sessionManager;
   state.memory = deps.memory;
+  state.skills = deps.skills;
+  state.plugins = deps.plugins;
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
   state.reconfigure = (config) => deps.agent.reconfigure(config);
 

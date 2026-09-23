@@ -81,6 +81,9 @@
     host: {},
     busy: false,
     activeSessionId: null,
+    memory: undefined,
+    skills: undefined,
+    pluginsData: undefined,
   };
 
   let tabs = [];
@@ -1347,21 +1350,218 @@
     container.appendChild(p);
   }
 
+  function placeholderFor(data, empty) {
+    const d = el("div", "placeholder");
+    if (data === undefined) d.textContent = "loading…";
+    else d.textContent = empty;
+    return d;
+  }
+
+  function groupHeader(label, count) {
+    const head = el("div", "row");
+    head.appendChild(el("span", "val accent", label));
+    if (count != null) head.appendChild(el("span", "val dim", String(count)));
+    return head;
+  }
+
+  const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"];
+
+  function renderMemoryPanel() {
+    const container = document.querySelector('[data-panel="memory"]');
+    if (!container) return;
+    container.textContent = "";
+    if (state.memory === undefined || state.memory === null) {
+      container.appendChild(placeholderFor(state.memory, "memory unavailable"));
+      return;
+    }
+    const data = state.memory;
+
+    const addRow = el("div", "row");
+    addRow.appendChild(el("span", "", "add entry"));
+    const catSel = el("select");
+    MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
+    catSel.value = "facts";
+    addRow.appendChild(catSel);
+    const textIn = el("input", "grow");
+    textIn.placeholder = "new memory…";
+    addRow.appendChild(textIn);
+    const addBtn = el("span", "edit", "add");
+    addBtn.addEventListener("click", async () => {
+      const text = textIn.value.trim();
+      if (!text) return;
+      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
+      if (r.ok && r.data && r.data.ok) {
+        textIn.value = "";
+        await loadMemory();
+      } else {
+        setIndicator("add failed", true);
+      }
+    });
+    addRow.appendChild(addBtn);
+    container.appendChild(addRow);
+
+    const search = el("input", "searchbox");
+    search.placeholder = "search memory…";
+    container.appendChild(search);
+    const list = el("div", "settings-list");
+    container.appendChild(list);
+
+    const draw = () => {
+      list.textContent = "";
+      const q = search.value.trim().toLowerCase();
+      let any = false;
+      (data.categories || []).forEach((cat) => {
+        const entries = (cat.entries || []).filter(
+          (e) => !q || String(e.text).toLowerCase().indexOf(q) !== -1,
+        );
+        if (!entries.length) return;
+        any = true;
+        list.appendChild(groupHeader(cat.name, entries.length));
+        entries.forEach((e) => {
+          const line = el("div", "list-line");
+          line.appendChild(el("span", "name", String(e.text).replace(/^- /, "")));
+          const del = el("span", "edit", "forget");
+          del.addEventListener("click", async () => {
+            const r = await api(
+              "/api/memory/" + encodeURIComponent(cat.name) + "/" + e.n,
+              { method: "DELETE" },
+            );
+            if (r.ok) await loadMemory();
+            else setIndicator("forget failed", true);
+          });
+          line.appendChild(del);
+          list.appendChild(line);
+        });
+      });
+      const prefs = Object.entries(data.preferences || {});
+      if (prefs.length && !q) {
+        any = true;
+        list.appendChild(groupHeader("preferences", prefs.length));
+        prefs.forEach(([k, v]) => {
+          const line = el("div", "list-line");
+          line.appendChild(el("span", "name", k + " = " + v));
+          list.appendChild(line);
+        });
+      }
+      if (!any) {
+        const empty = el("div", "placeholder");
+        empty.textContent = q ? "no matches" : "no memory entries";
+        list.appendChild(empty);
+      }
+    };
+    search.addEventListener("input", draw);
+    draw();
+  }
+
+  function renderSkillsPanel() {
+    const container = document.querySelector('[data-panel="skills"]');
+    if (!container) return;
+    container.textContent = "";
+    if (state.skills === undefined || state.skills === null) {
+      container.appendChild(placeholderFor(state.skills, "skills unavailable"));
+      return;
+    }
+    if (!state.skills.length) {
+      const empty = el("div", "placeholder");
+      empty.textContent = "no skills found";
+      container.appendChild(empty);
+      return;
+    }
+    const list = el("div", "settings-list");
+    state.skills.forEach((s) => {
+      const line = el("div", "list-line");
+      line.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
+      line.appendChild(el("span", "name", s.name));
+      if (s.source) line.appendChild(el("span", "src", s.source));
+      line.appendChild(el("span", "st", s.enabled ? "enabled" : "available"));
+      list.appendChild(line);
+    });
+    container.appendChild(list);
+  }
+
+  function renderPluginsPanel() {
+    const container = document.querySelector('[data-panel="plugins"]');
+    if (!container) return;
+    container.textContent = "";
+    if (state.pluginsData === undefined || state.pluginsData === null) {
+      container.appendChild(placeholderFor(state.pluginsData, "plugins unavailable"));
+      return;
+    }
+    const data = state.pluginsData;
+    const list = el("div", "settings-list");
+    list.appendChild(groupHeader("plugins", (data.plugins || []).length));
+    if (!(data.plugins || []).length) {
+      const empty = el("div", "placeholder");
+      empty.textContent = "no plugins registered";
+      list.appendChild(empty);
+    }
+    (data.plugins || []).forEach((p) => {
+      const line = el("div", "list-line");
+      line.appendChild(el("span", "g", "✓"));
+      line.appendChild(el("span", "name", p.name));
+      if (p.version) line.appendChild(el("span", "src", "v" + p.version));
+      if (p.source) line.appendChild(el("span", "src", p.source));
+      line.appendChild(el("span", "st", p.enabled === false ? "disabled" : "enabled"));
+      list.appendChild(line);
+    });
+    list.appendChild(groupHeader("mcp servers", (data.mcp || []).length));
+    if (!(data.mcp || []).length) {
+      const empty = el("div", "placeholder");
+      empty.textContent = "no MCP servers configured";
+      list.appendChild(empty);
+    }
+    (data.mcp || []).forEach((m) => {
+      const line = el("div", "list-line");
+      const on = m.status !== "disabled";
+      line.appendChild(el("span", on ? "g" : "dim", on ? "✓" : "○"));
+      line.appendChild(el("span", "name", m.name));
+      line.appendChild(el("span", "st", m.status || "—"));
+      list.appendChild(line);
+    });
+    container.appendChild(list);
+  }
+
+  async function loadMemory() {
+    const r = await api("/api/memory");
+    state.memory = r.ok && r.data ? r.data : null;
+    renderMemoryPanel();
+  }
+
+  async function loadSkills() {
+    const r = await api("/api/skills");
+    state.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
+    renderSkillsPanel();
+  }
+
+  async function loadPlugins() {
+    const r = await api("/api/plugins");
+    state.pluginsData =
+      r.ok && r.data
+        ? { plugins: r.data.plugins || [], mcp: r.data.mcp || [] }
+        : null;
+    renderPluginsPanel();
+  }
+
   function renderSettings() {
     renderGenericPanel("general", SECTION_KEYS.general);
     renderModelPanel();
     renderGenericPanel("context", SECTION_KEYS.context);
     renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
     renderUiPanel();
-    renderPlaceholderPanel("memory", "memory list/add/forget is wired in a follow-up task.");
-    renderPlaceholderPanel("skills", "skill registry is wired in a follow-up task.");
-    renderPlaceholderPanel("plugins", "plugin / MCP status is wired in a follow-up task.");
+    renderMemoryPanel();
+    renderSkillsPanel();
+    renderPluginsPanel();
     renderPlaceholderPanel("security", "protected paths, restricted mode and web token are managed by the terminal wizard.");
     renderGenericPanel("advanced", SECTION_KEYS.advanced);
   }
 
   const overlay = document.getElementById("overlay");
-  document.getElementById("openSettings").addEventListener("click", () => overlay.classList.add("open"));
+  document.getElementById("openSettings").addEventListener("click", () => {
+    overlay.classList.add("open");
+    void loadMemory();
+    void loadSkills();
+    void loadPlugins();
+  });
   document.getElementById("closeSettings").addEventListener("click", () => overlay.classList.remove("open"));
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.classList.remove("open");
@@ -1404,6 +1604,9 @@
     await loadConfig();
     await loadModels();
     await loadSessions();
+    await loadMemory();
+    await loadSkills();
+    await loadPlugins();
     await refresh();
     connectSSE();
     setInterval(refresh, 2000);

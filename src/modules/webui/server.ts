@@ -18,6 +18,7 @@ import {
   sendJson,
 } from "./util";
 import { handleConfigGet, handleConfigPost, handleModelsGet, handleSessionsApi } from "./config-api";
+import { handleSettingsApi } from "./settings-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
@@ -110,6 +111,10 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
 
   if (handleSessionsApi(req, res, reqUrl, s)) {
+    return;
+  }
+
+  if (handleSettingsApi(req, res, reqUrl, s)) {
     return;
   }
 

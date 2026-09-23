@@ -485,3 +485,16 @@ body.light .toggle { background: var(--toggle-off); }
 }
 .placeholder { color: var(--dim-b); font-size: 12.5px; padding: 6px 0; line-height: 1.7; }
 .placeholder .tag { color: var(--yellow-const); }
+
+/* settings data lists (memory / skills / plugins) */
+.settings-list .list-line { align-items: center; gap: 10px; }
+.settings-list .list-line .name { flex: 1 1 auto; color: var(--fg); word-break: break-word; }
+.settings-list .list-line .src { color: var(--dim-a); font-size: 11.5px; white-space: nowrap; }
+.settings-list .list-line .st { color: var(--dim-a); white-space: nowrap; }
+.settings-list .list-line .dim { color: var(--dim-a); }
+.settings-list .list-line .edit { margin-left: auto; }
+.row select {
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 4px 6px;
+}
+.row input.grow { width: 220px; text-align: left; }
