@@ -47,6 +47,7 @@
 | O10 | All new strings go through `t()` with `en`+`ru` parity; all human output follows STYLE.md. |
 | O11 | No new required config; onboarding has sane defaults. Optional knobs may be added later. |
 | O12 | Onboarding sessions are logged to `session.jsonl` as `onboarding_*` events for observability. |
+| O13 | `MEET_SYSTEM_PROMPT` is a **semi-script**: the guide owns topic coverage and a preference-key whitelist; the model owns wording and light follow-ups. Keys outside the whitelist are not written. |
 
 ## 5. Command surface
 
@@ -88,6 +89,22 @@
 - Agent questions: `?` glyph (accent); user echo: `>` (accent); reasoning: `✦` (violet).
 - `remember` actions: `◇` + `tool.friendly.remember` label, meta category (dim); a batch collapses to `◇ Запоминаю · N записей ✓`.
 - Final summary uses `✓` (green) and `↳` (dim) detail lines. No boxes, no system tool names.
+
+### 6.5 Guide (`MEET_SYSTEM_PROMPT`)
+
+Semi-script. The guide defines coverage and the memory slots; the model only phrases and adapts.
+
+| Topic | Target memory slot |
+|---|---|
+| name | `preferences.name` |
+| reply language | `preferences.language` |
+| response style | `preferences.response_style` (`concise\|balanced\|detailed`) |
+| stack / experience | `facts` (free-form) |
+| working habits | `facts` |
+| "do not without asking" | `preferences.git_autocommit` / `facts` |
+| code / commit language | `preferences.code_language` |
+
+Rules baked into the prompt: 1–3 questions per turn; closed questions via the `question` tool (options), open questions as plain text; ask in the user's language; stop once topics are covered; **do not invent keys outside the whitelist**; never ask about the repository/code.
 
 ## 7. `init` — `AGENTS.md`
 
