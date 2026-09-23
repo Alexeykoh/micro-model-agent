@@ -482,6 +482,9 @@ body.light .kv .wn { color: var(--yellow); }
   gap: 6px 14px; min-width: 0;
 }
 .row:last-child { border-bottom: none; }
+.row > .row-label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row-label .row-name { overflow-wrap: anywhere; }
+.row-label .row-desc { color: var(--dim-a); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; max-width: 60ch; }
 .row > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .row .val {
   color: var(--fg); min-width: 0; max-width: 100%;

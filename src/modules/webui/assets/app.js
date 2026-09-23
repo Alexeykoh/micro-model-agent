@@ -1603,9 +1603,12 @@
     return state.registry.find((d) => d.key === key) || null;
   }
 
-  function row(label, control) {
+  function row(label, control, desc) {
     const r = el("div", "row");
-    r.appendChild(el("span", "", label));
+    const left = el("div", "row-label");
+    left.appendChild(el("span", "row-name", label));
+    if (desc) left.appendChild(el("span", "row-desc", desc));
+    r.appendChild(left);
     if (typeof control === "string") {
       const v = el("span", "val", control);
       v.title = control;
@@ -1614,6 +1617,12 @@
       r.appendChild(control);
     }
     return r;
+  }
+
+  function descFor(key) {
+    const k = "config.desc." + key;
+    const d = t(k);
+    return d === k ? "" : d;
   }
 
   function configControl(def, key) {
@@ -1670,7 +1679,7 @@
     keys.forEach((key) => {
       const def = defFor(key);
       if (!def) return;
-      container.appendChild(row(configLabel(def), configControl(def, key)));
+      container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
     });
   }
 
@@ -1921,10 +1930,10 @@
     SECTION_KEYS.security.forEach((key) => {
       const def = defFor(key);
       if (!def) return;
-      container.appendChild(row(configLabel(def), configControl(def, key)));
+      container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
     });
     container.appendChild(
-      row(t("web.settings.web_token"), el("span", "val dim", state.webToken || t("web.settings.web_token_none"))),
+      row(t("web.settings.web_token"), el("span", "val dim", state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
     );
     const note = el("div", "placeholder");
     note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
