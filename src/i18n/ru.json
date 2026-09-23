@@ -338,6 +338,8 @@
   "repl.meet_unavailable": "Не могу начать: провайдер не отвечает ({reason}).",
   "repl.meet_unavailable_hint": "Запусти модель и повтори /meet — ничего не записано.",
   "onboarding.already": "Уже выполняется.",
+  "repl.init_start_prompt": "Создай или улучши {dir} для этой папки. Сначала изучи, потом запиши.",
+  "repl.init_unavailable": "Не могу запустить init: провайдер не отвечает ({reason}).",
   "cli.list_providers": "Список провайдеров",
   "cli.current_provider": "Текущий провайдер:",
   "cli.base_url": "Базовый URL:",

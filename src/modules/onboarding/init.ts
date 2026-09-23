@@ -1,0 +1,62 @@
+import { join } from "path";
+import type { ReplContext } from "../../cli/repl-commands";
+import type { PromptBlock } from "../../core/types";
+import { estimateTokens } from "../../llm/token-counter";
+import type { PreflightResult } from "../providers/preflight";
+import { preflightProvider, resolveProviderTarget } from "../providers/preflight";
+import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "./prompts";
+import { t } from "../../i18n/index";
+import { pc } from "../../ui/colors";
+
+export interface RunInitOptions {
+  /** Test seam. */
+  preflight?: () => Promise<PreflightResult>;
+}
+
+/**
+ * Generate or improve AGENTS.md for the workspace. Single agent run with a
+ * strict allowlist (no bash). Returns false when the provider is unavailable
+ * or another onboarding mode is active.
+ */
+export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Promise<boolean> {
+  if (ctx.toolCtx.onboarding) {
+    ctx.output.writeLine(pc.yellow(t("onboarding.already")));
+    return false;
+  }
+
+  const check =
+    opts.preflight ??
+    (() => {
+      const target = resolveProviderTarget(ctx.config.provider);
+      return preflightProvider({
+        baseUrl: target.baseUrl,
+        apiKey: target.apiKey,
+        model: ctx.config.model,
+      });
+    });
+
+  const pre = await check();
+  if (!pre.ok) {
+    ctx.output.writeLine(pc.yellow(t("repl.init_unavailable", { reason: pre.reason })));
+    ctx.output.writeLine(t("repl.meet_unavailable_hint"));
+    return false;
+  }
+
+  const block: PromptBlock = {
+    content: INIT_SYSTEM_PROMPT,
+    priority: "high",
+    essential: true,
+    estimatedTokens: estimateTokens(INIT_SYSTEM_PROMPT),
+  };
+  ctx.agent.pushPromptBlock(block);
+  ctx.toolCtx.toolAllowlist = [...INIT_TOOLS];
+  try {
+    await ctx.runAgent(
+      t("repl.init_start_prompt", { dir: join(ctx.baseDir, "AGENTS.md") }),
+    );
+  } finally {
+    ctx.agent.removePromptBlock(block);
+    ctx.toolCtx.toolAllowlist = undefined;
+  }
+  return true;
+}

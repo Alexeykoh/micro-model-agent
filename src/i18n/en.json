@@ -344,6 +344,8 @@
   "repl.meet_unavailable": "Can't start: the provider is not responding ({reason}).",
   "repl.meet_unavailable_hint": "Start the model and try /meet again — nothing was saved.",
   "onboarding.already": "Already running.",
+  "repl.init_start_prompt": "Generate or improve {dir} for this workspace. Scan first, then write.",
+  "repl.init_unavailable": "Can't run init: the provider is not responding ({reason}).",
   "cli.list_providers": "List providers",
   "cli.current_provider": "Current provider:",
   "cli.base_url": "Base URL:",
