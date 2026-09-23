@@ -510,6 +510,126 @@
     append(el("div", "errline", "✗ " + data.error));
   }
 
+  function renderAssistantText(feed, text) {
+    parseFences(String(text)).forEach((part) => {
+      if (part.type === "code") {
+        const code = el("div", "code");
+        code.textContent = part.content;
+        feed.appendChild(code);
+      } else if (part.content) {
+        feed.appendChild(el("div", "ans", part.content));
+      }
+    });
+  }
+
+  function renderThinkBlock(feed, text) {
+    const wrap = el("div", "think");
+    const head = el("div", "think-h");
+    head.appendChild(el("span", "g", "✦"));
+    head.appendChild(el("span", "lab", "thinking"));
+    head.appendChild(el("span", "tog", "▾ hide"));
+    const body = el("div", "think-body");
+    body.textContent = text || "";
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    feed.appendChild(wrap);
+  }
+
+  function renderHistoryAct(feed, entry, statusNodes) {
+    const line = el("div", "act " + categoryOf(entry.name));
+    line.appendChild(el("span", "g", "◇"));
+    line.appendChild(el("span", "lab", labelOf(entry.name)));
+    const args = argText(entry.args);
+    if (args) {
+      line.appendChild(el("span", "sep", "·"));
+      line.appendChild(el("span", "args", args));
+    }
+    const status = el("span", "ok", "");
+    line.appendChild(status);
+    feed.appendChild(line);
+    if (entry.toolCallId) statusNodes.set(entry.toolCallId, status);
+  }
+
+  function renderHistoryResult(feed, entry, statusNodes) {
+    const dur = formatMs(entry.duration);
+    const mark = (entry.success ? " ✓" : " ✗") + (dur ? " " + dur : "");
+    const status = entry.toolCallId ? statusNodes.get(entry.toolCallId) : null;
+    if (status) {
+      status.textContent = mark;
+      if (!entry.success) status.classList.add("fail");
+      statusNodes.delete(entry.toolCallId);
+      return;
+    }
+    const line = el("div", "act " + categoryOf(entry.tool));
+    line.appendChild(el("span", "g", "↳"));
+    line.appendChild(el("span", "lab", labelOf(entry.tool)));
+    line.appendChild(el("span", "ok" + (entry.success ? "" : " fail"), mark));
+    feed.appendChild(line);
+  }
+
+  function renderHistory(feed, entries) {
+    const statusNodes = new Map();
+    entries.forEach((entry) => {
+      if (!entry || typeof entry.kind !== "string") return;
+      switch (entry.kind) {
+        case "user":
+          feed.appendChild(el("div", "u", entry.text || ""));
+          break;
+        case "assistant":
+          renderAssistantText(feed, entry.text || "");
+          break;
+        case "reasoning":
+          renderThinkBlock(feed, entry.text || "");
+          break;
+        case "tool_call":
+          renderHistoryAct(feed, entry, statusNodes);
+          break;
+        case "tool_result":
+          renderHistoryResult(feed, entry, statusNodes);
+          break;
+        case "plan":
+          if (entry.text) feed.appendChild(el("div", "sysline", "▸ " + entry.text));
+          break;
+        case "context":
+          if (entry.text) feed.appendChild(el("div", "detail", "↳ " + entry.text));
+          break;
+        case "error":
+          feed.appendChild(el("div", "errline", "✗ " + (entry.text || "")));
+          break;
+        case "system":
+          if (entry.text) feed.appendChild(el("div", "sysline", entry.text));
+          break;
+      }
+    });
+  }
+
+  function feedHasContent(feed) {
+    return !!feed.querySelector(".u, .ans, .code, .act, .think, .errline, .sysline");
+  }
+
+  async function loadHistory(t) {
+    if (!t || t.historyLoaded || t.historyLoading) return;
+    t.historyLoading = true;
+    const placeholder = el("div", "detail", "loading…");
+    if (!feedHasContent(t.feed)) {
+      clearEmpty(t.feed);
+      t.feed.appendChild(placeholder);
+    }
+    const r = await api("/api/sessions/" + encodeURIComponent(t.id) + "/history");
+    t.historyLoading = false;
+    placeholder.remove();
+    t.historyLoaded = true;
+    if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
+      if (!feedHasContent(t.feed)) t.feed.appendChild(el("div", "detail", "— history unavailable"));
+      return;
+    }
+    // A live session already rendered its content over SSE: don't duplicate it.
+    if (feedHasContent(t.feed)) return;
+    renderHistory(t.feed, r.data.history);
+    if (!r.data.history.length) t.feed.appendChild(el("div", "detail", "— empty session —"));
+    if (t.feed === activeFeed()) scroll();
+  }
+
   function renderTabstrip() {
     tabstripEl.textContent = "";
     tabs.forEach((t) => {
@@ -543,7 +663,14 @@
   function openTab(id, name, kind, server) {
     let t = tabs.find((x) => x.id === id);
     if (!t) {
-      t = { id, name: name || id, kind: kind || "session", feed: makeFeed() };
+      t = {
+        id,
+        name: name || id,
+        kind: kind || "session",
+        feed: makeFeed(),
+        historyLoaded: false,
+        historyLoading: false,
+      };
       tabs.push(t);
     } else if (name) {
       t.name = name;
@@ -554,8 +681,13 @@
     renderTabstrip();
     renderSessionsDropdown();
     msgs.scrollTop = msgs.scrollHeight;
+    if (t.kind === "session" && !server) {
+      // Auto-opened live session: SSE fills the feed, no transcript fetch.
+      t.historyLoaded = true;
+    }
     if (server && t.kind === "session") {
       api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
+      loadHistory(t);
     }
   }
 

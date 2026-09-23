@@ -13,6 +13,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { redactConfigSecrets } from "../../config/redact";
 import { configDefs, setConfigValue } from "../../config/registry";
+import { handleSessionHistory } from "./history-api";
 import { readBody, readBodyError, sendJson } from "./util";
 import type { WebUiState } from "./state";
 
@@ -209,6 +210,38 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiSta
     return;
   }
   sendJson(res, 200, { ok: true });
+}
+
+/**
+ * Dispatch `/api/sessions*` routes. Returns whether the request was handled so
+ * `server.ts` keeps a flat chain without duplicating path parsing here.
+ */
+export function handleSessionsApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: URL,
+  s: WebUiState,
+): boolean {
+  const p = reqUrl.pathname;
+  if (p === "/api/sessions" && req.method === "GET") {
+    handleSessionsGet(res, s);
+    return true;
+  }
+  if (p === "/api/sessions/activate" && req.method === "POST") {
+    handleSessionActivate(req, res, s);
+    return true;
+  }
+  if (p.startsWith("/api/sessions/") && p.endsWith("/history") && req.method === "GET") {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
+    handleSessionHistory(res, id, s);
+    return true;
+  }
+  if (p.startsWith("/api/sessions/") && req.method === "DELETE") {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length));
+    handleSessionDelete(res, id, s);
+    return true;
+  }
+  return false;
 }
 
 /** `GET /api/models` — model ids known to the active provider. */

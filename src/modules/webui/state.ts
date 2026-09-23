@@ -9,13 +9,16 @@
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { AppConfig } from "../../config/types";
-import type { SessionMeta } from "../../modules/session/types";
+import type { SessionMeta, SessionMessage } from "../../modules/session/types";
+import type { SessionLogEntry } from "../../modules/session/store";
 import { MAX_BODY_BYTES } from "./util";
 
 /**
  * Structural subset of `SessionManager` the web REST surface needs. Keeping it
  * narrow lets the real manager satisfy it implicitly while tests stub it
- * without casts.
+ * without casts. The history readers are optional so lightweight stubs that
+ * only exercise list/activate/delete stay valid; the history endpoint answers
+ * with an empty transcript when neither is implemented.
  */
 export interface WebSessionManager {
   list(): SessionMeta[];
@@ -23,6 +26,8 @@ export interface WebSessionManager {
   getActive(): string | null;
   setActive(id: string): void;
   delete(id: string): void;
+  loadSessionLog?(id: string): SessionLogEntry[];
+  getHistory?(id: string): SessionMessage[];
 }
 
 export interface WebUiAssets {
