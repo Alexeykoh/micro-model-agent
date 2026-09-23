@@ -96,7 +96,7 @@ bun run build:prod
 ### 2. Запустите мастер настройки
 
 ```bash
-bun run mma init
+bun run mma setup
 ```
 
 Сканирует локальные порты, находит модель, тестирует соединение и записывает конфиг.
@@ -121,7 +121,9 @@ bun run dev
 bun run mma "<prompt>"
 
 # Подкоманды
-bun run mma init                       # Интерактивный мастер настройки
+bun run mma setup                      # Интерактивный мастер настройки
+bun run mma meet                       # «Познакомимся» — интервью, пишет в память
+bun run mma init                       # Создать/улучшить AGENTS.md для workspace
 bun run mma config set model qwen/qwen3.5-9b
 bun run mma config show
 bun run mma model list                 # Список доступных моделей (✔ = сертифицирована)

@@ -61,7 +61,7 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
 4. **`/memory` round-trip.**
    - `/memory set favorite_city Moscow` → `/memory get favorite_city` → `Moscow`.
    - `/memory find moscow` находит запись; `/memory unset favorite_city` удаляет.
-   - `/memory forget preferences 1` удаляет одну запись и сообщает об этом; повторный вызов на
+   - `/memory forget facts 1` удаляет одну запись и сообщает об этом; повторный вызов на
      пустой категории даёт мягкое `memory_entry_not_found`.
 
 5. **`mma init` — AGENTS.md.**

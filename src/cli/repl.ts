@@ -1239,6 +1239,7 @@ export class Repl implements ReplContext {
         } else {
           const { runInit } = await import("../modules/onboarding/init");
           await runInit(this);
+          this.slog.logOnboarding("init_done", { model: this.config.model });
         }
       } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
         const { preflightFromConfig } = await import("../modules/providers/preflight");

@@ -102,6 +102,12 @@ export interface ToolContext {
    */
   toolAllowlist?: string[];
   /**
+   * When set, write_file/edit_file may only target these absolute paths
+   * (case-insensitive). Used by onboarding `init` to restrict writes to
+   * AGENTS.md. Undefined = no restriction.
+   */
+  writePathAllowlist?: string[];
+  /**
    * Shared onboarding state. Set by the `meet_done` sentinel tool and read by
    * the REPL to leave meet mode. Carries the active guide block so the REPL
    * can remove it on exit. Undefined outside an onboarding session.

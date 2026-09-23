@@ -128,9 +128,9 @@ $env:MMA_CONFIG_DIR = "E:\projects\micro-models-agent\_testing\ui-firstrun\.mma"
 
 Формат: ** invoke → ожидаемое поведение и UI-проверки**.
 
-### 4.1. `init`
+### 4.1. `setup`
 
-- [ ] `bun run mma init` — запускает мастер, сохраняет `~/.mma/config.json`, печатает `cli.config_saved`.
+- [ ] `bun run mma setup` — запускает мастер, сохраняет `~/.mma/config.json`, печатает `cli.config_saved`.
 - [ ] Не перезапускает процесс (в отличие от первого `mma`).
 - [ ] Прерывание (`Ctrl+C`) в мастере не оставляет битого конфига.
 

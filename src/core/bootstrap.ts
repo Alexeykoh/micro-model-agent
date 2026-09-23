@@ -875,7 +875,9 @@ export async function bootstrap(
       if (sessionBlock) blocks.push(sessionBlock);
       const mapBlock = indexerModule.getSystemPromptBlock();
       if (mapBlock) blocks.push(mapBlock);
-      const hiddenToolsBlock = buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
+      const hiddenToolsBlock = toolCtx.toolAllowlist
+        ? null
+        : buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
       if (hiddenToolsBlock) {
         blocks.push({
           content: hiddenToolsBlock,

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { join } from "path";
 import { runInit } from "../../src/modules/onboarding/init";
 import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "../../src/modules/onboarding/prompts";
 import { t } from "../../src/i18n/index";
@@ -37,12 +38,15 @@ describe("runInit", () => {
   it("sets an init allowlist, runs once, then restores state", async () => {
     const ctx = fakeCtx();
     let captured: string[] | undefined;
+    let capturedWritePaths: string[] | undefined;
     ctx.runAgent = vi.fn(async () => {
       captured = [...ctx.toolCtx.toolAllowlist];
+      capturedWritePaths = [...ctx.toolCtx.writePathAllowlist];
     });
     const ok = await runInit(ctx, { preflight: async () => ({ ok: true, reason: "ok", ms: 1 }) });
     expect(ok).toBe(true);
     expect(captured).toEqual([...INIT_TOOLS]);
+    expect(capturedWritePaths).toEqual([join("/tmp/ws", "AGENTS.md")]);
     expect(ctx.runAgent).toHaveBeenCalledOnce();
     expect(ctx.agent.pushPromptBlock).toHaveBeenCalledOnce();
     expect(ctx.agent.pushPromptBlock).toHaveBeenCalledWith(
@@ -50,6 +54,7 @@ describe("runInit", () => {
     );
     expect(ctx.agent.removePromptBlock).toHaveBeenCalledOnce();
     expect(ctx.toolCtx.toolAllowlist).toBeUndefined();
+    expect(ctx.toolCtx.writePathAllowlist).toBeUndefined();
   });
 
   it("refuses when preflight fails", async () => {
@@ -80,6 +85,7 @@ describe("runInit", () => {
     ).rejects.toThrow("boom");
     expect(captured).toEqual([...INIT_TOOLS]);
     expect(ctx.toolCtx.toolAllowlist).toBeUndefined();
+    expect(ctx.toolCtx.writePathAllowlist).toBeUndefined();
     expect(ctx.agent.removePromptBlock).toHaveBeenCalledOnce();
     const block = ctx.agent.pushPromptBlock.mock.calls[0]?.[0];
     expect(block.content).toBe(INIT_SYSTEM_PROMPT);

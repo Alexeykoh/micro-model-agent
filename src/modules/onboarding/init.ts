@@ -46,6 +46,7 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
   };
   ctx.agent.pushPromptBlock(block);
   ctx.toolCtx.toolAllowlist = [...INIT_TOOLS];
+  ctx.toolCtx.writePathAllowlist = [join(ctx.baseDir, "AGENTS.md")];
   try {
     await ctx.runAgent(
       t("repl.init_start_prompt", { dir: join(ctx.baseDir, "AGENTS.md") }),
@@ -53,6 +54,7 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
   } finally {
     ctx.agent.removePromptBlock(block);
     ctx.toolCtx.toolAllowlist = undefined;
+    ctx.toolCtx.writePathAllowlist = undefined;
   }
   return true;
 }
