@@ -169,6 +169,40 @@ describe("webui settings REST", () => {
     });
   });
 
+  it("POST /api/mcp/:id toggles a configured server and persists", async () => {
+    const s = createWebUiState();
+    s.config = structuredClone(DEFAULTS);
+    s.config.mcpServers = {
+      context7: { name: "context7", url: "https://x", enabled: true },
+    };
+    const saved: number[] = [];
+    s.saveConfig = () => {
+      saved.push(1);
+    };
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/mcp/context7", { enabled: false });
+      expect(res.status).toBe(200);
+      const body = res.json as {
+        ok: boolean;
+        persisted: boolean;
+        restartRequired: boolean;
+        mcp: Array<{ id: string; name: string; status: string }>;
+      };
+      expect(body.ok).toBe(true);
+      expect(body.persisted).toBe(true);
+      expect(body.restartRequired).toBe(true);
+      expect(s.config?.mcpServers.context7.enabled).toBe(false);
+      expect(body.mcp[0].status).toBe("disabled");
+      expect(saved).toHaveLength(1);
+
+      const missing = await postJson(base, "/api/mcp/ghost", { enabled: true });
+      expect(missing.status).toBe(404);
+
+      const bad = await postJson(base, "/api/mcp/context7", { enabled: "yes" });
+      expect(bad.status).toBe(400);
+    });
+  });
+
   it("answers 503 when a collaborator is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {

@@ -578,6 +578,26 @@ body.light .toggle { background: var(--toggle-off); }
 .mem-add input { flex: 1 1 180px; min-width: 0; }
 .mem-add .edit { flex: 0 0 auto; }
 
+/* provider add/edit form */
+.add-provider { display: inline-block; padding: 8px 0; }
+.pform {
+  margin-top: 10px; padding: 12px; border: 1px solid var(--border-2); border-radius: 6px;
+  background: var(--surface);
+}
+.pform-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 12px;
+}
+.pform-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pform-field label { font-size: 11px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
+.pform-field input {
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 5px 8px; width: 100%; min-width: 0;
+}
+.pform-actions { display: flex; gap: 14px; align-items: center; padding-top: 10px; }
+.pform-actions .edit.dim { color: var(--dim-a); }
+.settings-note { color: var(--dim-b); font-size: 11.5px; line-height: 1.7; padding: 8px 0 4px; }
+
 /* ---- responsive layout ---- */
 @media (max-width: 760px) {
   .bar-top { gap: 8px; padding: 8px 10px; }

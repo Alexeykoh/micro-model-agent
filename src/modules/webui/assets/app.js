@@ -91,6 +91,8 @@
     memory: undefined,
     skills: undefined,
     pluginsData: undefined,
+    providers: undefined,
+    providerForm: null,
   };
 
   let tabs = [];
@@ -1460,6 +1462,12 @@
     renderSelectors();
   }
 
+  async function loadProviders() {
+    const r = await api("/api/providers");
+    state.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
+    renderModelPanel();
+  }
+
   async function loadSessions() {
     const r = await api("/api/sessions");
     if (!r.ok || !r.data) return;
@@ -1666,12 +1674,140 @@
     });
   }
 
+  function providerEntries() {
+    if (state.providers && Array.isArray(state.providers.entries) && state.providers.entries.length) {
+      return state.providers.entries;
+    }
+    const provider = (state.config && state.config.provider) || {};
+    if (Array.isArray(provider.entries) && provider.entries.length) {
+      return provider.entries.map((e) => ({
+        type: e.type,
+        label: e.label || e.type,
+        baseUrl: e.baseUrl,
+        hasApiKey: !!e.apiKey,
+        contextWindow: e.contextWindow,
+        priority: e.priority,
+      }));
+    }
+    return [
+      {
+        type: provider.type,
+        label: provider.active || provider.type,
+        baseUrl: provider.baseUrl,
+        hasApiKey: !!provider.apiKey,
+      },
+    ];
+  }
+
+  function providerName(p) {
+    return p.label || p.type || "—";
+  }
+
+  function providerMeta(p) {
+    const parts = [p.type];
+    if (p.contextWindow) parts.push(Math.round(p.contextWindow / 1024) + "K");
+    if (typeof p.rpm === "number" || typeof p.parallel === "number") {
+      parts.push("rpm " + (p.rpm == null ? "—" : p.rpm) + " · x" + (p.parallel == null ? "—" : p.parallel));
+    }
+    return parts.join(" · ");
+  }
+
+  function pfield(labelKey, input) {
+    const f = el("div", "pform-field");
+    f.appendChild(el("label", "", t(labelKey)));
+    f.appendChild(input);
+    return f;
+  }
+
+  function providerInput(value, type, placeholder) {
+    const input = el("input");
+    input.type = type || "text";
+    if (placeholder) input.placeholder = placeholder;
+    if (value != null) input.value = String(value);
+    return input;
+  }
+
+  function providerForm() {
+    const editing = (state.providerForm && state.providerForm.entry) || {};
+    const box = el("div", "pform");
+    const grid = el("div", "pform-grid");
+
+    const fType = providerInput(editing.type, "text", "openai-compat");
+    const fLabel = providerInput(editing.label, "text", "my-provider");
+    const fBase = providerInput(editing.baseUrl, "text", "http://localhost:1234/v1");
+    const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
+    const fCtx = providerInput(editing.contextWindow, "number", "32768");
+    const fPrio = providerInput(editing.priority, "number", "0");
+    const fRpm = providerInput(editing.rpm, "number", "60");
+    const fPar = providerInput(editing.parallel, "number", "1");
+
+    grid.appendChild(pfield("web.settings.provider_type", fType));
+    grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
+    grid.appendChild(pfield("web.settings.provider_baseurl", fBase));
+    grid.appendChild(pfield("web.settings.provider_apikey", fKey));
+    grid.appendChild(pfield("web.settings.provider_context", fCtx));
+    grid.appendChild(pfield("web.settings.provider_priority", fPrio));
+    grid.appendChild(pfield("web.settings.provider_rpm", fRpm));
+    grid.appendChild(pfield("web.settings.provider_parallel", fPar));
+    box.appendChild(grid);
+
+    const actions = el("div", "pform-actions");
+    const save = el("span", "edit", t("web.settings.save"));
+    save.addEventListener("click", async () => {
+      const type = fType.value.trim();
+      const baseUrl = fBase.value.trim();
+      if (!type || !baseUrl) {
+        setIndicator(t("web.settings.provider_required"), true);
+        return;
+      }
+      const body = { type, baseUrl };
+      const label = fLabel.value.trim();
+      if (label) body.label = label;
+      const key = fKey.value.trim();
+      if (key && key !== "***") body.apiKey = key;
+      const nums = [
+        ["contextWindow", fCtx, 1024],
+        ["priority", fPrio, 0],
+        ["rpm", fRpm, 1],
+        ["parallel", fPar, 1],
+      ];
+      for (const entry of nums) {
+        const raw = entry[1].value.trim();
+        if (!raw) continue;
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < entry[2]) {
+          setIndicator(t("web.settings.provider_invalid"), true);
+          return;
+        }
+        body[entry[0]] = n;
+      }
+      const r = await api("/api/providers", { method: "POST", body });
+      if (r.ok && r.data && r.data.ok) {
+        const persisted = r.data.persisted !== false;
+        state.providerForm = null;
+        setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
+        await loadProviders();
+        await loadConfig();
+      } else {
+        setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+      }
+    });
+    const cancel = el("span", "edit dim", t("web.settings.cancel"));
+    cancel.addEventListener("click", () => {
+      state.providerForm = null;
+      renderModelPanel();
+    });
+    actions.appendChild(save);
+    actions.appendChild(cancel);
+    box.appendChild(actions);
+    return box;
+  }
+
   function renderModelPanel() {
     const container = document.querySelector('[data-panel="model"]');
     if (!container) return;
     container.textContent = "";
     const cfg = state.config || {};
-    const provider = cfg.provider || {};
 
     const search = el("input", "searchbox");
     search.placeholder = t("web.settings.search_models");
@@ -1705,30 +1841,60 @@
     search.addEventListener("input", draw);
     draw();
 
-    const entries = Array.isArray(provider.entries) && provider.entries.length
-      ? provider.entries
-      : [{ label: provider.active || provider.type, type: provider.type }];
-    const activeName = provider.active || provider.type || "—";
+    const entries = providerEntries();
+    const activeName = (state.providers && state.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
     const activeVal = el("span", "val", activeName);
     activeVal.title = activeName;
     container.appendChild(row(t("web.settings.active_provider"), activeVal));
+
+    const provList = el("div", "settings-list");
     entries.forEach((entry) => {
-      const name = entry.label || entry.type;
-      if (!name) return;
-      const r = el("div", "row");
-      const labelEl = el("span", "", t("web.settings.provider_label", { name }));
-      labelEl.title = name;
-      r.appendChild(labelEl);
-      if (name === (provider.active || provider.type)) {
-        r.appendChild(el("span", "val dim", t("web.settings.active")));
+      const name = providerName(entry);
+      if (!name || name === "—") return;
+      const line = el("div", "list-line");
+      const nameEl = el("span", "name", name);
+      nameEl.title = name;
+      line.appendChild(nameEl);
+      line.appendChild(el("span", "src", providerMeta(entry)));
+      if (name === activeName) {
+        line.appendChild(el("span", "st", t("web.settings.active")));
       } else {
         const use = el("span", "edit", t("web.settings.use"));
         use.addEventListener("click", () => postConfig("provider.active", name, true));
-        r.appendChild(use);
+        line.appendChild(use);
       }
-      container.appendChild(r);
+      const edit = el("span", "edit", t("web.settings.edit"));
+      edit.addEventListener("click", () => {
+        state.providerForm = { mode: "edit", entry };
+        renderModelPanel();
+      });
+      line.appendChild(edit);
+      if (name !== activeName) {
+        const del = el("span", "edit", t("web.settings.delete"));
+        del.addEventListener("click", async () => {
+          const r = await api("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
+          if (r.ok && r.data && r.data.ok) {
+            setIndicator(t("web.settings.saved"));
+            await loadProviders();
+            await loadConfig();
+          } else {
+            const err = (r.data && r.data.error) || t("web.settings.delete_failed");
+            setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
+          }
+        });
+        line.appendChild(del);
+      }
+      provList.appendChild(line);
     });
-    container.appendChild(row(t("web.settings.add_provider"), el("span", "val dim", t("web.settings.add_provider_hint"))));
+    container.appendChild(provList);
+
+    const addBtn = el("span", "edit add-provider", t("web.settings.add_provider"));
+    addBtn.addEventListener("click", () => {
+      state.providerForm = { mode: "add", entry: null };
+      renderModelPanel();
+    });
+    container.appendChild(addBtn);
+    if (state.providerForm) container.appendChild(providerForm());
   }
 
   function renderUiPanel() {
@@ -1944,9 +2110,14 @@
         src.title = p.source;
         line.appendChild(src);
       }
+      if (p.builtin) line.appendChild(el("span", "src", t("web.settings.builtin")));
       line.appendChild(el("span", "st", p.enabled === false ? t("web.settings.disabled") : t("web.settings.enabled")));
       list.appendChild(line);
     });
+    const pnote = el("div", "settings-note");
+    pnote.textContent = t("web.settings.plugins_note");
+    list.appendChild(pnote);
+
     list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
     if (!(data.mcp || []).length) {
       const empty = el("div", "placeholder");
@@ -1956,11 +2127,33 @@
     (data.mcp || []).forEach((m) => {
       const line = el("div", "list-line");
       const on = m.status !== "disabled";
-      line.appendChild(el("span", on ? "g" : "dim", on ? "✓" : "○"));
-      line.appendChild(el("span", "name", m.name));
+      const toggle = el("span", "toggle" + (on ? " on" : ""));
+      toggle.title = on ? t("web.settings.mcp_disable") : t("web.settings.mcp_enable");
+      toggle.addEventListener("click", async () => {
+        const next = !toggle.classList.contains("on");
+        const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), {
+          method: "POST",
+          body: { enabled: next },
+        });
+        if (r.ok && r.data && r.data.ok) {
+          setIndicator(t("web.settings.mcp_saved"), false);
+          await loadPlugins();
+        } else {
+          setIndicator(t("web.settings.save_failed"), true);
+        }
+      });
+      line.appendChild(toggle);
+      const nameEl = el("span", "name", m.name);
+      nameEl.title = m.name;
+      line.appendChild(nameEl);
       line.appendChild(el("span", "st", m.status || "—"));
       list.appendChild(line);
     });
+    if ((data.mcp || []).length) {
+      const mnote = el("div", "settings-note");
+      mnote.textContent = t("web.settings.mcp_note");
+      list.appendChild(mnote);
+    }
     container.appendChild(list);
   }
 
@@ -2096,6 +2289,7 @@
     renderSettings();
     await loadConfig();
     await loadModels();
+    await loadProviders();
     await loadSessions();
     await loadMemory();
     await loadSkills();

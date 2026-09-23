@@ -132,6 +132,16 @@ export function handleSkillsGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, { skills });
 }
 
+/** Project configured MCP servers into the settings UI shape. */
+function mcpList(s: WebUiState): Array<{ id: string; name: string; status: string }> {
+  const servers = s.config?.mcpServers ?? {};
+  return Object.entries(servers).map(([key, cfg]) => ({
+    id: key,
+    name: cfg.name || key,
+    status: cfg.enabled === false ? "disabled" : "enabled",
+  }));
+}
+
 /** `GET /api/plugins` — registered plugins + configured MCP servers. */
 export function handlePluginsGet(res: ServerResponse, s: WebUiState): void {
   if (!s.plugins) {
@@ -139,18 +149,70 @@ export function handlePluginsGet(res: ServerResponse, s: WebUiState): void {
     return;
   }
   const plugins = s.plugins.getPluginInfos().map(({ plugin, source }) => {
-    const info: Record<string, unknown> = { name: plugin.name, enabled: true };
+    const info: Record<string, unknown> = {
+      name: plugin.name,
+      enabled: true,
+      builtin: plugin.isBuiltin === true,
+    };
     if (plugin.version) info.version = plugin.version;
     const src = source || plugin.source;
     if (src) info.source = src;
     return info;
   });
-  const servers = s.config?.mcpServers ?? {};
-  const mcp = Object.entries(servers).map(([key, cfg]) => ({
-    name: cfg.name || key,
-    status: cfg.enabled === false ? "disabled" : "enabled",
-  }));
-  sendJson(res, 200, { plugins, mcp });
+  sendJson(res, 200, { plugins, mcp: mcpList(s) });
+}
+
+/**
+ * `POST /api/mcp/:id {enabled}` — toggle a configured MCP server.
+ *
+ * `config.mcpServers[id].enabled` is the flag the MCP module filters on at
+ * bootstrap, so the change is persisted and takes effect on the next run (MCP
+ * connections are not re-established by `agent.reconfigure`). The response
+ * carries `restartRequired: true` so the UI can say so.
+ */
+export function handleMcpToggle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  id: string,
+  s: WebUiState,
+): void {
+  if (!s.config) {
+    sendJson(res, 503, { error: "config_unavailable" });
+    return;
+  }
+  const config = s.config;
+  const entry = config.mcpServers?.[id];
+  if (!entry) {
+    sendJson(res, 404, { ok: false, error: "not_found" });
+    return;
+  }
+  readBody(req, s.maxBodyBytes)
+    .then((raw) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        sendJson(res, 400, { ok: false, error: "invalid JSON" });
+        return;
+      }
+      const rec =
+        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+      if (typeof rec.enabled !== "boolean") {
+        sendJson(res, 400, { ok: false, error: "invalid-enabled" });
+        return;
+      }
+      config.mcpServers[id] = { ...entry, enabled: rec.enabled };
+      let persisted = true;
+      try {
+        s.saveConfig?.(config);
+      } catch {
+        persisted = false;
+      }
+      sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
+    })
+    .catch((err: unknown) => {
+      readBodyError(req, res, err);
+    });
 }
 
 /**
@@ -186,6 +248,10 @@ export function handleSettingsApi(
   }
   if (p === "/api/plugins" && req.method === "GET") {
     handlePluginsGet(res, s);
+    return true;
+  }
+  if (p.startsWith("/api/mcp/") && req.method === "POST") {
+    handleMcpToggle(req, res, decodeURIComponent(p.slice("/api/mcp/".length)), s);
     return true;
   }
   return false;

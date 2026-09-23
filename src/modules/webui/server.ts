@@ -22,6 +22,7 @@ import { handleI18nGet } from "./i18n-api";
 import { handleAnswerPost } from "./answer-api";
 import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
+import { handleProvidersApi } from "./providers-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
@@ -128,6 +129,10 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
 
   if (handleSettingsApi(req, res, reqUrl, s)) {
+    return;
+  }
+
+  if (handleProvidersApi(req, res, reqUrl, s)) {
     return;
   }
 
