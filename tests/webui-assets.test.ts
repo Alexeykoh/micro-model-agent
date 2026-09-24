@@ -32,4 +32,16 @@ describe("webui assets", () => {
     expect(a.js).toContain("showBusy(");
     expect(a.css).toContain(".busy .busytime");
   });
+
+  it("wires the file card's Open button to /api/file in a new tab", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("/api/file?path=");
+    expect(a.js).toContain("fc-open");
+    expect(a.css).toContain(".filecard .fc-open");
+  });
+
+  it("renders reasoning blocks collapsed by default", () => {
+    const a = loadAssets();
+    expect(a.js).toContain('"think-body hidden"');
+  });
 });

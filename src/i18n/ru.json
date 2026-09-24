@@ -1148,7 +1148,7 @@
   "web.tool.output_few": "вывод · {count} символа",
   "web.tool.output_many": "вывод · {count} символов",
   "web.tool.collapse": "свернуть",
-  "web.card.view": "открыть ↗",
+  "web.card.open": "открыть ↗",
   "web.card.screenshot": "снимок экрана",
   "web.card.attached_image": "прикреплённое изображение",
   "web.card.browser_viewport": "браузер · область просмотра",

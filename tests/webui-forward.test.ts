@@ -32,6 +32,19 @@ describe("webui forwarder", () => {
     expect(seen[0].chunk).toBe("mn");
   });
 
+  it("strips ANSI escape codes from streamed meta and text", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    // The terminal renderer wraps reasoning in `pc.dim` (ESC[2m … ESC[0m) and
+    // plugins may colour text; the browser must receive plain text.
+    fwd.onMeta("\u001b[2mthinking\u001b[0m");
+    fwd.onText("\u001b[31mred\u001b[0m");
+    vi.advanceTimersByTime(350);
+    expect(seen.map((e) => e.chunk)).toEqual(["red", "thinking"]);
+  });
+
   it("flushes buffered text before a phase and never duplicates it", () => {
     vi.useFakeTimers();
     const s = createWebUiState();

@@ -53,6 +53,9 @@
   };
 
   const FILE_TOOLS = ["read_file", "write_file", "edit_file", "list_dir", "delete_file", "move_file", "file_info"];
+  // Tools whose `path` argument points at a readable file the viewer can open.
+  // `list_dir` is a directory, `delete_file`/`move_file` leave the file gone.
+  const OPENABLE_TOOLS = ["read_file", "write_file", "edit_file", "file_info"];
   const IMAGE_TOOLS = ["attach_image", "browser"];
   const LINK_TOOLS = ["web_fetch", "download_file"];
 
@@ -561,20 +564,28 @@
       const wrap = el("div", "think");
       const head = el("button", "think-h");
       head.type = "button";
-      head.setAttribute("aria-expanded", "true");
+      head.setAttribute("aria-expanded", "false");
       head.appendChild(el("span", "g", "✦"));
       head.appendChild(el("span", "lab", t("web.action.thinking")));
       head.appendChild(el("span", "dur", ""));
       const tog = el("span", "tog");
-      setIcon(tog, "chevron-down", t("web.action.hide"));
+      setIcon(tog, "chevron-right", t("web.action.show"));
       head.appendChild(tog);
-      const body = el("div", "think-body");
+      const body = el("div", "think-body hidden");
       wrap.appendChild(head);
       wrap.appendChild(body);
       appendTo(feed, wrap);
       curMeta = { wrap, head, body, startedAt: Date.now() };
     }
     curMeta.body.textContent += chunk;
+    // Reasoning is collapsed by default (quiet by default); a warning or error
+    // carried on the meta channel expands the block so it is never hidden.
+    if ((chunk.indexOf("⚠") !== -1 || chunk.indexOf("✗") !== -1) && curMeta.body.classList.contains("hidden")) {
+      curMeta.body.classList.remove("hidden");
+      curMeta.head.setAttribute("aria-expanded", "true");
+      const tog = curMeta.head.querySelector(".tog");
+      if (tog) setIcon(tog, "chevron-down", t("web.action.hide"));
+    }
     if (feed === activeFeed()) scroll();
   }
 
@@ -645,6 +656,14 @@
     return null;
   }
 
+  function openFileViewer(path) {
+    const url =
+      "/api/file?path=" +
+      encodeURIComponent(path) +
+      (token ? "&token=" + encodeURIComponent(token) : "");
+    window.open(url, "_blank", "noopener");
+  }
+
   function cardFor(name, args, sid) {
     const feed = feedForEvent(sid);
     if (!feed) return;
@@ -652,10 +671,21 @@
       const path = args.path || args.file || args.dir;
       if (!path) return;
       const card = el("div", "filecard");
-      card.appendChild(el("span", "g", "◇"));
-      card.appendChild(el("span", "name", path));
-      card.appendChild(el("span", "", labelOf(name)));
-      card.appendChild(el("span", "meta", t("web.card.view")));
+      const top = el("div", "fc-top");
+      top.appendChild(el("span", "g", "◇"));
+      const nameEl = el("span", "name", path);
+      nameEl.title = path;
+      top.appendChild(nameEl);
+      card.appendChild(top);
+      const bottom = el("div", "fc-bottom");
+      bottom.appendChild(el("span", "lab", labelOf(name)));
+      if (OPENABLE_TOOLS.indexOf(name) !== -1) {
+        const open = el("button", "fc-open", t("web.card.open"));
+        open.type = "button";
+        open.addEventListener("click", () => openFileViewer(path));
+        bottom.appendChild(open);
+      }
+      card.appendChild(bottom);
       appendTo(feed, card);
       return;
     }
@@ -785,13 +815,13 @@
     const wrap = el("div", "think");
     const head = el("button", "think-h");
     head.type = "button";
-    head.setAttribute("aria-expanded", "true");
+    head.setAttribute("aria-expanded", "false");
     head.appendChild(el("span", "g", "✦"));
     head.appendChild(el("span", "lab", t("web.action.thinking")));
     const tog = el("span", "tog");
-    setIcon(tog, "chevron-down", t("web.action.hide"));
+    setIcon(tog, "chevron-right", t("web.action.show"));
     head.appendChild(tog);
-    const body = el("div", "think-body");
+    const body = el("div", "think-body hidden");
     body.textContent = text || "";
     wrap.appendChild(head);
     wrap.appendChild(body);

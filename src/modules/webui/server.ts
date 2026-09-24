@@ -24,6 +24,7 @@ import { handleAnswerPost } from "./answer-api";
 import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
 import { handleProvidersApi } from "./providers-api";
+import { handleFileApi } from "./file-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
@@ -139,6 +140,10 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
 
   if (handleProvidersApi(req, res, reqUrl, s)) {
+    return;
+  }
+
+  if (handleFileApi(req, res, reqUrl, s)) {
     return;
   }
 

@@ -1166,7 +1166,7 @@
   "web.tool.output_few": "output · {count} chars",
   "web.tool.output_many": "output · {count} chars",
   "web.tool.collapse": "collapse",
-  "web.card.view": "view ↗",
+  "web.card.open": "open ↗",
   "web.card.screenshot": "screenshot",
   "web.card.attached_image": "attached image",
   "web.card.browser_viewport": "browser · viewport",

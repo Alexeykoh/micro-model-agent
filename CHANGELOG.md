@@ -4,6 +4,21 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-09-24
+
+### Added
+
+- **web file viewer** (`src/modules/webui/file-api.ts`): `GET /api/file?path=<p>` serves a workspace text file (resolved against the workspace, outside paths and protected paths refused, 512 KB cap, binary refused) so chat file cards can be opened in a new tab.
+
+### Fixed
+
+- **web reasoning text** (`src/modules/webui/forward.ts`, `history-api.ts`): ANSI escape sequences (`ESC[2m…`) are stripped from streamed/replayed text, meta and tool output — reasoning no longer renders as literal `\u001b[2m…` garbage on the model's own words.
+- **web file card** (`assets/app.js`, `styles.css`): the card stacks vertically (path on its own line) and its `open` control is a real button that opens the file in a new tab.
+
+### Changed
+
+- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; a warning/error carried on the meta channel expands the block automatically.
+
 ## [2.4.0] - 2026-09-24
 
 ### Added

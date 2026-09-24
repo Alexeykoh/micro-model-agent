@@ -13,6 +13,7 @@
 import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
 import { redactContextSecrets } from "../../core/agent/context-log";
+import { stripAnsi } from "../../ui/line-math";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
@@ -106,12 +107,16 @@ export function makeForwarder(
   const flush = () => {
     if (timer) clearTimeout(timer);
     timer = null;
+    // The terminal renderer colours meta (reasoning/status) with ANSI codes and
+    // plugins may colour text too — the browser has no terminal, so any escape
+    // sequences would otherwise show up as literal `\u001b[2m…` garbage. Strip
+    // them here, the single point every text/meta chunk crosses.
     if (buf.text) {
-      sink({ type: "text", ts: Date.now(), chunk: buf.text });
+      sink({ type: "text", ts: Date.now(), chunk: stripAnsi(buf.text) });
       buf.text = "";
     }
     if (buf.meta) {
-      sink({ type: "meta", ts: Date.now(), chunk: buf.meta });
+      sink({ type: "meta", ts: Date.now(), chunk: stripAnsi(buf.meta) });
       buf.meta = "";
     }
   };
@@ -151,7 +156,7 @@ export function makeForwarder(
         name: call.name,
         success: result.success,
         durationMs,
-        output: redactContextSecrets(clipToolOutput(call.name, result.output || "")),
+        output: stripAnsi(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
       });
     },
     onPlan(plan) {
