@@ -16,6 +16,7 @@ import {
   readBodyError,
   sameOrigin,
   sendJson,
+  setAuthCookie,
 } from "./util";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
 import { handleI18nGet } from "./i18n-api";
@@ -217,6 +218,7 @@ export function handleRequest(
       sendJson(res, 401, { error: "unauthorized" });
       return;
     }
+    setAuthCookie(res, s);
     handleEvents(req, res, s);
     return;
   }
@@ -239,6 +241,7 @@ export function handleRequest(
       sendJson(res, 403, { error: "cross-origin requests are not allowed" });
       return;
     }
+    setAuthCookie(res, s);
     handleApi(req, res, reqUrl, s);
     return;
   }

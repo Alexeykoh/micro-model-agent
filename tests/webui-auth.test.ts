@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createServer } from "node:http";
+import type { IncomingMessage } from "node:http";
 import { handleRequest, stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
+import { checkAuth } from "../src/modules/webui/util";
 import type { Host } from "../src/core/host";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -179,6 +181,24 @@ describe("webui auth + limits", () => {
       // executeCommand is fire-and-forget; let the microtask run.
       await new Promise((r) => setTimeout(r, 0));
       expect(lines).toEqual(["/status"]);
+    });
+  });
+
+  it("checkAuth accepts the mma_web_auth cookie when a token is configured", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "other=1; mma_web_auth=s3cret" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
+    const bad = { headers: { cookie: "mma_web_auth=nope" } } as unknown as IncomingMessage;
+    expect(checkAuth(bad, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
+  it("sets the auth cookie on an authenticated api response", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/i18n", { headers: { "x-mma-token": "s3cret" } });
+      expect(res.headers.get("set-cookie") || "").toContain("mma_web_auth=s3cret");
     });
   });
 });
