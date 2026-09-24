@@ -53,6 +53,12 @@ export interface WebUiDeps {
   toolCtx?: { exitOnComplete?: boolean };
   /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
   configDir?: string;
+  /**
+   * Bootstrap context-probe promise (LM Studio loaded context). Resolved lazily
+   * and surfaced in the sidebar; never awaited at startup so a slow probe can't
+   * delay the server bind.
+   */
+  contextProbe?: Promise<{ model: string; actual: number } | null>;
   /** Model ids known to the active provider (defaults to a background cache). */
   knownModels?: () => string[];
   /** Bind address override (default: state default / env). */
@@ -79,6 +85,7 @@ export interface HostStateInput {
   sessionManager?: Pick<SessionManager, "getActiveMeta">;
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   usage?: UsageSnapshot;
+  contextProbe?: { model: string; actual: number } | null;
 }
 /**
  * Capture the usage-bearing subset of an `AgentResult` into a
@@ -127,6 +134,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     compactionCount: deps.usage?.compactionCount,
     cacheHitRate: deps.usage?.cacheHitRate,
     contextQuality: deps.usage?.contextQuality,
+    contextProbe: deps.contextProbe,
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };
 }
@@ -182,6 +190,19 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const forwarder = makeForwarder(state);
   const stopOutputForwarding = installOutputForwarding(state);
 
+  // Context probe: resolve in the background; `undefined` until it settles so
+  // the sidebar can render a "pending" dash without blocking startup.
+  let probe: { model: string; actual: number } | null | undefined;
+  if (deps.contextProbe) {
+    void deps.contextProbe
+      .then((p) => {
+        probe = p;
+      })
+      .catch(() => {
+        probe = null;
+      });
+  }
+
   // `ToolEvent` is renderer-oriented and carries no id. Synthesize one per
   // `start` and match it on `end` (LIFO per tool name) so the browser can pair
   // tool_start/tool_end cards (correction #1).
@@ -215,6 +236,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     interrupted = false;
     toolCalls = 0;
     state.agentRunning = true;
+    // Own every event of this turn for the session that started it, so SSE
+    // output routes to the right browser tab even if the user switches tabs.
+    state.activeSessionId = deps.sessionManager?.getActiveMeta()?.id;
     try {
       const result = await deps.agent.run(
         text,
@@ -271,6 +295,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           sessionManager: deps.sessionManager,
           execModule: deps.execModule,
           usage: state.usage,
+          contextProbe: probe,
         },
         state.busy,
       ),

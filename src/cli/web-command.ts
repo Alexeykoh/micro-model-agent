@@ -70,6 +70,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     pluginManager,
     toolRegistry,
     toolCtx,
+    contextProbe,
   } = await bootstrap(...webBootstrapArgs(opts));
 
   if (virgin) {
@@ -87,6 +88,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     toolRegistry,
     toolCtx,
     configDir,
+    contextProbe,
     host: opts.host,
     token: opts.token,
   });

@@ -108,6 +108,12 @@ describe("webui smoke", () => {
         await page.waitForSelector(".bar-top", { timeout: 5_000 });
         await page.waitForSelector("#openSettings", { timeout: 5_000 });
 
+        // Composer: attach + textarea + send on one row, Esc hint idle-hidden.
+        expect(await page.locator(".composer .attach-btn").count()).toBe(1);
+        expect(await page.locator(".composer #inp").count()).toBe(1);
+        expect(await page.locator(".composer #sendBtn").count()).toBe(1);
+        expect(await page.locator("#hintEsc").isHidden()).toBe(true);
+
         await page.click("#openSettings");
         await page.waitForSelector("#overlay.open", { timeout: 5_000 });
 
@@ -165,6 +171,178 @@ describe("webui smoke", () => {
         const box = await page.locator(".stab").first().boundingBox();
         expect(box).not.toBeNull();
         expect(box?.height ?? 0).toBeGreaterThan(15);
+      } finally {
+        if (browser) await browser.close().catch(() => {});
+        if (started) stopServer(state);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+
+  // Regression guard: long/unbreakable feed content and long menu labels must
+  // not create horizontal scroll — neither in the feed (`#msgs`) nor at the
+  // page level (which would shove the sidebar off-screen).
+  smoke(
+    "no horizontal overflow from long content or long menu labels",
+    async (ctx) => {
+      const { state, dir } = makeState();
+      let browser: Browser | null = null;
+      let started = false;
+      try {
+        const url = await startServer(loadAssets(), state);
+        started = true;
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            executablePath: CHROMIUM ?? undefined,
+            timeout: 15_000,
+          });
+        } catch (err) {
+          if (isMissingBrowserError(err)) {
+            ctx.skip();
+            return;
+          }
+          throw err;
+        }
+
+        for (const width of [1440, 1000, 820]) {
+          const page = await browser.newPage({ viewport: { width, height: 800 } });
+          await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+          await page.waitForSelector("#inp", { timeout: 5_000 });
+
+          const report = await page.evaluate(() => {
+            const msgs = document.querySelector("#msgs") as HTMLElement;
+            const long = "x".repeat(400);
+            const mk = (cls: string, html: string) => {
+              const d = document.createElement("div");
+              d.className = cls;
+              d.innerHTML = html;
+              msgs.appendChild(d);
+            };
+            mk("ans", long);
+            mk("u", long);
+            mk("code", long);
+            mk("detail", "↳ " + long);
+            mk("cmdout", long);
+            mk("filecard", `<span class="g">◇</span><span class="name">${long}</span><span class="meta">view</span>`);
+            mk("linkline", `↳ <a href="#">https://example.com/${long}</a>`);
+            const act = document.createElement("div");
+            act.className = "act recon";
+            act.innerHTML = `<span class="g">◇</span><span class="lab">Reading file</span><span class="sep">·</span><span class="args">${long}</span><span class="ok">✓</span>`;
+            msgs.appendChild(act);
+
+            // Open the model selector with long labels (real markup: a span child).
+            (document.querySelector("#selModelBtn") as HTMLElement).click();
+            const menu = document.querySelector("#selModelMenu") as HTMLElement;
+            for (let i = 0; i < 4; i++) {
+              const b = document.createElement("button");
+              b.className = "mi";
+              const s = document.createElement("span");
+              s.textContent = "model-" + "abcdefghij".repeat(20) + i;
+              b.appendChild(s);
+              menu.appendChild(b);
+            }
+            document.querySelector('[data-sel="model"]')?.classList.add("open");
+
+            const de = document.documentElement;
+            const offenders: string[] = [];
+            msgs.querySelectorAll("*").forEach((el) => {
+              const e = el as HTMLElement;
+              if (e.getBoundingClientRect().width > msgs.clientWidth + 1) {
+                offenders.push(`${e.tagName}.${String(e.className).slice(0, 40)}`);
+              }
+            });
+            return {
+              docScroll: de.scrollWidth,
+              docClient: de.clientWidth,
+              msgsScroll: msgs.scrollWidth,
+              msgsClient: msgs.clientWidth,
+              offenders,
+            };
+          });
+
+          const msg = `w=${width} ${JSON.stringify(report)}`;
+          expect(report.offenders, msg).toEqual([]);
+          expect(report.msgsScroll, msg).toBeLessThanOrEqual(report.msgsClient);
+          expect(report.docScroll, msg).toBeLessThanOrEqual(report.docClient);
+          await page.close();
+        }
+      } finally {
+        if (browser) await browser.close().catch(() => {});
+        if (started) stopServer(state);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+
+  // Session delete: two-step arm survives the 2s state re-render; the active
+  // session is guarded with a visible inline message instead of a silent 409.
+  smoke(
+    "session delete is two-step and guards the active session",
+    async (ctx) => {
+      const { state, dir } = makeState();
+      const now = new Date().toISOString();
+      const deleted: string[] = [];
+      state.sessionManager = {
+        list: () => [
+          { id: "aaaa1111", name: "Active", updatedAt: now },
+          { id: "bbbb2222", name: "Other", updatedAt: now },
+        ],
+        get: (id: string) => ({ id, name: id, updatedAt: now }),
+        getActive: () => "aaaa1111",
+        setActive: () => {},
+        delete: (id: string) => {
+          deleted.push(id);
+        },
+      } as unknown as NonNullable<typeof state.sessionManager>;
+      state.bridge = {
+        isBusy: () => false,
+        submit: () => Promise.resolve(),
+        interrupt: () => {},
+        getState: () => ({ busy: false, sessionId: "aaaa1111", sessionName: "Active" }),
+        executeCommand: () => Promise.resolve(),
+      };
+      let browser: Browser | null = null;
+      let started = false;
+      try {
+        const url = await startServer(loadAssets(), state);
+        started = true;
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            executablePath: CHROMIUM ?? undefined,
+            timeout: 15_000,
+          });
+        } catch (err) {
+          if (isMissingBrowserError(err)) {
+            ctx.skip();
+            return;
+          }
+          throw err;
+        }
+
+        const page = await browser.newPage();
+        await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.waitForSelector("#sessBtn", { timeout: 5_000 });
+        await page.click("#sessBtn");
+        await page.waitForSelector(".dd-menu .del-btn", { timeout: 5_000 });
+
+        const dels = page.locator(".dd-menu .del-btn");
+        // First click arms (not destructive), row + button marked armed.
+        await dels.nth(1).click();
+        expect(await page.locator(".dd-menu .si-row.armed").count()).toBe(1);
+        // Second click deletes the non-active session.
+        await dels.nth(1).click();
+        expect(deleted).toContain("bbbb2222");
+
+        // Active row: click shows the guard, never arms or deletes it.
+        // The dropdown is still open after the delete.
+        await page.locator(".dd-menu .del-btn").nth(0).click();
+        const err = await page.locator(".dd-menu .dd-err").innerText();
+        expect(err.toLowerCase()).toContain("active");
+        expect(deleted).not.toContain("aaaa1111");
       } finally {
         if (browser) await browser.close().catch(() => {});
         if (started) stopServer(state);

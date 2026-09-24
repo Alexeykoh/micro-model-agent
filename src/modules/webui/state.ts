@@ -117,6 +117,12 @@ export interface WebUiState {
   /** Usage metrics from the most recent completed turn (see {@link UsageSnapshot}). */
   usage?: UsageSnapshot;
   /**
+   * Session id owning the current/last turn. Stamped onto every SSE event so
+   * the browser can route streamed output to the originating session tab
+   * instead of whichever tab happens to be foregrounded.
+   */
+  activeSessionId?: string;
+  /**
    * Bootstrap collaborators for the config/session/model REST surface. Wired by
    * `module.ts`; optional so tests can drive individual endpoints in isolation
    * (a missing one yields 503, never a crash).
@@ -179,7 +185,10 @@ export interface SseEvent {
 }
 
 export function broadcast(ev: SseEvent, s: WebUiState): void {
-  const payload = `event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`;
+  // Stamp the active session onto every event so the client can route streamed
+  // output to the right tab. An event may override it explicitly.
+  const data: SseEvent = s.activeSessionId ? { sessionId: s.activeSessionId, ...ev } : ev;
+  const payload = `event: ${ev.type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of s.clients) {
     // Backpressure: a `false` return means the socket buffer is full (slow or
     // stalled reader). Drop the client rather than buffering events unboundedly.

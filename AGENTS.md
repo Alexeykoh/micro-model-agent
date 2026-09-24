@@ -319,21 +319,26 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
-### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.3.0)
+### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.4.0)
 
 Дизайн: [docs/specs/2026-09-23-mma-web/design.md](./docs/specs/2026-09-23-mma-web/design.md).
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
 - **Transport:** SSE `GET /events` (`state, text, meta, phase, tool_start, tool_end, turn_end, plan, command, error`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`; static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов.
-- **UI:** паритет с каноническим мокапом — topbar (`+`/`☰`/tabs/`⚙`), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
+- **UI:** паритет с каноническим мокапом — topbar (new chat/sessions/tabs/settings), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
+- **Композер:** attach + textarea + send — единая bordered-поверхность поля (контролы внутри, focus-ring на группе); send (`arrow-up`) на время хода становится stop (`square`); textarea авто-растёт (≤200px); чипы селекторов с Lucide-шевронами; хинт `Esc` — только во время хода.
+- **Chrome-иконки:** инлайн SVG [Lucide](https://lucide.dev) (MIT) в `app.js` (`icon()`/`ICONS`, zero-dep) вместо emoji/`⚙`; чат-глифы (`◇ ✓ ✗ ✦ ⟡ …`) остаются текстовыми по STYLE.md.
+- **A11y:** реальные `<button>`/`role="switch"`/`role="tab"`+`tablist`/`role="log"`, `aria-*`, `:focus-visible`, arrow-key в settings-табах, Tab-ловушка в модалке, `prefers-reduced-motion`; клавиатурные `qopt`/`toggle`/меню.
+- **Сайдбар:** usage-ячейка `probe` берётся из LM Studio context-probe (`contextProbe` в `HostStateSnapshot`); plan/usage не перерисовываются при неизменном `/api/state` (иначе 2s-поллинг сбрасывал скролл).
+- **Маршрутизация SSE:** `broadcast` (`state.ts`) добавляет `activeSessionId` в каждый event; клиент кладёт стрим в вкладку своей сессии, а не в активную.
 - **Slash-команды в браузере:** `/help` `/status` `/config` `/model` `/provider` `/memory` `/reasoning` `/verbose` `/context` `/session list|use` `/export` (handler map); `/clear` и `/new` — клиентские; terminal-only команды вне scope.
-- **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены.
+- **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены. Мультивыбор (подсказка + send) и «own answer…» (`CUSTOM_INDEX = -1` → follow-up free-text) поддержаны.
 - **i18n:** `GET /api/i18n` отдаёт словари, chrome веб-UI локализуется и переключается при смене `locale`; SSE-reconnect с ресинком; статика с `Cache-Control: no-store`.
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
-### Current Version: 2.3.0
+### Current Version: 2.4.0
 
 ### Changelog
 

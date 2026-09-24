@@ -4,32 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MMA Web</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%E2%97%87%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
 <div class="bar-top">
-  <button class="icon-btn primary" id="newChat" title="new chat">+</button>
+  <button class="icon-btn primary" id="newChat" title="new chat" aria-label="new chat">+</button>
   <div class="dd" id="sessDD">
-    <button class="icon-btn" id="sessBtn" title="all sessions">☰</button>
+    <button class="icon-btn" id="sessBtn" title="all sessions" aria-label="all sessions" aria-haspopup="menu" aria-expanded="false">☰</button>
     <div class="dd-menu">
       <div class="h" id="sessActiveHeader">active</div>
       <div id="sessActiveList"></div>
       <div class="h" id="sessRecentHeader">recent</div>
       <div id="sessRecentList"></div>
       <div class="sep"></div>
-      <div class="act" id="sessNew">+ new session</div>
-      <div class="act" id="sessRefresh">↻ refresh</div>
+      <button class="act" type="button" id="sessNew">+ new session</button>
+      <button class="act" type="button" id="sessRefresh">↻ refresh</button>
     </div>
   </div>
   <div class="tabstrip" id="tabstrip"></div>
-  <button class="icon-btn" id="openSettings" title="settings">⚙</button>
-  <span class="conn" id="connStatus" hidden></span>
+  <button class="icon-btn" id="openSettings" title="settings" aria-label="settings" aria-haspopup="dialog" aria-expanded="false">⚙</button>
+  <span class="conn" id="connStatus" role="status" aria-live="polite" hidden></span>
 </div>
 
 <div class="layout">
   <div class="chat">
-    <div class="msgs" id="msgs"></div>
+    <div class="msgs" id="msgs" role="log" aria-label="conversation"></div>
+    <div class="visually-hidden" id="live" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="input-area">
       <div class="selectors">
@@ -45,34 +47,37 @@
           <button id="selContextBtn">context: <b>—</b> ▾</button>
           <div class="menu" id="selContextMenu"></div>
         </div>
-        <button class="attach-btn" id="attachBtn" title="attach image">🖼</button>
       </div>
       <input type="file" id="imgPicker" accept="image/*" multiple hidden>
       <div class="attach-strip" id="attachStrip" hidden></div>
       <div class="attach-err" id="attachErr" hidden></div>
-      <textarea class="inp" id="inp" rows="2" placeholder="ввод сообщения… (/ — команды)"></textarea>
-      <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc">Esc — stop</span><span id="hintAttach">🖼 / Ctrl+V — attach</span></div>
+      <div class="composer">
+        <button class="attach-btn" id="attachBtn" type="button" title="attach image" aria-label="attach image">◧</button>
+        <textarea class="inp" id="inp" rows="1" placeholder="message… (/ for commands)"></textarea>
+        <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
+      </div>
+      <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span></div>
     </div>
   </div>
 
   <div class="sb">
     <div class="sec plan-sec">
-      <div class="sec-h" data-collapse><span class="arrow">▾</span> <span id="planHeaderLabel">plan</span> <span class="n" id="planCount"></span></div>
+      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="planHeaderLabel">plan</span> <span class="n" id="planCount"></span></button>
       <div class="sec-body" id="plan"></div>
     </div>
 
     <div class="sec usage-sec">
-      <div class="sec-h" data-collapse><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></div>
+      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></button>
       <div class="sec-body" id="usage"></div>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="overlay">
-  <div class="modal">
-    <div class="modal-top">⚙ <span id="settingsTitle">settings</span> <span class="saved" id="saveIndicator"></span> <span class="x" id="closeSettings">✕ close</span></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-top"><span class="modal-top-icon" id="settingsIcon" aria-hidden="true"></span> <span id="settingsTitle">settings</span> <span class="saved" id="saveIndicator" role="status" aria-live="polite"></span> <button class="x linkbtn" id="closeSettings" type="button">✕ close</button></div>
     <div class="modal-body">
-      <div class="menu-col" id="setMenu">
+      <div class="menu-col" id="setMenu" role="tablist" aria-label="settings sections">
         <div class="mi on" data-p="general">General</div>
         <div class="mi" data-p="model">Model &amp; Provider</div>
         <div class="mi" data-p="context">Context</div>

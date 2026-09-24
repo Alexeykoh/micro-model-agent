@@ -4,6 +4,40 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-09-24
+
+### Added
+
+- **web UI chrome icons**: topbar, session tabs/dropdown, settings modal, attach button, chevrons and delete/close controls use inlined [Lucide](https://lucide.dev) SVGs (MIT) instead of emoji/gear glyphs. Chat status glyphs (`◇ ✓ ✗ ✦ ⟡ …`) stay textual per `docs/design/ui/STYLE.md`.
+- **web accessibility**: real `<button>`/`role="switch"`/tablist/`role="log"` semantics, `aria-label`/`aria-expanded`/`aria-checked`/`aria-selected`, `:focus-visible` outlines, arrow-key navigation in the settings tablist, a Tab focus trap in the dialog, and `prefers-reduced-motion` handling. Question options, toggles and menu rows are keyboard-operable; the settings modal moves focus in/out.
+- **web context probe** (`src/modules/webui/module.ts`, `src/core/host.ts`): the LM Studio loaded-context probe is surfaced as a real sidebar "probe" cell (`{actual} loaded`, warns when below the configured window) instead of a dead `—`.
+- **web question parity** (`src/modules/webui/assets/app.js`, `prompt-io.ts`): multi-select hint, and an "own answer…" choice entry mapped to `CUSTOM_INDEX` so `allowCustom` works in the browser (follow-up free-text prompt), matching the terminal.
+- **web busy feedback**: the composer reflects `aria-busy`/dim state during a turn, and Enter while busy shows a hint instead of silently dropping the message; Enter is IME-safe (`isComposing`).
+- **web session delete guard** (`assets/app.js`): deleting a session is a two-step action (arm → confirm within 3s) instead of an instant destructive click.
+- **web context size**: a custom context window is entered inline in the selector menu (focusable number field + save) instead of a native `window.prompt`.
+- **web screen-reader status**: a polite live region announces turn end and warnings/errors.
+- **web favicon**: a data-URI icon stops the `/favicon.ico` 404 console error.
+- **web composer** (`assets/index.html`, `app.js`, `styles.css`): attach + textarea + send share one bordered input surface (controls integrated into the field, focus ring on the group); the send button (`arrow-up`) becomes stop (`square`) during a turn; the textarea auto-grows up to ~200px; selector chips use Lucide chevrons; the `Esc — stop` hint shows only while a turn is running (`web.input.send`/`web.input.stop`).
+
+### Changed
+
+- **web light theme** (`assets/styles.css`): the palette is rebuilt from a single token source. All tokens are defined for both themes (no `-const` duplicates); light-theme `dim`, `cmdout`, success/warn/cyan/think and checker colors now meet text contrast (was ~1.8–2.8:1).
+- **web SSE session routing** (`state.ts`, `module.ts`, `assets/app.js`): `broadcast` stamps `activeSessionId` on every event, and the client routes streamed text/tool/plan output to the originating session tab instead of whichever tab is foregrounded.
+- **web sidebar polling** (`assets/app.js`): plan/usage re-render is skipped when the `/api/state` snapshot is unchanged, so a 2s poll no longer resets the plan scroll position.
+
+### Fixed
+
+- **web i18n leaks** (`assets/app.js`, `src/i18n`): reasoning hide/show toggle, turn metric ("tools"), usage/metric labels, start banner and `<html lang>` are localized; `attach` hint drops the emoji; added `web.usage.*`, `web.turn.tools`, `web.start.*`, `web.question.*`, `web.input.busy`.
+- **web custom answers** (`prompt-io.ts`): `toIndexes` preserves `CUSTOM_INDEX` (`-1`); previously the custom entry was filtered out, so choose-your-own answers were impossible in the browser.
+- **web empty-state hint** no longer hardcodes a dark-only color.
+- **web horizontal overflow** (`assets/styles.css`): long unbreakable content (user text, file paths, URLs, tool args, command output) now wraps or ellipsizes instead of pushing the feed; `#msgs` clips horizontal overflow. The model/provider/session dropdowns are width-clamped with ellipsized labels, so long names can no longer widen the page and shove the sidebar off-screen. The light-theme input border was softened (was solid green, looked permanently focused). A Chromium smoke test guards all of this at 1440/1000/820px.
+- **web tabs** (`assets/styles.css`): tab height now matches the topbar icon buttons (24px, scrollbar padding dropped); the session name ellipsizes with `min-width:0` so the short id and close button always stay inside the tab.
+- **web session delete** (`assets/app.js`, `assets/styles.css`): the two-step confirmation no longer resets every 2s (armed id lives in app state, not the rebuilt DOM row); failures show an inline message in the dropdown (the old `#saveIndicator` is modal-only and invisible); deleting the active session is guarded with a clear message instead of a silent `409`; the delete button lost its default UA border/background (was a bordered square). A Chromium smoke test covers the arm → delete and the active-session guard.
+
+### Removed
+
+- **web dead assets**: unused mockup i18n keys (`web.settings.font_size`/`sidebar_default`/`stream_partials`/`add_entry`/`provider_label`/`add_provider_hint`/`pending`) and the obsolete `.edit` CSS selectors; remaining latent `t()` shadowing in `app.js` renamed.
+
 ## [2.3.0] - 2026-09-23
 
 ### Added

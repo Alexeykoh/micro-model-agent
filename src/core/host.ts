@@ -22,6 +22,12 @@ export interface HostStateSnapshot {
   cacheHitRate?: number;
   /** Context quality score for the last turn (0..100); absent when unknown. */
   contextQuality?: number;
+  /**
+   * LM Studio context probe (actual loaded context vs configured). Absent while
+   * the probe is pending or when the provider is not probeable; `null` when the
+   * probe finished without a result.
+   */
+  contextProbe?: { model: string; actual: number } | null;
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;

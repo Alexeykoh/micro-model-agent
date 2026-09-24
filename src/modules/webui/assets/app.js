@@ -17,6 +17,18 @@
   const attachErr = document.getElementById("attachErr");
   const imgPicker = document.getElementById("imgPicker");
   const connStatus = document.getElementById("connStatus");
+  const liveEl = document.getElementById("live");
+  const sendBtn = document.getElementById("sendBtn");
+
+  // Announce a short status line to assistive tech (turn end, warnings/errors).
+  // Clearing first forces repeats to be re-announced.
+  function announce(text) {
+    if (!liveEl || !text) return;
+    liveEl.textContent = "";
+    setTimeout(() => {
+      liveEl.textContent = text;
+    }, 30);
+  }
 
   const LABELS = {
     read_file: "Reading file",
@@ -93,6 +105,11 @@
     pluginsData: undefined,
     providers: undefined,
     providerForm: null,
+    // Session-delete two-step confirmation survives the 2s `renderState` rebuild.
+    pendingDeleteId: null,
+    pendingDeleteTs: 0,
+    // Transient error shown inline in the sessions dropdown (visible without the modal).
+    sessionsError: null,
   };
 
   let tabs = [];
@@ -105,6 +122,8 @@
   let curText = null;
   let curTextNodes = [];
   let curMeta = null;
+  let lastPlanSig = null;
+  let lastUsageSig = null;
   let runCount = 0;
   let runFails = 0;
   let busyTimer = null;
@@ -115,6 +134,97 @@
     const node = document.createElement(tag);
     if (cls) node.className = cls;
     if (text != null) node.textContent = text;
+    return node;
+  }
+
+  // --- Lucide icons (MIT), inlined: chrome only. Chat status glyphs (◇ ✓ ✗ ✦ ⟡ …)
+  // stay textual per docs/design/ui/STYLE.md; icons replace emoji/gear chrome.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ICONS = {
+    plus: [["path", { d: "M5 12h14" }], ["path", { d: "M12 5v14" }]],
+    menu: [
+      ["line", { x1: 4, y1: 6, x2: 20, y2: 6 }],
+      ["line", { x1: 4, y1: 12, x2: 20, y2: 12 }],
+      ["line", { x1: 4, y1: 18, x2: 20, y2: 18 }],
+    ],
+    settings: [
+      ["path", { d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }],
+      ["circle", { cx: 12, cy: 12, r: 3 }],
+    ],
+    image: [
+      ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],
+      ["circle", { cx: 9, cy: 9, r: 2 }],
+      ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" }],
+    ],
+    x: [["path", { d: "M18 6 6 18" }], ["path", { d: "m6 6 12 12" }]],
+    trash: [
+      ["path", { d: "M3 6h18" }],
+      ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }],
+      ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }],
+      ["line", { x1: 10, y1: 11, x2: 10, y2: 17 }],
+      ["line", { x1: 14, y1: 11, x2: 14, y2: 17 }],
+    ],
+    refresh: [
+      ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }],
+      ["path", { d: "M21 3v5h-5" }],
+      ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
+      ["path", { d: "M8 21H3v-5" }],
+    ],
+    "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
+    "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
+    "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
+    square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
+  };
+
+  function icon(name, cls) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    svg.setAttribute("class", "svg-icon" + (cls ? " " + cls : ""));
+    (ICONS[name] || []).forEach(([tag, attrs]) => {
+      const child = document.createElementNS(SVG_NS, tag);
+      Object.keys(attrs).forEach((k) => child.setAttribute(k, String(attrs[k])));
+      svg.appendChild(child);
+    });
+    return svg;
+  }
+
+  // Replace a node's contents with an icon + optional label, keeping it a real
+  // control. Returns the label node so callers can preserve text-only updates.
+  function setIcon(button, name, label) {
+    if (!button) return null;
+    button.textContent = "";
+    button.appendChild(icon(name));
+    if (label != null) button.appendChild(el("span", "", label));
+    return button;
+  }
+
+  // Text action control (`edit`, `forget`, `add`, …) as a focusable <button>.
+  function link(label, cls, onClick) {
+    const b = el("button", "linkbtn" + (cls ? " " + cls : ""), label);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  // Upgrade an existing non-button node (a span/div kept for layout) into a
+  // keyboard-activatable control.
+  function activate(node, fn) {
+    node.setAttribute("role", "button");
+    if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
+    node.addEventListener("click", fn);
+    node.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        fn(e);
+      }
+    });
     return node;
   }
 
@@ -257,9 +367,7 @@
     wrap.appendChild(el("span", "g", "✦"));
     wrap.appendChild(document.createTextNode(" " + t("web.empty.title")));
     wrap.appendChild(document.createElement("br"));
-    const hint = el("span", "", t("web.empty.hint"));
-    hint.style.color = "#9198a1";
-    wrap.appendChild(hint);
+    wrap.appendChild(el("span", "hint", t("web.empty.hint")));
     return wrap;
   }
 
@@ -276,19 +384,29 @@
   function clearFeed(feed) {
     if (!feed) return;
     feed.replaceChildren(emptyView());
-    const t = tabs.find((x) => x.feed === feed);
-    if (t) t.planCard = null;
+    const tab = tabs.find((x) => x.feed === feed);
+    if (tab) tab.planCard = null;
     if (feed === activeFeed()) scroll();
   }
 
   function activeFeed() {
-    const t = tabs.find((x) => x.id === activeTabId);
-    return t ? t.feed : null;
+    const tab = tabs.find((x) => x.id === activeTabId);
+    return tab ? tab.feed : null;
   }
 
   function liveFeed() {
-    const t = tabs.find((x) => x.id === liveTabId) || tabs.find((x) => x.id === activeTabId);
-    return t ? t.feed : null;
+    const tab = tabs.find((x) => x.id === liveTabId) || tabs.find((x) => x.id === activeTabId);
+    return tab ? tab.feed : null;
+  }
+
+  // Route a server event to the tab that owns its session (item from `broadcast`
+  // enrichment); fall back to the live/active tab for events without one.
+  function feedForEvent(sessionId) {
+    if (sessionId) {
+      const tab = tabs.find((x) => x.id === sessionId);
+      if (tab) return tab.feed;
+    }
+    return liveFeed();
   }
 
   function nearBottom() {
@@ -315,12 +433,12 @@
     if (empty) empty.remove();
   }
 
-  function clearBusy() {
+  function clearBusy(feed) {
     if (busyTimer) {
       clearInterval(busyTimer);
       busyTimer = null;
     }
-    const feed = liveFeed();
+    feed = feed || liveFeed();
     if (!feed) return;
     const line = feed.querySelector(".busy");
     if (line) line.remove();
@@ -421,9 +539,9 @@
     if (feed === activeFeed()) scroll();
   }
 
-  function onText(chunk) {
-    clearBusy();
-    const feed = liveFeed();
+  function onText(chunk, sid) {
+    const feed = feedForEvent(sid);
+    clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
     if (curMeta) {
@@ -446,20 +564,24 @@
     curMeta = null;
   }
 
-  function onMeta(chunk) {
-    clearBusy();
-    const feed = liveFeed();
+  function onMeta(chunk, sid) {
+    const feed = feedForEvent(sid);
+    clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
     if (!curMeta) {
       flushRun();
       const wrap = el("div", "think");
-      const head = el("div", "think-h");
+      const head = el("button", "think-h");
+      head.type = "button";
+      head.setAttribute("aria-expanded", "true");
       head.appendChild(el("span", "g", "✦"));
       head.appendChild(el("span", "lab", t("web.action.thinking")));
       head.appendChild(el("span", "dur", ""));
-      head.appendChild(el("span", "tog", t("web.action.hide")));
+      const tog = el("span", "tog");
+      setIcon(tog, "chevron-down", t("web.action.hide"));
+      head.appendChild(tog);
       const body = el("div", "think-body");
       wrap.appendChild(head);
       wrap.appendChild(body);
@@ -470,17 +592,18 @@
     if (feed === activeFeed()) scroll();
   }
 
-  function onPhase(phase) {
+  function onPhase(phase, sid) {
+    const feed = feedForEvent(sid);
     if (phase === "thinking") {
-      showBusy();
+      showBusy(feed);
     } else {
-      clearBusy();
+      clearBusy(feed);
     }
   }
 
   function onToolStart(data) {
-    clearBusy();
-    const feed = liveFeed();
+    const feed = feedForEvent(data.sessionId);
+    clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
@@ -536,8 +659,8 @@
     return null;
   }
 
-  function cardFor(name, args) {
-    const feed = liveFeed();
+  function cardFor(name, args, sid) {
+    const feed = feedForEvent(sid);
     if (!feed) return;
     if (FILE_TOOLS.indexOf(name) !== -1) {
       const path = args.path || args.file || args.dir;
@@ -594,42 +717,49 @@
     toolNodes.delete(data.toolCallId);
     const args = pendingArgs.get(data.toolCallId) || {};
     pendingArgs.delete(data.toolCallId);
-    if (data.success) cardFor(data.name, args);
+    if (data.success) cardFor(data.name, args, data.sessionId);
     renderToolOutput(line, data.output);
   }
 
   function onTurnEnd(data) {
     state.busy = false;
-    clearBusy();
+    const feed = feedForEvent(data.sessionId);
+    clearBusy(feed);
     finishMeta();
     curText = null;
     flushRun();
-    const live = tabs.find((x) => x.id === liveTabId);
-    if (live) live.planCard = null;
-    const feed = liveFeed();
+    const owner = tabs.find((x) => x.id === data.sessionId);
+    if (owner) owner.planCard = null;
     if (!feed) return;
     if (data.success === false) {
       if (data.interrupted) {
         appendTo(feed, el("div", "warnline", "⚠ " + t("web.turn.stopped")));
+        announce(t("web.turn.stopped"));
       } else {
         appendTo(feed, el("div", "errline", "✗ " + t("web.turn.failed")));
+        announce(t("web.turn.failed"));
       }
     } else {
       const parts = [];
-      if (typeof data.toolCalls === "number" && data.toolCalls > 0) parts.push(data.toolCalls + " tools");
+      if (typeof data.toolCalls === "number" && data.toolCalls > 0) {
+        parts.push(t("web.turn.tools", { count: data.toolCalls }));
+      }
       if (typeof data.durationMs === "number") parts.push(formatMs(data.durationMs));
       if (parts.length) appendTo(feed, el("div", "metric", "⟡ " + parts.join(" · ")));
       appendTo(feed, el("div", "sysline", "— " + t("web.turn.end", { count: data.toolCalls || 0 }) + " —"));
+      announce(t("web.turn.end", { count: data.toolCalls || 0 }));
     }
   }
 
   function onErrorEvent(data) {
     if (!data || !data.error) return;
-    append(el("div", "errline", "✗ " + data.error));
+    const feed = feedForEvent(data.sessionId);
+    if (feed) appendTo(feed, el("div", "errline", "✗ " + data.error));
+    announce(String(data.error));
   }
 
-  function onCommandOutput(text) {
-    const feed = liveFeed() || activeFeed();
+  function onCommandOutput(text, sid) {
+    const feed = feedForEvent(sid) || activeFeed();
     if (!feed) return;
     clearEmpty(feed);
     String(text)
@@ -642,7 +772,7 @@
   // `textContent` so nothing untrusted is parsed as HTML.
   function onLog(data) {
     if (!data || typeof data.text !== "string" || !data.text) return;
-    const feed = liveFeed() || activeFeed();
+    const feed = feedForEvent(data.sessionId) || activeFeed();
     if (!feed) return;
     const level = data.level;
     const cls = level === "error" ? "errline" : level === "warn" ? "warnline" : "detail";
@@ -650,6 +780,7 @@
     const line = el("div", cls);
     line.textContent = glyph + data.text;
     appendTo(feed, line);
+    if (level === "error" || level === "warn") announce(data.text);
   }
 
   function renderAssistantText(feed, text) {
@@ -666,10 +797,14 @@
 
   function renderThinkBlock(feed, text) {
     const wrap = el("div", "think");
-    const head = el("div", "think-h");
+    const head = el("button", "think-h");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "true");
     head.appendChild(el("span", "g", "✦"));
     head.appendChild(el("span", "lab", t("web.action.thinking")));
-    head.appendChild(el("span", "tog", t("web.action.hide")));
+    const tog = el("span", "tog");
+    setIcon(tog, "chevron-down", t("web.action.hide"));
+    head.appendChild(tog);
     const body = el("div", "think-body");
     body.textContent = text || "";
     wrap.appendChild(head);
@@ -775,18 +910,32 @@
   function renderTabstrip() {
     tabstripEl.textContent = "";
     tabs.forEach((item) => {
-      const tab = el("div", "stab" + (item.id === activeTabId ? " on" : ""));
-      tab.appendChild(el("span", "name", item.name || item.id));
+      const on = item.id === activeTabId;
+      const label = item.name || item.id;
+      const tab = el("div", "stab" + (on ? " on" : ""));
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("tabindex", on ? "0" : "-1");
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.setAttribute("aria-label", label);
+      tab.appendChild(el("span", "name", label));
       if (item.kind === "session") tab.appendChild(el("span", "sid", String(item.id).slice(0, 4)));
-      const x = el("span", "x", "✕");
+      const x = el("button", "stab-x");
+      x.type = "button";
       x.title = t("web.topbar.close");
+      x.setAttribute("aria-label", t("web.topbar.close") + ": " + label);
+      x.appendChild(icon("x"));
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeTab(item.id);
+      });
       tab.appendChild(x);
-      tab.addEventListener("click", (e) => {
-        if (e.target.classList.contains("x")) {
-          closeTab(item.id);
-          return;
+      const open = () => openTab(item.id, item.name, item.kind, true);
+      tab.addEventListener("click", open);
+      tab.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
         }
-        openTab(item.id, item.name, item.kind, true);
       });
       tabstripEl.appendChild(tab);
     });
@@ -803,9 +952,9 @@
   );
 
   function openTab(id, name, kind, server) {
-    let t = tabs.find((x) => x.id === id);
-    if (!t) {
-      t = {
+    let tab = tabs.find((x) => x.id === id);
+    if (!tab) {
+      tab = {
         id,
         name: name || id,
         kind: kind || "session",
@@ -814,30 +963,30 @@
         historyLoading: false,
         planCard: null,
       };
-      tabs.push(t);
+      tabs.push(tab);
     } else if (name) {
-      t.name = name;
+      tab.name = name;
     }
     activeTabId = id;
     liveTabId = id;
-    msgs.replaceChildren(t.feed);
+    msgs.replaceChildren(tab.feed);
     renderTabstrip();
     renderSessionsDropdown();
     msgs.scrollTop = msgs.scrollHeight;
-    if (t.kind === "session" && !server) {
+    if (tab.kind === "session" && !server) {
       // Auto-opened live session: SSE fills the feed, no transcript fetch.
-      t.historyLoaded = true;
+      tab.historyLoaded = true;
     }
-    if (server && t.kind === "session") {
+    if (server && tab.kind === "session") {
       api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
-      loadHistory(t);
+      loadHistory(tab);
     }
   }
 
   function closeTab(id) {
-    const i = tabs.findIndex((t) => t.id === id);
+    const i = tabs.findIndex((x) => x.id === id);
     if (i === -1) return;
-    tabs = tabs.filter((t) => t.id !== id);
+    tabs = tabs.filter((x) => x.id !== id);
     if (activeTabId === id) {
       const next = tabs[Math.min(i, tabs.length - 1)];
       if (next) {
@@ -872,7 +1021,7 @@
   document.getElementById("newChat").addEventListener("click", newChatTab);
   document.getElementById("sessNew").addEventListener("click", () => {
     newChatTab();
-    document.getElementById("sessDD").classList.remove("open");
+    setSessOpen(false);
   });
   document.getElementById("sessRefresh").addEventListener("click", () => {
     loadSessions();
@@ -883,6 +1032,10 @@
     const recentList = document.getElementById("sessRecentList");
     activeList.textContent = "";
     recentList.textContent = "";
+    // Drop a stale pending delete (armed >3s ago) before rendering rows.
+    if (state.pendingDeleteId && Date.now() - state.pendingDeleteTs > 3000) {
+      state.pendingDeleteId = null;
+    }
     const activeId = state.activeSessionId;
     const sorted = state.sessions.slice().sort((a, b) => {
       const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
@@ -906,44 +1059,115 @@
     if (!recentList.childNodes.length) {
       recentList.appendChild(el("div", "si", t("web.sessions.none")));
     }
+    if (state.sessionsError) {
+      recentList.appendChild(el("div", "dd-err", state.sessionsError));
+    }
   }
 
   function sessionRow(s, isActive) {
-    const row = el("div", "si" + (isActive ? " on" : ""));
-    row.appendChild(el("span", "id", String(s.id).slice(0, 4)));
-    row.appendChild(el("span", "name", s.name || String(s.id)));
-    row.appendChild(el("span", "meta", relTime(s.updatedAt)));
-    const del = el("span", "del", "✕");
-    del.title = t("web.sessions.delete");
-    row.appendChild(del);
-    row.addEventListener("click", (e) => {
-      if (e.target.classList.contains("del")) {
-        e.stopPropagation();
+    const armed = state.pendingDeleteId === s.id;
+    const row = el("div", "si si-row" + (isActive ? " on" : "") + (armed ? " armed" : ""));
+    const name = s.name || String(s.id);
+    const main = el("button", "dd-row-main");
+    main.type = "button";
+    main.setAttribute("aria-label", name);
+    main.appendChild(el("span", "id", String(s.id).slice(0, 4)));
+    main.appendChild(el("span", "name", name));
+    main.appendChild(el("span", "meta", relTime(s.updatedAt)));
+    main.addEventListener("click", () => {
+      clearPendingDelete();
+      setSessOpen(false);
+      openTab(s.id, name, "session", true);
+    });
+    row.appendChild(main);
+    const del = el("button", "del-btn");
+    del.type = "button";
+    del.appendChild(icon("trash"));
+    const label = armed ? t("web.sessions.confirm_delete") : t("web.sessions.delete");
+    del.title = label;
+    del.setAttribute("aria-label", label + ": " + name);
+    if (armed) del.classList.add("armed");
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // The active session can't be removed server-side (409) — say so instead
+      // of arming a delete that would fail.
+      if (s.id === state.activeSessionId) {
+        clearPendingDelete();
+        showSessionsError(t("web.sessions.active_guard"));
+        return;
+      }
+      if (state.pendingDeleteId === s.id) {
+        clearPendingDelete();
         deleteSession(s.id);
         return;
       }
-      document.getElementById("sessDD").classList.remove("open");
-      openTab(s.id, s.name || s.id, "session", true);
+      armDelete(s.id);
     });
+    row.appendChild(del);
     return row;
   }
 
+  // --- session delete: durable two-step + inline feedback ----------------
+  function armDelete(id) {
+    state.pendingDeleteId = id;
+    state.pendingDeleteTs = Date.now();
+    renderSessionsDropdown();
+    if (deleteArmTimer) clearTimeout(deleteArmTimer);
+    deleteArmTimer = setTimeout(() => {
+      if (state.pendingDeleteId) {
+        state.pendingDeleteId = null;
+        renderSessionsDropdown();
+      }
+    }, 3000);
+  }
+
+  function clearPendingDelete() {
+    if (deleteArmTimer) clearTimeout(deleteArmTimer);
+    deleteArmTimer = null;
+    state.pendingDeleteId = null;
+  }
+
+  function showSessionsError(msg) {
+    state.sessionsError = msg;
+    renderSessionsDropdown();
+    if (sessionsErrTimer) clearTimeout(sessionsErrTimer);
+    sessionsErrTimer = setTimeout(() => {
+      state.sessionsError = null;
+      renderSessionsDropdown();
+    }, 4500);
+  }
+
   async function deleteSession(id) {
+    clearPendingDelete();
     const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
-    if (!r.ok) setIndicator(t("web.sessions.delete_failed"), true);
+    if (!r.ok) {
+      const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
+      showSessionsError(code === "active_session" ? t("web.sessions.active_guard") : t("web.sessions.delete_failed"));
+    } else {
+      state.sessionsError = null;
+    }
     await loadSessions();
   }
 
   const sessDD = document.getElementById("sessDD");
-  document.getElementById("sessBtn").addEventListener("click", (e) => {
+  const sessBtn = document.getElementById("sessBtn");
+  function setSessOpen(open) {
+    sessDD.classList.toggle("open", !!open);
+    sessBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  sessBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
-    sessDD.classList.toggle("open");
+    setSessOpen(!sessDD.classList.contains("open"));
   });
 
   document.addEventListener("click", () => {
     document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
-    sessDD.classList.remove("open");
+    setSessOpen(false);
+    if (state.pendingDeleteId) {
+      clearPendingDelete();
+      renderSessionsDropdown();
+    }
   });
 
   msgs.addEventListener("click", (e) => {
@@ -952,8 +1176,9 @@
     const body = head.nextElementSibling;
     if (!body) return;
     const hidden = body.classList.toggle("hidden");
+    head.setAttribute("aria-expanded", hidden ? "false" : "true");
     const tog = head.querySelector(".tog");
-    if (tog) tog.textContent = hidden ? "▸ show" : "▾ hide";
+    if (tog) setIcon(tog, hidden ? "chevron-right" : "chevron-down", t(hidden ? "web.action.show" : "web.action.hide"));
   });
 
   function setAttachError(msg) {
@@ -976,8 +1201,11 @@
       img.alt = "";
       img.src = src;
       thumb.appendChild(img);
-      const rm = el("span", "rm", "✕");
+      const rm = el("button", "rm");
+      rm.type = "button";
       rm.title = t("web.attach.remove");
+      rm.setAttribute("aria-label", t("web.attach.remove"));
+      rm.appendChild(icon("x"));
       rm.addEventListener("click", () => {
         attachments.splice(i, 1);
         renderAttachments();
@@ -1093,17 +1321,35 @@
     });
   }
 
+  // Grow the composer with its content up to a max, then scroll.
+  const INPUT_MAX_PX = 200;
+  function autogrow() {
+    if (!inp) return;
+    inp.style.height = "auto";
+    inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
+  }
+  function clearInput() {
+    inp.value = "";
+    autogrow();
+  }
+  if (inp) inp.addEventListener("input", autogrow);
+
   async function send() {
     const text = inp.value.trim();
     const images = attachments.slice();
-    if ((!text && !images.length) || state.busy) return;
+    if (!text && !images.length) return;
     const feed = liveFeed() || activeFeed();
+    if (state.busy) {
+      // Don't drop the input silently: tell the user a turn is still running.
+      if (feed) appendTo(feed, el("div", "warnline", "⚠ " + t("web.input.busy")));
+      return;
+    }
     clearEmpty(feed);
     curText = null;
     finishMeta();
     if (text.startsWith("/")) {
       appendTo(feed, el("div", "u", text));
-      inp.value = "";
+      clearInput();
       const name = text.slice(1).split(/\s+/)[0].toLowerCase();
       if (name === "clear") {
         clearFeed(feed);
@@ -1121,13 +1367,14 @@
     }
     if (feed && feed.querySelector(".startbanner") === null && feed.querySelector(".u") === null) {
       const banner = el("div", "startbanner");
-      banner.appendChild(document.createTextNode("start: "));
+      banner.appendChild(document.createTextNode(t("web.start.label") + " "));
       banner.appendChild(el("b", "", (state.config && state.config.model) || state.host.model || "—"));
-      banner.appendChild(document.createTextNode(" · " + (state.host.provider || (state.config && state.config.provider && state.config.provider.active) || "—") + " · " + contextLabel() + (state.host.sessionId ? " · session " + String(state.host.sessionId).slice(0, 4) : "")));
+      const sessionPart = state.host.sessionId ? " · " + t("web.start.session") + " " + String(state.host.sessionId).slice(0, 4) : "";
+      banner.appendChild(document.createTextNode(" · " + (state.host.provider || (state.config && state.config.provider && state.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
       feed.insertBefore(banner, feed.firstChild);
     }
     appendTo(feed, userMessageNode(text, images));
-    inp.value = "";
+    clearInput();
     const body = { text };
     if (images.length) body.images = images;
     const r = await api("/api/message", { method: "POST", body });
@@ -1146,6 +1393,9 @@
   }
 
   inp.addEventListener("keydown", (e) => {
+    // Ignore keys that confirm an IME composition (CJK/RU input methods):
+    // sending on that Enter would submit a half-composed message.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -1155,13 +1405,29 @@
     }
   });
 
+  if (sendBtn) {
+    sendBtn.addEventListener("click", () => {
+      if (state.busy) interrupt();
+      else send();
+    });
+  }
+
   document.querySelectorAll("[data-collapse]").forEach((head) => {
+    const initArrow = head.querySelector(".arrow");
+    if (initArrow) {
+      initArrow.textContent = "";
+      initArrow.appendChild(icon("chevron-down"));
+    }
     head.addEventListener("click", () => {
       const body = head.nextElementSibling;
       if (!body) return;
       const collapsed = body.classList.toggle("collapsed");
+      head.setAttribute("aria-expanded", collapsed ? "false" : "true");
       const arrow = head.querySelector(".arrow");
-      if (arrow) arrow.textContent = collapsed ? "▸" : "▾";
+      if (arrow) {
+        arrow.textContent = "";
+        arrow.appendChild(icon(collapsed ? "chevron-right" : "chevron-down"));
+      }
     });
   });
 
@@ -1171,25 +1437,44 @@
   }
 
   function setSelButton(btn, label, value) {
-    btn.textContent = label + ": ";
+    btn.textContent = label + ":";
     btn.appendChild(el("b", "", value));
-    btn.appendChild(document.createTextNode(" ▾"));
+    btn.appendChild(icon("chevron-down"));
   }
 
   function closeAllMenus() {
-    document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
-    const dd = document.getElementById("sessDD");
-    if (dd) dd.classList.remove("open");
+    document.querySelectorAll("[data-sel]").forEach((s) => {
+      s.classList.remove("open");
+      const b = s.querySelector("button");
+      if (b) b.setAttribute("aria-expanded", "false");
+    });
+    setSessOpen(false);
   }
 
   function menuItem(label, sub, active, onClick) {
-    const mi = el("div", "mi" + (active ? " on" : ""));
+    const mi = el("button", "mi" + (active ? " on" : ""));
+    mi.type = "button";
+    mi.setAttribute("aria-pressed", active ? "true" : "false");
     mi.appendChild(el("span", "", label));
     if (sub) mi.appendChild(el("span", "sub", sub));
     mi.addEventListener("click", (e) => {
       e.stopPropagation();
       onClick();
       closeAllMenus();
+    });
+    return mi;
+  }
+
+  // Menu action row (refresh, custom, add…) with an optional leading icon.
+  function menuAction(label, iconName, onClick) {
+    const mi = el("button", "mi row-mi");
+    mi.type = "button";
+    if (iconName) mi.appendChild(icon(iconName));
+    mi.appendChild(el("span", "", label));
+    mi.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeAllMenus();
+      onClick();
     });
     return mi;
   }
@@ -1209,13 +1494,11 @@
       });
     }
     modelMenu.appendChild(el("div", "sep"));
-    const refresh = el("div", "mi", t("web.selectors.refresh_list"));
-    refresh.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeAllMenus();
-      loadModels().then(renderSelectors);
-    });
-    modelMenu.appendChild(refresh);
+    modelMenu.appendChild(
+      menuAction(t("web.selectors.refresh_list"), "refresh", () => {
+        loadModels().then(renderSelectors);
+      }),
+    );
 
     setSelButton(document.getElementById("selProviderBtn"), t("web.selectors.provider"), provider.active || provider.type || "—");
     const provMenu = document.getElementById("selProviderMenu");
@@ -1237,30 +1520,72 @@
       ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? t("web.selectors.current") : "", n === cfg.contextWindow, () => postConfig("contextWindow", n, false)));
     });
     ctxMenu.appendChild(el("div", "sep"));
-    const custom = el("div", "mi", t("web.selectors.custom"));
+    // Inline custom size (no native `window.prompt`): the menu stays open while
+    // typing; Enter/save commits and closes it.
+    const custom = el("button", "mi row-mi");
+    custom.type = "button";
+    custom.appendChild(icon("settings"));
+    custom.appendChild(el("span", "", t("web.selectors.custom")));
     custom.addEventListener("click", (e) => {
       e.stopPropagation();
-      closeAllMenus();
-      const raw = window.prompt(t("web.selectors.context_prompt"), String(cfg.contextWindow || 32768));
-      if (raw == null) return;
-      const n = Number(raw.trim());
-      if (Number.isFinite(n) && n >= 1024) postConfig("contextWindow", n, false);
+      if (ctxMenu.querySelector(".ctx-custom")) return;
+      const wrap = el("div", "ctx-custom");
+      const input = el("input");
+      input.type = "number";
+      input.min = "1024";
+      input.step = "1024";
+      input.value = String(cfg.contextWindow || 32768);
+      input.placeholder = t("web.selectors.context_prompt");
+      input.setAttribute("aria-label", t("web.selectors.context_prompt"));
+      const commit = () => {
+        const n = Number(input.value.trim());
+        if (Number.isFinite(n) && n >= 1024) {
+          closeAllMenus();
+          postConfig("contextWindow", n, false);
+        } else {
+          input.focus();
+        }
+      };
+      input.addEventListener("click", (ev) => ev.stopPropagation());
+      input.addEventListener("keydown", (ev) => {
+        ev.stopPropagation();
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          commit();
+        } else if (ev.key === "Escape") {
+          wrap.remove();
+        }
+      });
+      const ok = link(t("web.settings.save"), "", commit);
+      wrap.appendChild(input);
+      wrap.appendChild(ok);
+      ctxMenu.appendChild(wrap);
+      setTimeout(() => input.focus(), 0);
     });
     ctxMenu.appendChild(custom);
   }
 
   document.querySelectorAll("[data-sel]").forEach((sel) => {
     const btn = sel.querySelector("button");
+    btn.setAttribute("aria-haspopup", "menu");
+    btn.setAttribute("aria-expanded", "false");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      sessDD.classList.remove("open");
+      setSessOpen(false);
       document.querySelectorAll("[data-sel]").forEach((s) => {
-        if (s !== sel) s.classList.remove("open");
+        if (s !== sel) {
+          s.classList.remove("open");
+          const b = s.querySelector("button");
+          if (b) b.setAttribute("aria-expanded", "false");
+        }
       });
-      sel.classList.toggle("open");
+      const open = sel.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
     });
   });
 
+  let deleteArmTimer = null;
+  let sessionsErrTimer = null;
   let indicatorTimer = null;
   function setIndicator(msg, fail) {
     if (!saveIndicator) return;
@@ -1291,12 +1616,33 @@
     return false;
   }
 
+  // Reflect the busy flag on the composer so a turn in progress is visible and
+  // `aria-busy` is honest for assistive tech.
+  function reflectBusy() {
+    if (inp) inp.setAttribute("aria-busy", state.busy ? "true" : "false");
+    const area = document.querySelector(".input-area");
+    if (area) area.classList.toggle("busy", state.busy);
+    // Send button doubles as stop while a turn is running; the Esc hint is only
+    // meaningful then.
+    if (sendBtn) {
+      const label = state.busy ? t("web.input.stop") : t("web.input.send");
+      sendBtn.textContent = "";
+      sendBtn.appendChild(icon(state.busy ? "square" : "arrow-up"));
+      sendBtn.classList.toggle("busy", state.busy);
+      sendBtn.title = label;
+      sendBtn.setAttribute("aria-label", label);
+    }
+    const escHint = document.getElementById("hintEsc");
+    if (escHint) escHint.hidden = !state.busy;
+  }
+
   function renderState(snapshot, busy) {
     state.host = snapshot || {};
     state.busy = !!busy;
+    reflectBusy();
     const sessionId = state.host.sessionId || null;
     state.activeSessionId = sessionId;
-    if (sessionId && !tabs.some((t) => t.id === sessionId)) {
+    if (sessionId && !tabs.some((x) => x.id === sessionId)) {
       openTab(sessionId, state.host.sessionName || String(sessionId), "session", false);
     }
     if (!tabs.length) showEmptyFeed();
@@ -1306,6 +1652,11 @@
   }
 
   function renderPlan(plan) {
+    // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
+    // reset it would cause) when the snapshot is unchanged.
+    const sig = JSON.stringify([plan, I18N.locale]);
+    if (sig === lastPlanSig) return;
+    lastPlanSig = sig;
     planEl.textContent = "";
     if (!plan || !Array.isArray(plan.steps) || !plan.steps.length) {
       planCountEl.textContent = "";
@@ -1333,10 +1684,10 @@
   }
 
   function onPlan(data) {
-    const feed = liveFeed();
+    const feed = feedForEvent(data && data.sessionId);
     if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
     clearEmpty(feed);
-    const tab = tabs.find((x) => x.id === liveTabId);
+    const tab = tabs.find((x) => x.feed === feed);
     let card = tab ? tab.planCard : null;
     if (!card || card.parentNode !== feed) {
       card = el("div", "planblock");
@@ -1369,7 +1720,7 @@
 
   function onQuestion(data) {
     if (!data || typeof data.text !== "string") return;
-    const feed = liveFeed();
+    const feed = feedForEvent(data.sessionId);
     if (!feed) return;
     clearEmpty(feed);
     const promptText = questionLabel(data.text);
@@ -1377,30 +1728,61 @@
     block.appendChild(el("div", "qtext", promptText));
     let answered = false;
 
-    const settle = (value) => {
+    // `display` is what the user sees; `raw` is exactly what goes to `/api/answer`.
+    const settle = (display, raw) => {
       if (answered) return;
       answered = true;
-      const answer = Array.isArray(value)
-        ? value
-            .map((i) => data.options && data.options[i])
-            .filter((x) => x != null)
-            .join(", ")
-        : String(value == null ? "" : value);
       block.classList.add("answered");
       block.textContent = "";
       block.appendChild(el("div", "qtext", promptText));
-      block.appendChild(el("div", "qans", "↳ " + (answer || t("web.question.answered"))));
-      api("/api/answer", { method: "POST", body: { id: data.id, value } });
+      block.appendChild(el("div", "qans", "↳ " + (String(display || "").trim() || t("web.question.answered"))));
+      api("/api/answer", { method: "POST", body: { id: data.id, value: raw } });
       if (feed === activeFeed()) scroll();
     };
 
-    if (data.kind === "choice" && Array.isArray(data.options) && data.options.length) {
+    // Free-text prompt (a `text` question, or the tool's follow-up after the
+    // "own answer" choice — see `askUser`/`CUSTOM_INDEX`).
+    const textInput = (placeholder) => {
+      const wrap = el("div", "qcustom");
+      const input = el("input", "qinput");
+      input.type = "text";
+      input.placeholder = placeholder;
+      input.setAttribute("aria-label", placeholder);
+      input.addEventListener("keydown", (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const value = input.value.trim();
+          if (value) settle(value, value);
+        }
+      });
+      wrap.appendChild(input);
+      wrap.appendChild(
+        link(t("web.question.custom_send"), "", () => {
+          const value = input.value.trim();
+          if (value) settle(value, value);
+        }),
+      );
+      if (feed === activeFeed()) setTimeout(() => input.focus(), 0);
+      return wrap;
+    };
+
+    const options = Array.isArray(data.options) ? data.options : [];
+    if (data.kind === "choice" && options.length) {
       const multiple = !!data.multiple;
+      const allowCustom = !!data.allowCustom;
+      // UI entries; the "own answer" entry maps to CUSTOM_INDEX (-1) so the tool
+      // then asks the free-text follow-up.
+      const entries = options.map((label) => ({ label, raw: null }));
+      if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
+      const rawOf = (i) => (entries[i].raw != null ? entries[i].raw : i);
       const opts = el("div", "opts");
       const selected = [];
       let sendBtn = null;
-      data.options.forEach((label, i) => {
-        const row = el("div", "qopt", i + 1 + ". " + label);
+      entries.forEach((entry, i) => {
+        const row = el("button", "qopt", i + 1 + ". " + entry.label);
+        row.type = "button";
+        row.setAttribute("aria-checked", "false");
         row.addEventListener("click", () => {
           if (answered) return;
           if (multiple) {
@@ -1408,40 +1790,35 @@
             if (pos === -1) {
               selected.push(i);
               row.classList.add("on");
+              row.setAttribute("aria-checked", "true");
             } else {
               selected.splice(pos, 1);
               row.classList.remove("on");
+              row.setAttribute("aria-checked", "false");
             }
             if (sendBtn) sendBtn.disabled = selected.length === 0;
           } else {
-            settle([i]);
+            row.setAttribute("aria-checked", "true");
+            settle(entry.label, [rawOf(i)]);
           }
         });
         opts.appendChild(row);
       });
       block.appendChild(opts);
       if (multiple) {
+        block.appendChild(el("div", "qmulti-hint", t("web.question.multi_hint")));
         sendBtn = el("button", "qsend", t("web.question.send"));
+        sendBtn.type = "button";
         sendBtn.disabled = true;
         sendBtn.addEventListener("click", () => {
-          if (!answered && selected.length) {
-            settle(selected.slice().sort((a, b) => a - b));
-          }
+          if (answered || !selected.length) return;
+          const chosen = selected.slice().sort((a, b) => a - b);
+          settle(chosen.map((i) => entries[i].label).join(", "), chosen.map(rawOf));
         });
         block.appendChild(sendBtn);
       }
     } else {
-      const input = el("input", "qinput");
-      input.type = "text";
-      input.placeholder = t("web.question.placeholder");
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          settle(input.value);
-        }
-      });
-      block.appendChild(input);
-      if (feed === activeFeed()) setTimeout(() => input.focus(), 0);
+      block.appendChild(textInput(t("web.question.placeholder")));
     }
     appendTo(feed, block);
     if (feed === activeFeed()) scroll();
@@ -1455,13 +1832,21 @@
   }
 
   function renderUsage(h) {
+    const cfg = state.config || {};
+    const sig = JSON.stringify([
+      h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
+      h.compactionCount, h.contextQuality, h.contextProbe, cfg.model, cfg.contextWindow,
+      I18N.locale,
+    ]);
+    if (sig === lastUsageSig) return;
+    lastUsageSig = sig;
     usageEl.textContent = "";
     const sid = h.sessionId ? String(h.sessionId).slice(0, 8) : "—";
-    usageEl.appendChild(usageRow("session", sid));
-    usageEl.appendChild(usageRow("model", h.model || (state.config && state.config.model) || "—"));
+    usageEl.appendChild(usageRow(t("web.usage.session"), sid));
+    usageEl.appendChild(usageRow(t("web.usage.model"), h.model || cfg.model || "—"));
     const used = typeof h.contextUsed === "number" ? h.contextUsed : null;
-    const limit = typeof h.contextLimit === "number" ? h.contextLimit : (state.config && state.config.contextWindow) || null;
-    usageEl.appendChild(usageRow("context", used != null && limit ? fmtTokens(used) + " / " + fmtTokens(limit) : "—"));
+    const limit = typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null;
+    usageEl.appendChild(usageRow(t("web.usage.context"), used != null && limit ? fmtTokens(used) + " / " + fmtTokens(limit) : "—"));
     if (used != null && limit) {
       const bar = el("div", "bar");
       const fill = el("i");
@@ -1470,12 +1855,29 @@
       usageEl.appendChild(bar);
     }
     const hit = typeof h.cacheHitRate === "number" ? h.cacheHitRate : null;
-    usageEl.appendChild(usageRow("cache", hit != null ? Math.round(hit * 100) + "%" : "—", hit != null ? "" : "dim"));
-    usageEl.appendChild(usageRow("cost", typeof h.costUsd === "number" ? "$" + h.costUsd.toFixed(4) : "—"));
-    usageEl.appendChild(usageRow("compactions", "⟳ " + (h.compactionCount || 0), h.compactionCount ? "wn" : "dim"));
+    usageEl.appendChild(usageRow(t("web.usage.cache"), hit != null ? Math.round(hit * 100) + "%" : "—", hit != null ? "" : "dim"));
+    usageEl.appendChild(usageRow(t("web.usage.cost"), typeof h.costUsd === "number" ? "$" + h.costUsd.toFixed(4) : "—"));
+    usageEl.appendChild(usageRow(t("web.usage.compactions"), "⟳ " + (h.compactionCount || 0), h.compactionCount ? "wn" : "dim"));
     const q = typeof h.contextQuality === "number" ? h.contextQuality : null;
-    usageEl.appendChild(usageRow("quality", q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
-    usageEl.appendChild(usageRow("probe", "—", "dim"));
+    usageEl.appendChild(usageRow(t("web.usage.quality"), q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
+
+    // Context probe: real LM Studio loaded context vs configured. Pending/absent
+    // renders a dim dash; loaded < configured warns.
+    let probeText = "—";
+    let probeCls = "dim";
+    const probe = h.contextProbe;
+    if (probe && typeof probe.actual === "number") {
+      const actual = fmtTokens(probe.actual);
+      const configured = h.contextLimit || cfg.contextWindow || null;
+      if (configured && probe.actual < configured) {
+        probeText = t("web.usage.probe_low", { actual, configured: fmtTokens(configured) });
+        probeCls = "wn";
+      } else {
+        probeText = t("web.usage.probe_loaded", { actual });
+        probeCls = "";
+      }
+    }
+    usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
   }
 
   function fmtTokens(n) {
@@ -1562,15 +1964,15 @@
     };
     es.addEventListener("text", (e) => {
       const d = parse(e);
-      if (d) onText(d.chunk || "");
+      if (d) onText(d.chunk || "", d.sessionId);
     });
     es.addEventListener("meta", (e) => {
       const d = parse(e);
-      if (d) onMeta(d.chunk || "");
+      if (d) onMeta(d.chunk || "", d.sessionId);
     });
     es.addEventListener("phase", (e) => {
       const d = parse(e);
-      if (d) onPhase(d.phase);
+      if (d) onPhase(d.phase, d.sessionId);
     });
     es.addEventListener("tool_start", (e) => {
       const d = parse(e);
@@ -1594,7 +1996,7 @@
     });
     es.addEventListener("command", (e) => {
       const d = parse(e);
-      if (d && typeof d.text === "string") onCommandOutput(d.text);
+      if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
     });
     es.addEventListener("log", (e) => {
       const d = parse(e);
@@ -1604,6 +2006,7 @@
       const d = parse(e);
       if (d) {
         state.busy = !!d.busy;
+        reflectBusy();
         if (d.usage && typeof d.usage === "object") {
           state.host = Object.assign({}, state.host, d.usage);
           renderUsage(state.host);
@@ -1675,21 +2078,31 @@
   function configControl(def, key) {
     const value = state.config ? getPath(state.config, key) : undefined;
     if (def.valueType === "bool") {
-      const t = el("span", "toggle" + (value ? " on" : ""));
-      t.addEventListener("click", () => {
-        const next = !t.classList.contains("on");
-        t.classList.toggle("on", next);
+      const toggle = el("button", "toggle" + (value ? " on" : ""));
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", value ? "true" : "false");
+      toggle.addEventListener("click", () => {
+        const next = !toggle.classList.contains("on");
+        toggle.classList.toggle("on", next);
+        toggle.setAttribute("aria-checked", next ? "true" : "false");
         postConfig(key, next, false);
       });
-      return t;
+      return toggle;
     }
     if (def.valueType === "enum") {
       const seg = el("span", "seg");
       (def.enum || []).forEach((v) => {
         const b = el("button", v === value ? "on" : "", enumLabel(v));
+        b.type = "button";
+        b.setAttribute("aria-pressed", v === value ? "true" : "false");
         b.addEventListener("click", () => {
-          seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+          seg.querySelectorAll("button").forEach((x) => {
+            x.classList.remove("on");
+            x.setAttribute("aria-pressed", "false");
+          });
           b.classList.add("on");
+          b.setAttribute("aria-pressed", "true");
           postConfig(key, v, false);
         });
         seg.appendChild(b);
@@ -1702,6 +2115,7 @@
       return ro;
     }
     const input = el("input");
+    input.setAttribute("aria-label", configLabel(def));
     if (def.valueType === "int") {
       input.type = "number";
       if (def.min != null) input.min = String(def.min);
@@ -1771,6 +2185,7 @@
   function pfield(labelKey, input) {
     const f = el("div", "pform-field");
     f.appendChild(el("label", "", t(labelKey)));
+    input.setAttribute("aria-label", t(labelKey));
     f.appendChild(input);
     return f;
   }
@@ -1808,8 +2223,7 @@
     box.appendChild(grid);
 
     const actions = el("div", "pform-actions");
-    const save = el("span", "edit", t("web.settings.save"));
-    save.addEventListener("click", async () => {
+    const save = link(t("web.settings.save"), "", async () => {
       const type = fType.value.trim();
       const baseUrl = fBase.value.trim();
       if (!type || !baseUrl) {
@@ -1848,8 +2262,7 @@
         setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
       }
     });
-    const cancel = el("span", "edit dim", t("web.settings.cancel"));
-    cancel.addEventListener("click", () => {
+    const cancel = link(t("web.settings.cancel"), "dim", () => {
       state.providerForm = null;
       renderModelPanel();
     });
@@ -1867,6 +2280,7 @@
 
     const search = el("input", "searchbox");
     search.placeholder = t("web.settings.search_models");
+    search.setAttribute("aria-label", t("web.settings.search_models"));
     container.appendChild(search);
     const list = el("div");
     container.appendChild(list);
@@ -1887,9 +2301,7 @@
         if (active) {
           r.appendChild(el("span", "val dim", contextLabel() + " · " + t("web.settings.active_check")));
         } else {
-          const use = el("span", "edit", t("web.settings.use"));
-          use.addEventListener("click", () => postConfig("model", m, true));
-          r.appendChild(use);
+          r.appendChild(link(t("web.settings.use"), "", () => postConfig("model", m, true)));
         }
         list.appendChild(r);
       });
@@ -1915,41 +2327,39 @@
       if (name === activeName) {
         line.appendChild(el("span", "st", t("web.settings.active")));
       } else {
-        const use = el("span", "edit", t("web.settings.use"));
-        use.addEventListener("click", () => postConfig("provider.active", name, true));
-        line.appendChild(use);
+        line.appendChild(link(t("web.settings.use"), "", () => postConfig("provider.active", name, true)));
       }
-      const edit = el("span", "edit", t("web.settings.edit"));
-      edit.addEventListener("click", () => {
-        state.providerForm = { mode: "edit", entry };
-        renderModelPanel();
-      });
-      line.appendChild(edit);
+      line.appendChild(
+        link(t("web.settings.edit"), "", () => {
+          state.providerForm = { mode: "edit", entry };
+          renderModelPanel();
+        }),
+      );
       if (name !== activeName) {
-        const del = el("span", "edit", t("web.settings.delete"));
-        del.addEventListener("click", async () => {
-          const r = await api("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
-          if (r.ok && r.data && r.data.ok) {
-            setIndicator(t("web.settings.saved"));
-            await loadProviders();
-            await loadConfig();
-          } else {
-            const err = (r.data && r.data.error) || t("web.settings.delete_failed");
-            setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
-          }
-        });
-        line.appendChild(del);
+        line.appendChild(
+          link(t("web.settings.delete"), "danger", async () => {
+            const r = await api("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
+            if (r.ok && r.data && r.data.ok) {
+              setIndicator(t("web.settings.saved"));
+              await loadProviders();
+              await loadConfig();
+            } else {
+              const err = (r.data && r.data.error) || t("web.settings.delete_failed");
+              setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
+            }
+          }),
+        );
       }
       provList.appendChild(line);
     });
     container.appendChild(provList);
 
-    const addBtn = el("span", "edit add-provider", t("web.settings.add_provider"));
-    addBtn.addEventListener("click", () => {
-      state.providerForm = { mode: "add", entry: null };
-      renderModelPanel();
-    });
-    container.appendChild(addBtn);
+    container.appendChild(
+      link(t("web.settings.add_provider"), "add-provider", () => {
+        state.providerForm = { mode: "add", entry: null };
+        renderModelPanel();
+      }),
+    );
     if (state.providerForm) container.appendChild(providerForm());
   }
 
@@ -1958,12 +2368,18 @@
     if (!container) return;
     container.textContent = "";
     const seg = el("span", "seg");
-    ["dark", "light", "auto"].forEach((t) => {
-      const b = el("button", currentTheme() === t ? "on" : "", t);
+    ["dark", "light", "auto"].forEach((theme) => {
+      const b = el("button", currentTheme() === theme ? "on" : "", theme);
+      b.type = "button";
+      b.setAttribute("aria-pressed", currentTheme() === theme ? "true" : "false");
       b.addEventListener("click", () => {
-        seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+        seg.querySelectorAll("button").forEach((x) => {
+          x.classList.remove("on");
+          x.setAttribute("aria-pressed", "false");
+        });
         b.classList.add("on");
-        applyTheme(t);
+        b.setAttribute("aria-pressed", "true");
+        applyTheme(theme);
       });
       seg.appendChild(b);
     });
@@ -2016,29 +2432,32 @@
 
     const addRow = el("div", "mem-add");
     const catSel = el("select");
+    catSel.setAttribute("aria-label", t("web.settings.memory_category"));
     MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
     catSel.value = "facts";
     addRow.appendChild(catSel);
     const textIn = el("input");
     textIn.placeholder = t("web.settings.new_memory");
+    textIn.setAttribute("aria-label", t("web.settings.new_memory"));
     addRow.appendChild(textIn);
-    const addBtn = el("span", "edit", t("web.settings.add"));
-    addBtn.addEventListener("click", async () => {
-      const text = textIn.value.trim();
-      if (!text) return;
-      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
-      if (r.ok && r.data && r.data.ok) {
-        textIn.value = "";
-        await loadMemory();
-      } else {
-        setIndicator(t("web.settings.add_failed"), true);
-      }
-    });
-    addRow.appendChild(addBtn);
+    addRow.appendChild(
+      link(t("web.settings.add"), "", async () => {
+        const text = textIn.value.trim();
+        if (!text) return;
+        const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
+        if (r.ok && r.data && r.data.ok) {
+          textIn.value = "";
+          await loadMemory();
+        } else {
+          setIndicator(t("web.settings.add_failed"), true);
+        }
+      }),
+    );
     container.appendChild(addRow);
 
     const search = el("input", "searchbox");
     search.placeholder = t("web.settings.search_memory");
+    search.setAttribute("aria-label", t("web.settings.search_memory"));
     container.appendChild(search);
     const list = el("div", "settings-list");
     container.appendChild(list);
@@ -2056,11 +2475,7 @@
       body.appendChild(inlineTextNodes(text));
       body.title = String(text == null ? "" : text);
       block.appendChild(body);
-      if (onForget) {
-        const del = el("span", "mem-del", t("web.settings.forget"));
-        del.addEventListener("click", onForget);
-        block.appendChild(del);
-      }
+      if (onForget) block.appendChild(link(t("web.settings.forget"), "mem-del", onForget));
       return block;
     };
 
@@ -2185,8 +2600,12 @@
     (data.mcp || []).forEach((m) => {
       const line = el("div", "list-line");
       const on = m.status !== "disabled";
-      const toggle = el("span", "toggle" + (on ? " on" : ""));
+      const toggle = el("button", "toggle" + (on ? " on" : ""));
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", on ? "true" : "false");
       toggle.title = on ? t("web.settings.mcp_disable") : t("web.settings.mcp_enable");
+      toggle.setAttribute("aria-label", toggle.title);
       toggle.addEventListener("click", async () => {
         const next = !toggle.classList.contains("on");
         const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), {
@@ -2252,6 +2671,7 @@
   // Re-apply the dictionary to static chrome after a locale switch. Dynamic
   // feeds (tool output, model text) are localized server-side and untouched.
   function applyStaticI18n() {
+    document.documentElement.lang = I18N.locale;
     const setText = (id, text) => {
       const node = document.getElementById(id);
       if (node) node.textContent = text;
@@ -2259,27 +2679,39 @@
     setText("planHeaderLabel", t("web.sidebar.plan"));
     setText("usageHeaderLabel", t("web.sidebar.session") + " · " + t("web.sidebar.usage"));
     setText("settingsTitle", t("web.settings.title"));
-    setText("closeSettings", "✕ " + t("web.topbar.close"));
     setText("sessActiveHeader", t("web.sessions.active"));
     setText("sessRecentHeader", t("web.sessions.recent"));
-    setText("sessNew", t("web.sessions.new"));
-    setText("sessRefresh", t("web.sessions.refresh"));
     setText("hintEnter", t("web.input.enter"));
     setText("hintShift", t("web.input.shift_enter"));
     setText("hintEsc", t("web.input.esc"));
     setText("hintAttach", t("web.input.attach"));
 
-    const titles = {
-      newChat: t("web.topbar.new_chat"),
-      sessBtn: t("web.topbar.all_sessions"),
-      openSettings: t("web.topbar.settings"),
-      attachBtn: t("web.attach.title"),
+    // Chrome controls: Lucide icon + label, plus matching title/aria-label.
+    const controls = {
+      newChat: ["plus", t("web.topbar.new_chat")],
+      sessBtn: ["menu", t("web.topbar.all_sessions")],
+      openSettings: ["settings", t("web.topbar.settings")],
+      attachBtn: ["image", t("web.attach.title")],
+      closeSettings: ["x", t("web.topbar.close")],
+      sessNew: ["plus", t("web.sessions.new")],
+      sessRefresh: ["refresh", t("web.sessions.refresh")],
     };
-    Object.keys(titles).forEach((id) => {
+    Object.keys(controls).forEach((id) => {
       const node = document.getElementById(id);
-      if (node) node.title = titles[id];
+      if (!node) return;
+      const [name, label] = controls[id];
+      // Text-bearing buttons keep their label; icon-only ones don't add one.
+      const withLabel = id === "closeSettings" || id === "sessNew" || id === "sessRefresh";
+      setIcon(node, name, withLabel ? label : null);
+      node.title = label;
+      node.setAttribute("aria-label", label);
     });
-    if (inp) inp.placeholder = t("web.input.placeholder");
+    const settingsIcon = document.getElementById("settingsIcon");
+    if (settingsIcon) setIcon(settingsIcon, "settings", null);
+    if (inp) {
+      inp.placeholder = t("web.input.placeholder");
+      inp.setAttribute("aria-label", t("web.input.placeholder"));
+    }
 
     document.querySelectorAll("#setMenu .mi").forEach((mi) => {
       const p = mi.dataset.p;
@@ -2298,27 +2730,90 @@
   }
 
   const overlay = document.getElementById("overlay");
-  document.getElementById("openSettings").addEventListener("click", () => {
+  const settingsBtn = document.getElementById("openSettings");
+  const closeSettingsBtn = document.getElementById("closeSettings");
+  let settingsReturnFocus = null;
+
+  // Settings sections act as a real tablist: roles, roving tabindex, arrow keys.
+  const settingsTabs = Array.from(document.querySelectorAll("#setMenu .mi"));
+  function selectSettingsPanel(name) {
+    settingsTabs.forEach((x) => {
+      const on = x.dataset.p === name;
+      x.classList.toggle("on", on);
+      x.setAttribute("aria-selected", on ? "true" : "false");
+      x.tabIndex = on ? 0 : -1;
+    });
+    document.querySelectorAll(".content-col .panel").forEach((x) => x.classList.remove("on"));
+    const panel = document.getElementById("p-" + name);
+    if (panel) panel.classList.add("on");
+  }
+  settingsTabs.forEach((mi) => {
+    const name = mi.dataset.p;
+    mi.setAttribute("role", "tab");
+    mi.setAttribute("id", "tab-" + name);
+    mi.setAttribute("aria-controls", "p-" + name);
+    mi.setAttribute("aria-selected", mi.classList.contains("on") ? "true" : "false");
+    mi.tabIndex = mi.classList.contains("on") ? 0 : -1;
+    mi.addEventListener("click", () => selectSettingsPanel(name));
+    mi.addEventListener("keydown", (e) => {
+      const i = settingsTabs.indexOf(mi);
+      let next = null;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") next = settingsTabs[(i + 1) % settingsTabs.length];
+      else if (e.key === "ArrowUp" || e.key === "ArrowLeft") next = settingsTabs[(i - 1 + settingsTabs.length) % settingsTabs.length];
+      else if (e.key === "Home") next = settingsTabs[0];
+      else if (e.key === "End") next = settingsTabs[settingsTabs.length - 1];
+      if (next) {
+        e.preventDefault();
+        selectSettingsPanel(next.dataset.p);
+        next.focus();
+      }
+    });
+  });
+  document.querySelectorAll(".content-col .panel").forEach((panel) => {
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", "tab-" + panel.id.replace(/^p-/, ""));
+  });
+
+  function openSettings() {
+    settingsReturnFocus = document.activeElement;
     overlay.classList.add("open");
+    settingsBtn.setAttribute("aria-expanded", "true");
     void loadMemory();
     void loadSkills();
     void loadPlugins();
-  });
-  document.getElementById("closeSettings").addEventListener("click", () => overlay.classList.remove("open"));
+    const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
+    if (active) setTimeout(() => active.focus(), 0);
+  }
+  function closeSettings() {
+    overlay.classList.remove("open");
+    settingsBtn.setAttribute("aria-expanded", "false");
+    if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
+    settingsReturnFocus = null;
+  }
+  settingsBtn.addEventListener("click", openSettings);
+  closeSettingsBtn.addEventListener("click", closeSettings);
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.classList.remove("open");
+    if (e.target === overlay) closeSettings();
+  });
+  // Trap Tab inside the dialog while it is open.
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const items = Array.from(
+      overlay.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'),
+    ).filter((node) => node.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && overlay.classList.contains("open")) overlay.classList.remove("open");
-  });
-  document.querySelectorAll("#setMenu .mi").forEach((mi) => {
-    mi.addEventListener("click", () => {
-      document.querySelectorAll("#setMenu .mi").forEach((x) => x.classList.remove("on"));
-      document.querySelectorAll(".content-col .panel").forEach((x) => x.classList.remove("on"));
-      mi.classList.add("on");
-      const panel = document.getElementById("p-" + mi.dataset.p);
-      if (panel) panel.classList.add("on");
-    });
+    if (e.key === "Escape" && overlay.classList.contains("open")) closeSettings();
   });
 
   function currentTheme() {

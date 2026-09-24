@@ -23,13 +23,17 @@ function nextQuestionId(): string {
   return `q${Date.now().toString(36)}-${questionSeq}`;
 }
 
-/** Coerce an arbitrary browser payload into the index array `askChoice` expects. */
+/**
+ * Coerce an arbitrary browser payload into the index array `askChoice` expects.
+ * `-1` ({@link CUSTOM_INDEX}) is preserved: it marks the "own answer" entry,
+ * which the tool then resolves with a follow-up `askText`.
+ */
 function toIndexes(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
   const out: number[] = [];
   for (const item of value) {
     const n = typeof item === "number" ? item : Number(item);
-    if (Number.isInteger(n) && n >= 0) out.push(n);
+    if (Number.isInteger(n) && n >= -1) out.push(n);
   }
   return out;
 }
