@@ -32,6 +32,17 @@ describe("webui forwarder", () => {
     expect(seen[0].chunk).toBe("mn");
   });
 
+  it("emits a dedicated reasoning event, not meta", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onReasoning("why");
+    fwd.onMeta("stats");
+    vi.advanceTimersByTime(350);
+    expect(seen.map((e) => e.type)).toEqual(["reasoning", "meta"]);
+  });
+
   it("strips ANSI escape codes from streamed meta and text", () => {
     vi.useFakeTimers();
     const s = createWebUiState();

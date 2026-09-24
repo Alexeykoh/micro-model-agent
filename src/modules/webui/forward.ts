@@ -1,11 +1,11 @@
 /**
  * Agent-loop → SSE bridge for `mma web`.
  *
- * The agent loop streams text/meta chunks in tiny pieces; forwarding each one
- * verbatim would flood the browser and the socket. Text and meta are therefore
- * buffered and flushed together (`flushMs`, ~350ms), while discrete lifecycle
- * events (phase, tool start/end, turn end) flush the buffer first so ordering is
- * preserved.
+ * The agent loop streams text/meta/reasoning chunks in tiny pieces; forwarding
+ * each one verbatim would flood the browser and the socket. Text, meta and
+ * reasoning are therefore buffered and flushed together (`flushMs`, ~350ms),
+ * while discrete lifecycle events (phase, tool start/end, turn end) flush the
+ * buffer first so ordering is preserved.
  *
  * `onTurnEnd` MUST reset `state.busy = false`: the server sets `busy = true` on
  * `/api/message` and relies on this reset to accept the next submit.
@@ -84,6 +84,7 @@ export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
 export interface Forwarder {
   onText(chunk: string): void;
   onMeta(chunk: string): void;
+  onReasoning(chunk: string): void;
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
@@ -101,16 +102,20 @@ export function makeForwarder(
   opts: { flushMs?: number } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
-  let buf = { text: "", meta: "" };
+  let buf = { text: "", meta: "", reasoning: "" };
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const flush = () => {
     if (timer) clearTimeout(timer);
     timer = null;
-    // The terminal renderer colours meta (reasoning/status) with ANSI codes and
+    // The terminal renderer colours meta/reasoning (status) with ANSI codes and
     // plugins may colour text too — the browser has no terminal, so any escape
     // sequences would otherwise show up as literal `\u001b[2m…` garbage. Strip
-    // them here, the single point every text/meta chunk crosses.
+    // them here, the single point every text/meta/reasoning chunk crosses.
+    if (buf.reasoning) {
+      sink({ type: "reasoning", ts: Date.now(), chunk: stripAnsi(buf.reasoning) });
+      buf.reasoning = "";
+    }
     if (buf.text) {
       sink({ type: "text", ts: Date.now(), chunk: stripAnsi(buf.text) });
       buf.text = "";
@@ -131,6 +136,10 @@ export function makeForwarder(
     },
     onMeta(chunk) {
       buf.meta += chunk;
+      schedule();
+    },
+    onReasoning(chunk) {
+      buf.reasoning += chunk;
       schedule();
     },
     onPhase(phase) {

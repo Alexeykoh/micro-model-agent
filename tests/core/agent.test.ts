@@ -1184,7 +1184,7 @@ describe("Agent", () => {
     expect(result.success).toBe(false);
   });
 
-  it("streams reasoning via onMeta when showReasoning is true", async () => {
+  it("streams reasoning via onReasoning when showReasoning is true", async () => {
     const mockProvider = {
       model: "test-model",
       contextWindow: 4096,
@@ -1200,15 +1200,18 @@ describe("Agent", () => {
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
     const agent = new Agent(deps as any);
-    const meta: string[] = [];
+    const reasoning: string[] = [];
     const text: string[] = [];
     await agent.run(
       "test",
       (c) => text.push(c),
-      (m) => meta.push(m),
+      () => {},
+      undefined,
+      undefined,
+      (r) => reasoning.push(r),
     );
 
-    expect(meta.some((c) => c.includes("Let me think"))).toBe(true);
+    expect(reasoning.some((c) => c.includes("Let me think"))).toBe(true);
     expect(text.some((c) => c.includes("Answer"))).toBe(true);
     expect(text.some((c) => c.includes("Let me think"))).toBe(false);
   });
