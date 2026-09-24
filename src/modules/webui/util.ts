@@ -47,13 +47,20 @@ function safeEqual(a: string, b: string): boolean {
 /** Name of the HttpOnly cookie that carries the web token for GET navigations. */
 const AUTH_COOKIE = "mma_web_auth";
 
-/** Read a cookie value from a raw `Cookie:` header. */
+/** Read a cookie value from a raw `Cookie:` header. Malformed encodings yield null. */
 function cookieValue(header: string | undefined, name: string): string | null {
   if (!header) return null;
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+    if (part.slice(0, eq).trim() === name) {
+      const raw = part.slice(eq + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return null;
+      }
+    }
   }
   return null;
 }

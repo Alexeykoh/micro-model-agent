@@ -193,6 +193,13 @@ describe("webui auth + limits", () => {
     expect(checkAuth(bad, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
   });
 
+  it("checkAuth tolerates a malformed cookie encoding without throwing", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "mma_web_auth=%ZZ" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
   it("sets the auth cookie on an authenticated api response", async () => {
     const s = createWebUiState();
     s.token = "s3cret";
