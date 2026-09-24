@@ -205,7 +205,20 @@ describe("webui auth + limits", () => {
     s.token = "s3cret";
     await withServer(s, async (base) => {
       const res = await doFetch(base + "/api/i18n", { headers: { "x-mma-token": "s3cret" } });
-      expect(res.headers.get("set-cookie") || "").toContain("mma_web_auth=s3cret");
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Path=/");
     });
+  });
+
+  it("round-trips a token with special characters through the cookie", () => {
+    const s = createWebUiState();
+    s.token = "a;b=c %";
+    const req = {
+      headers: { cookie: "mma_web_auth=" + encodeURIComponent(s.token) },
+    } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
   });
 });
