@@ -28,6 +28,12 @@ export interface HostStateSnapshot {
    * probe finished without a result.
    */
   contextProbe?: { model: string; actual: number } | null;
+  /** Agent workspace (the `-d` dir), absolute; absent when unknown. */
+  workspace?: string;
+  /** AGENTS.md instruction sources that were loaded (or `disabled` via flag). */
+  instructions?: { files: string[]; disabled: boolean };
+  /** Project-map (index) stats; `indexed:false` until the walk finishes. */
+  projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number };
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;

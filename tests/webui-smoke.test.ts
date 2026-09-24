@@ -130,7 +130,7 @@ describe("webui smoke", () => {
   );
 
   smoke(
-    "renders a named session tab with a short id once a session is active",
+    "renders a named session tab with the full session id once a session is active",
     async (ctx) => {
       const { state, dir } = makeState();
       state.bridge = {
@@ -166,11 +166,21 @@ describe("webui smoke", () => {
 
         expect(await page.locator(".stab").count()).toBe(1);
         expect(await page.locator(".stab .name").innerText()).toBe("My session");
-        expect(await page.locator(".stab .sid").innerText()).toBe("abcd");
+        expect(await page.locator(".stab .sid").innerText()).toBe("abcd1234");
 
         const box = await page.locator(".stab").first().boundingBox();
         expect(box).not.toBeNull();
         expect(box?.height ?? 0).toBeGreaterThan(15);
+
+        // Slash-command autocomplete: '/' opens the menu, Tab completes.
+        await page.click("#inp");
+        await page.type("#inp", "/mo");
+        await page.waitForSelector(".cmdk .cmdk-item", { timeout: 5_000 });
+        const cmdItems = await page.locator(".cmdk .cmdk-item").allInnerTexts();
+        expect(cmdItems.length).toBeGreaterThan(0);
+        expect(cmdItems.every((t) => t.startsWith("/mo"))).toBe(true);
+        await page.keyboard.press("Tab");
+        expect(await page.inputValue("#inp")).toBe("/model ");
       } finally {
         if (browser) await browser.close().catch(() => {});
         if (started) stopServer(state);
@@ -277,10 +287,10 @@ describe("webui smoke", () => {
     30_000,
   );
 
-  // Session delete: two-step arm survives the 2s state re-render; the active
-  // session is guarded with a visible inline message instead of a silent 409.
+  // Session delete: a confirmation dialog guards the destructive action; the
+  // active session has no delete control at all (server would 409 anyway).
   smoke(
-    "session delete is two-step and guards the active session",
+    "session delete confirms and hides the control for the active session",
     async (ctx) => {
       const { state, dir } = makeState();
       const now = new Date().toISOString();
@@ -327,21 +337,29 @@ describe("webui smoke", () => {
         await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
         await page.waitForSelector("#sessBtn", { timeout: 5_000 });
         await page.click("#sessBtn");
-        await page.waitForSelector(".dd-menu .del-btn", { timeout: 5_000 });
+        await page.waitForSelector(".dd-menu .si-row.on", { timeout: 5_000 });
 
+        // The full session id is shown in the tab and in the list (not truncated).
+        expect(await page.locator(".stab .sid").first().innerText()).toBe("aaaa1111");
+        expect(await page.locator("#sessActiveList .si-row .id").innerText()).toBe("aaaa1111");
+
+        // The active session has no delete control; only the other session does.
+        expect(await page.locator("#sessActiveList .del-btn").count()).toBe(0);
         const dels = page.locator(".dd-menu .del-btn");
-        // First click arms (not destructive), row + button marked armed.
-        await dels.nth(1).click();
-        expect(await page.locator(".dd-menu .si-row.armed").count()).toBe(1);
-        // Second click deletes the non-active session.
-        await dels.nth(1).click();
-        expect(deleted).toContain("bbbb2222");
+        expect(await dels.count()).toBe(1);
 
-        // Active row: click shows the guard, never arms or deletes it.
-        // The dropdown is still open after the delete.
-        await page.locator(".dd-menu .del-btn").nth(0).click();
-        const err = await page.locator(".dd-menu .dd-err").innerText();
-        expect(err.toLowerCase()).toContain("active");
+        // Clicking delete opens a confirmation dialog; cancelling is non-destructive.
+        await dels.first().click();
+        await page.waitForSelector("#confirmOverlay.open", { timeout: 5_000 });
+        await page.click("#confirmCancel");
+        await page.waitForSelector("#confirmOverlay.open", { state: "hidden", timeout: 5_000 });
+        expect(deleted).not.toContain("bbbb2222");
+
+        // Confirming deletes the non-active session.
+        await dels.first().click();
+        await page.waitForSelector("#confirmOverlay.open", { timeout: 5_000 });
+        await page.click("#confirmAccept");
+        await expect.poll(() => deleted, { timeout: 5_000 }).toContain("bbbb2222");
         expect(deleted).not.toContain("aaaa1111");
       } finally {
         if (browser) await browser.close().catch(() => {});

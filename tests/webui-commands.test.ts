@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { MemoryStore } from "../src/modules/memory/store";
+import { handleRequest } from "../src/modules/webui/server";
+import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
+import { webCommandList } from "../src/modules/webui/commands";
 import { makeHarness } from "./helpers/webui-commands";
 
 describe("webui slash commands", () => {
@@ -145,5 +149,48 @@ describe("webui slash commands", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
+const doFetch: typeof fetch =
+  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
+
+async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
+  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+  const addr = srv.address();
+  const port = typeof addr === "object" && addr ? addr.port : 0;
+  try {
+    await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    srv.close();
+  }
+}
+
+describe("webui commands api", () => {
+  it("webCommandList exposes name/usage/desc for every supported command", () => {
+    const list = webCommandList();
+    expect(list.length).toBeGreaterThan(5);
+    const names = list.map((c) => c.name);
+    expect(names).toContain("help");
+    expect(names).toContain("model");
+    expect(names).toContain("config");
+    for (const c of list) {
+      expect(c.usage.startsWith("/")).toBe(true);
+      expect(c.name).toBe(c.usage.slice(1).split(/[\s|]/)[0]);
+      expect(typeof c.desc).toBe("string");
+    }
+  });
+
+  it("GET /api/commands returns the list (autocomplete source)", async () => {
+    const s = createWebUiState();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/commands");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { commands: Array<{ name: string }> };
+      expect(Array.isArray(body.commands)).toBe(true);
+      expect(body.commands.map((c) => c.name)).toContain("help");
+    });
   });
 });

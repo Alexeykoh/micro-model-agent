@@ -37,6 +37,15 @@ const HELP: Array<{ usage: string; desc: string }> = [
   { usage: "/new", desc: "open a new chat tab (browser-side)" },
 ];
 
+/** `GET /api/commands` payload: name + usage + desc per supported command. */
+export function webCommandList(): Array<{ name: string; usage: string; desc: string }> {
+  return HELP.map((h) => ({
+    name: h.usage.slice(1).split(/[\s|]/)[0],
+    usage: h.usage,
+    desc: h.desc,
+  }));
+}
+
 export interface WebCommandDeps {
   state: WebUiState;
   /** Capture sink for tests; defaults to an SSE `command` broadcast. */
@@ -82,7 +91,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
   };
 }
 
-/** One-line status: model · provider · context · session · verbosity. */
+/** One-line status: model · provider · context · session · verbosity (+ environment). */
 function status(cfg: AppConfig, state: WebUiState, out: Out): void {
   const provider = cfg.provider.active ?? cfg.provider.type;
   const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
@@ -91,6 +100,16 @@ function status(cfg: AppConfig, state: WebUiState, out: Out): void {
   const verbosity = getConfigValue(cfg, "ui.verbosity");
   parts.push(verbosity.ok ? verbosity.display : "—");
   out(parts.join(" · "));
+  if (state.workspace) out(`dir: ${state.workspace}`);
+  if (state.agentsMd) {
+    if (state.agentsMd.disabled) out("AGENTS.md: disabled");
+    else if (state.agentsMd.files.length) out(`AGENTS.md: ${state.agentsMd.files.join(", ")}`);
+    else out("AGENTS.md: not found");
+  }
+  if (state.projectMapStats) {
+    const map = state.projectMapStats();
+    out(map ? `map: ${map.files} file(s) · ${map.symbols} sym · ~${map.tokens} tok` : "map: not indexed");
+  }
 }
 
 /** Persist + reconfigure after a successful registry write, then report. */

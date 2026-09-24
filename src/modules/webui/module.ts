@@ -53,6 +53,12 @@ export interface WebUiDeps {
   toolCtx?: { exitOnComplete?: boolean };
   /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
   configDir?: string;
+  /** Agent workspace (`-d` dir) surfaced in the sidebar "environment" section. */
+  baseDir?: string;
+  /** Loaded AGENTS.md sources; `disabled` when `--no-agents-md`. */
+  agentsMd?: { files: string[]; disabled: boolean };
+  /** Project-map (index) module for sidebar stats. */
+  indexer?: WebIndexer;
   /**
    * Bootstrap context-probe promise (LM Studio loaded context). Resolved lazily
    * and surfaced in the sidebar; never awaited at startup so a slow probe can't
@@ -86,6 +92,15 @@ export interface HostStateInput {
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   usage?: UsageSnapshot;
   contextProbe?: { model: string; actual: number } | null;
+  workspace?: string;
+  instructions?: { files: string[]; disabled: boolean };
+  projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number } | null;
+}
+
+/** Structural subset of the indexer module the sidebar needs (avoids a hard dep). */
+export interface WebIndexer {
+  buildIndex(): Promise<unknown>;
+  stats(): { files: number; symbols: number; tokens: number } | null;
 }
 /**
  * Capture the usage-bearing subset of an `AgentResult` into a
@@ -135,6 +150,9 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     cacheHitRate: deps.usage?.cacheHitRate,
     contextQuality: deps.usage?.contextQuality,
     contextProbe: deps.contextProbe,
+    workspace: deps.workspace,
+    instructions: deps.instructions,
+    projectMap: deps.projectMap ?? undefined,
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };
 }
@@ -155,6 +173,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.memory = deps.memory;
   state.skills = deps.skills;
   state.plugins = deps.plugins;
+  state.workspace = deps.baseDir;
+  state.agentsMd = deps.agentsMd;
+  if (deps.indexer) state.projectMapStats = () => deps.indexer?.stats() ?? null;
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
   state.reconfigure = (config) => deps.agent.reconfigure(config);
 
@@ -296,6 +317,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           execModule: deps.execModule,
           usage: state.usage,
           contextProbe: probe,
+          workspace: deps.baseDir,
+          instructions: deps.agentsMd,
+          projectMap: (() => {
+            const s = deps.indexer?.stats();
+            return s ? { indexed: true, ...s } : { indexed: false, files: 0, symbols: 0, tokens: 0 };
+          })(),
         },
         state.busy,
       ),

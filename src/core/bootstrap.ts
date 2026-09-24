@@ -80,14 +80,15 @@ function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefine
  * (в порядке приоритета). Каждый найденный непустой файл — prompt-блок
  * высокого приоритета.
  */
+/** Candidate AGENTS.md paths, in priority order: project, project `.mma`, global config. */
+export function agentsMdPaths(baseDir: string, configDir: string): string[] {
+  return [join(baseDir, "AGENTS.md"), join(baseDir, ".mma", "AGENTS.md"), join(configDir, "AGENTS.md")];
+}
+
 function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): PromptBlock[] {
   if (skip) return [];
   const blocks: PromptBlock[] = [];
-  const candidates = [
-    join(baseDir, "AGENTS.md"),
-    join(baseDir, ".mma", "AGENTS.md"),
-    join(dir, "AGENTS.md"),
-  ];
+  const candidates = agentsMdPaths(baseDir, dir);
   for (const p of candidates) {
     if (existsSync(p)) {
       const content = readFileSync(p, "utf-8").trim();
@@ -268,6 +269,8 @@ export interface BootstrapResult {
   /** Shared global memory store — the same instance the memory module and the
    *  agent loop use, so UI consumers (`mma web` `/memory`) read/write live data. */
   memoryStore: MemoryStore;
+  /** Project-map indexer — web mode surfaces its stats in the environment panel. */
+  indexerModule: IndexerModule;
 }
 
 /**
@@ -941,5 +944,6 @@ export async function bootstrap(
     legacyDetected,
     contextProbe: contextProbePromise,
     memoryStore,
+    indexerModule,
   };
 }

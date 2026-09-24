@@ -132,6 +132,12 @@ export interface WebUiState {
   saveConfig?: (config: AppConfig) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /** Agent workspace (`-d` dir) for the sidebar "environment" section + `/status`. */
+  workspace?: string;
+  /** Loaded AGENTS.md sources (project + global), or `disabled` via `--no-agents-md`. */
+  agentsMd?: { files: string[]; disabled: boolean };
+  /** Project-map stats (`null` until the index walk finishes). */
+  projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /**
    * Global memory store, shared with the agent (`bootstrap` owns one instance).
    * Wired by `module.ts`; optional so tests can drive command dispatch without

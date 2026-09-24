@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { bootstrap } from "../core/bootstrap";
+import { agentsMdPaths } from "../core/bootstrap";
 import { getDefaultChannel } from "../output";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
@@ -65,6 +66,9 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     sessionManager,
     execModule,
     configDir,
+    baseDir,
+    noAgentsMd,
+    indexerModule,
     memoryStore,
     skillsModule,
     pluginManager,
@@ -88,6 +92,12 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     toolRegistry,
     toolCtx,
     configDir,
+    baseDir,
+    agentsMd: {
+      disabled: noAgentsMd,
+      files: noAgentsMd ? [] : agentsMdPaths(baseDir, configDir).filter((p) => existsSync(p)),
+    },
+    indexer: indexerModule,
     contextProbe,
     host: opts.host,
     token: opts.token,

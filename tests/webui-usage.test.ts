@@ -119,4 +119,38 @@ describe("webui usage metrics", () => {
       expect(body.state.costUsd).toBe(0.02);
     });
   });
+
+  it("buildHostState surfaces the environment (workspace, AGENTS.md, map)", () => {
+    const config = structuredClone(DEFAULTS);
+    const snapshot = buildHostState(
+      {
+        config,
+        workspace: "E:/proj",
+        instructions: { files: ["E:/proj/AGENTS.md"], disabled: false },
+        projectMap: { indexed: true, files: 12, symbols: 34, tokens: 567 },
+      },
+      false,
+    );
+    expect(snapshot.workspace).toBe("E:/proj");
+    expect(snapshot.instructions).toEqual({ files: ["E:/proj/AGENTS.md"], disabled: false });
+    expect(snapshot.projectMap).toEqual({ indexed: true, files: 12, symbols: 34, tokens: 567 });
+  });
+
+  it("GET /api/state includes the environment block", async () => {
+    const config = structuredClone(DEFAULTS);
+    const bridge = fakeHost({
+      config,
+      workspace: "E:/proj",
+      instructions: { files: [], disabled: true },
+      projectMap: { indexed: false, files: 0, symbols: 0, tokens: 0 },
+    });
+    await withServer(bridge, async (base) => {
+      const res = await doFetch(base + "/api/state");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { state: HostStateSnapshot };
+      expect(body.state.workspace).toBe("E:/proj");
+      expect(body.state.instructions?.disabled).toBe(true);
+      expect(body.state.projectMap?.indexed).toBe(false);
+    });
+  });
 });

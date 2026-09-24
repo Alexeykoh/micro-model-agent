@@ -35,13 +35,13 @@
 
     <div class="input-area">
       <div class="selectors">
-        <div class="sel" data-sel="model">
-          <button id="selModelBtn">model: <b>—</b> ▾</button>
-          <div class="menu" id="selModelMenu"></div>
-        </div>
         <div class="sel" data-sel="provider">
           <button id="selProviderBtn">provider: <b>—</b> ▾</button>
           <div class="menu" id="selProviderMenu"></div>
+        </div>
+        <div class="sel" data-sel="model">
+          <button id="selModelBtn">model: <b>—</b> ▾</button>
+          <div class="menu" id="selModelMenu"></div>
         </div>
         <div class="sel" data-sel="context">
           <button id="selContextBtn">context: <b>—</b> ▾</button>
@@ -52,11 +52,14 @@
       <div class="attach-strip" id="attachStrip" hidden></div>
       <div class="attach-err" id="attachErr" hidden></div>
       <div class="composer">
-        <button class="attach-btn" id="attachBtn" type="button" title="attach image" aria-label="attach image">◧</button>
-        <textarea class="inp" id="inp" rows="1" placeholder="message… (/ for commands)"></textarea>
-        <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
+        <div class="composer-main">
+          <button class="attach-btn" id="attachBtn" type="button" title="attach image" aria-label="attach image">◧</button>
+          <textarea class="inp" id="inp" rows="1" placeholder="message… (/ for commands)"></textarea>
+          <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
+        </div>
+        <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span></div>
       </div>
-      <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span></div>
+      <div class="ws-line" id="wsLine" hidden></div>
     </div>
   </div>
 
@@ -69,6 +72,11 @@
     <div class="sec usage-sec">
       <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></button>
       <div class="sec-body" id="usage"></div>
+    </div>
+
+    <div class="sec env-sec">
+      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="envHeaderLabel">environment</span></button>
+      <div class="sec-body" id="env"></div>
     </div>
   </div>
 </div>
@@ -100,6 +108,19 @@
         <div class="panel" id="p-plugins"><h3>Plugins · MCP</h3><div class="rows" data-panel="plugins"></div></div>
         <div class="panel" id="p-security"><h3>Security</h3><div class="rows" data-panel="security"></div></div>
         <div class="panel" id="p-advanced"><h3>Advanced</h3><div class="rows" data-panel="advanced"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="confirmOverlay">
+  <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMsg">
+    <div class="modal-top"><span id="confirmTitle">confirm</span></div>
+    <div class="modal-body confirm-body">
+      <p class="confirm-msg" id="confirmMsg"></p>
+      <div class="confirm-actions">
+        <button class="linkbtn confirm-cancel" id="confirmCancel" type="button">cancel</button>
+        <button class="linkbtn danger confirm-accept" id="confirmAccept" type="button">delete</button>
       </div>
     </div>
   </div>

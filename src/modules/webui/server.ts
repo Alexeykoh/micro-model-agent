@@ -19,6 +19,7 @@ import {
 } from "./util";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
 import { handleI18nGet } from "./i18n-api";
+import { webCommandList } from "./commands";
 import { handleAnswerPost } from "./answer-api";
 import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
@@ -121,6 +122,11 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
 
   if (reqUrl.pathname === "/api/i18n" && req.method === "GET") {
     handleI18nGet(res, s);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/commands" && req.method === "GET") {
+    sendJson(res, 200, { commands: webCommandList() });
     return;
   }
 

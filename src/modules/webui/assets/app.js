@@ -12,6 +12,8 @@
   const planEl = document.getElementById("plan");
   const planCountEl = document.getElementById("planCount");
   const usageEl = document.getElementById("usage");
+  const envEl = document.getElementById("env");
+  const wsLine = document.getElementById("wsLine");
   const saveIndicator = document.getElementById("saveIndicator");
   const attachStrip = document.getElementById("attachStrip");
   const attachErr = document.getElementById("attachErr");
@@ -29,43 +31,6 @@
       liveEl.textContent = text;
     }, 30);
   }
-
-  const LABELS = {
-    read_file: "Reading file",
-    list_dir: "Listing directory",
-    glob: "Finding files",
-    grep: "Searching",
-    file_info: "File info",
-    project_map: "Project map",
-    chunk_query: "Querying",
-    web_search: "Web search",
-    web_fetch: "Fetching URL",
-    history: "History",
-    recall: "Recall",
-    process_list: "Listing processes",
-    process_log: "Process log",
-    write_file: "Writing file",
-    edit_file: "Editing file",
-    create_dir: "Creating directory",
-    delete_file: "Deleting file",
-    move_file: "Moving file",
-    attach_image: "Attaching image",
-    bash: "Running command",
-    process_kill: "Killing process",
-    pipeline_run: "Running pipeline",
-    browser: "Browser",
-    download_file: "Downloading",
-    subagent: "Subagent",
-    mcp_call: "MCP call",
-    plan: "Plan",
-    todo: "Todo",
-    verify: "Verify",
-    lsp_check: "LSP check",
-    enable_tools: "Enable tools",
-    set_thinking: "Thinking",
-    load_skill: "Loading skill",
-    remember: "Memory",
-  };
 
   const CATEGORIES = {
     recon: [
@@ -105,9 +70,6 @@
     pluginsData: undefined,
     providers: undefined,
     providerForm: null,
-    // Session-delete two-step confirmation survives the 2s `renderState` rebuild.
-    pendingDeleteId: null,
-    pendingDeleteTs: 0,
     // Transient error shown inline in the sessions dropdown (visible without the modal).
     sessionsError: null,
   };
@@ -124,6 +86,7 @@
   let curMeta = null;
   let lastPlanSig = null;
   let lastUsageSig = null;
+  let lastEnvSig = null;
   let runCount = 0;
   let runFails = 0;
   let busyTimer = null;
@@ -306,6 +269,24 @@
     return template;
   }
 
+  // Plural form for a `{count}` template: uses `baseKey_one|_few|_many`
+  // (RU one/few/many; EN one/many) and falls back to `baseKey` if absent.
+  function pluralCount(baseKey, n) {
+    let form;
+    if (I18N.locale === "ru") {
+      const m10 = n % 10;
+      const m100 = n % 100;
+      if (m10 === 1 && m100 !== 11) form = "one";
+      else if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) form = "few";
+      else form = "many";
+    } else {
+      form = n === 1 ? "one" : "many";
+    }
+    const key = baseKey + "_" + form;
+    const s = t(key, { count: n });
+    return s === key ? t(baseKey, { count: n }) : s;
+  }
+
   async function loadI18n() {
     const r = await api("/api/i18n");
     if (r.ok && r.data) {
@@ -321,8 +302,13 @@
     return "meta";
   }
 
+  // Friendly, localized tool label from `tool.friendly.*`; humanize unknown names.
   function labelOf(name) {
-    return LABELS[name] || String(name).replace(/_/g, " ");
+    const key = "tool.friendly." + name;
+    const s = t(key);
+    if (s !== key) return s;
+    const human = String(name).replace(/_/g, " ");
+    return human.charAt(0).toUpperCase() + human.slice(1);
   }
 
   function argText(args) {
@@ -481,7 +467,7 @@
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
     const fails = runFails > 0 ? " · " + runFails + " ✗" : " ✓";
-    line.appendChild(document.createTextNode(" " + t("web.action.actions", { count: runCount }) + fails));
+    line.appendChild(document.createTextNode(" " + pluralCount("web.action.actions", runCount) + fails));
     appendTo(feed, line);
     runCount = 0;
     runFails = 0;
@@ -633,7 +619,7 @@
     const long = text.length > 600 || text.split("\n").length > 12;
     if (long) {
       wrap.classList.add("collapsed");
-      const outLabel = "▸ " + t("web.tool.output", { count: text.length });
+      const outLabel = "▸ " + pluralCount("web.tool.output", text.length);
       const more = el("span", "more", outLabel);
       more.addEventListener("click", () => {
         const collapsed = wrap.classList.toggle("collapsed");
@@ -917,8 +903,11 @@
       tab.setAttribute("tabindex", on ? "0" : "-1");
       tab.setAttribute("aria-selected", on ? "true" : "false");
       tab.setAttribute("aria-label", label);
-      tab.appendChild(el("span", "name", label));
-      if (item.kind === "session") tab.appendChild(el("span", "sid", String(item.id).slice(0, 4)));
+      tab.title = label;
+      const nameEl = el("span", "name", label);
+      nameEl.title = label;
+      tab.appendChild(nameEl);
+      if (item.kind === "session") tab.appendChild(el("span", "sid", String(item.id)));
       const x = el("button", "stab-x");
       x.type = "button";
       x.title = t("web.topbar.close");
@@ -1032,10 +1021,6 @@
     const recentList = document.getElementById("sessRecentList");
     activeList.textContent = "";
     recentList.textContent = "";
-    // Drop a stale pending delete (armed >3s ago) before rendering rows.
-    if (state.pendingDeleteId && Date.now() - state.pendingDeleteTs > 3000) {
-      state.pendingDeleteId = null;
-    }
     const activeId = state.activeSessionId;
     const sorted = state.sessions.slice().sort((a, b) => {
       const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
@@ -1065,66 +1050,44 @@
   }
 
   function sessionRow(s, isActive) {
-    const armed = state.pendingDeleteId === s.id;
-    const row = el("div", "si si-row" + (isActive ? " on" : "") + (armed ? " armed" : ""));
+    const row = el("div", "si si-row" + (isActive ? " on" : ""));
     const name = s.name || String(s.id);
     const main = el("button", "dd-row-main");
     main.type = "button";
     main.setAttribute("aria-label", name);
-    main.appendChild(el("span", "id", String(s.id).slice(0, 4)));
+    main.appendChild(el("span", "id", String(s.id)));
     main.appendChild(el("span", "name", name));
     main.appendChild(el("span", "meta", relTime(s.updatedAt)));
     main.addEventListener("click", () => {
-      clearPendingDelete();
       setSessOpen(false);
       openTab(s.id, name, "session", true);
     });
     row.appendChild(main);
-    const del = el("button", "del-btn");
-    del.type = "button";
-    del.appendChild(icon("trash"));
-    const label = armed ? t("web.sessions.confirm_delete") : t("web.sessions.delete");
-    del.title = label;
-    del.setAttribute("aria-label", label + ": " + name);
-    if (armed) del.classList.add("armed");
-    del.addEventListener("click", (e) => {
-      e.stopPropagation();
-      // The active session can't be removed server-side (409) — say so instead
-      // of arming a delete that would fail.
-      if (s.id === state.activeSessionId) {
-        clearPendingDelete();
-        showSessionsError(t("web.sessions.active_guard"));
-        return;
-      }
-      if (state.pendingDeleteId === s.id) {
-        clearPendingDelete();
-        deleteSession(s.id);
-        return;
-      }
-      armDelete(s.id);
-    });
-    row.appendChild(del);
+    // The active session can't be removed server-side (409), so it has no
+    // delete control at all.
+    if (!isActive) {
+      const del = el("button", "del-btn");
+      del.type = "button";
+      del.appendChild(icon("trash"));
+      const label = t("web.sessions.delete");
+      del.title = label;
+      del.setAttribute("aria-label", label + ": " + name);
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        confirmDeleteSession(s.id, name);
+      });
+      row.appendChild(del);
+    }
     return row;
   }
 
-  // --- session delete: durable two-step + inline feedback ----------------
-  function armDelete(id) {
-    state.pendingDeleteId = id;
-    state.pendingDeleteTs = Date.now();
-    renderSessionsDropdown();
-    if (deleteArmTimer) clearTimeout(deleteArmTimer);
-    deleteArmTimer = setTimeout(() => {
-      if (state.pendingDeleteId) {
-        state.pendingDeleteId = null;
-        renderSessionsDropdown();
-      }
-    }, 3000);
-  }
-
-  function clearPendingDelete() {
-    if (deleteArmTimer) clearTimeout(deleteArmTimer);
-    deleteArmTimer = null;
-    state.pendingDeleteId = null;
+  // --- session delete: confirmation dialog --------------------------------
+  function confirmDeleteSession(id, name) {
+    openConfirm({
+      title: t("web.sessions.confirm_title"),
+      body: t("web.sessions.confirm_body", { name }),
+      onAccept: () => deleteSession(id),
+    });
   }
 
   function showSessionsError(msg) {
@@ -1138,7 +1101,6 @@
   }
 
   async function deleteSession(id) {
-    clearPendingDelete();
     const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
     if (!r.ok) {
       const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
@@ -1164,10 +1126,7 @@
   document.addEventListener("click", () => {
     document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
     setSessOpen(false);
-    if (state.pendingDeleteId) {
-      clearPendingDelete();
-      renderSessionsDropdown();
-    }
+    closeCmdk();
   });
 
   msgs.addEventListener("click", (e) => {
@@ -1321,6 +1280,86 @@
     });
   }
 
+  // --- slash-command autocomplete ----------------------------------------
+  // List comes from the server (`/api/commands`) so it stays in sync with `/help`.
+  const cmdk = el("div", "cmdk");
+  cmdk.id = "cmdk-list";
+  cmdk.hidden = true;
+  cmdk.setAttribute("role", "listbox");
+  if (inputArea) inputArea.appendChild(cmdk);
+  let webCommands = [];
+  let cmdkItems = [];
+  let cmdkIndex = 0;
+
+  async function loadCommands() {
+    const r = await api("/api/commands");
+    if (r.ok && r.data && Array.isArray(r.data.commands)) webCommands = r.data.commands;
+  }
+
+  function slashToken() {
+    const v = inp.value;
+    return v.startsWith("/") && !/\s/.test(v) ? v : null;
+  }
+
+  function closeCmdk() {
+    if (cmdk.hidden) return;
+    cmdk.hidden = true;
+    cmdk.textContent = "";
+    cmdkItems = [];
+    cmdkIndex = 0;
+    inp.setAttribute("aria-expanded", "false");
+    inp.removeAttribute("aria-activedescendant");
+  }
+
+  function highlightCmdk() {
+    Array.from(cmdk.children).forEach((node, i) => node.classList.toggle("on", i === cmdkIndex));
+    const on = cmdk.children[cmdkIndex];
+    if (on) inp.setAttribute("aria-activedescendant", on.id);
+  }
+
+  function updateCmdk() {
+    const token = slashToken();
+    if (token === null || !webCommands.length) {
+      closeCmdk();
+      return;
+    }
+    const q = token.slice(1).toLowerCase();
+    const matches = webCommands.filter((c) => String(c.name).toLowerCase().startsWith(q)).slice(0, 8);
+    if (!matches.length) {
+      closeCmdk();
+      return;
+    }
+    cmdkItems = matches;
+    cmdkIndex = 0;
+    cmdk.textContent = "";
+    matches.forEach((c, i) => {
+      const item = el("div", "cmdk-item" + (i === 0 ? " on" : ""));
+      item.id = "cmdk-opt-" + i;
+      item.setAttribute("role", "option");
+      item.appendChild(el("span", "cmd", c.usage));
+      if (c.desc) item.appendChild(el("span", "desc", c.desc));
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        acceptCmdk(i);
+      });
+      cmdk.appendChild(item);
+    });
+    cmdk.hidden = false;
+    cmdk.setAttribute("aria-label", t("web.cmdk.label"));
+    inp.setAttribute("aria-expanded", "true");
+    inp.setAttribute("aria-controls", cmdk.id);
+    highlightCmdk();
+  }
+
+  function acceptCmdk(i) {
+    const c = cmdkItems[i];
+    if (!c) return;
+    inp.value = "/" + c.name + " ";
+    autogrow();
+    closeCmdk();
+    inp.focus();
+  }
+
   // Grow the composer with its content up to a max, then scroll.
   const INPUT_MAX_PX = 200;
   function autogrow() {
@@ -1331,8 +1370,13 @@
   function clearInput() {
     inp.value = "";
     autogrow();
+    closeCmdk();
   }
-  if (inp) inp.addEventListener("input", autogrow);
+  if (inp)
+    inp.addEventListener("input", () => {
+      autogrow();
+      updateCmdk();
+    });
 
   async function send() {
     const text = inp.value.trim();
@@ -1369,7 +1413,7 @@
       const banner = el("div", "startbanner");
       banner.appendChild(document.createTextNode(t("web.start.label") + " "));
       banner.appendChild(el("b", "", (state.config && state.config.model) || state.host.model || "—"));
-      const sessionPart = state.host.sessionId ? " · " + t("web.start.session") + " " + String(state.host.sessionId).slice(0, 4) : "";
+      const sessionPart = state.host.sessionId ? " · " + t("web.start.session") + " " + String(state.host.sessionId) : "";
       banner.appendChild(document.createTextNode(" · " + (state.host.provider || (state.config && state.config.provider && state.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
       feed.insertBefore(banner, feed.firstChild);
     }
@@ -1396,6 +1440,41 @@
     // Ignore keys that confirm an IME composition (CJK/RU input methods):
     // sending on that Enter would submit a half-composed message.
     if (e.isComposing || e.keyCode === 229) return;
+    // Slash-command autocomplete owns the arrows/Enter/Tab/Esc while open.
+    if (!cmdk.hidden) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        cmdkIndex = Math.min(cmdkIndex + 1, cmdkItems.length - 1);
+        highlightCmdk();
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        cmdkIndex = Math.max(cmdkIndex - 1, 0);
+        highlightCmdk();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeCmdk();
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        acceptCmdk(cmdkIndex);
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        const token = slashToken();
+        const selected = cmdkItems[cmdkIndex];
+        // Exact command typed → send; otherwise complete the highlighted one.
+        if (token && selected && token.slice(1).toLowerCase() !== String(selected.name).toLowerCase()) {
+          e.preventDefault();
+          acceptCmdk(cmdkIndex);
+          return;
+        }
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -1584,7 +1663,6 @@
     });
   });
 
-  let deleteArmTimer = null;
   let sessionsErrTimer = null;
   let indicatorTimer = null;
   function setIndicator(msg, fail) {
@@ -1648,6 +1726,8 @@
     if (!tabs.length) showEmptyFeed();
     renderPlan(state.host.plan);
     renderUsage(state.host);
+    renderEnvironment(state.host);
+    renderWorkspace(state.host);
     renderSessionsDropdown();
   }
 
@@ -1697,7 +1777,7 @@
     card.textContent = "";
     const total = data.steps.length;
     const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
-    card.appendChild(el("div", "ph2", "◇ " + t("web.plan.heading", { count: total })));
+    card.appendChild(el("div", "ph2", "◇ " + pluralCount("web.plan.heading", total)));
     data.steps.forEach((step, i) => {
       const status =
         step.status === "done" ? "done" : step.status === "failed" ? "fail" : i === cur ? "cur" : "";
@@ -1841,7 +1921,7 @@
     if (sig === lastUsageSig) return;
     lastUsageSig = sig;
     usageEl.textContent = "";
-    const sid = h.sessionId ? String(h.sessionId).slice(0, 8) : "—";
+    const sid = h.sessionId ? String(h.sessionId) : "—";
     usageEl.appendChild(usageRow(t("web.usage.session"), sid));
     usageEl.appendChild(usageRow(t("web.usage.model"), h.model || cfg.model || "—"));
     const used = typeof h.contextUsed === "number" ? h.contextUsed : null;
@@ -1878,6 +1958,62 @@
       }
     }
     usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
+  }
+
+  // Workspace path under the composer (dim, own line).
+  function renderWorkspace(h) {
+    const ws = h.workspace || "";
+    if (wsLine.dataset.ws === ws) return;
+    wsLine.dataset.ws = ws;
+    wsLine.textContent = "";
+    wsLine.hidden = !ws;
+    if (!ws) return;
+    wsLine.appendChild(el("span", "ws-k", t("web.env.dir")));
+    const v = el("span", "ws-v", ws);
+    v.title = ws;
+    wsLine.appendChild(v);
+  }
+
+  // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
+  function envItem(label, values) {
+    const item = el("div", "env-item");
+    item.appendChild(el("div", "env-k", label));
+    values.forEach((val) => {
+      const v = el("div", "env-v", val);
+      v.title = val;
+      item.appendChild(v);
+    });
+    return item;
+  }
+
+  function renderEnvironment(h) {
+    const disabled = !!(h.instructions && h.instructions.disabled);
+    const files = h.instructions && !disabled ? h.instructions.files || [] : [];
+    const map = h.projectMap || null;
+    const sig = JSON.stringify([disabled, files, map, I18N.locale]);
+    if (sig === lastEnvSig) return;
+    lastEnvSig = sig;
+    envEl.textContent = "";
+    envEl.appendChild(
+      envItem(
+        t("web.env.agents"),
+        disabled ? [t("web.env.agents_disabled")] : files.length ? files : [t("web.env.agents_none")],
+      ),
+    );
+    envEl.appendChild(
+      envItem(
+        t("web.env.map"),
+        map && map.indexed
+          ? [
+              [
+                pluralCount("web.env.files", map.files),
+                pluralCount("web.env.symbols", map.symbols),
+                pluralCount("web.env.tokens", map.tokens),
+              ].join(" · "),
+            ]
+          : [t("web.env.map_not_indexed")],
+      ),
+    );
   }
 
   function fmtTokens(n) {
@@ -2678,6 +2814,7 @@
     };
     setText("planHeaderLabel", t("web.sidebar.plan"));
     setText("usageHeaderLabel", t("web.sidebar.session") + " · " + t("web.sidebar.usage"));
+    setText("envHeaderLabel", t("web.sidebar.env"));
     setText("settingsTitle", t("web.settings.title"));
     setText("sessActiveHeader", t("web.sessions.active"));
     setText("sessRecentHeader", t("web.sessions.recent"));
@@ -2816,6 +2953,62 @@
     if (e.key === "Escape" && overlay.classList.contains("open")) closeSettings();
   });
 
+  // --- generic confirmation dialog (alertdialog) -------------------------
+  const confirmOverlay = document.getElementById("confirmOverlay");
+  const confirmTitle = document.getElementById("confirmTitle");
+  const confirmMsg = document.getElementById("confirmMsg");
+  const confirmAccept = document.getElementById("confirmAccept");
+  const confirmCancel = document.getElementById("confirmCancel");
+  let confirmOnAccept = null;
+  let confirmReturnFocus = null;
+
+  function openConfirm(opts) {
+    if (!confirmOverlay) return;
+    confirmReturnFocus = document.activeElement;
+    confirmTitle.textContent = opts.title || "";
+    confirmMsg.textContent = opts.body || "";
+    confirmAccept.textContent = opts.acceptLabel || t("web.sessions.delete");
+    confirmCancel.textContent = opts.cancelLabel || t("web.action.cancel");
+    confirmOnAccept = opts.onAccept || null;
+    confirmOverlay.classList.add("open");
+    setTimeout(() => confirmCancel.focus(), 0);
+  }
+
+  function closeConfirm() {
+    if (!confirmOverlay || !confirmOverlay.classList.contains("open")) return;
+    confirmOverlay.classList.remove("open");
+    confirmOnAccept = null;
+    if (confirmReturnFocus && confirmReturnFocus.focus) confirmReturnFocus.focus();
+    confirmReturnFocus = null;
+  }
+
+  if (confirmOverlay) {
+    confirmCancel.addEventListener("click", closeConfirm);
+    confirmAccept.addEventListener("click", () => {
+      const fn = confirmOnAccept;
+      closeConfirm();
+      if (fn) fn();
+    });
+    confirmOverlay.addEventListener("click", (e) => {
+      // Keep clicks inside the dialog from reaching the global handler, so the
+      // sessions dropdown stays open behind it.
+      e.stopPropagation();
+      if (e.target === confirmOverlay) closeConfirm();
+    });
+    // Keep Tab between the two actions while the dialog is open.
+    confirmOverlay.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      e.preventDefault();
+      (document.activeElement === confirmAccept ? confirmCancel : confirmAccept).focus();
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
+    else if (overlay.classList.contains("open")) closeSettings();
+  });
+
   function currentTheme() {
     return localStorage.getItem(THEME_KEY) || "auto";
   }
@@ -2835,6 +3028,7 @@
 
   async function boot() {
     await loadI18n();
+    await loadCommands();
     applyTheme(currentTheme());
     applyStaticI18n();
     showEmptyFeed();

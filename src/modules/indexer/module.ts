@@ -26,6 +26,7 @@ export class IndexerModule implements AgentModule {
   private cache: IndexCache;
   private baseDir: string;
   private index: IndexResult | null = null;
+  private statsCache: { index: IndexResult; value: { files: number; symbols: number; tokens: number } } | null = null;
   private rebuildTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: IndexerModuleOptions) {
@@ -122,6 +123,24 @@ export class IndexerModule implements AgentModule {
       estimatedTokens: this.estimateTokens(content),
       kind: "project-map",
     };
+  }
+
+  /**
+   * Compact project-map stats for the host sidebar (`null` before the walk
+   * finishes). Cached per index object so `/api/state` polling never re-renders
+   * the whole map.
+   */
+  stats(): { files: number; symbols: number; tokens: number } | null {
+    if (!this.index) return null;
+    if (this.statsCache && this.statsCache.index === this.index) return this.statsCache.value;
+    const symbols = this.index.files.reduce((n, f) => n + f.exports.length, 0);
+    const value = {
+      files: this.index.files.length,
+      symbols,
+      tokens: this.estimateTokens(this.formatMap(this.index)),
+    };
+    this.statsCache = { index: this.index, value };
+    return value;
   }
 
   getToolDefinitions(): ToolDefinition[] {
