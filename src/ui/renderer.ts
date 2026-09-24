@@ -346,7 +346,7 @@ export class Renderer {
     }
   }
 
-  /** Dimmed reasoning stream (already colored by the agent). */
+  /** Dimmed reasoning stream (colored here, not by the agent). */
   reasoning(chunk: string): void {
     this.spinner.stop();
     this.flushRecon();

@@ -108,7 +108,7 @@ export function makeForwarder(
   const flush = () => {
     if (timer) clearTimeout(timer);
     timer = null;
-    // The terminal renderer colours meta/reasoning (status) with ANSI codes and
+    // Tool/status meta (and plugin `runOnMeta` output) may carry ANSI codes and
     // plugins may colour text too — the browser has no terminal, so any escape
     // sequences would otherwise show up as literal `\u001b[2m…` garbage. Strip
     // them here, the single point every text/meta/reasoning chunk crosses.
