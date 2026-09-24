@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createServer } from "node:http";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRequest } from "../src/modules/webui/server";
@@ -31,6 +31,34 @@ function makeWorkspace(): string {
   tmpRoots.push(dir);
   return dir;
 }
+
+// Creating file symlinks needs privileges/developer mode on Windows.
+const canSymlink = (() => {
+  try {
+    const dir = mkdtempSync(join(tmpdir(), "mma-webui-sym-"));
+    const target = join(dir, "t");
+    writeFileSync(target, "x");
+    symlinkSync(target, join(dir, "l"));
+    rmSync(dir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+// Directory junctions work on Windows without an elevated shell.
+const canLinkDir = (() => {
+  try {
+    const dir = mkdtempSync(join(tmpdir(), "mma-webui-junc-"));
+    const target = join(dir, "t");
+    mkdirSync(target);
+    symlinkSync(target, join(dir, "l"), "junction");
+    rmSync(dir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 describe("webui file viewer", () => {
   afterEach(() => {
@@ -82,6 +110,38 @@ describe("webui file viewer", () => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(join(ws, ".env")));
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({ error: "protected_path" });
+    });
+  });
+
+  it.skipIf(!canSymlink)("refuses a symlink that escapes the workspace", async () => {
+    const ws = makeWorkspace();
+    const outside = makeWorkspace();
+    writeFileSync(join(outside, "secret.txt"), "top secret");
+    const link = join(ws, "link.txt");
+    symlinkSync(join(outside, "secret.txt"), link);
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(link));
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "outside_workspace" });
+    });
+  });
+
+  it.skipIf(!canLinkDir)("refuses a file reached through a linked directory", async () => {
+    const ws = makeWorkspace();
+    const outside = makeWorkspace();
+    writeFileSync(join(outside, "secret.txt"), "top secret");
+    const linkDir = join(ws, "linked");
+    symlinkSync(outside, linkDir, "junction");
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(
+        base + "/api/file?path=" + encodeURIComponent(join(linkDir, "secret.txt")),
+      );
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "outside_workspace" });
     });
   });
 

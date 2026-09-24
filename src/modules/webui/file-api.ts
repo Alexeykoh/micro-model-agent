@@ -5,12 +5,14 @@
  * Security (the server handles auth + same-origin upstream):
  *  - the path is resolved against the agent workspace and MUST stay inside it
  *    (absolute paths outside the workspace are rejected);
+ *  - symlinks (and Windows junctions) are resolved first, so a link inside the
+ *    workspace cannot reach a file outside it;
  *  - protected paths (`.git/`, `.env*`, keys, credentials — see
  *    `matchProtectedPath`) are rejected;
  *  - only regular text files up to {@link MAX_FILE_VIEW_BYTES} are served, so a
  *    stray binary or a multi-GB log cannot be streamed to the browser.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { matchProtectedPath } from "../security/protected-paths";
@@ -44,37 +46,59 @@ export function handleFileApi(
   }
 
   const abs = isAbsolute(raw) ? resolve(raw) : resolve(base, raw);
-  const rel = relative(resolve(base), abs);
-  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+  // Cheap lexical guard first: a path that is obviously outside the workspace
+  // (e.g. `../../etc/passwd`) is refused before touching the filesystem, even
+  // when the target does not exist.
+  const lexical = relative(resolve(base), abs);
+  if (lexical.startsWith("..") || isAbsolute(lexical)) {
     sendJson(res, 403, { error: "outside_workspace" });
     return true;
   }
-  if (matchProtectedPath(base, abs)) {
-    sendJson(res, 403, { error: "protected_path" });
-    return true;
+  void serveFile(res, base, abs);
+  return true;
+}
+
+/** Resolve real paths, enforce the workspace guard, then stream the text file. */
+async function serveFile(res: ServerResponse, base: string, abs: string): Promise<void> {
+  let baseReal: string;
+  let absReal: string;
+  try {
+    // `realpath` follows symlinks/junctions; without it a link inside the
+    // workspace could point at any file on disk and bypass the guard below.
+    baseReal = await realpath(resolve(base));
+    absReal = await realpath(abs);
+  } catch {
+    sendJson(res, 404, { error: "not_found" });
+    return;
   }
 
-  readFile(abs)
-    .then((buf) => {
-      if (buf.length > MAX_FILE_VIEW_BYTES) {
-        sendJson(res, 413, { error: "file_too_large", limit: MAX_FILE_VIEW_BYTES });
-        return;
-      }
-      if (buf.includes(0)) {
-        sendJson(res, 415, { error: "binary_file" });
-        return;
-      }
-      res.writeHead(200, {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      });
-      res.end(buf.toString("utf8"));
-    })
-    .catch(() => {
-      // Missing path, a directory, or an unreadable file — all are "not found"
-      // from the viewer's point of view.
-      sendJson(res, 404, { error: "not_found" });
-    });
+  const rel = relative(baseReal, absReal);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    sendJson(res, 403, { error: "outside_workspace" });
+    return;
+  }
+  if (matchProtectedPath(baseReal, absReal)) {
+    sendJson(res, 403, { error: "protected_path" });
+    return;
+  }
 
-  return true;
+  try {
+    const buf = await readFile(absReal);
+    if (buf.length > MAX_FILE_VIEW_BYTES) {
+      sendJson(res, 413, { error: "file_too_large", limit: MAX_FILE_VIEW_BYTES });
+      return;
+    }
+    if (buf.includes(0)) {
+      sendJson(res, 415, { error: "binary_file" });
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(buf.toString("utf8"));
+  } catch {
+    // A directory or an unreadable file — "not found" from the viewer's angle.
+    sendJson(res, 404, { error: "not_found" });
+  }
 }
