@@ -973,7 +973,7 @@
     const tab = tabs.find((x) => x.id === activeTabId);
     if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
     else url.searchParams.delete("session");
-    history.replaceState(null, "", url.pathname + url.search + url.hash);
+    history.replaceState(null, "", url);
   }
 
   function openTab(id, name, kind, server) {
@@ -1761,7 +1761,6 @@
     if (sessionId && !tabs.some((x) => x.id === sessionId)) {
       openTab(sessionId, state.host.sessionName || String(sessionId), "session", false);
     }
-    syncUrl();
     if (!tabs.length) showEmptyFeed();
     renderPlan(state.host.plan);
     renderUsage(state.host);
@@ -3070,6 +3069,7 @@
   }
 
   async function boot() {
+    // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
     const initialSession = new URLSearchParams(location.search).get("session");
     await loadI18n();
     await loadCommands();
@@ -3082,14 +3082,16 @@
     await loadModels();
     await loadProviders();
     await loadSessions();
-    if (initialSession && state.sessions.some((s) => s.id === initialSession)) {
-      const meta = state.sessions.find((s) => s.id === initialSession);
-      openTab(initialSession, (meta && meta.name) || String(initialSession), "session", true);
-    }
     await loadMemory();
     await loadSkills();
     await loadPlugins();
     await refresh();
+    // Restore the session from the URL AFTER the first refresh: `renderState`
+    // may auto-open the server's active session, and the requested one must win.
+    if (initialSession) {
+      const meta = state.sessions.find((s) => s.id === initialSession);
+      if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
+    }
     connectSSE();
     setInterval(refresh, 2000);
     setInterval(loadSessions, 15000);

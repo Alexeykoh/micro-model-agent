@@ -64,6 +64,8 @@ describe("webui assets", () => {
     const a = loadAssets();
     expect(a.js).toContain("replaceState");
     expect(a.js).toContain('searchParams.set("session"');
+    expect(a.js).toContain('searchParams.delete("session")');
     expect(a.js).toContain('URLSearchParams(location.search).get("session")');
+    expect(a.js).toMatch(/openTab\(initialSession/);
   });
 });
