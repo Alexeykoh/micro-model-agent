@@ -49,7 +49,14 @@ describe("webui assets", () => {
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
     expect(a.js).toContain('addEventListener("reasoning"');
-    expect(a.js).toContain("onReasoning(");
+    expect(a.js).toContain('addEventListener("meta"');
+    expect(a.js).not.toContain("finishMeta");
+  });
+
+  it("renders generic meta as always-visible lines", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("metaln");
     expect(a.css).toContain(".metaln");
+    expect(a.css).toContain(".metaln.warn");
   });
 });

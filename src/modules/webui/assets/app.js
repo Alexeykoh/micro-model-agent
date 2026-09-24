@@ -553,6 +553,25 @@
     curThink = null;
   }
 
+  // Build the collapsible reasoning block. The global `.think-h` click handler
+  // depends on this exact structure: wrap > [head, body], body carries `hidden`.
+  function buildThinkBlock(withDur) {
+    const wrap = el("div", "think");
+    const head = el("button", "think-h");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(el("span", "g", "✦"));
+    head.appendChild(el("span", "lab", t("web.action.thinking")));
+    if (withDur) head.appendChild(el("span", "dur", ""));
+    const tog = el("span", "tog");
+    setIcon(tog, "chevron-right", t("web.action.show"));
+    head.appendChild(tog);
+    const body = el("div", "think-body hidden");
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    return { wrap, head, body };
+  }
+
   function onReasoning(chunk, sid) {
     const feed = feedForEvent(sid);
     clearBusy(feed);
@@ -561,19 +580,7 @@
     curText = null;
     if (!curThink) {
       flushRun();
-      const wrap = el("div", "think");
-      const head = el("button", "think-h");
-      head.type = "button";
-      head.setAttribute("aria-expanded", "false");
-      head.appendChild(el("span", "g", "✦"));
-      head.appendChild(el("span", "lab", t("web.action.thinking")));
-      head.appendChild(el("span", "dur", ""));
-      const tog = el("span", "tog");
-      setIcon(tog, "chevron-right", t("web.action.show"));
-      head.appendChild(tog);
-      const body = el("div", "think-body hidden");
-      wrap.appendChild(head);
-      wrap.appendChild(body);
+      const { wrap, head, body } = buildThinkBlock(true);
       appendTo(feed, wrap);
       curThink = { wrap, head, body, startedAt: Date.now() };
     }
@@ -811,19 +818,8 @@
   }
 
   function renderThinkBlock(feed, text) {
-    const wrap = el("div", "think");
-    const head = el("button", "think-h");
-    head.type = "button";
-    head.setAttribute("aria-expanded", "false");
-    head.appendChild(el("span", "g", "✦"));
-    head.appendChild(el("span", "lab", t("web.action.thinking")));
-    const tog = el("span", "tog");
-    setIcon(tog, "chevron-right", t("web.action.show"));
-    head.appendChild(tog);
-    const body = el("div", "think-body hidden");
+    const { wrap, body } = buildThinkBlock(false);
     body.textContent = text || "";
-    wrap.appendChild(head);
-    wrap.appendChild(body);
     feed.appendChild(wrap);
   }
 
@@ -896,7 +892,7 @@
   }
 
   function feedHasContent(feed) {
-    return !!feed.querySelector(".u, .ans, .code, .act, .think, .errline, .sysline");
+    return !!feed.querySelector(".u, .ans, .code, .act, .think, .metaln, .errline, .sysline");
   }
 
   async function loadHistory(tab) {
