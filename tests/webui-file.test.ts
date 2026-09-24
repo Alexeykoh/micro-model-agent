@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRequest } from "../src/modules/webui/server";
+import { decodeText } from "../src/modules/webui/file-api";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -98,19 +99,10 @@ describe("webui file viewer", () => {
       const res = await doFetch(base + "/api/file?path=../../secret.txt");
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
-      // Locale-independent: a readable message, not a JSON error object.
-      expect((await res.text()).startsWith("{")).toBe(false);
-    });
-  });
-
-  it("rejects a path outside the workspace", async () => {
-    const ws = makeWorkspace();
-    const s = createWebUiState();
-    s.workspace = ws;
-    await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent("../../secret.txt"));
-      expect(res.status).toBe(403);
-      expect(res.headers.get("content-type")).toContain("text/plain");
+      const body = await res.text();
+      // Locale-independent: a readable message, not JSON and not a leaked key.
+      expect(body.startsWith("{")).toBe(false);
+      expect(body).not.toContain("web.file.error");
     });
   });
 
@@ -123,6 +115,7 @@ describe("webui file viewer", () => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(join(ws, ".env")));
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
+      expect(await res.text()).not.toContain("web.file.error");
     });
   });
 
@@ -170,6 +163,19 @@ describe("webui file viewer", () => {
     });
   });
 
+  it("refuses a binary file with a readable message", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "bin.dat"), Buffer.from([0x00, 0x01, 0x02, 0x00]));
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=bin.dat");
+      expect(res.status).toBe(415);
+      expect(res.headers.get("content-type")).toContain("text/plain");
+      expect(await res.text()).not.toContain("web.file.error");
+    });
+  });
+
   it("answers a readable message for a directory", async () => {
     const ws = makeWorkspace();
     const s = createWebUiState();
@@ -178,6 +184,7 @@ describe("webui file viewer", () => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(ws));
       expect(res.status).toBe(404);
       expect(res.headers.get("content-type")).toContain("text/plain");
+      expect(await res.text()).not.toContain("web.file.error");
     });
   });
 
@@ -189,9 +196,11 @@ describe("webui file viewer", () => {
       const missing = await doFetch(base + "/api/file?path=nope.txt");
       expect(missing.status).toBe(404);
       expect(missing.headers.get("content-type")).toContain("text/plain");
+      expect(await missing.text()).not.toContain("web.file.error");
       const noPath = await doFetch(base + "/api/file");
       expect(noPath.status).toBe(400);
       expect(noPath.headers.get("content-type")).toContain("text/plain");
+      expect(await noPath.text()).not.toContain("web.file.error");
     });
   });
 
@@ -201,5 +210,20 @@ describe("webui file viewer", () => {
       const res = await doFetch(base + "/api/file?path=x.txt");
       expect(res.status).toBe(503);
     });
+  });
+});
+
+describe("decodeText", () => {
+  it("handles BOMs, odd-length BE, NUL and plain text", () => {
+    expect(decodeText(Buffer.from("\uFEFFhi", "utf16le"))).toEqual({ text: "hi", binary: false });
+    expect(decodeText(Buffer.from([0xfe, 0xff, 0x00, 0x68, 0x00, 0x69]))).toEqual({
+      text: "hi",
+      binary: false,
+    });
+    expect(() => decodeText(Buffer.from([0xfe, 0xff, 0x00]))).not.toThrow();
+    expect(decodeText(Buffer.from([0xef, 0xbb, 0xbf, 0x68]))).toEqual({ text: "h", binary: false });
+    expect(decodeText(Buffer.from([0x68, 0x00]))).toEqual({ text: "", binary: true });
+    expect(decodeText(Buffer.from("ok"))).toEqual({ text: "ok", binary: false });
+    expect(decodeText(Buffer.alloc(0))).toEqual({ text: "", binary: false });
   });
 });
