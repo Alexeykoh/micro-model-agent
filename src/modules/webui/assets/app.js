@@ -53,6 +53,9 @@
   };
 
   const FILE_TOOLS = ["read_file", "write_file", "edit_file", "list_dir", "delete_file", "move_file", "file_info"];
+  // Tools whose `path` argument points at a readable file the viewer can open.
+  // `list_dir` is a directory, `delete_file`/`move_file` leave the file gone.
+  const OPENABLE_TOOLS = ["read_file", "write_file", "edit_file", "file_info"];
   const IMAGE_TOOLS = ["attach_image", "browser"];
   const LINK_TOOLS = ["web_fetch", "download_file"];
 
@@ -83,7 +86,7 @@
 
   let curText = null;
   let curTextNodes = [];
-  let curMeta = null;
+  let curThink = null;
   let lastPlanSig = null;
   let lastUsageSig = null;
   let lastEnvSig = null;
@@ -365,6 +368,7 @@
 
   function showEmptyFeed() {
     msgs.replaceChildren(emptyView());
+    syncUrl();
   }
 
   function clearFeed(feed) {
@@ -530,8 +534,8 @@
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
-    if (curMeta) {
-      finishMeta();
+    if (curThink) {
+      finishThink();
     }
     if (curText == null) {
       flushRun();
@@ -542,39 +546,60 @@
     renderTextSegment(feed, curText);
   }
 
-  function finishMeta() {
-    if (curMeta && curMeta.startedAt) {
-      const dur = curMeta.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - curMeta.startedAt) / 1000).toFixed(1) + "s";
+  function finishThink() {
+    if (curThink && curThink.startedAt) {
+      const dur = curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - curThink.startedAt) / 1000).toFixed(1) + "s";
     }
-    curMeta = null;
+    curThink = null;
   }
 
-  function onMeta(chunk, sid) {
+  // Build the collapsible reasoning block. The global `.think-h` click handler
+  // depends on this exact structure: wrap > [head, body], body carries `hidden`.
+  function buildThinkBlock(withDur) {
+    const wrap = el("div", "think");
+    const head = el("button", "think-h");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(el("span", "g", "✦"));
+    head.appendChild(el("span", "lab", t("web.action.thinking")));
+    if (withDur) head.appendChild(el("span", "dur", ""));
+    const tog = el("span", "tog");
+    setIcon(tog, "chevron-right", t("web.action.show"));
+    head.appendChild(tog);
+    const body = el("div", "think-body hidden");
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    return { wrap, head, body };
+  }
+
+  function onReasoning(chunk, sid) {
     const feed = feedForEvent(sid);
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
-    if (!curMeta) {
+    if (!curThink) {
       flushRun();
-      const wrap = el("div", "think");
-      const head = el("button", "think-h");
-      head.type = "button";
-      head.setAttribute("aria-expanded", "true");
-      head.appendChild(el("span", "g", "✦"));
-      head.appendChild(el("span", "lab", t("web.action.thinking")));
-      head.appendChild(el("span", "dur", ""));
-      const tog = el("span", "tog");
-      setIcon(tog, "chevron-down", t("web.action.hide"));
-      head.appendChild(tog);
-      const body = el("div", "think-body");
-      wrap.appendChild(head);
-      wrap.appendChild(body);
+      const { wrap, head, body } = buildThinkBlock(true);
       appendTo(feed, wrap);
-      curMeta = { wrap, head, body, startedAt: Date.now() };
+      curThink = { wrap, head, body, startedAt: Date.now() };
     }
-    curMeta.body.textContent += chunk;
+    curThink.body.textContent += chunk;
+    if (feed === activeFeed()) scroll();
+  }
+
+  // Generic agent status (context stats, compaction, MoE status, warnings):
+  // always visible, one dim line per chunk, never collapsed.
+  function onMeta(chunk, sid) {
+    const feed = feedForEvent(sid);
+    clearBusy(feed);
+    const text = (chunk || "").trim();
+    if (!feed || !text) return;
+    clearEmpty(feed);
+    curText = null;
+    const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
+    appendTo(feed, el("div", warn ? "metaln warn" : "metaln", text));
     if (feed === activeFeed()) scroll();
   }
 
@@ -593,7 +618,7 @@
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
-    finishMeta();
+    finishThink();
     pendingArgs.set(data.toolCallId, data.args || {});
     const line = el("div", "act " + categoryOf(data.name));
     line.appendChild(el("span", "g", "◇"));
@@ -652,10 +677,22 @@
       const path = args.path || args.file || args.dir;
       if (!path) return;
       const card = el("div", "filecard");
-      card.appendChild(el("span", "g", "◇"));
-      card.appendChild(el("span", "name", path));
-      card.appendChild(el("span", "", labelOf(name)));
-      card.appendChild(el("span", "meta", t("web.card.view")));
+      const top = el("div", "fc-top");
+      top.appendChild(el("span", "g", "◇"));
+      const nameEl = el("span", "name", path);
+      nameEl.title = path;
+      top.appendChild(nameEl);
+      card.appendChild(top);
+      const bottom = el("div", "fc-bottom");
+      bottom.appendChild(el("span", "lab", labelOf(name)));
+      if (OPENABLE_TOOLS.indexOf(name) !== -1) {
+        const openLink = el("a", "fc-open", t("web.card.open"));
+        openLink.href = "/api/file?path=" + encodeURIComponent(path);
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        bottom.appendChild(openLink);
+      }
+      card.appendChild(bottom);
       appendTo(feed, card);
       return;
     }
@@ -711,7 +748,7 @@
     state.busy = false;
     const feed = feedForEvent(data.sessionId);
     clearBusy(feed);
-    finishMeta();
+    finishThink();
     curText = null;
     flushRun();
     const owner = tabs.find((x) => x.id === data.sessionId);
@@ -782,19 +819,8 @@
   }
 
   function renderThinkBlock(feed, text) {
-    const wrap = el("div", "think");
-    const head = el("button", "think-h");
-    head.type = "button";
-    head.setAttribute("aria-expanded", "true");
-    head.appendChild(el("span", "g", "✦"));
-    head.appendChild(el("span", "lab", t("web.action.thinking")));
-    const tog = el("span", "tog");
-    setIcon(tog, "chevron-down", t("web.action.hide"));
-    head.appendChild(tog);
-    const body = el("div", "think-body");
+    const { wrap, body } = buildThinkBlock(false);
     body.textContent = text || "";
-    wrap.appendChild(head);
-    wrap.appendChild(body);
     feed.appendChild(wrap);
   }
 
@@ -867,7 +893,7 @@
   }
 
   function feedHasContent(feed) {
-    return !!feed.querySelector(".u, .ans, .code, .act, .think, .errline, .sysline");
+    return !!feed.querySelector(".u, .ans, .code, .act, .think, .metaln, .errline, .sysline");
   }
 
   async function loadHistory(tab) {
@@ -940,6 +966,16 @@
     { passive: false }
   );
 
+  // Mirror the active session into `?session=` so a page refresh restores it.
+  // Only the active tab is persisted; the token param is preserved as-is.
+  function syncUrl() {
+    const url = new URL(location.href);
+    const tab = tabs.find((x) => x.id === activeTabId);
+    if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
+    else url.searchParams.delete("session");
+    history.replaceState(null, "", url);
+  }
+
   function openTab(id, name, kind, server) {
     let tab = tabs.find((x) => x.id === id);
     if (!tab) {
@@ -967,9 +1003,14 @@
       tab.historyLoaded = true;
     }
     if (server && tab.kind === "session") {
+      // A tab auto-opened as "live" (server=false) sets historyLoaded=true; when
+      // it is opened from the server afterward we must actually fetch the
+      // transcript, or a reload of the active session shows an empty feed.
+      if (!feedHasContent(tab.feed)) tab.historyLoaded = false;
       api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
       loadHistory(tab);
     }
+    syncUrl();
   }
 
   function closeTab(id) {
@@ -990,6 +1031,7 @@
     }
     renderTabstrip();
     renderSessionsDropdown();
+    syncUrl();
   }
 
   async function newChatTab() {
@@ -1390,7 +1432,7 @@
     }
     clearEmpty(feed);
     curText = null;
-    finishMeta();
+    finishThink();
     if (text.startsWith("/")) {
       appendTo(feed, el("div", "u", text));
       clearInput();
@@ -2105,6 +2147,10 @@
     es.addEventListener("meta", (e) => {
       const d = parse(e);
       if (d) onMeta(d.chunk || "", d.sessionId);
+    });
+    es.addEventListener("reasoning", (e) => {
+      const d = parse(e);
+      if (d) onReasoning(d.chunk || "", d.sessionId);
     });
     es.addEventListener("phase", (e) => {
       const d = parse(e);
@@ -3027,6 +3073,8 @@
   }
 
   async function boot() {
+    // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
+    const initialSession = new URLSearchParams(location.search).get("session");
     await loadI18n();
     await loadCommands();
     applyTheme(currentTheme());
@@ -3042,6 +3090,12 @@
     await loadSkills();
     await loadPlugins();
     await refresh();
+    // Restore the session from the URL AFTER the first refresh: `renderState`
+    // may auto-open the server's active session, and the requested one must win.
+    if (initialSession) {
+      const meta = state.sessions.find((s) => s.id === initialSession);
+      if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
+    }
     connectSSE();
     setInterval(refresh, 2000);
     setInterval(loadSessions, 15000);

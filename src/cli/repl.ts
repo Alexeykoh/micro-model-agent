@@ -844,6 +844,7 @@ export class Repl implements ReplContext, Host {
             renderer.thinkingEnd();
           }
         },
+        (reasoning) => renderer.reasoning(reasoning),
       );
       renderer.flush();
       if (result.provider && result.model) {

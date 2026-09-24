@@ -325,7 +325,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
-- **Transport:** SSE `GET /events` (`state, text, meta, phase, tool_start, tool_end, turn_end, plan, command, error`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`; static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов.
+- **Transport:** SSE `GET /events` (`state, text, meta, reasoning, phase, tool_start, tool_end, turn_end, plan, command, error`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET /api/file?path=` (просмотр файла из карточки, ответы `text/plain`); static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов. GET-навигации (клик по карточке) аутентифицируются HttpOnly `SameSite=Strict` cookie `mma_web_auth`, которую сервер ставит на любой успешный запрос, — токен в URL ссылки не попадает.
 - **UI:** паритет с каноническим мокапом — topbar (new chat/sessions/tabs/settings), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
 - **Композер:** attach + textarea + send — единая bordered-поверхность поля (контролы внутри, focus-ring на группе); send (`arrow-up`) на время хода становится stop (`square`); textarea авто-растёт (≤200px); чипы селекторов с Lucide-шевронами; хинт `Esc` — только во время хода.
 - **Chrome-иконки:** инлайн SVG [Lucide](https://lucide.dev) (MIT) в `app.js` (`icon()`/`ICONS`, zero-dep) вместо emoji/`⚙`; чат-глифы (`◇ ✓ ✗ ✦ ⟡ …`) остаются текстовыми по STYLE.md.
@@ -340,7 +340,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
-### Current Version: 2.4.0
+### Current Version: 2.5.0
 
 ### Changelog
 

@@ -19,6 +19,7 @@ import type { SessionLogEntry } from "../../modules/session/store";
 import type { SessionMessage } from "../../modules/session/types";
 import { getMessageText } from "../../llm/provider";
 import { redactContextSecrets } from "../../core/agent/context-log";
+import { stripAnsi } from "../../ui/line-math";
 import { scrubToolArgs } from "./forward";
 import { sendJson } from "./util";
 import type { WebUiState } from "./state";
@@ -48,7 +49,7 @@ export interface HistoryEntry {
 }
 
 function scrub(text: string | undefined): string | undefined {
-  return text ? redactContextSecrets(text) : undefined;
+  return text ? stripAnsi(redactContextSecrets(text)) : undefined;
 }
 
 /** Map one raw log entry to the wire shape, or `null` for internal-only types. */

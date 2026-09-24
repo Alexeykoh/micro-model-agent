@@ -44,13 +44,50 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** Token auth for HTTP surfaces (header `x-mma-token` or `?token=`); no token → allow. */
+/** Name of the HttpOnly cookie that carries the web token for GET navigations. */
+const AUTH_COOKIE = "mma_web_auth";
+
+/** Read a cookie value from a raw `Cookie:` header. Malformed encodings yield null. */
+function cookieValue(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) {
+      const raw = part.slice(eq + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+/** Token auth for HTTP surfaces (header `x-mma-token`, `?token=` or cookie); no token → allow. */
 export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boolean {
   if (!s.token) return true;
   const header = req.headers["x-mma-token"];
   if (typeof header === "string" && safeEqual(header, s.token)) return true;
   const query = reqUrl.searchParams.get("token");
-  return query !== null && safeEqual(query, s.token);
+  if (query !== null && safeEqual(query, s.token)) return true;
+  const cookie = cookieValue(req.headers.cookie, AUTH_COOKIE);
+  return cookie !== null && safeEqual(cookie, s.token);
+}
+
+/**
+ * Hand the browser a same-site cookie holding the token so a plain
+ * `<a target="_blank" href="/api/file?...">` navigation (which cannot set the
+ * `x-mma-token` header) still authenticates. `SameSite=Strict` means a
+ * cross-site request never carries it, so this adds no CSRF surface.
+ */
+export function setAuthCookie(res: ServerResponse, s: WebUiState): void {
+  if (!s.token) return;
+  res.setHeader(
+    "Set-Cookie",
+    `${AUTH_COOKIE}=${encodeURIComponent(s.token)}; Path=/; HttpOnly; SameSite=Strict`,
+  );
 }
 
 /** Reject browser-initiated cross-origin writes (CSRF hardening). */

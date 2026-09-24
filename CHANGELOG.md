@@ -4,6 +4,24 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-09-24
+
+### Added
+
+- **web file viewer** (`src/modules/webui/file-api.ts`): `GET /api/file?path=<p>` serves a workspace text file for the chat file cards' Open link — resolved against the workspace (lexical + `realpath` guards, so symlinks/junctions cannot escape), protected paths (`.git/`, `.env*`, keys) refused, 512 KB cap, binary refused. UTF-16 LE/BE BOM and UTF-8 BOM are decoded; errors are human-readable `text/plain` (the endpoint opens as a browser tab).
+- **web cookie auth** (`src/modules/webui/util.ts`, `server.ts`): authenticated requests set an `HttpOnly; SameSite=Strict` `mma_web_auth` cookie and `checkAuth` accepts it, so a plain `<a target="_blank">` navigation authenticates without the token in the URL.
+- **web session persistence** (`assets/app.js`): the active session is mirrored into `?session=` (`history.replaceState`, token preserved) and restored on reload after the first state refresh.
+
+### Fixed
+
+- **web reasoning text** (`src/modules/webui/forward.ts`, `history-api.ts`): ANSI escape sequences (`ESC[2m…`) are stripped from streamed/replayed text, meta and tool output — reasoning no longer renders as literal `\u001b[2m…` garbage on the model's own words.
+- **web file card** (`assets/app.js`, `styles.css`): the card stacks vertically (path on its own line) and its `open` control is a real `<a target="_blank">` link that opens the file in a new tab.
+
+### Changed
+
+- **dedicated reasoning channel** (`src/core/agent.ts`, `src/modules/webui/forward.ts`, `src/cli/repl.ts`, `src/cli/main.ts`): model reasoning now travels on its own `onReasoning` callback and SSE `reasoning` event (no longer pre-dimmed and no longer mixed into the generic `meta` channel); the terminal renders it via `renderer.reasoning`.
+- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; generic `meta` (status, context stats, compaction, tool summaries, warnings) renders as always-visible `.metaln` lines instead of being folded into the reasoning block.
+
 ## [2.4.0] - 2026-09-24
 
 ### Added

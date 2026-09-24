@@ -239,6 +239,11 @@ body {
 .think-h .tog:hover { color: var(--dim-a); }
 .think-body { color: var(--dim-c); padding-left: 18px; white-space: pre-wrap; font-size: 12.5px; overflow-wrap: anywhere; }
 .think-body.hidden { display: none; }
+.metaln {
+  color: var(--dim-c); padding-left: 26px; white-space: pre-wrap;
+  font-size: 12.5px; overflow-wrap: anywhere;
+}
+.metaln.warn { color: var(--yellow); }
 .act { display: flex; gap: 8px; min-width: 0; }
 .act .lab { white-space: nowrap; }
 .act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -298,14 +303,27 @@ body.light .code { border: 1px solid var(--border); }
 body.light .imgcard .ph { background: var(--ph-light); }
 .imgcard .cap { padding: 6px 10px; color: var(--dim-a); font-size: 12px; }
 .filecard {
-  margin-left: 26px; padding: 7px 12px; border-radius: 4px;
+  margin-left: 26px; padding: 8px 12px; border-radius: 6px;
   background: var(--surface); border: 1px solid var(--border-2); color: var(--muted);
-  display: flex; gap: 10px; align-items: baseline; font-size: 12.5px;
-  max-width: 480px; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  font-size: 12.5px; max-width: 480px; min-width: 0;
 }
+.filecard .fc-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
 .filecard .g { color: var(--cyan); flex: 0 0 auto; }
-.filecard .name { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.filecard .meta { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
+.filecard .name {
+  color: var(--fg); min-width: 0; overflow-wrap: anywhere; word-break: break-word;
+}
+.filecard .fc-bottom {
+  display: flex; gap: 10px; align-items: center; justify-content: space-between;
+}
+.filecard .lab { color: var(--dim-a); min-width: 0; overflow-wrap: anywhere; }
+.filecard .fc-open {
+  flex: 0 0 auto; font: inherit; font-size: 12px; line-height: 1.4;
+  color: var(--accent); background: transparent; border: 1px solid var(--border-2);
+  border-radius: 4px; padding: 2px 10px; cursor: pointer; text-decoration: none;
+}
+.filecard .fc-open:hover { border-color: var(--accent); text-decoration: none; }
+.filecard .fc-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .linkline { margin-left: 26px; min-width: 0; overflow-wrap: anywhere; }
 .linkline a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; word-break: break-word; }
 .linkline a:hover { text-decoration: underline; }

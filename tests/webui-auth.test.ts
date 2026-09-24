@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createServer } from "node:http";
+import type { IncomingMessage } from "node:http";
 import { handleRequest, stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
+import { checkAuth } from "../src/modules/webui/util";
 import type { Host } from "../src/core/host";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -180,5 +182,60 @@ describe("webui auth + limits", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(lines).toEqual(["/status"]);
     });
+  });
+
+  it("checkAuth accepts the mma_web_auth cookie when a token is configured", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "other=1; mma_web_auth=s3cret" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
+    const bad = { headers: { cookie: "mma_web_auth=nope" } } as unknown as IncomingMessage;
+    expect(checkAuth(bad, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
+  it("checkAuth tolerates a malformed cookie encoding without throwing", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "mma_web_auth=%ZZ" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
+  it("sets the auth cookie on an authenticated api response", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/i18n", { headers: { "x-mma-token": "s3cret" } });
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Path=/");
+    });
+  });
+
+  it("sets the auth cookie on the /events stream", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const controller = new AbortController();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/events?token=s3cret", { signal: controller.signal });
+      expect(res.status).toBe(200);
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      // Abort once headers are read; the stream would otherwise stay open.
+      controller.abort();
+    });
+    controller.abort();
+  });
+
+  it("round-trips a token with special characters through the cookie", () => {
+    const s = createWebUiState();
+    s.token = "a;b=c %";
+    const req = {
+      headers: { cookie: "mma_web_auth=" + encodeURIComponent(s.token) },
+    } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
   });
 });

@@ -1184,7 +1184,7 @@ describe("Agent", () => {
     expect(result.success).toBe(false);
   });
 
-  it("streams reasoning via onMeta when showReasoning is true", async () => {
+  it("streams reasoning via onReasoning when showReasoning is true", async () => {
     const mockProvider = {
       model: "test-model",
       contextWindow: 4096,
@@ -1200,15 +1200,18 @@ describe("Agent", () => {
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
     const agent = new Agent(deps as any);
-    const meta: string[] = [];
+    const reasoning: string[] = [];
     const text: string[] = [];
     await agent.run(
       "test",
       (c) => text.push(c),
-      (m) => meta.push(m),
+      () => {},
+      undefined,
+      undefined,
+      (r) => reasoning.push(r),
     );
 
-    expect(meta.some((c) => c.includes("Let me think"))).toBe(true);
+    expect(reasoning.some((c) => c.includes("Let me think"))).toBe(true);
     expect(text.some((c) => c.includes("Answer"))).toBe(true);
     expect(text.some((c) => c.includes("Let me think"))).toBe(false);
   });
@@ -1336,9 +1339,18 @@ describe("Agent", () => {
     const deps = createMockDeps({ llmProvider: mockProvider as any, config });
     const agent = new Agent(deps as any);
     const meta: string[] = [];
-    await agent.run("test", undefined, (m) => meta.push(m));
+    const reasoning: string[] = [];
+    await agent.run(
+      "test",
+      undefined,
+      (m) => meta.push(m),
+      undefined,
+      undefined,
+      (r) => reasoning.push(r),
+    );
 
     expect(meta.some((c) => c.includes("Hidden thought"))).toBe(false);
+    expect(reasoning.join("")).toBe("");
   });
 
   it("emits thinking/done phases around each LLM call", async () => {
@@ -1497,15 +1509,21 @@ describe("Agent", () => {
     const agent = new Agent(deps as any);
     const chunks: string[] = [];
     const meta: string[] = [];
+    const reasoning: string[] = [];
     await agent.run(
       "test",
       (c) => chunks.push(c),
       (m) => meta.push(m),
+      undefined,
+      undefined,
+      (r) => reasoning.push(r),
     );
 
     expect(chunks.join("")).toContain("[redacted]");
     expect(chunks.join("")).not.toContain("secret");
     expect(meta.join("")).not.toContain("secret");
+    expect(reasoning.join("")).toContain("[redacted]");
+    expect(reasoning.join("")).not.toContain("secret");
   });
 
   it("truncateToolOutput respects absolute max chars limit", () => {

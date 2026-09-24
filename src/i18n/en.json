@@ -1166,7 +1166,7 @@
   "web.tool.output_few": "output · {count} chars",
   "web.tool.output_many": "output · {count} chars",
   "web.tool.collapse": "collapse",
-  "web.card.view": "view ↗",
+  "web.card.open": "open ↗",
   "web.card.screenshot": "screenshot",
   "web.card.attached_image": "attached image",
   "web.card.browser_viewport": "browser · viewport",
@@ -1174,5 +1174,12 @@
   "web.question.send": "send",
   "web.question.answered": "answered",
   "web.question.multi_hint": "select one or more",
-  "web.misc.command_unavailable": "command unavailable"
+  "web.misc.command_unavailable": "command unavailable",
+  "web.file.error.missing_path": "No file path was given.",
+  "web.file.error.outside_workspace": "This file is outside the agent workspace and cannot be opened.",
+  "web.file.error.protected_path": "This file is protected (secrets/VCS) and cannot be opened.",
+  "web.file.error.too_large": "File is too large to open in the browser ({limit} bytes max).",
+  "web.file.error.binary_file": "This looks like a binary file and cannot be shown as text.",
+  "web.file.error.not_found": "File not found (it may be a directory or it was deleted).",
+  "web.file.error.workspace_unavailable": "No workspace is open."
 }

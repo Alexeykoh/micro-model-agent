@@ -14,7 +14,6 @@ import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
-import { pc } from "../ui/colors";
 import { errMsg } from "../utils";
 import { join } from "path";
 import { PromptBuilder } from "./prompt-builder";
@@ -504,6 +503,7 @@ export class Agent {
     onMeta?: (meta: string) => void,
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
+    onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
     // Reset shutdown flag from previous interrupt
     this.shutdownRequested = false;
@@ -629,7 +629,7 @@ export class Agent {
               baseDir: this.deps.baseDir,
             },
             input,
-            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase),
+            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning),
             {
               onMeta,
               onTool: countTool,
@@ -639,7 +639,7 @@ export class Agent {
               sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
             },
           )
-        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase);
+        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
 
       // In MoE mode the single-agent loop (the only writer of assistant turns)
       // never runs — without this the history ends user→user across turns and
@@ -677,6 +677,7 @@ export class Agent {
     onMeta?: (meta: string) => void,
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
+    onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
     const {
       config,
@@ -863,7 +864,7 @@ export class Agent {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
             if (emittedReasoning && !textContent) {
-              onMeta?.("\n\n");
+              onReasoning?.("\n\n");
             }
             textContent += chunk.content;
             const textOut = pluginManager.runOnText({ iteration: state.iteration, logger, contextManager }, chunk.content);
@@ -877,7 +878,7 @@ export class Agent {
                 chunk.content,
               );
               if (metaOut) {
-                onMeta?.(pc.dim(metaOut));
+                onReasoning?.(metaOut);
               }
               emittedReasoning = true;
             }
