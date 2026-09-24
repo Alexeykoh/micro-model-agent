@@ -59,4 +59,11 @@ describe("webui assets", () => {
     expect(a.css).toContain(".metaln");
     expect(a.css).toContain(".metaln.warn");
   });
+
+  it("persists the active session in the URL and restores it on boot", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("replaceState");
+    expect(a.js).toContain('searchParams.set("session"');
+    expect(a.js).toContain('URLSearchParams(location.search).get("session")');
+  });
 });

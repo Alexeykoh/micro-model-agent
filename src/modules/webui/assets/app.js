@@ -368,6 +368,7 @@
 
   function showEmptyFeed() {
     msgs.replaceChildren(emptyView());
+    syncUrl();
   }
 
   function clearFeed(feed) {
@@ -965,6 +966,16 @@
     { passive: false }
   );
 
+  // Mirror the active session into `?session=` so a page refresh restores it.
+  // Only the active tab is persisted; the token param is preserved as-is.
+  function syncUrl() {
+    const url = new URL(location.href);
+    const tab = tabs.find((x) => x.id === activeTabId);
+    if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
+    else url.searchParams.delete("session");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
   function openTab(id, name, kind, server) {
     let tab = tabs.find((x) => x.id === id);
     if (!tab) {
@@ -995,6 +1006,7 @@
       api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
       loadHistory(tab);
     }
+    syncUrl();
   }
 
   function closeTab(id) {
@@ -1015,6 +1027,7 @@
     }
     renderTabstrip();
     renderSessionsDropdown();
+    syncUrl();
   }
 
   async function newChatTab() {
@@ -1748,6 +1761,7 @@
     if (sessionId && !tabs.some((x) => x.id === sessionId)) {
       openTab(sessionId, state.host.sessionName || String(sessionId), "session", false);
     }
+    syncUrl();
     if (!tabs.length) showEmptyFeed();
     renderPlan(state.host.plan);
     renderUsage(state.host);
@@ -3056,6 +3070,7 @@
   }
 
   async function boot() {
+    const initialSession = new URLSearchParams(location.search).get("session");
     await loadI18n();
     await loadCommands();
     applyTheme(currentTheme());
@@ -3067,6 +3082,10 @@
     await loadModels();
     await loadProviders();
     await loadSessions();
+    if (initialSession && state.sessions.some((s) => s.id === initialSession)) {
+      const meta = state.sessions.find((s) => s.id === initialSession);
+      openTab(initialSession, (meta && meta.name) || String(initialSession), "session", true);
+    }
     await loadMemory();
     await loadSkills();
     await loadPlugins();
