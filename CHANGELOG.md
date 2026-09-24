@@ -8,16 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- **web file viewer** (`src/modules/webui/file-api.ts`): `GET /api/file?path=<p>` serves a workspace text file (resolved against the workspace, outside paths and protected paths refused, 512 KB cap, binary refused) so chat file cards can be opened in a new tab.
+- **web file viewer** (`src/modules/webui/file-api.ts`): `GET /api/file?path=<p>` serves a workspace text file for the chat file cards' Open link — resolved against the workspace (lexical + `realpath` guards, so symlinks/junctions cannot escape), protected paths (`.git/`, `.env*`, keys) refused, 512 KB cap, binary refused. UTF-16 LE/BE BOM and UTF-8 BOM are decoded; errors are human-readable `text/plain` (the endpoint opens as a browser tab).
+- **web cookie auth** (`src/modules/webui/util.ts`, `server.ts`): authenticated requests set an `HttpOnly; SameSite=Strict` `mma_web_auth` cookie and `checkAuth` accepts it, so a plain `<a target="_blank">` navigation authenticates without the token in the URL.
+- **web session persistence** (`assets/app.js`): the active session is mirrored into `?session=` (`history.replaceState`, token preserved) and restored on reload after the first state refresh.
 
 ### Fixed
 
 - **web reasoning text** (`src/modules/webui/forward.ts`, `history-api.ts`): ANSI escape sequences (`ESC[2m…`) are stripped from streamed/replayed text, meta and tool output — reasoning no longer renders as literal `\u001b[2m…` garbage on the model's own words.
-- **web file card** (`assets/app.js`, `styles.css`): the card stacks vertically (path on its own line) and its `open` control is a real button that opens the file in a new tab.
+- **web file card** (`assets/app.js`, `styles.css`): the card stacks vertically (path on its own line) and its `open` control is a real `<a target="_blank">` link that opens the file in a new tab.
 
 ### Changed
 
-- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; a warning/error carried on the meta channel expands the block automatically.
+- **dedicated reasoning channel** (`src/core/agent.ts`, `src/modules/webui/forward.ts`, `src/cli/repl.ts`, `src/cli/main.ts`): model reasoning now travels on its own `onReasoning` callback and SSE `reasoning` event (no longer pre-dimmed and no longer mixed into the generic `meta` channel); the terminal renders it via `renderer.reasoning`.
+- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; generic `meta` (context stats, compaction, MoE status, warnings) renders as always-visible `.metaln` lines instead of being folded into the reasoning block.
 
 ## [2.4.0] - 2026-09-24
 
