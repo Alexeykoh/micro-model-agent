@@ -36,6 +36,9 @@
 
 3. **Build**: `bun run build:prod`
 4. **Publish**: `npm publish --access public`
+
+   > **Note:** npm's registry now processes publishes **asynchronously** — the upload returns `PUT 202 Accepted` and the CLI prints «Your package is being processed and may take a few minutes to become available.» The version may not appear in `npm view` / `registry.npmjs.org` for a while. **Do not wait for it:** a `202` + `+ <pkg>@<version>` output is a successful publish. Proceed to tagging/pushing.
+
 5. **Git tag**: `npm version` creates tag automatically, push with `git push --follow-tags`
 6. **Update CHANGELOG** (if exists) or AGENTS.md with notable changes
 
@@ -77,7 +80,7 @@ Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
 3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
 4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
 
-### Current Version: 2.3.0
+### Current Version: 2.4.0
 
 - **82** = `mma web` Phase 3 — visual parity with the approved mockup + real web surfaces (branch `feat/mma-web`): (1) **Frontend rewrite** (`src/modules/webui/assets/`) — topbar (`+`/`☰`/session tabs/`⚙`), chat feed (start banner, user blocks, colored `◇` tool lines, `↳` details, `⟡` metrics, `✦` reasoning toggle, plan/file/link/image cards, `/command` output), model/provider/context selectors, independently collapsible sidebar (scrollable plan + session·usage), wide settings modal (General / Model / Context / Reasoning / UI / Memory / Skills / Plugins·MCP / Security / Advanced), dark/light/auto theme via CSS variables; zero-dependency vanilla JS, `textContent` for model/tool output. (2) **REST** (`config-api.ts`, `settings-api.ts`, `sessions-api.ts`, `history-api.ts`) — `GET/POST /api/config`, `GET /api/models`, `GET /api/memory` + `POST` + `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`. (3) **Slash commands** (`commands.ts`, `memory-commands.ts`) — `/help` `/status` `/config` `/model` `/provider` `/memory` via a handler map (rule #17), output streamed as SSE `command` events; `/clear`/`/new` client-side; terminal-only commands out of scope. (4) **Live data** — real usage metrics in the sidebar, clipped tool output in `tool_end`, plan card, image attachments, new-session creation. Version: **2.3.0** (MINOR — new UI, endpoints, commands and behavior).
 

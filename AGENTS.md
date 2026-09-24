@@ -350,6 +350,8 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 При публикации (`npm publish`) changelog автоматически попадает в пакет и виден пользователям при установке (`npm info micro-models-agent`).
 
+**⚠️ npm publish асинхронный:** реестр отвечает `PUT 202 Accepted` («being processed…»), и версия может несколько минут не появляться в `npm view`. `202` + `+ <pkg>@<version>` — уже успешная публикация; **не жди** фактического появления, сразу тегируй/пушь. Детали — [docs/agents/versioning.md](./docs/agents/versioning.md), шаг «Publish».
+
 ### Versioning Rules
 
 Версии — **вехи**, а не счётчик PR. Один MAJOR на пакет ломающих изменений, а не на каждую итерацию.
