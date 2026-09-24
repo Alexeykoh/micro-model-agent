@@ -213,6 +213,23 @@ describe("webui auth + limits", () => {
     });
   });
 
+  it("sets the auth cookie on the /events stream", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const controller = new AbortController();
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/events?token=s3cret", { signal: controller.signal });
+      expect(res.status).toBe(200);
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      // Abort once headers are read; the stream would otherwise stay open.
+      controller.abort();
+    });
+    controller.abort();
+  });
+
   it("round-trips a token with special characters through the cookie", () => {
     const s = createWebUiState();
     s.token = "a;b=c %";

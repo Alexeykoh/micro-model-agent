@@ -1003,6 +1003,10 @@
       tab.historyLoaded = true;
     }
     if (server && tab.kind === "session") {
+      // A tab auto-opened as "live" (server=false) sets historyLoaded=true; when
+      // it is opened from the server afterward we must actually fetch the
+      // transcript, or a reload of the active session shows an empty feed.
+      if (!feedHasContent(tab.feed)) tab.historyLoaded = false;
       api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
       loadHistory(tab);
     }

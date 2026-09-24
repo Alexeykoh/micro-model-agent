@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRequest } from "../src/modules/webui/server";
-import { decodeText } from "../src/modules/webui/file-api";
+import { decodeText, MAX_FILE_VIEW_BYTES } from "../src/modules/webui/file-api";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
 
 const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
@@ -171,6 +171,19 @@ describe("webui file viewer", () => {
     await withServer(s, async (base) => {
       const res = await doFetch(base + "/api/file?path=bin.dat");
       expect(res.status).toBe(415);
+      expect(res.headers.get("content-type")).toContain("text/plain");
+      expect(await res.text()).not.toContain("web.file.error");
+    });
+  });
+
+  it("refuses a file larger than the cap with 413 before reading", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "big.txt"), Buffer.alloc(MAX_FILE_VIEW_BYTES + 10, 0x61));
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=big.txt");
+      expect(res.status).toBe(413);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).not.toContain("web.file.error");
     });

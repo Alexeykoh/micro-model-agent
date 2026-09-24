@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 
 - **dedicated reasoning channel** (`src/core/agent.ts`, `src/modules/webui/forward.ts`, `src/cli/repl.ts`, `src/cli/main.ts`): model reasoning now travels on its own `onReasoning` callback and SSE `reasoning` event (no longer pre-dimmed and no longer mixed into the generic `meta` channel); the terminal renders it via `renderer.reasoning`.
-- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; generic `meta` (context stats, compaction, MoE status, warnings) renders as always-visible `.metaln` lines instead of being folded into the reasoning block.
+- **web reasoning collapsed by default** (`assets/app.js`): `thinking` blocks (live and replayed) start collapsed; generic `meta` (status, context stats, compaction, tool summaries, warnings) renders as always-visible `.metaln` lines instead of being folded into the reasoning block.
 
 ## [2.4.0] - 2026-09-24
 

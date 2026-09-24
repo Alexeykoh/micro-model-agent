@@ -19,8 +19,8 @@
  * happen upstream in `server.ts` and stay JSON — they are only reachable when
  * the auth cookie is missing/forged, not from a real viewer tab.
  */
-import { readFile, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { matchProtectedPath } from "../security/protected-paths";
 import { t } from "../../i18n/index";
@@ -64,6 +64,12 @@ export function decodeText(buf: Buffer): { text: string; binary: boolean } {
   return { text: body.toString("utf8"), binary: false };
 }
 
+/** True when `target` is not inside `base` (lexically). */
+function escapes(base: string, target: string): boolean {
+  const rel = relative(base, target);
+  return rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel);
+}
+
 /**
  * Handle `/api/file`. Returns `false` when the request is not for this route so
  * the caller can fall through to the next handler.
@@ -91,8 +97,7 @@ export function handleFileApi(
   // Cheap lexical guard first: a path that is obviously outside the workspace
   // (e.g. `../../etc/passwd`) is refused before touching the filesystem, even
   // when the target does not exist.
-  const lexical = relative(resolve(base), abs);
-  if (lexical.startsWith("..") || isAbsolute(lexical)) {
+  if (escapes(resolve(base), abs)) {
     sendTextError(res, 403, "web.file.error.outside_workspace");
     return true;
   }
@@ -114,8 +119,7 @@ async function serveFile(res: ServerResponse, base: string, abs: string): Promis
     return;
   }
 
-  const rel = relative(baseReal, absReal);
-  if (rel.startsWith("..") || isAbsolute(rel)) {
+  if (escapes(baseReal, absReal)) {
     sendTextError(res, 403, "web.file.error.outside_workspace");
     return;
   }
@@ -125,13 +129,18 @@ async function serveFile(res: ServerResponse, base: string, abs: string): Promis
   }
 
   try {
-    const buf = await readFile(absReal);
-    if (buf.length > MAX_FILE_VIEW_BYTES) {
+    const info = await stat(absReal);
+    if (!info.isFile()) {
+      sendTextError(res, 404, "web.file.error.not_found");
+      return;
+    }
+    if (info.size > MAX_FILE_VIEW_BYTES) {
       sendTextError(res, 413, "web.file.error.too_large", {
         limit: String(MAX_FILE_VIEW_BYTES),
       });
       return;
     }
+    const buf = await readFile(absReal);
     const { text, binary } = decodeText(buf);
     if (binary) {
       sendTextError(res, 415, "web.file.error.binary_file");
