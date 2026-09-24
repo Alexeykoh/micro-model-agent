@@ -35,9 +35,9 @@ describe("webui assets", () => {
 
   it("wires the file card's Open link to /api/file in a new tab", () => {
     const a = loadAssets();
-    expect(a.js).toContain("/api/file?path=");
-    expect(a.js).toContain('target = "_blank"');
-    expect(a.js).not.toContain("window.open(");
+    expect(a.js).toMatch(/el\("a", "fc-open"[\s\S]{0,200}?target = "_blank"/);
+    expect(a.js).toContain('openLink.rel = "noopener noreferrer"');
+    expect(a.js).not.toContain("&token=");
     expect(a.css).toContain(".filecard .fc-open");
   });
 

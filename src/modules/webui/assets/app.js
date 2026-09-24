@@ -672,12 +672,11 @@
       const bottom = el("div", "fc-bottom");
       bottom.appendChild(el("span", "lab", labelOf(name)));
       if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-        const open = el("a", "fc-open", t("web.card.open"));
-        open.href = "/api/file?path=" + encodeURIComponent(path);
-        open.target = "_blank";
-        open.rel = "noopener";
-        open.title = t("web.card.open");
-        bottom.appendChild(open);
+        const openLink = el("a", "fc-open", t("web.card.open"));
+        openLink.href = "/api/file?path=" + encodeURIComponent(path);
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        bottom.appendChild(openLink);
       }
       card.appendChild(bottom);
       appendTo(feed, card);
