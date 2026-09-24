@@ -16,11 +16,39 @@ import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { matchProtectedPath } from "../security/protected-paths";
-import { sendJson } from "./util";
+import { t } from "../../i18n/index";
 import type { WebUiState } from "./state";
 
 /** Cap for a viewed file; larger files are refused rather than truncated. */
 export const MAX_FILE_VIEW_BYTES = 512 * 1024;
+
+/** The viewer is opened as a browser tab — errors must read as text, not JSON. */
+function sendTextError(
+  res: ServerResponse,
+  status: number,
+  key: string,
+  vars?: Record<string, string>,
+): void {
+  res.writeHead(status, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(t(key, vars));
+}
+
+/** Decode a text buffer, honouring a UTF-16 BOM; NUL elsewhere means binary. */
+export function decodeText(buf: Buffer): { text: string; binary: boolean } {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return { text: buf.subarray(2).toString("utf16le"), binary: false };
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const swapped = Buffer.from(buf.subarray(2));
+    swapped.swap16();
+    return { text: swapped.toString("utf16le"), binary: false };
+  }
+  if (buf.includes(0)) return { text: "", binary: true };
+  return { text: buf.toString("utf8"), binary: false };
+}
 
 /**
  * Handle `/api/file`. Returns `false` when the request is not for this route so
@@ -36,12 +64,12 @@ export function handleFileApi(
 
   const base = s.workspace;
   if (!base) {
-    sendJson(res, 503, { error: "workspace_unavailable" });
+    sendTextError(res, 503, "web.file.error.workspace_unavailable");
     return true;
   }
   const raw = reqUrl.searchParams.get("path") ?? "";
   if (!raw) {
-    sendJson(res, 400, { error: "missing_path" });
+    sendTextError(res, 400, "web.file.error.missing_path");
     return true;
   }
 
@@ -51,7 +79,7 @@ export function handleFileApi(
   // when the target does not exist.
   const lexical = relative(resolve(base), abs);
   if (lexical.startsWith("..") || isAbsolute(lexical)) {
-    sendJson(res, 403, { error: "outside_workspace" });
+    sendTextError(res, 403, "web.file.error.outside_workspace");
     return true;
   }
   void serveFile(res, base, abs);
@@ -68,37 +96,40 @@ async function serveFile(res: ServerResponse, base: string, abs: string): Promis
     baseReal = await realpath(resolve(base));
     absReal = await realpath(abs);
   } catch {
-    sendJson(res, 404, { error: "not_found" });
+    sendTextError(res, 404, "web.file.error.not_found");
     return;
   }
 
   const rel = relative(baseReal, absReal);
   if (rel.startsWith("..") || isAbsolute(rel)) {
-    sendJson(res, 403, { error: "outside_workspace" });
+    sendTextError(res, 403, "web.file.error.outside_workspace");
     return;
   }
   if (matchProtectedPath(baseReal, absReal)) {
-    sendJson(res, 403, { error: "protected_path" });
+    sendTextError(res, 403, "web.file.error.protected_path");
     return;
   }
 
   try {
     const buf = await readFile(absReal);
     if (buf.length > MAX_FILE_VIEW_BYTES) {
-      sendJson(res, 413, { error: "file_too_large", limit: MAX_FILE_VIEW_BYTES });
+      sendTextError(res, 413, "web.file.error.too_large", {
+        limit: String(MAX_FILE_VIEW_BYTES),
+      });
       return;
     }
-    if (buf.includes(0)) {
-      sendJson(res, 415, { error: "binary_file" });
+    const { text, binary } = decodeText(buf);
+    if (binary) {
+      sendTextError(res, 415, "web.file.error.binary_file");
       return;
     }
     res.writeHead(200, {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "no-store",
     });
-    res.end(buf.toString("utf8"));
+    res.end(text);
   } catch {
     // A directory or an unreadable file — "not found" from the viewer's angle.
-    sendJson(res, 404, { error: "not_found" });
+    sendTextError(res, 404, "web.file.error.not_found");
   }
 }

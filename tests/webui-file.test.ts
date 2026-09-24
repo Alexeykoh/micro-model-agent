@@ -90,6 +90,19 @@ describe("webui file viewer", () => {
     });
   });
 
+  it("answers plain-text errors so a new tab shows a readable message", async () => {
+    const ws = makeWorkspace();
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=../../secret.txt");
+      expect(res.status).toBe(403);
+      expect(res.headers.get("content-type")).toContain("text/plain");
+      // Locale-independent: a readable message, not a JSON error object.
+      expect((await res.text()).startsWith("{")).toBe(false);
+    });
+  });
+
   it("rejects a path outside the workspace", async () => {
     const ws = makeWorkspace();
     const s = createWebUiState();
@@ -97,7 +110,7 @@ describe("webui file viewer", () => {
     await withServer(s, async (base) => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent("../../secret.txt"));
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "outside_workspace" });
+      expect(res.headers.get("content-type")).toContain("text/plain");
     });
   });
 
@@ -109,7 +122,7 @@ describe("webui file viewer", () => {
     await withServer(s, async (base) => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(join(ws, ".env")));
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "protected_path" });
+      expect(res.headers.get("content-type")).toContain("text/plain");
     });
   });
 
@@ -124,7 +137,7 @@ describe("webui file viewer", () => {
     await withServer(s, async (base) => {
       const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(link));
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "outside_workspace" });
+      expect(res.headers.get("content-type")).toContain("text/plain");
     });
   });
 
@@ -141,7 +154,30 @@ describe("webui file viewer", () => {
         base + "/api/file?path=" + encodeURIComponent(join(linkDir, "secret.txt")),
       );
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "outside_workspace" });
+      expect(res.headers.get("content-type")).toContain("text/plain");
+    });
+  });
+
+  it("serves a UTF-16LE text file", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "u16.txt"), Buffer.from("\uFEFFhello", "utf16le"));
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=u16.txt");
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("hello");
+    });
+  });
+
+  it("answers a readable message for a directory", async () => {
+    const ws = makeWorkspace();
+    const s = createWebUiState();
+    s.workspace = ws;
+    await withServer(s, async (base) => {
+      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(ws));
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toContain("text/plain");
     });
   });
 
@@ -152,8 +188,10 @@ describe("webui file viewer", () => {
     await withServer(s, async (base) => {
       const missing = await doFetch(base + "/api/file?path=nope.txt");
       expect(missing.status).toBe(404);
+      expect(missing.headers.get("content-type")).toContain("text/plain");
       const noPath = await doFetch(base + "/api/file");
       expect(noPath.status).toBe(400);
+      expect(noPath.headers.get("content-type")).toContain("text/plain");
     });
   });
 
