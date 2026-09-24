@@ -656,14 +656,6 @@
     return null;
   }
 
-  function openFileViewer(path) {
-    const url =
-      "/api/file?path=" +
-      encodeURIComponent(path) +
-      (token ? "&token=" + encodeURIComponent(token) : "");
-    window.open(url, "_blank", "noopener");
-  }
-
   function cardFor(name, args, sid) {
     const feed = feedForEvent(sid);
     if (!feed) return;
@@ -680,9 +672,11 @@
       const bottom = el("div", "fc-bottom");
       bottom.appendChild(el("span", "lab", labelOf(name)));
       if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-        const open = el("button", "fc-open", t("web.card.open"));
-        open.type = "button";
-        open.addEventListener("click", () => openFileViewer(path));
+        const open = el("a", "fc-open", t("web.card.open"));
+        open.href = "/api/file?path=" + encodeURIComponent(path);
+        open.target = "_blank";
+        open.rel = "noopener";
+        open.title = t("web.card.open");
         bottom.appendChild(open);
       }
       card.appendChild(bottom);

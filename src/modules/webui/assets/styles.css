@@ -315,9 +315,9 @@ body.light .imgcard .ph { background: var(--ph-light); }
 .filecard .fc-open {
   flex: 0 0 auto; font: inherit; font-size: 12px; line-height: 1.4;
   color: var(--accent); background: transparent; border: 1px solid var(--border-2);
-  border-radius: 4px; padding: 2px 10px; cursor: pointer;
+  border-radius: 4px; padding: 2px 10px; cursor: pointer; text-decoration: none;
 }
-.filecard .fc-open:hover { border-color: var(--accent); }
+.filecard .fc-open:hover { border-color: var(--accent); text-decoration: none; }
 .filecard .fc-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .linkline { margin-left: 26px; min-width: 0; overflow-wrap: anywhere; }
 .linkline a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; word-break: break-word; }

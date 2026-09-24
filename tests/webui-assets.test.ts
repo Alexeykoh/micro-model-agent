@@ -33,10 +33,11 @@ describe("webui assets", () => {
     expect(a.css).toContain(".busy .busytime");
   });
 
-  it("wires the file card's Open button to /api/file in a new tab", () => {
+  it("wires the file card's Open link to /api/file in a new tab", () => {
     const a = loadAssets();
     expect(a.js).toContain("/api/file?path=");
-    expect(a.js).toContain("fc-open");
+    expect(a.js).toContain('target = "_blank"');
+    expect(a.js).not.toContain("window.open(");
     expect(a.css).toContain(".filecard .fc-open");
   });
 
