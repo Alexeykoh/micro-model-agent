@@ -86,7 +86,7 @@
 
   let curText = null;
   let curTextNodes = [];
-  let curMeta = null;
+  let curThink = null;
   let lastPlanSig = null;
   let lastUsageSig = null;
   let lastEnvSig = null;
@@ -533,8 +533,8 @@
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
-    if (curMeta) {
-      finishMeta();
+    if (curThink) {
+      finishThink();
     }
     if (curText == null) {
       flushRun();
@@ -545,21 +545,21 @@
     renderTextSegment(feed, curText);
   }
 
-  function finishMeta() {
-    if (curMeta && curMeta.startedAt) {
-      const dur = curMeta.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - curMeta.startedAt) / 1000).toFixed(1) + "s";
+  function finishThink() {
+    if (curThink && curThink.startedAt) {
+      const dur = curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - curThink.startedAt) / 1000).toFixed(1) + "s";
     }
-    curMeta = null;
+    curThink = null;
   }
 
-  function onMeta(chunk, sid) {
+  function onReasoning(chunk, sid) {
     const feed = feedForEvent(sid);
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
-    if (!curMeta) {
+    if (!curThink) {
       flushRun();
       const wrap = el("div", "think");
       const head = el("button", "think-h");
@@ -575,17 +575,23 @@
       wrap.appendChild(head);
       wrap.appendChild(body);
       appendTo(feed, wrap);
-      curMeta = { wrap, head, body, startedAt: Date.now() };
+      curThink = { wrap, head, body, startedAt: Date.now() };
     }
-    curMeta.body.textContent += chunk;
-    // Reasoning is collapsed by default (quiet by default); a warning or error
-    // carried on the meta channel expands the block so it is never hidden.
-    if ((chunk.indexOf("⚠") !== -1 || chunk.indexOf("✗") !== -1) && curMeta.body.classList.contains("hidden")) {
-      curMeta.body.classList.remove("hidden");
-      curMeta.head.setAttribute("aria-expanded", "true");
-      const tog = curMeta.head.querySelector(".tog");
-      if (tog) setIcon(tog, "chevron-down", t("web.action.hide"));
-    }
+    curThink.body.textContent += chunk;
+    if (feed === activeFeed()) scroll();
+  }
+
+  // Generic agent status (context stats, compaction, MoE status, warnings):
+  // always visible, one dim line per chunk, never collapsed.
+  function onMeta(chunk, sid) {
+    const feed = feedForEvent(sid);
+    clearBusy(feed);
+    const text = (chunk || "").trim();
+    if (!feed || !text) return;
+    clearEmpty(feed);
+    curText = null;
+    const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
+    appendTo(feed, el("div", warn ? "metaln warn" : "metaln", text));
     if (feed === activeFeed()) scroll();
   }
 
@@ -604,7 +610,7 @@
     if (!feed) return;
     clearEmpty(feed);
     curText = null;
-    finishMeta();
+    finishThink();
     pendingArgs.set(data.toolCallId, data.args || {});
     const line = el("div", "act " + categoryOf(data.name));
     line.appendChild(el("span", "g", "◇"));
@@ -734,7 +740,7 @@
     state.busy = false;
     const feed = feedForEvent(data.sessionId);
     clearBusy(feed);
-    finishMeta();
+    finishThink();
     curText = null;
     flushRun();
     const owner = tabs.find((x) => x.id === data.sessionId);
@@ -1413,7 +1419,7 @@
     }
     clearEmpty(feed);
     curText = null;
-    finishMeta();
+    finishThink();
     if (text.startsWith("/")) {
       appendTo(feed, el("div", "u", text));
       clearInput();
@@ -2128,6 +2134,10 @@
     es.addEventListener("meta", (e) => {
       const d = parse(e);
       if (d) onMeta(d.chunk || "", d.sessionId);
+    });
+    es.addEventListener("reasoning", (e) => {
+      const d = parse(e);
+      if (d) onReasoning(d.chunk || "", d.sessionId);
     });
     es.addEventListener("phase", (e) => {
       const d = parse(e);

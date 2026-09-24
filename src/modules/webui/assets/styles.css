@@ -239,6 +239,11 @@ body {
 .think-h .tog:hover { color: var(--dim-a); }
 .think-body { color: var(--dim-c); padding-left: 18px; white-space: pre-wrap; font-size: 12.5px; overflow-wrap: anywhere; }
 .think-body.hidden { display: none; }
+.metaln {
+  color: var(--dim-c); padding-left: 26px; white-space: pre-wrap;
+  font-size: 12.5px; overflow-wrap: anywhere;
+}
+.metaln.warn { color: var(--yellow); }
 .act { display: flex; gap: 8px; min-width: 0; }
 .act .lab { white-space: nowrap; }
 .act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

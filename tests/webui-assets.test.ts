@@ -45,4 +45,11 @@ describe("webui assets", () => {
     const a = loadAssets();
     expect(a.js).toContain('"think-body hidden"');
   });
+
+  it("listens for the dedicated reasoning event", () => {
+    const a = loadAssets();
+    expect(a.js).toContain('addEventListener("reasoning"');
+    expect(a.js).toContain("onReasoning(");
+    expect(a.css).toContain(".metaln");
+  });
 });
