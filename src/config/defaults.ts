@@ -21,6 +21,12 @@ export const DEFAULTS: AppConfig = {
     enabled: false,
     maxReplanCycles: 3,
   },
+  critic: {
+    enabled: true,
+    maxCalls: 4,
+    maxRepairCycles: 1,
+    timeoutMs: 15000,
+  },
   tools: {
     // TODO(2026-08-29): revisit tool-set visibility. enableOnDemand:false
     // restores the full ~28-tool set (legacy behavior) — safe for small

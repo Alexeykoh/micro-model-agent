@@ -34,6 +34,10 @@ describe("config defaults", () => {
     expect(DEFAULTS.orchestrator.model).toBeUndefined();
     expect(DEFAULTS.orchestrator.provider).toBeUndefined();
   });
+
+  it("defaults critic to enabled with bounded loops", () => {
+    expect(DEFAULTS.critic).toEqual({ enabled: true, maxCalls: 4, maxRepairCycles: 1, timeoutMs: 15000 });
+  });
 });
 
 describe("subagent defaults", () => {
