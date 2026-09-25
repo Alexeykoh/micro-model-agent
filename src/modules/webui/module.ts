@@ -22,6 +22,7 @@ import type { AgentResult, ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
+import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
@@ -71,6 +72,8 @@ export interface WebUiDeps {
   host?: string;
   /** Token override (mandatory for a non-loopback bind). */
   token?: string;
+  /** Virgin config: gate chat behind the browser first-run wizard. */
+  setupRequired?: boolean;
 }
 
 export interface WebUiHandle {
@@ -164,6 +167,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const state = createWebUiState();
   if (deps.host) state.host = deps.host;
   if (deps.token) state.token = deps.token;
+  // First-run gating + wizard display data. `buildSetupDisplay` is cheap and
+  // depends only on the provider presets, so it is always populated.
+  state.setupRequired = deps.setupRequired ?? false;
+  state.setup = buildSetupDisplay();
 
   // Collaborators for the config/session/model REST surface. `state.config`
   // aliases the live config object, so `/api/config` writes mutate the same

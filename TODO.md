@@ -36,22 +36,22 @@
 
 ## Актуальное
 
-### MMA Web — первый запуск (мастер настройки) — в работе (2026-09-25)
+### MMA Web — первый запуск (мастер настройки) ✅ ЗАКРЫТО (2026-09-25), релиз 2.6.0
 
 **Спека:** `docs/specs/2026-09-25-web-first-run-design.md` · **Ветка:** `feat/web-first-run`
 
-Проблема: `mma web` при виргин-конфиге лишь печатает `cli.first_run_oneshot` и стартует на дефолтах
+Проблема: `mma web` при виргин-конфиге лишь печатал `cli.first_run_oneshot` и стартовал на дефолтах
 (`web-command.ts:80`); в терминале тот же случай запускает `runSetup()` (`main.ts:330`). Браузер
-получает агента без провайдера/модели. Дизайн (вариант A — общее ядро setup на терминал и веб) утверждён.
+получал агента без провайдера/модели. Реализован вариант A — общее ядро setup на терминал и веб.
 
-- [ ] `src/modules/setup/{answers,apply,discovery}.ts`; `cli/setup.ts` / `cli/setup-order.ts` → re-export (тесты без изменений)
-- [ ] `webui/setup-api.ts`: `GET /api/setup`, `POST /api/setup/{scan,models,test,locale}`, `POST /api/setup`
-- [ ] `state.setupRequired` + серверный `409 setup_required` на `/api/message` и `/api/command`
-- [ ] Фронтенд: гейт `setup.js` (Language → Provider → Key → Model → Context → Security → Review), скрытие чата
-- [ ] Финиш: `applyAnswersToConfig` → `saveConfig` → `reconfigure` → reload
-- [ ] i18n `web.setup.*` (en+ru), стиль по STYLE.md
-- [ ] Тесты `tests/webui/setup-api.test.ts` + asset-level; `bun test` + `tsc --noEmit` зелёные
-- [ ] Docs: AGENTS.md, CHANGELOG, версия 2.6.0 (MINOR)
+- [x] `src/modules/setup/{answers,apply,discovery}.ts`; `cli/setup.ts` / `cli/setup-order.ts` → re-export (тесты без изменений)
+- [x] `webui/setup-api.ts`: `GET /api/setup`, `POST /api/setup/{scan,models,test,locale}`, `POST /api/setup`
+- [x] `state.setupRequired` + серверный `409 setup_required` на `/api/message` и `/api/command`
+- [x] Фронтенд: гейт `setup.js` (Language → Provider → Key → Model → Context → Security → Review), скрытие чата
+- [x] Финиш: `applyAnswersToConfig` → `saveConfig` → `reconfigure` → reload
+- [x] i18n `web.setup.*` (en+ru), стиль по STYLE.md
+- [x] Тесты `tests/webui-setup.test.ts` + asset-level; `bun test` (2489 pass / 0 fail) + `tsc --noEmit` зелёные
+- [x] Docs: AGENTS.md, CHANGELOG, версия 2.6.0 (MINOR)
 
 ### Баг: затенение i18n `t()` в web-фронтенде (2026-09-23) — исправлено (`08ae01a`)
 

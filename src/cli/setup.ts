@@ -4,21 +4,19 @@ import { Spinner } from "../ui/spinner";
 import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
 import { getDefaultChannel } from "../output";
-import { probeChat } from "../modules/providers/preflight";
+import {
+  SETUP_DEFAULTS,
+  SETUP_LANGUAGES,
+  type SetupAnswers,
+} from "../modules/setup/answers";
+import {
+  fetchProviderModels,
+  scanLocalServers,
+  testProviderChat,
+} from "../modules/setup/discovery";
 import { SetupPrompt, type PromptInput } from "./setup-prompt";
 
-export interface SetupAnswers {
-  provider: string;
-  apiBase: string;
-  apiKey: string;
-  model: string;
-  contextWindow: number;
-  maxToolIterations: number;
-  locale: string;
-  securityBashBlock: boolean;
-  securityFlagsBlock: boolean;
-  securityPathsRestrict: boolean;
-}
+export type { SetupAnswers } from "../modules/setup/answers";
 
 async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T> {
   const spinner = new Spinner({ channel: getDefaultChannel() });
@@ -60,71 +58,6 @@ const PROVIDER_TYPES = BUILTIN_PROVIDERS.map((spec) => ({
   label: spec.label,
 }));
 
-/** UI languages offered by the wizard (labels stay in their own language). */
-const LANGUAGES = [
-  { value: "en", label: "English" },
-  { value: "ru", label: "Русский" },
-];
-
-const KNOWN_PORTS = [
-  { port: 1234, label: "LM Studio" },
-  { port: 11434, label: "Ollama" },
-  { port: 8080, label: "vLLM / custom" },
-  { port: 4891, label: "GPT4All" },
-];
-
-async function scanPorts(): Promise<{ label: string; url: string }[]> {
-  const found: { label: string; url: string }[] = [];
-  for (const { port, label } of KNOWN_PORTS) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
-      const resp = await fetch(`http://localhost:${port}/v1/models`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (resp.ok) {
-        found.push({ label, url: `http://localhost:${port}/v1` });
-      }
-    } catch {
-      /* port not available */
-    }
-  }
-  return found;
-}
-
-async function fetchModels(apiBase: string, apiKey: string): Promise<string[]> {
-  try {
-    const url = `${apiBase.replace(/\/+$/, "")}/models`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const resp = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!resp.ok) return [];
-    const data = (await resp.json()) as any;
-    const models = (data.data || data || [])
-      .map((m: any) => m.id || m.name || m.model || "")
-      .filter(Boolean);
-    return models;
-  } catch {
-    return [];
-  }
-}
-
-async function testChat(apiBase: string, apiKey: string, model: string): Promise<boolean> {
-  try {
-    return (await probeChat({ baseUrl: apiBase, apiKey, model }, 10000)) !== "";
-  } catch {
-    return false;
-  }
-}
-
 export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> {
   getDefaultChannel().writeLine(t("setup.title"));
 
@@ -132,18 +65,18 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   const ownRl = !externalRl;
 
   getDefaultChannel().writeLine(t("setup.language"));
-  menuList(LANGUAGES);
+  menuList([...SETUP_LANGUAGES]);
   const languageChoice = await ask(
     rl,
-    t("setup.select_language_num", { max: LANGUAGES.length }),
+    t("setup.select_language_num", { max: SETUP_LANGUAGES.length }),
     "1",
   );
   const typedLang = languageChoice.trim().toLowerCase();
-  const byCode = LANGUAGES.find((l) => l.value === typedLang);
+  const byCode = SETUP_LANGUAGES.find((l) => l.value === typedLang);
   const locale = byCode
     ? byCode.value
-    : LANGUAGES[
-        Math.max(0, Math.min(LANGUAGES.length - 1, (parseInt(languageChoice) || 1) - 1))
+    : SETUP_LANGUAGES[
+        Math.max(0, Math.min(SETUP_LANGUAGES.length - 1, (parseInt(languageChoice) || 1) - 1))
       ].value;
   setLocale(locale);
 
@@ -163,7 +96,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   let apiBase = "";
 
   if (provider === "openai-compat") {
-    const found = await withSpinner(t("setup.scanning_spinner"), async () => scanPorts());
+    const found = await withSpinner(t("setup.scanning_spinner"), async () => scanLocalServers());
 
     if (found.length > 0) {
       getDefaultChannel().writeLine(t("setup.found_servers", { count: found.length }));
@@ -189,7 +122,9 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   const defaultKey = provider === "openai-compat" ? "not-needed" : "";
   const apiKey = await ask(rl, t("setup.api_key"), defaultKey);
 
-  const models = await withSpinner(t("setup.fetching_spinner"), () => fetchModels(apiBase, apiKey));
+  const models = await withSpinner(t("setup.fetching_spinner"), () =>
+    fetchProviderModels(apiBase, apiKey),
+  );
   let model = "";
   if (models.length > 0) {
     getDefaultChannel().writeLine(t("setup.available_models"));
@@ -206,7 +141,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   }
 
   const connected = await withSpinner(t("setup.testing_spinner", { model }), () =>
-    testChat(apiBase, apiKey, model),
+    testProviderChat(apiBase, apiKey, model),
   );
   if (connected) {
     getDefaultChannel().writeLine(pc.green(t("setup.ok")));
@@ -215,8 +150,8 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   }
 
   getDefaultChannel().writeLine(t("setup.agent_settings"));
-  const contextWindow = await askInt(rl, t("setup.context_window"), 32768);
-  const maxIterations = await askInt(rl, t("setup.max_iters"), 1000);
+  const contextWindow = await askInt(rl, t("setup.context_window"), SETUP_DEFAULTS.contextWindow);
+  const maxIterations = await askInt(rl, t("setup.max_iters"), SETUP_DEFAULTS.maxToolIterations);
 
   // Security settings
   getDefaultChannel().writeLine(t("setup.security_header"));

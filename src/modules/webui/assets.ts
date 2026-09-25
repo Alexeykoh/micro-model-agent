@@ -31,5 +31,6 @@ export function loadAssets(): WebUiAssets {
     html: read("index.html", "<!DOCTYPE html><h1>MMA web assets missing</h1>"),
     css: read("styles.css", "/* missing */"),
     js: read("app.js", "// missing"),
+    setupJs: read("setup.js", "// missing"),
   };
 }

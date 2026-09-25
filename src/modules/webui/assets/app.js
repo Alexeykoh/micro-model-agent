@@ -3075,6 +3075,15 @@
   async function boot() {
     // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
     const initialSession = new URLSearchParams(location.search).get("session");
+    // First-run wizard owns the screen when the server reports a virgin config;
+    // it reloads the page once setup completes, so skip the chat boot entirely.
+    if (window.MmaSetup) {
+      try {
+        if (await window.MmaSetup.maybeOpen()) return;
+      } catch (err) {
+        /* wizard failure must never brick the chat boot */
+      }
+    }
     await loadI18n();
     await loadCommands();
     applyTheme(currentTheme());

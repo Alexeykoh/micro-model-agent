@@ -340,7 +340,32 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
-### Current Version: 2.5.0
+### Web First-Run Setup (2.6.0)
+
+Дизайн: [docs/specs/2026-09-25-web-first-run-design.md](./docs/specs/2026-09-25-web-first-run-design.md).
+
+- **Общее ядро setup** (`src/modules/setup/`): `answers.ts` (`SetupAnswers`, `SETUP_LANGUAGES`,
+  `SETUP_DEFAULTS`, `buildSetupDisplay()`), `apply.ts` (`applyAnswersToConfig` + `SECURITY_BASH_BLOCKLIST`),
+  `discovery.ts` (`scanLocalServers`/`fetchProviderModels`/`testProviderChat`). Терминальные пути —
+  тонкие shim'ы: `src/cli/setup-order.ts` реэкспортирует `apply.ts`, `src/cli/setup.ts` берёт типы/дефолты/
+  discovery оттуда. Один контракт записи для обоих фронтендов; тесты `tests/cli/main-first-run.test.ts` не менялись.
+- **Сервер** (`src/modules/webui/setup-api.ts`): `GET /api/setup` (`required` + languages/providers/defaults),
+  `POST /api/setup/{scan,models,test,locale}`, `POST /api/setup` (валидация → `applyAnswersToConfig` →
+  `setLocale` → `saveConfig` → `reconfigure` → `state.setupRequired=false` → SSE `setup_done`). Контракт:
+  `400 invalid-answers`, `409 already_configured` (повторный вызов после настройки), `503 config_unavailable`.
+  API-ключ принимается, но **никогда не возвращается**.
+- **Гейтинг (defense in depth):** `state.setupRequired` (из `virgin` в `web-command.ts`) — чат-эндпоинты
+  `POST /api/message` и `POST /api/command` отвечают `409 setup_required`; разрешены `/events`, статика,
+  `/api/state`, `/api/i18n`, `/api/setup*`. Реализовано в `util.ts` (`handleMessagePost`) и `server.ts`
+  (`/api/command`), чтобы curl/вторая вкладка не обошли UI.
+- **Фронтенд** (`assets/setup.js`, `index.html`, `app.js`, `styles.css`): скрытый полноэкранный `#setupGate`,
+  `window.MmaSetup.maybeOpen()` (Promise<boolean>) вызывается первым в `app.js` `boot()`; при `required`
+  визард (Language → Provider → Key → Model → Context → Security → Review) берёт экран (`body.setup-active`)
+  и после успеха делает `location.reload()`. Локализация `web.setup.*` (en+ru, RU-плюрализация `_few`),
+  стиль по `docs/design/ui/STYLE.md` (строки/глифы, без boxed-панелей). `/setup.js` отдаётся как статик
+  (`WebUiAssets.setupJs`, `Cache-Control: no-store`).
+
+### Current Version: 2.6.0
 
 ### Changelog
 

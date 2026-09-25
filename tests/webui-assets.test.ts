@@ -69,4 +69,24 @@ describe("webui assets", () => {
     expect(a.js).toMatch(/openTab\(initialSession/);
     expect(a.js).toContain("if (!feedHasContent(tab.feed)) tab.historyLoaded = false;");
   });
+
+  it("ships the first-run setup gate and wizard assets", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="setupGate"');
+    expect(a.html).toContain('src="/setup.js"');
+    expect(a.setupJs).toBeTruthy();
+    expect(a.css).toContain(".setup-gate");
+    expect(a.css).toContain("body.setup-active");
+  });
+
+  it("wires the setup wizard to the /api/setup endpoints and app boot hook", () => {
+    const a = loadAssets();
+    expect(a.setupJs).toContain('window.MmaSetup');
+    expect(a.setupJs).toContain('"/api/setup"');
+    expect(a.setupJs).toContain('"/api/setup/scan"');
+    expect(a.setupJs).toContain('"/api/setup/models"');
+    expect(a.setupJs).toContain('"/api/setup/test"');
+    expect(a.setupJs).toContain('"/api/setup/locale"');
+    expect(a.js).toContain("window.MmaSetup");
+  });
 });
