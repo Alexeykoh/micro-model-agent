@@ -381,6 +381,35 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   стиль по `docs/design/ui/STYLE.md` (строки/глифы, без boxed-панелей). `/setup.js` отдаётся как статик
   (`WebUiAssets.setupJs`, `Cache-Control: no-store`).
 
+### Session Auto-Naming (2.6.0)
+
+- **Детерминированно + LLM:** имя сессии выводится из первого user-сообщения
+  (`deriveSessionName`, `src/modules/session/auto-name.ts`) в единственном хуке `Agent.run()`
+  (REPL/web/one-shot), затем fire-and-forget LLM-уточнение (`generateSessionTitle`, timeout 8s,
+  fail-open) при `config.session.autoName` (default true).
+- **Provenance:** `SessionMeta.nameSource` (`default`/`auto`/`manual`); ручное имя (`create(name)`
+  или `rename`) никогда не перезаписывается. Web-таб обновляет подпись из SSE `state.sessionName`.
+
+### Counter-Agent (In-Loop Critic) (2.6.0)
+
+- **Модули:** `src/modules/critic/` (`types.ts`, `evidence.ts` — `buildEvidencePack`/`isWorkMutation`,
+  `client.ts` — `CriticClient`/`parseVerdict`/`CRITIC_SYSTEM_PROMPT`) + `src/core/agent/critic-gate.ts`
+  (`CriticGate`, `gatherTurnToolEvents`). Встроен в `executeSingleAgentLoop` рядом с `AuditGate`/
+  `HallucinationGate`; **MoE-путь не тронут**.
+- **Поведение:** триггер по work-мутациям (`write_file`/`edit_file`/`delete_file`/`move_file`/
+  `create_dir`/`bash`; `plan` не считается) и перед принятием финального ответа. `critical` →
+  ограниченный repair (`critic.maxRepairCycles`), `concern` → совет; оба инжектят
+  `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
+  `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
+- **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`).
+- **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
+  (`SessionLogger.logCritic`). Визуально: одна строка вердикта при `ui.verbosity ≥ normal`
+  (терминал — `Renderer.criticVerdict`; web — SSE `critic`), в `quiet` скрыта, в `verbose` +summary;
+  model-facing repair/advice (`<system-summary>`) в чат не попадает. v1 использует активный провайдер +
+  детерминированный evidence pack.
+- **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
+  и ограниченный read-only tool-loop (`critic.tools`).
+
 ### Current Version: 2.6.0
 
 ### Changelog

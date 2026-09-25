@@ -66,6 +66,24 @@ mode needs (slash commands, sidebar/topbar snapshot).
   (REST route handlers), `assets.ts`, `util.ts`.
   App creation is separated from `listen()` (rule #13), so tests bind no port.
 
+### Session Auto-Naming
+
+> **Source:** `src/modules/session/auto-name.ts`, `src/core/agent.ts` (`Agent.run`).
+
+Every session is named from the first user message through one cross-transport
+hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
+
+- **Deterministic first** — `deriveSessionName(input)` produces an instant name
+  (first non-empty line, markdown/code/url stripped, capped at 60 chars).
+  `SessionManager.rename(id, name, "auto")` records provenance in
+  `SessionMeta.nameSource` (`default` | `auto` | `manual`).
+- **LLM refinement second** — unless `config.session.autoName === false`, a
+  fire-and-forget `generateSessionTitle` call (8s timeout, fail-open) refines
+  the title and stores it only when the session is still `auto` and unchanged
+  (stale-session guard).
+- **Manual is sticky** — a session created with an explicit name or renamed by
+  the user has `nameSource: "manual"` and is never overwritten.
+
 ### Security Module
 
 > **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
@@ -247,6 +265,32 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 > - Dynamic expert tag discovery by LLM.
 > - Cost/budget tracking per subtask.
 > - Subagent tool set uses tag filtering from expert config, but the orchestrator model selection is still the base model when no separate orchestrator provider is configured.
+
+## Counter-Agent (In-Loop Critic)
+
+> **Spec:** `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4.
+
+An evidence-grounded, event-triggered LLM verifier ("counter-agent") that reviews the single agent's
+in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the MoE path is untouched.
+
+- **Modules:** `src/modules/critic/types.ts` (`CriticVerdict`/`CriticIssue`/`EvidencePack`),
+  `evidence.ts` (`buildEvidencePack`, `isWorkMutation`), `client.ts` (`CriticClient`, `parseVerdict`,
+  `CRITIC_SYSTEM_PROMPT`); the gate lives in `src/core/agent/critic-gate.ts` (`CriticGate`,
+  `gatherTurnToolEvents`).
+- **Trigger:** `enabled` + `criticCalls < maxCalls` + (before-finish OR `mutationsSinceCritic >= 3`)
+  + at least one tool event in the turn. Work mutations are counted per tool call (`write_file`,
+  `edit_file`, `delete_file`, `move_file`, `create_dir`, `bash`; `plan` is bookkeeping, not work).
+- **Authority:** `concern`/`critical` inject a `<system-summary>` and return `retry` once per fresh
+  issue (signature-deduped). `critical` before finish consumes one bounded repair cycle
+  (`maxRepairCycles`); after the budget it degrades to advice. `ok`/null passes.
+- **Fail-open:** the client catches provider errors/timeouts and returns `null` on unparseable JSON
+  (repaired with `jsonrepair` first); the gate catches any verify throw. A broken critic can never
+  block the agent.
+- **Config:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (`src/config/defaults.ts`).
+- **Observability:** `critic_verdict` / `critic_escalation` entries in `session.jsonl` via
+  `SessionLogger.logCritic`; no chat line (quiet UI).
+- **Phase 2 (deferred):** dedicated critic provider and a bounded read-only tool-loop. v1 uses the
+  active provider and the deterministic evidence pack only.
 
 ## LLM Provider Contract (llama.cpp / OpenAI-compat)
 

@@ -3,6 +3,8 @@ import type { ContentPart } from "../../llm/provider";
 export interface SessionMeta {
   id: string;
   name: string;
+  /** Provenance of `name`: default date name, auto-generated, or user-set. */
+  nameSource?: "default" | "auto" | "manual";
   createdAt: string;
   updatedAt: string;
   messageCount: number;

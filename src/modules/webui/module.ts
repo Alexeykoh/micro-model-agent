@@ -286,6 +286,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         },
         (phase) => forwarder.onPhase(phase),
         (reasoning) => forwarder.onReasoning(reasoning),
+        (critic) => forwarder.onCritic(critic),
       );
       // Capture usage before `onTurnEnd` so a `state` broadcast right after the
       // turn already carries the fresh sidebar metrics (the client also polls

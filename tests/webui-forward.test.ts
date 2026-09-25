@@ -160,4 +160,19 @@ describe("webui forwarder", () => {
     expect(json).toContain("[REDACTED]");
     expect(args.count).toBe(3);
   });
+
+  it("emits a critic event and redacts the summary", () => {
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onCritic({
+      status: "critical",
+      issueCount: 1,
+      summary: "leaked sk-1234567890abcdefghij",
+      repair: true,
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ type: "critic", status: "critical", issueCount: 1, repair: true });
+    expect(String(seen[0].summary)).not.toContain("sk-1234567890abcdefghij");
+  });
 });

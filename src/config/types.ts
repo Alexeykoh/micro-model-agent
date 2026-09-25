@@ -144,6 +144,8 @@ export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
   isolateMemory: boolean;
+  /** LLM-refine the session name after the first message (deterministic name always applies). */
+  autoName: boolean;
 }
 
 /**
@@ -436,6 +438,15 @@ export interface ReasoningConfig {
   baseline?: Exclude<ReasoningLevel, "default" | "auto">;
 }
 
+export interface CriticConfig {
+  enabled: boolean;
+  /** Hard cap on critic LLM calls per run. */
+  maxCalls: number;
+  /** Bounded number of critical-triggered repair cycles per run. */
+  maxRepairCycles: number;
+  timeoutMs: number;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -477,4 +488,5 @@ export interface AppConfig {
   lsp?: LspConfig;
   updater: UpdaterConfig;
   reasoning?: ReasoningConfig;
+  critic: CriticConfig;
 }

@@ -41,6 +41,15 @@ import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
+import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
+import { CriticClient } from "../modules/critic/client";
+import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
+import type { CriticUiEvent } from "../modules/critic/types";
+import {
+  deriveSessionName,
+  generateSessionTitle,
+  type TitleChat,
+} from "../modules/session/auto-name";
 import {
   resolvePromptOverflow,
   overflowHint,
@@ -139,6 +148,10 @@ export interface AgentDeps {
   planSummary?: () => string | null;
   /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
   runWithMoEOverride?: typeof runWithMoE;
+  /** Test seam — replaces the real critic verify (Bun module mocks are process-global). */
+  criticOverride?: {
+    verify: (pack: import("../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../modules/critic/types").CriticVerdict | null>;
+  };
   /**
    * Live name of the active provider entry. Needed because transparent
    * failover (FallbackProvider) switches the manager's active entry without
@@ -505,6 +518,7 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
+    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     // Reset shutdown flag from previous interrupt
     this.shutdownRequested = false;
@@ -528,6 +542,9 @@ export class Agent {
       sessionManager.create();
       logger.debug(`Session started: ${sessionManager.getActive()}`);
     }
+
+    const activeMeta = sessionManager?.getActiveMeta();
+    const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
 
     if (
       !this.systemPromptAdded &&
@@ -589,6 +606,36 @@ export class Agent {
     contextManager.addMessage({ role: "user", content: input });
     slog.logUser(input);
 
+    if (isFirstMessage && activeMeta && sessionManager) {
+      const meta = sessionManager.getActiveMeta();
+      if (meta && (meta.nameSource ?? "default") !== "manual") {
+        sessionManager.rename(meta.id, deriveSessionName(input), "auto");
+        if (config.session.autoName !== false) {
+          const chat: TitleChat = async (prompt, signal) => {
+            let text = "";
+            for await (const chunk of llmProvider.chat(
+              [{ role: "user", content: prompt }],
+              undefined,
+              signal,
+              { maxTokens: 48, reasoningEffort: "none" },
+            )) {
+              if (chunk.type === "text" && chunk.content) text += chunk.content;
+            }
+            return text;
+          };
+          void generateSessionTitle(input, chat)
+            .then((title) => {
+              if (!title) return;
+              const cur = sessionManager.getActiveMeta();
+              if (cur && cur.id === meta.id && (cur.nameSource ?? "default") === "auto") {
+                sessionManager.rename(meta.id, title, "auto");
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    }
+
     // Turn lifecycle for plugins: count tool events without touching the loop,
     // and dispatch onTurnEnd exactly once — success, error or interrupt.
     const startedAt = Date.now();
@@ -629,7 +676,7 @@ export class Agent {
               baseDir: this.deps.baseDir,
             },
             input,
-            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning),
+            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic),
             {
               onMeta,
               onTool: countTool,
@@ -639,7 +686,7 @@ export class Agent {
               sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
             },
           )
-        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
+        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic);
 
       // In MoE mode the single-agent loop (the only writer of assistant turns)
       // never runs — without this the history ends user→user across turns and
@@ -678,6 +725,7 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
+    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     const {
       config,
@@ -720,6 +768,26 @@ export class Agent {
     });
     const hallucinationGate = new HallucinationGate(hallucinationDetector);
     const auditGate = new AuditGate(this.deps.finalAudit);
+    // Defensive: partial/legacy configs (tests, old config.json) may lack the
+    // `critic` domain — treat it as disabled rather than crashing the loop.
+    const criticConfig = {
+      enabled: config.critic?.enabled ?? false,
+      maxCalls: config.critic?.maxCalls ?? 4,
+      maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
+      timeoutMs: config.critic?.timeoutMs ?? 15000,
+    };
+    const criticClient = new CriticClient({
+      provider: this.deps.llmProvider,
+      timeoutMs: criticConfig.timeoutMs,
+    });
+    const criticGate = new CriticGate({
+      enabled: criticConfig.enabled,
+      maxCalls: criticConfig.maxCalls,
+      maxRepairCycles: criticConfig.maxRepairCycles,
+      verify: this.deps.criticOverride?.verify ?? ((pack, signal) => criticClient.verify(pack, signal)),
+      buildPack: (d) => buildEvidencePack({ task: d.task, planSummary: d.planSummary, toolEvents: d.toolEvents }),
+      signal: this.abortController?.signal,
+    });
 
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
@@ -1105,6 +1173,9 @@ export class Agent {
             cycleNudges.push(target);
           }
         }
+        for (const tc of toolCalls) {
+          if (isWorkMutation(tc.name)) state.mutationsSinceCritic++;
+        }
       }
 
       if (sawToolCall) {
@@ -1225,6 +1296,23 @@ export class Agent {
         logger.warn(
           `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
         );
+      }
+
+      const criticAction = await criticGate.evaluate({
+        state,
+        iteration: state.iteration,
+        logger,
+        contextManager,
+        slog,
+        task: input,
+        planSummary: this.deps.planSummary?.() ?? undefined,
+        toolEvents: gatherTurnToolEvents(contextManager),
+        beforeFinish: true,
+        onUi: onCritic,
+      });
+      if (criticAction === "retry") {
+        state.suppressRepetitionRetry = true;
+        continue;
       }
 
       const auditVerdict = await auditGate.evaluate({
