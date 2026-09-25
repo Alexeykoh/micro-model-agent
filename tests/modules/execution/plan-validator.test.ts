@@ -171,6 +171,46 @@ describe("deleteReadOverlap", () => {
     const results = deleteReadOverlap(subtasks);
     expect(results).toHaveLength(0);
   });
+
+  it("does not flag sibling files that merely share a prefix (.ts vs .tsx)", () => {
+    const subtasks = [
+      {
+        ...validPlan.subtasks[0],
+        id: "writer",
+        allowed_files: ["src/main.ts"],
+        read_only_files: [],
+        depends_on: [],
+      },
+      {
+        ...validPlan.subtasks[0],
+        id: "reader",
+        allowed_files: [],
+        read_only_files: ["src/main.tsx"],
+        depends_on: [],
+      },
+    ];
+    expect(deleteReadOverlap(subtasks)).toHaveLength(0);
+  });
+
+  it("flags a real directory ancestor overlap", () => {
+    const subtasks = [
+      {
+        ...validPlan.subtasks[0],
+        id: "writer",
+        allowed_files: ["src/components"],
+        read_only_files: [],
+        depends_on: [],
+      },
+      {
+        ...validPlan.subtasks[0],
+        id: "reader",
+        allowed_files: [],
+        read_only_files: ["src/components/Button.tsx"],
+        depends_on: [],
+      },
+    ];
+    expect(deleteReadOverlap(subtasks).length).toBeGreaterThan(0);
+  });
 });
 
 describe("applyAutoFixes", () => {
@@ -194,5 +234,27 @@ describe("applyAutoFixes", () => {
     };
     const fixed = applyAutoFixes(plan, [{ subtaskId: "a", fix: "Add depends_on: b" }]);
     expect(fixed.subtasks[0].depends_on).toContain("b");
+  });
+
+  it("does not mutate the caller's plan (depends_on array is copied)", () => {
+    const plan: MoEPlan = {
+      title: "fix",
+      subtasks: [
+        {
+          id: "a",
+          description: "",
+          expert_tag: "code",
+          allowed_files: [],
+          read_only_files: [],
+          depends_on: [],
+          input_from: [],
+          expected_output: "",
+          success_criteria: [],
+        },
+      ],
+      shared_context: { rules: [], refs: [] },
+    };
+    applyAutoFixes(plan, [{ subtaskId: "a", fix: "Add depends_on: b" }]);
+    expect(plan.subtasks[0].depends_on).toEqual([]);
   });
 });

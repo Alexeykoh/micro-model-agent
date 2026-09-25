@@ -1,25 +1,23 @@
-const FILE_PATH_RE = /\b[\w./\\-]+\.[a-z]+\b/gi;
-const IGNORED_EXT = new Set([
-  "tsx",
-  "jsx",
-  "json5",
-  "mdx",
-  "yml",
-  "yaml",
-  "toml",
-  "lock",
-  "svg",
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "ico",
-  "css",
-  "scss",
-  "less",
-  "html",
+import { stripUrls } from "../hallucination/js-identifiers";
+
+/**
+ * Coverage-specific extension allow-list. Only real deliverable file types are
+ * counted, so prose like `e.g` / `i.e` (extensions `g`/`e`) is never mistaken
+ * for a file, while web/doc deliverables (`.css`, `.html`, `.scss`, `.md`) ARE
+ * checked — the old deny-list silently skipped them.
+ */
+const COVERAGE_EXT = new Set([
+  // code
+  "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rb", "go", "rs", "java",
+  "kt", "kts", "cs", "php", "swift", "c", "cc", "cpp", "cxx", "h", "hpp",
+  "lua", "pl", "sh", "bash", "zsh", "bat", "cmd", "ps1", "sql", "vue",
+  "svelte", "dart", "scala", "clj",
+  // web / docs / config
+  "css", "scss", "less", "html", "htm", "md", "mdx", "json", "json5",
+  "toml", "yaml", "yml", "ini", "env", "txt",
 ]);
+
+const FILE_PATH_RE = /\b[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
  * Extract file paths (with extensions) mentioned in a task statement.
@@ -29,12 +27,16 @@ export function extractFilePaths(text: string): string[] {
   if (!text) return [];
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const m of text.matchAll(FILE_PATH_RE)) {
-    let p = m[0];
-    // Trim trailing punctuation that regex greedily keeps (e.g. "test.ts.")
-    p = p.replace(/[.,;:)\]>]+$/g, "");
-    const ext = p.split(".").pop()?.toLowerCase() ?? "";
-    if (!p || IGNORED_EXT.has(ext)) continue;
+  for (const m of stripUrls(text).matchAll(FILE_PATH_RE)) {
+    const p = m[0].replace(/[.,;:)\]>]+$/g, "");
+    if (!p) continue;
+    // Require a real file name: a non-empty stem before the extension in the
+    // last path segment (so `tsx/.ts` / `.env` segments are not "files").
+    const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    const last = slash >= 0 ? p.slice(slash + 1) : p;
+    const dot = last.lastIndexOf(".");
+    if (dot <= 0) continue;
+    if (!COVERAGE_EXT.has(last.slice(dot + 1).toLowerCase())) continue;
     const key = p.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);

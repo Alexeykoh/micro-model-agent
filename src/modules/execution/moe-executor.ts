@@ -379,6 +379,14 @@ export class MoEExecutor {
 
     const subtasks =
       skipIds && skipIds.size > 0 ? plan.subtasks.filter((s) => !skipIds.has(s.id)) : plan.subtasks;
+
+    // Selective re-plan where every subtask was already successful: nothing to
+    // execute. This used to fall through to topologicalSort([]) and be reported
+    // as a bogus "possible cycle" failure, burning the remaining re-plan cycles.
+    if (subtasks.length === 0) {
+      return { success: true, results, errors: [], warnings };
+    }
+
     const waves = topologicalSort(subtasks);
 
     if (waves.length === 0) {

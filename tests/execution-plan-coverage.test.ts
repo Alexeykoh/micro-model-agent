@@ -32,6 +32,15 @@ describe("extractFilePaths", () => {
     const task = "Create a utility library with tests";
     expect(extractFilePaths(task)).toEqual([]);
   });
+
+  it("does not treat e.g./i.e as files and keeps real css/html deliverables", () => {
+    const task = "Create foo.ts and bar.tsx, e.g. add styles.css. Use i.e. the header";
+    const paths = extractFilePaths(task);
+    expect(paths).not.toContain("e.g");
+    expect(paths).not.toContain("i.e");
+    expect(paths).toContain("foo.ts");
+    expect(paths).toContain("styles.css");
+  });
 });
 
 describe("checkPlanCoverage", () => {

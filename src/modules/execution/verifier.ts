@@ -9,6 +9,8 @@ import { validateExpertConfig } from "../../config/experts";
 import { findProjectRoot, resolveTscCommand } from "../lsp/project-root";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
+import { findTypecheckRoot } from "./audit-runners";
+import { killTree } from "../processes/kill-tree";
 
 export interface VerificationItem {
   passed: boolean;
@@ -45,8 +47,10 @@ export class StepVerifier {
   }
 
   async checkFileExists(path: string): Promise<VerificationItem> {
-    const resolved = resolve(this.baseDir, path);
-    const exists = existsSync(resolved);
+    // Nested-aware (same resolver as verifyStep): a project created in
+    // `baseDir/proj/` must not be reported missing because the file lives below.
+    const resolved = findExistingFile(this.baseDir, path);
+    const exists = !!resolved;
     return {
       passed: exists,
       message: exists ? t("verify.file_exists", { path }) : t("verify.file_not_found", { path }),
@@ -65,15 +69,19 @@ export class StepVerifier {
     }
   }
 
-  async runTypeCheck(): Promise<VerificationItem> {
-    const tsconfigPath = resolve(this.baseDir, "tsconfig.json");
+  async runTypeCheck(existingFiles: string[] = []): Promise<VerificationItem> {
+    // Resolve the project root from the artifacts too, so a project nested in
+    // `baseDir/proj/` is type-checked instead of being skipped ("No
+    // tsconfig.json found") — the old baseDir-only lookup missed it.
+    const root = findTypecheckRoot(this.baseDir, existingFiles) ?? this.baseDir;
+    const tsconfigPath = join(root, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
       return { passed: true, message: "No tsconfig.json found — skipping type check" };
     }
-    const tsc = resolveTscCommand(this.baseDir);
+    const tsc = resolveTscCommand(root);
     if (!tsc) return { passed: true, message: "tsc not installed — skipping type check" };
     try {
-      await this.runAsync(`${tsc} --noEmit`, this.baseDir, 60_000);
+      await this.runAsync(`${tsc} --noEmit`, root, 60_000);
       return { passed: true, message: "TypeScript type check passed" };
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
@@ -215,7 +223,11 @@ export class StepVerifier {
       details.push({ passed: false, message: err });
     }
 
-    const tscResult = await this.runTypeCheck();
+    const existingArtifacts = plan.subtasks
+      .flatMap((s) => s.allowed_files || [])
+      .map((f) => findExistingFile(this.baseDir, f))
+      .filter((f): f is string => !!f);
+    const tscResult = await this.runTypeCheck(existingArtifacts);
     details.push(tscResult);
     if (!tscResult.passed) {
       errors.push(tscResult.message);
@@ -361,7 +373,9 @@ export class StepVerifier {
         stderr += d.toString();
       });
       const timer = setTimeout(() => {
-        child.kill();
+        // Kill the whole tree: with shell:true, child.kill() only stops the
+        // shell and leaves the real tsc/node grandchild running.
+        killTree(child);
         reject(new Error(`Command timed out after ${timeoutMs}ms`));
       }, timeoutMs);
       child.on("error", (err) => {
