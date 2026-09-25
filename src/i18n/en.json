@@ -712,6 +712,8 @@
   "exec.repetitive_tool": "Called {tool} {count} times with identical arguments and result. Try a different approach — create files directly, change arguments, or check process status via process_log.",
   "exec.consecutive_failures_recovery": "{count} consecutive tool failures. Create files directly via write_file instead of terminal commands. Check that dependencies are installed (npm install). Do not run build/tests until all files are created.",
   "exec.bash_flailing_recovery": "bash failed in {fails} of the last {window} attempts. Stop using shell commands for file operations on this machine — they do not work. Use the dedicated tools instead: read_file (the header shows line counts), write_file, edit_file, file_info (file size), glob/grep for search",
+  "exec.bash_flailing": "bash failed in {fails} of the last {window} attempts.",
+  "exec.consecutive_failures": "{count} consecutive tool failures.",
   "exec.read_only_loop": "No write/exec for {count} tool calls — the agent is only reading/exploring.",
   "exec.read_only_loop_recovery": "{count} consecutive read-only tool calls (read_file/glob/grep/browser) with no writes. STOP exploring and make the edit the task requires: read the file, then call write_file or edit_file. If you cannot finish the task, ask the user instead of re-reading the same files.",
   "exec.plan_warning": "Current plan step {step} is \"{description}\", but {tool} is being called for files outside this step. Complete the current step first, then call plan update step={step} status=done before moving to the next step.",

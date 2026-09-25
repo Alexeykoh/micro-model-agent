@@ -382,7 +382,10 @@ export class StuckDetector {
   recordToolSuccess(): void {
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
-    this.escalationCount = 0;
+    // NOTE: escalationCount is deliberately NOT reset here. A single trivial
+    // tool success (e.g. one read_file) used to clear it, so shouldEscalate()
+    // was rarely reached on a flailing session — defeating the anti-gaming
+    // property that resetStepState() explicitly preserves.
     // Decay per-tool error counters on productive calls: a tool that failed
     // early must not keep the "Tool X failed N times" warning alive forever
     // (ses_mt4fn58c — bash failed 3x, warning re-logged after 30 successful
@@ -706,6 +709,16 @@ export class StuckDetector {
     );
     if (errorTool) {
       return t("exec.tool_errors", { tool: errorTool[0], count: errorTool[1] });
+    }
+    if (this.hasBashFlailing()) {
+      const fails = this.bashRecent.filter((ok) => !ok).length;
+      return t("exec.bash_flailing", {
+        fails: String(fails),
+        window: String(this.bashRecent.length),
+      });
+    }
+    if (this.hasConsecutiveFailures()) {
+      return t("exec.consecutive_failures", { count: String(this.consecutiveFailures) });
     }
     if (this.hasReadOnlyLoop()) {
       return t("exec.read_only_loop", {
