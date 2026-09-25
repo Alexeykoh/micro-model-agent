@@ -3,6 +3,7 @@ import { join } from "path";
 import { Logger } from "../../logger/app-logger";
 import type { Plan } from "./planner";
 import { errMsg } from "../../utils";
+import { projectMmaDir } from "../../config/paths";
 
 const log = new Logger("info", "plan-store");
 
@@ -85,7 +86,7 @@ export class PlanStore {
   private legacyPath: string;
 
   constructor(baseDir: string) {
-    const mmaDir = join(baseDir, ".mma");
+    const mmaDir = projectMmaDir(baseDir);
     if (!existsSync(mmaDir)) mkdirSync(mmaDir, { recursive: true });
 
     this.baseDir = baseDir;

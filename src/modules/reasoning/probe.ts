@@ -3,7 +3,7 @@ import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningStrategy } from "../../config/types";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
+import { globalMmaDir } from "../../config/paths";
 
 const PROBE_MESSAGES: Message[] = [
   { role: "user", content: "Reply with exactly: ok" },
@@ -21,7 +21,7 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Disk cache path: ~/.mma/reasoning-cache.json (override with MMA_REASONING_CACHE). */
 function cachePath(): string {
-  return process.env.MMA_REASONING_CACHE ?? join(homedir(), ".mma", "reasoning-cache.json");
+  return process.env.MMA_REASONING_CACHE ?? join(globalMmaDir(), "reasoning-cache.json");
 }
 
 /** In-memory L1 cache (same-process fast path). */

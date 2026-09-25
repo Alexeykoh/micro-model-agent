@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
-import { join, } from "path";
-import { homedir } from "os";
+import { join } from "path";
 import {
   encryptString,
   decryptString,
@@ -8,6 +7,7 @@ import {
   ConfigEncryptor,
 } from "./encryption";
 import { defaultOutputBus } from "../../output";
+import { globalMmaDir } from "../../config/paths";
 
 /**
  * Session file encryption configuration
@@ -50,7 +50,7 @@ export class SessionFileEncryptor {
   constructor(config?: Partial<SessionEncryptionConfig>) {
     this.config = { ...DEFAULT_SESSION_ENCRYPTION, ...config };
     this.encryptor = new ConfigEncryptor({
-      keyPath: config?.keyPath || join(homedir(), ".mma", ".session-encryption-key"),
+      keyPath: config?.keyPath || join(globalMmaDir(), ".session-encryption-key"),
     });
   }
 

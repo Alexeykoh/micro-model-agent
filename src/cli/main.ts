@@ -15,7 +15,6 @@ import { t, setLocale } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { UpdaterModule, isDevEntryPath } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
@@ -23,6 +22,7 @@ import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
 import type { AgentResult } from "../core/types";
+import { globalMmaDir } from "../config/paths";
 
 /**
  * Set only for one-shot `--json` runs (a positional prompt exists). Module-scoped
@@ -41,7 +41,7 @@ let jsonMode = false;
 function resolveEarlyLocale(): string | undefined {
   const env = process.env.MMA_LOCALE;
   if (env) return env;
-  const dir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+  const dir = globalMmaDir();
   for (const p of [join(dir, "config", "core.json"), join(dir, "config.json")]) {
     try {
       const parsed = JSON.parse(readFileSync(p, "utf-8")) as { locale?: unknown };
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     const jsonSink = jsonOpt ? new JsonOutputSink(defaultOutputBus) : undefined;
 
     const prompt = program.args.join(" ");
-    const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+    const mmaDir = globalMmaDir();
     const { hasDomainFiles } = await import("../config/domains");
     const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
     const { agent, config, baseDir, legacyDetected, contextProbe } = await bootstrap(
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
   } else {
     if (onboardingStart === "meet") process.env.MMA_START_MEET = "1";
     if (onboardingStart === "init") process.env.MMA_START_INIT = "1";
-    const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+    const mmaDir = globalMmaDir();
     const legacyConfigPath = join(mmaDir, "config.json");
     let hasAnyConfig = existsSync(legacyConfigPath);
     if (!hasAnyConfig) {

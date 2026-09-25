@@ -16,6 +16,7 @@ import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
 import { join } from "path";
+import { projectMmaDir } from "../config/paths";
 import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
@@ -445,7 +446,7 @@ export class Agent {
       includedTokens: dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0),
       systemBudget,
       provider: cfg.instructions?.summarize === false ? null : this.deps.llmProvider,
-      cacheDir: join(this.deps.baseDir, ".mma", "cache", "prompt-summaries"),
+      cacheDir: join(projectMmaDir(this.deps.baseDir), "cache", "prompt-summaries"),
       logger: this.deps.logger,
     });
     for (const r of res.replacements) {

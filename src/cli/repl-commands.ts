@@ -30,7 +30,6 @@ import { getMessageText } from "../llm/provider";
 import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
-import { homedir } from "os";
 import type { LineInput } from "../ui/line-editor";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
@@ -43,6 +42,7 @@ import { runMapAction } from "../modules/indexer/map-command";
 import { registerOnboardingCommands } from "./onboarding-commands";
 import { errMsg } from "../utils";
 import type { OutputChannel } from "../output";
+import { globalExportsDir } from "../config/paths";
 
 const version = readMmaVersion();
 
@@ -1341,7 +1341,7 @@ function registerSessionCommands(ctx: ReplContext): void {
         ctx.output.writeLine(text);
         return;
       }
-      const baseDir = out ? dirname(out) : join(homedir(), ".mma", "exports");
+      const baseDir = out ? dirname(out) : globalExportsDir();
       const path =
         out ?? join(baseDir, `${sanitizeFileName(match.name)}-${match.id.slice(0, 8)}.${extensionFor(format)}`);
       try {

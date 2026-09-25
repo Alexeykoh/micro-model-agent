@@ -14,9 +14,10 @@ import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
 import { defaultOutputBus } from "../output";
+import { MMA_DIR_NAME } from "./paths";
 
 // ── Centralized path constants ──────────────────────────────────────────
-export const CONFIG_DIR = join(homedir(), ".mma");
+export const CONFIG_DIR = join(homedir(), MMA_DIR_NAME);
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 export const CONFIG_DOMAIN_DIR = join(CONFIG_DIR, "config");
 

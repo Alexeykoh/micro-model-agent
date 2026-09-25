@@ -62,6 +62,7 @@ import {
 } from "../output";
 import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
+import { MMA_DIR_NAME, projectMmaDir } from "../config/paths";
 
 function formatContextBar(
   used: number,
@@ -184,7 +185,7 @@ export class Repl implements ReplContext, Host {
     this.execModule = execModule;
     this.slog = new SessionLogger(sessionManager, logger);
     this.bindSessionOutput();
-    this.configDir = configDir || join(homedir(), ".mma");
+    this.configDir = configDir || join(homedir(), MMA_DIR_NAME);
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
     this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
@@ -1228,7 +1229,7 @@ export class Repl implements ReplContext, Host {
     } else {
       const agentsMdCandidates = [
         join(this.baseDir, "AGENTS.md"),
-        join(this.baseDir, ".mma", "AGENTS.md"),
+        join(projectMmaDir(this.baseDir), "AGENTS.md"),
         join(this.configDir, "AGENTS.md"),
       ];
       const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));

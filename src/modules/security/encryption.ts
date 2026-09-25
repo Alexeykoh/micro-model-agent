@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { homedir } from "os";
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "fs";
+import { globalMmaDir } from "../../config/paths";
 
 /**
  * Encryption configuration
@@ -20,7 +20,7 @@ export interface EncryptionConfig {
 }
 
 const DEFAULT_CONFIG: Required<EncryptionConfig> = {
-  keyPath: join(homedir(), ".mma", ".encryption-key"),
+  keyPath: join(globalMmaDir(), ".encryption-key"),
   algorithm: "aes-256-gcm",
 };
 

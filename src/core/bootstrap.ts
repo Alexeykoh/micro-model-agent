@@ -44,6 +44,11 @@ import { dryRunOverflow, overflowHint } from "./prompt-overflow";
 import { probeModel, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
 import type { ReasoningLevel } from "../config/types";
+import {
+  globalMmaDir,
+  globalPluginsDir as resolveGlobalPluginsDir,
+  projectMmaDir,
+} from "../config/paths";
 
 /**
  * CLI --reasoning переопределяет конфигурационный режим
@@ -81,7 +86,7 @@ function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefine
  */
 /** Candidate AGENTS.md paths, in priority order: project, project `.mma`, global config. */
 export function agentsMdPaths(baseDir: string, configDir: string): string[] {
-  return [join(baseDir, "AGENTS.md"), join(baseDir, ".mma", "AGENTS.md"), join(configDir, "AGENTS.md")];
+  return [join(baseDir, "AGENTS.md"), join(projectMmaDir(baseDir), "AGENTS.md"), join(configDir, "AGENTS.md")];
 }
 
 function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): PromptBlock[] {
@@ -300,7 +305,7 @@ export async function bootstrap(
   reasoningLevel?: string,
   contextLog?: boolean,
 ): Promise<BootstrapResult> {
-  const dir = configDir || process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+  const dir = configDir || globalMmaDir();
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
   const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });
@@ -480,7 +485,7 @@ export async function bootstrap(
     logger.warn(warning);
   }
 
-  const projectMapCacheDir = join(baseDir, ".mma");
+  const projectMapCacheDir = projectMmaDir(baseDir);
   const indexerModule = new IndexerModule({
     baseDir,
     cacheDir: projectMapCacheDir,
@@ -503,7 +508,7 @@ export async function bootstrap(
   const skillsLoader = new SkillsLoader();
   const builtinDir = join(import.meta.dirname, "skills", "builtin");
   const globalDir = join(homedir(), ".agents", "skills");
-  const projectSkillsDir = join(baseDir, ".mma", "skills");
+  const projectSkillsDir = join(projectMmaDir(baseDir), "skills");
   const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir);
 
   const skillsBudget = Math.floor(config.contextWindow * config.skills.budget);
@@ -784,8 +789,8 @@ export async function bootstrap(
   pluginManager.register(notifyPlugin);
 
   const pluginLoader = new PluginLoader();
-  const globalPluginsDir = join(homedir(), ".mma", "plugins");
-  const projectPluginsDir = join(baseDir, ".mma", "plugins");
+  const globalPluginsDir = resolveGlobalPluginsDir();
+  const projectPluginsDir = join(projectMmaDir(baseDir), "plugins");
   const mmaVersion = readMmaVersion();
   pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger, {
     source: "global",

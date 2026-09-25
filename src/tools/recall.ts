@@ -1,8 +1,8 @@
-import { homedir } from "os";
-import { join } from "path";
+
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { MemoryStore } from "../modules/memory/store";
+import { globalMemoryDir } from "../config/paths";
 
 const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"];
 
@@ -30,7 +30,7 @@ export const recallTool: ToolDefinition = {
   handler: async (_ctx, args) => {
     const query = args.query ? String(args.query) : "";
     const category = args.category ? String(args.category) : "";
-    const memoryDir = join(homedir(), ".mma", "memory");
+    const memoryDir = globalMemoryDir();
     const store = new MemoryStore(memoryDir);
 
     try {

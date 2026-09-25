@@ -11,7 +11,6 @@
  * styling) and never throws; errors become a dim `↳ ...` hint.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { getConfigValue } from "../../config/registry";
 import type { AppConfig } from "../../config/types";
@@ -25,6 +24,7 @@ import {
 import { errMsg } from "../../utils/error";
 import { applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
 import type { WebUiState } from "./state";
+import { globalExportsDir } from "../../config/paths";
 
 const REASONING_USAGE = "/reasoning [show|hide|on|off|level <auto|default|none|low|medium|high|max>]";
 const CONTEXT_USAGE = "/context [<tokens> | system <share> | reserve <share>]";
@@ -209,7 +209,7 @@ function exportCmd(state: WebUiState, args: string[], out: Out): void {
     return;
   }
   const text = redactExport(formatExport({ meta: match, messages, log }, format), true);
-  const dir = outPath ? dirname(outPath) : join(homedir(), ".mma", "exports");
+  const dir = outPath ? dirname(outPath) : globalExportsDir();
   const path =
     outPath ??
     join(dir, `${sanitizeFileName(match.name)}-${match.id.slice(0, 8)}.${extensionFor(format)}`);
