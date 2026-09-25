@@ -178,4 +178,14 @@ describe("SSRF bypass regressions (audit 2026-08-26)", () => {
     expect(isIpPrivate("8.8.8.8")).toBe(false);
     expect(isIpPrivate("2606:4700::6810:85e5")).toBe(false);
   });
+
+  it("blocks expanded/non-canonical IPv6 loopback and mapped forms", () => {
+    expect(isIpPrivate("0:0:0:0:0:0:0:1")).toBe(true);
+    expect(isIpPrivate("::")).toBe(true);
+    expect(isIpPrivate("::ffff:0:7f00:1")).toBe(true);
+    expect(isIpPrivate("fe80::1")).toBe(true);
+    expect(isIpPrivate("fd00::1")).toBe(true);
+    expect(isIpPrivate("0:0:0:0:0:0:0:1%eth0")).toBe(true);
+    expect(isUrlAllowed("http://[0:0:0:0:0:0:0:1]/x", { enabled: true } as any).allowed).toBe(false);
+  });
 });

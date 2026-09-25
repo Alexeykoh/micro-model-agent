@@ -1,9 +1,15 @@
 import { writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import {
+  BlockedRedirectError,
+  fetchValidated,
+  isUrlAllowed,
+  sanitizeUrl,
+} from "../modules/security/network-validator";
 import { isPathWritable } from "../modules/security/path-validator";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 import { logNetworkRequest, logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
@@ -72,10 +78,30 @@ export const downloadFileTool: ToolDefinition = {
       };
     }
 
+    // Same write guard as write_file/edit_file: an onboarding write allowlist
+    // and the always-on protected-path check (download_file could otherwise
+    // overwrite .env / keys that every other write tool refuses).
+    if (ctx.writePathAllowlist) {
+      const ok = ctx.writePathAllowlist.some(
+        (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
+      );
+      if (!ok) {
+        return {
+          success: false,
+          output: t("file.path_not_allowed", {
+            path: `${path} — ${t("onboarding.write_restricted")}`,
+          }),
+        };
+      }
+    }
+    const protectedBlock = protectedPathBlock(ctx, resolved, path);
+    if (protectedBlock) return protectedBlock;
+
     const maxBytes = Number(args.max_bytes) > 0 ? Number(args.max_bytes) : MAX_DOWNLOAD_BYTES;
 
     try {
-      const response = await fetch(url, {
+      // Redirect hops are re-validated (SSRF) inside the helper.
+      const { response } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
       });
       if (!response.ok) {
@@ -130,6 +156,10 @@ export const downloadFileTool: ToolDefinition = {
         }),
       };
     } catch (e: any) {
+      if (e instanceof BlockedRedirectError) {
+        logSecurityBlock(ctx.sessionId, "network_request", e.reason, sanitizeUrl(url));
+        return { success: false, output: `[SECURITY BLOCKED] redirect: ${e.reason}` };
+      }
       logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
       return {
         success: false,

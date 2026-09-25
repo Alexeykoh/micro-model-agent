@@ -62,20 +62,20 @@ export const mcpCallTool: ToolDefinition = {
       };
     }
 
+    const client = new MCPClient(serverConfig);
     try {
-      const client = new MCPClient(serverConfig);
       await client.connect();
-
       const result = await client.callTool(toolName, toolArgs);
-
-      await client.disconnect();
-
       return {
         success: true,
         output: `MCP call result:\n${JSON.stringify(result, null, 2)}`,
       };
     } catch (e: any) {
       return { success: false, output: `MCP call failed: ${e.message}` };
+    } finally {
+      // Always close the client — an error/timeout during callTool used to
+      // skip disconnect and orphan the stdio child process for the session.
+      await client.disconnect().catch(() => {});
     }
   },
 };

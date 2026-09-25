@@ -24,14 +24,27 @@ export class MemoryStore {
     }
   }
 
+  /**
+   * Reject any name outside the fixed memory categories. Without this a
+   * model-supplied `category` (the tool schema `enum` is advisory, not
+   * enforced) could traverse out of the memory dir, e.g.
+   * `recall category="../../Users/x/notes"` read `notes.md` outside it.
+   */
+  private fileFor(name: string): string {
+    if (!MEMORY_FILES.includes(name)) {
+      throw new Error(`unknown memory category: ${name}`);
+    }
+    return join(this.memoryDir, `${name}.md`);
+  }
+
   read(name: string): string {
-    const path = join(this.memoryDir, `${name}.md`);
+    const path = this.fileFor(name);
     if (!existsSync(path)) return "";
     return readFileSync(path, "utf-8");
   }
 
   append(name: string, entry: string): void {
-    const path = join(this.memoryDir, `${name}.md`);
+    const path = this.fileFor(name);
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
     const formatted = `- **${timestamp}** — ${entry}\n`;
     appendFileSync(path, formatted, "utf-8");

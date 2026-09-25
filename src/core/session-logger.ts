@@ -5,8 +5,7 @@ import type { CacheUsage } from "../llm/cache-usage";
 import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
-import { join } from "path";
-import { readFileSync, existsSync } from "fs";
+import { redactContextSecrets } from "./agent/context-log";
 
 /**
  * Thin wrapper around SessionManager that eliminates repetitive
@@ -51,7 +50,7 @@ export class SessionLogger {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "system",
-      content,
+      content: redactContextSecrets(content),
     });
   }
 
@@ -80,7 +79,7 @@ export class SessionLogger {
       this.session?.appendLog({
         ts: new Date().toISOString(),
         type: "reasoning",
-        content: reasoning,
+        content: redactContextSecrets(reasoning),
         iteration,
         provider: caller?.provider,
         model: caller?.model,
@@ -89,7 +88,7 @@ export class SessionLogger {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "assistant",
-      content,
+      content: redactContextSecrets(content),
       ...(toolCalls
         ? {
             tool_calls: toolCalls.map((tc) => ({
@@ -109,7 +108,7 @@ export class SessionLogger {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "assistant",
-      content,
+      content: redactContextSecrets(content),
       timestamp: new Date().toISOString(),
       provider: caller?.provider,
       model: caller?.model,
@@ -308,7 +307,7 @@ export class SessionLogger {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "error",
-      content: message,
+      content: redactContextSecrets(message),
     });
   }
 
@@ -346,15 +345,15 @@ export class SessionLogger {
     plugins?: string[];
     skills?: number;
   }): void {
-    // Skip if session_start already logged (REPL may have logged it with LSP probe)
+    // Skip if session_start already logged (REPL may have logged it with LSP
+    // probe). Read through the decrypt-aware store: under session encryption
+    // the on-disk lines are ciphertext, so a plaintext substring check never
+    // matched and a duplicate entry was appended.
     const meta = this.session?.getActiveMeta();
     if (meta) {
-      const logPath = join(this.session!.getSessionDirectory(meta.id), "session.jsonl");
       try {
-        if (existsSync(logPath)) {
-          const content = readFileSync(logPath, "utf-8");
-          if (content.includes('"type":"session_start"')) return;
-        }
+        const entries = this.session!.loadSessionLog(meta.id);
+        if (entries.some((e) => e.type === "session_start")) return;
       } catch {
         // File read error — proceed to write
       }

@@ -184,6 +184,17 @@ describe("session-logger sanitization", () => {
     expect(tool.content).toBe(long);
   });
 
+  it("redacts secrets from assistant/reasoning/system/error entries", () => {
+    const { logger, logs, messages } = makeLogger();
+    const secret = "sk-ABCDEF12345678901234";
+    logger.logSystem(`system ${secret}`);
+    logger.logAssistant(`answer ${secret}`, `reasoning ${secret}`);
+    logger.saveAssistantMessage(`final ${secret}`);
+    logger.logError(`error ${secret}`);
+    const all = JSON.stringify({ logs, messages });
+    expect(all).not.toContain(secret);
+  });
+
   it("logToolCall does not throw when sanitizer corrupts the arg JSON", () => {
     // Санитайзер режет закрывающую кавычку в `password=secret"`, из-за чего
     // JSON.parse падал и запись tool_call терялась. Запись обязана выжить.
