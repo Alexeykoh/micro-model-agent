@@ -89,4 +89,14 @@ describe("webui assets", () => {
     expect(a.setupJs).toContain('"/api/setup/locale"');
     expect(a.js).toContain("window.MmaSetup");
   });
+
+  it("wires the critic SSE event and the Agent settings panel (MoE + critic keys)", () => {
+    const a = loadAssets();
+    expect(a.js).toContain('addEventListener("critic"');
+    expect(a.js).toContain("onCritic");
+    expect(a.js).toContain("critic.enabled");
+    expect(a.js).toContain("moe.enabled");
+    expect(a.html).toContain('data-p="agent"');
+    expect(a.html).toContain('data-panel="agent"');
+  });
 });

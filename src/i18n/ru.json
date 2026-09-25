@@ -1071,6 +1071,7 @@
   "web.settings.model": "Модель и провайдер",
   "web.settings.context": "Контекст",
   "web.settings.reasoning": "Рассуждения",
+  "web.settings.agent": "Агент",
   "web.settings.ui": "Интерфейс и тема",
   "web.settings.memory": "Память",
   "web.settings.skills": "Навыки",
