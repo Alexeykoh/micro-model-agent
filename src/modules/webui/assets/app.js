@@ -806,6 +806,36 @@
     if (level === "error" || level === "warn") announce(data.text);
   }
 
+  // In-loop critic verdict (concern/critical). Mirrors the terminal verbosity
+  // (quiet hides, normal shows one line, verbose adds the summary). The
+  // repair/advice directive itself is model-facing and never sent here.
+  function criticVerbosity() {
+    const ui = (state.config && state.config.ui) || {};
+    if (ui.verbosity) return ui.verbosity;
+    return ui.verbose ? "verbose" : "quiet";
+  }
+
+  function onCritic(data) {
+    if (!data || (data.status !== "concern" && data.status !== "critical")) return;
+    const verbosity = criticVerbosity();
+    if (verbosity === "quiet") return;
+    const feed = feedForEvent(data.sessionId) || activeFeed();
+    if (!feed) return;
+    const critical = data.status === "critical" || data.repair === true;
+    const label = critical
+      ? t("web.critic_repair")
+      : pluralCount("web.critic_concern", Number(data.issueCount) || 0);
+    const line = el("div", critical ? "warnline" : "detail");
+    line.textContent = (critical ? "⚠ " : "⟡ ") + label;
+    appendTo(feed, line);
+    if (verbosity === "verbose" && typeof data.summary === "string" && data.summary) {
+      const detail = el("div", "detail");
+      detail.textContent = "↳ " + data.summary;
+      appendTo(feed, detail);
+    }
+    if (critical) announce(label);
+  }
+
   function renderAssistantText(feed, text) {
     parseFences(String(text)).forEach((part) => {
       if (part.type === "code") {
@@ -2177,6 +2207,10 @@
     es.addEventListener("plan", (e) => {
       const d = parse(e);
       if (d) onPlan(d);
+    });
+    es.addEventListener("critic", (e) => {
+      const d = parse(e);
+      if (d) onCritic(d);
     });
     es.addEventListener("question", (e) => {
       const d = parse(e);

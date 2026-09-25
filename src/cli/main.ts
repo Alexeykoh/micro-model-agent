@@ -306,6 +306,7 @@ async function main(): Promise<void> {
           }
         },
         (reasoning) => renderer.reasoning(reasoning),
+        (critic) => renderer.criticVerdict(critic),
       );
     } catch (err) {
       // A throw from the agent loop must not skip shutdown/updater or dump a

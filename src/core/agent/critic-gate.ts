@@ -1,7 +1,7 @@
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
-import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/critic/types";
+import type { CriticIssue, CriticVerdict, EvidencePack, CriticUiEvent } from "../../modules/critic/types";
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";
 
@@ -18,6 +18,8 @@ export interface CriticGateDeps {
   toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }>;
   /** True when evaluated right before the loop would accept the final answer. */
   beforeFinish: boolean;
+  /** Optional UI surface (terminal renderer / web feed). Fires once per non-ok verdict. */
+  onUi?: (event: CriticUiEvent) => void;
 }
 
 export type CriticAction = "pass" | "retry";
@@ -59,7 +61,17 @@ export class CriticGate {
     if (fresh.length === 0) return "pass";
 
     this.logVerdict(deps, verdict, fresh.length);
-    this.inject(deps, verdict, fresh);
+    const canRepair =
+      verdict.status === "critical" &&
+      deps.beforeFinish &&
+      deps.state.criticRepairCycles < this.opts.maxRepairCycles;
+    deps.onUi?.({
+      status: verdict.status,
+      issueCount: fresh.length,
+      summary: verdict.summary,
+      repair: canRepair,
+    });
+    this.inject(deps, verdict, fresh, canRepair);
     return "retry";
   }
 
@@ -110,11 +122,12 @@ export class CriticGate {
     deps.logger.info(`Critic ${verdict.status}: ${verdict.summary} (${count} issue(s))`);
   }
 
-  private inject(deps: CriticGateDeps, verdict: CriticVerdict, fresh: CriticIssue[]): void {
-    const canRepair =
-      verdict.status === "critical" &&
-      deps.beforeFinish &&
-      deps.state.criticRepairCycles < this.opts.maxRepairCycles;
+  private inject(
+    deps: CriticGateDeps,
+    verdict: CriticVerdict,
+    fresh: CriticIssue[],
+    canRepair: boolean,
+  ): void {
     if (!canRepair) {
       deps.contextManager.addMessage({
         role: "user",

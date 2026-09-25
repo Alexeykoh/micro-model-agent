@@ -44,6 +44,7 @@ import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
 import { CriticClient } from "../modules/critic/client";
 import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
+import type { CriticUiEvent } from "../modules/critic/types";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -517,6 +518,7 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
+    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     // Reset shutdown flag from previous interrupt
     this.shutdownRequested = false;
@@ -674,7 +676,7 @@ export class Agent {
               baseDir: this.deps.baseDir,
             },
             input,
-            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning),
+            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic),
             {
               onMeta,
               onTool: countTool,
@@ -684,7 +686,7 @@ export class Agent {
               sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
             },
           )
-        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
+        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic);
 
       // In MoE mode the single-agent loop (the only writer of assistant turns)
       // never runs — without this the history ends user→user across turns and
@@ -723,6 +725,7 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
+    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     const {
       config,
@@ -1305,6 +1308,7 @@ export class Agent {
         planSummary: this.deps.planSummary?.() ?? undefined,
         toolEvents: gatherTurnToolEvents(contextManager),
         beforeFinish: true,
+        onUi: onCritic,
       });
       if (criticAction === "retry") {
         state.suppressRepetitionRetry = true;

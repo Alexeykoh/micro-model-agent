@@ -178,4 +178,24 @@ describe("Agent in-loop critic", () => {
     expect(result.success).toBe(true);
     expect(t.provider.chat).toHaveBeenCalledTimes(2);
   });
+
+  it("notifies the UI once per fresh verdict", async () => {
+    const verify = vi.fn(async () => ({
+      status: "critical" as const,
+      summary: "broken",
+      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
+    }));
+    const t = createMockDeps({ criticOverride: { verify } } as any);
+    const onCritic = vi.fn();
+    const agent = new Agent(t.deps);
+    await agent.run("do work", undefined, undefined, undefined, undefined, undefined, onCritic);
+
+    expect(onCritic).toHaveBeenCalledTimes(1);
+    expect(onCritic).toHaveBeenCalledWith({
+      status: "critical",
+      issueCount: 1,
+      summary: "broken",
+      repair: true,
+    });
+  });
 });

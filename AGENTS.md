@@ -403,7 +403,9 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
 - **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`).
 - **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
-  (`SessionLogger.logCritic`); quiet UI (без строки в чате). v1 использует активный провайдер +
+  (`SessionLogger.logCritic`). Визуально: одна строка вердикта при `ui.verbosity ≥ normal`
+  (терминал — `Renderer.criticVerdict`; web — SSE `critic`), в `quiet` скрыта, в `verbose` +summary;
+  model-facing repair/advice (`<system-summary>`) в чат не попадает. v1 использует активный провайдер +
   детерминированный evidence pack.
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
   и ограниченный read-only tool-loop (`critic.tools`).

@@ -68,4 +68,19 @@ describe("CriticGate", () => {
     await gate.evaluate(d);
     expect(d.slog.logCritic).toHaveBeenCalledWith("critic_check", expect.objectContaining({ beforeFinish: true, mutations: 3 }));
   });
+
+  it("emits one UI event per non-ok verdict (repair flag on critical)", async () => {
+    const onUi = vi.fn();
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
+    await gate.evaluate(deps({ onUi }));
+    expect(onUi).toHaveBeenCalledTimes(1);
+    expect(onUi).toHaveBeenCalledWith({ status: "critical", issueCount: 1, summary: "broken", repair: true });
+  });
+
+  it("does not emit a UI event for ok verdicts", async () => {
+    const onUi = vi.fn();
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    await gate.evaluate(deps({ onUi }));
+    expect(onUi).not.toHaveBeenCalled();
+  });
 });

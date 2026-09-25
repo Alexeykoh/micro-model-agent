@@ -17,6 +17,7 @@ import { stripAnsi } from "../../ui/line-math";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
+import type { CriticUiEvent } from "../critic/types";
 
 /**
  * Non-null plan snapshot carried by the dedicated SSE `plan` event. Reuses the
@@ -90,6 +91,8 @@ export interface Forwarder {
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
   /** Dedicated plan snapshot event (emitted after a `plan`/`todo` tool ends). */
   onPlan(plan: PlanSnapshot): void;
+  /** In-loop critic verdict (concern/critical). */
+  onCritic(event: CriticUiEvent): void;
   onTurnEnd(summary: TurnEndSummary): void;
   flushNow(): void;
 }
@@ -175,6 +178,17 @@ export function makeForwarder(
         ts: Date.now(),
         steps: plan.steps,
         currentIndex: plan.currentIndex,
+      });
+    },
+    onCritic(event) {
+      flush();
+      sink({
+        type: "critic",
+        ts: Date.now(),
+        status: event.status,
+        issueCount: event.issueCount,
+        repair: event.repair,
+        summary: stripAnsi(redactContextSecrets(event.summary)),
       });
     },
     onTurnEnd(summary) {
