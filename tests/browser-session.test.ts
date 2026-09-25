@@ -1,9 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import {
-  BrowserSession,
-  BrowserActionTracker,
-  ConsoleBuffer,
-} from "../src/modules/browser/session";
+import { BrowserSession, BrowserActionTracker } from "../src/modules/browser/session";
+import { ConsoleBuffer } from "../src/modules/browser/console-buffer";
 import { DEFAULT_BROWSER_CONFIG } from "../src/modules/browser/types";
 import { mkdtempSync, } from "fs";
 import { tmpdir } from "os";

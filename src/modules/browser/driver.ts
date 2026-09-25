@@ -1,22 +1,12 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ConsoleEntry, ConsoleType, NetworkErrorEntry, BrowserConfig } from "./types";
-import { ConsoleBuffer } from "./session";
+import { ConsoleBuffer } from "./console-buffer";
 import type { StoredCookie } from "./cookie-store";
+import type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driver-types";
+
+export type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driver-types";
 
 export const DIRECT_LAUNCH_TIMEOUT_MS = 8000;
-
-/**
- * Explicit browser location/channel resolved from the environment. Escape
- * hatch for locked-down or offline machines where Playwright cannot download
- * its pinned Chromium revision (CDN blocked) but a system Chrome/Edge exists:
- *
- *   MMA_BROWSER_EXECUTABLE=C:\Program Files\Google\Chrome\Application\chrome.exe
- *   MMA_BROWSER_CHANNEL=chrome|msedge|chromium
- */
-export interface BrowserLaunchOverrides {
-  executablePath?: string;
-  channel?: string;
-}
 
 export function resolveBrowserLaunchOverrides(
   env: NodeJS.ProcessEnv = process.env,
@@ -75,33 +65,6 @@ function launchChromium(cfg: LaunchConfig, overrides: BrowserLaunchOverrides): P
     cfg,
     overrides,
   );
-}
-
-export interface LaunchConfig {
-  headless: boolean;
-  viewport: { width: number; height: number };
-  timeoutMs: number;
-  overrides?: BrowserLaunchOverrides;
-}
-
-export interface BrowserDriver {
-  launch(cfg: LaunchConfig): Promise<void>;
-  goto(url: string, timeoutMs: number): Promise<void>;
-  evaluate(js: string): Promise<unknown>;
-  content(): Promise<string>;
-  title(): Promise<string>;
-  url(): string;
-  waitForLoad(timeoutMs: number): Promise<void>;
-  screenshot(): Promise<Buffer>;
-  cookies(): Promise<StoredCookie[]>;
-  addCookies(cookies: StoredCookie[]): Promise<void>;
-  goBack(timeoutMs: number): Promise<void>;
-  goForward(timeoutMs: number): Promise<void>;
-  resetEventLog(): void;
-  getConsole(): ConsoleEntry[];
-  getNetworkErrors(): NetworkErrorEntry[];
-  close(): Promise<void>;
-  dispose(): void;
 }
 
 export class PlaywrightDriver implements BrowserDriver {
