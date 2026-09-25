@@ -34,6 +34,10 @@ describe("config defaults", () => {
     expect(DEFAULTS.orchestrator.model).toBeUndefined();
     expect(DEFAULTS.orchestrator.provider).toBeUndefined();
   });
+
+  it("defaults session.autoName to true", () => {
+    expect(DEFAULTS.session.autoName).toBe(true);
+  });
 });
 
 describe("subagent defaults", () => {

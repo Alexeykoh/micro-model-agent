@@ -144,6 +144,8 @@ export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
   isolateMemory: boolean;
+  /** LLM-refine the session name after the first message (deterministic name always applies). */
+  autoName: boolean;
 }
 
 /**

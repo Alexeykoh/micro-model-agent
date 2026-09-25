@@ -93,6 +93,7 @@ export const DEFAULTS: AppConfig = {
     autoSave: true,
     maxSessions: 50,
     isolateMemory: false,
+    autoName: true,
   },
   contextLog: {
     enabled: false,
