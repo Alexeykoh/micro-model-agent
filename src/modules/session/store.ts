@@ -38,6 +38,9 @@ export interface SessionLogEntry {
     | "moe_replan"
     | "moe_verify"
     | "output"
+    | "critic_check"
+    | "critic_verdict"
+    | "critic_escalation"
     | `onboarding_${string}`;
   tool?: string;
   tool_call_id?: string;

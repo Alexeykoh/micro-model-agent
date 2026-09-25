@@ -416,4 +416,17 @@ export class SessionLogger {
       ...data,
     });
   }
+
+  /** Log a critic lifecycle event (counter-agent). */
+  logCritic(
+    event: "critic_check" | "critic_verdict" | "critic_escalation",
+    data: Record<string, unknown> = {},
+  ): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: event,
+      content: (data.summary as string) ?? event,
+      ...data,
+    });
+  }
 }
