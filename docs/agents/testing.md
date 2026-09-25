@@ -80,6 +80,53 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
    - Повторный `/meet` во время активного знакомства печатает подсказку
      `Знакомство уже идёт. Выполни /meet stop, чтобы завершить.` (без перезапуска интервью).
 
+## Тестирование web UI (Playwright)
+
+Веб-интерфейс (`mma web`) тестируем **через Playwright**, а не глазами в браузере по скриншотам.
+Repos уже зависит от `playwright` (см. `package.json`); браузеры стоят в
+`%LOCALAPPDATA%\ms-playwright`.
+
+**Запуск сервера** (всегда из корня репо, иначе bun подхватит глобальный `mma` — см. правило 5 выше):
+
+```bash
+bun run src/cli/main.ts web --port 4319 --host 127.0.0.1 --no-open
+```
+
+**Скрипт-драйвер** (видимый браузер, замедление, чтобы наблюдать шаги):
+
+```js
+import { chromium } from "playwright";
+const browser = await chromium.launch({ headless: false, slowMo: 400, args: ["--start-maximized"] });
+const page = await browser.newPage({ viewport: null });
+await page.goto("http://127.0.0.1:4319/");
+```
+
+Альтернатива без своего скрипта — **Playwright MCP** в opencode (`@playwright/mcp`, прописан в
+`~/.config/opencode/opencode.jsonc`): после рестарта opencode браузером можно «тыкать» интерактивно.
+
+**Опорные селекторы (стабильные якоря UI):**
+
+| Что | Селектор |
+| --- | --- |
+| открыть настройки | `#openSettings` |
+| вкладка «Модель и провайдер» | `[data-p="model"]` |
+| панель настроек | `[data-panel="model"]` |
+| «+ добавить» / шаблон / доп. поля | `.sec-add`, `.pform-preset`, `.pform-adv` |
+| список моделей | `.model-item` (`.active` — выбранная) |
+| список провайдеров | `.provider-item` (`.chip` действия, `.chip.danger` — удалить) |
+
+**⚠️ Не гоняй пишущие проверки по реальному `~/.mma`.** Добавление/удаление провайдера живьём
+мутирует рабочий конфиг. Указывай `MMA_CONFIG_DIR` на временную папку с валидным `config.json`
+(или доменами), запускай сервер с ней — UI будет изолирован.
+
+**Ключевые инварианты (проверять в сценарии):**
+
+1. Список моделей соответствует **активному** провайдеру и обновляется после переключения
+   (`postConfig("provider.active")` → `reconfigure` → `/api/models`).
+2. Добавление провайдера на легаси-конфиге (`provider.type` без `entries`) **не затирает**
+   существующий — он попадает в `entries[0]` и остаётся активным.
+3. Имя нового/переименованного провайдера уникально (коллизия → `409 name-conflict`).
+
 ## Наблюдения за маленькими моделями
 
 > **Журнал:** [docs/small-model-observations.md](./docs/small-model-observations.md)

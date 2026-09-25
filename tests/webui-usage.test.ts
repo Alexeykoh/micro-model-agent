@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildHostState, captureUsage, type HostStateInput } from "../src/modules/webui/module";
+import type { ServerResponse } from "node:http";
+import {
+  buildHostState,
+  captureUsage,
+  makeReconfigure,
+  type HostStateInput,
+} from "../src/modules/webui/module";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AgentResult } from "../src/core/types";
 import type { Host, HostStateSnapshot } from "../src/core/host";
@@ -78,6 +84,42 @@ describe("webui usage metrics", () => {
     expect(snapshot.compactionCount).toBe(1);
     expect(snapshot.cacheHitRate).toBe(0.25);
     expect(snapshot.contextQuality).toBe(80);
+  });
+
+  it("makeReconfigure refreshes the sidebar context limit after a resize", async () => {
+    const s = createWebUiState();
+    s.usage = { contextUsed: 1000, contextLimit: 24576, costUsd: 0.1 };
+    const writes: string[] = [];
+    s.clients.add({
+      write: (payload: string) => {
+        writes.push(payload);
+        return true;
+      },
+    } as unknown as ServerResponse);
+
+    let history = 24576;
+    const agent = {
+      reconfigure: () => {
+        history = 86016;
+      },
+      contextManager: { getBudget: () => ({ history }) },
+    };
+    await makeReconfigure(s, agent)(structuredClone(DEFAULTS));
+
+    expect(s.usage?.contextLimit).toBe(86016);
+    expect(s.usage?.contextUsed).toBe(1000);
+    expect(s.usage?.costUsd).toBe(0.1);
+    expect(writes.join("")).toContain('"contextLimit":86016');
+  });
+
+  it("makeReconfigure seeds a limit even before the first turn", async () => {
+    const s = createWebUiState();
+    const agent = {
+      reconfigure: () => {},
+      contextManager: { getBudget: () => ({ history: 49152 }) },
+    };
+    await makeReconfigure(s, agent)(structuredClone(DEFAULTS));
+    expect(s.usage).toEqual({ contextLimit: 49152 });
   });
 
   it("GET /api/state reflects usage after a turn", async () => {

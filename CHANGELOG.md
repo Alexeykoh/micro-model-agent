@@ -4,6 +4,30 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-09-25
+
+### Added
+
+- **web streaming Markdown** (`src/modules/webui/assets/md.js`, `smd.js`): chat answers are now parsed incrementally by a vendored `streaming-markdown` (MIT) and rendered as real Markdown — headings, paragraphs, lists, task lists, blockquotes, rules, tables, links, images, inline code, bold/italic/strikethrough. Incremental block rendering replaces the old full re-render per chunk (O(n²)); half-open inline constructs (`**bo`) resolve without flicker.
+- **syntax highlighting** (`src/modules/webui/assets/hljs.js`, `styles.css`): fenced code blocks are highlighted once, when the fence closes, with a vendored highlight.js (common build, MIT); token palette reuses the theme's semantic colors in dark and light.
+- **code block chrome** (`md.js`): every fence gets a dim header with its lowercase language label and a copy button (`navigator.clipboard` with an `execCommand` fallback), enabled only once the block is complete; success shows `✓`.
+- **per-message copy** (`app.js`): each assistant message/turn gets `copy` and `copy as markdown` actions. New i18n keys `web.code.copy/copied/copy_failed`, `web.msg.copy/copy_md` (en+ru).
+- **new web assets/routes**: `/md.js`, `/smd.js`, `/hljs.js` (`WebUiAssets.mdJs/smdJs/hljsJs`, `STATIC_ASSETS`); `index.html` loads `hljs.js` (defer) and boots `app.js` as an ES module.
+- **web settings — model/provider panel redesign** (`src/modules/webui/assets/app.js`, `styles.css`): the panel is split into titled sections **Model** (search + scrollable catalog, active marked) and **Providers** (add button in the section header, one entry per provider with an active badge, metadata line and `make active`/`edit`/`delete` chips). The duplicate "active provider" row is gone; the add/edit form opens inline with required fields first and optional context/priority/rpm/parallel collapsed under "advanced", plus type/base-URL suggestions. New i18n keys `web.settings.section_models/section_providers/provider_add_title/provider_edit_title/provider_advanced/provider_make_active/providers_empty` (en+ru). Design: `docs/specs/2026-09-25-webui-provider-settings-design.md`.
+- **per-provider model memory** (`src/config/registry.ts`, `src/config/types.ts`): the model you last used with a provider is stored in `provider.models[name]` (written on every `model` change) and restored when you switch back via `provider.active` — the global `config.model` no longer silently carries over a model the new backend does not serve. Additive config field, no migration.
+- **provider name guard** (`src/modules/providers/naming.ts`, `src/modules/webui/providers-api.ts`, CLI add): a new/renamed provider must not collide with another entry's `label` or `type`; conflicts are rejected (`409 name-conflict`, `cli.provider_name_conflict`) instead of silently editing the wrong entry. Web edits send `originalName` so an entry can keep its own name.
+- **one-click provider presets in the settings form** (`src/modules/webui/providers-api.ts`, `assets/app.js`): `GET /api/providers` now returns `presets` (the builtin providers with their fixed base URLs, plus named local endpoints **LM Studio / Ollama / vLLM** that map to `openai-compat` with their well-known URLs) and the add/edit form shows a **preset** select that fills `type`, `label` and `baseUrl` in one click — neither hosted nor local providers require typing a URL by hand. New i18n keys `web.settings.provider_preset/provider_custom` (en+ru).
+
+### Changed
+
+- **`app.js`** is now an ES module importing `./md.js`; `renderAssistantText` and the live `text` stream share one renderer, and `parseFences`/`renderTextSegment` are removed.
+- **`feedHasContent`** now recognizes `.md` blocks.
+
+### Fixed
+
+- **model list now follows the active provider** (`src/modules/webui/module.ts`): the web model cache was built once at startup and never refreshed, so after switching provider the settings/selector still showed the previous provider's models. It is refreshed on every `reconfigure` (`makeReconfigure(..., after)`), so `/api/models` reflects the newly active provider.
+- **adding a provider no longer drops the legacy config** (`src/modules/webui/providers-api.ts`): on a legacy single-provider config (`provider.type`/`baseUrl` without `entries`) the first add used to create `entries` from scratch and switch `active`, replacing the working provider. The legacy entry is now seeded into `entries[0]` and stays active.
+
 ## [2.6.0] - 2026-09-25
 
 ### Added

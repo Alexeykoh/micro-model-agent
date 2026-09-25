@@ -78,6 +78,11 @@ export interface ProviderConfig {
   active?: string;
   /** All configured providers (multi-provider mode). */
   entries?: ProviderEntry[];
+  /**
+   * Last model used per provider name (`label` or `type`). Written whenever the
+   * active model changes, so switching providers restores each one's model.
+   */
+  models?: Record<string, string>;
   /** Auto-failover to the next provider on 429/5xx (default false). */
   fallback?: boolean;
   // Legacy single-provider fields — kept working (mirror the active entry).

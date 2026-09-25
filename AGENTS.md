@@ -107,7 +107,7 @@ All detailed documentation lives in `docs/agents/`:
 | [tools.md](./docs/agents/tools.md)               | Question Tool, Browser Tool, Image Handling, Tool Set Narrowing, Process Management                                     |
 | [modules.md](./docs/agents/modules.md)           | Session Management, Project Map, UI Rendering, Plugins, Context Budget, Cost Tracking, Auto-Update                      |
 | [execution.md](./docs/agents/execution.md)       | Execution Guarantees, Agent Loop States, Orchestrator, RLM-Inspired Features, Hallucination Detection, Migration Safety |
-| [testing.md](./docs/agents/testing.md)           | Agent Testing from Console, Small Model Observations, Model Certification                                               |
+| [testing.md](./docs/agents/testing.md)           | Agent Testing from Console, Web UI testing via Playwright, Small Model Observations, Model Certification             |
 | [versioning.md](./docs/agents/versioning.md)     | Versioning Rules, Release Process, Version History                                                                      |
 | [changelog](./CHANGELOG.md)                      | Public changelog (included in npm package)                                                                              |
 
@@ -354,6 +354,9 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены. Мультивыбор (подсказка + send) и «own answer…» (`CUSTOM_INDEX = -1` → follow-up free-text) поддержаны.
 - **i18n:** `GET /api/i18n` отдаёт словари, chrome веб-UI локализуется и переключается при смене `locale`; SSE-reconnect с ресинком; статика с `Cache-Control: no-store`.
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
+- **Панель «Модель и провайдер» (2.7.0):** две секции `.settings-section` — «Модель» (поиск + скроллируемый `.model-list`, активная выделена) и «Провайдеры» (кнопка `.sec-add` в шапке секции, строка `.provider-item` с бейджем `[активный]`, dim-строкой метаданных и чипсами `make active`/`edit`/`delete`). Дублирующей строки «активный провайдер» нет. Форма добавления/правки (`providerForm`) открывается **inline** в секции (без новых модалок), обязательные поля сверху, опциональные (context/priority/rpm/parallel) — в `<details> «дополнительно»`; `datalist` подсказывает типы провайдеров и base URL. Спек: `docs/specs/2026-09-25-webui-provider-settings-design.md`.
+- **Multi-provider (2.7.0):** `provider.models[name]` помнит последнюю модель каждого провайдера (`setConfigValue` в `src/config/registry.ts`): `model` → запись под активным, `provider.active` → восстановление; веб `postConfig` после смены провайдера/модели перечитывает `/api/config` + `/api/models`. Имена провайдеров уникальны (`providerNameTaken`, `src/modules/providers/naming.ts`): коллизия label/type → `409 name-conflict` в web и `cli.provider_name_conflict` в CLI; правка из web шлёт `originalName`, поэтому запись может сохранить своё имя. Удаление активного по-прежнему запрещено (`active-provider`) — сначала переключись.
+- **Пресеты провайдеров в форме (2.7.0):** `GET /api/providers` отдаёт `presets` (`buildProviderPresets`): `BUILTIN_PROVIDERS` с фиксированными `baseUrl` + именованные локальные (**LM Studio / Ollama / vLLM** → `openai-compat` с известными URL). В форме `providerForm` селект «шаблон» одним кликом заполняет `type`/`name`/`baseUrl` — ни хостед, ни локальный провайдер не требуют вводить URL руками (`web.settings.provider_preset/provider_custom`).
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 
 ### Web First-Run Setup (2.6.0)
@@ -380,6 +383,25 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   и после успеха делает `location.reload()`. Локализация `web.setup.*` (en+ru, RU-плюрализация `_few`),
   стиль по `docs/design/ui/STYLE.md` (строки/глифы, без boxed-панелей). `/setup.js` отдаётся как статик
   (`WebUiAssets.setupJs`, `Cache-Control: no-store`).
+
+### Web Markdown, Highlighting & Copy (2.7.0)
+
+- **Рендерер:** `src/modules/webui/assets/md.js` (ESM) поверх вендоренного `smd.js`
+  (streaming-markdown, MIT). `mountMarkdown(parent, opts)` стримит чанки, `renderMarkdown(parent, text, opts)`
+  рендерит готовый текст (история). Инкрементально — только append в DOM, без полного ре-рендера (старый `parseFences`/`renderTextSegment` удалён).
+  Half-open inline (`**bo`) достраивается без мерцания. `app.js` — ES-модуль, импортит `./md.js`.
+- **Безопасность:** текст только `createTextNode`; `innerHTML` не используется. HTML от highlight.js парсится
+  через `DOMParser` (инертный) и импортируется узлами. URL — allowlist `http(s):`/`mailto:`/`data:image`; `javascript:` отбрасывается; ссылки получают `target=_blank` + `rel=noopener noreferrer`.
+- **Подсветка:** вендоренный `hljs.js` (highlight.js common, MIT, `window.hljs`). Подсветка — **один раз при
+  закрытии fence** (не на каждый токен); палитра `.hljs-*` в `styles.css` на семантических токенах темы (dark/light).
+- **Кодовый блок:** `.codeblock` с dim-шапкой `.cb-head` (lowercase язык `.cb-lang` + кнопка `.cb-copy`).
+  Копирование — `copyText` (`navigator.clipboard` → fallback `execCommand`), кнопка активна только после
+  закрытия блока, успех — `✓`.
+- **Копирование сообщения:** `app.js` добавляет строку `.msg-actions` (`copy` / `copy as markdown`) в конце
+  ассистентского хода и после каждой assistant-записи в истории; plain-текст берётся из DOM, markdown — из
+  накопленного сырого текста. Ключи i18n: `web.code.copy/copied/copy_failed`, `web.msg.copy/copy_md` (en+ru).
+- **Ассеты/роуты:** `WebUiAssets.mdJs/smdJs/hljsJs`, `STATIC_ASSETS["/md.js"|"/smd.js"|"/hljs.js"]`;
+  `index.html` грузит `hljs.js` (defer) и `app.js` как `type="module"`. `build:prod` копирует их автоматически.
 
 ### Session Auto-Naming (2.6.0)
 
@@ -411,7 +433,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
   и ограниченный read-only tool-loop (`critic.tools`).
 
-### Current Version: 2.6.0
+### Current Version: 2.7.0
 
 ### Changelog
 

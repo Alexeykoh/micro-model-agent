@@ -18,6 +18,7 @@ import {
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
+import { providerNameTaken } from "../modules/providers/naming";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { readMmaVersion } from "../core/version";
 import type { IndexerModule } from "../modules/indexer/module";
@@ -525,6 +526,10 @@ function buildProviderCommands(program: Command): void {
           opts.url || HOSTED_BASE_URLS[name] || HOSTED_BASE_URLS[`opencode-${name}`] || "";
         if (!baseUrl) {
           getDefaultChannel().writeLine(pc.red(t("cli.provider_no_url", { name })));
+          return;
+        }
+        if (providerNameTaken(entries, name)) {
+          getDefaultChannel().writeLine(pc.red(t("cli.provider_name_conflict", { name })));
           return;
         }
         entries.push({

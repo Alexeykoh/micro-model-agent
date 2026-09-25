@@ -32,5 +32,8 @@ export function loadAssets(): WebUiAssets {
     css: read("styles.css", "/* missing */"),
     js: read("app.js", "// missing"),
     setupJs: read("setup.js", "// missing"),
+    mdJs: read("md.js", "// missing"),
+    smdJs: read("smd.js", "// missing"),
+    hljsJs: read("hljs.js", "// missing"),
   };
 }

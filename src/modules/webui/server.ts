@@ -45,6 +45,9 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
+  "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },
+  "/smd.js": { type: "text/javascript; charset=utf-8", key: "smdJs" },
+  "/hljs.js": { type: "text/javascript; charset=utf-8", key: "hljsJs" },
 };
 
 /**

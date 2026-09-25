@@ -47,6 +47,12 @@ export interface WebUiAssets {
    * fixtures that only exercise the chat surface stay valid.
    */
   setupJs?: string;
+  /** Streaming Markdown module (`/md.js`). */
+  mdJs?: string;
+  /** Vendored streaming-markdown parser (`/smd.js`, ESM). */
+  smdJs?: string;
+  /** Vendored highlight.js bundle (`/hljs.js`, exposes `window.hljs`). */
+  hljsJs?: string;
 }
 
 /**

@@ -7,6 +7,7 @@ import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
 import { saveConfig } from "../config/config";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
+import { providerNameTaken } from "../modules/providers/naming";
 import { budgetBreakdownLines } from "../config/budget";
 import {
   setConfigValue,
@@ -778,6 +779,10 @@ function registerProviderCommands(ctx: ReplContext): void {
       flags.url || HOSTED_BASE_URLS[name] || HOSTED_BASE_URLS[`opencode-${name}`] || "";
     if (!baseUrl) {
       ctx.output.writeLine(pc.red(t("cli.provider_no_url", { name })), "stderr");
+      return;
+    }
+    if (providerNameTaken(entries, name)) {
+      ctx.output.writeLine(pc.red(t("cli.provider_name_conflict", { name })), "stderr");
       return;
     }
     entries.push({

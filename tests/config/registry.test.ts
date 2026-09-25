@@ -110,4 +110,31 @@ describe("config registry", () => {
     expect(snap.get("model")).toBe(DEFAULTS.model);
     expect(snap.get("contextWindow")).toBe(DEFAULTS.contextWindow);
   });
+
+  it("remembers the last model per provider and restores it on switch", () => {
+    const cfg = freshConfig();
+    cfg.provider = {
+      active: "a",
+      entries: [
+        { type: "openai-compat", label: "a", baseUrl: "http://a/v1" },
+        { type: "openai-compat", label: "b", baseUrl: "http://b/v1" },
+      ],
+      type: "openai-compat",
+      baseUrl: "http://a/v1",
+    };
+
+    expect(setConfigValue(cfg, "model", "model-a").ok).toBe(true);
+    expect(cfg.provider.models).toEqual({ a: "model-a" });
+
+    // `b` has no memory yet → the current model is kept.
+    expect(setConfigValue(cfg, "provider.active", "b").ok).toBe(true);
+    expect(cfg.model).toBe("model-a");
+
+    expect(setConfigValue(cfg, "model", "model-b").ok).toBe(true);
+    expect(cfg.provider.models).toEqual({ a: "model-a", b: "model-b" });
+
+    // Switching back restores what `a` used last.
+    expect(setConfigValue(cfg, "provider.active", "a").ok).toBe(true);
+    expect(cfg.model).toBe("model-a");
+  });
 });
