@@ -2,7 +2,7 @@ import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
 import { readMmaVersion } from "../core/version";
-import { RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
+import { type RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
 import type { CacheCapability, CacheReportFormat, RateLimitConfig } from "../config/types";
 import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
@@ -229,7 +229,7 @@ export class OpenAICompatProvider implements LLMProvider {
       if (copy[i].role === "user") {
         const msg = { ...copy[i] };
         if (typeof msg.content === "string") {
-          msg.content = msg.content + "\n" + tag;
+          msg.content = `${msg.content}\n${tag}`;
         } else {
           // Array of parts — append a text part
           msg.content = [...msg.content, { type: "text" as const, text: tag }];
@@ -605,7 +605,7 @@ export class OpenAICompatProvider implements LLMProvider {
       "User-Agent": this.userAgent,
     };
     if (this.config.apiKey && this.config.apiKey !== "not-needed") {
-      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
     const sessionId = this.getSessionId?.();
     // Когда capability задана — шлём заголовок только тем, кому он нужен
@@ -758,7 +758,7 @@ export class OpenAICompatProvider implements LLMProvider {
         "User-Agent": this.userAgent,
       };
       if (this.config.apiKey && this.config.apiKey !== "not-needed") {
-        headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+        headers.Authorization = `Bearer ${this.config.apiKey}`;
       }
 
       const response = await fetch(url, {

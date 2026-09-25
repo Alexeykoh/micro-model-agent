@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, } from "vitest";
 import { attachImageTool } from "../src/tools/attach-image";
 import { ContextManager } from "../src/modules/context/manager";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";

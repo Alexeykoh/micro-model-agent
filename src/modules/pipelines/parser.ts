@@ -19,7 +19,7 @@ export class PipelineParser {
     const lines = yaml.split("\n").filter((l) => l.trim());
     const result: any = {};
     let currentSection: string | null = null;
-    let currentSteps: any[] = [];
+    const currentSteps: any[] = [];
 
     for (const line of lines) {
       if (line.match(/^\w+:/) && !line.startsWith(" ") && !line.startsWith("  -")) {

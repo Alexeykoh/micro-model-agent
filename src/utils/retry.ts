@@ -17,7 +17,7 @@ export function backoffDelay(
 ): number {
   const base =
     maxDelay !== undefined
-      ? Math.min(baseDelay * Math.pow(2, attempt), maxDelay)
-      : baseDelay * Math.pow(2, attempt);
+      ? Math.min(baseDelay * 2 ** attempt, maxDelay)
+      : baseDelay * 2 ** attempt;
   return base + Math.random() * baseDelay * jitterFactor;
 }

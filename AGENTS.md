@@ -39,7 +39,8 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 
 - **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
 - **Testing:** vitest (`bun test`)
-- **Linting:** TypeScript strict mode (`tsc --noEmit`)
+- **Linting:** TypeScript strict mode (`tsc --noEmit`) + Biome (`biome.json`; linter only, formatter off — Prettier remains)
+- **Quality gate:** `bun run quality` = `typecheck` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml`; git pre-commit hook — fallow
 - **Dependencies:** commander, js-tiktoken, picocolors, execa, jsonrepair, playwright
 
 ## Commands
@@ -62,6 +63,10 @@ bun test
 
 # Typecheck
 tsc --noEmit
+
+# Lint (Biome) / full quality gate (typecheck + lint + fallow)
+bun run lint
+bun run quality
 
 # Test a single file
 bun test tests/<name>.test.ts

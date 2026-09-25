@@ -100,12 +100,11 @@ export class LspModule implements AgentModule {
   }
 
   getPlugin(): AgentPlugin {
-    const self = this;
     return {
       name: "lsp-check",
       priority: 15,
       onAfterTool: async (_ctx: ToolContext, call: ToolCall, result: ToolResult) => {
-        if (!self.config.enabled) return;
+        if (!this.config.enabled) return;
         if (call.name !== "write_file" && call.name !== "edit_file") return;
         if (!result.success) return;
 
@@ -115,11 +114,11 @@ export class LspModule implements AgentModule {
         const fullPath = resolve(_ctx.baseDir, filePath);
         if (!existsSync(fullPath)) return;
 
-        const serverConfig = getServerForFile(fullPath, self.config);
+        const serverConfig = getServerForFile(fullPath, this.config);
         if (!serverConfig) return;
 
-        const key = self.serverKey(serverConfig);
-        if (self.disabledServers.has(key)) return;
+        const key = this.serverKey(serverConfig);
+        if (this.disabledServers.has(key)) return;
 
         const projectRoot = findProjectRoot(
           fullPath,
@@ -128,13 +127,13 @@ export class LspModule implements AgentModule {
         );
 
         try {
-          const diagnostics = await self.client.checkFile(
+          const diagnostics = await this.client.checkFile(
             fullPath,
             _ctx.baseDir,
             serverConfig,
             projectRoot,
           );
-          self.failuresByServer.set(key, 0);
+          this.failuresByServer.set(key, 0);
           const errors = diagnostics.filter((d) => d.severity === 1);
           const warnings = diagnostics.filter((d) => d.severity === 2);
 
@@ -151,15 +150,15 @@ export class LspModule implements AgentModule {
           // previously produced ZERO diagnostics across whole sessions and the
           // model only found type errors reactively via `bun run build`.
           const msg = errMsg(e);
-          const failures = (self.failuresByServer.get(key) ?? 0) + 1;
-          self.failuresByServer.set(key, failures);
+          const failures = (this.failuresByServer.get(key) ?? 0) + 1;
+          this.failuresByServer.set(key, failures);
           try {
             _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`);
           } catch {}
           if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
             // One loud, actionable message, then stop the per-write noise for
             // the rest of the session. The model must not learn to ignore LSP.
-            self.disabledServers.add(key);
+            this.disabledServers.add(key);
             result.output += `\n\n[LSP disabled: ${t("lsp.unavailable")}]`;
           } else {
             result.output += `\n\n[LSP check failed]: ${msg}`;
@@ -178,7 +177,6 @@ export class LspModule implements AgentModule {
    * gives the model a way to ask for static diagnostics on demand.
    */
   getToolDefinitions(): ToolDefinition[] {
-    const self = this;
     return [
       {
         name: "lsp_check",
@@ -199,7 +197,7 @@ export class LspModule implements AgentModule {
           },
           required: ["path"],
         },
-        handler: async (ctx, args) => self.runCheck(ctx, args),
+        handler: async (ctx, args) => this.runCheck(ctx, args),
       },
     ];
   }

@@ -47,7 +47,7 @@ export class ToolRegistry {
     const selected =
       tagSet.size === 0
         ? all
-        : all.filter((t) => t.alwaysOn || (t.tags && t.tags.some((tag) => tagSet.has(tag))));
+        : all.filter((t) => t.alwaysOn || (t.tags?.some((tag) => tagSet.has(tag))));
     return selected.map((t) => ({
       name: t.name,
       description: t.description,

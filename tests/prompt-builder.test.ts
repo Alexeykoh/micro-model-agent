@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { PromptBuilder } from "../src/core/prompt-builder";
-import type { PromptBlock } from "../src/core/types";
 
 describe("PromptBuilder", () => {
   it("should include essential blocks regardless of budget", () => {

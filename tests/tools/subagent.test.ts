@@ -170,7 +170,7 @@ describe("subagentTool", () => {
     try {
       mockAgentRun.mockResolvedValue({
         success: true,
-        text: "big result ".repeat(500) + "TAIL_MARKER_XYZ",
+        text: `${"big result ".repeat(500)}TAIL_MARKER_XYZ`,
         iterationCount: 3,
       });
       const result = await subagentTool.handler(

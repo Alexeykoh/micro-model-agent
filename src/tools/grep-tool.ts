@@ -1,4 +1,4 @@
-import { spawn, execFileSync } from "child_process";
+import { spawn, } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";

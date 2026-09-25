@@ -165,7 +165,6 @@ export class Indexer {
         } catch (e) {
           // Entry vanished or is unreadable — skip it, keep indexing the rest.
           logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
-          continue;
         }
       }
     };

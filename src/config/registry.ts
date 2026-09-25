@@ -275,7 +275,7 @@ export function canonicalKeys(): string[] {
  * lists both shares.
  */
 export function keysForGroup(prefix: string): ConfigKeyDef[] {
-  return DEFINITIONS.filter((d) => d.key.startsWith(prefix + "."));
+  return DEFINITIONS.filter((d) => d.key.startsWith(`${prefix}.`));
 }
 
 /** Canonical + alias names, for completion. */

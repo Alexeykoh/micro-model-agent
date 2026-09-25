@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, existsSync, statSync } from "fs";
+import { readdirSync, readFileSync, existsSync, statSync, type Stats } from "fs";
 import { join } from "path";
 
 export interface SkillMeta {
@@ -23,7 +23,7 @@ export class SkillsLoader {
 
     for (const entry of entries) {
       const fullPath = join(dirPath, entry);
-      let stat;
+      let stat: Stats;
       try {
         stat = statSync(fullPath);
       } catch {

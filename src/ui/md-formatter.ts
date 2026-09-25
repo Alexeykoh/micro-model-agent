@@ -15,8 +15,8 @@ const ATTR = /\b([a-zA-Z-]+=)"([^"]*)"/g;
 function highlight(code: string, lang: string): string {
   if (lang === "html" || lang === "xml" || lang === "svg") {
     code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
-    code = code.replace(ATTR, (_m, attr, val) => pc.yellow(attr) + "=" + pc.green('"' + val + '"'));
-    code = code.replace(TAG, (_m, tag) => "<" + pc.cyan(tag));
+    code = code.replace(ATTR, (_m, attr, val) => `${pc.yellow(attr)}=${pc.green(`"${val}"`)}`);
+    code = code.replace(TAG, (_m, tag) => `<${pc.cyan(tag)}`);
   } else if (lang === "css" || lang === "scss" || lang === "less") {
     code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
     code = code.replace(STRING, (m) => pc.green(m));
@@ -257,7 +257,7 @@ export class FormattingStream {
   }
 
   private formatLine(line: string): string {
-    let result = line;
+    const result = line;
 
     const heading = result.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
@@ -313,7 +313,7 @@ export class FormattingStream {
     result = result.replace(/\*([^*]+)\*/g, (_, s) => pc.italic(s));
     result = result.replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, (_m, pre, s) => pre + pc.italic(s));
     result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const short = url.length > 80 ? url.slice(0, 77) + "…" : url;
+      const short = url.length > 80 ? `${url.slice(0, 77)}…` : url;
       return `${pc.cyan(label)} ${pc.dim(`(${short})`)}`;
     });
 

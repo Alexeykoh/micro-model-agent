@@ -141,7 +141,7 @@ export interface SyntaxValidationResult {
 export async function preValidateSyntax(
   filePath: string,
   content: string,
-  baseDir: string,
+  _baseDir: string,
 ): Promise<SyntaxValidationResult> {
   const ext = extname(filePath).toLowerCase();
 
@@ -251,7 +251,7 @@ export function detectImportConflicts(content: string): string[] {
   const imports = new Set<string>();
   const exports = new Set<string>();
 
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = importRegex.exec(content))) {
     const names = match[1]
       .split(",")

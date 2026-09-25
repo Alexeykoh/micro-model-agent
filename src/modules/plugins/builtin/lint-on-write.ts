@@ -67,7 +67,7 @@ function getWinDecoder(): TextDecoder {
       windowsHide: true,
     }).toString("latin1");
     const m = cpOut.match(/(\d+)/);
-    if (m) decoder = new TextDecoder("ibm" + m[1]);
+    if (m) decoder = new TextDecoder(`ibm${m[1]}`);
   } catch {
     /* chcp failed (load/ENOENT) — retry on the next call */
   }
@@ -331,12 +331,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     signal?: AbortSignal,
   ): Promise<string | null> {
     try {
-      const { stdout, stderr } = await runAsync(
-        `${tsc} --noEmit --skipLibCheck`,
-        baseDir,
-        30000,
-        signal,
-      );
+      await runAsync(`${tsc} --noEmit --skipLibCheck`, baseDir, 30000, signal);
       return null;
     } catch (err: any) {
       if (

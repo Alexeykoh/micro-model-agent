@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { loadConfig } from "../../src/config/config";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 

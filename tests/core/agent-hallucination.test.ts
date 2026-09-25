@@ -126,7 +126,7 @@ describe("Agent hallucination reactions", () => {
     let callCount = 0;
     const mockDeps = createMockDeps({
       hallucinationDetector: {
-        validate: (response: string) => {
+        validate: (_response: string) => {
           callCount++;
           if (callCount === 1) return { status: "retry" as const, reason: "Low confidence" };
           return { status: "pass" as const };

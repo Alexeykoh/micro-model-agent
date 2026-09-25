@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "fs";
+
 import { extname } from "path";
 
 /**
@@ -41,7 +41,7 @@ export interface AutoFixResult {
 export function parseTscOutput(output: string): LspError[] {
   const errors: LspError[] = [];
   const regex = /(.+?)\((\d+),(\d+)\): error TS(\d+): (.+)/g;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = regex.exec(output))) {
     errors.push({
@@ -122,7 +122,7 @@ function fixError(
     return { fixed: false, newContent: content };
   }
 
-  const line = lines[lineIndex];
+  const _line = lines[lineIndex];
 
   switch (error.code) {
     case 2440: // Import declaration conflicts with local declaration
@@ -152,7 +152,7 @@ function fixImportConflict(
   lineIndex: number,
   error: LspError,
 ): { fixed: boolean; newContent: string } {
-  const line = lines[lineIndex];
+  const _line = lines[lineIndex];
 
   // Find the conflicting name in the error message
   const nameMatch = error.message.match(/Import declaration conflicts with local declaration of '(\w+)'/);
@@ -224,7 +224,7 @@ function fixUnusedImport(
   lineIndex: number,
   error: LspError,
 ): { fixed: boolean; newContent: string } {
-  const line = lines[lineIndex];
+  const _line = lines[lineIndex];
 
   // Find the unused name in the error message
   const nameMatch = error.message.match(/'(\w+)' is declared but its value is never read/);

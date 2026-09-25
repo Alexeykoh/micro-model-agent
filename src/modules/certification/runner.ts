@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readdirSync, readFileSync, } from "fs";
 import { join, resolve, dirname, relative } from "path";
 import { checkSandbox } from "./fact-checker";
 import type { CertScenario, ScenarioResult } from "./types";
@@ -14,9 +14,7 @@ export interface SpawnResult {
   timedOut: boolean;
 }
 
-export interface RepRunner {
-  (env: NodeJS.ProcessEnv, cwd: string, args: string[], timeoutMs: number): Promise<SpawnResult>;
-}
+export type RepRunner = (env: NodeJS.ProcessEnv, cwd: string, args: string[], timeoutMs: number) => Promise<SpawnResult>
 
 export interface RunScenarioOptions {
   model: string;

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { homedir, hostname, platform, tmpdir, type, userInfo } from "os";
+import { homedir, hostname, platform, type, } from "os";
 import { env } from "process";
 import { ProfileCompressor } from "./compressor";
 

@@ -4,7 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { runStartupHealthCheck, parseTscErrors } from "../../../src/modules/lsp/startup-check";
 import type { LspConfig, LspDiagnostic, LspServerConfig } from "../../../src/modules/lsp/types";
-import { LspClient } from "../../../src/modules/lsp/client";
+import type { LspClient } from "../../../src/modules/lsp/client";
 
 const DEFAULT_LSP_CONFIG: LspConfig = {
   enabled: true,

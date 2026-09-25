@@ -22,7 +22,7 @@ function parseIpNumber(s: string): number | null {
 
 /** Check whether four decoded octets form a private/reserved IPv4 address. */
 function isPrivateIpv4(o: number[]): boolean {
-  const [a, b = 0, c = 0, d = 0] = o;
+  const [a, b = 0, _c = 0, _d = 0] = o;
   return (
     a === 0 ||
     a === 10 ||
@@ -82,7 +82,7 @@ function expandIpv6(input: string): number[] | null {
  * checks missed `0:0:0:0:0:0:0:1` and `::ffff:0:7f00:1`).
  */
 export function isIpPrivate(hostname: string): boolean {
-  let h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");
+  const h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");
 
   if (h.includes(":")) {
     const g = expandIpv6(h);

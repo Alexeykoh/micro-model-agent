@@ -81,7 +81,7 @@ describe("webui session history REST", () => {
     s.sessionManager = fakeSessions({ metas: [meta("s1")], logs: { s1: log } });
 
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions/s1/history");
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { id: string; history: Array<Record<string, unknown>> };
       expect(body.id).toBe("s1");
@@ -108,13 +108,13 @@ describe("webui session history REST", () => {
 
   it("caps the transcript to the last historyTail entries", async () => {
     const log: SessionLogEntry[] = [];
-    for (let i = 0; i < 10; i++) log.push({ ts: TS, type: "user", content: "m" + i });
+    for (let i = 0; i < 10; i++) log.push({ ts: TS, type: "user", content: `m${i}` });
     const s = createWebUiState();
     s.historyTail = 3;
     s.sessionManager = fakeSessions({ metas: [meta("s1")], logs: { s1: log } });
 
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions/s1/history");
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
       const body = (await res.json()) as { history: Array<{ text?: string }> };
       expect(body.history.map((h) => h.text)).toEqual(["m7", "m8", "m9"]);
     });
@@ -130,7 +130,7 @@ describe("webui session history REST", () => {
     s.sessionManager = fakeSessions({ metas: [meta("s1")], history: { s1: history } });
 
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions/s1/history");
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
       const body = (await res.json()) as { history: Array<Record<string, unknown>> };
       expect(body.history.map((h) => h.kind)).toEqual(["user", "assistant", "tool_result"]);
       expect(body.history[0].text).toBe("hi");
@@ -142,7 +142,7 @@ describe("webui session history REST", () => {
     const s = createWebUiState();
     s.sessionManager = fakeSessions({ metas: [meta("s1")] });
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions/ghost/history");
+      const res = await doFetch(`${base}/api/sessions/ghost/history`);
       expect(res.status).toBe(404);
     });
   });
@@ -150,7 +150,7 @@ describe("webui session history REST", () => {
   it("returns 503 when no session manager is wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions/s1/history");
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
       expect(res.status).toBe(503);
     });
   });
@@ -160,10 +160,10 @@ describe("webui session history REST", () => {
     s.token = "s3cret";
     s.sessionManager = fakeSessions({ metas: [meta("s1")], logs: { s1: [] } });
     await withServer(s, async (base) => {
-      const denied = await doFetch(base + "/api/sessions/s1/history");
+      const denied = await doFetch(`${base}/api/sessions/s1/history`);
       expect(denied.status).toBe(401);
 
-      const allowed = await doFetch(base + "/api/sessions/s1/history", {
+      const allowed = await doFetch(`${base}/api/sessions/s1/history`, {
         headers: { "x-mma-token": "s3cret" },
       });
       expect(allowed.status).toBe(200);

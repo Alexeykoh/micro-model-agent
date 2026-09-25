@@ -10,7 +10,7 @@ describe("Indexer fs.watch", () => {
     const indexer = new Indexer(tempDir);
 
     let changeDetected = false;
-    indexer.watch((event, filename) => {
+    indexer.watch((_event, _filename) => {
       changeDetected = true;
     });
 

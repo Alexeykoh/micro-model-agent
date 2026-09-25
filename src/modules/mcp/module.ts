@@ -44,7 +44,6 @@ export class MCPModule implements AgentModule {
   private serverConfigs: Map<string, MCPServerConfig> = new Map();
   private discovered: DiscoveredTool[] = [];
   private initialized = false;
-  private initError: string | null = null;
   /** Servers that failed initial discovery — will not be retried. */
   private failedServers: Set<string> = new Set();
 
@@ -133,7 +132,7 @@ export class MCPModule implements AgentModule {
         } catch (e: any) {
           timedOut = true;
           this.failedServers.add(serverName);
-          this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
+          logger.warn(`MCP server "${serverName}" init failed: ${e.message}`);
           await client.disconnect().catch((err: unknown) => {
             logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
           });

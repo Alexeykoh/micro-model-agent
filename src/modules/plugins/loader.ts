@@ -1,6 +1,6 @@
-import { readdirSync, existsSync, statSync } from "fs";
+import { readdirSync, existsSync, statSync, type Stats } from "fs";
 import { join, basename } from "path";
-import { PluginManager } from "./manager";
+import type { PluginManager } from "./manager";
 import { t } from "../../i18n/index";
 import { semverGt } from "../updater/checker";
 import type { AgentPlugin } from "./types";
@@ -31,7 +31,7 @@ export class PluginLoader {
       const fullPath = join(dirPath, entry);
       // A dangling symlink / permission-denied entry must not abort the whole
       // plugin scan (and with it bootstrap) — skip it with a warning.
-      let stat;
+      let stat: Stats;
       try {
         stat = statSync(fullPath);
       } catch (e) {
@@ -75,7 +75,7 @@ export class PluginLoader {
     try {
       const mod = require(fullPath) as { default?: AgentPlugin; plugin?: AgentPlugin };
       const plugin = mod.default || mod.plugin;
-      if (plugin && plugin.name) {
+      if (plugin?.name) {
         if (
           plugin.minMmaVersion &&
           options?.mmaVersion &&

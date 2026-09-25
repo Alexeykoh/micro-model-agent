@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, rmSync, readFileSync, cpSync } from "fs";
-import { join, dirname } from "path";
+import { join, } from "path";
 import { platform } from "os";
 
 // ── helpers ────────────────────────────────────────────────────────────────

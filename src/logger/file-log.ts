@@ -122,9 +122,9 @@ export class FileLogWriter {
   }
 
   logToolCall(tool: string, preview: string, result?: string): void {
-    const previewTrimmed = preview.length > 200 ? preview.slice(0, 200) + "..." : preview;
+    const previewTrimmed = preview.length > 200 ? `${preview.slice(0, 200)}...` : preview;
     if (result !== undefined) {
-      const resultTrimmed = result.length > 200 ? result.slice(0, 200) + "..." : result;
+      const resultTrimmed = result.length > 200 ? `${result.slice(0, 200)}...` : result;
       this.log("INFO", "TOOL", `${tool} | ${previewTrimmed} → ${resultTrimmed}`);
     } else {
       this.log("INFO", "TOOL", `${tool} | ${previewTrimmed}`);
@@ -141,7 +141,7 @@ export class FileLogWriter {
   }
 
   logREPL(tag: "user" | "assistant" | "system", content: string): void {
-    const trimmed = content.length > 400 ? content.slice(0, 400) + "..." : content;
+    const trimmed = content.length > 400 ? `${content.slice(0, 400)}...` : content;
     this.log("INFO", `REPL/${tag}`, trimmed);
   }
 

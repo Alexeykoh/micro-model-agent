@@ -217,7 +217,7 @@ describe("LineEditor interactive", () => {
       },
     });
     const seen: unknown[] = [];
-    editor.onKeyInput = (str, key) => {
+    editor.onKeyInput = (_str, key) => {
       seen.push(key);
       return false;
     };
@@ -234,7 +234,7 @@ describe("LineEditor interactive", () => {
     // Escape is forwarded to the host hook. Invoke the gate directly: a lone
     // ESC pushed through readline is only emitted after its ~500ms escape
     // timeout, which would make this test slow and timing-dependent.
-    editor["onKey"]("\x1b", { name: "escape" });
+    editor.onKey("\x1b", { name: "escape" });
     expect(seen.some((k) => (k as { name?: string })?.name === "escape")).toBe(true);
     expect(lines).toEqual([]);
   });

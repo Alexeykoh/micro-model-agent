@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import type { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { readMmaVersion } from "../core/version";
 import { t } from "../i18n/index";

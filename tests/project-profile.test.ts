@@ -45,7 +45,7 @@ describe("project-profile", () => {
     expect(profile.runtime).toBe("node");
     expect(profile.deps).toEqual(["react", "react-dom"]);
     expect(profile.devDeps).toEqual(["vite", "typescript"]);
-    expect(profile.scripts["dev"]).toBe("vite");
+    expect(profile.scripts.dev).toBe("vite");
   });
 
   it("caps dependency lists in the formatted line", () => {

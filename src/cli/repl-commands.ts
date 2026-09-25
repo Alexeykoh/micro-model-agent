@@ -29,9 +29,8 @@ import {
 import { getMessageText } from "../llm/provider";
 import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
-import { fileURLToPath } from "url";
 import type { LineInput } from "../ui/line-editor";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
@@ -1215,11 +1214,11 @@ function registerSessionCommands(ctx: ReplContext): void {
         ctx.output.writeLine("");
         for (const msg of history) {
           if (msg.role === "user") {
-            ctx.output.writeLine(pc.cyan(t("session.user_label") + ":"));
+            ctx.output.writeLine(pc.cyan(`${t("session.user_label")}:`));
             ctx.output.writeLine(getMessageText(msg.content));
             ctx.output.writeLine("");
           } else if (msg.role === "assistant") {
-            ctx.output.writeLine(pc.green(t("session.assistant_label") + ":"));
+            ctx.output.writeLine(pc.green(`${t("session.assistant_label")}:`));
             ctx.output.writeLine(getMessageText(msg.content));
             ctx.output.writeLine("");
           }
@@ -1493,7 +1492,7 @@ async function runConfigMigrate(ctx: ReplContext): Promise<void> {
   saveConfig(config, configPath, configDir);
 
   const { renameSync, readdirSync } = await import("fs");
-  renameSync(configPath, configPath + ".bak");
+  renameSync(configPath, `${configPath}.bak`);
 
   const domainFiles = readdirSync(join(configDir, "config")).filter((f: string) =>
     f.endsWith(".json"),

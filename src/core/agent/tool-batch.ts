@@ -10,6 +10,7 @@ import type { CostTracker } from "../../modules/pricing/index";
 import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
+import type { ToolResult } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import {
   summarizeToolArgs,
@@ -145,7 +146,7 @@ export class ToolBatchExecutor {
       // Снимок стоимости ДО тула: рендеру нужна стоимость именно этого вызова
       // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
       const costBeforeTool = this.deps.costTracker.total;
-      let result;
+      let result: ToolResult;
       try {
         result = await this.deps.toolExecutor.execute(call, this.deps.getAbortSignal());
       } catch (err) {
@@ -194,14 +195,14 @@ export class ToolBatchExecutor {
       // строку вывалил бы всё содержимое файла в REPL.
       if (result.display !== undefined) {
         if (result.display.length > 0) {
-          onMeta?.("\n" + result.display + "\n");
+          onMeta?.(`\n${result.display}\n`);
         }
       } else if (result.success) {
         const metaOut = pluginManager.runOnMeta(
           { iteration, logger, contextManager },
           result.output,
         );
-        onMeta?.("\n" + pc.dim(metaOut) + "\n");
+        onMeta?.(`\n${pc.dim(metaOut)}\n`);
       } else {
         // Failed tool: its `output` is model-facing (Hints, recovery
         // directives, "Do NOT …"). The user only needs a calm gist — the first
@@ -214,11 +215,11 @@ export class ToolBatchExecutor {
         if (metaOut) {
           const color = failure.severity === "warn" ? pc.yellow : pc.red;
           const glyph = failure.severity === "warn" ? "⚠" : "✗";
-          onMeta?.("\n" + color(`${glyph} ${metaOut}`) + "\n");
+          onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`);
         }
       }
       if (result.diff) {
-        onMeta?.("\n" + result.diff + "\n");
+        onMeta?.(`\n${result.diff}\n`);
       }
 
       const currentTokens = contextManager.getEstimatedTokens();
@@ -332,7 +333,7 @@ export class ToolBatchExecutor {
         count: state.consecutiveToolFailures,
       });
       logger.warn(`Consecutive tool failures: ${state.consecutiveToolFailures}`);
-      const taskSnippet = input.length > 200 ? input.slice(0, 200) + "..." : input;
+      const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
       const taskReminder = t("exec.task_reminder", { task: taskSnippet });
       contextManager.addMessage({
         role: "user",

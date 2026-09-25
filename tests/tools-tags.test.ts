@@ -81,7 +81,7 @@ describe("enableToolsTool", () => {
     const activeToolTags = ["file"];
     const ctx = {
       activeToolTags,
-      toolExecutor: { getToolDefinitions: (tags: string[]) => [] },
+      toolExecutor: { getToolDefinitions: (_tags: string[]) => [] },
     } as unknown as ToolContext;
 
     const res = await enableToolsTool.handler(ctx, { tags: ["file"] });

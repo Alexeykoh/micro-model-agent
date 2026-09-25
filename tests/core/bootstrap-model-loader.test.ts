@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { bootstrap } from "../../src/core/bootstrap";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { writeFileSync, rmSync, } from "fs";
 import { join } from "path";
 
 describe("Bootstrap model loader", () => {

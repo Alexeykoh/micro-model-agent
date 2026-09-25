@@ -72,7 +72,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(join(ws, "note.md")));
+      const res = await doFetch(`${base}/api/file?path=${encodeURIComponent(join(ws, "note.md"))}`);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).toBe("# hello");
@@ -85,7 +85,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=rel.txt");
+      const res = await doFetch(`${base}/api/file?path=rel.txt`);
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("relative");
     });
@@ -96,7 +96,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=../../secret.txt");
+      const res = await doFetch(`${base}/api/file?path=../../secret.txt`);
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
       const body = await res.text();
@@ -112,7 +112,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(join(ws, ".env")));
+      const res = await doFetch(`${base}/api/file?path=${encodeURIComponent(join(ws, ".env"))}`);
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).not.toContain("web.file.error");
@@ -128,7 +128,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(link));
+      const res = await doFetch(`${base}/api/file?path=${encodeURIComponent(link)}`);
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
     });
@@ -144,7 +144,7 @@ describe("webui file viewer", () => {
     s.workspace = ws;
     await withServer(s, async (base) => {
       const res = await doFetch(
-        base + "/api/file?path=" + encodeURIComponent(join(linkDir, "secret.txt")),
+        `${base}/api/file?path=${encodeURIComponent(join(linkDir, "secret.txt"))}`,
       );
       expect(res.status).toBe(403);
       expect(res.headers.get("content-type")).toContain("text/plain");
@@ -157,7 +157,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=u16.txt");
+      const res = await doFetch(`${base}/api/file?path=u16.txt`);
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("hello");
     });
@@ -169,7 +169,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=bin.dat");
+      const res = await doFetch(`${base}/api/file?path=bin.dat`);
       expect(res.status).toBe(415);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).not.toContain("web.file.error");
@@ -182,7 +182,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=big.txt");
+      const res = await doFetch(`${base}/api/file?path=big.txt`);
       expect(res.status).toBe(413);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).not.toContain("web.file.error");
@@ -194,7 +194,7 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=" + encodeURIComponent(ws));
+      const res = await doFetch(`${base}/api/file?path=${encodeURIComponent(ws)}`);
       expect(res.status).toBe(404);
       expect(res.headers.get("content-type")).toContain("text/plain");
       expect(await res.text()).not.toContain("web.file.error");
@@ -206,11 +206,11 @@ describe("webui file viewer", () => {
     const s = createWebUiState();
     s.workspace = ws;
     await withServer(s, async (base) => {
-      const missing = await doFetch(base + "/api/file?path=nope.txt");
+      const missing = await doFetch(`${base}/api/file?path=nope.txt`);
       expect(missing.status).toBe(404);
       expect(missing.headers.get("content-type")).toContain("text/plain");
       expect(await missing.text()).not.toContain("web.file.error");
-      const noPath = await doFetch(base + "/api/file");
+      const noPath = await doFetch(`${base}/api/file`);
       expect(noPath.status).toBe(400);
       expect(noPath.headers.get("content-type")).toContain("text/plain");
       expect(await noPath.text()).not.toContain("web.file.error");
@@ -220,7 +220,7 @@ describe("webui file viewer", () => {
   it("answers 503 when no workspace is wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/file?path=x.txt");
+      const res = await doFetch(`${base}/api/file?path=x.txt`);
       expect(res.status).toBe(503);
     });
   });

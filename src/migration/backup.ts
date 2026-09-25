@@ -20,7 +20,7 @@ export class BackupManager {
   }
 
   backupAll(): void {
-    const bakDir = this.configDir + ".bak";
+    const bakDir = `${this.configDir}.bak`;
     if (existsSync(bakDir)) {
       // Повторная миграция не перезаписывает бэкап — фиксируем в логе, чтобы
       // «нет бэкапа за этот запуск» не выглядело как потеря данных.
@@ -47,7 +47,7 @@ export class BackupManager {
   getBackupSummary(): string {
     const lines: string[] = [];
     const bakConfig = join(this.configDir, "config.json.bak");
-    const bakDir = this.configDir + ".bak";
+    const bakDir = `${this.configDir}.bak`;
 
     if (existsSync(bakConfig)) {
       lines.push(t("migration.config_bak"));

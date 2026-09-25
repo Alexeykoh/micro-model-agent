@@ -68,7 +68,7 @@ function normalizeLspServerArgs(config: AppConfig): void {
   for (const [lang, legacy] of Object.entries(LEGACY_LSP_SERVER_ARGS)) {
     const server = servers[lang];
     const def = DEFAULT_LSP_CONFIG.servers[lang];
-    if (!server || server.command !== "npx" || !def) continue;
+    if (server?.command !== "npx" || !def) continue;
     const storedArgs = Array.isArray(server.args) ? server.args : null;
     const isLegacy =
       storedArgs === null || JSON.stringify(storedArgs) === JSON.stringify(legacy.args);
@@ -168,21 +168,21 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
   }
   if (env.MMA_CONTEXT_WINDOW) {
     const v = parseInt(env.MMA_CONTEXT_WINDOW, 10);
-    if (!isNaN(v)) {
+    if (!Number.isNaN(v)) {
       record("contextWindow", v);
       result.contextWindow = v;
     }
   }
   if (env.MMA_MAX_TOOL_ITERATIONS) {
     const v = parseInt(env.MMA_MAX_TOOL_ITERATIONS, 10);
-    if (!isNaN(v)) {
+    if (!Number.isNaN(v)) {
       record("maxToolIterations", v);
       result.maxToolIterations = v;
     }
   }
   if (env.MMA_STUCK_THRESHOLD) {
     const v = parseInt(env.MMA_STUCK_THRESHOLD, 10);
-    if (!isNaN(v)) {
+    if (!Number.isNaN(v)) {
       record("stuckThreshold", v);
       result.stuckThreshold = v;
     }

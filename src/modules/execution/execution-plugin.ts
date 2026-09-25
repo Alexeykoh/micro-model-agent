@@ -1,7 +1,7 @@
 import type { AgentPlugin } from "../types";
 import type { ToolCall } from "../../tools/types";
 import { t } from "../../i18n/index";
-import { StuckDetector } from "./stuck-detector";
+import type { StuckDetector } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import { detectTestResults } from "../../tools/bash";
@@ -299,7 +299,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             const diagnostic = deps.stuckDetector.getStuckDiagnostic(currentIter);
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>${diagnostic ? diagnostic + "\n" : ""}${recovery}${tscContext}</system-summary>`,
+              content: `<system-summary>${diagnostic ? `${diagnostic}\n` : ""}${recovery}${tscContext}</system-summary>`,
             });
           }
           deps.stuckDetector.recordEscalation();

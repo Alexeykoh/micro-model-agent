@@ -178,7 +178,7 @@ export function normalizeErrorSignature(toolName: string, output?: string): stri
  * noise — searching it would just burn a query.
  */
 export function isSearchableError(output: string): boolean {
-  if (!output || !output.trim()) return false;
+  if (!output?.trim()) return false;
   const text = output.trim();
   return SEARCHABLE_PATTERNS.some((p) => p.test(text));
 }

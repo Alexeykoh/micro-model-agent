@@ -72,16 +72,16 @@ describe("webui server", () => {
 
   it("serves static assets", async () => {
     const url = await startServer(assets);
-    const page = await get(url + "/");
+    const page = await get(`${url}/`);
     expect(page.status).toBe(200);
     expect(page.body).toContain("hi");
-    const js = await get(url + "/app.js");
+    const js = await get(`${url}/app.js`);
     expect(js.body).toBe("//ok");
   });
 
   it("404s unknown paths", async () => {
     const url = await startServer(assets);
-    expect((await get(url + "/nope")).status).toBe(404);
+    expect((await get(`${url}/nope`)).status).toBe(404);
   });
 
   it("handleRequest works against an explicit state (app≠listen)", async () => {
@@ -113,7 +113,7 @@ describe("webui server", () => {
 
     await withServer(s, async (base) => {
       const long = "a".repeat(40_000);
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: long }),
@@ -146,7 +146,7 @@ describe("webui server", () => {
     s.clients.add(fake as unknown as ServerResponse);
 
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -191,7 +191,7 @@ describe("webui server", () => {
     };
 
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -219,7 +219,7 @@ describe("webui server", () => {
     s.bridge = bridge;
 
     await withServer(s, async (base) => {
-      const bad = await doFetch(base + "/api/message", {
+      const bad = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{not json",
@@ -227,7 +227,7 @@ describe("webui server", () => {
       expect(bad.status).toBe(400);
       expect(await bad.json()).toEqual({ error: "invalid JSON" });
 
-      const empty = await doFetch(base + "/api/message", {
+      const empty = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "   " }),
@@ -241,11 +241,11 @@ describe("webui server", () => {
     const s = createWebUiState();
     s.token = "s3cret";
     await withServer(s, async (base) => {
-      const denied = await get(base + "/events");
+      const denied = await get(`${base}/events`);
       expect(denied.status).toBe(401);
 
       const controller = new AbortController();
-      const ok = await doFetch(base + "/events?token=s3cret", { signal: controller.signal });
+      const ok = await doFetch(`${base}/events?token=s3cret`, { signal: controller.signal });
       expect(ok.status).toBe(200);
       expect(ok.headers.get("content-type")).toContain("text/event-stream");
       controller.abort();
@@ -258,7 +258,7 @@ describe("webui server", () => {
     s.maxBodyBytes = 16;
     s.bridge = makeBridge();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "x".repeat(500) }),
@@ -308,7 +308,7 @@ describe("webui server", () => {
 
     await withServer(s, async (base) => {
       const post = () =>
-        doFetch(base + "/api/message", {
+        doFetch(`${base}/api/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: "hi" }),
@@ -353,7 +353,7 @@ describe("webui server", () => {
     const fwd = makeForwarder(s, () => {});
 
     await withServer(s, async (base) => {
-      const started = await doFetch(base + "/api/message", {
+      const started = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -361,7 +361,7 @@ describe("webui server", () => {
       expect(started.status).toBe(202);
       expect(s.busy).toBe(true);
 
-      const res = await doFetch(base + "/api/interrupt", { method: "POST" });
+      const res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
       expect(res.status).toBe(200);
       expect(interrupted).toBe(1);
       // The aborted turn is still unwinding: busy must NOT be cleared here.
@@ -377,14 +377,14 @@ describe("webui server", () => {
     const s = createWebUiState();
     s.bridge = makeBridge();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/interrupt", { method: "POST" });
+      const res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
       expect(res.status).toBe(409);
     });
   });
 });
 
 describe("webui message body validation", () => {
-  const img = (n = 16) => "data:image/png;base64," + "A".repeat(n);
+  const img = (n = 16) => `data:image/png;base64,${"A".repeat(n)}`;
 
   it("accepts up to 3 data-url images", () => {
     const body = parseMessageBody(JSON.stringify({ text: "hi", images: [img(), img(), img()] }));
@@ -404,7 +404,7 @@ describe("webui message body validation", () => {
   });
 
   it("rejects an oversized image", () => {
-    const big = "data:image/png;base64," + "A".repeat(MAX_IMAGE_DATA_URL_BYTES);
+    const big = `data:image/png;base64,${"A".repeat(MAX_IMAGE_DATA_URL_BYTES)}`;
     const body = parseMessageBody(JSON.stringify({ text: "hi", images: [big] }));
     expect(body).toEqual({ error: "image too large" });
   });

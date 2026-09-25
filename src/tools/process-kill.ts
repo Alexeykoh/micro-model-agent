@@ -15,7 +15,7 @@ export const processKillTool: ToolDefinition = {
     },
     required: ["id"],
   },
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     if (args.id === undefined || String(args.id).trim() === "") {
       // ses_mt4fn58c: `process_kill -p=5173` produced "Process not found:
       // undefined" — no hint about the correct format. Answer with usage.

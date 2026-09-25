@@ -1,4 +1,4 @@
-import type { SecurityConfig, SessionEncryptionConfig, AuditNotifierConfig } from "./types";
+import type { SecurityConfig, } from "./types";
 
 /**
  * Default security configuration for MMA.
@@ -153,7 +153,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       /require\('net'\)\.createServer/,
       /process\.exit\(/,
       /while\(true\)/,
-      /for\(\;\;\)/,
+      /for\(;;\)/,
       /rm -rf/,
       /dd if=/,
       /chmod 777/,

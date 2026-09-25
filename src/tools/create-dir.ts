@@ -1,5 +1,4 @@
 import { mkdirSync, existsSync } from "fs";
-import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathWritable } from "../modules/security/path-validator";

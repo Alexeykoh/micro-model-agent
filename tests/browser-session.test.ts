@@ -5,7 +5,7 @@ import {
   ConsoleBuffer,
 } from "../src/modules/browser/session";
 import { DEFAULT_BROWSER_CONFIG } from "../src/modules/browser/types";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 

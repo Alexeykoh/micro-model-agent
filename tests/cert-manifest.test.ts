@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { rmSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {

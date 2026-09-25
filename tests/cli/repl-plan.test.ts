@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Repl } from "../../src/cli/repl";
-import { ExecutionModule } from "../../src/modules/execution/module";
+import type { ExecutionModule } from "../../src/modules/execution/module";
 import { makeCaptureChannel } from "./capture-channel";
 
 function makeRepl(execModule?: ExecutionModule): Repl {

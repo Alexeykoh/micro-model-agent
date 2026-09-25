@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolContext, ToolResult } from "./types";
+import type { ToolDefinition, ToolContext, } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
@@ -530,8 +530,7 @@ export const bashTool: ToolDefinition = {
     if (
       toolCall &&
       toolCall.tool !== "bash" &&
-      ctx.toolExecutor &&
-      ctx.toolExecutor.hasTool(toolCall.tool)
+      ctx.toolExecutor?.hasTool(toolCall.tool)
     ) {
       const redirected = await ctx.toolExecutor.executeByName(
         toolCall.tool,

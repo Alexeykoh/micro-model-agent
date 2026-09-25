@@ -105,7 +105,7 @@ describe("webui setup REST", () => {
   it("GET /api/setup reports required + display data", async () => {
     const s = virginState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/setup");
+      const res = await doFetch(`${base}/api/setup`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         required: boolean;
@@ -126,7 +126,7 @@ describe("webui setup REST", () => {
     s.config = structuredClone(DEFAULTS);
     s.setup = buildSetupDisplay();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/setup");
+      const res = await doFetch(`${base}/api/setup`);
       const body = (await res.json()) as { required: boolean };
       expect(body.required).toBe(false);
     });
@@ -252,9 +252,9 @@ describe("webui setup REST", () => {
   it("still serves /api/state and static assets while gated", async () => {
     const s = virginState();
     await withServer(s, async (base) => {
-      const state = await doFetch(base + "/api/state");
+      const state = await doFetch(`${base}/api/state`);
       expect(state.status).toBe(200);
-      const js = await doFetch(base + "/setup.js");
+      const js = await doFetch(`${base}/setup.js`);
       expect(js.status).toBe(200);
       expect(await js.text()).toContain("/api/setup");
     });

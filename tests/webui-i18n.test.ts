@@ -52,7 +52,7 @@ describe("webui i18n", () => {
     const s = createWebUiState();
     s.config = testConfig();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/i18n");
+      const res = await doFetch(`${base}/api/i18n`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         locale: string;
@@ -71,7 +71,7 @@ describe("webui i18n", () => {
     s.config = testConfig();
     s.config.locale = "ru";
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/i18n");
+      const res = await doFetch(`${base}/api/i18n`);
       const body = (await res.json()) as { locale: string };
       expect(body.locale).toBe("ru");
     });
@@ -112,13 +112,13 @@ describe("webui i18n", () => {
   it("translates every registry key and enum value in both locales", () => {
     const dicts = getFlatDicts();
     for (const def of configDefs()) {
-      const key = "config.key." + def.key;
-      expect(typeof dicts.en[key], key + " (en)").toBe("string");
-      expect(typeof dicts.ru[key], key + " (ru)").toBe("string");
+      const key = `config.key.${def.key}`;
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
       for (const value of def.enumValues ?? []) {
-        const ek = "config.enum." + value;
-        expect(typeof dicts.en[ek], ek + " (en)").toBe("string");
-        expect(typeof dicts.ru[ek], ek + " (ru)").toBe("string");
+        const ek = `config.enum.${value}`;
+        expect(typeof dicts.en[ek], `${ek} (en)`).toBe("string");
+        expect(typeof dicts.ru[ek], `${ek} (ru)`).toBe("string");
       }
     }
   });
@@ -126,7 +126,7 @@ describe("webui i18n", () => {
   it("returns 503-free empty locale when config is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/i18n");
+      const res = await doFetch(`${base}/api/i18n`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { locale: string };
       expect(body.locale).toBe("en");

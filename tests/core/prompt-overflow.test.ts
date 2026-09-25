@@ -44,7 +44,6 @@ function fakeProvider(respond: () => string): LLMProvider & { calls: number } {
   return {
     model: "fake",
     contextWindow: 32768,
-    calls: 0,
     countTokens: (text: string) => Math.ceil(text.length / 4),
     listModels: async () => [],
     // @ts-expect-error — test stub narrows the streaming API

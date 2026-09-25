@@ -76,7 +76,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   const locale = byCode
     ? byCode.value
     : SETUP_LANGUAGES[
-        Math.max(0, Math.min(SETUP_LANGUAGES.length - 1, (parseInt(languageChoice) || 1) - 1))
+        Math.max(0, Math.min(SETUP_LANGUAGES.length - 1, (parseInt(languageChoice, 10) || 1) - 1))
       ].value;
   setLocale(locale);
 
@@ -89,7 +89,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   );
   const providerIdx = Math.max(
     0,
-    Math.min(PROVIDER_TYPES.length - 1, (parseInt(providerChoice) || 1) - 1),
+    Math.min(PROVIDER_TYPES.length - 1, (parseInt(providerChoice, 10) || 1) - 1),
   );
   const provider = PROVIDER_TYPES[providerIdx].value;
 
@@ -105,7 +105,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
         { label: t("setup.custom_url") },
       ]);
       const choice = await ask(rl, t("setup.select_server", { max: found.length + 1 }), "1");
-      const idx = (parseInt(choice) || 1) - 1;
+      const idx = (parseInt(choice, 10) || 1) - 1;
       if (idx >= found.length) {
         apiBase = await ask(rl, t("setup.api_base"), "http://localhost:1234/v1");
       } else {
@@ -134,7 +134,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
       t("setup.select_model", { max: Math.min(models.length, 10) }),
       "1",
     );
-    const idx = Math.max(0, Math.min(models.length - 1, (parseInt(choice) || 1) - 1));
+    const idx = Math.max(0, Math.min(models.length - 1, (parseInt(choice, 10) || 1) - 1));
     model = models[idx];
   } else {
     model = await ask(rl, t("setup.model_name"), "qwen/qwen3.5-9b");

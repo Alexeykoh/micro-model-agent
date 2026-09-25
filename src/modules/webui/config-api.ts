@@ -58,7 +58,7 @@ export function buildConfigRegistry(): ConfigRegistryEntry[] {
 /** Mask a secret for display: keep the last 4 chars, hide the rest. */
 function maskToken(token: string | null): string | null {
   if (!token) return null;
-  return token.length <= 4 ? "••••" : "••••" + token.slice(-4);
+  return token.length <= 4 ? "••••" : `••••${token.slice(-4)}`;
 }
 
 /** `GET /api/config` — redacted live config + key registry. */

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, } from "vitest";
 import { ContextManager } from "../src/modules/context/manager";
 import type { ContentPart } from "../src/llm/provider";
 
@@ -115,7 +115,7 @@ describe("ContextManager — multimodal content", () => {
   it("should estimate tokens for multimodal messages", () => {
     const smallImage: ContentPart = {
       type: "image_url",
-      image_url: { url: "data:image/png;base64," + "a".repeat(1024) },
+      image_url: { url: `data:image/png;base64,${"a".repeat(1024)}` },
     };
     cm.addMessage({ role: "user", content: [smallImage] });
     const tokens = cm.getEstimatedTokens();

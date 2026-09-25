@@ -12,7 +12,6 @@ import {
   type SecurityPolicyPreset,
 } from "../../src/modules/security/security-policies";
 import type { SecurityConfig } from "../../src/config/types";
-import { DEFAULT_SECURITY_CONFIG } from "../../src/config/security";
 
 describe("SecurityPolicies", () => {
   describe("Policy definitions", () => {

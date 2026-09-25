@@ -117,7 +117,7 @@ describe("POST /api/answer", () => {
   afterEach(() => stopServer());
 
   function post(base: string, body: string, headers: Record<string, string> = {}) {
-    return doFetch(base + "/api/answer", {
+    return doFetch(`${base}/api/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body,

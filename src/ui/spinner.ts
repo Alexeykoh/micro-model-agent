@@ -77,7 +77,7 @@ export class Spinner {
       if (stringWidth(acc + ch) > this.width - 3) break;
       acc += ch;
     }
-    return acc + "…";
+    return `${acc}…`;
   }
 
   private tick(): void {
@@ -88,7 +88,7 @@ export class Spinner {
     // that the tool is still working, not just fast output.
     const elapsed = Date.now() - this.startedAt;
     const suffix = elapsed >= 3000 ? pc.dim(` · ${Math.floor(elapsed / 1000)}s`) : "";
-    const text = "\r" + pc.cyan(frame) + " " + this.message + suffix + "\x1b[K";
+    const text = `\r${pc.cyan(frame)} ${this.message}${suffix}\x1b[K`;
     if (this.channel) this.channel.writeOverlay(text);
     else this.stream.write(text);
   }

@@ -148,7 +148,7 @@ function buildConfigCommands(program: Command): void {
       saveConfig(config, configPath, configDir);
 
       // Rename legacy file
-      const bakPath = configPath + ".bak";
+      const bakPath = `${configPath}.bak`;
       const { renameSync } = await import("fs");
       renameSync(configPath, bakPath);
 
@@ -314,7 +314,7 @@ function buildContextCommand(program: Command): void {
       }
 
       const contextWindow = parseInt(size, 10);
-      if (isNaN(contextWindow) || contextWindow < 1024) {
+      if (Number.isNaN(contextWindow) || contextWindow < 1024) {
         getDefaultChannel().writeLine(t("cli.invalid_context_size"));
         return;
       }
@@ -793,7 +793,7 @@ export function createProgram(): Command {
   program
     .argument("[prompt...]", "Prompt to execute")
     .description("Run a single prompt")
-    .action((prompt: string[]) => {
+    .action((_prompt: string[]) => {
       /* Handled by main.ts after program.parse() */
     });
 

@@ -26,11 +26,11 @@ function getName(
 ): string {
   const fromAttr =
     attrs["aria-label"] ||
-    attrs["placeholder"] ||
-    attrs["title"] ||
-    attrs["alt"] ||
-    attrs["value"] ||
-    attrs["name"] ||
+    attrs.placeholder ||
+    attrs.title ||
+    attrs.alt ||
+    attrs.value ||
+    attrs.name ||
     "";
   if (fromAttr) return fromAttr;
 
@@ -66,18 +66,18 @@ export function extractInteractiveElements(html: string, maxElements = 30): Elem
       attrs[attrMatch[1].toLowerCase()] = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
     }
 
-    if (attrs["style"]?.includes("display:none") || attrs["style"]?.includes("display: none"))
+    if (attrs.style?.includes("display:none") || attrs.style?.includes("display: none"))
       continue;
-    if (attrs["hidden"] !== undefined) continue;
+    if (attrs.hidden !== undefined) continue;
     if (attrs["aria-hidden"] === "true") continue;
-    if (tag === "input" && attrs["type"] === "hidden") continue;
+    if (tag === "input" && attrs.type === "hidden") continue;
 
-    const role = attrs["role"] || inferRole(tag, attrs["type"]);
+    const role = attrs.role || inferRole(tag, attrs.type);
     const isInteractive =
-      ["a", "button", "input", "textarea", "select"].includes(tag) || attrs["role"] !== undefined;
+      ["a", "button", "input", "textarea", "select"].includes(tag) || attrs.role !== undefined;
 
     if (!isInteractive) continue;
-    if (tag === "a" && !attrs["href"]) continue;
+    if (tag === "a" && !attrs.href) continue;
 
     const name = getName(tag, attrs, html, match.index);
 
@@ -86,8 +86,8 @@ export function extractInteractiveElements(html: string, maxElements = 30): Elem
       tag,
       role,
       name,
-      value: attrs["value"],
-      href: attrs["href"],
+      value: attrs.value,
+      href: attrs.href,
       visible: true,
     });
   }

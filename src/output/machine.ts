@@ -5,5 +5,5 @@ export function writeMachineJson(value: unknown): void {
 
 /** Raw stdout write for the non-TTY REPL fallback (documented single-writer exception). */
 export function writeNonTtyLine(text: string): void {
-  process.stdout.write(text + "\n");
+  process.stdout.write(`${text}\n`);
 }

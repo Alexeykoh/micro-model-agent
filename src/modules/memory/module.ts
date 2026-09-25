@@ -72,7 +72,7 @@ export class MemoryModule implements AgentModule {
     if (sections.length === 0) return null;
     let joined = sections.join("\n\n");
     // Hard cap so a huge errors.md can never blow the system prompt budget.
-    if (joined.length > 1200) joined = joined.slice(0, 1200) + "\n…";
+    if (joined.length > 1200) joined = `${joined.slice(0, 1200)}\n…`;
     return joined;
   }
 

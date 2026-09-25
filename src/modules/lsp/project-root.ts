@@ -54,7 +54,7 @@ export function findProjectRoot(filePath: string, baseDir: string, markers: stri
   // (probes) start at dirname(baseDir) — ABOVE the sandbox — and would pick up
   // a marker directory from the parent (e.g. a package.json next to it).
   const rel = relative(root, dir);
-  if ((rel && rel.startsWith("..")) || isAbsolute(rel)) dir = root;
+  if ((rel?.startsWith("..")) || isAbsolute(rel)) dir = root;
   while (true) {
     if (markers.some((m) => existsSync(join(dir, m)))) {
       return dir;

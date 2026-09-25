@@ -3,7 +3,7 @@ import { DEFAULTS } from "../../../src/config/defaults";
 import type { MoEPlan } from "../../../src/modules/execution/types";
 import { topologicalSort, MoEExecutor } from "../../../src/modules/execution/moe-executor";
 import { ToolRegistry } from "../../../src/tools/registry";
-import type { ToolDefinition, ToolContext } from "../../../src/tools/types";
+import type { ToolDefinition, } from "../../../src/tools/types";
 import { mkdtempSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";

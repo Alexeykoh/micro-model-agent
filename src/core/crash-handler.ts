@@ -35,7 +35,7 @@ export function formatCrashEntry(type: CrashType, err: unknown): CrashEntry {
 export function writeCrashEntry(dir: string, entry: CrashEntry): void {
   try {
     mkdirSync(dir, { recursive: true });
-    appendFileSync(join(dir, CRASH_LOG_FILE), JSON.stringify(entry) + "\n", "utf-8");
+    appendFileSync(join(dir, CRASH_LOG_FILE), `${JSON.stringify(entry)}\n`, "utf-8");
   } catch {
     // Best effort — never crash while reporting a crash
   }

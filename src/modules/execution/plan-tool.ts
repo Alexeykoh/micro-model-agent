@@ -1,12 +1,9 @@
 import type { ToolDefinition } from "../../tools/types";
 import { t } from "../../i18n/index";
-import { PlanCreator, getPlanProgress, type Plan, type StepKind } from "./planner";
+import type { Plan, StepKind } from "./planner";
 import type { PlanTracker } from "./tracker";
-import { PlanStore } from "./plan-store";
-import { StepVerifier } from "./verifier";
-import { checkPlanCoverage } from "./plan-coverage";
-import { stepTypecheckGate } from "./execution-plugin";
-import { switchStepToDelete } from "./plan-steps";
+import type { PlanStore } from "./plan-store";
+import type { StepVerifier } from "./verifier";
 import { dispatchPlanAction } from "./plan-actions";
 
 export interface PlanToolDeps {

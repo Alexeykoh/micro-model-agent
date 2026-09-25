@@ -2,7 +2,7 @@ import { existsSync, readdirSync, type Dirent } from "fs";
 import { resolve, isAbsolute, join } from "path";
 import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
-import { isFilePathLike, extractFileLikeTokens, stripUrls } from "./js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "./js-identifiers";
 
 /** Generated/cached dirs to skip when scanning for bare file names. */
 const IGNORED_DIRS = new Set([

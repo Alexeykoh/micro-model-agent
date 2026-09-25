@@ -125,7 +125,7 @@ describe("unifiedDiff", () => {
 
   it("does not throw on large inputs (fallback path)", () => {
     const big = Array.from({ length: 3000 }, (_, i) => `line ${i}`).join("\n");
-    expect(() => unifiedDiff(big, big + "\nextra")).not.toThrow();
+    expect(() => unifiedDiff(big, `${big}\nextra`)).not.toThrow();
   });
 });
 

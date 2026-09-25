@@ -67,7 +67,7 @@ export function decodeText(buf: Buffer): { text: string; binary: boolean } {
 /** True when `target` is not inside `base` (lexically). */
 function escapes(base: string, target: string): boolean {
   const rel = relative(base, target);
-  return rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel);
+  return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
 }
 
 /**

@@ -438,7 +438,7 @@ export class ContextLogger {
 
   private append(text: string): void {
     try {
-      appendFileSync(this.path, text.endsWith("\n") ? text : text + "\n", "utf8");
+      appendFileSync(this.path, text.endsWith("\n") ? text : `${text}\n`, "utf8");
     } catch {
       // Логирование контекста не должно ронять агент.
     }

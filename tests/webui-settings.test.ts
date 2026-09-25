@@ -60,7 +60,7 @@ describe("webui settings REST", () => {
       s.memory = store;
 
       await withServer(s, async (base) => {
-        const res = await doFetch(base + "/api/memory");
+        const res = await doFetch(`${base}/api/memory`);
         expect(res.status).toBe(200);
         const body = (await res.json()) as {
           preferences: Record<string, string>;
@@ -103,15 +103,15 @@ describe("webui settings REST", () => {
       const s = createWebUiState();
       s.memory = store;
       await withServer(s, async (base) => {
-        const del = await doFetch(base + "/api/memory/errors/1", { method: "DELETE" });
+        const del = await doFetch(`${base}/api/memory/errors/1`, { method: "DELETE" });
         expect(del.status).toBe(200);
         expect(store.read("errors")).not.toContain("first");
         expect(store.read("errors")).toContain("second");
 
-        const missing = await doFetch(base + "/api/memory/errors/9", { method: "DELETE" });
+        const missing = await doFetch(`${base}/api/memory/errors/9`, { method: "DELETE" });
         expect(missing.status).toBe(404);
 
-        const badCat = await doFetch(base + "/api/memory/bogus/1", { method: "DELETE" });
+        const badCat = await doFetch(`${base}/api/memory/bogus/1`, { method: "DELETE" });
         expect(badCat.status).toBe(400);
       });
     });
@@ -127,7 +127,7 @@ describe("webui settings REST", () => {
       getLoaded: () => [{ name: "alpha" }],
     };
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/skills");
+      const res = await doFetch(`${base}/api/skills`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         skills: Array<{ name: string; source?: string; enabled?: boolean; description?: string }>;
@@ -154,7 +154,7 @@ describe("webui settings REST", () => {
       ],
     };
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/plugins");
+      const res = await doFetch(`${base}/api/plugins`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         plugins: Array<{ name: string; version?: string; source?: string; enabled?: boolean }>;
@@ -206,11 +206,11 @@ describe("webui settings REST", () => {
   it("answers 503 when a collaborator is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      expect((await doFetch(base + "/api/memory")).status).toBe(503);
+      expect((await doFetch(`${base}/api/memory`)).status).toBe(503);
       expect((await postJson(base, "/api/memory", { category: "facts", text: "x" })).status).toBe(503);
-      expect((await doFetch(base + "/api/memory/facts/1", { method: "DELETE" })).status).toBe(503);
-      expect((await doFetch(base + "/api/skills")).status).toBe(503);
-      expect((await doFetch(base + "/api/plugins")).status).toBe(503);
+      expect((await doFetch(`${base}/api/memory/facts/1`, { method: "DELETE" })).status).toBe(503);
+      expect((await doFetch(`${base}/api/skills`)).status).toBe(503);
+      expect((await doFetch(`${base}/api/plugins`)).status).toBe(503);
     });
   });
 
@@ -220,8 +220,8 @@ describe("webui settings REST", () => {
       s.memory = store;
       s.token = "s3cret";
       await withServer(s, async (base) => {
-        expect((await doFetch(base + "/api/memory")).status).toBe(401);
-        const allowed = await doFetch(base + "/api/memory", {
+        expect((await doFetch(`${base}/api/memory`)).status).toBe(401);
+        const allowed = await doFetch(`${base}/api/memory`, {
           headers: { "x-mma-token": "s3cret" },
         });
         expect(allowed.status).toBe(200);

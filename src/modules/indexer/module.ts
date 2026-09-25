@@ -197,7 +197,7 @@ export class IndexerModule implements AgentModule {
       ...(stackLine ? [stackLine] : []),
       `${t("indexer.top_directories")}: ${topDirs}`,
       ...(duplicates.length > 0 ? [t("indexer.duplicates", { names: duplicates.join(", ") })] : []),
-      `${t("indexer.files")}:` + (fileLines.length > 0 ? "" : " " + t("indexer.empty")),
+      `${t("indexer.files")}:${fileLines.length > 0 ? "" : ` ${t("indexer.empty")}`}`,
       ...fileLines,
       more,
     ].join("\n");

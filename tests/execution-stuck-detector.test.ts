@@ -599,7 +599,7 @@ describe("StuckDetector buildSearchQuery", () => {
   });
 
   it("caps the query length", () => {
-    const q = buildSearchQuery("x", "y", "error TS2322: " + "very long ".repeat(100), "bash", 50);
+    const q = buildSearchQuery("x", "y", `error TS2322: ${"very long ".repeat(100)}`, "bash", 50);
     expect(q.length).toBeLessThanOrEqual(50);
   });
 });

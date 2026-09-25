@@ -19,7 +19,7 @@ function pushConsole(type, text) {
   if (consoleBuf.length >= CONSOLE_CAP) return;
   const clean = String(text).replace(/\s+/g, " ").trim();
   if (!clean) return;
-  const line = clean.length > maxLineChars ? clean.slice(0, maxLineChars) + "…" : clean;
+  const line = clean.length > maxLineChars ? `${clean.slice(0, maxLineChars)}…` : clean;
   consoleBuf.push({ type, text: line });
 }
 
@@ -47,7 +47,7 @@ const SYSTEM_CHANNEL_FALLBACKS = ["chrome", "msedge"];
 
 function isMissingBrowserError(err) {
   return /Executable doesn't exist|is not found|looks like Playwright was just installed/i.test(
-    String(err && err.message ? err.message : err),
+    String(err?.message ? err.message : err),
   );
 }
 
@@ -228,7 +228,7 @@ rl.on("line", async (line) => {
       resp = { id: req.id, ok: false, error: err.message, ...drain() };
     }
   }
-  process.stdout.write(JSON.stringify(resp) + "\n");
+  process.stdout.write(`${JSON.stringify(resp)}\n`);
 });
 
 let shuttingDown = false;

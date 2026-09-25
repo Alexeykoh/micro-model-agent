@@ -71,7 +71,7 @@ describe("webui providers REST", () => {
     const s = createWebUiState();
     s.config = testConfig();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/providers");
+      const res = await doFetch(`${base}/api/providers`);
       expect(res.status).toBe(200);
       const raw = await res.text();
       expect(raw).not.toContain("sk-local-secret");
@@ -173,18 +173,18 @@ describe("webui providers REST", () => {
       saved++;
     };
     await withServer(s, async (base) => {
-      const activeDel = await doFetch(base + "/api/providers/local", { method: "DELETE" });
+      const activeDel = await doFetch(`${base}/api/providers/local`, { method: "DELETE" });
       expect(activeDel.status).toBe(409);
       expect(((await activeDel.json()) as { error: string }).error).toBe("active-provider");
 
-      const del = await doFetch(base + "/api/providers/or", { method: "DELETE" });
+      const del = await doFetch(`${base}/api/providers/or`, { method: "DELETE" });
       expect(del.status).toBe(200);
       const body = (await del.json()) as ProviderBody;
       expect(body.ok).toBe(true);
       expect(body.entries.map((e) => e.label)).toEqual(["local"]);
       expect(saved).toBe(1);
 
-      const missing = await doFetch(base + "/api/providers/ghost", { method: "DELETE" });
+      const missing = await doFetch(`${base}/api/providers/ghost`, { method: "DELETE" });
       expect(missing.status).toBe(404);
     });
   });
@@ -192,9 +192,9 @@ describe("webui providers REST", () => {
   it("returns 503 when config is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      expect((await doFetch(base + "/api/providers")).status).toBe(503);
+      expect((await doFetch(`${base}/api/providers`)).status).toBe(503);
       expect((await postJson(base, "/api/providers", { type: "x", baseUrl: "y" })).status).toBe(503);
-      expect((await doFetch(base + "/api/providers/x", { method: "DELETE" })).status).toBe(503);
+      expect((await doFetch(`${base}/api/providers/x`, { method: "DELETE" })).status).toBe(503);
     });
   });
 
@@ -203,8 +203,8 @@ describe("webui providers REST", () => {
     s.config = testConfig();
     s.token = "s3cret";
     await withServer(s, async (base) => {
-      expect((await doFetch(base + "/api/providers")).status).toBe(401);
-      const allowed = await doFetch(base + "/api/providers", {
+      expect((await doFetch(`${base}/api/providers`)).status).toBe(401);
+      const allowed = await doFetch(`${base}/api/providers`, {
         headers: { "x-mma-token": "s3cret" },
       });
       expect(allowed.status).toBe(200);

@@ -226,7 +226,7 @@ export class OrchestratorClient {
     const text = await this.chat(messages, signal);
     const parsed = this.parseJSON<MoEPlan>(text);
 
-    if (parsed && parsed.subtasks && parsed.subtasks.length > 0) {
+    if (parsed?.subtasks && parsed.subtasks.length > 0) {
       return { plan: parsed, raw: text };
     }
 
@@ -246,7 +246,7 @@ export class OrchestratorClient {
     const text = await this.chat(messages, signal);
     const parsed = this.parseJSON<OrchestratorResult>(text);
 
-    if (parsed && parsed.type) {
+    if (parsed?.type) {
       return parsed;
     }
 

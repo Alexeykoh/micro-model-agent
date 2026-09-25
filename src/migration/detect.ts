@@ -18,7 +18,7 @@ export class MigrationDetector {
       const content = readFileSync(configPath, "utf-8");
       const config = JSON.parse(content);
 
-      if (config.version && config.version.startsWith("2.")) return false;
+      if (config.version?.startsWith("2.")) return false;
 
       for (const field of V1_ONLY_FIELDS) {
         if (field in config) return true;

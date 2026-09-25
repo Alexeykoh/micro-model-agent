@@ -27,7 +27,6 @@ const DEFAULT_CONFIG: Required<EncryptionConfig> = {
 const IV_LENGTH = 16;
 const SALT_LENGTH = 16;
 const KEY_LENGTH = 32;
-const AUTH_TAG_LENGTH = 16;
 
 /**
  * Generate a new encryption key

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { FallbackProvider, type FallbackSource } from "../src/modules/providers/fallback";
-import type { LLMProvider, Message } from "../src/llm/provider";
+import type { LLMProvider, } from "../src/llm/provider";
 import { LlmError } from "../src/llm/llm-errors";
 
-function makeProvider(name: string, behavior: () => AsyncIterable<any> | never): LLMProvider {
+function makeProvider(_name: string, behavior: () => AsyncIterable<any> | never): LLMProvider {
   return {
     model: "m",
     contextWindow: 1000,

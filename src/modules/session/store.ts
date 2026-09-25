@@ -242,12 +242,12 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(msg);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(this.historyPath(id), this.encryptor.encryptFileContent(line) + "\n", {
+      appendFileSync(this.historyPath(id), `${this.encryptor.encryptFileContent(line)}\n`, {
         encoding: "utf-8",
         mode: 0o600,
       });
     } else {
-      appendFileSync(this.historyPath(id), line + "\n", { encoding: "utf-8", mode: 0o600 });
+      appendFileSync(this.historyPath(id), `${line}\n`, { encoding: "utf-8", mode: 0o600 });
     }
     // Re-read meta from disk (not the cache) right before the increment so
     // counters appended by ANOTHER process are not clobbered by a stale
@@ -323,12 +323,12 @@ export class SessionStore {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(entry);
     if (this.encryptor?.isEnabled()) {
-      appendFileSync(this.sessionLogPath(id), this.encryptor.encryptFileContent(line) + "\n", {
+      appendFileSync(this.sessionLogPath(id), `${this.encryptor.encryptFileContent(line)}\n`, {
         encoding: "utf-8",
         mode: 0o600,
       });
     } else {
-      appendFileSync(this.sessionLogPath(id), line + "\n", { encoding: "utf-8", mode: 0o600 });
+      appendFileSync(this.sessionLogPath(id), `${line}\n`, { encoding: "utf-8", mode: 0o600 });
     }
   }
 
