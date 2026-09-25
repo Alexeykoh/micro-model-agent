@@ -633,3 +633,74 @@ describe("StuckDetector bash flailing (P4)", () => {
     expect(detector.hasBashFlailing()).toBe(false);
   });
 });
+
+describe("StuckDetector failure classification", () => {
+  let d: StuckDetector;
+  beforeEach(() => {
+    d = new StuckDetector(5, 3);
+  });
+
+  it("classifies no-progress iterations as timeout", () => {
+    for (let i = 0; i < 6; i++) d.recordIteration(1);
+    const c = d.classifyFailure(9);
+    expect(c).toEqual({ type: "timeout", iteration: 9 });
+  });
+
+  it("classifies one tool failing repeatedly as error_loop (with tool + count)", () => {
+    for (let i = 0; i < 4; i++) d.recordToolError("bash", "boom");
+    const c = d.classifyFailure(3);
+    expect(c).toMatchObject({ type: "error_loop", tool: "bash", count: 4, iteration: 3 });
+  });
+
+  it("classifies consecutive failures across tools as error_loop without a tool", () => {
+    d.recordToolError("bash", "a");
+    d.recordToolError("read_file", "b");
+    d.recordToolError("grep", "c");
+    const c = d.classifyFailure();
+    expect(c?.type).toBe("error_loop");
+    expect(c?.tool).toBeUndefined();
+    expect(c?.count).toBe(3);
+  });
+
+  it("classifies identical repeated calls as repeat", () => {
+    for (let i = 0; i < 4; i++) d.recordToolCall("read_file", { path: "src/a.ts" });
+    expect(d.hasRepetitiveToolCalls()).toBe(true);
+    const c = d.classifyFailure(2);
+    expect(c).toMatchObject({ type: "repeat", tool: "read_file", count: 3 });
+  });
+
+  it("classifies rotating failing shell commands as bash_flailing", () => {
+    for (let i = 0; i < 4; i++) d.recordBashAttempt(false);
+    const c = d.classifyFailure();
+    expect(c?.type).toBe("bash_flailing");
+    expect(c?.count).toBe(4);
+  });
+
+  it("classifies a long read-only streak as read_only", () => {
+    for (let i = 0; i < 10; i++) d.recordToolCall("read_file", { path: `src/f${i}.ts` });
+    expect(d.hasReadOnlyLoop()).toBe(true);
+    const c = d.classifyFailure();
+    expect(c).toMatchObject({ type: "read_only", count: 10 });
+  });
+
+  it("returns null and an empty diagnostic when healthy", () => {
+    expect(d.classifyFailure()).toBeNull();
+    expect(d.getStuckDiagnostic()).toBe("");
+  });
+
+  it("formats a compact, parseable [STUCK: ...] diagnostic", () => {
+    for (let i = 0; i < 4; i++) d.recordToolCall("read_file", { path: "src/a.ts" });
+    const line = d.getStuckDiagnostic(7);
+    expect(line).toContain("[STUCK: ");
+    expect(line).toContain("type=repeat");
+    expect(line).toContain("tool=read_file");
+    expect(line).toContain("count=3");
+    expect(line).toContain("iteration=7");
+  });
+
+  it("omits the tool and iteration parts when unknown", () => {
+    for (let i = 0; i < 6; i++) d.recordIteration(1);
+    const line = d.getStuckDiagnostic();
+    expect(line).toBe("[STUCK: type=timeout]");
+  });
+});

@@ -240,7 +240,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 **6 задач, 4 волны:**
 - Wave 1: Реструктуризация ядра + удаление дублирования — [ ] открыто (крупный рефактор промпта, нужен ручной прогон)
 - Wave 2: [x] DONE CONDITIONS + STOP directives ✅ реализовано; [ ] Session start protocol — открыто
-- Wave 3: Failure classification в StuckDetector — [ ] открыто
+- Wave 3: [x] Failure classification в StuckDetector ✅ (`FailureType`/`classifyFailure`/`getStuckDiagnostic`, `[STUCK: type=…]` префикс recovery-сообщения); ветка `feat/failure-classification`. `scope_drift`/`empty_output` из плана не реализованы — нет надёжного сигнала.
 - Wave 4: FORBIDDEN patterns (autoPlan или always — решить) — [ ] открыто
 
 ---

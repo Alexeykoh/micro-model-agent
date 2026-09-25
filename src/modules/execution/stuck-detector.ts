@@ -8,6 +8,31 @@ interface ToolCallRecord {
 
 export type ErrorClassification = "transient" | "systematic" | "blocking";
 
+/**
+ * Stable, machine-readable failure taxonomy for stuck/recovery diagnostics.
+ *
+ * Mapped from the detector's live states (see `classifyFailure`). The original
+ * plan also named `scope_drift` and `empty_output`; neither has a reliable
+ * detector signal here (scope drift is not tracked, empty output is covered by
+ * `getActionableHints`), so they are intentionally not invented.
+ */
+export type FailureType =
+  | "timeout" // no progress across N iterations on the current step
+  | "repeat" // identical tool call (same args) repeated
+  | "error_loop" // one tool, or consecutive calls, failing repeatedly
+  | "bash_flailing" // rotating failing shell commands
+  | "read_only"; // long read-only exploration loop with no writes
+
+export interface FailureClassification {
+  type: FailureType;
+  /** Tool the failure is attributable to, when known. */
+  tool?: string;
+  /** Repetition/failure count, when meaningful. */
+  count?: number;
+  /** Agent-loop iteration at classification time (0 when unknown). */
+  iteration: number;
+}
+
 const BLOCKING_PATTERNS = [
   /EACCES/i,
   /permission denied/i,
@@ -731,6 +756,53 @@ export class StuckDetector {
       });
     }
     return "";
+  }
+
+  /**
+   * Classify the current failure state into a stable {@link FailureType} for
+   * diagnostics/logs. Returns null when healthy. `iteration` is supplied by the
+   * caller (the detector does not track the global loop counter).
+   */
+  classifyFailure(iteration = 0): FailureClassification | null {
+    const primary = this.getPrimaryReason();
+    if (!primary) return null;
+    switch (primary) {
+      case "stuck":
+        return { type: "timeout", iteration };
+      case "tool-errors": {
+        const entry = Array.from(this.toolErrors.entries()).find(
+          ([, c]) => c >= this.errorThreshold,
+        );
+        return { type: "error_loop", tool: entry?.[0], count: entry?.[1], iteration };
+      }
+      case "consecutive":
+        return { type: "error_loop", count: this.consecutiveFailures, iteration };
+      case "repetitive": {
+        const last = this.recentToolCalls[this.recentToolCalls.length - 1];
+        return { type: "repeat", tool: last?.name, count: this.repetitionThreshold, iteration };
+      }
+      case "bash-flailing": {
+        const fails = this.bashRecent.filter((ok) => !ok).length;
+        return { type: "bash_flailing", count: fails, iteration };
+      }
+      case "read-only":
+        return { type: "read_only", count: this.readOnlyStreak, iteration };
+    }
+  }
+
+  /** Compact `[STUCK: type=..., tool=..., count=..., iteration=N]` marker. */
+  formatFailureDiagnostic(c: FailureClassification): string {
+    const parts = [`type=${c.type}`];
+    if (c.tool) parts.push(`tool=${c.tool}`);
+    if (typeof c.count === "number") parts.push(`count=${c.count}`);
+    if (c.iteration > 0) parts.push(`iteration=${c.iteration}`);
+    return `[STUCK: ${parts.join(", ")}]`;
+  }
+
+  /** Diagnostic marker for the current state, or "" when healthy. */
+  getStuckDiagnostic(iteration = 0): string {
+    const c = this.classifyFailure(iteration);
+    return c ? this.formatFailureDiagnostic(c) : "";
   }
 
   /**

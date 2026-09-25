@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **web chat gating**: while `setupRequired`, `POST /api/message` and `/api/command` answer `409 setup_required` — server-enforced, not just hidden in the UI. A configured instance refuses a second `POST /api/setup` with `409 already_configured`.
 - **web setup UI**: hidden full-screen `#setupGate` + `setup.js` (`window.MmaSetup.maybeOpen()`), `app.js` runs the wizard before chat boot, localized `web.setup.*` keys (en+ru), styles per `docs/design/ui/STYLE.md`.
 - **system-prompt completion criteria** (`src/core/bootstrap.ts`): `buildSystemInfo` now carries a `DONE CONDITIONS` section (all plan steps done, artifacts exist with real content, runnable verification reports clean, then a short summary) and a `STOP AND ASK THE USER` section (ambiguity, unfound path, destructive action, stuck after 2+ approaches) — explicit stop/ask criteria for small models.
+- **stuck failure classification** (`src/modules/execution/stuck-detector.ts`, `execution-plugin.ts`): `StuckDetector.classifyFailure()` maps the live stuck states to a stable `FailureType` (`timeout`/`repeat`/`error_loop`/`bash_flailing`/`read_only`) and `getStuckDiagnostic()` emits a compact `[STUCK: type=…, tool=…, count=…, iteration=…]` marker, now prefixed to the recovery `<system-summary>` so the model sees a machine-readable reason before the guidance.
 
 ### Changed
 
