@@ -137,6 +137,8 @@
   "tool.friendly.lsp_check": "Проверка кода",
   "tool.friendly.meet_done": "Знакомство завершено",
   "tool.truncated": "[Обрезано: удалено {tokens} токенов]",
+  "critic.repair": "Верификатор отметил критичные проблемы; исправь их до завершения:\n{issues}\nСводка: {summary}",
+  "critic.advice": "Верификатор отметил проблемы, которые стоит проверить до завершения:\n{issues}",
   "tool.subagent_queued": "Задача подагенту добавлена: {task}",
   "tool.subagent_artifact": "Суб-агент завершён. Полный результат сохранён в артефакт: {path}\nИтераций: {iterations}\nСводка:\n{summary}",
   "tool.pipeline_started": "Пайплайн \"{name}\" запущен. Движок пайплайнов — заглушка, задача отправлена.",

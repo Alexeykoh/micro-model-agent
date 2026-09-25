@@ -727,14 +727,22 @@ export class Agent {
     });
     const hallucinationGate = new HallucinationGate(hallucinationDetector);
     const auditGate = new AuditGate(this.deps.finalAudit);
+    // Defensive: partial/legacy configs (tests, old config.json) may lack the
+    // `critic` domain — treat it as disabled rather than crashing the loop.
+    const criticConfig = {
+      enabled: config.critic?.enabled ?? false,
+      maxCalls: config.critic?.maxCalls ?? 4,
+      maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
+      timeoutMs: config.critic?.timeoutMs ?? 15000,
+    };
     const criticClient = new CriticClient({
       provider: this.deps.llmProvider,
-      timeoutMs: config.critic.timeoutMs,
+      timeoutMs: criticConfig.timeoutMs,
     });
     const criticGate = new CriticGate({
-      enabled: config.critic.enabled,
-      maxCalls: config.critic.maxCalls,
-      maxRepairCycles: config.critic.maxRepairCycles,
+      enabled: criticConfig.enabled,
+      maxCalls: criticConfig.maxCalls,
+      maxRepairCycles: criticConfig.maxRepairCycles,
       verify: this.deps.criticOverride?.verify ?? ((pack, signal) => criticClient.verify(pack, signal)),
       buildPack: (d) => buildEvidencePack({ task: d.task, planSummary: d.planSummary, toolEvents: d.toolEvents }),
       signal: this.abortController?.signal,
