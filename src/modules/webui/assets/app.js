@@ -2263,15 +2263,14 @@
       "security.contentScan.enabled",
       "security.sessionEncryption.enabled",
     ],
-    advanced: [
+    advanced: ["logLevel", "version"],
+    agent: [
       "moe.enabled",
       "moe.maxReplanCycles",
       "critic.enabled",
       "critic.maxCalls",
       "critic.maxRepairCycles",
       "critic.timeoutMs",
-      "logLevel",
-      "version",
     ],
   };
 
@@ -2902,6 +2901,7 @@
     renderModelPanel();
     renderGenericPanel("context", SECTION_KEYS.context);
     renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
+    renderGenericPanel("agent", SECTION_KEYS.agent);
     renderUiPanel();
     renderMemoryPanel();
     renderSkillsPanel();

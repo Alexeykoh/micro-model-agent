@@ -1095,6 +1095,7 @@
   "web.settings.model": "Model & Provider",
   "web.settings.context": "Context",
   "web.settings.reasoning": "Reasoning",
+  "web.settings.agent": "Agent",
   "web.settings.ui": "UI & Theme",
   "web.settings.memory": "Memory",
   "web.settings.skills": "Skills",
