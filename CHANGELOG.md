@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **stale project-map cache** (`src/modules/indexer/cache.ts`, `walker.ts`): `index-cache.json` is now an envelope carrying a schema `version`, the absolute project `root` and a tree `signature` (SHA-1 over sorted `path\0size\0mtimeMs`, computed stat-only by `Indexer.scanSignature()`). `IndexCache.load()` recomputes the signature and rejects a cache whose version/root/signature differ, or a legacy raw-`IndexResult` cache, so a project map that no longer matches the tree can never reach the system prompt — the index is rebuilt instead.
 - **reasoning overhead on trivial turns** (`src/config/defaults.ts`, `src/core/agent/reasoning-resolver.ts`): the auto-policy baseline now defaults to `"low"` (was an implicit `"medium"` resolver fallback), and an unset `baseline` falls back to the configured `reasoning.min` (`"low"` by default) instead of a hardcoded `"medium"`. Trivial Q&A turns no longer burn medium reasoning tokens; the policy still raises to `"high"` on hallucinations, audit rejections and plan creation.
 - **`WebUiAssets.setupJs`** is optional (lightweight test fixtures stay valid) and `/setup.js` is served with `Cache-Control: no-store` like the other assets.
 
