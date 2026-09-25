@@ -238,6 +238,11 @@ export class ToolExecutor {
     this.ctx.scope = scope;
   }
 
+  /** Current shared-executor scope (used for compare-and-restore by subagents). */
+  getScope(): import("./types").ToolScope | undefined {
+    return this.ctx.scope;
+  }
+
   setPromptIO(io?: import("./prompt-io").PromptIO): void {
     this.ctx.promptIO = io;
   }

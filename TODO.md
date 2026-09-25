@@ -7,13 +7,13 @@
 > контекста/предсказуемость) vs. риск и объём работы.
 
 ### P0 — качество прогонов и фундамент
-- **Безопасность/целостность (аудит волн B/C/D/E, sev 4)** — отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`:
-  - **W-1 (B-1/E-1)** `isPathWritable` не зовёт `escapesViaSymlink` (`security/path-validator.ts:139`) → запись/удаление вне `baseDir` через symlink/junction.
-  - **W-3 (E-2)** command injection через путь файла в lint-on-write (`spawn(shell:true)`, `lint-on-write.ts:165,188`).
-  - **W-4 (C-1)** `plan update` пишет статус без валидации (`plan-actions.ts:241,374`, `as any`) → план не завершается / переоткрытие шага.
-  - **W-5 (C-2)** `autoCloseEvidenceSteps` ложно закрывает пустые/delete-шаги (`execution/module.ts:353-366`).
-  - **W-2 (B-2)** параллельные MoE-субагенты затирают общий scope в `undefined` (`tools/subagent.ts:168-176,269`).
-  - **W-6 (E-4)** MCP-тулы не регистрируются из-за race (`mcp/module.ts:90` vs `bootstrap.ts:758`).
+- **Безопасность/целостность (аудит волн B/C/D/E, sev 4)** — отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md` — ✅ все 6 исправлены (ветка `fix/audit-sev4`):
+  - [x] ~~**W-1 (B-1/E-1)** `isPathWritable` без `escapesViaSymlink`~~ ✅ symlink-проверка добавлена в запись + канонизация ближайшего существующего предка (`path-validator.ts`).
+  - [x] ~~**W-3 (E-2)** command injection в lint-on-write~~ ✅ `bun build`/`node --check` через `spawn(file,args)` без `shell`.
+  - [x] ~~**W-4 (C-1)** `plan update` без валидации статуса~~ ✅ допустимы только `done|failed|skipped`, иначе отказ (`plan.bad_status`).
+  - [x] ~~**W-5 (C-2)** ложный автозакрыт шагов~~ ✅ delete-шаги проверяются на отсутствие файлов, create — на непустое содержимое.
+  - [x] ~~**W-2 (B-2)** MoE затирает scope в `undefined`~~ ✅ `getScope()` + compare-and-restore с реальным родительским scope.
+  - [x] ~~**W-6 (E-4)** MCP-тулы не регистрируются~~ ✅ discovery параллельный и awaited до сборки реестра; late-success после таймаута отменяется.
 - [x] ~~**P6b — reasoning baseline `"medium"` на тривиальных**~~ ✅ baseline теперь `"low"` (`defaults.ts`), резолвер падает на `reasoningConfig.min` вместо хардкода `"medium"`; policy по-прежнему поднимает до high на сигналах (ветка `fix/reasoning-baseline`).
 - [x] ~~**Этап 0 — базовая линия**~~ ✅ `bun test` + `tsc --noEmit` зелёные, зафиксировано.
 - [x] ~~**Валидация кэша индекса**~~ ✅ `index-cache.json` — envelope `{version,root,signature}`; `load()` сверяет SHA-1 сигнатуру дерева (`Indexer.scanSignature()`, stat-only) и отклоняет устаревший/легаси-кэш (ветка `fix/index-cache-validation`).

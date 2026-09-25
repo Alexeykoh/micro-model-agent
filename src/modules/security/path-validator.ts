@@ -1,4 +1,4 @@
-import { resolve, normalize } from "path";
+import { resolve, normalize, dirname } from "path";
 import { realpathSync } from "fs";
 import { isInsideDir, matchesScopeEntry, toForwardSlash } from "../../tools/path-utils";
 import type { PathSecurityConfig } from "../../config/types";
@@ -14,24 +14,33 @@ export interface PathValidationResult {
 
 /**
  * Symlink containment: resolve() does NOT follow symlinks, so a symlink
- * inside baseDir can point outside it. When the target exists on disk its
- * real path must also stay inside the (real) base directory. Returns true if
- * the check cannot be performed (target missing) — creation is validated by
- * the resolved path itself.
+ * (or Windows junction) inside baseDir can point outside it.
+ *
+ * For an existing target the real path must stay inside the real base. For a
+ * not-yet-created leaf the nearest EXISTING ancestor is canonicalized instead,
+ * so `base/link/new.txt` is caught when `link` points outside — creation is
+ * no longer a bypass. Returns false (cannot judge) when baseDir itself does
+ * not exist, so pure lexical validation still works on virtual paths.
  */
 function escapesViaSymlink(baseResolved: string, targetResolved: string): boolean {
+  let realBase: string;
   try {
-    const realTarget = realpathSync(targetResolved);
-    let realBase = baseResolved;
-    try {
-      realBase = realpathSync(baseResolved);
-    } catch {
-      // Keep the resolved baseDir when it cannot be canonicalized.
-    }
-    return !isInsideDir(realTarget, realBase);
+    realBase = realpathSync(baseResolved);
   } catch {
-    // ENOENT etc — target does not exist yet, nothing to follow.
+    // baseDir missing (virtual path / test fixture) — nothing to canonicalize.
     return false;
+  }
+
+  let probe = targetResolved;
+  for (;;) {
+    try {
+      const real = realpathSync(probe);
+      return real !== realBase && !isInsideDir(real, realBase);
+    } catch {
+      const parent = dirname(probe);
+      if (parent === probe) return false; // reached the root, nothing exists
+      probe = parent;
+    }
   }
 }
 
@@ -151,6 +160,14 @@ export function isPathWritable(
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
+    };
+  }
+  // Writes must never follow a symlink/junction out of baseDir (the read path
+  // has always checked this; the write path used to skip it).
+  if (escapesViaSymlink(baseResolved, targetResolved)) {
+    return {
+      allowed: false,
+      reason: "Path resolves outside the base working directory via symlink",
     };
   }
 

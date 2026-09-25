@@ -25,6 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **reasoning overhead on trivial turns** (`src/config/defaults.ts`, `src/core/agent/reasoning-resolver.ts`): the auto-policy baseline now defaults to `"low"` (was an implicit `"medium"` resolver fallback), and an unset `baseline` falls back to the configured `reasoning.min` (`"low"` by default) instead of a hardcoded `"medium"`. Trivial Q&A turns no longer burn medium reasoning tokens; the policy still raises to `"high"` on hallucinations, audit rejections and plan creation.
 - **`WebUiAssets.setupJs`** is optional (lightweight test fixtures stay valid) and `/setup.js` is served with `Cache-Control: no-store` like the other assets.
 
+### Security (audit waves B/C/D/E, severity 4)
+
+- **symlink write escape** (`src/modules/security/path-validator.ts`): `isPathWritable` now runs the `escapesViaSymlink` check the read path always had — and canonicalizes the nearest existing ancestor, so creating a file under a symlinked/junctioned directory that points outside `baseDir` is blocked too. Write/delete/move can no longer escape the sandbox through a link.
+- **command injection in lint-on-write** (`src/modules/plugins/builtin/lint-on-write.ts`): `bun build`/`node --check` now spawn with `shell: false` and an argv array instead of interpolating a model-supplied path into a shell string (`$(…)`, backticks, `%VAR%` no longer execute).
+- **MCP tool registration race** (`src/modules/mcp/module.ts`): tool discovery is parallel and awaited before the bootstrap snapshots tool definitions (was fire-and-forget, so real MCP tools were never registered); a timed-out attempt is cancelled so its late success cannot register a server already marked failed.
+
+### Fixed (audit waves B/C/D/E, severity 4)
+
+- **unvalidated `plan update` status** (`src/modules/execution/plan-actions.ts`): only `done|failed|skipped` are accepted; an arbitrary status (or `pending`) is rejected (`plan.bad_status`) instead of being persisted as an unknown state that never lets the plan complete or silently reopens a done step.
+- **false auto-close of plan steps** (`src/modules/execution/module.ts`): `autoCloseEvidenceSteps` now requires delete-kind targets to be gone and create-kind files to exist with non-empty content, instead of marking empty/undeleted deliverables done and passing the final audit.
+- **MoE subagent scope clobber** (`src/tools/subagent.ts`, `src/tools/executor.ts`): the parent scope is read from the shared executor (`getScope`) and restored with compare-and-restore, so parallel subtasks no longer reset isolation to `undefined` (unrestricted).
+
 ## [2.5.0] - 2026-09-24
 
 ### Added

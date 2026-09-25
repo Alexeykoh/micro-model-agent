@@ -150,6 +150,21 @@ export const subagentTool: ToolDefinition = {
       }
     }
 
+    // Save/restore the shared executor scope so the sub-agent doesn't
+    // permanently mutate the parent's scope. Read the CURRENT scope from the
+    // shared executor, not `ctx.scope`: MoE invokes this tool with an ad-hoc
+    // context whose `scope` is undefined, so capturing `ctx.scope` restored
+    // "unrestricted" and wiped isolation for the whole wave.
+    const parentScope = executor?.getScope?.() ?? ctx.scope;
+    const appliedScope = scope || { allowed_files: [], read_only_files: [] };
+    // Compare-and-restore: under parallel MoE waves a sibling may have
+    // installed its own scope meanwhile — never clobber the newer owner.
+    const restoreScope = () => {
+      if (ctx.toolExecutor?.getScope?.() === appliedScope) {
+        ctx.toolExecutor.setScope(parentScope);
+      }
+    };
+
     try {
       const subContextManager = new ContextManager(
         ctx.config.contextWindow,
@@ -163,13 +178,10 @@ export const subagentTool: ToolDefinition = {
       subPluginManager.register(scopeCollector.plugin, "builtin");
       const hallucinationDetector = new HallucinationDetector(ctx.baseDir, ctx.llmProvider);
 
-      // Save/restore the shared executor scope so the sub-agent doesn't
-      // permanently mutate the parent's scope.
-      const parentScope = ctx.scope;
-      ctx.toolExecutor.setScope(scope || { allowed_files: [], read_only_files: [] });
+      ctx.toolExecutor.setScope(appliedScope);
       // Register cleanup so the executor restores scope on timeout/abort
       // even when the agent's `finally` block never runs (abandoned promise).
-      ctx.cleanup = () => ctx.toolExecutor?.setScope(parentScope);
+      ctx.cleanup = restoreScope;
       // Increment recursion depth on the shared executor ctx so NESTED
       // sub-agents see the deeper level (and the guard above can fire).
       ctx.recursionDepth = currentDepth + 1;
@@ -264,10 +276,11 @@ export const subagentTool: ToolDefinition = {
           usage: pickUsage(),
         };
       } finally {
-        // Restore the parent's exact scope: undefined means "no restrictions"
-        // and must not become an empty scope (which denies everything).
-        ctx.toolExecutor.setScope(parentScope);
-        ctx.cleanup = undefined;
+        // Restore the parent's exact scope (compare-and-restore so a parallel
+        // sibling's newer scope is not clobbered). undefined means "no
+        // restrictions" and must not become an empty scope (denies everything).
+        restoreScope();
+        if (ctx.cleanup === restoreScope) ctx.cleanup = undefined;
         ctx.recursionDepth = currentDepth;
         executor?.setRecursionDepth?.(currentDepth);
       }

@@ -162,7 +162,12 @@ export class LintOnWritePlugin implements AgentPlugin {
         return cached.error;
       }
       try {
-        await runAsync(`bun build --no-bundle --target=bun "${filePath}"`, baseDir, 10000, signal);
+        await runAsync(
+          { file: "bun", args: ["build", "--no-bundle", "--target=bun", filePath] },
+          baseDir,
+          10000,
+          signal,
+        );
         // Aborted check (interrupt) never validated the file — don't cache it.
         if (signal?.aborted) return null;
         syntaxCache.set(filePath, { hash, error: null });
@@ -185,7 +190,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
     if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
       try {
-        await runAsync(`node --check "${filePath}"`, baseDir, 5000, signal);
+        await runAsync({ file: "node", args: ["--check", filePath] }, baseDir, 5000, signal);
         return null;
       } catch (err: any) {
         const stderr = err.stderr?.toString() || "";
@@ -354,20 +359,34 @@ export class LintOnWritePlugin implements AgentPlugin {
 /**
  * Run a command asynchronously (non-blocking event loop) and resolve when it
  * exits. Rejects with captured stderr/stdout on non-zero exit or timeout.
+ *
+ * A plain string runs through a shell (project-controlled scripts). An
+ * `{file,args}` spec spawns WITHOUT a shell — required for anything built from
+ * a model-supplied path (`bun build … <file>`, `node --check <file>`), since a
+ * filename may contain `$()`, backticks or `%VAR%` and shell:true would execute
+ * it (command injection).
  */
 function runAsync(
-  command: string,
+  command: string | { file: string; args: string[] },
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child =
+      typeof command === "string"
+        ? spawn(command, {
+            cwd,
+            shell: true,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          })
+        : spawn(command.file, command.args, {
+            cwd,
+            shell: false,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
     const utf8Chunks: Buffer[] = [];
     const oemChunks: Buffer[] = [];
     child.stdout?.on("data", (d: Buffer) => {

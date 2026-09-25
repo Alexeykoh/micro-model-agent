@@ -85,50 +85,63 @@ export class MCPModule implements AgentModule {
       this.serverConfigs.set(serverName, registry.get(serverName)!);
     }
 
-    // Attempt fast discovery in background (best-effort, timeout-bounded).
-    // If it fails, tools are still registered — they'll connect on first call.
-    this.discoverAllTools();
+    // Discover tools BEFORE the caller snapshots tool definitions. This used
+    // to be fire-and-forget, so `collectToolDefinitions()` at bootstrap ran
+    // before any server finished connecting and the real MCP tools were never
+    // registered. Discovery is bounded (per-server timeout, servers in
+    // parallel) and best-effort: failures leave the lazy "connect" placeholder.
+    await this.discoverAllTools();
   }
 
   /**
-   * Try to connect and discover tools for all registered servers.
-   * Runs in background, never blocks the caller. Failures are silent —
-   * tools still get registered and will retry connection on first call.
+   * Try to connect and discover tools for all registered servers, in parallel,
+   * each bounded by DISCOVERY_TIMEOUT_MS. A timed-out attempt is cancelled: its
+   * late completion must not register a server already marked failed.
    */
   private async discoverAllTools(): Promise<void> {
-    for (const [serverName, serverConfig] of this.serverConfigs) {
-      if (this.failedServers.has(serverName)) continue;
+    await Promise.all(
+      [...this.serverConfigs].map(async ([serverName, serverConfig]) => {
+        if (this.failedServers.has(serverName)) return;
 
-      const client = new MCPClient(serverConfig);
+        const client = new MCPClient(serverConfig);
+        let timedOut = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
 
-      try {
-        // Race discovery against timeout — never let a dead server block startup.
-        await Promise.race([
-          (async () => {
-            await client.connect();
-            const tools = await client.listTools();
-            this.connections.set(serverName, client);
-            for (const tool of tools) {
-              this.discovered.push({
-                serverName,
-                toolName: tool.name,
-                description: tool.description || `Tool on MCP server "${serverName}"`,
-                inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
-              });
-            }
-          })(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("discovery timeout")), DISCOVERY_TIMEOUT_MS),
-          ),
-        ]);
-      } catch (e: any) {
-        this.failedServers.add(serverName);
-        this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
-        await client.disconnect().catch((err: unknown) => {
-          logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
-        });
-      }
-    }
+        try {
+          await Promise.race([
+            (async () => {
+              await client.connect();
+              const tools = await client.listTools();
+              if (timedOut) return; // lost the race — do not mutate state
+              this.connections.set(serverName, client);
+              for (const tool of tools) {
+                this.discovered.push({
+                  serverName,
+                  toolName: tool.name,
+                  description: tool.description || `Tool on MCP server "${serverName}"`,
+                  inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+                });
+              }
+            })(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("discovery timeout")),
+                DISCOVERY_TIMEOUT_MS,
+              );
+            }),
+          ]);
+        } catch (e: any) {
+          timedOut = true;
+          this.failedServers.add(serverName);
+          this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
+          await client.disconnect().catch((err: unknown) => {
+            logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
+          });
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }),
+    );
   }
 
   /**

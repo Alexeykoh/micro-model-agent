@@ -340,16 +340,18 @@ describe("subagentTool", () => {
 });
 
 describe("subagent scope restore", () => {
-  it("restores undefined parent scope after run (no empty-scope lockdown)", async () => {
-    const { subagentTool } = await import("../../src/tools/subagent");
-    const setScope = vi.fn();
+  function makeCtx(initialScope: unknown): { ctx: any; current: () => unknown } {
+    let scope: unknown = initialScope;
+    const setScope = vi.fn((s: unknown) => {
+      scope = s;
+    });
     const ctx: any = {
       baseDir: "/tmp/ws",
       config: {},
       logger: { info() {}, error() {}, warn() {} },
       sessionId: "t",
       scope: undefined,
-      toolExecutor: { setScope, getRegistry: () => ({ getByTags: () => [] }) },
+      toolExecutor: { setScope, getScope: () => scope, getRegistry: () => ({ getByTags: () => [] }) },
       agentFactory: () => ({ run: mockAgentRun }),
       llmProvider: {
         chat: async () => ({
@@ -360,10 +362,25 @@ describe("subagent scope restore", () => {
         countTokens: () => 1,
       },
     };
+    return { ctx, current: () => scope };
+  }
+
+  it("restores undefined parent scope after run (no empty-scope lockdown)", async () => {
+    const { subagentTool } = await import("../../src/tools/subagent");
+    const { ctx, current } = makeCtx(undefined);
     await subagentTool.handler(ctx, { task: "x", allowed_files: ["docs"] });
-    const calls = setScope.mock.calls.map((c: any[]) => c[0]);
-    // First call installs the subagent scope, the final restore must be
-    // exactly `undefined`, not an empty scope that denies everything.
-    expect(calls[calls.length - 1]).toBeUndefined();
+    // The final restore must be exactly `undefined`, not an empty scope that
+    // denies everything.
+    expect(current()).toBeUndefined();
+  });
+
+  it("restores the executor's prior scope when the ad-hoc ctx has none (MoE)", async () => {
+    const { subagentTool } = await import("../../src/tools/subagent");
+    const parentScope = { allowed_files: ["parent"], read_only_files: [] };
+    const { ctx, current } = makeCtx(parentScope);
+    // The MoE executor passes a constructed ctx without `scope`; the parent
+    // scope lives on the shared executor. It must not be reset to undefined.
+    await subagentTool.handler(ctx, { task: "x", allowed_files: ["docs"] });
+    expect(current()).toEqual(parentScope);
   });
 });

@@ -17,6 +17,15 @@ export type PlanAction = (
   args: Record<string, unknown>,
 ) => Promise<ToolResult> | ToolResult;
 
+/**
+ * Statuses `plan update` may set. Anything else (arbitrary model text, or
+ * `pending`/`in_progress`) is rejected: an unknown status never settles
+ * `isComplete()`, so the plan would spin forever and the bogus value would be
+ * persisted to `.mma/plans/active.json`.
+ */
+const STEP_UPDATE_STATUSES = ["done", "failed", "skipped"] as const;
+type StepUpdateStatus = (typeof STEP_UPDATE_STATUSES)[number];
+
 function actionList(deps: PlanToolDeps): ToolResult {
   const metas = deps.store.listAll();
   if (metas.length === 0) {
@@ -239,6 +248,15 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
     return { success: false, output: t("plan.step_not_found") };
   }
   const status = String(args.status || "done");
+  if (!(STEP_UPDATE_STATUSES as readonly string[]).includes(status)) {
+    return {
+      success: false,
+      output: t("plan.bad_status", {
+        status,
+        allowed: STEP_UPDATE_STATUSES.join(", "),
+      }),
+    };
+  }
 
   // Completed plan: re-marking a done step of a finished plan is the
   // loop anchor (observed: 3× "plan update step=4 done" on a 4/4 plan
@@ -371,7 +389,7 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
     }
   }
 
-  tracker.updateStepStatus(stepId, status as any);
+  tracker.updateStepStatus(stepId, status as StepUpdateStatus);
   if (args.note) tracker.addNote(Number(args.step), String(args.note));
   tracker.syncCurrentStep();
   deps.store.saveActive(tracker.getPlan());
