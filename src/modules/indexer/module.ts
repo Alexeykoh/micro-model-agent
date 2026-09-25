@@ -32,7 +32,13 @@ export class IndexerModule implements AgentModule {
   constructor(opts: IndexerModuleOptions) {
     this.baseDir = opts.baseDir;
     this.indexer = new Indexer(opts.baseDir);
-    this.cache = new IndexCache(opts.cacheDir);
+    // Tie the cache to this project root + current tree signature so a stale
+    // `index-cache.json` (files added/removed/edited since the walk) is rebuilt
+    // instead of leaking an outdated map into the system prompt.
+    this.cache = new IndexCache(opts.cacheDir, {
+      root: opts.baseDir,
+      signature: () => this.indexer.scanSignature(),
+    });
   }
 
   async buildIndex(): Promise<IndexResult | null> {

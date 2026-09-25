@@ -8,8 +8,8 @@
 
 ### P0 — качество прогонов и фундамент
 - [x] ~~**P6b — reasoning baseline `"medium"` на тривиальных**~~ ✅ baseline теперь `"low"` (`defaults.ts`), резолвер падает на `reasoningConfig.min` вместо хардкода `"medium"`; policy по-прежнему поднимает до high на сигналах (ветка `fix/reasoning-baseline`).
-- **Этап 0 — базовая линия**: `bun test` + `tsc --noEmit`, зафиксировать зелёное. Нужно до любой чистки, иначе нет критерия «не сломал».
-- **Валидация кэша индекса**: `cache.ts:load()` не проверяет mtime/hash → устаревшая карта проекта уходит в системный промпт.
+- [x] ~~**Этап 0 — базовая линия**~~ ✅ `bun test` (2491 pass / 0 fail) + `tsc --noEmit` зелёные, зафиксировано.
+- [x] ~~**Валидация кэша индекса**~~ ✅ `index-cache.json` — envelope `{version,root,signature}`; `load()` сверяет SHA-1 сигнатуру дерева (`Indexer.scanSignature()`, stat-only) и отклоняет устаревший/легаси-кэш (ветка `fix/index-cache-validation`).
 
 ### P1 — поведение агента
 - **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
@@ -72,7 +72,7 @@
 - **Индексатор**: мультиязычный `IGNORE_DIRS` (venv/`.venv`/target/vendor/__pycache__/…), сегментный матчинг в watcher; реестр языков `symbols.ts` (TS/JS, Python, Rust, Go, Java, Kotlin, C#, Ruby, PHP, Swift, Scala, C/C++, Shell, Lua).
 
 **Открытые хвосты по индексации:**
-- [ ] Валидация кэша индекса (mtime/hash) — `index-cache.json` не проверяется на свежесть
+- [x] ~~Валидация кэша индекса (mtime/hash)~~ ✅ `IndexCache.load()` сверяет `version`/`root`/`signature`; устаревший или легаси-кэш → полный пересбор.
 - [ ] Watcher на Linux не рекурсивный (`fs.watch recursive`) — автообновление только ручное
 
 ### Аудит логики агента — `docs/analysis/2026-08-29-agent-logic-audit.md`

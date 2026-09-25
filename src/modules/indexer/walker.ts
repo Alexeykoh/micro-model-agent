@@ -1,4 +1,14 @@
-import { readdirSync, readFileSync, statSync, lstatSync, existsSync, watch, FSWatcher } from "fs";
+import {
+  readdirSync,
+  readFileSync,
+  statSync,
+  lstatSync,
+  existsSync,
+  watch,
+  type FSWatcher,
+  type Stats,
+} from "fs";
+import { createHash } from "node:crypto";
 import { join, relative, extname } from "path";
 import { Logger } from "../../logger/app-logger";
 import { languageIdForExt, extractSymbols } from "./symbols";
@@ -108,9 +118,16 @@ export class Indexer {
     }
   }
 
-  async walk(): Promise<IndexResult> {
-    const files: IndexedFile[] = [];
-    let totalSize = 0;
+  /**
+   * Traverse every indexable source file under `baseDir` and invoke `visit`
+   * with its full path, project-relative path, language id and stat. Honors
+   * `MAX_FILES` and `IGNORE_DIRS`; file contents are NOT read here — `walk()`
+   * reads them for symbol extraction, while `scanSignature()` uses the stat
+   * only. Shared so both passes see exactly the same file set.
+   */
+  private eachSourceFile(
+    visit: (fullPath: string, relPath: string, language: string, stat: Stats) => void,
+  ): void {
     let count = 0;
 
     const walkDir = (dir: string): void => {
@@ -139,13 +156,9 @@ export class Indexer {
               walkDir(fullPath);
             }
           } else if (stat.isFile()) {
-            const ext = extname(entry).toLowerCase();
-            const language = languageIdForExt(ext);
+            const language = languageIdForExt(extname(entry).toLowerCase());
             if (language) {
-              const content = readFileSync(fullPath, "utf-8");
-              const exports = extractSymbols(content, language);
-              files.push({ path: relPath, language, exports, size: stat.size });
-              totalSize += stat.size;
+              visit(fullPath, relPath, language, stat);
               count++;
             }
           }
@@ -158,7 +171,41 @@ export class Indexer {
     };
 
     walkDir(this.baseDir);
+  }
+
+  async walk(): Promise<IndexResult> {
+    const files: IndexedFile[] = [];
+    let totalSize = 0;
+
+    this.eachSourceFile((fullPath, relPath, language, stat) => {
+      try {
+        const content = readFileSync(fullPath, "utf-8");
+        const exports = extractSymbols(content, language);
+        files.push({ path: relPath, language, exports, size: stat.size });
+        totalSize += stat.size;
+      } catch (e) {
+        // Read failed after a successful stat — skip the file, keep the rest.
+        logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
+      }
+    });
+
     return { files, totalSize };
+  }
+
+  /**
+   * Cheap, content-free fingerprint of the indexed tree: sorted
+   * `path\0size\0mtimeMs` hashed with SHA-1. `IndexCache` stores it and
+   * re-computes it on load to reject a stale `index-cache.json` (a file added,
+   * removed or edited since the walk changes the signature). Stat-only — no
+   * file reads, so it is far cheaper than a full walk.
+   */
+  scanSignature(): string {
+    const parts: string[] = [];
+    this.eachSourceFile((_fullPath, relPath, _language, stat) => {
+      parts.push(`${relPath}\u0000${stat.size}\u0000${Math.floor(stat.mtimeMs)}`);
+    });
+    parts.sort();
+    return createHash("sha1").update(parts.join("\n")).digest("hex");
   }
 
   summarize(result: IndexResult): string {
