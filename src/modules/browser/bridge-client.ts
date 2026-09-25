@@ -2,9 +2,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import type { BrowserDriver } from "./driver";
+import type { BrowserDriver } from "./driver-types";
 import type { ConsoleEntry, NetworkErrorEntry } from "./types";
-import { ConsoleBuffer } from "./session";
+import { ConsoleBuffer } from "./console-buffer";
 import type { StoredCookie } from "./cookie-store";
 import { pickExistingPath } from "./bridge-path";
 

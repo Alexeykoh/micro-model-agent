@@ -29,7 +29,7 @@
   - `B-13` прочие `catch {}` в `auto-fixer.ts`/`bash.ts`/`search-history.ts`/`scope-request.ts` — это намеренный control-flow с комментарием (парсинг с фолбэком / пропуск битой строки), не сокрытие ошибки; `syntax-validator` cleanup логируется.
   - `C-18` часть публичных методов `StuckDetector` (`classifyError`, `getHints`, `getToolAlternative`, …) и actionable-hints остаются англоязычными model-facing диагностиками (как system prompt) — сохранены как API/тесты.
 - Дробление (правило ≤300): `repl-commands.ts` 1426, `agent.ts` 1338 (`executeSingleAgentLoop` ~665), `repl.ts` 1327, `line-editor.ts` 1068, `bootstrap.ts` 870, `stuck-detector.ts` 749, `module.ts` 750.
-- Разорвать 2 цикла `browser/` (`driver ↔ session`).
+- [x] ~~Разорвать 2 цикла `browser/`~~ ✅ `ConsoleBuffer` → `console-buffer.ts`, `BrowserDriver`/`LaunchConfig`/`BrowserLaunchOverrides` → `driver-types.ts`; `driver`/`bridge-client` больше не импортируют `session`. fallow-baseline теперь пустой.
 - Извлечь общий test-harness (сейчас только `tests/helpers/webui-commands.ts`).
 - Хардкод → абстракция: `BASH_GRACE_MS`, пути `.mma`, единый реестр `MMA_*`.
 - Аудит `as any` (53) и глухих `catch {}`.
