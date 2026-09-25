@@ -1009,10 +1009,17 @@
   function updateTabName(id, name) {
     if (!id || !name) return;
     const tab = tabs.find((x) => x.id === id);
-    if (!tab || tab.name === name) return;
-    tab.name = name;
-    renderTabstrip();
-    renderSessionsDropdown();
+    if (tab && tab.name !== name) {
+      tab.name = name;
+      renderTabstrip();
+    }
+    // Patch the session list too, otherwise the dropdown keeps the stale name
+    // until the next `loadSessions()` poll (15s).
+    const sess = state.sessions.find((s) => s.id === id);
+    if (sess && sess.name !== name) {
+      sess.name = name;
+      renderSessionsDropdown();
+    }
   }
 
   function openTab(id, name, kind, server) {
@@ -2256,7 +2263,16 @@
       "security.contentScan.enabled",
       "security.sessionEncryption.enabled",
     ],
-    advanced: ["logLevel", "version"],
+    advanced: [
+      "moe.enabled",
+      "moe.maxReplanCycles",
+      "critic.enabled",
+      "critic.maxCalls",
+      "critic.maxRepairCycles",
+      "critic.timeoutMs",
+      "logLevel",
+      "version",
+    ],
   };
 
   // Localized label for a registry key: `config.key.<canonical>`, falling back

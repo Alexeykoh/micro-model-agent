@@ -212,6 +212,84 @@ const DEFINITIONS: ConfigKeyDef[] = [
     },
   },
   {
+    key: "moe.enabled",
+    aliases: [],
+    domain: "agent",
+    valueType: "bool",
+    reconfigure: true,
+    get: (c) => c.moe?.enabled ?? DEFAULTS.moe.enabled,
+    set: (c, v) => {
+      c.moe = { ...(c.moe ?? DEFAULTS.moe), enabled: v as boolean };
+    },
+  },
+  {
+    key: "moe.maxReplanCycles",
+    aliases: [],
+    domain: "agent",
+    valueType: "int",
+    min: 0,
+    max: 10,
+    step: 1,
+    reconfigure: true,
+    get: (c) => c.moe?.maxReplanCycles ?? DEFAULTS.moe.maxReplanCycles,
+    set: (c, v) => {
+      c.moe = { ...(c.moe ?? DEFAULTS.moe), maxReplanCycles: v as number };
+    },
+  },
+  {
+    key: "critic.enabled",
+    aliases: [],
+    domain: "agent",
+    valueType: "bool",
+    reconfigure: true,
+    get: (c) => c.critic?.enabled ?? DEFAULTS.critic.enabled,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), enabled: v as boolean };
+    },
+  },
+  {
+    key: "critic.maxCalls",
+    aliases: [],
+    domain: "agent",
+    valueType: "int",
+    min: 0,
+    max: 20,
+    step: 1,
+    reconfigure: true,
+    get: (c) => c.critic?.maxCalls ?? DEFAULTS.critic.maxCalls,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), maxCalls: v as number };
+    },
+  },
+  {
+    key: "critic.maxRepairCycles",
+    aliases: [],
+    domain: "agent",
+    valueType: "int",
+    min: 0,
+    max: 5,
+    step: 1,
+    reconfigure: true,
+    get: (c) => c.critic?.maxRepairCycles ?? DEFAULTS.critic.maxRepairCycles,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), maxRepairCycles: v as number };
+    },
+  },
+  {
+    key: "critic.timeoutMs",
+    aliases: [],
+    domain: "agent",
+    valueType: "int",
+    min: 1000,
+    max: 120000,
+    step: 1000,
+    reconfigure: true,
+    get: (c) => c.critic?.timeoutMs ?? DEFAULTS.critic.timeoutMs,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), timeoutMs: v as number };
+    },
+  },
+  {
     key: "logLevel",
     aliases: [],
     domain: "agent",
