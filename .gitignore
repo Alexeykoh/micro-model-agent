@@ -10,3 +10,4 @@ _testing/
 images*.jpg
 certification/report-*.json
 .superpowers/
+.fallow/

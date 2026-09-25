@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/cli/main.ts",
+    "bin/mma.mjs",
+    "scripts/*.ts",
+    "src/modules/browser/bridge-server.mjs"
+  ],
+  "ignorePatterns": [
+    "examples/plugins/**",
+    "dist/**",
+    "certification/**",
+    "_testing/**",
+    "src/modules/webui/assets/**"
+  ],
+  "duplicates": {
+    "minOccurrences": 3
+  },
+  "rules": {
+    "unused-dependencies": "warn"
+  }
+}

@@ -11,9 +11,9 @@ import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import type { WebUiState } from "./state";
 import { broadcast, releaseBusy, reserveBusy } from "./state";
+import { MAX_BODY_BYTES } from "./limits";
 
-/** Max bytes accepted for a POST body (32KB text or 3×~6MB images + JSON overhead). */
-export const MAX_BODY_BYTES = 24 * 1024 * 1024;
+export { MAX_BODY_BYTES } from "./limits";
 
 /** Hard cap on a single message's text, independent of the transport body cap. */
 export const MAX_MESSAGE_CHARS = 32 * 1024;

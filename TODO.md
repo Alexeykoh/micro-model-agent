@@ -35,10 +35,12 @@
 - Аудит `as any` (53) и глухих `catch {}`.
 
 ### P3 — гигиена и релиз
-- Удалить `verify-tools.ts`; убрать `tsconfig-paths` (не используется); добавить `.fallowrc.json`.
-- CI quality gate (`fallow --ci`), lint (Biome/ESLint), pre-commit hook.
-- Русские комментарии/JSDoc (~76 файлов с кириллицей).
-- README + `docs/` актуализация; `fallow security`.
+- [x] ~~Удалить `verify-tools.ts`; убрать `tsconfig-paths`; добавить `.fallowrc.json`~~ ✅ (ветка `chore/p3-hygiene`).
+- [x] ~~CI quality gate + pre-commit hook~~ ✅: `.fallowrc.json` (+baseline `.fallow-baseline.json`, `src/modules/webui/assets/**` в ignore), npm-скрипты `quality`/`fallow`/`fallow:baseline`/`fallow:security`, workflow `.gitea/workflows/quality.yml` (typecheck + `bun test` + `fallow dead-code --baseline … --fail-on-issues`), git pre-commit hook (`fallow hooks install --target git`).
+- [x] ~~`fallow security`~~ ✅ прогнан, триаж `docs/analysis/2026-09-25-fallow-security.md`: actionable-находок нет.
+- [ ] **Lint (Biome/ESLint)** strict (no-explicit-any, no-console кроме cli/) — отдельная крупная задача (install + правки по всему репо).
+- [ ] Русские комментарии/JSDoc (~76 файлов с кириллицей).
+- [ ] README + `docs/` актуализация.
 
 ### P4 — бэклог
 - Автоназвание сессии по контексту (сейчас только ручной `rename`).
