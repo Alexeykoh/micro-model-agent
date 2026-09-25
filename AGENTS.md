@@ -401,7 +401,8 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   ограниченный repair (`critic.maxRepairCycles`), `concern` → совет; оба инжектят
   `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
   `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
-- **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`).
+- **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`);
+  доступны в `/config` и web settings (Advanced), вместе с `moe.enabled`/`moe.maxReplanCycles`.
 - **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
   (`SessionLogger.logCritic`). Визуально: одна строка вердикта при `ui.verbosity ≥ normal`
   (терминал — `Renderer.criticVerdict`; web — SSE `critic`), в `quiet` скрыта, в `verbose` +summary;
