@@ -7,14 +7,21 @@
 > контекста/предсказуемость) vs. риск и объём работы.
 
 ### P0 — качество прогонов и фундамент
+- **Безопасность/целостность (аудит волн B/C/D/E, sev 4)** — отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`:
+  - **W-1 (B-1/E-1)** `isPathWritable` не зовёт `escapesViaSymlink` (`security/path-validator.ts:139`) → запись/удаление вне `baseDir` через symlink/junction.
+  - **W-3 (E-2)** command injection через путь файла в lint-on-write (`spawn(shell:true)`, `lint-on-write.ts:165,188`).
+  - **W-4 (C-1)** `plan update` пишет статус без валидации (`plan-actions.ts:241,374`, `as any`) → план не завершается / переоткрытие шага.
+  - **W-5 (C-2)** `autoCloseEvidenceSteps` ложно закрывает пустые/delete-шаги (`execution/module.ts:353-366`).
+  - **W-2 (B-2)** параллельные MoE-субагенты затирают общий scope в `undefined` (`tools/subagent.ts:168-176,269`).
+  - **W-6 (E-4)** MCP-тулы не регистрируются из-за race (`mcp/module.ts:90` vs `bootstrap.ts:758`).
 - [x] ~~**P6b — reasoning baseline `"medium"` на тривиальных**~~ ✅ baseline теперь `"low"` (`defaults.ts`), резолвер падает на `reasoningConfig.min` вместо хардкода `"medium"`; policy по-прежнему поднимает до high на сигналах (ветка `fix/reasoning-baseline`).
-- [x] ~~**Этап 0 — базовая линия**~~ ✅ `bun test` (2491 pass / 0 fail) + `tsc --noEmit` зелёные, зафиксировано.
+- [x] ~~**Этап 0 — базовая линия**~~ ✅ `bun test` + `tsc --noEmit` зелёные, зафиксировано.
 - [x] ~~**Валидация кэша индекса**~~ ✅ `index-cache.json` — envelope `{version,root,signature}`; `load()` сверяет SHA-1 сигнатуру дерева (`Indexer.scanSignature()`, stat-only) и отклоняет устаревший/легаси-кэш (ветка `fix/index-cache-validation`).
 
 ### P1 — поведение агента
 - **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
 - [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
-- **Аудит волн B/C/D/E** (`tools/`, `execution/`, `session/ui`, `modules/`): может выявить новые P0/P1-баги.
+- [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0), ~24 sev 3, ~25 sev 2; чистого кода больше, чем проблемного (см. раздел «Покрытие»). Часть sev 3 (bash-flailing/consecutive никогда не инжектятся, `stuckDetector.reset()` каждый iteration, `recordToolSuccess` гасит type-error) — дешёвые фиксы в `execution-plugin`/`stuck-detector`.
 - **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
 
 ### P2 — техдолг и поддерживаемость
