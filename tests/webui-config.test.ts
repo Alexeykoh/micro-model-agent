@@ -60,7 +60,7 @@ function fakeSessions(initial: SessionMeta[], activeId: string | null): WebSessi
     },
     create: (name) => {
       seq++;
-      const m = meta("s" + seq, name || "new", false);
+      const m = meta(`s${seq}`, name || "new", false);
       store.set(m.id, m);
       active = m.id;
       return m;
@@ -92,7 +92,7 @@ describe("webui config/session/model REST", () => {
     const s = createWebUiState();
     s.config = testConfig();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/config");
+      const res = await doFetch(`${base}/api/config`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         config: AppConfig;
@@ -216,7 +216,7 @@ describe("webui config/session/model REST", () => {
   it("GET /api/config returns 503 when config is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/config");
+      const res = await doFetch(`${base}/api/config`);
       expect(res.status).toBe(503);
     });
   });
@@ -229,7 +229,7 @@ describe("webui config/session/model REST", () => {
     );
 
     await withServer(s, async (base) => {
-      const list = await doFetch(base + "/api/sessions");
+      const list = await doFetch(`${base}/api/sessions`);
       expect(list.status).toBe(200);
       const body = (await list.json()) as { sessions: Array<Record<string, unknown>> };
       expect(body.sessions.map((x) => x.id).sort()).toEqual(["s1", "s2"]);
@@ -244,14 +244,14 @@ describe("webui config/session/model REST", () => {
       expect(missing.status).toBe(404);
 
       // Active session cannot be deleted.
-      const activeDel = await doFetch(base + "/api/sessions/s2", { method: "DELETE" });
+      const activeDel = await doFetch(`${base}/api/sessions/s2`, { method: "DELETE" });
       expect(activeDel.status).toBe(409);
 
-      const del = await doFetch(base + "/api/sessions/s1", { method: "DELETE" });
+      const del = await doFetch(`${base}/api/sessions/s1`, { method: "DELETE" });
       expect(del.status).toBe(200);
       expect(s.sessionManager?.get("s1")).toBeNull();
 
-      const unknownDel = await doFetch(base + "/api/sessions/ghost", { method: "DELETE" });
+      const unknownDel = await doFetch(`${base}/api/sessions/ghost`, { method: "DELETE" });
       expect(unknownDel.status).toBe(404);
     });
   });
@@ -260,7 +260,7 @@ describe("webui config/session/model REST", () => {
     const s = createWebUiState();
     s.config = testConfig();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/config");
+      const res = await doFetch(`${base}/api/config`);
       const body = (await res.json()) as {
         registry: Array<{ key: string; min?: number; max?: number; step?: number }>;
       };
@@ -281,7 +281,7 @@ describe("webui config/session/model REST", () => {
     const s = createWebUiState();
     s.config = testConfig();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/config");
+      const res = await doFetch(`${base}/api/config`);
       const body = (await res.json()) as {
         registry: Array<{ key: string; valueType: string; group: string; readOnly?: boolean }>;
       };
@@ -316,7 +316,7 @@ describe("webui config/session/model REST", () => {
     s.config = testConfig();
     s.token = "supersecrettoken";
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/config", {
+      const res = await doFetch(`${base}/api/config`, {
         headers: { "x-mma-token": "supersecrettoken" },
       });
       const body = (await res.json()) as { webToken: string | null };
@@ -327,7 +327,7 @@ describe("webui config/session/model REST", () => {
     const s2 = createWebUiState();
     s2.config = testConfig();
     await withServer(s2, async (base) => {
-      const res = await doFetch(base + "/api/config");
+      const res = await doFetch(`${base}/api/config`);
       const body = (await res.json()) as { webToken: string | null };
       expect(body.webToken).toBeNull();
     });
@@ -352,7 +352,7 @@ describe("webui config/session/model REST", () => {
     const s = createWebUiState();
     s.sessionManager = fakeSessions([], null);
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/sessions", { method: "POST" });
+      const res = await doFetch(`${base}/api/sessions`, { method: "POST" });
       expect(res.status).toBe(201);
       const body = (await res.json()) as { session: Record<string, unknown> };
       expect(typeof body.session.id).toBe("string");
@@ -373,7 +373,7 @@ describe("webui config/session/model REST", () => {
     const s = createWebUiState();
     s.knownModels = () => ["alpha", "beta"];
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/models");
+      const res = await doFetch(`${base}/api/models`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ models: ["alpha", "beta"] });
     });
@@ -382,7 +382,7 @@ describe("webui config/session/model REST", () => {
   it("GET /api/models returns 503 when not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/models");
+      const res = await doFetch(`${base}/api/models`);
       expect(res.status).toBe(503);
     });
   });
@@ -392,10 +392,10 @@ describe("webui config/session/model REST", () => {
     s.config = testConfig();
     s.token = "s3cret";
     await withServer(s, async (base) => {
-      const denied = await doFetch(base + "/api/config");
+      const denied = await doFetch(`${base}/api/config`);
       expect(denied.status).toBe(401);
 
-      const allowed = await doFetch(base + "/api/config", {
+      const allowed = await doFetch(`${base}/api/config`, {
         headers: { "x-mma-token": "s3cret" },
       });
       expect(allowed.status).toBe(200);

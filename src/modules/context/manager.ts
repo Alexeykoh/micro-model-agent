@@ -20,7 +20,7 @@ export interface Message {
 }
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
-import { TokenCounter } from "../../llm/token-counter";
+import type { TokenCounter } from "../../llm/token-counter";
 
 export interface ContextBudget {
   systemPrompt: number;

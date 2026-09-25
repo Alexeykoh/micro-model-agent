@@ -164,7 +164,7 @@ function pathsOverlap(a: string, b: string): boolean {
   const na = a.replace(/\\/g, "/").replace(/\/+$/, "");
   const nb = b.replace(/\\/g, "/").replace(/\/+$/, "");
   if (na === nb) return true;
-  return na.startsWith(nb + "/") || nb.startsWith(na + "/");
+  return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
 }
 
 export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {

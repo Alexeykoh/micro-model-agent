@@ -186,7 +186,7 @@ describe("webui commands api", () => {
   it("GET /api/commands returns the list (autocomplete source)", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/commands");
+      const res = await doFetch(`${base}/api/commands`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { commands: Array<{ name: string }> };
       expect(Array.isArray(body.commands)).toBe(true);

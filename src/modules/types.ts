@@ -80,9 +80,9 @@ export interface AgentPlugin {
   /** Tool card closed (after execution, with duration). */
   onToolEnd?(ctx: any, call: ToolCall, result: ToolResult, durationMs: number): void;
   /** Transform/filter streamed model text; return a string to replace, undefined to pass through. */
-  onText?(ctx: any, chunk: string): string | void;
+  onText?(ctx: any, chunk: string): string | undefined;
   /** Transform/filter streamed meta (reasoning + tool output); return a string to replace, undefined to pass through. */
-  onMeta?(ctx: any, chunk: string): string | void;
+  onMeta?(ctx: any, chunk: string): string | undefined;
   /** Called once when an agent `run()` completes (final answer, error or interrupt). */
   onTurnEnd?(ctx: any, summary: TurnSummary): void;
 }

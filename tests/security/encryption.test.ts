@@ -38,8 +38,12 @@ describe("Encryption", () => {
     it("should throw error for tampered encrypted string", () => {
       const plaintext = "test";
       const encrypted = encryptString(plaintext, testKey);
-      // Tamper with the encrypted string
-      const tampered = encrypted.replace(/a/gi, "b");
+      // Deterministic tamper: flip the first char of the AUTH TAG (part 2), so
+      // the HMAC never matches. The old `replace(/a/gi,"b")` was flaky — a
+      // random ciphertext can contain no "a", leaving it intact and decrypting.
+      const parts = encrypted.split(":");
+      parts[2] = (parts[2][0] === "A" ? "B" : "A") + parts[2].slice(1);
+      const tampered = parts.join(":");
       expect(() => decryptString(tampered, testKey)).toThrow("Authentication failed");
     });
 
@@ -190,7 +194,7 @@ describe("Encryption", () => {
 
   describe("key persistence", () => {
     it("throws when encryption key cannot be persisted", () => {
-      const badPath = join(tmpdir(), "mma-nonexistent-dir-" + Date.now(), "nested", "key");
+      const badPath = join(tmpdir(), `mma-nonexistent-dir-${Date.now()}`, "nested", "key");
       expect(() => getOrCreateEncryptionKey({ keyPath: badPath })).toThrow();
     });
   });

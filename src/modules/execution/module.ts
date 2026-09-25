@@ -136,7 +136,6 @@ export class ExecutionModule implements AgentModule {
   // classification (rule #10).
   private forbiddenBashFailures = new Map<string, number>();
   private searchRunner: WebSearchRunner;
-  private webSearchThreshold: number;
   private searchesThisSession = 0;
   private retryWebSearchSignatures = new Set<string>();
   private lastErrorSearchAt = 0;
@@ -197,7 +196,6 @@ export class ExecutionModule implements AgentModule {
     this.stuckDetector = new StuckDetector(stuckThreshold, 3, webSearchThreshold);
     this.auditor = new Auditor(baseDir);
     this.store = new PlanStore(baseDir);
-    this.webSearchThreshold = webSearchThreshold;
     this.searchRunner = searchRunner;
     this.errorSearchCooldownMs = errorSearchCooldownMs;
   }

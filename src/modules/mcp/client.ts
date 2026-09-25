@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
 import { defaultOutputBus } from "../../output";
 
@@ -77,7 +77,7 @@ export class MCPClient {
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      const buffer = "";
 
       this.readSSE(reader, decoder, buffer);
     } catch (err) {
@@ -197,7 +197,7 @@ export class MCPClient {
         )
           .then(() => {
             child.stdin?.write(
-              JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n",
+              `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
             );
           })
           .then(() => {
@@ -227,7 +227,7 @@ export class MCPClient {
    */
   private stdioRequest<T>(method: string, params?: unknown, timeoutMs?: number): Promise<T> {
     const proc = this.process;
-    if (!proc || !proc.stdout || !proc.stdin) {
+    if (!proc?.stdout || !proc.stdin) {
       return Promise.reject(new Error("Not connected to MCP server"));
     }
     const stdout = proc.stdout;
@@ -289,7 +289,7 @@ export class MCPClient {
         finish(() => reject(new Error(`MCP ${method} timeout`)));
       }, timeout);
 
-      proc.stdin!.write(JSON.stringify(request) + "\n");
+      proc.stdin!.write(`${JSON.stringify(request)}\n`);
     });
   }
 

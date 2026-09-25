@@ -36,7 +36,7 @@ export function truncateToolOutput(
   if (output.length <= maxChars) return output;
   const truncated = output.slice(0, maxChars);
   const removedChars = output.length - maxChars;
-  return truncated + `\n\n${t("tool.truncated", { tokens: Math.ceil(removedChars / 2) })}`;
+  return `${truncated}\n\n${t("tool.truncated", { tokens: Math.ceil(removedChars / 2) })}`;
 }
 
 /**

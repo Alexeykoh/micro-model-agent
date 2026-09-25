@@ -104,7 +104,7 @@ describe("webui smoke", () => {
         });
         page.on("pageerror", (err) => errors.push(err.message));
 
-        await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
         await page.waitForSelector(".bar-top", { timeout: 5_000 });
         await page.waitForSelector("#openSettings", { timeout: 5_000 });
 
@@ -161,7 +161,7 @@ describe("webui smoke", () => {
         }
 
         const page = await browser.newPage();
-        await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
         await page.waitForSelector(".stab", { timeout: 5_000 });
 
         expect(await page.locator(".stab").count()).toBe(1);
@@ -218,7 +218,7 @@ describe("webui smoke", () => {
 
         for (const width of [1440, 1000, 820]) {
           const page = await browser.newPage({ viewport: { width, height: 800 } });
-          await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+          await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
           await page.waitForSelector("#inp", { timeout: 5_000 });
 
           const report = await page.evaluate(() => {
@@ -233,7 +233,7 @@ describe("webui smoke", () => {
             mk("ans", long);
             mk("u", long);
             mk("code", long);
-            mk("detail", "↳ " + long);
+            mk("detail", `↳ ${long}`);
             mk("cmdout", long);
             mk("filecard", `<span class="g">◇</span><span class="name">${long}</span><span class="meta">view</span>`);
             mk("linkline", `↳ <a href="#">https://example.com/${long}</a>`);
@@ -249,7 +249,7 @@ describe("webui smoke", () => {
               const b = document.createElement("button");
               b.className = "mi";
               const s = document.createElement("span");
-              s.textContent = "model-" + "abcdefghij".repeat(20) + i;
+              s.textContent = `model-${"abcdefghij".repeat(20)}${i}`;
               b.appendChild(s);
               menu.appendChild(b);
             }
@@ -334,7 +334,7 @@ describe("webui smoke", () => {
         }
 
         const page = await browser.newPage();
-        await page.goto(url + "/", { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
         await page.waitForSelector("#sessBtn", { timeout: 5_000 });
         await page.click("#sessBtn");
         await page.waitForSelector(".dd-menu .si-row.on", { timeout: 5_000 });

@@ -156,13 +156,13 @@ export class Logger {
       try {
         appendFileSync(
           join(logTarget, "app.jsonl"),
-          JSON.stringify({
+          `${JSON.stringify({
             level,
             ts,
             prefix: this.prefix,
             msg: sanitizedMsg,
             meta: sanitizedMeta ?? null,
-          }) + "\n",
+          })}\n`,
           "utf-8",
         );
       } catch {
@@ -199,12 +199,12 @@ export class Logger {
     try {
       appendFileSync(
         join(logTarget, "app.jsonl"),
-        JSON.stringify({
+        `${JSON.stringify({
           level: "info",
           ts: new Date().toISOString(),
           type,
           meta: this.sanitizeMeta(data),
-        }) + "\n",
+        })}\n`,
         "utf-8",
       );
     } catch {
@@ -226,13 +226,13 @@ export class Logger {
     try {
       appendFileSync(
         join(logTarget, "app.jsonl"),
-        JSON.stringify({
+        `${JSON.stringify({
           level,
           ts,
           prefix: this.prefix,
           msg: sanitizedMsg,
           meta: sanitizedMeta ?? null,
-        }) + "\n",
+        })}\n`,
         "utf-8",
       );
     } catch {

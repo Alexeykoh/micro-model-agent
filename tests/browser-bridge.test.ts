@@ -35,7 +35,7 @@ function respondingChild(): any {
   const child = fakeChild();
   child.stdin.on("data", (chunk: Buffer) => {
     const msg = JSON.parse(chunk.toString());
-    const line = Buffer.from(JSON.stringify({ id: msg.id, ok: true, data: {} }) + "\n");
+    const line = Buffer.from(`${JSON.stringify({ id: msg.id, ok: true, data: {} })}\n`);
     child.stdout.emit("data", line);
   });
   return child;
@@ -48,7 +48,7 @@ function slowRespondingChild(delayMs = 50): any {
   child.stdin.on("data", (chunk: Buffer) => {
     const msg = JSON.parse(chunk.toString());
     setTimeout(() => {
-      const line = Buffer.from(JSON.stringify({ id: msg.id, ok: true, data: {} }) + "\n");
+      const line = Buffer.from(`${JSON.stringify({ id: msg.id, ok: true, data: {} })}\n`);
       child.stdout.emit("data", line);
     }, delayMs);
   });

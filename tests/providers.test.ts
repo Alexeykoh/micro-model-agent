@@ -76,7 +76,7 @@ describe("providers module", () => {
 
   describe("presets", () => {
     it("exposes hosted base URLs for hosted providers only", () => {
-      expect(HOSTED_BASE_URLS["openrouter"]).toBe("https://openrouter.ai/api/v1");
+      expect(HOSTED_BASE_URLS.openrouter).toBe("https://openrouter.ai/api/v1");
       expect(HOSTED_BASE_URLS["opencode-zen"]).toBe("https://opencode.ai/zen/v1");
       expect(HOSTED_BASE_URLS["opencode-go"]).toBe("https://opencode.ai/zen/go/v1");
       expect(HOSTED_BASE_URLS["openai-compat"]).toBeUndefined(); // user-entered URL

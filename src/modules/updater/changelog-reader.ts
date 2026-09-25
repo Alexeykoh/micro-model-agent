@@ -45,7 +45,7 @@ export function readChangelog(packageName: string): string | null {
 export function extractChangelogRange(
   changelog: string,
   fromVersion: string,
-  toVersion: string,
+  _toVersion: string,
 ): string | null {
   const lines = changelog.split("\n");
   const sections: string[] = [];

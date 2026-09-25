@@ -262,7 +262,7 @@ export class AuditNotifier {
 
     try {
       const line = JSON.stringify(notification);
-      appendFileSync(this.config.filePath, line + "\n", "utf8");
+      appendFileSync(this.config.filePath, `${line}\n`, "utf8");
     } catch (error) {
       defaultOutputBus.log(
         "error",

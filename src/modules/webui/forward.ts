@@ -70,7 +70,7 @@ const DEFAULT_OUTPUT_CAP = 6000;
 export function clipToolOutput(toolName: string, output: string): string {
   const cap = TOOL_OUTPUT_CAPS[toolName] ?? DEFAULT_OUTPUT_CAP;
   if (output.length <= cap) return output;
-  return output.slice(0, cap) + `\n… [truncated from ${output.length.toLocaleString()} chars]`;
+  return `${output.slice(0, cap)}\n… [truncated from ${output.length.toLocaleString()} chars]`;
 }
 
 /**
@@ -102,7 +102,7 @@ export function makeForwarder(
   opts: { flushMs?: number } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
-  let buf = { text: "", meta: "", reasoning: "" };
+  const buf = { text: "", meta: "", reasoning: "" };
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const flush = () => {

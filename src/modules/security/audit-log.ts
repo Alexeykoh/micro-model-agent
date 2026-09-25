@@ -72,7 +72,7 @@ export function logAudit(entry: AuditLogEntry): void {
 
   try {
     const logEntry = JSON.stringify(entry);
-    appendFileSync(join(dir, "audit.jsonl"), logEntry + "\n", "utf8");
+    appendFileSync(join(dir, "audit.jsonl"), `${logEntry}\n`, "utf8");
   } catch {
     // Silently fail if we can't write to audit log
     // This shouldn't break the agent
@@ -186,7 +186,7 @@ export function logNetworkRequest(
  */
 export function logSecurityBlock(
   sessionId: string | undefined,
-  action:
+  _action:
     "tool_call" | "file_read" | "file_write" | "file_delete" | "bash_command" | "network_request",
   reason: string,
   details?: string,

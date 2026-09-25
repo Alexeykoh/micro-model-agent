@@ -533,7 +533,7 @@ export class Repl implements ReplContext, Host {
       }
 
       if (inMultiLine) {
-        multiLineBuffer += "\n" + line;
+        multiLineBuffer += `\n${line}`;
         if (!this.isMultiLineInput(multiLineBuffer)) {
           inMultiLine = false;
           const fullInput = multiLineBuffer.trim();
@@ -688,7 +688,7 @@ export class Repl implements ReplContext, Host {
     this.presentPrompt();
   }
 
-  private handleSpecialKey(str: string, key: any): boolean {
+  private handleSpecialKey(_str: string, key: any): boolean {
     if (key.name === "escape") {
       // Bun's keypress decoder collapses a fast double-Esc into a single
       // keypress whose `sequence` contains two ESC bytes ("\x1b\x1b").
@@ -1052,7 +1052,7 @@ export class Repl implements ReplContext, Host {
         this.output.writeLine(pc.red(t("repl.help_unknown", { name })));
         return;
       }
-      this.output.writeLine(pc.bold(pc.cyan("/" + cmd.name)));
+      this.output.writeLine(pc.bold(pc.cyan(`/${cmd.name}`)));
       this.output.writeLine(`  ${cmd.description}`);
       if (cmd.usage) this.output.writeLine(`  ${pc.dim(cmd.usage)}`);
       if (cmd.aliases?.length) {
@@ -1083,7 +1083,7 @@ export class Repl implements ReplContext, Host {
       this.output.writeLine(pc.bold(t(`repl.group.${groupKey}`)));
       for (const cmd of cmds) {
         const aliases = cmd.aliases?.length ? ` (${pc.dim(cmd.aliases.join(", "))})` : "";
-        this.output.writeLine(`  ${pc.cyan("/" + cmd.name)}${aliases}  ${pc.dim(cmd.description)}`);
+        this.output.writeLine(`  ${pc.cyan(`/${cmd.name}`)}${aliases}  ${pc.dim(cmd.description)}`);
         if (cmd.usage) {
           this.output.writeLine(`    ${pc.dim(cmd.usage)}`);
         }

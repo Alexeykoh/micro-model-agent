@@ -4,10 +4,8 @@ import { join, dirname } from "path";
 import { SessionStore } from "../../src/modules/session/store";
 import {
   SessionFileEncryptor,
-  DEFAULT_SESSION_ENCRYPTION,
 } from "../../src/modules/security/session-encryption";
 import type { SessionEncryptionConfig } from "../../src/config/types";
-import { ConfigEncryptor } from "../../src/modules/security/encryption";
 import { defaultOutputBus } from "../../src/output";
 
 const TEST_DIR = join(__dirname, "test-sessions-encryption");

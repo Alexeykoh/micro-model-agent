@@ -390,7 +390,7 @@ export interface AuditNotifierConfig {
   maxRetries?: number;
 }
 
-import type { LspConfig, LspServerConfig } from "../modules/lsp/types";
+import type { LspConfig, } from "../modules/lsp/types";
 
 export interface UpdaterConfig {
   enabled: boolean;

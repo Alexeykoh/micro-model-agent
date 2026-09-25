@@ -20,7 +20,7 @@ import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import { runWithMoE } from "./agent-moe";
-import { MemoryStore } from "../modules/memory/store";
+import type { MemoryStore } from "../modules/memory/store";
 import { CostTracker } from "../modules/pricing/index";
 import { createPolicyState } from "../modules/reasoning/policy";
 import type { PolicyState } from "../modules/reasoning/policy";
@@ -519,7 +519,6 @@ export class Agent {
       contextManager,
       logger,
       sessionManager,
-      baseDir,
     } = this.deps;
 
     const slog = new SessionLogger(sessionManager, logger, () => this.callerProvenance());
@@ -1243,8 +1242,6 @@ export class Agent {
         // auditFailed уже выставлен вентилем.
         break;
       }
-      // reject → continue: аудит уже добавил контекст и взвёл suppressRepetitionRetry.
-      continue;
     }
 
     const tokensUsed = contextManager.getEstimatedTokens();
@@ -1272,7 +1269,7 @@ export class Agent {
     }
 
     return {
-      success: state.emptyResponseExhausted || state.auditFailed ? false : true,
+      success: !(state.emptyResponseExhausted || state.auditFailed ),
       text: state.lastText,
       error: state.emptyResponseExhausted
         ? t("error.empty_response")

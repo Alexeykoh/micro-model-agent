@@ -130,7 +130,6 @@ export function toolAccent(tool: string): (text: string) => string {
       return pc.magenta;
     case "execute":
       return pc.blue;
-    case "meta":
     default:
       return pc.dim;
   }

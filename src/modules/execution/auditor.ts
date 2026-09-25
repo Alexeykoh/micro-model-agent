@@ -62,7 +62,7 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
         e.name.toLowerCase() === name ||
         toForwardSlash(full)
           .toLowerCase()
-          .endsWith("/" + suffix)
+          .endsWith(`/${suffix}`)
       ) {
         found = full;
         return;

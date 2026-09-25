@@ -13,7 +13,7 @@ export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: st
   const activeSet = new Set(activeTags);
   const visible = new Set<string>();
   for (const tool of allTools) {
-    if (tool.alwaysOn || (tool.tags && tool.tags.some((tag) => activeSet.has(tag)))) {
+    if (tool.alwaysOn || (tool.tags?.some((tag) => activeSet.has(tag)))) {
       visible.add(tool.name);
     }
   }

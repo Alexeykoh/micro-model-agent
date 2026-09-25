@@ -1,5 +1,5 @@
 import type { SecurityConfig } from "../../config/types";
-import { DEFAULT_SECURITY_CONFIG, mergeSecurityConfig } from "../../config/security";
+import { mergeSecurityConfig } from "../../config/security";
 
 /**
  * Security policy presets
@@ -174,7 +174,7 @@ export const STRICT_POLICY: SecurityPolicy = {
         /require\('net'\)\.createServer/,
         /process\.exit\(/,
         /while\(true\)/,
-        /for\(\;\;\)/,
+        /for\(;;\)/,
         /rm -rf/,
         /dd if=/,
         /chmod 777/,
@@ -308,7 +308,7 @@ export const BALANCED_POLICY: SecurityPolicy = {
         /require\('child_process'\)/,
         /process\.exit\(/,
         /while\(true\)/,
-        /for\(\;\;\)/,
+        /for\(;;\)/,
         /rm -rf/,
         /dd if=/,
         /chmod 777/,
@@ -383,7 +383,7 @@ export const PERMISSIVE_POLICY: SecurityPolicy = {
         /eval\(/,
         /new Function\(/,
         /while\(true\)/,
-        /for\(\;\;\)/,
+        /for\(;;\)/,
         /rm -rf/,
         /dd if=/,
       ],

@@ -50,7 +50,7 @@ export async function performWebSearch(
     const results: SearchResult[] = [];
     const snippetRegex =
       /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = snippetRegex.exec(html)) !== null && results.length < numResults) {
       results.push({
         url: match[1].trim(),

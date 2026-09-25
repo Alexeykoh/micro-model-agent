@@ -165,7 +165,7 @@ describe("LineEditor", () => {
     input.pushData("\r");
     await tick();
     expect(lines).toEqual(["a"]);
-    expect(editor["lines"]).toEqual([""]);
+    expect(editor.lines).toEqual([""]);
   });
 
   it("supports left/right cursor navigation", async () => {
@@ -266,7 +266,7 @@ describe("LineEditor", () => {
     input.pushData("\r");
     await tick();
     expect(lines).toEqual(["prev"]);
-    expect(editor["lines"]).toEqual([""]);
+    expect(editor.lines).toEqual([""]);
   });
 
   it("completes with a single match", async () => {
@@ -355,7 +355,7 @@ describe("LineEditor", () => {
     const { editor, input } = makeEditor({ prompt: "You: " });
     input.pushData("x".repeat(200));
     await tick();
-    const layout = editor["layout"]();
+    const layout = editor.layout();
     // First visual row + the 5-char prompt must fit into 80 columns,
     // otherwise the terminal auto-wraps and every following row shifts.
     expect(layout[0].text.length).toBeLessThanOrEqual(80 - 5);
@@ -367,7 +367,7 @@ describe("LineEditor", () => {
     input.pushData("\x1b[13;2u"); // Shift+Enter → second buffer line
     input.pushData("z".repeat(90));
     await tick();
-    const layout = editor["layout"]();
+    const layout = editor.layout();
     for (const row of layout) {
       expect(row.text.length).toBeLessThanOrEqual(80);
     }
@@ -411,8 +411,8 @@ describe("LineEditor", () => {
     await tick();
     input.pushData("x");
     await tick();
-    expect(editor["lines"][0]).toBe("x");
-    expect(editor["lines"][0]).not.toContain("R");
+    expect(editor.lines[0]).toBe("x");
+    expect(editor.lines[0]).not.toContain("R");
   });
 
   it("does not query DSR while a question is pending", async () => {
@@ -429,16 +429,16 @@ describe("LineEditor", () => {
     input.pushData("a");
     input.pushData("\x1b[13;2u"); // newline → cursor visual row 1
     await tick();
-    expect(editor["dsrPending"]).toBe(true);
-    expect(editor["dsrQueryRow"]).toBe(0);
-    expect(editor["prevCursorRow"]).toBe(1);
+    expect(editor.dsrPending).toBe(true);
+    expect(editor.dsrQueryRow).toBe(0);
+    expect(editor.prevCursorRow).toBe(1);
     output.data = "";
     input.pushData("\x1b[9;1R"); // reply: cursor on screen row 9
     await tick();
     // top = 9 - dsrQueryRow(0) = 9, not 9 - prevCursorRow(1) = 8.
     input.pushData("b");
     await tick();
-    expect(editor["frameTopAbs"]).toBe(9);
+    expect(editor.frameTopAbs).toBe(9);
     expect(output.data.startsWith("\x1b[9;1H")).toBe(true);
   });
 
@@ -449,7 +449,7 @@ describe("LineEditor", () => {
     await tick();
     expect(output.data).not.toContain("\x1b[1;1H");
     // Manually set the anchor (simulating a DSR reply).
-    editor["frameTopAbs"] = 4;
+    editor.frameTopAbs = 4;
     // Next keystroke renders with an ABSOLUTE home onto row 4.
     output.data = "";
     input.pushData("!");
@@ -461,7 +461,7 @@ describe("LineEditor", () => {
     const { editor, input, output } = makeEditor();
     (output as unknown as { rows: number }).rows = 12;
     // Manually set anchor to simulate DSR reply.
-    editor["frameTopAbs"] = 8;
+    editor.frameTopAbs = 8;
     // Build a 3-row buffer.
     input.pushData("a\x1b[13;2ub\x1b[13;2uc");
     await tick();
@@ -470,7 +470,7 @@ describe("LineEditor", () => {
     input.pushData("d");
     await tick();
     expect(output.data.startsWith("\x1b[8;1H")).toBe(true);
-    expect(editor["frameTopAbs"]).toBe(8);
+    expect(editor.frameTopAbs).toBe(8);
     // Add lines so T+L-1 > H → scroll occurs.
     input.pushData("\x1b[13;2u");
     input.pushData("e");
@@ -484,7 +484,7 @@ describe("LineEditor", () => {
     input.pushData("g");
     await tick();
     // T=8, L=6, H=12 → 8+5=13 > 12 → scroll by 1. New anchor = 12-6+1 = 7.
-    expect(editor["frameTopAbs"]).toBe(7);
+    expect(editor.frameTopAbs).toBe(7);
   });
 
   it("caps the rendered frame to the visible screen rows", async () => {
@@ -497,18 +497,18 @@ describe("LineEditor", () => {
     // maxRows = rows - 2 = 3: only the tail of the frame is drawn.
     const clears = (output.data.match(/\x1b\[2K/g) || []).length;
     expect(clears).toBe(3);
-    expect(editor["visibleLayout"]().length).toBe(3);
+    expect(editor.visibleLayout().length).toBe(3);
   });
 
   it("resets the anchor on reset() and question()", async () => {
     const { editor, input } = makeEditor();
-    editor["frameTopAbs"] = 5;
+    editor.frameTopAbs = 5;
     input.pushData("abc");
     await tick();
-    expect(editor["frameTopAbs"]).toBe(5);
+    expect(editor.frameTopAbs).toBe(5);
     editor.reset();
-    expect(editor["frameTopAbs"]).toBeNull();
+    expect(editor.frameTopAbs).toBeNull();
     editor.question("Name: ", () => {});
-    expect(editor["frameTopAbs"]).toBeNull();
+    expect(editor.frameTopAbs).toBeNull();
   });
 });

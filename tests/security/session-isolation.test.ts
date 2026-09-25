@@ -4,10 +4,10 @@ import {
   isPathInSessionScope,
   createSessionFilePath,
   DEFAULT_SESSION_ISOLATION,
-  SessionIsolationConfig,
+  type SessionIsolationConfig,
 } from "../../src/modules/security/session-isolation";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync, existsSync, mkdtempSync } from "fs";
+import { mkdirSync, rmSync, mkdtempSync } from "fs";
 import { join, resolve } from "path";
 import { tmpdir } from "os";
 

@@ -27,7 +27,7 @@ const PRIORITY_ORDER: Record<string, number> = {
 
 function blockLabel(content: string): string {
   const firstLine = content.split("\n")[0].trim();
-  return firstLine.length > 70 ? firstLine.slice(0, 67) + "..." : firstLine;
+  return firstLine.length > 70 ? `${firstLine.slice(0, 67)}...` : firstLine;
 }
 
 export class PromptBuilder {

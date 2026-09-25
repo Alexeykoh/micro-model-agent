@@ -19,7 +19,7 @@ describe("ConfidenceCheck", () => {
     const sentence =
       "The system should use TypeScript for this project because it provides strong typing better tooling and reliable refactoring support across the entire codebase for long term maintainability";
     check.setPreviousResponse(sentence);
-    const result = check.validate(sentence + " as we already decided earlier in this session");
+    const result = check.validate(`${sentence} as we already decided earlier in this session`);
     expect(result.status).toBe("retry");
   });
 

@@ -1,5 +1,5 @@
 import { readFileSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
-import { resolve, extname } from "path";
+import { extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { isPathInScope } from "../modules/security/path-validator";

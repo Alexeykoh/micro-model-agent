@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { StepVerifier } from "../../../src/modules/execution/verifier";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync, } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 

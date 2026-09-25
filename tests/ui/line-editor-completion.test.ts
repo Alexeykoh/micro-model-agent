@@ -59,16 +59,16 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("/");
     input.pushData("\t");
     await tick();
-    expect(editor["lines"][0]).toBe("/alpha");
-    expect(editor["completionSession"]).not.toBeNull();
+    expect(editor.lines[0]).toBe("/alpha");
+    expect(editor.completionSession).not.toBeNull();
 
     input.pushData("\x1b[B"); // down
     await tick();
-    expect(editor["lines"][0]).toBe("/beta");
+    expect(editor.lines[0]).toBe("/beta");
 
     input.pushData("\x1b[A"); // up
     await tick();
-    expect(editor["lines"][0]).toBe("/alpha");
+    expect(editor.lines[0]).toBe("/alpha");
 
     editor.close();
   });
@@ -80,7 +80,7 @@ describe("LineEditor tab completion cycling", () => {
     await tick();
     input.pushData("\t"); // second Tab cycles, does not re-print/complete
     await tick();
-    expect(editor["lines"][0]).toBe("/beta");
+    expect(editor.lines[0]).toBe("/beta");
     editor.close();
   });
 
@@ -95,12 +95,12 @@ describe("LineEditor tab completion cycling", () => {
     await tick();
     input.pushData("\t");
     await tick();
-    expect(editor["lines"][0]).toBe("/alphafoo");
-    expect(editor["completionSession"]).not.toBeNull();
+    expect(editor.lines[0]).toBe("/alphafoo");
+    expect(editor.completionSession).not.toBeNull();
 
     input.pushData("\x1b[B"); // down -> replaces only the token
     await tick();
-    expect(editor["lines"][0]).toBe("/betafoo");
+    expect(editor.lines[0]).toBe("/betafoo");
 
     editor.close();
   });
@@ -110,12 +110,12 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("/");
     input.pushData("\t");
     await tick();
-    expect(editor["lines"][0]).toBe("/alpha");
+    expect(editor.lines[0]).toBe("/alpha");
 
     input.pushData("\x1b"); // escape
     await escapeTick();
-    expect(editor["lines"][0]).toBe("/");
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.lines[0]).toBe("/");
+    expect(editor.completionSession).toBeNull();
     editor.close();
   });
 
@@ -132,12 +132,12 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("/");
     input.pushData("\t");
     await tick();
-    expect(editor["lines"][0]).toBe("/alpha");
+    expect(editor.lines[0]).toBe("/alpha");
 
     input.pushData("\x1b"); // escape
     await escapeTick();
-    expect(editor["lines"][0]).toBe("/");
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.lines[0]).toBe("/");
+    expect(editor.completionSession).toBeNull();
     expect(captured).toEqual([]);
     editor.close();
   });
@@ -149,8 +149,8 @@ describe("LineEditor tab completion cycling", () => {
     await tick();
     input.pushData("x");
     await tick();
-    expect(editor["lines"][0]).toBe("/alphax");
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.lines[0]).toBe("/alphax");
+    expect(editor.completionSession).toBeNull();
     editor.close();
   });
 
@@ -164,7 +164,7 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("\r");
     await tick();
     expect(lines).toEqual(["/beta"]);
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.completionSession).toBeNull();
   });
 
   it("wraps from the last candidate down to the first", async () => {
@@ -176,7 +176,7 @@ describe("LineEditor tab completion cycling", () => {
       input.pushData("\x1b[B");
       await tick();
     }
-    expect(editor["lines"][0]).toBe("/alpha");
+    expect(editor.lines[0]).toBe("/alpha");
     editor.close();
   });
 
@@ -187,7 +187,7 @@ describe("LineEditor tab completion cycling", () => {
     await tick();
     input.pushData("\x1b[A"); // up -> wrap to last
     await tick();
-    expect(editor["lines"][0]).toBe("/gamma");
+    expect(editor.lines[0]).toBe("/gamma");
     editor.close();
   });
 
@@ -198,8 +198,8 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("/s");
     input.pushData("\t");
     await tick();
-    expect(editor["lines"][0]).toBe("/sessions");
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.lines[0]).toBe("/sessions");
+    expect(editor.completionSession).toBeNull();
     input.pushData("\r");
     await tick();
     expect(lines).toEqual(["/sessions"]);
@@ -214,7 +214,7 @@ describe("LineEditor tab completion cycling", () => {
     input.pushData("\t");
     await tick();
     expect(output.data).toContain("\x07");
-    expect(editor["completionSession"]).toBeNull();
+    expect(editor.completionSession).toBeNull();
     editor.close();
   });
 });

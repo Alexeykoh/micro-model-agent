@@ -1,12 +1,10 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
-import { join, dirname, basename } from "path";
+import { join, } from "path";
 import { homedir } from "os";
 import {
   encryptString,
   decryptString,
   isEncryptedString,
-  generateEncryptionKey,
-  getOrCreateEncryptionKey,
   ConfigEncryptor,
 } from "./encryption";
 import { defaultOutputBus } from "../../output";
@@ -191,7 +189,7 @@ export class SessionFileEncryptor {
    */
   appendToSessionJSONL<T>(filePath: string, obj: T): void {
     const encryptedLine = this.encryptFileContent(JSON.stringify(obj));
-    writeFileSync(filePath, encryptedLine + "\n", {
+    writeFileSync(filePath, `${encryptedLine}\n`, {
       flag: "a",
       encoding: "utf8",
     });
@@ -210,7 +208,7 @@ export class SessionFileEncryptor {
         try {
           const content = readFileSync(filePath, "utf8");
           const encrypted = this.encryptFileContent(content);
-          writeFileSync(filePath + ".enc", encrypted, "utf8");
+          writeFileSync(`${filePath}.enc`, encrypted, "utf8");
           unlinkSync(filePath);
         } catch {
           // Skip binary files or files we can't read

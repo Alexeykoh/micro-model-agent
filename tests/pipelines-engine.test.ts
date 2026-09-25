@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, } from "vitest";
 import { PipelineEngine } from "../src/modules/pipelines/engine";
-import type { Pipeline, PipelineStep } from "../src/modules/pipelines/parser";
+import type { PipelineStep } from "../src/modules/pipelines/parser";
 
 describe("PipelineEngine", () => {
   it("should resolve dependency order", () => {

@@ -98,7 +98,7 @@ describe("BackupManager", () => {
   it("should backup entire .mma directory when needed", () => {
     const backup = new BackupManager(tmpDir);
     backup.backupAll();
-    const bakDir = tmpDir + ".bak";
+    const bakDir = `${tmpDir}.bak`;
     expect(existsSync(bakDir)).toBe(true);
   });
 

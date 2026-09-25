@@ -22,6 +22,7 @@ import { installCrashHandlers } from "../core/crash-handler";
 import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
+import type { AgentResult } from "../core/types";
 
 /**
  * Set only for one-shot `--json` runs (a positional prompt exists). Module-scoped
@@ -252,7 +253,7 @@ async function main(): Promise<void> {
     const updater = exitOnComplete ? undefined : startAutoUpdate(config);
 
     if (jsonMode) {
-      let result;
+      let result: AgentResult;
       try {
         result = await agent.run(prompt);
       } catch (err) {
@@ -284,7 +285,7 @@ async function main(): Promise<void> {
       verbosity: resolveVerbosity(config.ui),
     });
     renderer.showLoader();
-    let result;
+    let result: AgentResult;
     try {
       result = await agent.run(
         prompt,
@@ -351,7 +352,7 @@ async function main(): Promise<void> {
     // process sees the saved config, skips the wizard, and creates its editor
     // first thing. `MMA_POST_SETUP=1` guards against a re-run loop.
     if (!hasAnyConfig && !exitOnComplete && process.env.MMA_POST_SETUP !== "1") {
-      getDefaultChannel().writeLine("\n  " + t("cli.first_run") + "\n");
+      getDefaultChannel().writeLine(`\n  ${t("cli.first_run")}\n`);
       const answers = await runSetup();
       const { config } = loadConfig({ configDir: mmaDir, projectConfigPath });
       // Preserve the CLI --reasoning override (bootstrap in the fresh process

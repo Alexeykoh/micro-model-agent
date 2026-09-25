@@ -107,7 +107,7 @@ describe("webui usage metrics", () => {
       usage: { contextUsed: 2048, contextLimit: 32768, cacheHitRate: 0.75, costUsd: 0.02 },
     });
     await withServer(bridge, async (base) => {
-      const res = await doFetch(base + "/api/state");
+      const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         busy: boolean;
@@ -145,7 +145,7 @@ describe("webui usage metrics", () => {
       projectMap: { indexed: false, files: 0, symbols: 0, tokens: 0 },
     });
     await withServer(bridge, async (base) => {
-      const res = await doFetch(base + "/api/state");
+      const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { state: HostStateSnapshot };
       expect(body.state.workspace).toBe("E:/proj");

@@ -24,7 +24,7 @@ export const processLogTool: ToolDefinition = {
     },
     required: ["id"],
   },
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     if (args.id === undefined || String(args.id).trim() === "") {
       const known = processRegistry.list();
       const ids = known.map((p) => p.id);

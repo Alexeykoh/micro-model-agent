@@ -37,7 +37,6 @@ export async function runMapAction(
       await module.buildIndex();
       return { ok: true, output: module.formatFind(q) };
     }
-    case "summary":
     default:
       return summary();
   }

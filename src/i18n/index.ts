@@ -59,7 +59,7 @@ export function setMissingKeyReporter(reporter?: (key: string) => void): void {
 
 export function t(key: string, params?: Record<string, string | number>): string {
   const localeDict = flat[currentLocale];
-  const enDict = flat["en"];
+  const enDict = flat.en;
   const template = localeDict?.[key] ?? enDict?.[key];
 
   if (template === undefined) {

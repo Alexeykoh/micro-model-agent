@@ -76,7 +76,7 @@ export class CostTracker {
   /** Total for one provider, or undefined when nothing was priced for it. */
   totalFor(provider: string): number | undefined {
     const entry = this.byProvider.get(provider);
-    return entry && entry.known ? entry.total : undefined;
+    return entry?.known ? entry.total : undefined;
   }
 
   /** Per-provider totals sorted by cost descending (priced providers only). */

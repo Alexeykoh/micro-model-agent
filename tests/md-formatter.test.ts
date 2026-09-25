@@ -93,7 +93,7 @@ describe("formatMarkdown", () => {
 function makeStream(): { chunks: string[]; stream: FormattingStream } {
   const chunks: string[] = [];
   const stream = new FormattingStream(
-    (line) => chunks.push(line + "\n"),
+    (line) => chunks.push(`${line}\n`),
     60,
     (text) => chunks.push(text),
   );

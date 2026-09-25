@@ -473,7 +473,7 @@ describe("Agent (mock-based integration)", () => {
   it("supports multi-turn tool+text cycles", async () => {
     const config = makeConfig({ maxToolIterations: 10 });
     let callCount = 0;
-    const llmProvider = makeLLMProvider(async function* (messages, _tools) {
+    const llmProvider = makeLLMProvider(async function* (_messages, _tools) {
       callCount++;
       // First two calls are tool_calls, third is final text
       if (callCount <= 2) {

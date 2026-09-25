@@ -163,7 +163,7 @@ export async function resolvePromptOverflow(opts: {
   const replacements: PromptBlock[] = [];
   const warnings: OverflowWarning[] = [];
   let used = includedTokens;
-  let unresolved: PromptBlockKind[] = [];
+  const unresolved: PromptBlockKind[] = [];
 
   // The bootstrap dry-run only warns that blocks "will be summarized before the
   // first run". Without a notice here the first prompt appears to hang while

@@ -353,7 +353,7 @@ export class LineEditor implements LineInput {
       this.completionSession = null;
     }
 
-    if (this.onKeyInput && this.onKeyInput(str, key)) return;
+    if (this.onKeyInput?.(str, key)) return;
 
     const k = key as {
       name?: string;
@@ -965,9 +965,9 @@ export class LineEditor implements LineInput {
         acc += ch;
         w += cw;
       }
-      return acc + "…";
+      return `${acc}…`;
     });
-    this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
+    this.output.write(`\r\n${rows.join("\r\n")}\r\n`);
     // The printed list moved the cursor below the old frame. Drop the absolute
     // frame anchor so the next render positions RELATIVE to the current cursor
     // (below the list). Keeping the DSR anchor re-homed the frame to its old

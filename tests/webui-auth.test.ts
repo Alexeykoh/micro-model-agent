@@ -46,25 +46,25 @@ describe("webui auth + limits", () => {
     s.token = "s3cret";
     s.bridge = makeBridge();
     await withServer(s, async (base) => {
-      const stateDenied = await doFetch(base + "/api/state");
+      const stateDenied = await doFetch(`${base}/api/state`);
       expect(stateDenied.status).toBe(401);
 
-      const cmdDenied = await doFetch(base + "/api/command", {
+      const cmdDenied = await doFetch(`${base}/api/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ line: "/status" }),
       });
       expect(cmdDenied.status).toBe(401);
 
-      const stateHeader = await doFetch(base + "/api/state", {
+      const stateHeader = await doFetch(`${base}/api/state`, {
         headers: { "x-mma-token": "s3cret" },
       });
       expect(stateHeader.status).toBe(200);
 
-      const stateQuery = await doFetch(base + "/api/state?token=s3cret");
+      const stateQuery = await doFetch(`${base}/api/state?token=s3cret`);
       expect(stateQuery.status).toBe(200);
 
-      const cmdHeader = await doFetch(base + "/api/command", {
+      const cmdHeader = await doFetch(`${base}/api/command`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-mma-token": "s3cret" },
         body: JSON.stringify({ line: "/status" }),
@@ -78,7 +78,7 @@ describe("webui auth + limits", () => {
     s.minPostIntervalMs = 0;
     s.bridge = makeBridge();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Origin: "http://evil.test" },
         body: JSON.stringify({ text: "hi" }),
@@ -93,7 +93,7 @@ describe("webui auth + limits", () => {
     s.minPostIntervalMs = 0;
     s.bridge = null;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -109,7 +109,7 @@ describe("webui auth + limits", () => {
     s.bridge = makeBridge();
     s.busy = true;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -125,7 +125,7 @@ describe("webui auth + limits", () => {
     s.bridge = makeBridge();
     s.lastPostTs = Date.now();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/message", {
+      const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
@@ -142,13 +142,13 @@ describe("webui auth + limits", () => {
       // MAX_CLIENTS defaults to 5; hold that many streams open, then the next is capped.
       for (let i = 0; i < 5; i++) {
         const controller = new AbortController();
-        const ok = await doFetch(base + "/events", { signal: controller.signal });
+        const ok = await doFetch(`${base}/events`, { signal: controller.signal });
         expect(ok.status).toBe(200);
         controllers.push(controller);
       }
       // Give the server a tick to register all clients.
       await new Promise((r) => setTimeout(r, 0));
-      const capped = await doFetch(base + "/events");
+      const capped = await doFetch(`${base}/events`);
       expect(capped.status).toBe(503);
       expect(await capped.json()).toEqual({ error: "too many clients" });
     });
@@ -171,7 +171,7 @@ describe("webui auth + limits", () => {
     };
     s.bridge = bridge;
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/command?token=s3cret", {
+      const res = await doFetch(`${base}/api/command?token=s3cret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ line: "/status" }),
@@ -204,7 +204,7 @@ describe("webui auth + limits", () => {
     const s = createWebUiState();
     s.token = "s3cret";
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/api/i18n", { headers: { "x-mma-token": "s3cret" } });
+      const res = await doFetch(`${base}/api/i18n`, { headers: { "x-mma-token": "s3cret" } });
       const cookie = res.headers.get("set-cookie") || "";
       expect(cookie).toContain("mma_web_auth=s3cret");
       expect(cookie).toContain("HttpOnly");
@@ -218,7 +218,7 @@ describe("webui auth + limits", () => {
     s.token = "s3cret";
     const controller = new AbortController();
     await withServer(s, async (base) => {
-      const res = await doFetch(base + "/events?token=s3cret", { signal: controller.signal });
+      const res = await doFetch(`${base}/events?token=s3cret`, { signal: controller.signal });
       expect(res.status).toBe(200);
       const cookie = res.headers.get("set-cookie") || "";
       expect(cookie).toContain("mma_web_auth=s3cret");
@@ -234,7 +234,7 @@ describe("webui auth + limits", () => {
     const s = createWebUiState();
     s.token = "a;b=c %";
     const req = {
-      headers: { cookie: "mma_web_auth=" + encodeURIComponent(s.token) },
+      headers: { cookie: `mma_web_auth=${encodeURIComponent(s.token)}` },
     } as unknown as IncomingMessage;
     expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
   });

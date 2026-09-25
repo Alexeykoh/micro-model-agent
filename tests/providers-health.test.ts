@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   probeProviders,
   type ProbeTarget,
-  type ProviderHealth,
 } from "../src/modules/providers/health";
 
 function target(name: string, behavior: () => Promise<string[]>): ProbeTarget {

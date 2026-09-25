@@ -131,7 +131,7 @@ export function getSessionTempDir(sessionContext: SessionContext): string {
 /**
  * Clean up session-specific temporary data
  */
-export function cleanupSessionTempDir(sessionContext: SessionContext): void {
+export function cleanupSessionTempDir(_sessionContext: SessionContext): void {
   // Note: In a real implementation, we would recursively delete the temp dir
   // For now, we just leave it as the OS will clean up eventually
   // In production, you might want to implement proper cleanup

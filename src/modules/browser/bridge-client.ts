@@ -77,7 +77,7 @@ export class BridgeDriver implements BrowserDriver {
         clearTimeout(timer);
         resolve(resp);
       });
-      this.proc!.stdin.write(JSON.stringify({ id, cmd, params }) + "\n");
+      this.proc!.stdin.write(`${JSON.stringify({ id, cmd, params })}\n`);
     });
     this.drainEvents(response);
     if (!response.ok) throw new Error(response.error || `Bridge command failed: ${cmd}`);

@@ -26,7 +26,7 @@ export class ConsoleBuffer {
   add(type: ConsoleType, text: string): void {
     const clean = String(text).replace(/\s+/g, " ").trim();
     if (!clean) return;
-    const line = clean.length > CONSOLE_MAX_LINE ? clean.slice(0, CONSOLE_MAX_LINE) + "…" : clean;
+    const line = clean.length > CONSOLE_MAX_LINE ? `${clean.slice(0, CONSOLE_MAX_LINE)}…` : clean;
     this.entries.push({ type, text: line });
     if (this.entries.length > this.maxEntries) {
       this.entries.splice(0, this.entries.length - this.maxEntries);
@@ -151,7 +151,7 @@ export class BrowserSession {
       if (action !== "open") {
         const warning = this.actionTracker.record(action, args, this.driver?.url() || "");
         if (warning && result.success) {
-          result.output = result.output + "\n\n⚠️ " + warning;
+          result.output = `${result.output}\n\n⚠️ ${warning}`;
         }
       }
 
@@ -235,7 +235,7 @@ export class BrowserSession {
 
     if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
       const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
-      url = isLocalhost ? "http://" + url : "https://" + url;
+      url = isLocalhost ? `http://${url}` : `https://${url}`;
     }
 
     await this.launch();

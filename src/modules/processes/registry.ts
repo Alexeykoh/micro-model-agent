@@ -41,7 +41,7 @@ function getOemDecoder(): TextDecoder | null {
     const m = cpOut ? cpOut.toString("latin1").match(/(\d+)/) : null;
     if (m) {
       try {
-        oemDecoder = new TextDecoder("ibm" + m[1]);
+        oemDecoder = new TextDecoder(`ibm${m[1]}`);
       } catch {
         oemDecoder = null;
       }
@@ -278,7 +278,7 @@ class ProcessRegistry {
   waitForExit(id: string, timeoutMs: number): Promise<boolean> {
     const entry = this.procs.get(id);
     const waiter = this.exitWaiters.get(id);
-    if (!entry || entry.status !== "running" || !waiter) {
+    if (entry?.status !== "running" || !waiter) {
       return Promise.resolve(true);
     }
     return new Promise((resolve) => {

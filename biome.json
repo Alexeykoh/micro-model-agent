@@ -1,0 +1,73 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!.fallow",
+      "!.mma",
+      "!.superpowers",
+      "!.opencode",
+      "!coverage",
+      "!_testing",
+      "!certification",
+      "!src/modules/webui/assets",
+      "!examples",
+      "!docs"
+    ]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noUnreachable": "error",
+        "noEmptyCharacterClassInRegex": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noConsole": "error",
+        "noAssignInExpressions": "off",
+        "noExportsInTest": "off",
+        "noControlCharactersInRegex": "off",
+        "useIterableCallbackReturn": "warn"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "useNodejsImportProtocol": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/cli/**", "src/output/**", "src/ui/**", "bin/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    },
+    {
+      "includes": ["**/crash-handler.ts", "**/bridge-server.mjs"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+    },
+    {
+      "includes": ["tests/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "off", "noConsole": "off" },
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "warn",
+            "useYield": "off",
+            "noUnreachable": "off"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -154,7 +154,7 @@ export async function runWithMoE(
   for (let cycle = 1; cycle <= maxCycles; cycle++) {
     ensureNotAborted();
     if (cycle > 1) {
-      status(t("moe.replan_started", { cycle, max: maxCycles }) + "\n");
+      status(`${t("moe.replan_started", { cycle, max: maxCycles })}\n`);
       emit("moe_replan", {
         cycle,
         title: currentPlan.title,
@@ -198,20 +198,20 @@ export async function runWithMoE(
           const decision = await orchestrator.resolveScopeRequest(subtaskId, req, signal);
           if (decision.action === "approve") {
             status(
-              t("moe.scope_approved", {
+              `${t("moe.scope_approved", {
                 subtask: subtaskId,
                 files: [...decision.write, ...decision.read].join(", "),
-              }) + "\n",
+              })}\n`,
             );
           } else {
-            status(t("moe.scope_rejected", { subtask: subtaskId }) + "\n");
+            status(`${t("moe.scope_rejected", { subtask: subtaskId })}\n`);
           }
           return decision;
         },
       });
 
     status(
-      t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) }) + "\n",
+      `${t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) })}\n`,
     );
 
     // Selective re-plan (Plan 5.1): subtasks already successfully executed in
