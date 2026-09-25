@@ -13,7 +13,7 @@
 
 ### P1 — поведение агента
 - **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
-- **System Prompt — DONE CONDITIONS**: STOP/scope есть, явных условий завершения нет (план `2026-08-27-system-prompt-optimization.md`, 0/7 отмечено).
+- [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
 - **Аудит волн B/C/D/E** (`tools/`, `execution/`, `session/ui`, `modules/`): может выявить новые P0/P1-баги.
 - **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
 
@@ -238,10 +238,10 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 Цель: перестроить `buildSystemInfo` для 9B моделей — уменьшить токены, улучшить читаемость, добавить недостающие директивы.
 
 **6 задач, 4 волны:**
-- Wave 1: Реструктуризация ядра + удаление дублирования
-- Wave 2: DONE CONDITIONS + STOP directives + Session start protocol
-- Wave 3: Failure classification в StuckDetector
-- Wave 4: FORBIDDEN patterns (autoPlan или always — решить)
+- Wave 1: Реструктуризация ядра + удаление дублирования — [ ] открыто (крупный рефактор промпта, нужен ручной прогон)
+- Wave 2: [x] DONE CONDITIONS + STOP directives ✅ реализовано; [ ] Session start protocol — открыто
+- Wave 3: Failure classification в StuckDetector — [ ] открыто
+- Wave 4: FORBIDDEN patterns (autoPlan или always — решить) — [ ] открыто
 
 ---
 

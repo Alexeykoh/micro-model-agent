@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **web setup API**: `GET /api/setup` (`required` + languages/providers/defaults), `POST /api/setup/{scan,models,test,locale}`, and `POST /api/setup` (validate → apply → persist → reconfigure → ungate). Emits an SSE `setup_done`.
 - **web chat gating**: while `setupRequired`, `POST /api/message` and `/api/command` answer `409 setup_required` — server-enforced, not just hidden in the UI. A configured instance refuses a second `POST /api/setup` with `409 already_configured`.
 - **web setup UI**: hidden full-screen `#setupGate` + `setup.js` (`window.MmaSetup.maybeOpen()`), `app.js` runs the wizard before chat boot, localized `web.setup.*` keys (en+ru), styles per `docs/design/ui/STYLE.md`.
+- **system-prompt completion criteria** (`src/core/bootstrap.ts`): `buildSystemInfo` now carries a `DONE CONDITIONS` section (all plan steps done, artifacts exist with real content, runnable verification reports clean, then a short summary) and a `STOP AND ASK THE USER` section (ambiguity, unfound path, destructive action, stuck after 2+ approaches) — explicit stop/ask criteria for small models.
 
 ### Changed
 

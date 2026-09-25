@@ -2,6 +2,8 @@
 
 > **For agentic workers:** implement task-by-task, TDD (test first), atomic commits `feat(scope): description`. Steps use checkbox (`- [ ]`) syntax.
 
+**Status (2026-09-25):** Task 3 (DONE CONDITIONS + STOP) implemented in `src/core/bootstrap.ts` (branch `feat/system-prompt-done-conditions`). Tasks 1, 2, 4, 5, 6 remain open.
+
 **Goal:** Restructure `buildSystemInfo` system prompt for 9B models — reduce token count, improve readability, add missing behavioral directives.
 
 **Source:** AI agent analysis 2026-08-27 (prompt audit against literature best practices).
