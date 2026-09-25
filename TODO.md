@@ -39,8 +39,8 @@
 - [x] ~~CI quality gate + pre-commit hook~~ ✅: `.fallowrc.json` (+baseline `.fallow-baseline.json`, `src/modules/webui/assets/**` в ignore), npm-скрипты `quality`/`fallow`/`fallow:baseline`/`fallow:security`, workflow `.gitea/workflows/quality.yml` (typecheck + `bun test` + `fallow dead-code --baseline … --fail-on-issues`), git pre-commit hook (`fallow hooks install --target git`).
 - [x] ~~`fallow security`~~ ✅ прогнан, триаж `docs/analysis/2026-09-25-fallow-security.md`: actionable-находок нет.
 - [x] ~~**Lint (Biome)**~~ ✅ `@biomejs/biome` + `biome.json` (линтер, formatter/assist off — Prettier остаётся), `bun run lint`, включён в `quality` и CI. Правила-полировка: `noConsole` error (allowlist cli/output/ui), `noUnusedVariables/Imports/Unreachable` error; `noExplicitAny` — **warn** (186, ratchet до error отдельной задачей); осознанно off: `noNonNullAssertion`, `noAssignInExpressions`, control-char-regex, `useNodejsImportProtocol`, `noStaticOnlyClass`. Авто-фиксы применены по всему репо; заодно исправлен flaky тест encryption.
+- [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0 (универсальное позиционирование, веб-режим, онбординг, кешинг, context-log, `/config`, актуальные счётчики/команды/тулы/конфиг/архитектура); `docs/mma-features-overview.md` — версия 2.6.0 + раздел «Что нового с 0.63.0»; `docs/agents/*` актуальны (AGENTS.md — канон).
 - [ ] Русские комментарии/JSDoc (~76 файлов с кириллицей).
-- [ ] README + `docs/` актуализация.
 
 ### P4 — бэклог
 - Автоназвание сессии по контексту (сейчас только ручной `rename`).
