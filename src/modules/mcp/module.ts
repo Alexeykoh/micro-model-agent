@@ -23,10 +23,10 @@ function sanitizeToolName(server: string, tool: string): string {
 
 function convertInputSchema(schema: Record<string, unknown>): Record<string, unknown> {
   if (schema && typeof schema === "object" && "properties" in schema) {
-    const required = Array.isArray((schema as any).required) ? (schema as any).required : [];
+    const required = Array.isArray(schema.required) ? schema.required : [];
     return {
       type: "object",
-      properties: (schema as any).properties,
+      properties: schema.properties,
       required: required.length > 0 ? required : undefined,
     };
   }

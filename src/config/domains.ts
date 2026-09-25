@@ -47,9 +47,10 @@ export function extractDomain(config: AppConfig, domain: string): Record<string,
   const keys = CONFIG_DOMAINS[domain];
   if (!keys) return {};
   const subset: Record<string, unknown> = {};
+  const source = config as unknown as Record<string, unknown>;
   for (const key of keys) {
-    if ((config as any)[key] !== undefined) {
-      subset[key] = (config as any)[key];
+    if (source[key] !== undefined) {
+      subset[key] = source[key];
     }
   }
   return subset;
@@ -119,9 +120,10 @@ export function saveDomainFiles(config: AppConfig, configDir: string): void {
   for (const [domain, keys] of Object.entries(CONFIG_DOMAINS)) {
     const subset: Record<string, unknown> = {};
     let hasContent = false;
+    const source = config as unknown as Record<string, unknown>;
     for (const key of keys) {
-      if ((config as any)[key] !== undefined) {
-        subset[key] = (config as any)[key];
+      if (source[key] !== undefined) {
+        subset[key] = source[key];
         hasContent = true;
       }
     }

@@ -53,12 +53,12 @@ export class ScopeDenialCollector {
     name: "scope-denial-collector",
     isBuiltin: true,
     onAfterTool: (_ctx, call, result) => {
-      const name = (call as any)?.name as string | undefined;
+      const name = call.name;
       if (!name || !result || result.success) return;
       if (!isPathDenialOutput(typeof result.output === "string" ? result.output : undefined)) {
         return;
       }
-      const path = pathArgOf((call as any)?.arguments);
+      const path = pathArgOf(call.arguments);
       if (!path) return;
       const write = WRITE_TOOLS.has(name);
       this.denied.set(path, { path, write });

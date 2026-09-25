@@ -9,6 +9,7 @@ import {
   type SecurityPolicyPreset,
 } from "../modules/security/security-policies";
 import { globalAuditNotifier } from "../modules/security/audit-notifier";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
 import { globalConfigFile } from "../config/paths";
@@ -48,7 +49,7 @@ export function createSecurityCommand(program: Command): void {
     .description(t("cli.security.status"))
     .action(async () => {
       const { config } = await bootstrap();
-      const security = (config as any).security || {};
+      const security = config.security ?? DEFAULT_SECURITY_CONFIG;
       const bash = security.bash || {};
       const paths = security.paths || {};
       const network = security.network || {};
@@ -129,7 +130,7 @@ export function createSecurityCommand(program: Command): void {
       const newSecurityConfig = applySecurityPolicy(preset as SecurityPolicyPreset);
 
       // Merge with existing config
-      (appConfig as any).security = newSecurityConfig;
+      appConfig.security = newSecurityConfig;
       saveConfig(appConfig, configPath, dirname(configPath));
 
       getDefaultChannel().writeLine(t("cli.security.policy_applied", { name: policy.name }));
@@ -146,7 +147,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleSessionEncryption(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -161,7 +163,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleSessionEncryption(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -176,7 +179,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleAuditNotifier(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -191,7 +195,8 @@ export function createSecurityCommand(program: Command): void {
       const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleAuditNotifier(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));

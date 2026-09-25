@@ -339,7 +339,10 @@ async function main(): Promise<void> {
       try {
         const { hasDomainFiles } = await import("../config/domains");
         hasAnyConfig = hasDomainFiles(mmaDir);
-      } catch {}
+      } catch {
+        // Domain probing is best-effort: a missing/broken module must not block
+        // the CLI. Falls back to the legacy config.json check above.
+      }
     }
 
     const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");

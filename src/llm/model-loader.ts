@@ -33,6 +33,22 @@ export interface ModelProbeResult {
   capabilities?: ModelCapabilities;
 }
 
+/** Minimal shape of an LM Studio `/api/v1/models` entry we consume. */
+interface LmStudioModel {
+  key?: string;
+  name?: string;
+  max_context_length?: number;
+  loaded_instances?: Array<{ config?: { context_length?: number } }>;
+  capabilities?: { vision?: boolean; trained_for_tool_use?: boolean };
+}
+interface LmStudioModelsResponse {
+  models?: LmStudioModel[];
+}
+interface LmStudioLoadResponse {
+  load_time_seconds?: number;
+  loadTime?: number;
+}
+
 /**
  * Ask the backend's native API (LM Studio `/api/v1/models`) for the loaded
  * model's context length AND advertised capabilities. Context length prefers
@@ -55,9 +71,11 @@ export async function probeModel(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return null;
-    const data = (await response.json()) as any;
-    const models: any[] = data.models || [];
-    const found = models.find((m) => m.key === model || m.name === model || model.includes(m.key));
+    const data = (await response.json()) as LmStudioModelsResponse;
+    const models = data.models ?? [];
+    const found = models.find(
+      (m) => m.key === model || m.name === model || (m.key ? model.includes(m.key) : false),
+    );
     if (!found) return null;
     const loadedInstance = (found.loaded_instances ?? [])[0];
     const contextLength = loadedInstance?.config?.context_length ?? found.max_context_length;
@@ -128,14 +146,14 @@ export class ModelLoader {
 
       if (!response.ok) return false;
 
-      const data = (await response.json()) as any;
-      const models = data.models || [];
+      const data = (await response.json()) as LmStudioModelsResponse;
+      const models = data.models ?? [];
 
-      const found = models.find((m: any) => m.key === model || m.name === model);
+      const found = models.find((m) => m.key === model || m.name === model);
       if (!found) return false;
 
-      const loadedInstances = found.loaded_instances || [];
-      return loadedInstances.some((inst: any) => inst.config?.context_length === contextLength);
+      const loadedInstances = found.loaded_instances ?? [];
+      return loadedInstances.some((inst) => inst.config?.context_length === contextLength);
     } catch {
       return false;
     }
@@ -168,7 +186,7 @@ export class ModelLoader {
       return { success: false, error: `HTTP ${response.status}: ${error}` };
     }
 
-    const result = (await response.json()) as any;
+    const result = (await response.json()) as LmStudioLoadResponse;
     this.logger.debug(`Model load response: ${JSON.stringify(result)}`);
     const loadTime = result.load_time_seconds ?? result.loadTime;
 

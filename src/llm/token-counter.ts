@@ -36,7 +36,7 @@ export class TokenCounter {
 
   constructor(model: string = "gpt-4o") {
     try {
-      this.encoder = encodingForModel(model as any);
+      this.encoder = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
     } catch {
       // Fallback to cl100k_base for unknown models
       this.encoder = getEncoding("cl100k_base");

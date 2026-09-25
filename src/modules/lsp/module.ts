@@ -154,7 +154,9 @@ export class LspModule implements AgentModule {
           this.failuresByServer.set(key, failures);
           try {
             _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`);
-          } catch {}
+          } catch {
+            // A throwing logger must not break the check path.
+          }
           if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
             // One loud, actionable message, then stop the per-write noise for
             // the rest of the session. The model must not learn to ignore LSP.
@@ -263,7 +265,9 @@ export class LspModule implements AgentModule {
         this.failuresByServer.set(key, failures);
         try {
           ctx.logger?.warn(`LSP check failed for ${file}: ${msg}`);
-        } catch {}
+        } catch {
+          // A throwing logger must not break the check path.
+        }
         if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
           this.disabledServers.add(key);
           notes.push(`[LSP disabled: ${t("lsp.unavailable")}]`);

@@ -93,7 +93,7 @@ export function satisfiesMinimum(version: string, requirement: string): boolean 
 }
 
 export function detectRuntime(): RuntimeInfo {
-  const bun = (globalThis as any).Bun;
+  const bun = (globalThis as { Bun?: { version?: string } }).Bun;
   const isBun = typeof bun !== "undefined" && typeof bun?.version !== "undefined";
   const engine = readEngineRequirement();
   const runtime: RuntimeName = isBun ? "bun" : "node";

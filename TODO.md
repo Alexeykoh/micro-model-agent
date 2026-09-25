@@ -31,8 +31,8 @@
 - Дробление (правило ≤300): `repl-commands.ts` 1426, `agent.ts` 1338 (`executeSingleAgentLoop` ~665), `repl.ts` 1327, `line-editor.ts` 1068, `bootstrap.ts` 870, `stuck-detector.ts` 749, `module.ts` 750.
 - [x] ~~Разорвать 2 цикла `browser/`~~ ✅ `ConsoleBuffer` → `console-buffer.ts`, `BrowserDriver`/`LaunchConfig`/`BrowserLaunchOverrides` → `driver-types.ts`; `driver`/`bridge-client` больше не импортируют `session`. fallow-baseline теперь пустой.
 - Извлечь общий test-harness (сейчас только `tests/helpers/webui-commands.ts`).
-- Хардкод → абстракция: `BASH_GRACE_MS`, пути `.mma`, единый реестр `MMA_*`.
-- Аудит `as any` (53) и глухих `catch {}`.
+- [x] ~~Хардкод путей `.mma`~~ ✅ `src/config/paths.ts` (`MMA_DIR_NAME`, `globalMmaDir`, `globalConfigFile/Memory/Sessions/Logs/Exports/Plugins`, `projectMmaDir`); ~30 литералов заменены. Осталось (не критично): магические числа/таймауты вне конфига, единый реестр `MMA_*`.
+- [x] ~~Аудит `as any` (53)~~ ✅ все `as any` в `src/` устранены (типизация: `Record<string, unknown>`/`unknown`-касты, интерфейсы для LM Studio/Bun.Image/`BrowserContext.addCookies`, статик-поле `Repl.sigintHandler`, typed input в `line-editor`). Глухие `catch {}` — снабжены обоснованием (best-effort); `noExplicitAny` остаётся **warn** (132 — это в основном `: any` в сигнатурах, отдельный ratchet).
 
 ### P3 — гигиена и релиз
 - [x] ~~Удалить `verify-tools.ts`; убрать `tsconfig-paths`; добавить `.fallowrc.json`~~ ✅ (ветка `chore/p3-hygiene`).

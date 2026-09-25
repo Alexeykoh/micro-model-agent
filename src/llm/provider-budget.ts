@@ -85,7 +85,9 @@ export async function fetchProviderBudget(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   try {
-    const keyBody = (await getJson(`${base}/key`, apiKey, timeoutMs)) as any;
+    const keyBody = (await getJson(`${base}/key`, apiKey, timeoutMs)) as {
+      data?: Record<string, unknown>;
+    };
     const data = keyBody?.data ?? {};
     const budget: ProviderBudget = { provider, source: "openrouter" };
     budget.keyLabel = typeof data.label === "string" ? data.label : undefined;
@@ -96,7 +98,9 @@ export async function fetchProviderBudget(
 
     // /credits требует management key; при отказе продолжаем с данными ключа.
     try {
-      const creditsBody = (await getJson(`${base}/credits`, apiKey, timeoutMs)) as any;
+      const creditsBody = (await getJson(`${base}/credits`, apiKey, timeoutMs)) as {
+        data?: Record<string, unknown>;
+      };
       const c = creditsBody?.data ?? {};
       budget.totalCreditsUsd = num(c.total_credits);
       budget.totalUsageUsd = num(c.total_usage);
