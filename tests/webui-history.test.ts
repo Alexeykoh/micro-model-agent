@@ -1,26 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createServer } from "node:http";
-import { handleRequest } from "../src/modules/webui/server";
-import { createWebUiState, type WebUiState, type WebSessionManager } from "../src/modules/webui/state";
+import { createWebUiState, type WebSessionManager } from "../src/modules/webui/state";
 import type { SessionLogEntry } from "../src/modules/session/store";
 import type { SessionMeta, SessionMessage } from "../src/modules/session/types";
+import { doFetch, withServer } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
 
-async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 function meta(id: string): SessionMeta {
   return {

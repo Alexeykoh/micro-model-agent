@@ -1,13 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { MemoryStore } from "../src/modules/memory/store";
-import { handleRequest } from "../src/modules/webui/server";
-import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
+import { createWebUiState, } from "../src/modules/webui/state";
 import { webCommandList } from "../src/modules/webui/commands";
 import { makeHarness } from "./helpers/webui-commands";
+import { doFetch, withServer } from "./helpers/webui-server";
 
 describe("webui slash commands", () => {
   it("/help lists the supported subset", async () => {
@@ -152,21 +151,7 @@ describe("webui slash commands", () => {
   });
 });
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
 
-async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 describe("webui commands api", () => {
   it("webCommandList exposes name/usage/desc for every supported command", () => {

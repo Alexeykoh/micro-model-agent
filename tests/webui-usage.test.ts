@@ -1,33 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { createServer } from "node:http";
-import { handleRequest } from "../src/modules/webui/server";
-import { createWebUiState } from "../src/modules/webui/state";
 import { buildHostState, captureUsage, type HostStateInput } from "../src/modules/webui/module";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AgentResult } from "../src/core/types";
 import type { Host, HostStateSnapshot } from "../src/core/host";
+import { createWebUiState } from "../src/modules/webui/state";
+import { doFetch, withServer } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
 
-async function withServer(
-  bridge: Host,
-  fn: (base: string) => Promise<void>,
-): Promise<void> {
-  const s = createWebUiState();
-  s.bridge = bridge;
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 function fakeHost(input: HostStateInput): Host {
   return {
@@ -106,7 +86,9 @@ describe("webui usage metrics", () => {
       config,
       usage: { contextUsed: 2048, contextLimit: 32768, cacheHitRate: 0.75, costUsd: 0.02 },
     });
-    await withServer(bridge, async (base) => {
+    const s = createWebUiState();
+    s.bridge = bridge;
+    await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
@@ -144,7 +126,9 @@ describe("webui usage metrics", () => {
       instructions: { files: [], disabled: true },
       projectMap: { indexed: false, files: 0, symbols: 0, tokens: 0 },
     });
-    await withServer(bridge, async (base) => {
+    const s = createWebUiState();
+    s.bridge = bridge;
+    await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { state: HostStateSnapshot };
