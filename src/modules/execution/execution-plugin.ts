@@ -289,9 +289,12 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
               }
             }
 
+            // Prefix a stable, machine-readable classification so the model
+            // sees WHY it is stuck before the localized recovery guidance.
+            const diagnostic = deps.stuckDetector.getStuckDiagnostic(currentIter);
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>${recovery}${tscContext}</system-summary>`,
+              content: `<system-summary>${diagnostic ? diagnostic + "\n" : ""}${recovery}${tscContext}</system-summary>`,
             });
           }
           deps.stuckDetector.recordEscalation();
