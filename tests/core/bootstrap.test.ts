@@ -269,6 +269,20 @@ describe("bootstrap", () => {
     expect(info).toContain("plan update");
   });
 
+  it("states explicit DONE conditions so the model knows when to stop", () => {
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    expect(info).toContain("DONE CONDITIONS");
+    expect(info).toContain("plan steps");
+    expect(info.toLowerCase()).toContain("summary");
+  });
+
+  it("states when to STOP and ask the user instead of guessing", () => {
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    expect(info).toContain("STOP AND ASK THE USER");
+    expect(info.toLowerCase()).toContain("ambiguous");
+    expect(info.toLowerCase()).toContain("could not find");
+  });
+
   it("lists security restrictions only when security is enabled", () => {
     const sec = {
       enabled: true,

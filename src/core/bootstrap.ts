@@ -188,6 +188,14 @@ export function buildSystemInfo(
     `Runtime verification: when a bug is described in terms of runtime behavior (what happens when the app runs), reproduce it — run the app / build / browser tool — and confirm the fix against actual runtime output before calling "plan update step=N status=done". Check existing servers first with process_list/process_log: a stale dev server started BEFORE your change still runs the old pipeline and keeps failing even after the files on disk are fixed. Restart or kill it (process_kill) and verify the exact endpoint/port the user reported — a fresh server on a new port does NOT prove the user's error is gone.`,
   );
 
+  // Explicit completion criteria: a 9B model tends to keep "improving" or to
+  // declare success without proof. One short section each, naming observable
+  // conditions, so the model can find them and knows when to stop or ask.
+  lines.push(
+    `DONE CONDITIONS — you are finished only when ALL hold: all plan steps are marked done; the requested files/artifacts exist with real content (not merely described in chat); each verification command you can run reports clean. Then reply with a short summary of what changed (files created/edited).`,
+    `STOP AND ASK THE USER WHEN: the task is ambiguous (multiple valid approaches, or unclear what/where); you could not find what the user asked about after listing the parent directory; finishing would delete or overwrite important files; or you are stuck after 2+ different approaches. Write one short clarifying question in plain text and wait — do not guess.`,
+  );
+
   // Security rules: when security is enabled the model should know the
   // restrictions up front — a blocked call costs an iteration, while this
   // block costs ~100 tokens once. Kept compact and capped so a long user
