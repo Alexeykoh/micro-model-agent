@@ -48,6 +48,7 @@ export class CriticGate {
   async evaluate(deps: CriticGateDeps): Promise<CriticAction> {
     if (!this.shouldRun(deps)) return "pass";
 
+    this.logCheck(deps);
     deps.state.criticCalls++;
     deps.state.mutationsSinceCritic = 0;
 
@@ -89,6 +90,15 @@ export class CriticGate {
       fresh.push(issue);
     }
     return fresh;
+  }
+
+  private logCheck(deps: CriticGateDeps): void {
+    deps.slog.logCritic("critic_check", {
+      iteration: deps.iteration,
+      beforeFinish: deps.beforeFinish,
+      mutations: deps.state.mutationsSinceCritic,
+      tools: deps.toolEvents.map((e) => e.tool).slice(0, 8),
+    });
   }
 
   private logVerdict(deps: CriticGateDeps, verdict: CriticVerdict, count: number): void {

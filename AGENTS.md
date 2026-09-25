@@ -402,7 +402,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
   `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
 - **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`).
-- **Observability:** события `critic_verdict`/`critic_escalation` в `session.jsonl`
+- **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
   (`SessionLogger.logCritic`); quiet UI (без строки в чате). v1 использует активный провайдер +
   детерминированный evidence pack.
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)

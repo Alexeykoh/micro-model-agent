@@ -61,4 +61,11 @@ describe("CriticGate", () => {
     await gate.evaluate(d);
     expect(await gate.evaluate(d)).toBe("pass");
   });
+
+  it("logs critic_check whenever a check actually runs", async () => {
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const d = deps();
+    await gate.evaluate(d);
+    expect(d.slog.logCritic).toHaveBeenCalledWith("critic_check", expect.objectContaining({ beforeFinish: true, mutations: 3 }));
+  });
 });
