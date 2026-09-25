@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - `mma provider use` persists the switch for multi-entry configs; line-editor completion drops the stale absolute frame anchor (candidate list no longer erased on DSR terminals); md-formatter flushes a pending table before a code fence.
   - removed the dead `tools/scope-check.ts` duplicate (test now targets the real `security/path-validator`); `isInsideDir` no longer rejects names beginning with `..`.
   - MCP reliability: sanitized tool-name collisions are disambiguated (was a bootstrap crash) and the prompt advertises the same sanitized `connect` name; concurrent SSE calls use a per-id pending map instead of one shared slot (no cross-talk / wrong response).
+  - removed the dead `PlanPersister` module; `PluginManager.runOnBeforeTool` now honours the string-return block contract like the tool executor.
 
 ## [2.5.0] - 2026-09-24
 
