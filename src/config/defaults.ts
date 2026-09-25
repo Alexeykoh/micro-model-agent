@@ -176,5 +176,8 @@ export const DEFAULTS: AppConfig = {
     min: "low",
     max: "high",
     overrideCooldown: 5,
+    // Trivial Q&A turns should not pay for medium reasoning; the policy still
+    // raises to high on hallucinations / audit rejections / plan creation.
+    baseline: "low",
   },
 };

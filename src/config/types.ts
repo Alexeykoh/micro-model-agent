@@ -428,10 +428,10 @@ export interface ReasoningConfig {
   overrideCooldown: number;
   /**
    * Starting level for the auto policy before any iteration signals exist
-   * (iteration 1 and quiet iterations). Default "medium" burns reasoning
-   * tokens on trivial Q&A turns (observed: a one-tool file-count question
-   * paid medium reasoning); set "low" for speed-oriented setups. The policy
-   * still raises to high on hallucinations/audit rejections/plan creation.
+   * (iteration 1 and quiet iterations). When unset it falls back to `min`
+   * ("low" in `DEFAULTS`), so trivial Q&A turns no longer pay "medium"
+   * reasoning; the policy still raises to high on hallucinations / audit
+   * rejections / plan creation.
    */
   baseline?: Exclude<ReasoningLevel, "default" | "auto">;
 }
