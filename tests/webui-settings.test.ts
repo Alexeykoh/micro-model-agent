@@ -1,45 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { handleRequest } from "../src/modules/webui/server";
-import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
+import { createWebUiState, } from "../src/modules/webui/state";
 import { MemoryStore } from "../src/modules/memory/store";
 import { DEFAULTS } from "../src/config/defaults";
+import { withServer, postJson, doFetch, } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-// Other tests in the shared process may stub globalThis.fetch; use the runtime's
-// own fetch so HTTP assertions stay real.
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
 
-async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
-
-async function postJson(
-  base: string,
-  path: string,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await doFetch(base + path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
 
 async function withMemory(fn: (store: MemoryStore, dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "webui-settings-"));

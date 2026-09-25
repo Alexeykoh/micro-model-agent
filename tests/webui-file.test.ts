@@ -1,30 +1,12 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createServer } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRequest } from "../src/modules/webui/server";
 import { decodeText, MAX_FILE_VIEW_BYTES } from "../src/modules/webui/file-api";
-import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
+import { createWebUiState, } from "../src/modules/webui/state";
+import { withServer, doFetch, } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-// Other tests in the shared process may stub globalThis.fetch; use the runtime's
-// own fetch so HTTP assertions stay real.
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
-
-async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 const tmpRoots: string[] = [];
 function makeWorkspace(): string {

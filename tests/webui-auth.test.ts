@@ -1,12 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
-import { handleRequest, stopServer } from "../src/modules/webui/server";
+import { stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
 import { checkAuth } from "../src/modules/webui/util";
 import type { Host } from "../src/core/host";
+import { withServer, doFetch, } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
 function makeBridge(): Host {
   return {
@@ -18,25 +17,6 @@ function makeBridge(): Host {
   };
 }
 
-// Other tests in the shared process may stub globalThis.fetch; use the runtime's
-// own fetch so HTTP assertions stay real.
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
-
-async function withServer(
-  s: ReturnType<typeof createWebUiState>,
-  fn: (base: string) => Promise<void>,
-): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 describe("webui auth + limits", () => {
   afterEach(() => stopServer());

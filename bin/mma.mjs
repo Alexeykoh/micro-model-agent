@@ -17,7 +17,7 @@ const runningUnderBun =
 if (process.env.MMA_DEBUG_RUNTIME) {
 	console.error(
 		"[mma] runtime=" +
-			(runningUnderBun ? "bun " + globalThis.Bun.version : "node " + process.version),
+			(runningUnderBun ? `bun ${globalThis.Bun.version}` : `node ${process.version}`),
 	);
 }
 

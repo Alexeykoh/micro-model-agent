@@ -1,29 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createServer } from "node:http";
-import { handleRequest } from "../src/modules/webui/server";
-import { createWebUiState, type WebUiState, type WebSessionManager } from "../src/modules/webui/state";
+import { createWebUiState, type WebSessionManager } from "../src/modules/webui/state";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
 import type { SessionMeta } from "../src/modules/session/types";
+import { withServer, postJson, doFetch, } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-// Other tests in the shared process may stub globalThis.fetch; use the runtime's
-// own fetch so HTTP assertions stay real.
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
-
-async function withServer(s: WebUiState, fn: (base: string) => Promise<void>): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 function testConfig(): AppConfig {
   const config = structuredClone(DEFAULTS);
@@ -73,19 +55,6 @@ function fakeSessions(initial: SessionMeta[], activeId: string | null): WebSessi
   };
 }
 
-async function postJson(
-  base: string,
-  path: string,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await doFetch(base + path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
-  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
-}
 
 describe("webui config/session/model REST", () => {
   it("GET /api/config returns redacted config + registry with enums", async () => {

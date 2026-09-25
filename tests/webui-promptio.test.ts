@@ -1,34 +1,15 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { createServer, type ServerResponse } from "node:http";
-import { handleRequest, stopServer } from "../src/modules/webui/server";
+import type { ServerResponse } from "node:http";
+import { stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
 import {
   cancelPendingQuestions,
   createWebPromptIO,
   resolveAnswer,
 } from "../src/modules/webui/prompt-io";
+import { doFetch, withServer } from "./helpers/webui-server";
 
-const assets = { html: "<h1>hi</h1>", css: "body{}", js: "//ok" };
 
-// Other tests in the shared process may stub globalThis.fetch; use the runtime's
-// own fetch so HTTP assertions stay real.
-const doFetch: typeof fetch =
-  typeof Bun !== "undefined" ? (Bun as unknown as { fetch: typeof fetch }).fetch.bind(Bun) : fetch;
-
-async function withServer(
-  s: ReturnType<typeof createWebUiState>,
-  fn: (base: string) => Promise<void>,
-): Promise<void> {
-  const srv = createServer((req, res) => handleRequest(req, res, assets, s));
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
-  const addr = srv.address();
-  const port = typeof addr === "object" && addr ? addr.port : 0;
-  try {
-    await fn(`http://127.0.0.1:${port}`);
-  } finally {
-    srv.close();
-  }
-}
 
 /** Collect SSE payloads broadcast to the state (broadcast only calls write). */
 function captureEvents(s: ReturnType<typeof createWebUiState>): string[] {
