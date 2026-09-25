@@ -140,6 +140,8 @@
   "tool.friendly.lsp_check": "Checking code",
   "tool.friendly.meet_done": "Interview complete",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
+  "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
+  "critic.advice": "A verifier flagged issues worth checking before you finish:\n{issues}",
   "tool.subagent_queued": "Sub-agent task queued: {task}",
   "tool.subagent_artifact": "Sub-agent completed. Full result saved to artifact: {path}\nIterations: {iterations}\nSummary:\n{summary}",
   "tool.pipeline_started": "Pipeline \"{name}\" execution started. Pipeline engine is a stub — run dispatched.",

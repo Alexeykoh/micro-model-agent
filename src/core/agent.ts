@@ -41,6 +41,9 @@ import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
+import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
+import { CriticClient } from "../modules/critic/client";
+import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -144,6 +147,10 @@ export interface AgentDeps {
   planSummary?: () => string | null;
   /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
   runWithMoEOverride?: typeof runWithMoE;
+  /** Test seam — replaces the real critic verify (Bun module mocks are process-global). */
+  criticOverride?: {
+    verify: (pack: import("../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../modules/critic/types").CriticVerdict | null>;
+  };
   /**
    * Live name of the active provider entry. Needed because transparent
    * failover (FallbackProvider) switches the manager's active entry without
@@ -758,6 +765,26 @@ export class Agent {
     });
     const hallucinationGate = new HallucinationGate(hallucinationDetector);
     const auditGate = new AuditGate(this.deps.finalAudit);
+    // Defensive: partial/legacy configs (tests, old config.json) may lack the
+    // `critic` domain — treat it as disabled rather than crashing the loop.
+    const criticConfig = {
+      enabled: config.critic?.enabled ?? false,
+      maxCalls: config.critic?.maxCalls ?? 4,
+      maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
+      timeoutMs: config.critic?.timeoutMs ?? 15000,
+    };
+    const criticClient = new CriticClient({
+      provider: this.deps.llmProvider,
+      timeoutMs: criticConfig.timeoutMs,
+    });
+    const criticGate = new CriticGate({
+      enabled: criticConfig.enabled,
+      maxCalls: criticConfig.maxCalls,
+      maxRepairCycles: criticConfig.maxRepairCycles,
+      verify: this.deps.criticOverride?.verify ?? ((pack, signal) => criticClient.verify(pack, signal)),
+      buildPack: (d) => buildEvidencePack({ task: d.task, planSummary: d.planSummary, toolEvents: d.toolEvents }),
+      signal: this.abortController?.signal,
+    });
 
     // Account for tool definitions in context budget (they're sent via body.tools, not messages)
     // Tool definitions are recomputed each iteration so `enable_tools`
@@ -1143,6 +1170,9 @@ export class Agent {
             cycleNudges.push(target);
           }
         }
+        for (const tc of toolCalls) {
+          if (isWorkMutation(tc.name)) state.mutationsSinceCritic++;
+        }
       }
 
       if (sawToolCall) {
@@ -1263,6 +1293,22 @@ export class Agent {
         logger.warn(
           `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
         );
+      }
+
+      const criticAction = await criticGate.evaluate({
+        state,
+        iteration: state.iteration,
+        logger,
+        contextManager,
+        slog,
+        task: input,
+        planSummary: this.deps.planSummary?.() ?? undefined,
+        toolEvents: gatherTurnToolEvents(contextManager),
+        beforeFinish: true,
+      });
+      if (criticAction === "retry") {
+        state.suppressRepetitionRetry = true;
+        continue;
       }
 
       const auditVerdict = await auditGate.evaluate({

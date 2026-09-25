@@ -44,7 +44,9 @@
 
 ### P4 — бэклог
 - Автоназвание сессии по контексту (сейчас только ручной `rename`).
-- Контр-агент для проверки работы (+ подобрать литературу).
+- [x] ~~Контр-агент для проверки работы (+ подобрать литературу)~~ ✅ v1 (ветка `feat/critic-agent`): in-loop `CriticGate` + `src/modules/critic/` (evidence pack + LLM-клиент, JSON-вердикт, fail-open), конфиг `critic.*`, события `critic_*` в `session.jsonl`; MoE не тронут. Дизайн: `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4, план `docs/superpowers/plans/2026-09-25-critic-agent.md`.
+  - **Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`).
+  - **Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`) вместо только детерминированного evidence pack.
 
 ## Актуальное
 

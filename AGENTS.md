@@ -390,6 +390,24 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Provenance:** `SessionMeta.nameSource` (`default`/`auto`/`manual`); ручное имя (`create(name)`
   или `rename`) никогда не перезаписывается. Web-таб обновляет подпись из SSE `state.sessionName`.
 
+### Counter-Agent (In-Loop Critic) (2.6.0)
+
+- **Модули:** `src/modules/critic/` (`types.ts`, `evidence.ts` — `buildEvidencePack`/`isWorkMutation`,
+  `client.ts` — `CriticClient`/`parseVerdict`/`CRITIC_SYSTEM_PROMPT`) + `src/core/agent/critic-gate.ts`
+  (`CriticGate`, `gatherTurnToolEvents`). Встроен в `executeSingleAgentLoop` рядом с `AuditGate`/
+  `HallucinationGate`; **MoE-путь не тронут**.
+- **Поведение:** триггер по work-мутациям (`write_file`/`edit_file`/`delete_file`/`move_file`/
+  `create_dir`/`bash`; `plan` не считается) и перед принятием финального ответа. `critical` →
+  ограниченный repair (`critic.maxRepairCycles`), `concern` → совет; оба инжектят
+  `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
+  `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
+- **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`).
+- **Observability:** события `critic_verdict`/`critic_escalation` в `session.jsonl`
+  (`SessionLogger.logCritic`); quiet UI (без строки в чате). v1 использует активный провайдер +
+  детерминированный evidence pack.
+- **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
+  и ограниченный read-only tool-loop (`critic.tools`).
+
 ### Current Version: 2.6.0
 
 ### Changelog

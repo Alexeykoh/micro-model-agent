@@ -266,6 +266,32 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 > - Cost/budget tracking per subtask.
 > - Subagent tool set uses tag filtering from expert config, but the orchestrator model selection is still the base model when no separate orchestrator provider is configured.
 
+## Counter-Agent (In-Loop Critic)
+
+> **Spec:** `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4.
+
+An evidence-grounded, event-triggered LLM verifier ("counter-agent") that reviews the single agent's
+in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the MoE path is untouched.
+
+- **Modules:** `src/modules/critic/types.ts` (`CriticVerdict`/`CriticIssue`/`EvidencePack`),
+  `evidence.ts` (`buildEvidencePack`, `isWorkMutation`), `client.ts` (`CriticClient`, `parseVerdict`,
+  `CRITIC_SYSTEM_PROMPT`); the gate lives in `src/core/agent/critic-gate.ts` (`CriticGate`,
+  `gatherTurnToolEvents`).
+- **Trigger:** `enabled` + `criticCalls < maxCalls` + (before-finish OR `mutationsSinceCritic >= 3`)
+  + at least one tool event in the turn. Work mutations are counted per tool call (`write_file`,
+  `edit_file`, `delete_file`, `move_file`, `create_dir`, `bash`; `plan` is bookkeeping, not work).
+- **Authority:** `concern`/`critical` inject a `<system-summary>` and return `retry` once per fresh
+  issue (signature-deduped). `critical` before finish consumes one bounded repair cycle
+  (`maxRepairCycles`); after the budget it degrades to advice. `ok`/null passes.
+- **Fail-open:** the client catches provider errors/timeouts and returns `null` on unparseable JSON
+  (repaired with `jsonrepair` first); the gate catches any verify throw. A broken critic can never
+  block the agent.
+- **Config:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (`src/config/defaults.ts`).
+- **Observability:** `critic_verdict` / `critic_escalation` entries in `session.jsonl` via
+  `SessionLogger.logCritic`; no chat line (quiet UI).
+- **Phase 2 (deferred):** dedicated critic provider and a bounded read-only tool-loop. v1 uses the
+  active provider and the deterministic evidence pack only.
+
 ## LLM Provider Contract (llama.cpp / OpenAI-compat)
 
 При работе с llama.cpp (и другими бэкендами, использующими Jinja-шаблоны для сообщений) необходимо соблюдать следующие правила. Их нарушение приводит к ошибке `400: Jinja Exception` и полной неработоспособности агента на multi-turn задачах.

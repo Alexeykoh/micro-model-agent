@@ -38,6 +38,10 @@ describe("config defaults", () => {
   it("defaults session.autoName to true", () => {
     expect(DEFAULTS.session.autoName).toBe(true);
   });
+
+  it("defaults critic to enabled with bounded loops", () => {
+    expect(DEFAULTS.critic).toEqual({ enabled: true, maxCalls: 4, maxRepairCycles: 1, timeoutMs: 15000 });
+  });
 });
 
 describe("subagent defaults", () => {
