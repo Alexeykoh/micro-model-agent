@@ -100,6 +100,15 @@ export interface LoopState {
   /** Последняя сводка неудачного аудита — для сообщения об ошибке. */
   lastAuditSummary: string;
 
+  /** Critic LLM calls made this run. */
+  criticCalls: number;
+  /** Repair cycles consumed this run. */
+  criticRepairCycles: number;
+  /** Work mutations accumulated since the last critic call. */
+  mutationsSinceCritic: number;
+  /** Dedupe signatures of critic issues already surfaced. */
+  seenCriticIssues: Set<string>;
+
   /** Счётчик пустых ответов. */
   emptyResponseRetries: number;
   /** Пустые ответы исчерпаны — итоговый результат success:false. */
@@ -163,6 +172,10 @@ export function createLoopState(): LoopState {
     cacheSource: "none",
     auditRetries: 0,
     lastAuditSummary: "",
+    criticCalls: 0,
+    criticRepairCycles: 0,
+    mutationsSinceCritic: 0,
+    seenCriticIssues: new Set(),
     emptyResponseRetries: 0,
     emptyResponseExhausted: false,
     auditFailed: false,
