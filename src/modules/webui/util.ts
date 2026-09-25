@@ -201,6 +201,10 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
  * `releaseBusy` covers a submit that never started.
  */
 export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+  if (s.setupRequired) {
+    sendJson(res, 409, { error: "setup_required" });
+    return;
+  }
   if (!s.bridge) {
     sendJson(res, 503, { error: "no_bridge" });
     return;

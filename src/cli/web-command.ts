@@ -78,7 +78,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   } = await bootstrap(...webBootstrapArgs(opts));
 
   if (virgin) {
-    getDefaultChannel().writeLine(pc.yellow(`  ${t("cli.first_run_oneshot")}`), "stderr");
+    getDefaultChannel().writeLine(pc.yellow(`  ${t("cli.web_setup_required")}`), "stderr");
   }
 
   const web = await startWebUi({
@@ -101,6 +101,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     contextProbe,
     host: opts.host,
     token: opts.token,
+    setupRequired: virgin,
   });
 
   const url = await web.url;

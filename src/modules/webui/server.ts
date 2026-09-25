@@ -26,6 +26,7 @@ import { handleSessionsApi } from "./sessions-api";
 import { handleSettingsApi } from "./settings-api";
 import { handleProvidersApi } from "./providers-api";
 import { handleFileApi } from "./file-api";
+import { handleSetupApi } from "./setup-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
@@ -43,6 +44,7 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
   "/index.html": { type: "text/html; charset=utf-8", key: "html" },
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
+  "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
 };
 
 /**
@@ -97,6 +99,10 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
 
 /** REST handler for `/api/*`; assumes auth + same-origin already checked. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
+  if (handleSetupApi(req, res, reqUrl, s)) {
+    return;
+  }
+
   if (reqUrl.pathname === "/api/state" && req.method === "GET") {
     sendJson(res, 200, { busy: s.busy, state: s.bridge?.getState?.() ?? null });
     return;
@@ -154,6 +160,10 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
 
   if (reqUrl.pathname === "/api/command" && req.method === "POST") {
+    if (s.setupRequired) {
+      sendJson(res, 409, { error: "setup_required" });
+      return;
+    }
     const bridge = s.bridge;
     readBody(req, s.maxBodyBytes)
       .then((raw) => {
@@ -228,7 +238,7 @@ export function handleRequest(
     // Assets are read once at server start; no-store keeps the browser from
     // caching a stale UI across restarts during development.
     res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
-    res.end(assets[asset.key]);
+    res.end(assets[asset.key] ?? "");
     return;
   }
 

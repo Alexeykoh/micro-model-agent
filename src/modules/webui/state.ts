@@ -12,6 +12,7 @@ import type { AppConfig } from "../../config/types";
 import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
 import type { MemoryStore } from "../memory/store";
+import type { SetupDisplay } from "../setup/answers";
 import { MAX_BODY_BYTES } from "./util";
 
 /**
@@ -41,6 +42,11 @@ export interface WebUiAssets {
   html: string;
   css: string;
   js: string;
+  /**
+   * First-run wizard script (`/setup.js`). Optional so lightweight test
+   * fixtures that only exercise the chat surface stay valid.
+   */
+  setupJs?: string;
 }
 
 /**
@@ -162,6 +168,14 @@ export interface WebUiState {
    * interrupt/shutdown so a blocked tool never hangs the turn.
    */
   pendingQuestions: Map<string, (value: unknown) => void>;
+  /**
+   * True for a virgin config (`runWeb` computed `virgin`): the browser wizard
+   * must run before chat. Server-enforced — `/api/message` and `/api/command`
+   * answer 409 until `POST /api/setup` clears it.
+   */
+  setupRequired: boolean;
+  /** Static wizard display data (languages/providers/defaults) for `GET /api/setup`. */
+  setup?: SetupDisplay;
 }
 
 export function createWebUiState(): WebUiState {
@@ -181,6 +195,7 @@ export function createWebUiState(): WebUiState {
     historyTail: 200,
     maxBodyBytes: MAX_BODY_BYTES,
     pendingQuestions: new Map(),
+    setupRequired: false,
   };
 }
 

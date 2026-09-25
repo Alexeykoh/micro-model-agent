@@ -4,6 +4,23 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-09-25
+
+### Added
+
+- **web first-run setup wizard** (`src/modules/setup/{answers,apply,discovery}.ts`, `src/modules/webui/setup-api.ts`, `assets/setup.js`): `mma web` with a virgin config now opens a browser wizard (Language → Provider → API key → Model → Context → Security → Review) instead of booting on defaults. The terminal wizard (`src/cli/setup.ts`, `setup-order.ts`) re-exports the same shared core, so both frontends use one write path.
+- **web setup API**: `GET /api/setup` (`required` + languages/providers/defaults), `POST /api/setup/{scan,models,test,locale}`, and `POST /api/setup` (validate → apply → persist → reconfigure → ungate). Emits an SSE `setup_done`.
+- **web chat gating**: while `setupRequired`, `POST /api/message` and `/api/command` answer `409 setup_required` — server-enforced, not just hidden in the UI. A configured instance refuses a second `POST /api/setup` with `409 already_configured`.
+- **web setup UI**: hidden full-screen `#setupGate` + `setup.js` (`window.MmaSetup.maybeOpen()`), `app.js` runs the wizard before chat boot, localized `web.setup.*` keys (en+ru), styles per `docs/design/ui/STYLE.md`.
+
+### Changed
+
+- **`mma web` virgin notice** (`src/cli/web-command.ts`): prints `cli.web_setup_required` (browser wizard opens) instead of the one-shot defaults warning.
+
+### Fixed
+
+- **`WebUiAssets.setupJs`** is optional (lightweight test fixtures stay valid) and `/setup.js` is served with `Cache-Control: no-store` like the other assets.
+
 ## [2.5.0] - 2026-09-24
 
 ### Added

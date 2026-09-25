@@ -879,3 +879,93 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   .input-area { margin: 8px 10px 10px; }
   .msgs { padding: 12px 10px; }
 }
+
+/* --- First-run setup gate ---------------------------------------------------
+   Full-screen wizard shown when the config is virgin. No boxed panels: rows,
+   glyphs and dim separators per docs/design/ui/STYLE.md. `body.setup-active`
+   hides the chat chrome so the wizard owns the viewport. */
+body.setup-active .bar-top,
+body.setup-active .layout { display: none; }
+
+.setup-gate[hidden] { display: none; }
+.setup-gate {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg); color: var(--fg);
+  overflow-y: auto;
+  display: flex; justify-content: center;
+  padding: 48px 20px;
+}
+.setup-wrap { width: 100%; max-width: 560px; }
+.setup-h { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+.setup-h .glyph { color: var(--accent); margin-right: 8px; }
+.setup-sub { color: var(--dim-a); font-size: 13px; margin: 0 0 22px; }
+
+.setup-steps {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  font-size: 12px; color: var(--dim-b); margin-bottom: 22px;
+}
+.setup-steps .s.on { color: var(--accent); }
+.setup-steps .s.done { color: var(--green); }
+.setup-steps .sep { color: var(--rule); }
+
+.setup-step-title { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.setup-hint { color: var(--dim-a); font-size: 12.5px; margin: 0 0 14px; line-height: 1.5; }
+
+.setup-field { margin-bottom: 14px; }
+.setup-label { display: block; font-size: 12px; color: var(--dim-a); margin-bottom: 5px; }
+.setup-input {
+  width: 100%; box-sizing: border-box;
+  background: var(--inp-bg); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 7px;
+  padding: 8px 10px; font-size: 13.5px; font-family: inherit;
+}
+.setup-input:focus-visible { outline: none; border-color: var(--inp-focus); box-shadow: 0 0 0 2px var(--input-shadow); }
+
+.setup-opt {
+  display: flex; width: 100%; box-sizing: border-box;
+  align-items: baseline; gap: 8px; text-align: left;
+  background: transparent; color: var(--fg);
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 9px 11px; margin-bottom: 7px;
+  font-size: 13px; font-family: inherit; cursor: pointer;
+}
+.setup-opt:hover { background: var(--hover-bg); }
+.setup-opt .g { color: var(--dim-b); }
+.setup-opt .t { font-weight: 500; }
+.setup-opt .d { color: var(--dim-a); font-size: 12px; }
+.setup-opt.on { border-color: var(--accent); background: var(--accent-bg); }
+.setup-opt.on .g { color: var(--accent); }
+
+.setup-row-inline { display: flex; gap: 8px; align-items: center; }
+.setup-row-inline .setup-input { flex: 1; }
+
+.setup-actions { display: flex; gap: 10px; align-items: center; margin-top: 22px; }
+.setup-actions .spacer { flex: 1; }
+.setup-btn {
+  background: var(--surface); color: var(--fg);
+  border: 1px solid var(--border-2); border-radius: 7px;
+  padding: 8px 15px; font-size: 13px; font-family: inherit; cursor: pointer;
+}
+.setup-btn:hover { background: var(--hover-bg); }
+.setup-btn.primary { background: var(--green-fill); border-color: var(--green-fill); color: #fff; }
+.setup-btn.primary:hover { filter: brightness(1.08); }
+.setup-btn:disabled { opacity: .5; cursor: default; }
+.setup-btn.link { background: none; border: none; color: var(--accent); padding: 8px 4px; }
+
+.setup-msg { font-size: 12.5px; margin-top: 10px; min-height: 17px; }
+.setup-msg.ok { color: var(--green); }
+.setup-msg.warn { color: var(--yellow); }
+.setup-msg.err { color: var(--err); }
+
+.setup-summary { margin-top: 6px; }
+.setup-summary .r { display: flex; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-3); font-size: 13px; }
+.setup-summary .k { color: var(--dim-a); width: 150px; flex: 0 0 auto; }
+.setup-summary .v { color: var(--fg); word-break: break-all; }
+
+.setup-toggle { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; cursor: pointer; }
+.setup-toggle input { accent-color: var(--green-fill); width: 15px; height: 15px; }
+
+@media (max-width: 640px) {
+  .setup-gate { padding: 24px 14px; }
+  .setup-summary .k { width: 110px; }
+}

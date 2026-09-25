@@ -1,6 +1,57 @@
 # TODO — Micro Models Agent
 
+## Осталось (по приоритетам, 2026-09-25)
+
+> Сверено с кодом на `master` @ 2.5.0. Закрытые пункты вычеркнуты ниже.
+> Основание приоритета: влияние на реального пользователя + маленькую модель (32K/бюджет
+> контекста/предсказуемость) vs. риск и объём работы.
+
+### P0 — качество прогонов и фундамент
+- **P6b — reasoning baseline `"medium"` на тривиальных**: `reasoning-resolver.ts:71` (`?? "medium"`), в `defaults.ts` `baseline` не задан → каждая Q&A-итерация платит за medium. Влияние высокое, работа малая.
+- **Этап 0 — базовая линия**: `bun test` + `tsc --noEmit`, зафиксировать зелёное. Нужно до любой чистки, иначе нет критерия «не сломал».
+- **Валидация кэша индекса**: `cache.ts:load()` не проверяет mtime/hash → устаревшая карта проекта уходит в системный промпт.
+
+### P1 — поведение агента
+- **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
+- **System Prompt — DONE CONDITIONS**: STOP/scope есть, явных условий завершения нет (план `2026-08-27-system-prompt-optimization.md`, 0/7 отмечено).
+- **Аудит волн B/C/D/E** (`tools/`, `execution/`, `session/ui`, `modules/`): может выявить новые P0/P1-баги.
+- **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
+
+### P2 — техдолг и поддерживаемость
+- Дробление (правило ≤300): `repl-commands.ts` 1426, `agent.ts` 1338 (`executeSingleAgentLoop` ~665), `repl.ts` 1327, `line-editor.ts` 1068, `bootstrap.ts` 870, `stuck-detector.ts` 749, `module.ts` 750.
+- Разорвать 2 цикла `browser/` (`driver ↔ session`).
+- Извлечь общий test-harness (сейчас только `tests/helpers/webui-commands.ts`).
+- Хардкод → абстракция: `BASH_GRACE_MS`, пути `.mma`, единый реестр `MMA_*`.
+- Аудит `as any` (53) и глухих `catch {}`.
+
+### P3 — гигиена и релиз
+- Удалить `verify-tools.ts`; убрать `tsconfig-paths` (не используется); добавить `.fallowrc.json`.
+- CI quality gate (`fallow --ci`), lint (Biome/ESLint), pre-commit hook.
+- Русские комментарии/JSDoc (~76 файлов с кириллицей).
+- README + `docs/` актуализация; `fallow security`.
+
+### P4 — бэклог
+- Автоназвание сессии по контексту (сейчас только ручной `rename`).
+- Контр-агент для проверки работы (+ подобрать литературу).
+
 ## Актуальное
+
+### MMA Web — первый запуск (мастер настройки) ✅ ЗАКРЫТО (2026-09-25), релиз 2.6.0
+
+**Спека:** `docs/specs/2026-09-25-web-first-run-design.md` · **Ветка:** `feat/web-first-run`
+
+Проблема: `mma web` при виргин-конфиге лишь печатал `cli.first_run_oneshot` и стартовал на дефолтах
+(`web-command.ts:80`); в терминале тот же случай запускает `runSetup()` (`main.ts:330`). Браузер
+получал агента без провайдера/модели. Реализован вариант A — общее ядро setup на терминал и веб.
+
+- [x] `src/modules/setup/{answers,apply,discovery}.ts`; `cli/setup.ts` / `cli/setup-order.ts` → re-export (тесты без изменений)
+- [x] `webui/setup-api.ts`: `GET /api/setup`, `POST /api/setup/{scan,models,test,locale}`, `POST /api/setup`
+- [x] `state.setupRequired` + серверный `409 setup_required` на `/api/message` и `/api/command`
+- [x] Фронтенд: гейт `setup.js` (Language → Provider → Key → Model → Context → Security → Review), скрытие чата
+- [x] Финиш: `applyAnswersToConfig` → `saveConfig` → `reconfigure` → reload
+- [x] i18n `web.setup.*` (en+ru), стиль по STYLE.md
+- [x] Тесты `tests/webui-setup.test.ts` + asset-level; `bun test` (2489 pass / 0 fail) + `tsc --noEmit` зелёные
+- [x] Docs: AGENTS.md, CHANGELOG, версия 2.6.0 (MINOR)
 
 ### Баг: затенение i18n `t()` в web-фронтенде (2026-09-23) — исправлено (`08ae01a`)
 
@@ -32,7 +83,7 @@
 #6/#7/#8/#9/#11, Task 10, Wave 8 (21–29), Wave 9 (30–35).
 
 **Открыто (по приоритету):**
-- [ ] **Task 12** — FactualCheck rescan (низкий приоритет)
+- [x] ~~**Task 12** — FactualCheck rescan~~ ✅ реализован: `factual.ts` `RESCAN_COOLDOWN_MS` + one-off rescan; аудит 2026-08-29 признал не-багом
 
 ### Аудит агента + план исправлений — `docs/superpowers/plans/2026-08-26-model-control-fixes.md`
 
@@ -149,7 +200,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [ ] Извлечь общий test-harness из интеграционных тестов (~1000 строк экономии, 26 копий scaffolding).
 - [~] Рефакторинг hotspot-функций: `createPlanToolDefinitions` (695), `bootstrap()` (438), `createProgram` (467)
       — частично: createProgram разбит (`c5b4274`), plan-definitions разбиты (`788aea2`); bootstrap() не тронут.
-- [ ] `console.*` в `repl-commands.ts` (126 вхождений) — консистентность с renderer/logger.
+- [x] ~~`console.*` в `repl-commands.ts` (126 вхождений)~~ ✅ сейчас 0 вхождений (OutputChannel).
 
 ### Этап 4. Хардкод → абстракция
 Аудит по категориям:
@@ -204,7 +255,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 4. **Качество агентных прогонов — P5/P6 из аудита 2026-08-31** (`_testing/agent-quality-review-2026-08-31.md`; P0–P4 из того же аудита закрыты коммитами `7ff98dc`, `98dc7a2`):
    - [ ] **P5 — авто-сужение набора тулов**: тривиальный вопрос тянет все 23 схемы тулов (~3.1K токенов, ~9% окна 32K); tool narrowing (`enable_tools`) есть, но не применяется автоматически — сужать по типу задачи до первого LLM-вызова
-   - [ ] **P6a — Unix-команды на Windows**: модель шлёт `find | head` в cmd.exe несмотря на hint в system prompt — кандидат: авто-конвертация или stub-ответ с hint'ом при характерной ошибке
+   - [x] ~~**P6a — Unix-команды на Windows**~~ ✅ реализовано: `windows-commands.ts` (hard-stop `<system-summary>`) + `bash.ts` `UNIX_TO_WIN_HINTS`/`FAILING_FIRST_WORDS`/`HARD_BLOCK_THRESHOLD`
    - [ ] **P6b — reasoning policy на тривиальных задачах**: уровень «medium» из policy назначается даже на Q&A в один тул — пересмотреть порог в reasoning-resolver
 
 ---
