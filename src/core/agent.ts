@@ -42,6 +42,11 @@ import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
 import {
+  deriveSessionName,
+  generateSessionTitle,
+  type TitleChat,
+} from "../modules/session/auto-name";
+import {
   resolvePromptOverflow,
   overflowHint,
   HINT_BLOCK_TOKENS,
@@ -529,6 +534,9 @@ export class Agent {
       logger.debug(`Session started: ${sessionManager.getActive()}`);
     }
 
+    const activeMeta = sessionManager?.getActiveMeta();
+    const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
+
     if (
       !this.systemPromptAdded &&
       !contextManager.getActiveHistory().some((m) => m.role === "system")
@@ -588,6 +596,36 @@ export class Agent {
     }
     contextManager.addMessage({ role: "user", content: input });
     slog.logUser(input);
+
+    if (isFirstMessage && activeMeta && sessionManager) {
+      const meta = sessionManager.getActiveMeta();
+      if (meta && (meta.nameSource ?? "default") !== "manual") {
+        sessionManager.rename(meta.id, deriveSessionName(input), "auto");
+        if (config.session.autoName !== false) {
+          const chat: TitleChat = async (prompt, signal) => {
+            let text = "";
+            for await (const chunk of llmProvider.chat(
+              [{ role: "user", content: prompt }],
+              undefined,
+              signal,
+              { maxTokens: 48, reasoningEffort: "none" },
+            )) {
+              if (chunk.type === "text" && chunk.content) text += chunk.content;
+            }
+            return text;
+          };
+          void generateSessionTitle(input, chat)
+            .then((title) => {
+              if (!title) return;
+              const cur = sessionManager.getActiveMeta();
+              if (cur && cur.id === meta.id && (cur.nameSource ?? "default") === "auto") {
+                sessionManager.rename(meta.id, title, "auto");
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    }
 
     // Turn lifecycle for plugins: count tool events without touching the loop,
     // and dispatch onTurnEnd exactly once — success, error or interrupt.
