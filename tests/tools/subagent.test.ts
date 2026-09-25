@@ -91,7 +91,7 @@ describe("subagentTool", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.output).toContain("missing llmProvider or toolExecutor");
+    expect(result.output).toContain("cannot run");
   });
 
   it("passes scope and toolTags to Agent deps", async () => {

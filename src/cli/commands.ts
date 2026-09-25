@@ -569,7 +569,7 @@ function buildSessionCommands(program: Command): void {
       for (const s of sessions) {
         const marker = s.id === active ? "*" : " ";
         getDefaultChannel().writeLine(
-          ` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} msgs  ${s.updatedAt.slice(0, 10)}`,
+          ` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} ${t("repl.msgs")}  ${s.updatedAt.slice(0, 10)}`,
         );
       }
     });

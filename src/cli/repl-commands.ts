@@ -1012,7 +1012,7 @@ function registerAgentCommands(ctx: ReplContext): void {
         const builtinCount = infos.filter(({ plugin }) => plugin.isBuiltin).length;
         if (builtinCount > 0) {
           ctx.output.writeLine(
-            pc.dim(`  (${builtinCount} builtin hidden — /plugins --all to show)`),
+            pc.dim(`  ${t("repl.plugins_hidden", { count: String(builtinCount) })}`),
           );
         }
       }
@@ -1042,7 +1042,7 @@ function registerLspCommands(ctx: ReplContext): void {
 
           ctx.output.writeLine(pc.bold(t("repl.lsp_status_header")));
           ctx.output.writeLine(
-            `${t("repl.lsp_enabled")} ${config?.enabled ? pc.green("yes") : pc.red("no")}`,
+            `${t("repl.lsp_enabled")} ${config?.enabled ? pc.green(t("repl.yes")) : pc.red(t("repl.no"))}`,
           );
 
           if (disabled.length > 0) {
@@ -1371,7 +1371,7 @@ function registerSkillCommands(ctx: ReplContext): void {
     for (const skill of available) {
       const tokens = estimateTokens(skill.content);
       const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
-      const marker = loaded ? pc.green(" [loaded]") : "";
+      const marker = loaded ? pc.green(` ${t("repl.loaded")}`) : "";
       ctx.output.writeLine(
         `  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
       );

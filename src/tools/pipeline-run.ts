@@ -90,7 +90,7 @@ export const pipelineRunTool: ToolDefinition = {
     if (!ctx.llmProvider || !ctx.toolExecutor) {
       return {
         success: false,
-        output: "Pipeline cannot run: missing llmProvider or toolExecutor in context",
+        output: t("tool.pipeline_cannot_run"),
       };
     }
 
@@ -161,16 +161,25 @@ export const pipelineRunTool: ToolDefinition = {
       if (failed.size > 0) {
         return {
           success: false,
-          output: `Pipeline "${pipeline.name}" failed. Executed ${completed.size}/${pipeline.steps.length} steps.\n${logs.join("\n")}`,
+          output: t("tool.pipeline_failed", {
+            name: pipeline.name,
+            done: String(completed.size),
+            total: String(pipeline.steps.length),
+            logs: logs.join("\n"),
+          }),
         };
       }
 
       return {
         success: true,
-        output: `Pipeline "${pipeline.name}" completed successfully (${completed.size} steps).\n${logs.join("\n")}`,
+        output: t("tool.pipeline_completed", {
+          name: pipeline.name,
+          steps: String(completed.size),
+          logs: logs.join("\n"),
+        }),
       };
     } catch (e: any) {
-      return { success: false, output: `Pipeline error: ${e.message}` };
+      return { success: false, output: t("tool.pipeline_error", { error: e.message }) };
     } finally {
       executor?.setRecursionDepth?.(currentDepth);
     }

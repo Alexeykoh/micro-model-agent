@@ -80,6 +80,6 @@ steps:
       },
     );
     expect(result.success).toBe(false);
-    expect(result.output).toContain("llmProvider");
+    expect(result.output).toContain("cannot run");
   });
 });

@@ -11,7 +11,7 @@ import { relaunchCli } from "./relaunch";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
 import { buildJsonError, buildJsonResult } from "./json-payload";
 import { saveConfig, loadConfig } from "../config/config";
-import { t } from "../i18n/index";
+import { t, setLocale } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
@@ -30,6 +30,27 @@ import { errMsg } from "../utils";
  * `mma --json` (no prompt) must not set it, or a REPL crash would emit JSON.
  */
 let jsonMode = false;
+
+/**
+ * Resolve the UI locale BEFORE `createProgram()`: command descriptions and the
+ * typo-guard suggestion are built with `t()` at registration time, so setting
+ * the locale only in bootstrap left `--help` and near-miss hints in English
+ * under `locale: ru`. Cheap, defensive file read — no full config load.
+ */
+function resolveEarlyLocale(): string | undefined {
+  const env = process.env.MMA_LOCALE;
+  if (env) return env;
+  const dir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+  for (const p of [join(dir, "config", "core.json"), join(dir, "config.json")]) {
+    try {
+      const parsed = JSON.parse(readFileSync(p, "utf-8")) as { locale?: unknown };
+      if (typeof parsed.locale === "string") return parsed.locale;
+    } catch {
+      /* missing/invalid file — try the next candidate */
+    }
+  }
+  return undefined;
+}
 
 /** Fire-and-forget self-update in the background (never blocks startup). */
 function startAutoUpdate(config: {
@@ -64,6 +85,8 @@ async function main(): Promise<void> {
   // `getDefaultChannel()`; without this call every bus event emitted before the
   // first channel use would have no terminal subscriber and be dropped.
   getDefaultChannel();
+
+  setLocale(resolveEarlyLocale() ?? "en");
 
   const program = createProgram();
 

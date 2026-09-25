@@ -1,8 +1,10 @@
 import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { extname, dirname } from "path";
 import { spawn } from "child_process";
+import { Logger } from "../logger/app-logger";
 
 const SYNTAX_CACHE = new Map<string, { hash: string; error: string | null }>();
+const logger = new Logger("warn", "syntax-validator");
 
 function contentHash(content: string): string {
   let h = 5381;
@@ -187,8 +189,12 @@ export async function preValidateSyntax(
     } finally {
       try {
         if (existsSync(tmpFile)) unlinkSync(tmpFile);
-      } catch {
-        /* ignore cleanup errors */
+      } catch (cleanupErr) {
+        // Best-effort: the check already returned; log so a leftover temp file
+        // is diagnosable rather than silently ignored.
+        logger.warn(`failed to remove syntax-check temp file ${tmpFile}`, {
+          error: String(cleanupErr),
+        });
       }
     }
   }
@@ -217,8 +223,12 @@ export async function preValidateSyntax(
     } finally {
       try {
         if (existsSync(tmpFile)) unlinkSync(tmpFile);
-      } catch {
-        /* ignore cleanup errors */
+      } catch (cleanupErr) {
+        // Best-effort: the check already returned; log so a leftover temp file
+        // is diagnosable rather than silently ignored.
+        logger.warn(`failed to remove syntax-check temp file ${tmpFile}`, {
+          error: String(cleanupErr),
+        });
       }
     }
   }

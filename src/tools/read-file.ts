@@ -72,7 +72,9 @@ function readLineSlice(
         }
         const tail = Buffer.concat([...rest, Buffer.from(carry, "utf-8")]);
         for (let i = 0; i < tail.length; i++) if (tail[i] === 0x0a) total++;
-        total++; // last line has no trailing newline
+        // Add the final (newline-less) line only when the file does not end in
+        // a newline — otherwise the count included a phantom empty line.
+        if (tail.length > 0 && tail[tail.length - 1] !== 0x0a) total++;
         return { selected: collected.join("\n"), total };
       }
     }
@@ -162,6 +164,9 @@ export const readFileTool: ToolDefinition = {
       } else {
         const content = readFileSync(resolved, "utf-8");
         lines = content.split("\n");
+        // A file ending in a newline yields a phantom empty last element;
+        // drop it so the advertised line count matches the streaming path.
+        if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
         total = lines.length;
         const end = Math.min(offset - 1 + limit, total);
         selected = lines.slice(offset - 1, end).join("\n");

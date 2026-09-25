@@ -76,16 +76,19 @@ export class StepVerifier {
     const root = findTypecheckRoot(this.baseDir, existingFiles) ?? this.baseDir;
     const tsconfigPath = join(root, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
-      return { passed: true, message: "No tsconfig.json found — skipping type check" };
+      return { passed: true, message: t("verify.typecheck_skipped_no_tsconfig") };
     }
     const tsc = resolveTscCommand(root);
-    if (!tsc) return { passed: true, message: "tsc not installed — skipping type check" };
+    if (!tsc) return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
     try {
       await this.runAsync(`${tsc} --noEmit`, root, 60_000);
-      return { passed: true, message: "TypeScript type check passed" };
+      return { passed: true, message: t("verify.typecheck_passed") };
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
-      return { passed: false, message: `TypeScript type check failed: ${stderr.slice(0, 500)}` };
+      return {
+        passed: false,
+        message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),
+      };
     }
   }
 
@@ -100,28 +103,31 @@ export class StepVerifier {
     const projectRoot = findProjectRoot(filePath, this.baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
-      return { passed: true, message: "No tsconfig.json found — skipping type check" };
+      return { passed: true, message: t("verify.typecheck_skipped_no_tsconfig") };
     }
     const tsc = resolveTscCommand(projectRoot);
-    if (!tsc) return { passed: true, message: "tsc not installed — skipping type check" };
+    if (!tsc) return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
     try {
       await this.runAsync(`${tsc} --noEmit --skipLibCheck`, projectRoot, 60_000);
-      return { passed: true, message: "TypeScript type check passed" };
+      return { passed: true, message: t("verify.typecheck_passed") };
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
-      return { passed: false, message: `TypeScript type check failed: ${stderr.slice(0, 500)}` };
+      return {
+        passed: false,
+        message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),
+      };
     }
   }
 
   async runTests(): Promise<VerificationItem> {
     const pkgPath = resolve(this.baseDir, "package.json");
     if (!existsSync(pkgPath)) {
-      return { passed: true, message: "No package.json found — skipping tests" };
+      return { passed: true, message: t("verify.tests_skipped_no_package") };
     }
     try {
       const pkg = JSON.parse(require("fs").readFileSync(pkgPath, "utf-8"));
       if (!pkg.scripts?.test) {
-        return { passed: true, message: "No test script defined — skipping tests" };
+        return { passed: true, message: t("verify.tests_skipped_no_script") };
       }
     } catch {
       /* fall through — attempt to run */

@@ -131,7 +131,7 @@ export const subagentTool: ToolDefinition = {
     if (!ctx.llmProvider || !ctx.toolExecutor) {
       return {
         success: false,
-        output: "Sub-agent cannot run: missing llmProvider or toolExecutor in context",
+        output: t("tool.subagent_cannot_run"),
       };
     }
 
@@ -232,7 +232,10 @@ export const subagentTool: ToolDefinition = {
               }
             : undefined;
         if (!result.success) {
-          let output = `Sub-agent failed: ${result.error}\nPartial output: ${result.text}`;
+          let output = t("tool.subagent_failed", {
+            error: String(result.error),
+            text: result.text,
+          });
           const scopeReq = scopeCollector.toScopeRequest();
           if (scopeReq) output += `\n${formatScopeRequest(scopeReq)}`;
           return { success: false, output };
@@ -272,7 +275,10 @@ export const subagentTool: ToolDefinition = {
 
         return {
           success: true,
-          output: `Sub-agent completed:\n${result.text}\n\nIterations: ${result.iterationCount}`,
+          output: t("tool.subagent_completed", {
+            text: result.text,
+            iterations: String(result.iterationCount),
+          }),
           usage: pickUsage(),
         };
       } finally {
@@ -285,7 +291,7 @@ export const subagentTool: ToolDefinition = {
         executor?.setRecursionDepth?.(currentDepth);
       }
     } catch (e: any) {
-      return { success: false, output: `Sub-agent error: ${e.message}` };
+      return { success: false, output: t("tool.subagent_error", { error: e.message }) };
     }
   },
 };

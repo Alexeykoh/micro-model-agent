@@ -66,6 +66,8 @@ export class LineEditor implements LineInput {
   private lines: string[] = [""];
   private row = 0;
   private col = 0;
+  /** Carry-over for non-TTY chunked input (a partial line split across reads). */
+  private pendingLine = "";
   private historyIndex = -1;
   private stash: { lines: string[]; row: number; col: number } | null = null;
   private isDone = false;
@@ -297,18 +299,15 @@ export class LineEditor implements LineInput {
     let text = buf.toString("utf-8");
     text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const parts = text.split("\n");
-    for (let i = 0; i < parts.length; i++) {
-      if (i < parts.length - 1) {
-        this.emitLine(parts[i]);
-        this.lines = [""];
-        this.row = 0;
-        this.col = 0;
-      } else if (parts[i]) {
-        this.emitLine(parts[i]);
-        this.lines = [""];
-        this.row = 0;
-        this.col = 0;
-      }
+    // Carry the incomplete tail to the next chunk: emitting it immediately
+    // split `"hello wor" + "ld\n"` into two wrong lines.
+    this.pendingLine += parts[0];
+    for (let i = 1; i < parts.length; i++) {
+      this.emitLine(this.pendingLine);
+      this.lines = [""];
+      this.row = 0;
+      this.col = 0;
+      this.pendingLine = parts[i];
     }
   }
 
@@ -1154,6 +1153,11 @@ export class LineEditor implements LineInput {
   }
 
   private emitClose(): void {
+    // Flush a final newline-less line from chunked non-TTY input.
+    if (this.pendingLine) {
+      this.emitLine(this.pendingLine);
+      this.pendingLine = "";
+    }
     this.listeners.close?.();
   }
 }

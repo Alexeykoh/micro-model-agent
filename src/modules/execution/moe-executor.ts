@@ -41,7 +41,7 @@ function buildErrorDetail(stuckDetector: StuckDetector, baseError: string, lastE
   }
   if (lastError) {
     errorDetail +=
-      "\n\nIf relevant skills are available, consider loading one with load_skill for expert guidance.";
+      `\n\n${t("exec.skills_hint")}`;
   }
   return errorDetail;
 }

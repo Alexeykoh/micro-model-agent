@@ -509,12 +509,20 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           if (testRun && testRun.failed > 0) {
             deps.pendingMessages.push({
               role: "user",
-              content: `<system-summary>${testRun.framework} reported ${testRun.failed} FAILING test(s) (${testRun.passed} passing). Do NOT mark the current step as done — fix the failing tests (read the failure output, correct the code) and re-run them until all pass.</system-summary>`,
+              content: `<system-summary>${t("exec.test_fail_summary", {
+                framework: testRun.framework,
+                failed: String(testRun.failed),
+                passed: String(testRun.passed),
+              })}</system-summary>`,
             });
           } else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
             deps.pendingMessages.push({
               role: "user",
-              content: `<system-summary>${testRun.framework}: all ${testRun.passed} test(s) passed for "${cmd}". You may mark the current step as done via plan update step=N status=done.</system-summary>`,
+              content: `<system-summary>${t("exec.test_pass_summary", {
+                framework: testRun.framework,
+                passed: String(testRun.passed),
+                cmd,
+              })}</system-summary>`,
             });
           }
         }

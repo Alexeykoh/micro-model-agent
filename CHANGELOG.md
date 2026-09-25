@@ -53,6 +53,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - removed the dead `tools/scope-check.ts` duplicate (test now targets the real `security/path-validator`); `isInsideDir` no longer rejects names beginning with `..`.
   - MCP reliability: sanitized tool-name collisions are disambiguated (was a bootstrap crash) and the prompt advertises the same sanitized `connect` name; concurrent SSE calls use a per-id pending map instead of one shared slot (no cross-talk / wrong response).
   - removed the dead `PlanPersister` module; `PluginManager.runOnBeforeTool` now honours the string-return block contract like the tool executor.
+  - i18n: verifier typecheck/test messages, subagent/pipeline/mcp_call/chunk_query/meet_done tool output, plan summaries/test-run summaries and CLI status/metric lines now go through `t()` (en+ru), so RU sessions no longer mix English fragments.
+  - `read_file` no longer counts a phantom trailing line; sessions older than 30 days are actually archived (`rotateOldSessions` was dead code — now scheduled non-blocking at bootstrap); the UI locale is resolved before `createProgram()` so `--help`/typo hints respect `locale`; non-TTY `LineEditor` carries partial chunks instead of splitting them; `killTree` is asynchronous (no event-loop stall on Windows shutdown).
 
 ## [2.5.0] - 2026-09-24
 

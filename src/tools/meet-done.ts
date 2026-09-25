@@ -1,3 +1,4 @@
+import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
 /** Sentinel: the model calls this to signal the meet interview is finished. */
@@ -9,6 +10,6 @@ export const meetDoneTool: ToolDefinition = {
   parameters: { type: "object", properties: {} },
   handler: async (ctx) => {
     if (ctx.onboarding) ctx.onboarding.done = true;
-    return { success: true, output: "Interview marked complete." };
+    return { success: true, output: t("tool.meet_done") };
   },
 };

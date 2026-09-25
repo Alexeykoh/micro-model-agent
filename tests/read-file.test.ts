@@ -180,6 +180,14 @@ describe("read_file", () => {
     expect(result.output).not.toContain("\nc");
   });
 
+  it("does not count a phantom line for a file ending in a newline", async () => {
+    writeFileSync(join(tmpDir, "test.txt"), "a\nb\n", "utf-8");
+    const result = await readFileTool.handler(ctx, { path: "test.txt" });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("lines 1-2");
+    expect(result.output).not.toContain("lines 1-3");
+  });
+
   it("caps an oversized limit", async () => {
     const lines = Array.from({ length: 5000 }, (_, i) => `l${i + 1}`);
     writeFileSync(join(tmpDir, "test.txt"), lines.join("\n"), "utf-8");

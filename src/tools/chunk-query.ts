@@ -79,17 +79,23 @@ export const chunkQueryTool: ToolDefinition = {
         ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
       );
       if (!check.allowed) {
-        return { success: false, output: `[SCOPE] ${check.reason || "Path not allowed"}` };
+        return {
+          success: false,
+          output: t("tool.chunk_query_path_not_allowed", { reason: check.reason || "Path not allowed" }),
+        };
       }
       try {
         content = readFileSync(resolvedInput, "utf8");
       } catch (e: any) {
-        return { success: false, output: `Cannot read ${inputPath}: ${e.message}` };
+        return {
+          success: false,
+          output: t("tool.chunk_query_read_failed", { path: inputPath, error: e.message }),
+        };
       }
     }
 
     if (!ctx.llmProvider) {
-      return { success: false, output: "chunk_query: missing llmProvider in context" };
+      return { success: false, output: t("tool.chunk_query_no_provider") };
     }
 
     const maxParallel =

@@ -1125,7 +1125,11 @@ export class Repl implements ReplContext, Host {
       this.output.writeLine(ctxLine);
       if (result.totalTokens !== undefined && result.totalTokens > 0) {
         const apiLine = pc.dim(
-          `  API: ${result.promptTokens} prompt + ${result.completionTokens} completion = ${result.totalTokens} total`,
+          t("repl.api_line", {
+            prompt: String(result.promptTokens),
+            completion: String(result.completionTokens),
+            total: String(result.totalTokens),
+          }),
         );
         this.output.writeLine(apiLine);
       }
@@ -1141,7 +1145,9 @@ export class Repl implements ReplContext, Host {
     } else if (ui?.showCompaction && result.compactionCount !== undefined) {
       if (result.compactionCount > this.lastCompactionShown) {
         this.lastCompactionShown = result.compactionCount;
-        this.output.writeLine(pc.dim(`\n  ⟳ Context compacted (${result.compactionCount})`));
+        this.output.writeLine(
+          pc.dim(`\n  ⟳ ${t("repl.compacted", { count: String(result.compactionCount) })}`),
+        );
       }
     }
   }
@@ -1179,7 +1185,10 @@ export class Repl implements ReplContext, Host {
       const budget = this.skillsModule.getBudget();
       row(
         t("repl.skills_label"),
-        `${pc.white(String(this.skillsModule.getAvailable().length))} available, ${pc.dim(`budget: ${budget.total} tokens`)}`,
+        t("repl.skills_available", {
+          count: String(this.skillsModule.getAvailable().length),
+          budget: String(budget.total),
+        }),
       );
     }
 
@@ -1195,7 +1204,7 @@ export class Repl implements ReplContext, Host {
           .join(", ");
         row(
           t("repl.plugins_label"),
-          `${pc.white(String(infos.length))} active  ${pc.dim(`(${pluginNames})`)}`,
+          t("repl.plugins_active", { count: String(infos.length), names: pluginNames }),
         );
       }
     }
@@ -1237,7 +1246,7 @@ export class Repl implements ReplContext, Host {
       const sessionPath = join(this.configDir, "sessions", meta.id);
       row(
         t("repl.session_label"),
-        `${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} msgs  ${pc.dim(sessionPath)}`,
+        `${pc.cyan(meta.name)} ${pc.dim(`(${meta.id.slice(0, 12)})`)}  —  ${meta.messageCount} ${t("repl.msgs")}  ${pc.dim(sessionPath)}`,
       );
     }
 

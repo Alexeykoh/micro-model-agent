@@ -25,15 +25,9 @@
 - **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
 
 ### P2 — техдолг и поддерживаемость
-- **Остатки аудита волн B/C/D/E** (2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`) — sev 4 и большинство sev 3/2 исправлены; осталось:
-  - `B-11` `readLineSlice` переоценивает `total` для файлов >1MB (семантика trailing-newline неоднозначна, нужно решение).
-  - `B-13` глухие `catch {}` без лога (правило #14): `syntax-validator.ts`, `auto-fixer.ts`, `bash.ts`, `search-history.ts`, `scope-request.ts`.
-  - `D-3` локаль применяется после `createProgram()` → `--help`/typo-подсказки на английском при `locale: ru`.
-  - `D-7` `rotateOldSessions()` никогда не вызывается (мёртвая фича архивации >30 дней).
-  - `D-8` non-TTY `LineEditor.onData` эмитит хвост чанка как строку (в проде REPL использует readline, но баг в классе есть).
-  - `E-15` `killTree` синхронно блокирует event loop (`spawnSync taskkill` + `sleepSync`).
-  - `C-18` остались неиспользуемые публичные методы `StuckDetector` (`classifyError`, `getHints`, `getToolAlternative`, …) — сохранены как API/тесты.
-  - i18n-свод `B-12`/`C-14`/`D-9` (hardcoded English в тулах/execution/CLI) — см. P3 i18n.
+- [x] ~~**Остатки аудита волн B/C/D/E**~~ ✅ (2026-09-25) — sev 4/3/2 закрыты: `B-11` (trailing-newline total), `D-3` (локаль до `createProgram`), `D-7` (`rotateOldSessions` подключён), `D-8` (carry-over non-TTY), `E-15` (async `killTree`), i18n `B-12`/`C-14`/`D-9` (verifier/tools/CLI через `t()`, en+ru). Осознанно оставлено:
+  - `B-13` прочие `catch {}` в `auto-fixer.ts`/`bash.ts`/`search-history.ts`/`scope-request.ts` — это намеренный control-flow с комментарием (парсинг с фолбэком / пропуск битой строки), не сокрытие ошибки; `syntax-validator` cleanup логируется.
+  - `C-18` часть публичных методов `StuckDetector` (`classifyError`, `getHints`, `getToolAlternative`, …) и actionable-hints остаются англоязычными model-facing диагностиками (как system prompt) — сохранены как API/тесты.
 - Дробление (правило ≤300): `repl-commands.ts` 1426, `agent.ts` 1338 (`executeSingleAgentLoop` ~665), `repl.ts` 1327, `line-editor.ts` 1068, `bootstrap.ts` 870, `stuck-detector.ts` 749, `module.ts` 750.
 - Разорвать 2 цикла `browser/` (`driver ↔ session`).
 - Извлечь общий test-harness (сейчас только `tests/helpers/webui-commands.ts`).

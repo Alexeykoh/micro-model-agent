@@ -471,10 +471,21 @@ export class ExecutionModule implements AgentModule {
     const done = plan.steps.filter((s) => s.status === "done").length;
     const total = plan.steps.length;
     if (this.tracker.isComplete()) {
-      return `[${plan.id}] "${plan.title}" ${done}/${total} done — plan complete. You may create a new plan for new work (plan create), or reply with your final answer.`;
+      return t("exec.plan_summary_complete", {
+        id: plan.id,
+        title: plan.title,
+        done: String(done),
+        total: String(total),
+      });
     }
     const current = this.tracker.getCurrentStepIndex() + 1;
-    return `[${plan.id}] "${plan.title}" ${done}/${total} done, current: step ${current} — continue it (plan show / re-plan), do NOT create a new plan`;
+    return t("exec.plan_summary_continue", {
+      id: plan.id,
+      title: plan.title,
+      done: String(done),
+      total: String(total),
+      current: String(current),
+    });
   }
 
   getToolDefinitions(): ToolDefinition[] {
