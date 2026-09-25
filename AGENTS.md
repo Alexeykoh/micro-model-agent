@@ -381,6 +381,15 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   стиль по `docs/design/ui/STYLE.md` (строки/глифы, без boxed-панелей). `/setup.js` отдаётся как статик
   (`WebUiAssets.setupJs`, `Cache-Control: no-store`).
 
+### Session Auto-Naming (2.6.0)
+
+- **Детерминированно + LLM:** имя сессии выводится из первого user-сообщения
+  (`deriveSessionName`, `src/modules/session/auto-name.ts`) в единственном хуке `Agent.run()`
+  (REPL/web/one-shot), затем fire-and-forget LLM-уточнение (`generateSessionTitle`, timeout 8s,
+  fail-open) при `config.session.autoName` (default true).
+- **Provenance:** `SessionMeta.nameSource` (`default`/`auto`/`manual`); ручное имя (`create(name)`
+  или `rename`) никогда не перезаписывается. Web-таб обновляет подпись из SSE `state.sessionName`.
+
 ### Current Version: 2.6.0
 
 ### Changelog

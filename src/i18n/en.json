@@ -88,6 +88,7 @@
   "session.available": "Available sessions:",
   "session.no_match": "No session matching \"{query}\"",
   "session.default_name": "Session {date}",
+  "session.auto_named": "Session auto-named: {name}",
   "session.info_full": "[Session: \"{name}\" ({id}) | model: {model} | context: {contextWindow} tokens]",
   "session.col_active": "",
   "session.col_id": "ID",

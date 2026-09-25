@@ -87,6 +87,7 @@
   "session.available": "Доступные сессии:",
   "session.no_match": "Нет сессии подходящей по \"{query}\"",
   "session.default_name": "Сессия {date}",
+  "session.auto_named": "Сессия названа: {name}",
   "session.info_full": "[Сессия: \"{name}\" ({id}) | модель: {model} | контекст: {contextWindow} токенов]",
   "session.col_active": "",
   "session.col_id": "ID",

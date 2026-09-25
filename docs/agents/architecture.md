@@ -66,6 +66,24 @@ mode needs (slash commands, sidebar/topbar snapshot).
   (REST route handlers), `assets.ts`, `util.ts`.
   App creation is separated from `listen()` (rule #13), so tests bind no port.
 
+### Session Auto-Naming
+
+> **Source:** `src/modules/session/auto-name.ts`, `src/core/agent.ts` (`Agent.run`).
+
+Every session is named from the first user message through one cross-transport
+hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
+
+- **Deterministic first** — `deriveSessionName(input)` produces an instant name
+  (first non-empty line, markdown/code/url stripped, capped at 60 chars).
+  `SessionManager.rename(id, name, "auto")` records provenance in
+  `SessionMeta.nameSource` (`default` | `auto` | `manual`).
+- **LLM refinement second** — unless `config.session.autoName === false`, a
+  fire-and-forget `generateSessionTitle` call (8s timeout, fail-open) refines
+  the title and stores it only when the session is still `auto` and unchanged
+  (stale-session guard).
+- **Manual is sticky** — a session created with an explicit name or renamed by
+  the user has `nameSource: "manual"` and is never overwritten.
+
 ### Security Module
 
 > **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.

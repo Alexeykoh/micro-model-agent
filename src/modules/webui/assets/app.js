@@ -976,6 +976,15 @@
     history.replaceState(null, "", url);
   }
 
+  function updateTabName(id, name) {
+    if (!id || !name) return;
+    const tab = tabs.find((x) => x.id === id);
+    if (!tab || tab.name === name) return;
+    tab.name = name;
+    renderTabstrip();
+    renderSessionsDropdown();
+  }
+
   function openTab(id, name, kind, server) {
     let tab = tabs.find((x) => x.id === id);
     if (!tab) {
@@ -1765,6 +1774,7 @@
     if (sessionId && !tabs.some((x) => x.id === sessionId)) {
       openTab(sessionId, state.host.sessionName || String(sessionId), "session", false);
     }
+    if (sessionId) updateTabName(sessionId, state.host.sessionName);
     if (!tabs.length) showEmptyFeed();
     renderPlan(state.host.plan);
     renderUsage(state.host);
