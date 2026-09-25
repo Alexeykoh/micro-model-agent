@@ -51,7 +51,7 @@ export class CriticGate {
     deps.state.criticCalls++;
     deps.state.mutationsSinceCritic = 0;
 
-    const verdict = await this.opts.verify(this.opts.buildPack(deps), this.opts.signal);
+    const verdict = await this.verifySafely(deps);
     if (!verdict || verdict.status === "ok") return "pass";
 
     const fresh = this.takeFreshIssues(deps.state, verdict.issues);
@@ -60,6 +60,15 @@ export class CriticGate {
     this.logVerdict(deps, verdict, fresh.length);
     this.inject(deps, verdict, fresh);
     return "retry";
+  }
+
+  /** Fail open: a broken/over-budget critic must never block the agent. */
+  private async verifySafely(deps: CriticGateDeps): Promise<CriticVerdict | null> {
+    try {
+      return await this.opts.verify(this.opts.buildPack(deps), this.opts.signal);
+    } catch {
+      return null;
+    }
   }
 
   private shouldRun(deps: CriticGateDeps): boolean {
@@ -117,4 +126,15 @@ export class CriticGate {
       })}</system-summary>`,
     });
   }
+}
+
+export function gatherTurnToolEvents(contextManager: {
+  getActiveHistory: () => Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
+}): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }> {
+  const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }> = [];
+  for (const m of contextManager.getActiveHistory()) {
+    if (m.role !== "tool" || !m.name) continue;
+    events.push({ tool: m.name, ok: m.success });
+  }
+  return events;
 }
