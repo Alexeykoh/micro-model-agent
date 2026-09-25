@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { isPathInScope, isPathWritable } from "../../src/tools/scope-check";
+// Production path scope lives in the security module; `tools/scope-check.ts`
+// was a dead duplicate (only this test imported it) and was removed.
+import { isPathInScope, isPathWritable } from "../../src/modules/security/path-validator";
 
 const BASE = "/workspace";
 

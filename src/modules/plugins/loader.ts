@@ -29,7 +29,15 @@ export class PluginLoader {
     const entries = readdirSync(dirPath).sort();
     for (const entry of entries) {
       const fullPath = join(dirPath, entry);
-      const stat = statSync(fullPath);
+      // A dangling symlink / permission-denied entry must not abort the whole
+      // plugin scan (and with it bootstrap) — skip it with a warning.
+      let stat;
+      try {
+        stat = statSync(fullPath);
+      } catch (e) {
+        logger?.warn(`Skipping unreadable plugin entry "${fullPath}": ${String(e)}`);
+        continue;
+      }
 
       if (stat.isFile()) {
         if (!entry.endsWith(".ts") && !entry.endsWith(".js")) continue;

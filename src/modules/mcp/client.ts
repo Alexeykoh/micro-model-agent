@@ -214,6 +214,8 @@ export class MCPClient {
 
   /** Unparsed trailing bytes from stdio responses (partial line). */
   private stdioBuffer = "";
+  /** Monotonic stdio request id (Date.now() collided for same-ms calls). */
+  private stdioRequestSeq = 0;
 
   /**
    * JSON-RPC request over stdio with timeout, exit handling and
@@ -231,7 +233,7 @@ export class MCPClient {
     return new Promise<T>((resolve, reject) => {
       const request = {
         jsonrpc: "2.0",
-        id: Date.now(),
+        id: ++this.stdioRequestSeq,
         method,
         ...(params !== undefined ? { params } : {}),
       };

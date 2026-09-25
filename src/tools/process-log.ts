@@ -4,6 +4,8 @@ import { t } from "../i18n/index";
 import { MAX_PREVIEW_LINES } from "./preview";
 
 const DEFAULT_TAIL = MAX_PREVIEW_LINES;
+/** Cap matching the tool description; this tool skips budget truncation. */
+const MAX_TAIL = 300;
 
 export const processLogTool: ToolDefinition = {
   name: "process_log",
@@ -42,7 +44,10 @@ export const processLogTool: ToolDefinition = {
         : entry.status === "exited"
           ? t("proc.status_exited")
           : t("proc.status_killed");
-    const tail = typeof args.tail === "number" ? args.tail : DEFAULT_TAIL;
+    const tail = Math.min(
+      MAX_TAIL,
+      Math.max(1, typeof args.tail === "number" ? Math.floor(args.tail) : DEFAULT_TAIL),
+    );
     const log = processRegistry.getLog(id, tail);
     if (!log) {
       return {

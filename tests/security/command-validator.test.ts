@@ -280,3 +280,27 @@ describe("Command Validator bypass regressions (audit 2026-08-26)", () => {
     expect(isCommandAllowed("echo $(rm -rf /)", cfg()).allowed).toBe(false);
   });
 });
+
+describe("wrapper / interpreter bypasses (audit 2026-09-25)", () => {
+  const cfg = () => ({ ...DEFAULT_SECURITY_CONFIG.bash, enabled: true });
+
+  it("blocks a blacklisted base command hidden behind a wrapper", () => {
+    for (const cmd of [
+      "nice rm file",
+      "nice -n 10 rm file",
+      "timeout 5 rm file",
+      "timeout -k 2 5 rm file",
+      "sudo -u root rm file",
+      "stdbuf -o 0 rm file",
+      "env FOO=bar rm file",
+    ]) {
+      expect(isCommandAllowed(cmd, cfg()).allowed, cmd).toBe(false);
+    }
+  });
+
+  it("blocks versioned interpreters invoked with -c/-e", () => {
+    for (const cmd of ["python3.11 -c 'x'", "python -e 'x'", "node -e 'x'", "ruby -e 'x'"]) {
+      expect(isCommandAllowed(cmd, cfg()).allowed, cmd).toBe(false);
+    }
+  });
+});

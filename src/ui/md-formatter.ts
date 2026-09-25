@@ -198,6 +198,9 @@ export class FormattingStream {
       if (this.inCodeBlock) {
         this.emitCodeBlock();
       } else {
+        // A pending table must not be emitted AFTER the code block that
+        // follows it: flush it before entering the fence.
+        if (this.tableBuffer.length > 0) this.flushTable();
         this.inCodeBlock = true;
         this.codeLang = line.trim().slice(3).trim();
         this.codeLines = [];

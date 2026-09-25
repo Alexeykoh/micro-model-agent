@@ -171,4 +171,21 @@ describe("read_file", () => {
     // LLM-facing output keeps the full header (fact extraction depends on it).
     expect(result.output).toContain("test.txt");
   });
+
+  it("clamps offset 0 to the first line (no negative slice)", async () => {
+    writeFileSync(join(tmpDir, "test.txt"), ["a", "b", "c"].join("\n"), "utf-8");
+    const result = await readFileTool.handler(ctx, { path: "test.txt", offset: 0, limit: 2 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("a\nb");
+    expect(result.output).not.toContain("\nc");
+  });
+
+  it("caps an oversized limit", async () => {
+    const lines = Array.from({ length: 5000 }, (_, i) => `l${i + 1}`);
+    writeFileSync(join(tmpDir, "test.txt"), lines.join("\n"), "utf-8");
+    const result = await readFileTool.handler(ctx, { path: "test.txt", limit: 999999 });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("l2000");
+    expect(result.output).not.toContain("l2001");
+  });
 });

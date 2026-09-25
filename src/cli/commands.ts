@@ -466,6 +466,9 @@ function buildProviderCommands(program: Command): void {
       if (config.provider.entries && config.provider.entries.length > 0) {
         try {
           await agent.setProvider(name);
+          // Persist: `agent.setProvider` only mutates the in-memory config, so
+          // the switch was silently lost on exit for multi-entry configs.
+          saveConfig(config, configPath, dirname(configPath));
           getDefaultChannel().writeLine(t("cli.provider_set", { name }));
         } catch (e: any) {
           getDefaultChannel().writeLine(pc.red(e.message));

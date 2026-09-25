@@ -44,7 +44,11 @@ export class SkillsLoader {
   }
 
   private parseSkillFile(content: string, sourcePath: string): SkillMeta | null {
-    const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    // Normalize CRLF first: a Windows checkout / Windows-authored skill has
+    // `---\r\n`, which the LF-only pattern silently failed to match (every
+    // bundled skill was dropped with no warning).
+    const normalized = content.replace(/\r\n/g, "\n");
+    const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (!match) return null;
 
     const frontmatter = this.parseFrontmatter(match[1]);

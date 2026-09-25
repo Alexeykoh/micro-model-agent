@@ -969,11 +969,12 @@ export class LineEditor implements LineInput {
       return acc + "…";
     });
     this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
-    // The printed list moved the cursor (rows.length + 1) visual rows down
-    // from its frame position. Account for those rows so the next render
-    // redraws the frame in place — otherwise its relative up-move starts
-    // above the frame and paints garbage over the just-printed list.
-    this.prevCursorRow += rows.length + 1;
+    // The printed list moved the cursor below the old frame. Drop the absolute
+    // frame anchor so the next render positions RELATIVE to the current cursor
+    // (below the list). Keeping the DSR anchor re-homed the frame to its old
+    // absolute row and its `\x1b[J` erased the list — on Linux/macOS the
+    // candidates flashed and disappeared.
+    this.invalidateAnchor();
 
     // Start a cycling session with the first candidate in the buffer:
     // ↑/↓/Tab cycle through the printed list in place.

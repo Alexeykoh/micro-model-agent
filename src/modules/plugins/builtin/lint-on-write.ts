@@ -105,8 +105,9 @@ export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
   priority = 10;
   isBuiltin = true;
-  private _checkPromise: Promise<string | null> | null = null;
-  private _checkTimestamp = 0;
+  // Debounced project typecheck, keyed by project root. A single slot leaked
+  // one project's tsc errors onto writes in another project (monorepo).
+  private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
 
   async onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
     if (call.name !== "write_file" && call.name !== "edit_file") {
@@ -276,17 +277,18 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
 
     const now = Date.now();
-    if (this._checkPromise && now - this._checkTimestamp < TYPE_CHECK_DEBOUNCE_MS) {
-      const error = await this._checkPromise;
+    const prev = this._checks.get(projectRoot);
+    if (prev && now - prev.at < TYPE_CHECK_DEBOUNCE_MS) {
+      const error = await prev.promise;
       if (error) {
         result.output += `\n\n[Project typecheck failed]: ${error}`;
       }
       return;
     }
 
-    this._checkTimestamp = now;
-    this._checkPromise = this.runTscCheck(tsc, projectRoot, signal);
-    const error = await this._checkPromise;
+    const promise = this.runTscCheck(tsc, projectRoot, signal);
+    this._checks.set(projectRoot, { at: now, promise });
+    const error = await promise;
     if (error) {
       // Try to auto-fix fixable errors
       const { stdout, stderr } = await runAsync(

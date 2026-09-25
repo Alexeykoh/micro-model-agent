@@ -11,7 +11,6 @@ import { HallucinationDetector } from "../modules/hallucination/detector";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 
-const engine = new PipelineEngine();
 const MAX_CONCURRENT = 3;
 const MAX_ATTEMPTS = 3;
 
@@ -99,7 +98,11 @@ export const pipelineRunTool: ToolDefinition = {
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
     const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
-    const currentDepth = ctx.recursionDepth ?? 0;
+    // Depth lives on the SHARED executor ctx (nested sub-agents/pipelines read
+    // it there); `ctx.recursionDepth` is captured once and never incremented,
+    // so the guard used to never fire. Mirrors subagent.ts.
+    const executor = ctx.toolExecutor;
+    const currentDepth = executor?.getRecursionDepth?.() ?? ctx.recursionDepth ?? 0;
     if (currentDepth >= maxDepth) {
       logSecurityBlock(
         ctx.sessionId,
@@ -113,9 +116,12 @@ export const pipelineRunTool: ToolDefinition = {
       };
     }
 
+    // A fresh engine per invocation: a module-level singleton was reset() by
+    // concurrent calls (MoE waves share the executor), corrupting step state.
+    const engine = new PipelineEngine();
+    executor?.setRecursionDepth?.(currentDepth + 1);
     try {
       const pipeline = PipelineParser.parse(yaml);
-      engine.reset();
       const order = engine.resolveDependencies(pipeline.steps);
       const completed = new Set<string>();
       const outputs: Record<string, { output: string }> = {};
@@ -165,6 +171,8 @@ export const pipelineRunTool: ToolDefinition = {
       };
     } catch (e: any) {
       return { success: false, output: `Pipeline error: ${e.message}` };
+    } finally {
+      executor?.setRecursionDepth?.(currentDepth);
     }
   },
 };
