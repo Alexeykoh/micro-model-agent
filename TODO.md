@@ -7,7 +7,7 @@
 > контекста/предсказуемость) vs. риск и объём работы.
 
 ### P0 — качество прогонов и фундамент
-- **Безопасность/целостность (аудит волн B/C/D/E, sev 4)** — отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md` — ✅ все 6 исправлены (ветка `fix/audit-sev4`):
+- **Безопасность/целостность (аудит волн B/C/D/E, sev 4)** — отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md` — ✅ все 6 исправлены (ветка `fix/audit-waves-bcde`):
   - [x] ~~**W-1 (B-1/E-1)** `isPathWritable` без `escapesViaSymlink`~~ ✅ symlink-проверка добавлена в запись + канонизация ближайшего существующего предка (`path-validator.ts`).
   - [x] ~~**W-3 (E-2)** command injection в lint-on-write~~ ✅ `bun build`/`node --check` через `spawn(file,args)` без `shell`.
   - [x] ~~**W-4 (C-1)** `plan update` без валидации статуса~~ ✅ допустимы только `done|failed|skipped`, иначе отказ (`plan.bad_status`).
@@ -21,10 +21,19 @@
 ### P1 — поведение агента
 - **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
 - [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
-- [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0), ~24 sev 3, ~25 sev 2; чистого кода больше, чем проблемного (см. раздел «Покрытие»). Часть sev 3 (bash-flailing/consecutive никогда не инжектятся, `stuckDetector.reset()` каждый iteration, `recordToolSuccess` гасит type-error) — дешёвые фиксы в `execution-plugin`/`stuck-detector`.
+- [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0, исправлены), ~24 sev 3, ~25 sev 2. **Исправлено большинство** (ветка `fix/audit-waves-bcde`): sev 4 + stuck-детектор, plan-correctness, SSRF/секреты/symlink/injection, MCP reliability, read/process/pipeline-харды, skills CRLF, command-validator wrappers. Остаток — в P2 (см. «Остатки аудита»).
 - **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
 
 ### P2 — техдолг и поддерживаемость
+- **Остатки аудита волн B/C/D/E** (2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`) — sev 4 и большинство sev 3/2 исправлены; осталось:
+  - `B-11` `readLineSlice` переоценивает `total` для файлов >1MB (семантика trailing-newline неоднозначна, нужно решение).
+  - `B-13` глухие `catch {}` без лога (правило #14): `syntax-validator.ts`, `auto-fixer.ts`, `bash.ts`, `search-history.ts`, `scope-request.ts`.
+  - `D-3` локаль применяется после `createProgram()` → `--help`/typo-подсказки на английском при `locale: ru`.
+  - `D-7` `rotateOldSessions()` никогда не вызывается (мёртвая фича архивации >30 дней).
+  - `D-8` non-TTY `LineEditor.onData` эмитит хвост чанка как строку (в проде REPL использует readline, но баг в классе есть).
+  - `E-15` `killTree` синхронно блокирует event loop (`spawnSync taskkill` + `sleepSync`).
+  - `C-18` остались неиспользуемые публичные методы `StuckDetector` (`classifyError`, `getHints`, `getToolAlternative`, …) — сохранены как API/тесты.
+  - i18n-свод `B-12`/`C-14`/`D-9` (hardcoded English в тулах/execution/CLI) — см. P3 i18n.
 - Дробление (правило ≤300): `repl-commands.ts` 1426, `agent.ts` 1338 (`executeSingleAgentLoop` ~665), `repl.ts` 1327, `line-editor.ts` 1068, `bootstrap.ts` 870, `stuck-detector.ts` 749, `module.ts` 750.
 - Разорвать 2 цикла `browser/` (`driver ↔ session`).
 - Извлечь общий test-harness (сейчас только `tests/helpers/webui-commands.ts`).
