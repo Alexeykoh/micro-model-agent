@@ -117,11 +117,12 @@
       backupAll существует но не вызывается (C2); toConfig() затирает provider.fallback (C3);
       env-значения персистятся навсегда (C4) → Wave 9 (Tasks 30–35)
 
-**Не пройдено (файловый обход продолжается):**
-- [ ] Wave B: tools/ (bash 603, write/edit/read-file, subagent, web-*, browser tool)
-- [ ] Wave C: execution module (module.ts 710, plan-tool 739, stuck-detector 845, auditor, verifier)
-- [ ] Wave D: session/logger/i18n/ui (repl.ts 856, repl-commands 891, renderer, line-editor 893)
-- [ ] Wave E: modules/security + processes + providers + mcp/pipelines/indexer/skills/plugins
+**Файловый обход B/C/D/E выполнен** отдельным аудитом 2026-09-25 (см. P0/P1/P2 и
+`docs/analysis/2026-09-25-waves-bcde-audit.md`):
+- [x] Wave B: tools/
+- [x] Wave C: execution module
+- [x] Wave D: session/logger/i18n/ui
+- [x] Wave E: modules/security + processes + providers + mcp/pipelines/indexer/skills/plugins
 
 Порядок выполнения фиксов: Wave 1 (контекст) → Wave 7 Tasks 15–17 (executor/MoE) → далее по волнам.
 **Волны 1–9 закрыты** (см. аудит 2026-08-29). Релиз после волн: 0.56.0 (MINOR) → фактически выпущены 0.57.0/0.57.1.
@@ -180,7 +181,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 | Здоровье | maintainability 90/100; 41 функция критичной сложности |
 
 ### Этап 0. Базовая линия
-- [ ] Прогнать `bun test` + `tsc --noEmit`, зафиксировать зелёное состояние как точку отсчёта.
+- [x] ~~Прогнать `bun test` + `tsc --noEmit`~~ ✅ зелёное зафиксировано (2537 pass / 0 fail).
 
 ### Этап 1. Мёртвый код (быстрая победа)
 - [ ] Удалить `verify-tools.ts` в корне (не входит ни в одну сборку).
