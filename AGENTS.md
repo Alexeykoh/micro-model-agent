@@ -31,6 +31,17 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 
 Ни одно изменение не считается завершённым, пока эти три аспекта не проверены явно.
 
+## Large files — accepted exceptions (не дробить без явного решения)
+
+Правило ≤300 строк применяется там, где есть чистый шов (так вынесены `core/system-prompt.ts` из
+`bootstrap.ts` и `repl-commands-lsp/skills.ts` из `repl-commands.ts`). Следующие файлы **осознанно
+оставлены крупными** (решение 2026-09-25): их функции плотно связаны с приватным состоянием класса,
+и дробление — риск-рефактор с побайтовой проверкой поведения, а не механический вынос:
+
+- `src/core/agent.ts` — `executeSingleAgentLoop` (~625 строк) держит состояние `Agent`.
+- `src/cli/repl.ts`, `src/ui/line-editor.ts` (DSR-протокол), `src/modules/execution/stuck-detector.ts`,
+  `src/modules/execution/module.ts`.
+
 ## Git & Branching
 
 **Правило (обязательно):** любая задача — фича, фикс, рефакторинг, документация — выполняется в **отдельной ветке**, созданной от актуального `master`. В `master` напрямую не коммитим и не пушим. Имя ветки — `<type>/<краткое-описание>` (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`). Ветка завершается только после ревью и зелёных `bun test` + `tsc --noEmit`; интеграция в `master` — через merge/PR. Дизайн-спека задачи (если есть) коммитится в той же ветке.
