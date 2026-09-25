@@ -26,6 +26,10 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
+    "quality": "bun run typecheck && bun run fallow",
+    "fallow": "fallow dead-code --baseline .fallow-baseline.json --fail-on-issues",
+    "fallow:baseline": "fallow dead-code --save-baseline .fallow-baseline.json",
+    "fallow:security": "fallow security",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "format": "prettier --write \"src/**/*.{ts,js,mjs,json}\" \"tests/**/*.{ts,js,json}\" \"scripts/**/*.ts\" \"*.{ts,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,mjs,json}\" \"tests/**/*.{ts,js,json}\" \"scripts/**/*.ts\" \"*.{ts,json}\""
@@ -44,7 +48,6 @@
     "@types/node": "^26.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "prettier": "^3.9.6",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }

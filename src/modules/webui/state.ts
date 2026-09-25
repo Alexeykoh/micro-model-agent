@@ -13,7 +13,7 @@ import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
 import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";
-import { MAX_BODY_BYTES } from "./util";
+import { MAX_BODY_BYTES } from "./limits";
 
 /**
  * Structural subset of `SessionManager` the web REST surface needs. Keeping it

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium, type Browser } from "playwright-core";
+import { chromium, type Browser } from "playwright";
 import { startServer, stopServer } from "../src/modules/webui/server";
 import { loadAssets } from "../src/modules/webui/assets";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
