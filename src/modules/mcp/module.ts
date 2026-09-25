@@ -210,7 +210,9 @@ export class MCPModule implements AgentModule {
           lines.push(`    - ${toolRef}: ${t.description}`);
         }
       } else {
-        lines.push(`    (not yet connected — use mcp__${serverName}__connect to discover tools)`);
+        lines.push(
+          `    (not yet connected — use ${sanitizeToolName(serverName, "connect")} to discover tools)`,
+        );
       }
     }
 
@@ -229,10 +231,26 @@ export class MCPModule implements AgentModule {
     // servers (so the LLM sees all configured MCP tools even if discovery failed at startup).
     const defs: ToolDefinition[] = [];
 
+    // Sanitization can collapse distinct names to the same id (`a.b`/`a-b`,
+    // `x.y`/`x-y`); the registry throws on a duplicate, which used to crash
+    // bootstrap. Disambiguate with a numeric suffix before registering.
+    const usedNames = new Set<string>();
+    const uniqueName = (base: string): string => {
+      if (!usedNames.has(base)) {
+        usedNames.add(base);
+        return base;
+      }
+      let i = 2;
+      while (usedNames.has(`${base}_${i}`)) i++;
+      const name = `${base}_${i}`;
+      usedNames.add(name);
+      return name;
+    };
+
     // Tools already discovered (connected at startup).
     for (const d of this.discovered) {
       defs.push({
-        name: sanitizeToolName(d.serverName, d.toolName),
+        name: uniqueName(sanitizeToolName(d.serverName, d.toolName)),
         description: `${d.description} [MCP server: ${d.serverName}]`,
         parameters: convertInputSchema(d.inputSchema),
         tags: ["code", "research"],
@@ -266,7 +284,7 @@ export class MCPModule implements AgentModule {
 
       // Register a single "connect" tool so the LLM can trigger discovery.
       defs.push({
-        name: sanitizeToolName(serverName, "connect"),
+        name: uniqueName(sanitizeToolName(serverName, "connect")),
         description: `Connect to MCP server "${serverName}" and discover its tools`,
         parameters: { type: "object", properties: {} },
         tags: ["code", "research"],

@@ -17,8 +17,13 @@ export class MCPClient {
   private process: ChildProcess | null = null;
   private _connected = false;
   private abortController: AbortController | null = null;
-  private pendingResolve: ((value: unknown) => void) | null = null;
-  private pendingReject: ((err: Error) => void) | null = null;
+  /** In-flight SSE calls keyed by JSON-RPC id (a single slot cross-talked
+   *  concurrent calls and matched responses by any id). */
+  private ssePending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
+  private sseSeq = 0;
 
   constructor(config: MCPServerConfig) {
     this.config = config;
@@ -123,15 +128,14 @@ export class MCPClient {
   private handleSSEMessage(data: string): void {
     try {
       const msg = JSON.parse(data);
-      if (this.pendingResolve && msg.id) {
-        this.clearSseTimer();
-        if (msg.error) {
-          this.pendingReject?.(new Error(msg.error.message));
-        } else {
-          this.pendingResolve(msg.result);
+      if (msg.id !== undefined) {
+        const pending = this.ssePending.get(msg.id);
+        if (pending) {
+          this.ssePending.delete(msg.id);
+          clearTimeout(pending.timer);
+          if (msg.error) pending.reject(new Error(msg.error.message));
+          else pending.resolve(msg.result);
         }
-        this.pendingResolve = null;
-        this.pendingReject = null;
       }
     } catch (e) {
       // Heartbeats/comments are not JSON — expected noise, but still logged
@@ -146,12 +150,11 @@ export class MCPClient {
   }
 
   private handleSSEError(err: Error): void {
-    if (this.pendingReject) {
-      this.clearSseTimer();
-      this.pendingReject(err);
-      this.pendingResolve = null;
-      this.pendingReject = null;
+    for (const [, pending] of this.ssePending) {
+      clearTimeout(pending.timer);
+      pending.reject(err);
     }
+    this.ssePending.clear();
   }
 
   private connectStdio(): Promise<void> {
@@ -467,13 +470,11 @@ export class MCPClient {
     return result.result || result;
   }
 
-  /** Timer of the in-flight SSE request — cleared when the reply arrives via the stream. */
-  private sseTimer: ReturnType<typeof setTimeout> | undefined;
-
   private async callToolSSE(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+    const id = ++this.sseSeq;
     const request = {
       jsonrpc: "2.0",
-      id: Date.now(),
+      id,
       method: "tools/call",
       params: {
         name: toolName,
@@ -482,15 +483,16 @@ export class MCPClient {
     };
 
     return new Promise((resolve, reject) => {
-      this.pendingResolve = resolve;
-      this.pendingReject = reject;
-
+      const settle = (fn: () => void) => {
+        const pending = this.ssePending.get(id);
+        if (!pending) return;
+        this.ssePending.delete(id);
+        clearTimeout(pending.timer);
+        fn();
+      };
       const timeout = this.config.timeout || 30000;
-      this.sseTimer = setTimeout(() => {
-        this.pendingResolve = null;
-        this.pendingReject = null;
-        reject(new Error("MCP call timeout"));
-      }, timeout);
+      const timer = setTimeout(() => settle(() => reject(new Error("MCP call timeout"))), timeout);
+      this.ssePending.set(id, { resolve, reject, timer });
 
       fetch(this.config.url!, {
         method: "POST",
@@ -503,33 +505,20 @@ export class MCPClient {
         signal: this.abortController?.signal,
       })
         .then(async (response) => {
-          this.clearSseTimer();
           if (!response.ok) {
             const text = await response.text().catch(() => "");
-            reject(new Error(`MCP POST failed: ${response.status} ${text}`));
+            settle(() => reject(new Error(`MCP POST failed: ${response.status} ${text}`)));
             return;
           }
           const result = await response.json();
-          if (result.error) {
-            reject(new Error(result.error.message));
-          } else {
-            resolve(result.result || result);
-          }
+          settle(() =>
+            result.error ? reject(new Error(result.error.message)) : resolve(result.result || result),
+          );
         })
         .catch((err) => {
-          this.clearSseTimer();
-          if (err.name !== "AbortError") {
-            reject(err);
-          }
+          if (err.name !== "AbortError") settle(() => reject(err));
         });
     });
-  }
-
-  private clearSseTimer(): void {
-    if (this.sseTimer !== undefined) {
-      clearTimeout(this.sseTimer);
-      this.sseTimer = undefined;
-    }
   }
 
   private callToolStdio(toolName: string, args: Record<string, unknown>): Promise<unknown> {
