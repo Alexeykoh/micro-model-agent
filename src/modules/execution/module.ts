@@ -356,10 +356,32 @@ export class ExecutionModule implements AgentModule {
       if (step.status === "done" || step.status === "skipped") continue;
       const tokens = extractFileLikeTokens(stripUrls(step.description));
       if (tokens.length === 0) continue;
-      const allExist = tokens.every((f) => findExistingFile(this.baseDir, f) !== null);
-      if (!allExist) continue;
+      const resolved = tokens.map((f) => findExistingFile(this.baseDir, f));
+
+      if (step.kind === "delete") {
+        // A delete step is satisfied only when every named target is GONE.
+        // (The old existence-only check marked it done with the files still
+        // present — the deliverable gate inverted.)
+        if (resolved.some((r) => r !== null)) continue;
+      } else {
+        // create: every target must exist AND be non-empty. An empty
+        // placeholder is not a deliverable, and the auditor only checks
+        // existence — auto-closing it produced a false "passed".
+        if (resolved.some((r) => r === null)) continue;
+        const empty = resolved.some((r) => {
+          try {
+            return readFileSync(r!, "utf-8").trim().length < 10;
+          } catch {
+            return false; // unreadable — fall back to existence
+          }
+        });
+        if (empty) continue;
+      }
+
       step.status = "done";
-      step.note = `auto-closed by final audit: all named files exist (${tokens.join(", ")})`;
+      step.note = `auto-closed by final audit: ${
+        step.kind === "delete" ? "all named files removed" : "all named files exist with content"
+      } (${tokens.join(", ")})`;
       closed++;
     }
     return closed;
@@ -449,10 +471,21 @@ export class ExecutionModule implements AgentModule {
     const done = plan.steps.filter((s) => s.status === "done").length;
     const total = plan.steps.length;
     if (this.tracker.isComplete()) {
-      return `[${plan.id}] "${plan.title}" ${done}/${total} done — plan complete. You may create a new plan for new work (plan create), or reply with your final answer.`;
+      return t("exec.plan_summary_complete", {
+        id: plan.id,
+        title: plan.title,
+        done: String(done),
+        total: String(total),
+      });
     }
     const current = this.tracker.getCurrentStepIndex() + 1;
-    return `[${plan.id}] "${plan.title}" ${done}/${total} done, current: step ${current} — continue it (plan show / re-plan), do NOT create a new plan`;
+    return t("exec.plan_summary_continue", {
+      id: plan.id,
+      title: plan.title,
+      done: String(done),
+      total: String(total),
+      current: String(current),
+    });
   }
 
   getToolDefinitions(): ToolDefinition[] {

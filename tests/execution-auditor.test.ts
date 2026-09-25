@@ -438,9 +438,10 @@ describe("ok", () => { it("passes", () => { expect(1).toBe(1); }); });\n`,
     expect(result.testRun!.failed).toBe(0);
   });
 
-  it("does not run tests when no step mentions testing", async () => {
-    // A failing test file exists, but the plan never mentions tests —
-    // the audit must not run bun test (and must not fail on it).
+  it("runs existing tests even when no step mentions testing (evidence-based, rule #10)", async () => {
+    // A failing test file exists; the plan prose never says "test". The audit
+    // must run the tests anyway (existence is the signal, not a keyword) and
+    // reject the plan instead of silently approving it.
     mkdirSync(join(tmpDir, "test"), { recursive: true });
     writeFileSync(
       join(tmpDir, "test", "bad.test.ts"),
@@ -453,8 +454,9 @@ describe("bad", () => { it("fails", () => { expect(1).toBe(2); }); });\n`,
     plan.steps[0].status = "done";
 
     const result = await auditor.audit(plan);
-    expect(result.passed).toBe(true);
-    expect(result.testRun).toBeNull();
+    expect(result.testRun).not.toBeNull();
+    expect(result.testRun!.failed).toBeGreaterThan(0);
+    expect(result.passed).toBe(false);
   });
 
   it("counts an unrecognized non-zero test run (failed: -1) as failing", async () => {

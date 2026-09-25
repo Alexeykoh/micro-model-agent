@@ -37,6 +37,15 @@ Some skill content here`;
     const skills = loader.loadFromDir(tmpDir);
     expect(skills).toHaveLength(0);
   });
+
+  it("loads a CRLF (Windows checkout) skill instead of silently dropping it", () => {
+    const skillContent =
+      "---\r\nname: crlf-skill\r\ndescription: Windows line endings\r\n---\r\nBody\r\n";
+    writeFileSync(join(tmpDir, "crlf.md"), skillContent);
+    const skills = loader.loadFromDir(tmpDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe("crlf-skill");
+  });
 });
 
 describe("SkillsModule.getSystemPromptBlock", () => {

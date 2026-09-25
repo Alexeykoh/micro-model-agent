@@ -17,6 +17,8 @@ import { errMsg } from "../utils";
  * covers typical component files in one call while still capping output.
  */
 const DEFAULT_LIMIT = 300;
+/** Hard cap for an explicit `limit` (this tool is exempt from budget truncation). */
+const MAX_READ_LIMIT = 2000;
 
 /**
  * Files larger than this are read through a bounded streaming path instead of
@@ -70,7 +72,9 @@ function readLineSlice(
         }
         const tail = Buffer.concat([...rest, Buffer.from(carry, "utf-8")]);
         for (let i = 0; i < tail.length; i++) if (tail[i] === 0x0a) total++;
-        total++; // last line has no trailing newline
+        // Add the final (newline-less) line only when the file does not end in
+        // a newline — otherwise the count included a phantom empty line.
+        if (tail.length > 0 && tail[tail.length - 1] !== 0x0a) total++;
         return { selected: collected.join("\n"), total };
       }
     }
@@ -137,8 +141,17 @@ export const readFileTool: ToolDefinition = {
           : t("file.notfound", { path });
       return { success: false, output };
     }
-    const offset = typeof args.offset === "number" ? args.offset : 1;
-    const limit = typeof args.limit === "number" ? args.limit : DEFAULT_LIMIT;
+    // Clamp both: `offset: 0` made slice(-1, end) return the LAST line, and an
+    // unbounded `limit` (this tool skips budget truncation) could pull a whole
+    // large file into context.
+    const offset = Math.max(
+      1,
+      typeof args.offset === "number" ? Math.floor(args.offset) : 1,
+    );
+    const limit = Math.min(
+      MAX_READ_LIMIT,
+      Math.max(1, typeof args.limit === "number" ? Math.floor(args.limit) : DEFAULT_LIMIT),
+    );
 
     let lines: string[];
     let total: number;
@@ -151,6 +164,9 @@ export const readFileTool: ToolDefinition = {
       } else {
         const content = readFileSync(resolved, "utf-8");
         lines = content.split("\n");
+        // A file ending in a newline yields a phantom empty last element;
+        // drop it so the advertised line count matches the streaming path.
+        if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
         total = lines.length;
         const end = Math.min(offset - 1 + limit, total);
         selected = lines.slice(offset - 1, end).join("\n");

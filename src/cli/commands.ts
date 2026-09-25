@@ -466,6 +466,9 @@ function buildProviderCommands(program: Command): void {
       if (config.provider.entries && config.provider.entries.length > 0) {
         try {
           await agent.setProvider(name);
+          // Persist: `agent.setProvider` only mutates the in-memory config, so
+          // the switch was silently lost on exit for multi-entry configs.
+          saveConfig(config, configPath, dirname(configPath));
           getDefaultChannel().writeLine(t("cli.provider_set", { name }));
         } catch (e: any) {
           getDefaultChannel().writeLine(pc.red(e.message));
@@ -566,7 +569,7 @@ function buildSessionCommands(program: Command): void {
       for (const s of sessions) {
         const marker = s.id === active ? "*" : " ";
         getDefaultChannel().writeLine(
-          ` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} msgs  ${s.updatedAt.slice(0, 10)}`,
+          ` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} ${t("repl.msgs")}  ${s.updatedAt.slice(0, 10)}`,
         );
       }
     });

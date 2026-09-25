@@ -119,12 +119,43 @@ describe("StuckDetector", () => {
     expect(d.shouldEscalate()).toBe(true);
   });
 
-  it("should reset escalation on success", () => {
+  it("keeps escalation across a trivial tool success; reset() clears it", () => {
+    // A single successful read used to wipe escalationCount (anti-gaming
+    // defeat: flailing sessions rarely reached shouldEscalate()). It now
+    // persists until an explicit reset.
     const d = new StuckDetector(8, 3);
     d.recordEscalation();
     d.recordEscalation();
     d.recordToolSuccess();
+    expect(d.getEscalationCount()).toBe(2);
+    d.reset();
     expect(d.getEscalationCount()).toBe(0);
+  });
+
+  it("surfaces bash-flailing in getStuckReason / getWarningKey", () => {
+    const d = new StuckDetector(8, 3);
+    for (let i = 0; i < 4; i++) d.recordBashAttempt(false);
+    expect(d.hasBashFlailing()).toBe(true);
+    expect(d.getWarningKey()).toBe("bash-flailing");
+    expect(d.getStuckReason().length).toBeGreaterThan(0);
+  });
+
+  it("surfaces consecutive cross-tool failures in getStuckReason", () => {
+    const d = new StuckDetector(8, 3);
+    d.recordToolError("bash", "a");
+    d.recordToolError("read_file", "b");
+    d.recordToolError("grep", "c");
+    expect(d.getStuckReason().toLowerCase()).toContain("consecutive");
+  });
+
+  it("resetStepProgress preserves the read-only streak (pre-plan loop detection)", () => {
+    const d = new StuckDetector(8, 3);
+    for (let i = 0; i < 10; i++) d.recordToolCall("read_file", { path: `src/f${i}.ts` });
+    expect(d.hasReadOnlyLoop()).toBe(true);
+    d.resetStepProgress();
+    expect(d.hasReadOnlyLoop()).toBe(true);
+    d.reset();
+    expect(d.hasReadOnlyLoop()).toBe(false);
   });
 
   it("should track file rewrites", () => {

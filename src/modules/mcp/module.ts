@@ -85,50 +85,63 @@ export class MCPModule implements AgentModule {
       this.serverConfigs.set(serverName, registry.get(serverName)!);
     }
 
-    // Attempt fast discovery in background (best-effort, timeout-bounded).
-    // If it fails, tools are still registered — they'll connect on first call.
-    this.discoverAllTools();
+    // Discover tools BEFORE the caller snapshots tool definitions. This used
+    // to be fire-and-forget, so `collectToolDefinitions()` at bootstrap ran
+    // before any server finished connecting and the real MCP tools were never
+    // registered. Discovery is bounded (per-server timeout, servers in
+    // parallel) and best-effort: failures leave the lazy "connect" placeholder.
+    await this.discoverAllTools();
   }
 
   /**
-   * Try to connect and discover tools for all registered servers.
-   * Runs in background, never blocks the caller. Failures are silent —
-   * tools still get registered and will retry connection on first call.
+   * Try to connect and discover tools for all registered servers, in parallel,
+   * each bounded by DISCOVERY_TIMEOUT_MS. A timed-out attempt is cancelled: its
+   * late completion must not register a server already marked failed.
    */
   private async discoverAllTools(): Promise<void> {
-    for (const [serverName, serverConfig] of this.serverConfigs) {
-      if (this.failedServers.has(serverName)) continue;
+    await Promise.all(
+      [...this.serverConfigs].map(async ([serverName, serverConfig]) => {
+        if (this.failedServers.has(serverName)) return;
 
-      const client = new MCPClient(serverConfig);
+        const client = new MCPClient(serverConfig);
+        let timedOut = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
 
-      try {
-        // Race discovery against timeout — never let a dead server block startup.
-        await Promise.race([
-          (async () => {
-            await client.connect();
-            const tools = await client.listTools();
-            this.connections.set(serverName, client);
-            for (const tool of tools) {
-              this.discovered.push({
-                serverName,
-                toolName: tool.name,
-                description: tool.description || `Tool on MCP server "${serverName}"`,
-                inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
-              });
-            }
-          })(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("discovery timeout")), DISCOVERY_TIMEOUT_MS),
-          ),
-        ]);
-      } catch (e: any) {
-        this.failedServers.add(serverName);
-        this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
-        await client.disconnect().catch((err: unknown) => {
-          logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
-        });
-      }
-    }
+        try {
+          await Promise.race([
+            (async () => {
+              await client.connect();
+              const tools = await client.listTools();
+              if (timedOut) return; // lost the race — do not mutate state
+              this.connections.set(serverName, client);
+              for (const tool of tools) {
+                this.discovered.push({
+                  serverName,
+                  toolName: tool.name,
+                  description: tool.description || `Tool on MCP server "${serverName}"`,
+                  inputSchema: (tool.inputSchema as Record<string, unknown>) || {},
+                });
+              }
+            })(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("discovery timeout")),
+                DISCOVERY_TIMEOUT_MS,
+              );
+            }),
+          ]);
+        } catch (e: any) {
+          timedOut = true;
+          this.failedServers.add(serverName);
+          this.initError = `MCP server "${serverName}" init failed: ${e.message}`;
+          await client.disconnect().catch((err: unknown) => {
+            logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
+          });
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }),
+    );
   }
 
   /**
@@ -197,7 +210,9 @@ export class MCPModule implements AgentModule {
           lines.push(`    - ${toolRef}: ${t.description}`);
         }
       } else {
-        lines.push(`    (not yet connected — use mcp__${serverName}__connect to discover tools)`);
+        lines.push(
+          `    (not yet connected — use ${sanitizeToolName(serverName, "connect")} to discover tools)`,
+        );
       }
     }
 
@@ -216,10 +231,26 @@ export class MCPModule implements AgentModule {
     // servers (so the LLM sees all configured MCP tools even if discovery failed at startup).
     const defs: ToolDefinition[] = [];
 
+    // Sanitization can collapse distinct names to the same id (`a.b`/`a-b`,
+    // `x.y`/`x-y`); the registry throws on a duplicate, which used to crash
+    // bootstrap. Disambiguate with a numeric suffix before registering.
+    const usedNames = new Set<string>();
+    const uniqueName = (base: string): string => {
+      if (!usedNames.has(base)) {
+        usedNames.add(base);
+        return base;
+      }
+      let i = 2;
+      while (usedNames.has(`${base}_${i}`)) i++;
+      const name = `${base}_${i}`;
+      usedNames.add(name);
+      return name;
+    };
+
     // Tools already discovered (connected at startup).
     for (const d of this.discovered) {
       defs.push({
-        name: sanitizeToolName(d.serverName, d.toolName),
+        name: uniqueName(sanitizeToolName(d.serverName, d.toolName)),
         description: `${d.description} [MCP server: ${d.serverName}]`,
         parameters: convertInputSchema(d.inputSchema),
         tags: ["code", "research"],
@@ -253,7 +284,7 @@ export class MCPModule implements AgentModule {
 
       // Register a single "connect" tool so the LLM can trigger discovery.
       defs.push({
-        name: sanitizeToolName(serverName, "connect"),
+        name: uniqueName(sanitizeToolName(serverName, "connect")),
         description: `Connect to MCP server "${serverName}" and discover its tools`,
         parameters: { type: "object", properties: {} },
         tags: ["code", "research"],

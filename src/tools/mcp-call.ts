@@ -58,24 +58,27 @@ export const mcpCallTool: ToolDefinition = {
       const available = registry.list();
       return {
         success: false,
-        output: `MCP server "${serverName}" not found. Available: ${available.join(", ") || "(none)"}`,
+        output: t("tool.mcp_server_not_found", {
+          server: serverName,
+          available: available.join(", ") || "(none)",
+        }),
       };
     }
 
+    const client = new MCPClient(serverConfig);
     try {
-      const client = new MCPClient(serverConfig);
       await client.connect();
-
       const result = await client.callTool(toolName, toolArgs);
-
-      await client.disconnect();
-
       return {
         success: true,
         output: `MCP call result:\n${JSON.stringify(result, null, 2)}`,
       };
     } catch (e: any) {
-      return { success: false, output: `MCP call failed: ${e.message}` };
+      return { success: false, output: t("tool.mcp_call_failed", { error: e.message }) };
+    } finally {
+      // Always close the client — an error/timeout during callTool used to
+      // skip disconnect and orphan the stdio child process for the session.
+      await client.disconnect().catch(() => {});
     }
   },
 };

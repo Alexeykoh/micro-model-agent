@@ -1,6 +1,11 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import {
+  BlockedRedirectError,
+  fetchValidated,
+  isUrlAllowed,
+  sanitizeUrl,
+} from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { MAX_PREVIEW_LINES } from "./preview";
@@ -42,7 +47,7 @@ export const webBrowseTool: ToolDefinition = {
     }
 
     try {
-      const response = await fetch(url, {
+      const { response } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
       });
       const text = await response.text();
@@ -88,6 +93,10 @@ export const webBrowseTool: ToolDefinition = {
         }),
       };
     } catch (err: any) {
+      if (err instanceof BlockedRedirectError) {
+        logSecurityBlock(ctx.sessionId, "network_request", err.reason, sanitizeUrl(url));
+        return { success: false, output: `[SECURITY BLOCKED] redirect: ${err.reason}` };
+      }
       logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
       return {
         success: false,

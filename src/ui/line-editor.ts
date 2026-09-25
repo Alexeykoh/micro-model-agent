@@ -66,6 +66,8 @@ export class LineEditor implements LineInput {
   private lines: string[] = [""];
   private row = 0;
   private col = 0;
+  /** Carry-over for non-TTY chunked input (a partial line split across reads). */
+  private pendingLine = "";
   private historyIndex = -1;
   private stash: { lines: string[]; row: number; col: number } | null = null;
   private isDone = false;
@@ -297,18 +299,15 @@ export class LineEditor implements LineInput {
     let text = buf.toString("utf-8");
     text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const parts = text.split("\n");
-    for (let i = 0; i < parts.length; i++) {
-      if (i < parts.length - 1) {
-        this.emitLine(parts[i]);
-        this.lines = [""];
-        this.row = 0;
-        this.col = 0;
-      } else if (parts[i]) {
-        this.emitLine(parts[i]);
-        this.lines = [""];
-        this.row = 0;
-        this.col = 0;
-      }
+    // Carry the incomplete tail to the next chunk: emitting it immediately
+    // split `"hello wor" + "ld\n"` into two wrong lines.
+    this.pendingLine += parts[0];
+    for (let i = 1; i < parts.length; i++) {
+      this.emitLine(this.pendingLine);
+      this.lines = [""];
+      this.row = 0;
+      this.col = 0;
+      this.pendingLine = parts[i];
     }
   }
 
@@ -969,11 +968,12 @@ export class LineEditor implements LineInput {
       return acc + "…";
     });
     this.output.write("\r\n" + rows.join("\r\n") + "\r\n");
-    // The printed list moved the cursor (rows.length + 1) visual rows down
-    // from its frame position. Account for those rows so the next render
-    // redraws the frame in place — otherwise its relative up-move starts
-    // above the frame and paints garbage over the just-printed list.
-    this.prevCursorRow += rows.length + 1;
+    // The printed list moved the cursor below the old frame. Drop the absolute
+    // frame anchor so the next render positions RELATIVE to the current cursor
+    // (below the list). Keeping the DSR anchor re-homed the frame to its old
+    // absolute row and its `\x1b[J` erased the list — on Linux/macOS the
+    // candidates flashed and disappeared.
+    this.invalidateAnchor();
 
     // Start a cycling session with the first candidate in the buffer:
     // ↑/↓/Tab cycle through the printed list in place.
@@ -1153,6 +1153,11 @@ export class LineEditor implements LineInput {
   }
 
   private emitClose(): void {
+    // Flush a final newline-less line from chunked non-TTY input.
+    if (this.pendingLine) {
+      this.emitLine(this.pendingLine);
+      this.pendingLine = "";
+    }
     this.listeners.close?.();
   }
 }

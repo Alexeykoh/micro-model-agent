@@ -105,8 +105,9 @@ export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
   priority = 10;
   isBuiltin = true;
-  private _checkPromise: Promise<string | null> | null = null;
-  private _checkTimestamp = 0;
+  // Debounced project typecheck, keyed by project root. A single slot leaked
+  // one project's tsc errors onto writes in another project (monorepo).
+  private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
 
   async onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
     if (call.name !== "write_file" && call.name !== "edit_file") {
@@ -162,7 +163,12 @@ export class LintOnWritePlugin implements AgentPlugin {
         return cached.error;
       }
       try {
-        await runAsync(`bun build --no-bundle --target=bun "${filePath}"`, baseDir, 10000, signal);
+        await runAsync(
+          { file: "bun", args: ["build", "--no-bundle", "--target=bun", filePath] },
+          baseDir,
+          10000,
+          signal,
+        );
         // Aborted check (interrupt) never validated the file — don't cache it.
         if (signal?.aborted) return null;
         syntaxCache.set(filePath, { hash, error: null });
@@ -185,7 +191,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
     if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
       try {
-        await runAsync(`node --check "${filePath}"`, baseDir, 5000, signal);
+        await runAsync({ file: "node", args: ["--check", filePath] }, baseDir, 5000, signal);
         return null;
       } catch (err: any) {
         const stderr = err.stderr?.toString() || "";
@@ -271,17 +277,18 @@ export class LintOnWritePlugin implements AgentPlugin {
     }
 
     const now = Date.now();
-    if (this._checkPromise && now - this._checkTimestamp < TYPE_CHECK_DEBOUNCE_MS) {
-      const error = await this._checkPromise;
+    const prev = this._checks.get(projectRoot);
+    if (prev && now - prev.at < TYPE_CHECK_DEBOUNCE_MS) {
+      const error = await prev.promise;
       if (error) {
         result.output += `\n\n[Project typecheck failed]: ${error}`;
       }
       return;
     }
 
-    this._checkTimestamp = now;
-    this._checkPromise = this.runTscCheck(tsc, projectRoot, signal);
-    const error = await this._checkPromise;
+    const promise = this.runTscCheck(tsc, projectRoot, signal);
+    this._checks.set(projectRoot, { at: now, promise });
+    const error = await promise;
     if (error) {
       // Try to auto-fix fixable errors
       const { stdout, stderr } = await runAsync(
@@ -354,20 +361,34 @@ export class LintOnWritePlugin implements AgentPlugin {
 /**
  * Run a command asynchronously (non-blocking event loop) and resolve when it
  * exits. Rejects with captured stderr/stdout on non-zero exit or timeout.
+ *
+ * A plain string runs through a shell (project-controlled scripts). An
+ * `{file,args}` spec spawns WITHOUT a shell — required for anything built from
+ * a model-supplied path (`bun build … <file>`, `node --check <file>`), since a
+ * filename may contain `$()`, backticks or `%VAR%` and shell:true would execute
+ * it (command injection).
  */
 function runAsync(
-  command: string,
+  command: string | { file: string; args: string[] },
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child =
+      typeof command === "string"
+        ? spawn(command, {
+            cwd,
+            shell: true,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          })
+        : spawn(command.file, command.args, {
+            cwd,
+            shell: false,
+            windowsHide: true,
+            stdio: ["ignore", "pipe", "pipe"],
+          });
     const utf8Chunks: Buffer[] = [];
     const oemChunks: Buffer[] = [];
     child.stdout?.on("data", (d: Buffer) => {

@@ -9,7 +9,6 @@ import {
   SKIP_DIRS,
   findTestFile,
   findTypecheckRoot,
-  hasTestStep,
   runTests,
   runTypecheck,
 } from "./audit-runners";
@@ -135,12 +134,16 @@ export class Auditor {
       }
     }
 
-    // Real test run: when the plan includes a verification step, do not
-    // trust the model's word (or exit codes) — actually execute the tests
-    // and check the runner summary. This catches the "all 7 passing ✅"
-    // final answers that hide 3 failing tests.
+    // Real test run: do not trust the model's word (or exit codes) — actually
+    // execute the tests and check the runner summary. This catches the "all 7
+    // passing ✅" final answers that hide 3 failing tests.
+    //
+    // Decision is EVIDENCE-based (a test file exists on disk), not a keyword
+    // classification of the step prose: rule #10 forbids deciding requirements
+    // from wording like "test"/"тест" (a plan with tests but no such word used
+    // to skip the audit; an unrelated "testing" mention used to force a 90s run).
     let testRun: TestRunCheck | null = null;
-    if (hasTestStep(plan) && findTestFile(this.baseDir)) {
+    if (findTestFile(this.baseDir)) {
       try {
         testRun = await runTests(this.baseDir);
       } catch {

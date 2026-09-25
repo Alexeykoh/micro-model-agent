@@ -283,6 +283,60 @@ describe("final audit still runs for a completed plan", () => {
     }
   });
 
+  it("does not auto-close a create step whose file exists but is empty", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Create src/a.ts with content"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "a.ts"), "   \n");
+
+    const audit = await execModule.runFinalAudit();
+    expect(audit).not.toBeNull();
+    expect(audit!.done).toBe(0);
+    expect(audit!.pendingSteps).toHaveLength(1);
+  });
+
+  it("does not auto-close a delete step while its target still exists", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Delete src/a.ts"],
+      kinds: ["delete"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+
+    const audit = await execModule.runFinalAudit();
+    expect(audit!.done).toBe(0);
+    expect(audit!.pendingSteps).toHaveLength(1);
+  });
+
+  it("auto-closes a delete step once its target is gone", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, {
+      action: "create",
+      title: "T",
+      steps: ["Delete src/a.ts"],
+      kinds: ["delete"],
+    });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    const target = join(tmpDir, "src", "a.ts");
+    writeFileSync(target, "export const a = 1;\n");
+    rmSync(target);
+
+    await execModule.runFinalAudit();
+    const steps = execModule.getTracker()!.getPlan().steps;
+    expect(steps[0].status).toBe("done");
+    expect(steps[0].note).toContain("removed");
+  });
+
   it("keeps pending steps with no evidence (file missing or no file token)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
@@ -606,5 +660,46 @@ describe("resolveTestCommand picks the project's runner", () => {
   it("detects go projects", () => {
     writeFileSync(join(tmpDir, "go.mod"), "module test");
     expect(resolveTestCommand(tmpDir)).toBe("go test ./...");
+  });
+});
+
+describe("plan update status validation", () => {
+  let tmpDir: string;
+  let execModule: ExecutionModule;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-status-"));
+    execModule = new ExecutionModule(tmpDir, 8);
+  });
+
+  afterEach(() => {
+    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("rejects an unknown status and leaves the step untouched", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "completed" });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("Invalid status");
+    // Bogus value must not be persisted as the step status.
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("pending");
+  });
+
+  it("rejects re-opening a done step with status=pending", async () => {
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts", "Create src/b.ts"] });
+    mkdirSync(join(tmpDir, "src"), { recursive: true });
+    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
+
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "pending" });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("Invalid status");
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
   });
 });

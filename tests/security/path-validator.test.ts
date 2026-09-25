@@ -1,7 +1,7 @@
 import { isPathInScope, isPathWritable } from "../../src/modules/security/path-validator";
 import { describe, it, expect } from "vitest";
 import { resolve } from "path";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -155,6 +155,35 @@ describe("cross-platform path-validator edge cases", () => {
       expect(isPathInScope(tmpBase, "src/code.ts", undefined, cfg2).allowed).toBe(true);
     } finally {
       rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("path-validator symlink containment", () => {
+  it("blocks read AND write through a symlinked directory that escapes baseDir", () => {
+    const base = mkdtempSync(join(tmpdir(), "mma-pv-base-"));
+    const outside = mkdtempSync(join(tmpdir(), "mma-pv-out-"));
+    try {
+      const link = join(base, "link");
+      try {
+        symlinkSync(outside, link, process.platform === "win32" ? "junction" : "dir");
+      } catch {
+        return; // symlink privileges unavailable in this environment — skip
+      }
+      writeFileSync(join(outside, "secret.txt"), "top secret");
+
+      // Existing file reached through the symlink.
+      expect(isPathWritable(base, "link/secret.txt", undefined, undefined).allowed).toBe(false);
+      expect(isPathInScope(base, "link/secret.txt", undefined, undefined).allowed).toBe(false);
+
+      // Not-yet-created file under the symlinked dir must also be blocked.
+      expect(isPathWritable(base, "link/new.txt", undefined, undefined).allowed).toBe(false);
+
+      // A direct child of baseDir is unaffected.
+      expect(isPathWritable(base, "ok.txt", undefined, undefined).allowed).toBe(true);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

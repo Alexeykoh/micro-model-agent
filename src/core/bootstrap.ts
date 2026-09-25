@@ -528,6 +528,16 @@ export async function bootstrap(
   const sessionDir = join(dir, "sessions");
   const sessionStore = new SessionStore(sessionDir, config.security?.sessionEncryption);
   sessionStore.init();
+  // Archive >30-day sessions (gzip history + mark rotated). This was dead code
+  // — never invoked, so old sessions were never compressed. Deferred so the
+  // (synchronous) compression never delays startup; failures are non-fatal.
+  setTimeout(() => {
+    try {
+      sessionStore.rotateOldSessions();
+    } catch (err) {
+      logger.warn(`session rotation failed: ${String(err)}`);
+    }
+  }, 0);
   const sessionManager = new SessionManager(sessionStore, {
     model: config.model,
     contextWindow: config.contextWindow,

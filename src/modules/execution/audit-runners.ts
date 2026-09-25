@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import type { Dirent } from "fs";
 import { dirname, join, resolve } from "path";
-import type { Plan } from "./planner";
 import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
 import { resolveTscCommand } from "../lsp/project-root";
@@ -21,8 +20,6 @@ export const SKIP_DIRS = new Set([
 
 const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
 const PY_TEST_RE = /^test_.*\.py$|^.*_test\.py$/i;
-const TEST_STEP_RE =
-  /\b(test(ing|s)?|тест(ы|ирование|ировать)?|провер\w*\s+тест|запустить\s+тест)\b|bun test|npm test|vitest|pytest|go test|jest|mocha/i;
 
 /**
  * Resolve the project's test command from its manifest, so the final audit
@@ -104,11 +101,6 @@ export function findTestFile(dir: string, depth = 0): string | null {
     }
   }
   return null;
-}
-
-/** The plan's step descriptions mention running/checking tests. */
-export function hasTestStep(plan: Plan): boolean {
-  return plan.steps.some((s) => TEST_STEP_RE.test(s.description));
 }
 
 /** Extract failing test names from a runner's output (bun/vitest style). */

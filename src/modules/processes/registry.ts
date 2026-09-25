@@ -19,6 +19,9 @@ export interface ManagedProcess {
 }
 
 const MAX_LOG_LINES = 2000;
+/** Cap a single not-yet-terminated line so a newline-less dump cannot OOM. */
+const MAX_PARTIAL_CHARS = 64 * 1024;
+const MAX_PARTIAL_BYTES = 64 * 1024;
 const MAX_KEPT_PROCESSES = 20;
 
 let seq = 0;
@@ -151,6 +154,11 @@ class ProcessRegistry {
         for (const line of lines) {
           pushLine(line);
         }
+        // Flush a very long partial line instead of buffering it unboundedly.
+        if (buf.length > MAX_PARTIAL_CHARS) {
+          pushLine(buf);
+          buf = "";
+        }
         return;
       }
       // Windows: buffer raw bytes and decode per line. Modern tools (Bun, Node,
@@ -163,6 +171,11 @@ class ProcessRegistry {
         const raw = byteBuf.subarray(0, nl);
         byteBuf = byteBuf.subarray(nl + 1);
         pushLine(decodeLineToUtf8(raw).replace(/\r$/, ""));
+      }
+      // Flush a very long partial line instead of buffering it unboundedly.
+      if (byteBuf.length > MAX_PARTIAL_BYTES) {
+        pushLine(decodeLineToUtf8(byteBuf));
+        byteBuf = Buffer.alloc(0);
       }
     };
     const flush = () => {

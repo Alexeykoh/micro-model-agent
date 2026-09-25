@@ -41,7 +41,7 @@ function buildErrorDetail(stuckDetector: StuckDetector, baseError: string, lastE
   }
   if (lastError) {
     errorDetail +=
-      "\n\nIf relevant skills are available, consider loading one with load_skill for expert guidance.";
+      `\n\n${t("exec.skills_hint")}`;
   }
   return errorDetail;
 }
@@ -153,7 +153,11 @@ async function executeSubtask(
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    stuckDetector.recordIteration(attempt);
+    // Stable id across attempts: passing `attempt` made recordIteration reset
+    // the detector's state on every retry (new stepId → resetStepState), so
+    // tool errors never accumulated and the exhausted-retries diagnostic was
+    // always empty.
+    stuckDetector.recordIteration(1);
     try {
       const allowedFiles = subtask.allowed_files || [];
       const readOnlyFiles = subtask.read_only_files || [];
@@ -375,6 +379,14 @@ export class MoEExecutor {
 
     const subtasks =
       skipIds && skipIds.size > 0 ? plan.subtasks.filter((s) => !skipIds.has(s.id)) : plan.subtasks;
+
+    // Selective re-plan where every subtask was already successful: nothing to
+    // execute. This used to fall through to topologicalSort([]) and be reported
+    // as a bogus "possible cycle" failure, burning the remaining re-plan cycles.
+    if (subtasks.length === 0) {
+      return { success: true, results, errors: [], warnings };
+    }
+
     const waves = topologicalSort(subtasks);
 
     if (waves.length === 0) {

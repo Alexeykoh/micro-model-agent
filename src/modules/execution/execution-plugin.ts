@@ -211,7 +211,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.state.mutationsWithoutPlan = 0;
           deps.state.planNudgeSent = false;
         } else {
-          deps.stuckDetector.reset();
+          // Pre-plan: keep the loop history (recent tool calls, read-only
+          // streak) so repeated/read-only loops are detected even without a
+          // plan. `reset()` wiped it every iteration, disabling that detection.
+          deps.stuckDetector.resetStepProgress();
           resetStepFlags(deps.state, -1);
 
           // Evidence-based plan nudge (rule #10 — no bare iteration counter,
@@ -264,7 +267,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       if (
         deps.stuckDetector.isStuck() ||
         deps.stuckDetector.hasRepetitiveToolCalls() ||
-        deps.stuckDetector.hasReadOnlyLoop()
+        deps.stuckDetector.hasReadOnlyLoop() ||
+        deps.stuckDetector.hasBashFlailing() ||
+        deps.stuckDetector.hasConsecutiveFailures()
       ) {
         const currentIter = typeof ctx.iteration === "number" ? ctx.iteration : 0;
         if (currentIter - deps.state.lastRecoveryIteration >= STUCK_RECOVERY_COOLDOWN) {
@@ -432,7 +437,22 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         if (broken.length > 0) {
           for (const b of broken) deps.state.typecheckFailures.set(b.file, b.error);
         } else if (result.success) {
-          deps.state.typecheckFailures.clear();
+          // Clear only entries for the file just written/edited (and the
+          // project-wide no-anchor entry this clean edit likely resolved).
+          // A blanket `.clear()` let an unrelated successful edit erase a
+          // recorded failure for another file, bypassing the done-gate.
+          const edited = normalizeBrokenPath(String(call.arguments?.path ?? ""));
+          for (const key of [...deps.state.typecheckFailures.keys()]) {
+            if (
+              key === "" ||
+              !edited ||
+              key === edited ||
+              key.endsWith(edited) ||
+              edited.endsWith(key)
+            ) {
+              deps.state.typecheckFailures.delete(key);
+            }
+          }
         }
       }
       if (!result.success) {
@@ -471,7 +491,11 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.stuckDetector.recordToolError(call.name, result.output);
         }
       } else {
-        deps.stuckDetector.recordToolSuccess();
+        // A "successful" write/edit can still carry a type/syntax error (the
+        // lint-on-write hook appends it while leaving success:true). Feeding
+        // recordToolSuccess() here cancelled the recordToolError above on the
+        // very same call, so the rewrite-loop signal never accumulated.
+        if (!hasTypeError) deps.stuckDetector.recordToolSuccess();
         if (call.name === "bash") {
           deps.stuckDetector.recordBashAttempt(true);
         }
@@ -485,12 +509,20 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           if (testRun && testRun.failed > 0) {
             deps.pendingMessages.push({
               role: "user",
-              content: `<system-summary>${testRun.framework} reported ${testRun.failed} FAILING test(s) (${testRun.passed} passing). Do NOT mark the current step as done — fix the failing tests (read the failure output, correct the code) and re-run them until all pass.</system-summary>`,
+              content: `<system-summary>${t("exec.test_fail_summary", {
+                framework: testRun.framework,
+                failed: String(testRun.failed),
+                passed: String(testRun.passed),
+              })}</system-summary>`,
             });
           } else if (testRun && testRun.failed === 0 && testRun.passed > 0) {
             deps.pendingMessages.push({
               role: "user",
-              content: `<system-summary>${testRun.framework}: all ${testRun.passed} test(s) passed for "${cmd}". You may mark the current step as done via plan update step=N status=done.</system-summary>`,
+              content: `<system-summary>${t("exec.test_pass_summary", {
+                framework: testRun.framework,
+                passed: String(testRun.passed),
+                cmd,
+              })}</system-summary>`,
             });
           }
         }

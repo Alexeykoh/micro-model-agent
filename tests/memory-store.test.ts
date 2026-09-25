@@ -55,4 +55,9 @@ describe("MemoryStore", () => {
     expect(content).toContain("Directory does not exist");
     expect(content).toContain("Run create_dir before write_file");
   });
+
+  it("rejects a path-traversal category instead of reading outside the memory dir", () => {
+    expect(() => store.read("../../etc/passwd")).toThrow(/unknown memory category/);
+    expect(() => store.append("../../evil", "x")).toThrow(/unknown memory category/);
+  });
 });

@@ -1,45 +1,41 @@
-import { spawnSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import { platform } from "os";
 
-/** Synchronous pause without blocking the event loop (via Atomics.wait). */
-function sleepSync(ms: number): void {
-  try {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  } catch {
-    /* ignore */
-  }
-}
-
-function taskkillPid(pid: number): void {
-  try {
-    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      stdio: "ignore",
-      timeout: 5000,
-    });
-  } catch {
-    /* already dead */
-  }
+/** Fire a `taskkill /T /F` and resolve when it exits (never rejects). */
+function taskkillPid(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      child.on("close", () => resolve());
+      child.on("error", () => resolve());
+    } catch {
+      /* already dead / taskkill missing */
+    }
+  });
 }
 
 /**
- * Kill a spawned process tree — cross-platform.
+ * Kill a spawned process tree — cross-platform, non-blocking.
  *
- * Windows: double `taskkill /T /F` with a 150ms settle gap. The second pass
- * catches late-attaching children that were still being created during the
- * first tree walk (e.g. `cmd.exe → node → tsserver` chains where node is
- * still starting up when cmd is killed).
+ * Windows: two `taskkill /T /F` passes 150ms apart (the second catches children
+ * that were still being created during the first tree walk, e.g.
+ * `cmd → node → tsserver`). Both are ASYNC: the previous `spawnSync` +
+ * `Atomics.wait` stalled the event loop (UI/streaming froze) for up to ~10s per
+ * process on shutdown.
  *
- * POSIX: process-group kill (`-pid`). Falls back to `SIGKILL` on the direct
+ * POSIX: process-group kill (`-pid`), falling back to `SIGKILL` on the direct
  * child when the group kill fails (e.g. non-detached process).
  */
 export function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (!pid) return;
   if (platform() === "win32") {
-    taskkillPid(pid);
-    sleepSync(150);
-    taskkillPid(pid);
+    void taskkillPid(pid).then(() => {
+      setTimeout(() => void taskkillPid(pid), 150);
+    });
     return;
   }
   try {

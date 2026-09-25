@@ -159,6 +159,14 @@ export interface ReadOverlapResult {
   error?: string;
 }
 
+/** Two path specs overlap when equal or one is a directory ancestor of the other. */
+function pathsOverlap(a: string, b: string): boolean {
+  const na = a.replace(/\\/g, "/").replace(/\/+$/, "");
+  const nb = b.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (na === nb) return true;
+  return na.startsWith(nb + "/") || nb.startsWith(na + "/");
+}
+
 export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {
   const results: ReadOverlapResult[] = [];
 
@@ -174,12 +182,11 @@ export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {
       const readFiles = new Set(reader.read_only_files);
       const writeFiles = writer.allowed_files;
 
-      const overlapping = writeFiles.filter((f) => {
-        for (const rf of readFiles) {
-          if (f.startsWith(rf) || rf.startsWith(f)) return true;
-        }
-        return false;
-      });
+      // Exact path or a real directory ancestor — NOT a string prefix, which
+      // flagged siblings like `src/main.ts` (writer) vs `src/main.tsx` (reader).
+      const overlapping = writeFiles.filter((f) =>
+        [...readFiles].some((rf) => pathsOverlap(f, rf)),
+      );
 
       if (overlapping.length > 0 && !reader.depends_on?.includes(writer.id)) {
         const canAutoFix = !reader.depends_on || reader.depends_on.length === 0;
@@ -208,7 +215,15 @@ export function applyAutoFixes(
   plan: MoEPlan,
   autoFixes: Array<{ subtaskId: string; fix: string }>,
 ): MoEPlan {
-  const fixed = { ...plan, subtasks: plan.subtasks.map((s) => ({ ...s })) };
+  // Deep-ish clone: copy each `depends_on` array so the pushes below never
+  // mutate the caller's plan (shallow `{...s}` shared the array).
+  const fixed = {
+    ...plan,
+    subtasks: plan.subtasks.map((s) => ({
+      ...s,
+      depends_on: [...(s.depends_on ?? [])],
+    })),
+  };
 
   for (const fix of autoFixes) {
     const sub = fixed.subtasks.find((s) => s.id === fix.subtaskId);

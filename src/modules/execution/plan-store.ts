@@ -42,9 +42,21 @@ function readPlanFile(path: string, fallbackBaseDir: string): Plan | null {
 function writePlanFile(path: string, plan: Plan): void {
   // Atomic write: a crash mid-write must not leave a truncated plan file
   // (readPlanFile silently returns null on broken JSON → active plan lost).
-  const tmpPath = `${path}.tmp`;
-  writeFileSync(tmpPath, JSON.stringify(plan, null, 2), "utf-8");
-  renameSync(tmpPath, path);
+  // The temp name is unique per process to avoid two `mma` instances sharing
+  // `.mma/plans/active.json` renaming away each other's `.tmp` (ENOENT).
+  const tmpPath = `${path}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  try {
+    writeFileSync(tmpPath, JSON.stringify(plan, null, 2), "utf-8");
+    renameSync(tmpPath, path);
+  } catch (e) {
+    try {
+      if (existsSync(tmpPath)) rmSync(tmpPath);
+    } catch {
+      /* best-effort cleanup */
+    }
+    log.warn(`failed to persist plan to ${path}`, { error: errMsg(e) });
+    throw e;
+  }
 }
 
 function listDir(dir: string, baseDir: string): Plan[] {

@@ -1,6 +1,11 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
+import {
+  BlockedRedirectError,
+  fetchValidated,
+  isUrlAllowed,
+  sanitizeUrl,
+} from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
@@ -55,34 +60,11 @@ export const webFetchTool: ToolDefinition = {
     }
 
     try {
-      const response = await fetch(url, {
+      // Every redirect hop is re-validated (SSRF); the old code re-checked one
+      // hop then used redirect:"follow", leaving later hops unchecked.
+      const { response: finalResponse, finalUrl } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
-        redirect: "manual",
       });
-      let finalResponse = response;
-      let finalUrl = url;
-      // Follow one redirect level manually, re-validating the target (SSRF).
-      if (response.status >= 300 && response.status < 400) {
-        const loc = response.headers.get("location");
-        if (!loc) {
-          return { success: false, output: t("error.fetch_failed", { message: "Redirect without location" }) };
-        }
-        finalUrl = new URL(loc, url).toString();
-        const recheck = isUrlAllowed(finalUrl, securityConfig);
-        if (!recheck.allowed) {
-          logSecurityBlock(
-            ctx.sessionId,
-            "network_request",
-            recheck.reason || "redirect blocked",
-            sanitizeUrl(finalUrl),
-          );
-          return { success: false, output: `[SECURITY BLOCKED] redirect: ${recheck.reason}` };
-        }
-        finalResponse = await fetch(finalUrl, {
-          signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
-          redirect: "follow",
-        });
-      }
       if (!finalResponse.ok) {
         return {
           success: false,
@@ -130,6 +112,10 @@ export const webFetchTool: ToolDefinition = {
         }),
       };
     } catch (e: any) {
+      if (e instanceof BlockedRedirectError) {
+        logSecurityBlock(ctx.sessionId, "network_request", e.reason, sanitizeUrl(url));
+        return { success: false, output: `[SECURITY BLOCKED] redirect: ${e.reason}` };
+      }
       logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
       return {
         success: false,

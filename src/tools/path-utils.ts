@@ -24,7 +24,9 @@ export function isInsideDir(targetPath: string, dirPath: string): boolean {
   const d = norm(resolve(dirPath));
   if (t === d) return true;
   const rel = relative(d, t);
-  return rel.length > 0 && !isAbsolute(rel) && !rel.startsWith("..");
+  // Reject only a real parent escape: `..` or `../…`. A file literally named
+  // `..foo` yields rel === "..foo" and is legitimately inside.
+  return rel.length > 0 && !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
 }
 
 /**

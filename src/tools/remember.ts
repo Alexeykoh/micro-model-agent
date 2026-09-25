@@ -68,7 +68,9 @@ export const rememberTool: ToolDefinition = {
         output: t("tool.remember.entry", { category, entry }),
       };
     } catch (err) {
-      return { success: true, output: t("tool.memory_error", { error: String(err) }) };
+      // A failed write is a failure: reporting success made the agent (and its
+      // failure accounting) believe the memory was saved.
+      return { success: false, output: t("tool.memory_error", { error: String(err) }) };
     }
   },
 };

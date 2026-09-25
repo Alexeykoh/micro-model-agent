@@ -49,19 +49,68 @@ export interface CommandValidationResult {
  *   "powershell Remove-Item x"    → "Remove-Item"
  *   "cmd /c del /s /q"            → "del"
  */
+/** Wrappers that run another command; their own options must be skipped. */
+const WRAPPERS = new Set([
+  "sudo",
+  "doas",
+  "env",
+  "command",
+  "exec",
+  "nohup",
+  "nice",
+  "timeout",
+  "stdbuf",
+  "ionice",
+  "setsid",
+  "time",
+]);
+
+/** Wrapper flags that consume the following token as their value. */
+const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
+  sudo: new Set(["-u", "-g", "-p", "-C", "-U", "-h", "-r", "-t", "-c"]),
+  doas: new Set(["-u"]),
+  nice: new Set(["-n", "--adjustment"]),
+  timeout: new Set(["-k", "-s", "--signal", "--kill-after"]),
+  stdbuf: new Set(["-i", "-o", "-e"]),
+  ionice: new Set(["-c", "-n"]),
+};
+
+/** Advance past a wrapper's own options/values; returns the next index. */
+function skipWrapperArgs(tokens: string[], i: number, wrapper: string): number {
+  const valueFlags = WRAPPER_VALUE_FLAGS[wrapper] ?? new Set<string>();
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (t.startsWith("-")) {
+      i++;
+      if (t.includes("=")) continue; // --flag=value is self-contained
+      if (valueFlags.has(t)) i++; // consume the flag's value
+      continue;
+    }
+    // A bare duration/count (timeout 5, nice 10) is never the command.
+    if (/^\d+(?:\.\d+)?[smhd]?$/.test(t)) {
+      i++;
+      continue;
+    }
+    break;
+  }
+  return i;
+}
+
 function extractBaseCommand(trimmed: string): string {
   const tokens = trimmed.split(/\s+/);
   let i = 0;
 
-  // Skip env assignments (KEY=val, KEY="val", etc.) and prefixed commands
+  // Skip env assignments (KEY=val, KEY="val", etc.) and wrapper invocations
+  // (sudo/nice/timeout/stdbuf/…) INCLUDING their options — otherwise
+  // `nice rm file` extracted "nice" and the blacklist never saw `rm`.
   while (i < tokens.length) {
     const tok = tokens[i];
     if (/^[a-zA-Z_][a-zA-Z0-9_]*=/.test(tok)) {
       i++;
       continue;
     }
-    if (tok === "sudo" || tok === "env" || tok === "command" || tok === "exec" || tok === "nohup") {
-      i++;
+    if (WRAPPERS.has(tok)) {
+      i = skipWrapperArgs(tokens, i + 1, tok);
       continue;
     }
     break;
@@ -143,7 +192,7 @@ export function isCommandAllowed(
   // separator (`/bin/bash -c`), so match those too.
   const unquotedCommand = trimmedCommand.replace(/["']/g, "");
   const INTERPRETER_FLAGS =
-    /(?:^|[\\/\s])(?:bash|sh|zsh|dash|python|python3|node|bun|perl|ruby)\s+(?:-c|-e|--command|--eval)\b/;
+    /(?:^|[\\/\s])(?:bash|sh|zsh|dash|python[0-9.]*|pypy[0-9.]*|node(?:js)?|bun|deno|perl|ruby|php|lua)\s+(?:-c|-e|--command|--eval)\b/;
   if (INTERPRETER_FLAGS.test(unquotedCommand)) {
     return { allowed: false, reason: "Interpreter -c/-e invocation is blocked" };
   }

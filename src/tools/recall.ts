@@ -67,7 +67,8 @@ export const recallTool: ToolDefinition = {
         output: t("tool.recall.search_results", { category: "all", results: formatted }),
       };
     } catch (err) {
-      return { success: true, output: t("tool.memory_error", { error: String(err) }) };
+      // Reading a missing/invalid category is an error, not an empty success.
+      return { success: false, output: t("tool.memory_error", { error: String(err) }) };
     }
   },
 };

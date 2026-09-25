@@ -112,7 +112,10 @@ export class PluginManager {
       if (plugin.onBeforeTool) {
         try {
           const result = await plugin.onBeforeTool(ctx, call);
-          if (result === false) return false;
+          // The plugin contract allows `false` OR a reason string to block (the
+          // tool executor handles both). Ignoring the string here would silently
+          // fail to block if this path is ever wired up.
+          if (result === false || typeof result === "string") return false;
         } catch (e) {
           logger.warn(`plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
         }
