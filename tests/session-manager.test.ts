@@ -137,4 +137,23 @@ describe("SessionManager", () => {
     expect(history).toHaveLength(1);
     expect(history[0].content).toBe("msg1");
   });
+
+  it("marks explicit create(name) as manual and default create() as default", () => {
+    const store = new SessionStore(tmpDir);
+    const mgr = new SessionManager(store, { model: "m", contextWindow: 1000, projectDir: tmpDir });
+    const auto = mgr.create();
+    expect(auto.nameSource).toBe("default");
+    const named = mgr.create("My name");
+    expect(named.nameSource).toBe("manual");
+  });
+
+  it("rename records the requested source (default manual)", () => {
+    const store = new SessionStore(tmpDir);
+    const mgr = new SessionManager(store, { model: "m", contextWindow: 1000, projectDir: tmpDir });
+    const s = mgr.create();
+    mgr.rename(s.id, "auto title", "auto");
+    expect(mgr.get(s.id)!.nameSource).toBe("auto");
+    mgr.rename(s.id, "user title");
+    expect(mgr.get(s.id)!.nameSource).toBe("manual");
+  });
 });

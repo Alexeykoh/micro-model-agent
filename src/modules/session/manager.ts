@@ -67,6 +67,7 @@ export class SessionManager {
     const meta: SessionMeta = {
       id,
       name: sessionName,
+      nameSource: name ? "manual" : "default",
       createdAt: now,
       updatedAt: now,
       messageCount: 0,
@@ -113,10 +114,11 @@ export class SessionManager {
     }
   }
 
-  rename(id: string, name: string): void {
+  rename(id: string, name: string, source: "auto" | "manual" = "manual"): void {
     const meta = this.store.loadMeta(id);
     if (!meta) throw new Error(t("session.not_found", { id }));
     meta.name = name;
+    meta.nameSource = source;
     this.store.saveMeta(id, meta);
   }
 
