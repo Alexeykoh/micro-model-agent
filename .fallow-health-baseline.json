@@ -1,0 +1,970 @@
+{
+  "finding_counts": {
+    "src/cli/commands.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/cli/main.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/cli/onboarding-commands.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/cli/repl-commands.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/cli/repl.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/cli/security-commands.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/cli/setup.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/config/config.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/config/redact.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/config/registry.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/core/agent-moe.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/core/agent.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/core/agent/context-log.ts": {
+      "complexity_high": {
+        "count": 3
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/core/agent/hallucination-gate.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/core/agent/reasoning-resolver.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/core/agent/tool-batch.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/core/agent/tool-output.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/core/bootstrap.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/core/prompt-overflow.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/core/system-prompt.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/llm/cache-usage.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/llm/openai-compat.ts": {
+      "complexity_critical": {
+        "count": 3
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/llm/orchestrator.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/llm/response.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/logger/app-logger.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/browser/bridge-server.mjs": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "src/modules/browser/session.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/modules/browser/snapshot.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/certification/cli.ts": {
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/certification/fact-checker.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/certification/loader.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/modules/certification/runner.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/context/fact-extractor.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/modules/context/manager.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/audit-runners.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/auditor.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/execution-plugin.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/module.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/execution/moe-executor.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/execution/plan-actions.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/plan-tool.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/plan-validator.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/planner.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/execution/stuck-detector.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/execution/verifier.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/modules/hallucination/confidence.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/hallucination/detector.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/hallucination/factual.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/indexer/cache.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/indexer/module.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/indexer/project-profile.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/indexer/walker.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/lsp/client.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/lsp/module.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/lsp/probe.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/lsp/startup-check.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/mcp/client.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/memory/search.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/pipelines/parser.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/modules/plugins/builtin/lint-on-write.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/plugins/loader.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/providers/fallback.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/providers/manager.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/security/audit-notifier.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/security/command-validator.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/modules/security/network-validator.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/security/path-validator.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/security/security-policies.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/updater/module.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/commands-settings.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/modules/webui/commands.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "src/modules/webui/config-api.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/history-api.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/memory-commands.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/providers-api.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "src/modules/webui/server.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/settings-api.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/modules/webui/setup-api.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/output/channel.ts": {
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/attach-image.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/bash.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "src/tools/browser.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/chunk-query.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/create-dir.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/delete-file.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/download-file.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/edit-file.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/executor.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/grep-tool.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/hidden-tools-block.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/move-file.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/path-utils.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "src/tools/pipeline-run.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/question.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/read-file.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "src/tools/recall.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/remember.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/search-history.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/set-thinking.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/subagent.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/syntax-validator.ts": {
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/user-input.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/web-browse.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/tools/web-fetch.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/tools/web-search.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/tools/write-file.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "src/ui/diff.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/ui/line-editor.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/ui/line-math.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/ui/md-formatter.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "src/ui/renderer.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "src/ui/table.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "tests/integration/llm-provider.integration-test.ts": {
+      "crap_high": {
+        "count": 3
+      }
+    },
+    "tests/integration/todo-app.integration-test.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": [
+    "src/core/agent.ts:complexity",
+    "src/modules/security/network-validator.ts:high impact",
+    "src/cli/repl.ts:complexity",
+    "src/llm/openai-compat.ts:complexity",
+    "src/modules/providers/manager.ts:high impact",
+    "src/modules/lsp/module.ts:complexity",
+    "src/modules/execution/module.ts:complexity",
+    "src/modules/webui/commands.ts:high impact",
+    "src/cli/main.ts:complexity",
+    "src/modules/webui/server.ts:complexity",
+    "src/modules/certification/loader.ts:high impact",
+    "src/core/bootstrap.ts:complexity",
+    "src/tools/subagent.ts:complexity",
+    "src/core/agent-moe.ts:complexity",
+    "src/modules/plugins/manager.ts:high impact",
+    "src/ui/table.ts:high impact",
+    "src/tools/executor.ts:complexity",
+    "src/output/channel.ts:high impact",
+    "src/modules/certification/manifest.ts:high impact",
+    "src/modules/context/manager.ts:complexity",
+    "src/modules/execution/moe-executor.ts:complexity",
+    "src/modules/webui/commands-settings.ts:untested risk",
+    "src/ui/renderer.ts:complexity",
+    "src/tools/registry.ts:high impact",
+    "src/core/agent/tool-batch.ts:complexity",
+    "src/modules/pipelines/parser.ts:complexity",
+    "src/cli/commands.ts:complexity",
+    "src/modules/browser/snapshot.ts:high impact",
+    "src/modules/pipelines/engine.ts:high impact",
+    "src/tools/read-file.ts:complexity",
+    "src/modules/security/path-validator.ts:complexity",
+    "src/modules/execution/execution-plugin.ts:complexity",
+    "src/modules/webui/providers-api.ts:untested risk",
+    "src/output/format.ts:high impact",
+    "src/tools/path-utils.ts:complexity",
+    "src/ui/line-editor.ts:complexity",
+    "src/tools/scope-request.ts:high impact",
+    "src/core/agent/context-log.ts:complexity",
+    "src/modules/certification/fact-checker.ts:untested risk",
+    "src/modules/browser/bridge-server.mjs:untested risk",
+    "src/modules/context/fact-extractor.ts:complexity",
+    "src/tools/syntax-validator.ts:complexity",
+    "src/modules/security/command-validator.ts:complexity",
+    "src/modules/execution/plan-actions.ts:complexity",
+    "src/core/system-prompt.ts:complexity"
+  ]
+}

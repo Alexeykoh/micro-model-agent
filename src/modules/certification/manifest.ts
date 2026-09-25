@@ -3,6 +3,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
 import type { CertManifest, CertificationEntry, CertMark } from "./types";
+import { MMA_DIR_NAME } from "../../config/paths";
 
 export function manifestPath(projectDir: string): string {
   return join(projectDir, "certification", "certifications.json");
@@ -10,7 +11,7 @@ export function manifestPath(projectDir: string): string {
 
 /** Directory of the global (per-user) manifest. Overridable for tests. */
 export function globalManifestDir(override?: string): string {
-  return override || process.env.MMA_CERT_HOME || join(homedir(), ".mma");
+  return override || process.env.MMA_CERT_HOME || join(homedir(), MMA_DIR_NAME);
 }
 
 export function globalManifestPath(override?: string): string {

@@ -5,6 +5,7 @@ import { collectEnvironment, type EnvironmentReport } from "./environment";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
+import { globalLogsDir } from "../config/paths";
 
 export type CrashType = "uncaughtException" | "unhandledRejection";
 
@@ -16,7 +17,7 @@ export interface CrashEntry {
   environment: EnvironmentReport;
 }
 
-export const CRASH_LOG_DIR = join(homedir(), ".mma", "logs");
+export const CRASH_LOG_DIR = globalLogsDir();
 export const CRASH_LOG_FILE = "crash.jsonl";
 
 /** Build a sanitized crash entry. Environment is captured at crash time (no tool scan). */

@@ -17,6 +17,37 @@ export function detectMime(filePath: string): string {
   return MIME_MAP[ext] ?? "image/png";
 }
 
+/** Minimal surface of Bun's built-in `Image` (not in @types/bun). */
+interface BunImage {
+  metadata(): Promise<{ width?: number }>;
+  resize(width: number, height: number, opts?: { fit?: string }): BunImage;
+  jpeg(opts?: { quality?: number }): BunImage;
+  dataurl(): Promise<string>;
+  buffer(): Promise<Uint8Array>;
+}
+type BunImageCtor = (new (buf: Buffer) => BunImage) & {
+  fromClipboard(): BunImage | null;
+};
+
+/** The Bun.Image constructor when running under Bun, else undefined. */
+function getBunImage(): BunImageCtor | undefined {
+  return (globalThis as { Bun?: { Image?: BunImageCtor } }).Bun?.Image;
+}
+
+/** Downscale a buffer to a JPEG data URL via Bun.Image; null when unavailable/failed. */
+async function resizeToJpegDataUrl(buf: Buffer): Promise<string | null> {
+  const Image = getBunImage();
+  if (!Image) return null;
+  try {
+    const img = new Image(buf);
+    const { width } = await img.metadata();
+    const targetWidth = Math.min(800, width || 800);
+    return await img.resize(targetWidth, 800, { fit: "inside" }).jpeg({ quality: 60 }).dataurl();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Read image from system clipboard using Bun.Image (macOS/Windows).
  * Falls back to platform-specific commands on Linux.
@@ -24,9 +55,10 @@ export function detectMime(filePath: string): string {
  */
 export async function readClipboardImage(): Promise<Buffer | null> {
   // Bun.Image.fromClipboard() works on macOS and Windows
-  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
+  const Image = getBunImage();
+  if (Image) {
     try {
-      const img = (Bun as any).Image.fromClipboard();
+      const img = Image.fromClipboard();
       if (img) {
         const buf = await img.resize(800, 800, { fit: "inside" }).jpeg({ quality: 60 }).buffer();
         return Buffer.from(buf);
@@ -69,7 +101,9 @@ async function readClipboardFallback(): Promise<Buffer | null> {
 
   try {
     unlinkSync(tmpPath);
-  } catch {}
+  } catch {
+    // Best-effort temp cleanup — a leftover temp file must not mask the null.
+  }
   return null;
 }
 
@@ -81,20 +115,8 @@ export async function loadFileAsDataUrl(filePath: string): Promise<{ dataUrl: st
   const buf = readFileSync(filePath);
 
   // Use Bun.Image if available — resize + convert to JPEG
-  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
-    try {
-      const img = new (Bun as any).Image(buf);
-      const { width } = await img.metadata();
-      const targetWidth = Math.min(800, width || 800);
-      const dataUrl = await img
-        .resize(targetWidth, 800, { fit: "inside" })
-        .jpeg({ quality: 60 })
-        .dataurl();
-      return { dataUrl };
-    } catch {
-      // Bun.Image failed — fall through to raw base64
-    }
-  }
+  const resized = await resizeToJpegDataUrl(buf);
+  if (resized) return { dataUrl: resized };
 
   // Fallback: raw base64 (no resize)
   const b64 = buf.toString("base64");
@@ -114,20 +136,8 @@ export async function loadUrlAsDataUrl(url: string): Promise<{ dataUrl: string }
   }
   const buf = Buffer.from(await resp.arrayBuffer());
 
-  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
-    try {
-      const img = new (Bun as any).Image(buf);
-      const { width } = await img.metadata();
-      const targetWidth = Math.min(800, width || 800);
-      const dataUrl = await img
-        .resize(targetWidth, 800, { fit: "inside" })
-        .jpeg({ quality: 60 })
-        .dataurl();
-      return { dataUrl };
-    } catch {
-      // fall through
-    }
-  }
+  const resized = await resizeToJpegDataUrl(buf);
+  if (resized) return { dataUrl: resized };
 
   const b64 = buf.toString("base64");
   return { dataUrl: `data:image/png;base64,${b64}` };
@@ -138,20 +148,8 @@ export async function loadUrlAsDataUrl(url: string): Promise<{ dataUrl: string }
  * into a data URL. Used by Ctrl+V handler.
  */
 export async function bufferToDataUrl(buf: Buffer): Promise<{ dataUrl: string }> {
-  if (typeof Bun !== "undefined" && typeof (Bun as any).Image !== "undefined") {
-    try {
-      const img = new (Bun as any).Image(buf);
-      const { width } = await img.metadata();
-      const targetWidth = Math.min(800, width || 800);
-      const dataUrl = await img
-        .resize(targetWidth, 800, { fit: "inside" })
-        .jpeg({ quality: 60 })
-        .dataurl();
-      return { dataUrl };
-    } catch {
-      // fall through
-    }
-  }
+  const resized = await resizeToJpegDataUrl(buf);
+  if (resized) return { dataUrl: resized };
 
   const b64 = buf.toString("base64");
   return { dataUrl: `data:image/png;base64,${b64}` };

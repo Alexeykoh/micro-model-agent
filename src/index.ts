@@ -53,9 +53,10 @@ import { t } from "./i18n/index";
 import { defaultOutputBus, getDefaultChannel } from "./output";
 import { homedir } from "os";
 import { join } from "path";
+import { MMA_DIR_NAME } from "./config/paths";
 
 export function checkMigration(configDir?: string): void {
-  const dir = configDir || join(homedir(), ".mma");
+  const dir = configDir || join(homedir(), MMA_DIR_NAME);
   const detector = new MigrationDetector(dir);
   if (detector.needsMigration()) {
     // Ensure a terminal subscriber exists before emitting to the bus; library

@@ -8,6 +8,7 @@ import { defaultOutputBus } from "../output";
 import { errMsg } from "../utils";
 import { join } from "path";
 import { mkdirSync } from "fs";
+import { projectMmaDir } from "../config/paths";
 
 let session: BrowserSession | null = null;
 
@@ -44,7 +45,7 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
 
 function getSession(ctx: ToolContext): BrowserSession {
   if (!session) {
-    const cookieDir = join(ctx.baseDir, ".mma", "browser");
+    const cookieDir = join(projectMmaDir(ctx.baseDir), "browser");
     mkdirSync(cookieDir, { recursive: true });
     session = sessionFactory
       ? sessionFactory(ctx)

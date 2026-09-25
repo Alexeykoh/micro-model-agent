@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
+import { globalSessionsDir } from "../config/paths";
 
 function searchFile(filePath: string, query: string, maxResults: number, results: string[]): void {
   if (!fs.existsSync(filePath)) return;
@@ -44,7 +44,7 @@ export const searchHistoryTool: ToolDefinition = {
     const query = String(args.query || "").toLowerCase();
     const maxResults = Number(args.maxResults) || 5;
     const sessionId = args.sessionId ? String(args.sessionId) : null;
-    const sessionDir = join(homedir(), ".mma", "sessions");
+    const sessionDir = globalSessionsDir();
     const results: string[] = [];
 
     try {

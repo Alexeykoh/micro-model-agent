@@ -27,22 +27,22 @@ import {
   type ExportFormat,
 } from "../modules/session/export";
 import { getMessageText } from "../llm/provider";
-import { estimateTokens } from "../llm/token-counter";
 import { join, dirname } from "path";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
-import { homedir } from "os";
 import type { LineInput } from "../ui/line-editor";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
-import type { LspModule } from "../modules/lsp/module";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { registerOnboardingCommands } from "./onboarding-commands";
 import { errMsg } from "../utils";
 import type { OutputChannel } from "../output";
+import { globalExportsDir } from "../config/paths";
+import { registerLspCommands } from "./repl-commands-lsp";
+import { registerSkillCommands } from "./repl-commands-skills";
 
 const version = readMmaVersion();
 
@@ -1019,87 +1019,6 @@ function registerAgentCommands(ctx: ReplContext): void {
   });
 }
 
-function registerLspCommands(ctx: ReplContext): void {
-  ctx.registerCommand({
-    name: "lsp",
-    description: t("repl.lsp"),
-    usage: t("repl.lsp_usage"),
-    examples: ["/lsp status", "/lsp restart", "/lsp check src/index.ts"],
-    action: async (args: string[]) => {
-      // Access LSP module via the agent's module registry
-      const lspModule = ctx.agent.getModule<LspModule>("lsp");
-      if (!lspModule) {
-        ctx.output.writeLine(pc.yellow(t("repl.lsp_not_available")));
-        return;
-      }
-
-      const handlers: Record<string, (rest: string[]) => void | Promise<void>> = {
-        status: () => {
-          const disabled = lspModule.getDisabledServers();
-          const failures = lspModule.getFailureCounts();
-          const config = ctx.config.lsp;
-
-          ctx.output.writeLine(pc.bold(t("repl.lsp_status_header")));
-          ctx.output.writeLine(
-            `${t("repl.lsp_enabled")} ${config?.enabled ? pc.green(t("repl.yes")) : pc.red(t("repl.no"))}`,
-          );
-
-          if (disabled.length > 0) {
-            ctx.output.writeLine(
-              pc.yellow(`${t("repl.lsp_disabled_servers")} ${disabled.join(", ")}`),
-            );
-          }
-
-          if (failures.size > 0) {
-            ctx.output.writeLine(pc.dim(t("repl.lsp_failure_counts")));
-            for (const [server, count] of failures) {
-              ctx.output.writeLine(pc.dim(`  ${server}: ${count}`));
-            }
-          }
-
-          if (disabled.length === 0 && failures.size === 0) {
-            ctx.output.writeLine(pc.green(t("repl.lsp_all_ok")));
-          }
-        },
-
-        restart: () => {
-          ctx.output.writeLine(pc.yellow(t("repl.lsp_restarting")));
-          lspModule.resetDisabledServers();
-          ctx.output.writeLine(pc.green(t("repl.lsp_restarted")));
-        },
-
-        check: async (rest: string[]) => {
-          const path = rest[0];
-          if (!path) {
-            ctx.output.writeLine(pc.yellow(t("repl.lsp_check_usage")));
-            return;
-          }
-          ctx.output.writeLine(pc.dim(t("repl.lsp_checking", { path })));
-          // Запуск тула lsp_check через публичный API агента (не через приватные deps)
-          try {
-            const result = await ctx.agent.runTool("lsp_check", { path });
-            if (result?.output) {
-              ctx.output.writeLine(result.output);
-            }
-          } catch (e) {
-            ctx.output.writeLine(pc.red(t("repl.lsp_check_error", { error: errMsg(e) })), "stderr");
-          }
-        },
-      };
-
-      const subcommand = args[0] || "status";
-      const handler = handlers[subcommand];
-      if (!handler) {
-        ctx.output.writeLine(
-          pc.yellow(t("repl.unknown_sub", { cmd: "lsp", sub: subcommand })),
-        );
-        ctx.output.writeLine(pc.dim(t("repl.lsp_usage")));
-        return;
-      }
-      await handler(args.slice(1));
-    },
-  });
-}
 
 function registerMmaCommands(ctx: ReplContext): void {
   registerRunCommands(ctx);
@@ -1341,7 +1260,7 @@ function registerSessionCommands(ctx: ReplContext): void {
         ctx.output.writeLine(text);
         return;
       }
-      const baseDir = out ? dirname(out) : join(homedir(), ".mma", "exports");
+      const baseDir = out ? dirname(out) : globalExportsDir();
       const path =
         out ?? join(baseDir, `${sanitizeFileName(match.name)}-${match.id.slice(0, 8)}.${extensionFor(format)}`);
       try {
@@ -1357,118 +1276,6 @@ function registerSessionCommands(ctx: ReplContext): void {
   });
 }
 
-function registerSkillCommands(ctx: ReplContext): void {
-  if (!ctx.skillsModule) return;
-
-  const listSkills = (): void => {
-    const available = ctx.skillsModule!.getAvailable();
-    if (available.length === 0) {
-      ctx.output.writeLine(t("repl.no_skills"));
-      return;
-    }
-    ctx.output.writeLine(pc.bold(t("repl.available_skills")));
-    for (const skill of available) {
-      const tokens = estimateTokens(skill.content);
-      const loaded = ctx.skillsModule!.getLoaded().some((s) => s.name === skill.name);
-      const marker = loaded ? pc.green(` ${t("repl.loaded")}`) : "";
-      ctx.output.writeLine(
-        `  ${pc.cyan(skill.name)}${marker}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-      );
-    }
-  };
-
-  const listLoaded = (): void => {
-    const loaded = ctx.skillsModule!.getLoaded();
-    const budget = ctx.skillsModule!.getBudget();
-    if (loaded.length === 0) {
-      ctx.output.writeLine(t("repl.no_loaded"));
-      return;
-    }
-    ctx.output.writeLine(pc.bold(t("repl.loaded_skills")));
-    for (const skill of loaded) {
-      const tokens = estimateTokens(skill.content);
-      ctx.output.writeLine(
-        `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-      );
-    }
-    ctx.output.writeLine(
-      pc.dim(
-        `\n  ${t("repl.budget", { used: budget.used, total: budget.total, remaining: budget.remaining })}`,
-      ),
-    );
-  };
-
-  const loadSkill = (args: string[]): void => {
-    const arg = args.join(" ");
-    if (!arg) {
-      ctx.output.writeLine(t("repl.skill_load_usage"));
-      return;
-    }
-    const result = ctx.skillsModule!.loadByName(arg);
-    if (result.success) {
-      ctx.output.writeLine(pc.green(result.message));
-    } else {
-      ctx.output.writeLine(pc.red(result.message), "stderr");
-    }
-  };
-
-  const unloadSkill = (args: string[]): void => {
-    const arg = args.join(" ");
-    if (!arg) {
-      ctx.output.writeLine(t("repl.skill_unload_usage"));
-      return;
-    }
-    if (ctx.skillsModule!.unload(arg)) {
-      ctx.output.writeLine(pc.green(t("repl.skill_unloaded", { name: arg })));
-    } else {
-      ctx.output.writeLine(pc.red(t("repl.skill_not_loaded", { name: arg })), "stderr");
-    }
-  };
-
-  const searchSkills = (args: string[]): void => {
-    const arg = args.join(" ");
-    if (!arg) {
-      ctx.output.writeLine(t("repl.skill_search_usage"));
-      return;
-    }
-    const results = ctx.skillsModule!.search(arg);
-    if (results.length === 0) {
-      ctx.output.writeLine(t("repl.no_skill_match", { query: arg }));
-      return;
-    }
-    ctx.output.writeLine(pc.bold(t("repl.skills_matching", { query: arg })));
-    for (const skill of results) {
-      const tokens = estimateTokens(skill.content);
-      ctx.output.writeLine(
-        `  ${pc.cyan(skill.name)}  ${pc.dim(`(${tokens} tokens)`)}  ${skill.description.slice(0, 60)}`,
-      );
-    }
-  };
-
-  const skillHandlers: Record<string, (args: string[]) => void> = {
-    list: listSkills,
-    loaded: listLoaded,
-    load: loadSkill,
-    unload: unloadSkill,
-    search: searchSkills,
-  };
-
-  ctx.registerCommand({
-    name: "skill",
-    description: t("repl.skill"),
-    usage: t("repl.skill_usage"),
-    action: (args: string[]) => {
-      const subcmd = args[0];
-      const handler = subcmd ? skillHandlers[subcmd] : skillHandlers.list;
-      if (!handler) {
-        ctx.output.writeLine(pc.yellow(t("repl.unknown_sub", { cmd: "skill", sub: subcmd })));
-        ctx.output.writeLine(t("repl.skill_usage"));
-        return;
-      }
-      handler(args.slice(1));
-    },
-  });
-}
 
 async function runConfigMigrate(ctx: ReplContext): Promise<void> {
   const { hasDomainFiles } = await import("../config/domains");

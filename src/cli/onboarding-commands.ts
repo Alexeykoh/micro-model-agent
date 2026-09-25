@@ -1,11 +1,11 @@
-import { homedir } from "os";
-import { join } from "path";
+
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { MemoryStore } from "../modules/memory/store";
 import type { ReplContext } from "./repl-commands";
 import { runMeet } from "../modules/onboarding/meet";
 import { runInit } from "../modules/onboarding/init";
+import { globalMemoryDir } from "../config/paths";
 
 const CATEGORIES = ["conventions", "decisions", "errors", "facts"] as const;
 
@@ -79,7 +79,7 @@ function renderOverview(store: MemoryStore): string[] {
  * duplicate/override it. `/setup` therefore reuses that handler.
  */
 export function registerOnboardingCommands(ctx: ReplContext): void {
-  const store = (): MemoryStore => new MemoryStore(join(homedir(), ".mma", "memory"));
+  const store = (): MemoryStore => new MemoryStore(globalMemoryDir());
 
   ctx.registerCommand({
     name: "memory",

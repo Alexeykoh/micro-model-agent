@@ -14,7 +14,7 @@ export interface SpinnerOptions {
 
 export function isSpinnerSupported(stream?: NodeJS.WritableStream): boolean {
   const s = stream ?? process.stderr;
-  return Boolean((s as any).isTTY) && !process.env.CI;
+  return Boolean((s as { isTTY?: boolean }).isTTY) && !process.env.CI;
 }
 
 /**

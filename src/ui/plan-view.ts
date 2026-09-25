@@ -5,9 +5,10 @@ import { glyph } from "./theme";
 import type { Plan, PlanStep } from "../modules/execution/planner";
 import { extractFileLikeTokens, stripUrls } from "../modules/hallucination/js-identifiers";
 import { t } from "../i18n/index";
+import { projectMmaDir } from "../config/paths";
 
 export function readActivePlan(baseDir: string): Plan | null {
-  const p = join(baseDir, ".mma", "plans", "active.json");
+  const p = join(projectMmaDir(baseDir), "plans", "active.json");
   if (!existsSync(p)) return null;
   try {
     const raw = readFileSync(p, "utf-8");

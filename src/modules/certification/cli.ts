@@ -2,6 +2,7 @@ import { rmSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync, readFileSync } from "fs";
+import { projectMmaDir } from "../../config/paths";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 import { loadScenarios, filterByTags, filterByScenarios, unknownScenarioIds } from "./loader";
@@ -62,7 +63,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   const providerUrl = opts.providerUrl || opts.config.provider.baseUrl;
 
   const { scenarios, errors } = loadScenarios(
-    join(opts.projectDir, ".mma", "certification", "scenarios"),
+    join(projectMmaDir(opts.projectDir), "certification", "scenarios"),
   );
   for (const e of errors) getDefaultChannel().writeLine(pc.yellow(`  ${e}`), "stderr");
 
@@ -113,7 +114,7 @@ export async function certify(opts: CertifyOptions): Promise<void> {
 
   getDefaultChannel().writeLine(t("cli.cert_started", { model: opts.name, provider: providerUrl }));
 
-  const sandboxBase = join(process.cwd(), ".mma", "certification");
+  const sandboxBase = join(projectMmaDir(process.cwd()), "certification");
   const results: ScenarioResult[] = [];
   const total = selected.length;
   let idx = 0;

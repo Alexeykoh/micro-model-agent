@@ -151,16 +151,16 @@ export class LineEditor implements LineInput {
       // readline's keypress emitter (both receive every chunk); replies may
       // arrive merged with regular keystrokes, hence the global regex.
       this.dsrDataHandler = (buf: Buffer | string) => this.consumeDsrReplies(buf.toString("utf-8"));
-      (this.input as any).on("data", this.dsrDataHandler);
+      this.input.on("data", this.dsrDataHandler);
       readline.emitKeypressEvents(this.input as never);
       this.keypressHandler = (str: string, key: unknown) => this.onKey(str, key);
-      (this.input as any).on("keypress", this.keypressHandler);
+      this.input.on("keypress", this.keypressHandler);
       // The editor owns stdin now: ensure it is flowing even if a previous
       // consumer paused it (e.g. the setup wizard).
-      (this.input as any).resume?.();
+      this.input.resume();
     } else {
       this.dataHandler = (buf: Buffer) => this.onData(buf);
-      (this.input as any).on("data", this.dataHandler);
+      this.input.on("data", this.dataHandler);
       this.endHandler = () => {
         const last = this.lines.join("\n");
         this.lines = [""];
@@ -169,7 +169,7 @@ export class LineEditor implements LineInput {
         if (last) this.emitLine(last);
         this.emitClose();
       };
-      (this.input as any).on("end", this.endHandler);
+      this.input.on("end", this.endHandler);
     }
   }
 
@@ -277,11 +277,10 @@ export class LineEditor implements LineInput {
     if (this.isDone) return;
     this.isDone = true;
     this.disableTerminalProtocols();
-    const inp = this.input as any;
-    if (this.dsrDataHandler) inp.removeListener("data", this.dsrDataHandler);
-    if (this.keypressHandler) inp.removeListener("keypress", this.keypressHandler);
-    if (this.dataHandler) inp.removeListener("data", this.dataHandler);
-    if (this.endHandler) inp.removeListener("end", this.endHandler);
+    if (this.dsrDataHandler) this.input.removeListener("data", this.dsrDataHandler);
+    if (this.keypressHandler) this.input.removeListener("keypress", this.keypressHandler);
+    if (this.dataHandler) this.input.removeListener("data", this.dataHandler);
+    if (this.endHandler) this.input.removeListener("end", this.endHandler);
     if (this.rawMode && this.input.setRawMode) {
       this.input.setRawMode(false);
     }

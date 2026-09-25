@@ -134,7 +134,7 @@ export class PlaywrightDriver implements BrowserDriver {
 
   async addCookies(cookies: StoredCookie[]): Promise<void> {
     if (!this.context || cookies.length === 0) return;
-    await this.context.addCookies(cookies as any);
+    await this.context.addCookies(cookies as Parameters<BrowserContext["addCookies"]>[0]);
   }
 
   async goBack(timeoutMs: number): Promise<void> {

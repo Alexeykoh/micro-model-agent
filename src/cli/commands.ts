@@ -32,6 +32,7 @@ import {
 } from "../modules/updater/changelog-reader";
 import { getDefaultChannel, writeMachineJson } from "../output";
 import { redactConfigSecrets } from "../config/redact";
+import { MMA_DIR_NAME, globalConfigFile, globalExportsDir } from "../config/paths";
 
 const version = readMmaVersion();
 
@@ -43,7 +44,7 @@ export function configForDisplay<T>(config: T, showSecrets?: boolean): T {
 /** Shared body of the provider setup wizard (`mma setup` and deprecated `mma init`). */
 async function runWizardCommand(): Promise<void> {
   const answers = await runSetup();
-  const configPath = join(homedir(), ".mma", "config.json");
+  const configPath = globalConfigFile();
   const { config } = await bootstrap();
   applyAnswersToConfig(config, answers);
   saveConfig(config, configPath, dirname(configPath));
@@ -98,7 +99,7 @@ function buildConfigCommands(program: Command): void {
     .argument("<value>", "Config value")
     .description(t("cli.set_value"))
     .action(async (key: string, value: string) => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config } = await bootstrap();
       const keys = key.split(".");
       let obj: any = config;
@@ -129,7 +130,7 @@ function buildConfigCommands(program: Command): void {
     .action(async () => {
       const { loadConfig } = await import("../config/config");
       const { hasDomainFiles } = await import("../config/domains");
-      const configDir = join(homedir(), ".mma");
+      const configDir = join(homedir(), MMA_DIR_NAME);
       const configPath = join(configDir, "config.json");
 
       if (hasDomainFiles(configDir)) {
@@ -216,7 +217,7 @@ function buildModelCommands(program: Command): void {
     .argument("<name>", "Model name")
     .description(t("cli.set_model"))
     .action(async (name: string) => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config } = await bootstrap();
       config.model = name;
       saveConfig(config, configPath, dirname(configPath));
@@ -461,7 +462,7 @@ function buildProviderCommands(program: Command): void {
     .argument("<name>", "Provider name")
     .description(t("cli.set_provider"))
     .action(async (name: string) => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config, agent } = await bootstrap();
       if (config.provider.entries && config.provider.entries.length > 0) {
         try {
@@ -508,7 +509,7 @@ function buildProviderCommands(program: Command): void {
           parallel?: string;
         },
       ) => {
-        const configPath = join(homedir(), ".mma", "config.json");
+        const configPath = globalConfigFile();
         const { config } = await bootstrap();
         const entries = Array.isArray(config.provider.entries) ? config.provider.entries : [];
         // If a legacy single provider exists, seed the list with it first.
@@ -696,7 +697,7 @@ function buildSessionCommands(program: Command): void {
         getDefaultChannel().writeLine(text);
         return;
       }
-      const baseDir = opts.out ? dirname(opts.out) : join(homedir(), ".mma", "exports");
+      const baseDir = opts.out ? dirname(opts.out) : globalExportsDir();
       const path =
         opts.out ??
         join(

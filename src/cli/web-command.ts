@@ -4,7 +4,6 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { bootstrap } from "../core/bootstrap";
 import { agentsMdPaths } from "../core/bootstrap";
 import { getDefaultChannel } from "../output";
@@ -12,6 +11,7 @@ import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { startWebUi } from "../modules/webui/module";
 import { tryOpenBrowser } from "../modules/webui/server";
+import { globalMmaDir } from "../config/paths";
 
 export interface WebCommandOptions {
   port?: number;
@@ -55,7 +55,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   if (opts.token) process.env.MMA_WEBUI_TOKEN = opts.token;
   if (opts.noOpen) process.env.MMA_WEBUI_OPEN = "0";
 
-  const mmaDir = process.env.MMA_CONFIG_DIR || join(homedir(), ".mma");
+  const mmaDir = globalMmaDir();
   const { hasDomainFiles } = await import("../config/domains");
   const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
 

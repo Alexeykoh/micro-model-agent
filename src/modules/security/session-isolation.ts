@@ -1,9 +1,9 @@
 import { join, resolve } from "path";
-import { homedir } from "os";
 import { mkdirSync, existsSync } from "fs";
 import type { SecurityConfig, AppConfig } from "../../config/types";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 import { isInsideDir } from "../../tools/path-utils";
+import { globalSessionsDir } from "../../config/paths";
 
 /**
  * Session isolation configuration
@@ -75,7 +75,7 @@ export function createSessionContext(
   const config = { ...DEFAULT_SESSION_ISOLATION, ...isolationConfig };
 
   // Create session-specific temporary directory
-  const baseDir = config.baseDir || join(homedir(), ".mma", "sessions", sessionId);
+  const baseDir = config.baseDir || join(globalSessionsDir(), sessionId);
   const tempDir = join(baseDir, "temp");
 
   if (config.isolateTempFiles && !existsSync(tempDir)) {

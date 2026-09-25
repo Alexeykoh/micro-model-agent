@@ -1,8 +1,7 @@
 import type { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
-import { join, dirname } from "path";
-import { homedir } from "os";
+import { dirname } from "path";
 import {
   SECURITY_POLICIES,
   applySecurityPolicy,
@@ -10,8 +9,10 @@ import {
   type SecurityPolicyPreset,
 } from "../modules/security/security-policies";
 import { globalAuditNotifier } from "../modules/security/audit-notifier";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
+import { globalConfigFile } from "../config/paths";
 
 /**
  * Toggle session-file encryption in place: flips `enabled` (and the two
@@ -48,7 +49,7 @@ export function createSecurityCommand(program: Command): void {
     .description(t("cli.security.status"))
     .action(async () => {
       const { config } = await bootstrap();
-      const security = (config as any).security || {};
+      const security = config.security ?? DEFAULT_SECURITY_CONFIG;
       const bash = security.bash || {};
       const paths = security.paths || {};
       const network = security.network || {};
@@ -114,7 +115,7 @@ export function createSecurityCommand(program: Command): void {
     .argument("<preset>", t("cli.security.preset"))
     .description(t("cli.security.set_policy"))
     .action(async (preset: string) => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
       const validPresets: SecurityPolicyPreset[] = ["strict", "balanced", "permissive"];
@@ -129,7 +130,7 @@ export function createSecurityCommand(program: Command): void {
       const newSecurityConfig = applySecurityPolicy(preset as SecurityPolicyPreset);
 
       // Merge with existing config
-      (appConfig as any).security = newSecurityConfig;
+      appConfig.security = newSecurityConfig;
       saveConfig(appConfig, configPath, dirname(configPath));
 
       getDefaultChannel().writeLine(t("cli.security.policy_applied", { name: policy.name }));
@@ -143,10 +144,11 @@ export function createSecurityCommand(program: Command): void {
     .command("enable-encryption")
     .description(t("cli.security.enable_encryption"))
     .action(async () => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleSessionEncryption(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -158,10 +160,11 @@ export function createSecurityCommand(program: Command): void {
     .command("disable-encryption")
     .description(t("cli.security.disable_encryption"))
     .action(async () => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleSessionEncryption(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -173,10 +176,11 @@ export function createSecurityCommand(program: Command): void {
     .command("enable-audit")
     .description(t("cli.security.enable_audit"))
     .action(async () => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleAuditNotifier(security, true);
 
       saveConfig(appConfig, configPath, dirname(configPath));
@@ -188,10 +192,11 @@ export function createSecurityCommand(program: Command): void {
     .command("disable-audit")
     .description(t("cli.security.disable_audit"))
     .action(async () => {
-      const configPath = join(homedir(), ".mma", "config.json");
+      const configPath = globalConfigFile();
       const { config: appConfig } = await bootstrap();
 
-      const security = ((appConfig as any).security = (appConfig as any).security || {});
+      if (!appConfig.security) appConfig.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      const security = appConfig.security;
       toggleAuditNotifier(security, false);
 
       saveConfig(appConfig, configPath, dirname(configPath));

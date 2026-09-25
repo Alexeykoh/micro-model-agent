@@ -1,8 +1,8 @@
-import { homedir } from "os";
-import { join } from "path";
+
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { MemoryStore } from "../modules/memory/store";
+import { globalMemoryDir } from "../config/paths";
 
 const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"];
 
@@ -41,7 +41,7 @@ export const rememberTool: ToolDefinition = {
       return { success: false, output: t("tool.invalid_params") };
     }
 
-    const memoryDir = join(homedir(), ".mma", "memory");
+    const memoryDir = globalMemoryDir();
     const store = new MemoryStore(memoryDir);
 
     try {

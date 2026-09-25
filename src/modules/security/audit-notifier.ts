@@ -1,6 +1,5 @@
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
 import type { AuditLogEntry } from "./audit-log";
 import { backoffDelay } from "../../utils/retry";
 import { defaultOutputBus } from "../../output";
@@ -94,7 +93,7 @@ const SEVERITY_WEIGHTS: Record<AuditSeverity, number> = {
  */
 export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
   enabled: false,
-  filePath: join(homedir(), ".mma", "logs", "audit-notifications.jsonl"),
+  filePath: join(globalLogsDir(), "audit-notifications.jsonl"),
   webhookTimeout: 5000,
   minSeverity: "medium",
   eventTypes: [
@@ -440,3 +439,4 @@ export function createAuditNotifier(config?: Partial<AuditNotifierConfig>): Audi
 
 // Import readFileSync for readNotifications
 import { readFileSync } from "fs";
+import { globalLogsDir } from "../../config/paths";

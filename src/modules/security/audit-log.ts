@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, appendFileSync } from "fs";
-import { resolve, join } from "path";
-import { homedir } from "os";
+import { join } from "path";
 import { globalAuditNotifier } from "./audit-notifier";
+import { globalLogsDir } from "../../config/paths";
 
 /**
  * Audit log entry structure
@@ -26,7 +26,7 @@ export interface AuditLogEntry {
   reason?: string; // For security blocks
 }
 
-let _globalAuditDir = resolve(homedir(), ".mma", "logs");
+let _globalAuditDir = globalLogsDir();
 let _sessionAuditDir: string | null = null;
 
 function getAuditDir(): string {

@@ -15,12 +15,19 @@ export function isPlainObject(v: unknown): boolean {
  * destroy it to {}.
  */
 export function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result: Record<string, unknown> = { ...(target as any) };
+  const result: Record<string, unknown> = {
+    ...(target as unknown as Record<string, unknown>),
+  };
+  const srcRec = source as unknown as Record<string, unknown>;
+  const tgtRec = target as unknown as Record<string, unknown>;
   for (const key of Object.keys(source as object)) {
-    const srcVal = (source as any)[key];
-    const tgtVal = (target as any)[key];
+    const srcVal = srcRec[key];
+    const tgtVal = tgtRec[key];
     if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
-      result[key] = deepMerge(tgtVal, srcVal);
+      result[key] = deepMerge(
+        tgtVal as Record<string, unknown>,
+        srcVal as Partial<Record<string, unknown>>,
+      );
     } else if (srcVal !== undefined) {
       result[key] = srcVal;
     }

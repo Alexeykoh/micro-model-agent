@@ -62,6 +62,7 @@ import {
 } from "../output";
 import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
+import { MMA_DIR_NAME, projectMmaDir } from "../config/paths";
 
 function formatContextBar(
   used: number,
@@ -88,6 +89,8 @@ function formatContextBar(
 export { createHostBridge };
 
 export class Repl implements ReplContext, Host {
+  /** Global SIGINT handler shared across Repl instances (see registerSigint). */
+  private static sigintHandler?: () => void;
   private completer: Completer = new Completer();
   private modelCache: string[] = [];
   /** Boot snapshot of managed config keys — `/config reset` restores from it. */
@@ -184,7 +187,7 @@ export class Repl implements ReplContext, Host {
     this.execModule = execModule;
     this.slog = new SessionLogger(sessionManager, logger);
     this.bindSessionOutput();
-    this.configDir = configDir || join(homedir(), ".mma");
+    this.configDir = configDir || join(homedir(), MMA_DIR_NAME);
     this.baseDir = baseDir || process.cwd();
     this.noAgentsMd = noAgentsMd === true;
     this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
@@ -607,10 +610,10 @@ export class Repl implements ReplContext, Host {
     // another global SIGINT handler. Leaked handlers from REPL instances
     // created in tests fired process.exit(0) on ANY process.emit("SIGINT")
     // elsewhere and silently terminated the whole bun test runner.
-    if (typeof (Repl as any).sigintHandler === "function") {
-      process.removeListener("SIGINT", (Repl as any).sigintHandler);
+    if (typeof Repl.sigintHandler === "function") {
+      process.removeListener("SIGINT", Repl.sigintHandler);
     }
-    (Repl as any).sigintHandler = () => {
+    Repl.sigintHandler = () => {
       if (this.agentRunning) {
         this.output.writeLine(pc.yellow(t("repl.ctrl_c_interrupt")));
         this.agent.shutdown();
@@ -624,7 +627,7 @@ export class Repl implements ReplContext, Host {
         process.exit(0);
       }
     };
-    process.on("SIGINT", (Repl as any).sigintHandler);
+    process.on("SIGINT", Repl.sigintHandler);
   }
 
   /**
@@ -1228,7 +1231,7 @@ export class Repl implements ReplContext, Host {
     } else {
       const agentsMdCandidates = [
         join(this.baseDir, "AGENTS.md"),
-        join(this.baseDir, ".mma", "AGENTS.md"),
+        join(projectMmaDir(this.baseDir), "AGENTS.md"),
         join(this.configDir, "AGENTS.md"),
       ];
       const foundAgents = agentsMdCandidates.filter((p) => existsSync(p));
@@ -1270,7 +1273,9 @@ export class Repl implements ReplContext, Host {
         this.output.writeLine(pc.yellow(`  ${t("config.legacy_hint")}`));
         this.output.writeLine("");
       }
-    } catch {}
+    } catch {
+      // Legacy-config hint is best-effort; a read failure just skips it.
+    }
 
     // Single prompt presentation for startup: the banner above was written
     // plainly (promptPresented was false), so no frame needs erasing here.

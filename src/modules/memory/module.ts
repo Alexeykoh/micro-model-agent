@@ -1,5 +1,4 @@
-import { homedir } from "os";
-import { join } from "path";
+
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition } from "../../tools/types";
@@ -7,6 +6,7 @@ import { MemoryStore } from "./store";
 import { rememberTool } from "../../tools/remember";
 import { recallTool } from "../../tools/recall";
 import { estimateTokens } from "../../llm/token-counter";
+import { globalMemoryDir } from "../../config/paths";
 
 const MEMORY_MD_FILES = ["errors", "conventions", "decisions", "facts"];
 
@@ -18,7 +18,7 @@ export class MemoryModule implements AgentModule {
     if (storeOrDir instanceof MemoryStore) {
       this.store = storeOrDir;
     } else {
-      const dir = storeOrDir || join(homedir(), ".mma", "memory");
+      const dir = storeOrDir || globalMemoryDir();
       this.store = new MemoryStore(dir);
     }
   }

@@ -6,6 +6,7 @@ import type { CertScenario, ScenarioResult } from "./types";
 import type { AppConfig } from "../../config/types";
 import { killTree } from "../processes/kill-tree";
 import { toForwardSlash } from "../../tools/path-utils";
+import { projectMmaDir } from "../../config/paths";
 
 export interface SpawnResult {
   code: number | null;
@@ -82,7 +83,7 @@ export async function runScenario(
       // Write cert-specific config if scenario declares overrides
       if (scenario.config && opts.baseConfig) {
         const merged = deepMergeAny(opts.baseConfig, scenario.config);
-        const certConfigDir = join(sandbox, ".mma");
+        const certConfigDir = projectMmaDir(sandbox);
         mkdirSync(certConfigDir, { recursive: true });
         writeFileSync(join(certConfigDir, "config.json"), JSON.stringify(merged, null, 2), "utf-8");
         env.MMA_CONFIG_DIR = certConfigDir;
@@ -159,7 +160,7 @@ export function collectDiagnostics(sandbox: string): string {
   }
 
   // Read active plan if present
-  const planPath = join(sandbox, ".mma", "plans", "active.json");
+  const planPath = join(projectMmaDir(sandbox), "plans", "active.json");
   if (existsSync(planPath)) {
     try {
       const plan = JSON.parse(readFileSync(planPath, "utf-8"));

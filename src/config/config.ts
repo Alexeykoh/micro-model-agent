@@ -14,9 +14,10 @@ import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
 import { defaultOutputBus } from "../output";
+import { MMA_DIR_NAME } from "./paths";
 
 // ── Centralized path constants ──────────────────────────────────────────
-export const CONFIG_DIR = join(homedir(), ".mma");
+export const CONFIG_DIR = join(homedir(), MMA_DIR_NAME);
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 export const CONFIG_DOMAIN_DIR = join(CONFIG_DIR, "config");
 
@@ -109,7 +110,7 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
   const result = { ...config };
 
   const record = (key: string, envValue: unknown): void => {
-    const original = (result as any)[key];
+    const original = (result as unknown as Record<string, unknown>)[key];
     if (original !== envValue) overrides.push({ key, envValue, originalValue: original });
   };
 
@@ -220,8 +221,9 @@ function stripEnvOverrides(config: AppConfig): AppConfig {
   if (!overrides || overrides.length === 0) return config;
   const result = { ...config };
   for (const o of overrides) {
-    if ((result as any)[o.key] === o.envValue) {
-      (result as any)[o.key] = o.originalValue;
+    const rec = result as unknown as Record<string, unknown>;
+    if (rec[o.key] === o.envValue) {
+      rec[o.key] = o.originalValue;
     }
   }
   return result;
@@ -325,14 +327,15 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   try {
     const encryptor = new ConfigEncryptor();
     const decrypted = encryptor.decrypt(config as unknown as Record<string, unknown>);
+    const configRec = config as unknown as Record<string, unknown>;
     for (const key of Object.keys(decrypted)) {
-      (config as any)[key] = decrypted[key];
+      configRec[key] = decrypted[key];
     }
     // Decrypt rebuilds the object tree (new identities). Re-point the provider
     // override at the post-decrypt provider so the save-time identity check in
     // stripEnvOverrides still matches the loaded config.
     const providerOverride = overrides.find((o) => o.key === "provider");
-    if (providerOverride) providerOverride.envValue = (config as any).provider;
+    if (providerOverride) providerOverride.envValue = config.provider;
   } catch (e: any) {
     defaultOutputBus.log("warn", "config", t("config.decryption_warning", { error: e.message }));
   }
