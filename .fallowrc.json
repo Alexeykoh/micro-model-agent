@@ -18,5 +18,11 @@
   },
   "rules": {
     "unused-dependencies": "warn"
+  },
+  "audit": {
+    "gate": "new-only",
+    "deadCodeBaseline": ".fallow-baseline.json",
+    "healthBaseline": ".fallow-health-baseline.json",
+    "dupesBaseline": ".fallow-dupes-baseline.json"
   }
 }
