@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **reasoning overhead on trivial turns** (`src/config/defaults.ts`, `src/core/agent/reasoning-resolver.ts`): the auto-policy baseline now defaults to `"low"` (was an implicit `"medium"` resolver fallback), and an unset `baseline` falls back to the configured `reasoning.min` (`"low"` by default) instead of a hardcoded `"medium"`. Trivial Q&A turns no longer burn medium reasoning tokens; the policy still raises to `"high"` on hallucinations, audit rejections and plan creation.
 - **`WebUiAssets.setupJs`** is optional (lightweight test fixtures stay valid) and `/setup.js` is served with `Cache-Control: no-store` like the other assets.
 
 ## [2.5.0] - 2026-09-24

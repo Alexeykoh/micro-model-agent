@@ -7,7 +7,7 @@
 > контекста/предсказуемость) vs. риск и объём работы.
 
 ### P0 — качество прогонов и фундамент
-- **P6b — reasoning baseline `"medium"` на тривиальных**: `reasoning-resolver.ts:71` (`?? "medium"`), в `defaults.ts` `baseline` не задан → каждая Q&A-итерация платит за medium. Влияние высокое, работа малая.
+- [x] ~~**P6b — reasoning baseline `"medium"` на тривиальных**~~ ✅ baseline теперь `"low"` (`defaults.ts`), резолвер падает на `reasoningConfig.min` вместо хардкода `"medium"`; policy по-прежнему поднимает до high на сигналах (ветка `fix/reasoning-baseline`).
 - **Этап 0 — базовая линия**: `bun test` + `tsc --noEmit`, зафиксировать зелёное. Нужно до любой чистки, иначе нет критерия «не сломал».
 - **Валидация кэша индекса**: `cache.ts:load()` не проверяет mtime/hash → устаревшая карта проекта уходит в системный промпт.
 
@@ -256,7 +256,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 4. **Качество агентных прогонов — P5/P6 из аудита 2026-08-31** (`_testing/agent-quality-review-2026-08-31.md`; P0–P4 из того же аудита закрыты коммитами `7ff98dc`, `98dc7a2`):
    - [ ] **P5 — авто-сужение набора тулов**: тривиальный вопрос тянет все 23 схемы тулов (~3.1K токенов, ~9% окна 32K); tool narrowing (`enable_tools`) есть, но не применяется автоматически — сужать по типу задачи до первого LLM-вызова
    - [x] ~~**P6a — Unix-команды на Windows**~~ ✅ реализовано: `windows-commands.ts` (hard-stop `<system-summary>`) + `bash.ts` `UNIX_TO_WIN_HINTS`/`FAILING_FIRST_WORDS`/`HARD_BLOCK_THRESHOLD`
-   - [ ] **P6b — reasoning policy на тривиальных задачах**: уровень «medium» из policy назначается даже на Q&A в один тул — пересмотреть порог в reasoning-resolver
+   - [x] ~~**P6b — reasoning policy на тривиальных задачах**~~ ✅ baseline `"low"` + fallback на `reasoningConfig.min` вместо `"medium"`
 
 ---
 

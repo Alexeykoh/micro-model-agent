@@ -68,7 +68,10 @@ export class ReasoningEffortResolver {
           planCreated: state.iterPlanCreated,
           consecutiveSuccesses: state.consecutiveToolSuccesses,
           isRepetitive: state.iterRepetitive,
-          baseline: reasoningConfig?.baseline ?? "medium",
+          // Baseline defaults to the configured floor (`min`, "low" by default)
+          // so a config without an explicit baseline never silently burns
+          // "medium" on trivial Q&A turns. The policy still raises on signals.
+          baseline: reasoningConfig.baseline ?? reasoningConfig.min,
         },
         deps.policyState,
       );

@@ -145,8 +145,8 @@ describe("Agent reasoning override", () => {
 
     await agent.run("hello");
 
-    // Expired override falls back to the policy baseline (medium).
-    expect(capturedOptions[0]?.reasoningEffort).toBe("medium");
+    // Expired override falls back to the policy baseline (config `min` = low).
+    expect(capturedOptions[0]?.reasoningEffort).toBe("low");
   });
 
   it("manual override from setReasoningLevel persists (no cooldown)", async () => {
@@ -167,8 +167,8 @@ describe("Agent reasoning override", () => {
 
     await agent.run("hello");
 
-    // Back to the auto policy baseline (medium).
-    expect(capturedOptions[0]?.reasoningEffort).toBe("medium");
+    // Back to the auto policy baseline (config `min` = low).
+    expect(capturedOptions[0]?.reasoningEffort).toBe("low");
   });
 
   it("previous-iteration hallucination retry reaches the policy raise branch", async () => {
@@ -182,9 +182,30 @@ describe("Agent reasoning override", () => {
 
     await agent.run("hello");
 
-    // Iteration 1: baseline (medium). Iteration 2 (after retry): raised high.
+    // Iteration 1: baseline (low). Iteration 2 (after retry): raised high.
     expect(capturedOptions.length).toBe(2);
-    expect(capturedOptions[0]?.reasoningEffort).toBe("medium");
+    expect(capturedOptions[0]?.reasoningEffort).toBe("low");
     expect(capturedOptions[1]?.reasoningEffort).toBe("high");
+  });
+
+  it("an explicit baseline overrides the `min` fallback", async () => {
+    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
+    (deps.config as AppConfig).reasoning!.baseline = "high";
+    const agent = new Agent(deps as any);
+
+    await agent.run("hello");
+
+    expect(capturedOptions[0]?.reasoningEffort).toBe("high");
+  });
+
+  it("falls back to the configured min when baseline is unset", async () => {
+    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
+    (deps.config as AppConfig).reasoning!.baseline = undefined;
+    (deps.config as AppConfig).reasoning!.min = "none";
+    const agent = new Agent(deps as any);
+
+    await agent.run("hello");
+
+    expect(capturedOptions[0]?.reasoningEffort).toBe("none");
   });
 });
