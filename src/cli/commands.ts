@@ -728,6 +728,30 @@ function buildSessionCommands(program: Command): void {
       sessionManager.delete(id);
       getDefaultChannel().writeLine(t("session.deleted", { id }));
     });
+  session
+    .command("prune")
+    .description(t("cli.prune_sessions"))
+    .option("--dry-run", t("cli.prune_dry_run"))
+    .action(async (opts: { dryRun?: boolean }) => {
+      const { sessionManager } = await bootstrap();
+      const active = sessionManager.getActive();
+      const candidates = sessionManager
+        .list()
+        .filter((s) => s.id !== active && sessionManager.isEmptySession(s.id));
+      if (candidates.length === 0) {
+        getDefaultChannel().writeLine(t("session.prune_empty"));
+        return;
+      }
+      if (opts.dryRun) {
+        getDefaultChannel().writeLine(t("session.prune_dry", { n: candidates.length }));
+      } else {
+        const deleted = sessionManager.pruneEmpty(active ?? undefined);
+        getDefaultChannel().writeLine(t("session.pruned", { n: deleted.length }));
+      }
+      for (const s of candidates) {
+        getDefaultChannel().writeLine(`   ${s.id.slice(0, 12)}  ${s.name}`);
+      }
+    });
 }
 
 function buildChangelogCommand(program: Command): void {
