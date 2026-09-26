@@ -32,7 +32,7 @@ import { Agent } from "./agent";
 import { ContextLogger } from "./agent/context-log";
 import { homedir } from "os";
 import { join, resolve } from "path";
-import { existsSync, readFileSync, } from "fs";
+import { existsSync, readFileSync, statSync, } from "fs";
 import type { AgentDeps } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { PromptBlock } from "./types";
@@ -85,6 +85,30 @@ function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefine
  * (в порядке приоритета). Каждый найденный непустой файл — prompt-блок
  * высокого приоритета.
  */
+/**
+ * Resolve the agent workspace dir. A `-d` path that does not exist (classic
+ * causes: the shell splitting on spaces, or a trailing backslash escaping the
+ * closing quote) must fail LOUDLY here — otherwise the agent silently works in
+ * a wrong directory and insists everything is fine.
+ */
+export function resolveBaseDir(projectDir?: string): string {
+  if (!projectDir) return process.cwd();
+  const abs = resolve(projectDir);
+  let isDir = false;
+  try {
+    isDir = statSync(abs).isDirectory();
+  } catch {
+    isDir = false;
+  }
+  if (!isDir) {
+    throw new Error(
+      `workspace directory does not exist: ${abs} (received ${JSON.stringify(projectDir)} — ` +
+        `if the path contains spaces, quote it without a trailing backslash)`,
+    );
+  }
+  return abs;
+}
+
 /** Candidate AGENTS.md paths, in priority order: project, project `.mma`, global config. */
 export function agentsMdPaths(baseDir: string, configDir: string): string[] {
   return [join(baseDir, "AGENTS.md"), join(projectMmaDir(baseDir), "AGENTS.md"), join(configDir, "AGENTS.md")];
@@ -354,7 +378,7 @@ export async function bootstrap(
     })();
   }
 
-  const baseDir = projectDir ? resolve(projectDir) : process.cwd();
+  const baseDir = resolveBaseDir(projectDir);
 
   // Cross-device diagnosis: log a full environment report (OS, runtime,
   // engines, PATH tools, provider/retry, playwright) at every startup.

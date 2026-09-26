@@ -105,7 +105,10 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   });
 
   const url = await web.url;
-  getDefaultChannel().writeLine(t("cli.web_started", { url }));
+  // Always show the resolved workspace: a shell-split `-d` path (spaces,
+  // trailing backslash) can silently point somewhere unintended, and this
+  // line is the only place web mode reports it (mirrors the REPL banner).
+  getDefaultChannel().writeLine(t("cli.web_started", { url, dir: baseDir }));
   if (!opts.noOpen) tryOpenBrowser(url);
 
   await new Promise<void>((resolve) => {
