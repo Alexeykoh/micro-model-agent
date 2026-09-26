@@ -1,5 +1,5 @@
 import type { LLMProvider, ContentPart } from "../llm/provider";
-import { ProviderManager } from "../modules/providers/manager";
+import { ProviderManager, activeProviderEndpoint } from "../modules/providers/manager";
 import { buildActiveProvider } from "../modules/providers/factory";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
@@ -162,6 +162,24 @@ export interface AgentDeps {
 }
 
 /**
+ * Model/backend identity a context probe ran against (value snapshot —
+ * see `Agent.lastProbeIdentity`).
+ */
+interface ProbeIdentity {
+  model: string;
+  baseUrl: string;
+  active?: string;
+}
+
+function probeIdentityOf(config: AppConfig): ProbeIdentity {
+  return {
+    model: config.model,
+    baseUrl: activeProviderEndpoint(config.provider).baseUrl,
+    active: config.provider?.active,
+  };
+}
+
+/**
  * Ключ целевого объекта мутации для детекции «перфекционизм-цикла».
  * edit_file/write_file → путь файла; bash → нормализованная команда.
  * Остальные тула (read-only, bookkeeping) не считаются мутациями.
@@ -217,6 +235,11 @@ export class Agent {
   /** Kind → replacement block for instructions/project-map blocks that
    *  exceeded the system budget (resolved once before the first LLM call). */
   private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
+  /** Identity the context probe last ran against. Compared by VALUE because
+   *  every write path mutates the live config in place and then passes the
+   *  SAME object to `reconfigure` — a prev/next object comparison would never
+   *  observe a change. Seeded in the constructor (pre-mutation strings). */
+  private lastProbeIdentity: ProbeIdentity;
   /** Small always-included block explaining the compressed instructions. */
   private overflowHintBlock: PromptBlock | null = null;
   /** Guards the one-time async overflow resolution in run(). */
@@ -228,6 +251,7 @@ export class Agent {
     this.contextRenderer = new ContextRenderer();
     this.policyState = createPolicyState();
     this.probePassed = deps.reasoningProbePassed ?? false;
+    this.lastProbeIdentity = probeIdentityOf(deps.config);
     const initialLevel = (deps.config.reasoning?.mode !== "auto" ? deps.config.reasoning?.mode : undefined) ?? "medium";
     this.reasoningState = { level: initialLevel, overrideIteration: -100 };
   }
@@ -1412,6 +1436,39 @@ export class Agent {
 
   async reconfigure(config: AppConfig): Promise<void> {
     const { TokenCounter } = await import("../llm/token-counter");
+    // Provider-first context: when the model or backend identity changed,
+    // ask the new provider for the context it actually serves before
+    // rebuilding budgets around the (possibly stale) configured value.
+    // Manual `contextWindow` edits without an identity change are respected
+    // as-is. Fail-open: probe errors keep the configured value.
+    try {
+      const nextId = probeIdentityOf(config);
+      const prevId = this.lastProbeIdentity;
+      const identityChanged =
+        prevId.model !== nextId.model ||
+        prevId.baseUrl !== nextId.baseUrl ||
+        prevId.active !== nextId.active;
+      if (identityChanged) {
+        const nextEndpoint = activeProviderEndpoint(config.provider);
+        const { probeModel, probeProviderContext } = await import("../llm/model-loader");
+        const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
+        const detected =
+          (lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null) ??
+          (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
+            apiKey: nextEndpoint.apiKey,
+            providerType: nextEndpoint.type,
+          }));
+        if (detected && detected.actual !== config.contextWindow) {
+          this.deps.logger?.info(
+            `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
+          );
+          config.contextWindow = detected.actual;
+        }
+        this.lastProbeIdentity = nextId;
+      }
+    } catch {
+      // Probe is best-effort — never block a model/provider switch.
+    }
     const built = buildActiveProvider(config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
     });

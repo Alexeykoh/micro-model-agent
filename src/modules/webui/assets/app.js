@@ -65,6 +65,13 @@ function renderState(snapshot, busy) {
   if (!S.tabs.length) showEmptyFeed();
   renderPlan(S.state.host.plan);
   renderUsage(S.state.host);
+  // Late provider auto-detect may change the effective window after boot —
+  // the snapshot carries it so the topbar follows without a config re-fetch.
+  if (snapshot && typeof snapshot.contextWindow === "number" && S.state.config &&
+      S.state.config.contextWindow !== snapshot.contextWindow) {
+    S.state.config.contextWindow = snapshot.contextWindow;
+    renderSelectors();
+  }
   renderEnvironment(S.state.host);
   renderWorkspace(S.state.host);
   renderSessionsDropdown();

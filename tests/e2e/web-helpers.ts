@@ -87,8 +87,9 @@ export async function launch(url: string): Promise<Launched> {
 export async function withE2E(
   dir: string,
   fn: (srv: E2EConfig, l: Launched) => Promise<void>,
+  serverOpts?: { port?: number; providerBaseUrl?: string },
 ): Promise<void> {
-  const srv = await startE2EServer({ artifactsDir: dir });
+  const srv = await startE2EServer({ artifactsDir: dir, ...serverOpts });
   let browser: Browser | null = null;
   try {
     let launched: Launched;

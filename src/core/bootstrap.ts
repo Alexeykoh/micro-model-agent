@@ -2,6 +2,7 @@ import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
 import type { LogLevel } from "../logger/app-logger";
 import { buildActiveProvider } from "../modules/providers/factory";
+import { activeProviderEndpoint } from "../modules/providers/manager";
 import { BUILTIN_PROVIDERS } from "../modules/providers/presets";
 import { ModelLoader } from "../llm/model-loader";
 import { ToolRegistry, registerAllTools } from "../tools/index";
@@ -42,7 +43,7 @@ import { readMmaVersion } from "./version";
 import { collectEnvironment, logEnvironment } from "./environment";
 import { errMsg } from "../utils";
 import { dryRunOverflow, overflowHint } from "./prompt-overflow";
-import { probeModel, type ContextProbeResult } from "../llm/model-loader";
+import { probeModel, probeProviderContext, type ContextProbeResult } from "../llm/model-loader";
 import type { AgentPlugin } from "../modules/types";
 import type { ReasoningLevel } from "../config/types";
 import {
@@ -78,6 +79,43 @@ function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefine
   if (!plugin) return;
   plugin.isBuiltin = true;
   pm.register(plugin);
+}
+
+/**
+ * Late application of a resolved context probe. The probe lands in the
+ * background, AFTER the ContextManager/provider were built with the startup
+ * window — adopting the value into `config` alone leaves budgets stale, so a
+ * reconfigure (resize + provider rebuild) is needed to make it effective.
+ *
+ * Skips when there is nothing to apply (`config` no longer carries the
+ * probed value — equal from the start or explicitly overridden) or when a
+ * turn already ran with the old window (resizing mid-history corrupts
+ * budgets). Never throws.
+ */
+export async function applyProbedContext(
+  agent: Pick<Agent, "currentIteration" | "reconfigure">,
+  config: AppConfig,
+  probe: ContextProbeResult,
+  logger: Pick<Logger, "logSilent">,
+): Promise<boolean> {
+  if (config.contextWindow !== probe.actual) return false;
+  if (agent.currentIteration !== 0) {
+    logger.logSilent(
+      "debug",
+      `Context probe: keeping startup contextWindow ${config.contextWindow} — a turn already ran`,
+    );
+    return false;
+  }
+  try {
+    await agent.reconfigure(config);
+    logger.logSilent(
+      "info",
+      `Context probe: applied provider context ${probe.actual} tokens (model "${probe.model}")`,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -261,8 +299,14 @@ export async function bootstrap(
     // Certification marks are cosmetic — never block startup.
   }
 
+  // Endpoint the probe/autoload talk to: the ACTIVE entry, not the legacy
+  // flat fields (they mirror whatever was active at the last write and go
+  // stale after `/provider use` — observed: flat localhost:1234 while the
+  // active entry was opencode-go, so Zen was never probed).
+  const probeEndpoint = activeProviderEndpoint(config.provider);
+
   if (config.modelLoad.autoLoad) {
-    const modelLoader = new ModelLoader(config.provider.baseUrl, logger);
+    const modelLoader = new ModelLoader(probeEndpoint.baseUrl, logger);
     const loadResult = await modelLoader.ensureModelLoaded({
       model: config.model,
       contextLength: config.contextWindow,
@@ -282,10 +326,14 @@ export async function bootstrap(
     }
   }
 
-  // Context probe (background): ask the provider (LM Studio native API) for
-  // the context length the model is ACTUALLY loaded with and compare it with
-  // the configured contextWindow. Never blocks the banner; null = probe not
-  // applicable (not LM Studio / model not loaded / transient error).
+  // Context probe (background): ask the ACTIVE provider for the context
+  // length it ACTUALLY serves for this model (loaded instance, not the model
+  // card maximum) and adopt it as the effective contextWindow — provider wins
+  // over config. Never blocks the banner; null = no provider reports a window
+  // (bare OpenAI-compat `/models`, offline backend, transient error), in which
+  // case the configured contextWindow is kept (fail-open). A manual
+  // `mma context <N>` / `/config contextWindow <N>` afterwards still applies
+  // for the rest of the session.
   // Живой источник возможностей модели для тулов (browser vision и т.п.).
   // Пресет и конфиг-оверрайд известны сразу, native-probe уточняет их
   // асинхронно и записывает сюда, не блокируя старт. Геттер на toolCtx
@@ -293,29 +341,41 @@ export async function bootstrap(
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: { probe?: ModelCapabilities } = {};
 
+  // Value at startup. The probe resolves in the background — if the user
+  // managed to change contextWindow first (web UI before the probe lands),
+  // their explicit choice wins and the probe result is only logged.
+  const probeConfiguredAtStart = config.contextWindow;
+
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
-      const probe = await probeModel(config.provider.baseUrl, config.model);
-      if (!probe) return null;
-      if (probe.capabilities) capabilitiesRef.probe = probe.capabilities;
-      const contextProbe: ContextProbeResult = { model: probe.model, actual: probe.contextLength };
-      if (probe.contextLength < config.contextWindow) {
+      const lmProbe = await probeModel(probeEndpoint.baseUrl, config.model);
+      if (lmProbe?.capabilities) capabilitiesRef.probe = lmProbe.capabilities;
+      const lmContext = lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null;
+      const detected =
+        lmContext ??
+        (await probeProviderContext(probeEndpoint.baseUrl, config.model, {
+          apiKey: probeEndpoint.apiKey,
+          providerType: probeEndpoint.type,
+        }));
+      if (!detected) return null;
+      if (detected.actual === config.contextWindow) {
         logger.logSilent(
-          "warn",
-          `Context probe: model "${probe.model}" is loaded with ${probe.contextLength} tokens, but contextWindow is configured as ${config.contextWindow} — overflow/429 risk. Lower contextWindow or reload the model with a larger context.`,
+          "debug",
+          `Context probe: configured contextWindow matches provider context (${detected.actual})`,
         );
-      } else if (probe.contextLength > config.contextWindow) {
+      } else if (config.contextWindow !== probeConfiguredAtStart) {
         logger.logSilent(
-          "info",
-          `Context probe: model "${probe.model}" supports ${probe.contextLength} tokens — consider "mma context ${probe.contextLength}" to use the full window.`,
+          "debug",
+          `Context probe: model "${detected.model}" serves ${detected.actual} tokens, keeping the explicit contextWindow ${config.contextWindow}`,
         );
       } else {
         logger.logSilent(
-          "debug",
-          `Context probe: configured contextWindow matches loaded context (${probe.contextLength})`,
+          "info",
+          `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
         );
+        config.contextWindow = detected.actual;
       }
-      return contextProbe;
+      return detected;
     } catch {
       return null;
     }
@@ -354,7 +414,7 @@ export async function bootstrap(
       try {
         const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } =
           await import("../modules/reasoning/probe");
-        const cacheK = `${config.provider.baseUrl ?? ""}|${config.model}`;
+        const cacheK = `${probeEndpoint.baseUrl ?? ""}|${config.model}`;
         const cached = getCachedProbeResult(cacheK);
         const passed =
           cached !== undefined
@@ -845,6 +905,17 @@ export async function bootstrap(
   };
 
   const agent = new Agent(agentDeps);
+
+  // Late probe resolution: the window may have been adopted into `config`
+  // after the ContextManager/provider were built — reconfigure once so
+  // budgets and the provider actually use it. No-op when the probe settled
+  // early (same value) or a turn already ran.
+  void contextProbePromise
+    .then((probe) => {
+      if (!probe) return;
+      return applyProbedContext(agent, config, probe, logger);
+    })
+    .catch(() => {});
 
   // Register set_thinking tool (needs agent's shared reasoning state)
   if (config.reasoning) {

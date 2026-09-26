@@ -413,7 +413,7 @@ function providerHints() {
   const frag = document.createDocumentFragment();
   const types = el("datalist");
   types.id = "providerTypes";
-  ["openai-compat", "openrouter", "openai", "anthropic", "opencode-zen", "opencode-go"].forEach((v) => {
+  ["openai-compat", "lmstudio", "openrouter", "openai", "anthropic", "opencode-zen", "opencode-go"].forEach((v) => {
     const o = el("option");
     o.value = v;
     types.appendChild(o);

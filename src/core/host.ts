@@ -28,6 +28,12 @@ export interface HostStateSnapshot {
    * probe finished without a result.
    */
   contextProbe?: { model: string; actual: number } | null;
+  /**
+   * Effective context window (tokens) the agent budgets against. Carried in
+   * the snapshot so web clients learn about a late provider auto-detect
+   * without re-fetching `/api/config`.
+   */
+  contextWindow?: number;
   /** Agent workspace (the `-d` dir), absolute; absent when unknown. */
   workspace?: string;
   /** AGENTS.md instruction sources that were loaded (or `disabled` via flag). */

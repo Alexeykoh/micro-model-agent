@@ -210,3 +210,26 @@ export function presetOf(type: string): { label: string; baseUrl: string } | und
   if (!spec) return undefined;
   return { label: spec.label, baseUrl: spec.baseUrl };
 }
+
+/**
+ * Resolve the ACTIVE provider endpoint for out-of-band calls (context probe,
+ * model autoload, reasoning-probe cache key). The legacy flat fields
+ * (`type`/`baseUrl`/`apiKey`) mirror whatever was active when the config was
+ * last written and go stale after a hot-swapped `/provider use` — entries are
+ * the source of truth. Falls back to the flat fields for legacy configs.
+ */
+export function activeProviderEndpoint(
+  config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,
+): {
+  baseUrl: string;
+  apiKey?: string;
+  type: string;
+} {
+  const entries = Array.isArray(config?.entries) ? config.entries : [];
+  const active =
+    entries.find((e) => e.label === config?.active || e.type === config?.active) ?? entries[0];
+  if (active) {
+    return { baseUrl: active.baseUrl, apiKey: active.apiKey, type: active.type };
+  }
+  return { baseUrl: config?.baseUrl ?? "", apiKey: config?.apiKey, type: config?.type ?? "openai-compat" };
+}

@@ -59,9 +59,9 @@ describe("webui providers REST", () => {
       const openrouter = body.presets?.find((p) => p.type === "openrouter");
       expect(openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
       expect(body.presets?.some((p) => p.type === "openai-compat")).toBe(true);
-      // Named local presets map to openai-compat with a known local URL.
+      // LM Studio graduated to a builtin preset with its own type.
       const lmstudio = body.presets?.find((p) => p.id === "lmstudio");
-      expect(lmstudio?.type).toBe("openai-compat");
+      expect(lmstudio?.type).toBe("lmstudio");
       expect(lmstudio?.baseUrl).toBe("http://localhost:1234/v1");
     });
   });

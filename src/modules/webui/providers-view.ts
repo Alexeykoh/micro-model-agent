@@ -34,10 +34,10 @@ export interface ProviderPresetView {
 
 /**
  * Named local endpoints: same `openai-compat` type, well-known base URLs, so a
- * local setup needs no URL knowledge either.
+ * local setup needs no URL knowledge either. (LM Studio graduated to a real
+ * builtin preset — `lmstudio` — and is no longer duplicated here.)
  */
 const LOCAL_PRESETS: ProviderPresetView[] = [
-  { id: "lmstudio", type: "openai-compat", name: "lmstudio", label: "LM Studio (localhost:1234)", baseUrl: "http://localhost:1234/v1" },
   { id: "ollama", type: "openai-compat", name: "ollama", label: "Ollama (localhost:11434)", baseUrl: "http://localhost:11434/v1" },
   { id: "vllm", type: "openai-compat", name: "vllm", label: "vLLM (localhost:8000)", baseUrl: "http://localhost:8000/v1" },
 ];

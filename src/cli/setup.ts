@@ -95,7 +95,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
 
   let apiBase = "";
 
-  if (provider === "openai-compat") {
+  if (provider === "openai-compat" || provider === "lmstudio") {
     const found = await withSpinner(t("setup.scanning_spinner"), async () => scanLocalServers());
 
     if (found.length > 0) {
@@ -119,7 +119,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     apiBase = HOSTED_BASE_URLS[provider] ?? "";
   }
 
-  const defaultKey = provider === "openai-compat" ? "not-needed" : "";
+  const defaultKey = provider === "openai-compat" || provider === "lmstudio" ? "not-needed" : "";
   const apiKey = await ask(rl, t("setup.api_key"), defaultKey);
 
   const models = await withSpinner(t("setup.fetching_spinner"), () =>

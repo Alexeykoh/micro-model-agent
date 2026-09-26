@@ -86,6 +86,13 @@ describe("webui usage metrics", () => {
     expect(snapshot.contextQuality).toBe(80);
   });
 
+  it("buildHostState surfaces the effective contextWindow for late auto-detect", () => {
+    const config = structuredClone(DEFAULTS);
+    config.contextWindow = 1000000;
+    const snapshot: HostStateSnapshot = buildHostState({ config }, false);
+    expect(snapshot.contextWindow).toBe(1000000);
+  });
+
   it("makeReconfigure refreshes the sidebar context limit after a resize", async () => {
     const s = createWebUiState();
     s.usage = { contextUsed: 1000, contextLimit: 24576, costUsd: 0.1 };
