@@ -12,13 +12,13 @@ import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
 
-export function setSelButton(btn, label, value) {
+function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
   btn.appendChild(el("b", "", value));
   btn.appendChild(icon("chevron-down"));
 }
 
-export function menuItem(label, sub, active, onClick) {
+function menuItem(label, sub, active, onClick) {
   const mi = el("button", "mi" + (active ? " on" : ""));
   mi.type = "button";
   mi.setAttribute("aria-pressed", active ? "true" : "false");
@@ -33,7 +33,7 @@ export function menuItem(label, sub, active, onClick) {
 }
 
 // Menu action row (refresh, custom, add…) with an optional leading icon.
-export function menuAction(label, iconName, onClick) {
+function menuAction(label, iconName, onClick) {
   const mi = el("button", "mi row-mi");
   mi.type = "button";
   if (iconName) mi.appendChild(icon(iconName));
@@ -151,7 +151,7 @@ document.querySelectorAll("[data-sel]").forEach((sel) => {
   });
 });
 
-export async function postConfig(key, value, refreshSettings) {
+async function postConfig(key, value, refreshSettings) {
   const r = await api("/api/config", { method: "POST", body: { key, value } });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
@@ -233,7 +233,7 @@ const SECTION_KEYS = {
 
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
-export function configLabel(def) {
+function configLabel(def) {
   const k = "config.key." + def.key;
   const tr = t(k);
   return tr === k ? def.key : tr;
@@ -241,17 +241,17 @@ export function configLabel(def) {
 
 // Localized enum value: `config.enum.<value>`, falling back to the raw value.
 // The raw value is still what gets POSTed — only the label is translated.
-export function enumLabel(v) {
+function enumLabel(v) {
   const k = "config.enum." + v;
   const tr = t(k);
   return tr === k ? v : tr;
 }
 
-export function defFor(key) {
+function defFor(key) {
   return S.state.registry.find((d) => d.key === key) || null;
 }
 
-export function row(label, control, desc) {
+function row(label, control, desc) {
   const r = el("div", "row");
   const left = el("div", "row-label");
   left.appendChild(el("span", "row-name", label));
@@ -267,13 +267,13 @@ export function row(label, control, desc) {
   return r;
 }
 
-export function descFor(key) {
+function descFor(key) {
   const k = "config.desc." + key;
   const d = t(k);
   return d === k ? "" : d;
 }
 
-export function configControl(def, key) {
+function configControl(def, key) {
   const value = S.state.config ? getPath(S.state.config, key) : undefined;
   if (def.valueType === "bool") {
     return makeToggle(!!value, (next) => {
@@ -324,7 +324,7 @@ export function configControl(def, key) {
   return input;
 }
 
-export function renderGenericPanel(name, keys) {
+function renderGenericPanel(name, keys) {
   const container = document.querySelector('[data-panel="' + name + '"]');
   if (!container) return;
   container.textContent = "";
@@ -335,7 +335,7 @@ export function renderGenericPanel(name, keys) {
   });
 }
 
-export function providerEntries() {
+function providerEntries() {
   if (S.state.providers && Array.isArray(S.state.providers.entries) && S.state.providers.entries.length) {
     return S.state.providers.entries;
   }
@@ -360,11 +360,11 @@ export function providerEntries() {
   ];
 }
 
-export function providerName(p) {
+function providerName(p) {
   return p.label || p.type || "—";
 }
 
-export function providerMeta(p) {
+function providerMeta(p) {
   const parts = [p.type];
   if (p.contextWindow) parts.push(Math.round(p.contextWindow / 1024) + "K");
   if (typeof p.rpm === "number" || typeof p.parallel === "number") {
@@ -373,7 +373,7 @@ export function providerMeta(p) {
   return parts.join(" · ");
 }
 
-export function pfield(labelKey, input) {
+function pfield(labelKey, input) {
   const f = el("div", "pform-field");
   f.appendChild(el("label", "", t(labelKey)));
   input.setAttribute("aria-label", t(labelKey));
@@ -381,7 +381,7 @@ export function pfield(labelKey, input) {
   return f;
 }
 
-export function providerInput(value, type, placeholder) {
+function providerInput(value, type, placeholder) {
   const input = el("input");
   input.type = type || "text";
   if (placeholder) input.placeholder = placeholder;
@@ -390,7 +390,7 @@ export function providerInput(value, type, placeholder) {
 }
 
 // A titled group inside a settings panel (models / providers).
-export function settingsSection(titleKey) {
+function settingsSection(titleKey) {
   const sec = el("div", "settings-section");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t(titleKey)));
@@ -401,7 +401,7 @@ export function settingsSection(titleKey) {
 }
 
 // Compact action control used inside list items (use / edit / delete).
-export function chip(label, cls, onClick) {
+function chip(label, cls, onClick) {
   const b = el("button", "chip" + (cls ? " " + cls : ""), label);
   b.type = "button";
   b.addEventListener("click", onClick);
@@ -409,7 +409,7 @@ export function chip(label, cls, onClick) {
 }
 
 // Suggestions for the provider form: known provider types and common base URLs.
-export function providerHints() {
+function providerHints() {
   const frag = document.createDocumentFragment();
   const types = el("datalist");
   types.id = "providerTypes";
@@ -437,32 +437,123 @@ export function providerHints() {
   return frag;
 }
 
-export function providerForm() {
+// One-click preset row: selecting a builtin fills type/label/base URL, so
+// hosted providers need no URL knowledge. `custom` leaves the fields free.
+// Returns the row node (null when no presets) plus the raw select for wiring.
+function providerPresetField(editing) {
+  const presets = S.state.providerPresets || [];
+  if (!presets.length) return { presets, sel: null, node: null };
+  const sel = el("select", "pform-preset");
+  const custom = el("option", "", t("web.settings.provider_custom"));
+  custom.value = "";
+  sel.appendChild(custom);
+  presets.forEach((p) => {
+    const o = el("option", "", p.label || p.type);
+    o.value = p.id;
+    sel.appendChild(o);
+  });
+  const match =
+    presets.find((p) => p.type === editing.type && p.baseUrl && p.baseUrl === editing.baseUrl) ||
+    presets.find((p) => p.type === editing.type && !p.baseUrl) ||
+    presets.find((p) => p.type === editing.type);
+  if (match) sel.value = match.id;
+  return { presets, sel, node: pfield("web.settings.provider_preset", sel) };
+}
+
+// Keep the preset select and the type field in sync both ways.
+function wirePresetSync(presets, presetSel, mode, f) {
+  if (!presetSel) return;
+  presetSel.addEventListener("change", () => {
+    const p = presets.find((x) => x.id === presetSel.value);
+    if (!p) return;
+    f.type.value = p.type;
+    if (mode === "add" || !f.label.value.trim()) f.label.value = p.name;
+    f.base.value = p.baseUrl || "";
+  });
+  f.type.addEventListener("input", () => {
+    const sel = presets.find((x) => x.id === presetSel.value);
+    if (!sel || f.type.value.trim() !== sel.type) presetSel.value = "";
+  });
+}
+
+// Optional tuning fields stay collapsed so the form reads as "type + URL".
+function providerAdvancedFields(editing) {
+  const adv = el("details", "pform-adv");
+  adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
+  const advGrid = el("div", "pform-grid");
+  const f = {
+    ctx: providerInput(editing.contextWindow, "number", "32768"),
+    prio: providerInput(editing.priority, "number", "0"),
+    rpm: providerInput(editing.rpm, "number", "60"),
+    par: providerInput(editing.parallel, "number", "1"),
+  };
+  advGrid.appendChild(pfield("web.settings.provider_context", f.ctx));
+  advGrid.appendChild(pfield("web.settings.provider_priority", f.prio));
+  advGrid.appendChild(pfield("web.settings.provider_rpm", f.rpm));
+  advGrid.appendChild(pfield("web.settings.provider_parallel", f.par));
+  adv.appendChild(advGrid);
+  return { node: adv, ...f };
+}
+
+// Validate the field bag, POST it, and refresh the panels on success.
+async function submitProviderForm(f, mode, editing) {
+  const type = f.type.value.trim();
+  const baseUrl = f.base.value.trim();
+  if (!type || !baseUrl) {
+    setIndicator(t("web.settings.provider_required"), true);
+    return;
+  }
+  const body = { type, baseUrl };
+  const label = f.label.value.trim();
+  if (label) body.label = label;
+  if (mode === "edit") {
+    const original = providerName(editing);
+    if (original && original !== "—") body.originalName = original;
+  }
+  const key = f.key.value.trim();
+  // Empty means "keep the stored key" (the field is never prefilled, only a
+  // hint). `"***"` guards password-manager autofill of a masked placeholder.
+  if (key && key !== "***") body.apiKey = key;
+  const nums = [
+    ["contextWindow", f.ctx, 1024],
+    ["priority", f.prio, 0],
+    ["rpm", f.rpm, 1],
+    ["parallel", f.par, 1],
+  ];
+  for (const entry of nums) {
+    const raw = entry[1].value.trim();
+    if (!raw) continue;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < entry[2]) {
+      setIndicator(t("web.settings.provider_invalid"), true);
+      return;
+    }
+    body[entry[0]] = n;
+  }
+  const r = await api("/api/providers", { method: "POST", body });
+  if (r.ok && r.data && r.data.ok) {
+    const persisted = r.data.persisted !== false;
+    S.state.providerForm = null;
+    setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
+    hideProviderOverlay();
+    await loadProviders();
+    await loadConfig();
+  } else {
+    const err = (r.data && r.data.error) || "";
+    setIndicator(
+      err === "name-conflict" ? t("web.settings.provider_name_conflict") : err || t("web.settings.save_failed"),
+      true,
+    );
+  }
+}
+
+function providerForm() {
   const mode = (S.state.providerForm && S.state.providerForm.mode) || "add";
   const editing = (S.state.providerForm && S.state.providerForm.entry) || {};
   const box = el("div", "pform");
 
-  // One-click preset: selecting a builtin fills type/label/base URL, so hosted
-  // providers need no URL knowledge. `custom` leaves the fields free.
-  const presets = S.state.providerPresets || [];
-  let presetSel = null;
-  if (presets.length) {
-    presetSel = el("select", "pform-preset");
-    const custom = el("option", "", t("web.settings.provider_custom"));
-    custom.value = "";
-    presetSel.appendChild(custom);
-    presets.forEach((p) => {
-      const o = el("option", "", p.label || p.type);
-      o.value = p.id;
-      presetSel.appendChild(o);
-    });
-    const match =
-      presets.find((p) => p.type === editing.type && p.baseUrl && p.baseUrl === editing.baseUrl) ||
-      presets.find((p) => p.type === editing.type && !p.baseUrl) ||
-      presets.find((p) => p.type === editing.type);
-    if (match) presetSel.value = match.id;
-    box.appendChild(pfield("web.settings.provider_preset", presetSel));
-  }
+  const { presets, sel: presetSel, node: presetNode } = providerPresetField(editing);
+  if (presetNode) box.appendChild(presetNode);
 
   const grid = el("div", "pform-grid");
   const fType = providerInput(editing.type, "text", "openai-compat");
@@ -471,101 +562,27 @@ export function providerForm() {
   const fBase = providerInput(editing.baseUrl, "text", "http://localhost:1234/v1");
   fBase.setAttribute("list", "providerBaseUrls");
   const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
-
   grid.appendChild(pfield("web.settings.provider_type", fType));
   grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
   grid.appendChild(pfield("web.settings.provider_baseurl", fBase));
   grid.appendChild(pfield("web.settings.provider_apikey", fKey));
   box.appendChild(grid);
+  wirePresetSync(presets, presetSel, mode, { type: fType, label: fLabel, base: fBase });
 
-  if (presetSel) {
-    presetSel.addEventListener("change", () => {
-      const p = presets.find((x) => x.id === presetSel.value);
-      if (!p) return;
-      fType.value = p.type;
-      if (mode === "add" || !fLabel.value.trim()) fLabel.value = p.name;
-      fBase.value = p.baseUrl || "";
-    });
-    fType.addEventListener("input", () => {
-      const sel = presets.find((x) => x.id === presetSel.value);
-      if (!sel || fType.value.trim() !== sel.type) presetSel.value = "";
-    });
-  }
-
-  // Optional tuning fields stay collapsed so the form reads as "type + URL".
-  const adv = el("details", "pform-adv");
-  adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
-  const advGrid = el("div", "pform-grid");
-  const fCtx = providerInput(editing.contextWindow, "number", "32768");
-  const fPrio = providerInput(editing.priority, "number", "0");
-  const fRpm = providerInput(editing.rpm, "number", "60");
-  const fPar = providerInput(editing.parallel, "number", "1");
-  advGrid.appendChild(pfield("web.settings.provider_context", fCtx));
-  advGrid.appendChild(pfield("web.settings.provider_priority", fPrio));
-  advGrid.appendChild(pfield("web.settings.provider_rpm", fRpm));
-  advGrid.appendChild(pfield("web.settings.provider_parallel", fPar));
-  adv.appendChild(advGrid);
-  box.appendChild(adv);
+  const { node: advNode, ...advF } = providerAdvancedFields(editing);
+  box.appendChild(advNode);
+  const f = { type: fType, label: fLabel, base: fBase, key: fKey, ...advF };
 
   box.appendChild(providerHints());
 
   const actions = el("div", "pform-actions");
-  const save = link(t("web.settings.save"), "", async () => {
-    const type = fType.value.trim();
-    const baseUrl = fBase.value.trim();
-    if (!type || !baseUrl) {
-      setIndicator(t("web.settings.provider_required"), true);
-      return;
-    }
-    const body = { type, baseUrl };
-    const label = fLabel.value.trim();
-    if (label) body.label = label;
-    if (mode === "edit") {
-      const original = providerName(editing);
-      if (original && original !== "—") body.originalName = original;
-    }
-    const key = fKey.value.trim();
-    if (key && key !== "***") body.apiKey = key;
-    const nums = [
-      ["contextWindow", fCtx, 1024],
-      ["priority", fPrio, 0],
-      ["rpm", fRpm, 1],
-      ["parallel", fPar, 1],
-    ];
-    for (const entry of nums) {
-      const raw = entry[1].value.trim();
-      if (!raw) continue;
-      const n = Number(raw);
-      if (!Number.isInteger(n) || n < entry[2]) {
-        setIndicator(t("web.settings.provider_invalid"), true);
-        return;
-      }
-      body[entry[0]] = n;
-    }
-    const r = await api("/api/providers", { method: "POST", body });
-    if (r.ok && r.data && r.data.ok) {
-      const persisted = r.data.persisted !== false;
-      S.state.providerForm = null;
-      setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
-      hideProviderOverlay();
-      await loadProviders();
-      await loadConfig();
-    } else {
-      const err = (r.data && r.data.error) || "";
-      setIndicator(
-        err === "name-conflict" ? t("web.settings.provider_name_conflict") : err || t("web.settings.save_failed"),
-        true,
-      );
-    }
-  });
-  const cancel = link(t("web.settings.cancel"), "dim", () => closeProviderForm());
-  actions.appendChild(save);
-  actions.appendChild(cancel);
+  actions.appendChild(link(t("web.settings.save"), "", () => submitProviderForm(f, mode, editing)));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeProviderForm()));
   box.appendChild(actions);
   return box;
 }
 
-export function renderModelPanel() {
+function renderModelPanel() {
   const container = document.querySelector('[data-panel="model"]');
   if (!container) return;
   container.textContent = "";
@@ -661,7 +678,7 @@ export function renderModelPanel() {
   container.appendChild(provSec.el);
 }
 
-export function renderUiPanel() {
+function renderUiPanel() {
   const container = document.querySelector('[data-panel="ui"]');
   if (!container) return;
   container.textContent = "";
@@ -684,7 +701,7 @@ export function renderUiPanel() {
   container.appendChild(row(t("web.settings.theme"), seg));
 }
 
-export function renderSecurityPanel() {
+function renderSecurityPanel() {
   const container = document.querySelector('[data-panel="security"]');
   if (!container) return;
   container.textContent = "";
@@ -702,14 +719,14 @@ export function renderSecurityPanel() {
   container.appendChild(note);
 }
 
-export function placeholderFor(data, empty) {
+function placeholderFor(data, empty) {
   const d = el("div", "placeholder");
   if (data === undefined) d.textContent = t("web.settings.loading");
   else d.textContent = empty;
   return d;
 }
 
-export function groupHeader(label, count) {
+function groupHeader(label, count) {
   const head = el("div", "row");
   head.appendChild(el("span", "val accent", label));
   if (count != null) head.appendChild(el("span", "val dim", String(count)));
@@ -718,7 +735,7 @@ export function groupHeader(label, count) {
 
 const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"];
 
-export function renderMemoryPanel() {
+function renderMemoryPanel() {
   const container = document.querySelector('[data-panel="memory"]');
   if (!container) return;
   container.textContent = "";
@@ -819,7 +836,7 @@ export function renderMemoryPanel() {
   draw();
 }
 
-export function renderSkillsPanel() {
+function renderSkillsPanel() {
   const container = document.querySelector('[data-panel="skills"]');
   if (!container) return;
   container.textContent = "";
@@ -853,7 +870,7 @@ export function renderSkillsPanel() {
   container.appendChild(list);
 }
 
-export function renderPluginsPanel() {
+function renderPluginsPanel() {
   const container = document.querySelector('[data-panel="plugins"]');
   if (!container) return;
   container.textContent = "";
@@ -970,7 +987,7 @@ let settingsReturnFocus = null;
 
 // Settings sections act as a real tablist: roles, roving tabindex, arrow keys.
 const settingsTabs = Array.from(document.querySelectorAll("#setMenu .mi"));
-export function selectSettingsPanel(name) {
+function selectSettingsPanel(name) {
   settingsTabs.forEach((x) => {
     const on = x.dataset.p === name;
     x.classList.toggle("on", on);
@@ -1008,7 +1025,7 @@ document.querySelectorAll(".content-col .panel").forEach((panel) => {
   panel.setAttribute("aria-labelledby", "tab-" + panel.id.replace(/^p-/, ""));
 });
 
-export function openSettings() {
+function openSettings() {
   settingsReturnFocus = document.activeElement;
   overlay.classList.add("open");
   settingsBtn.setAttribute("aria-expanded", "true");
@@ -1018,7 +1035,7 @@ export function openSettings() {
   const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
   if (active) setTimeout(() => active.focus(), 0);
 }
-export function closeSettings() {
+function closeSettings() {
   hideProviderOverlay();
   S.state.providerForm = null;
   overlay.classList.remove("open");
@@ -1040,11 +1057,11 @@ const providerFormTitle = document.getElementById("providerFormTitle");
 const closeProviderBtn = document.getElementById("closeProvider");
 let providerReturnFocus = null;
 
-export function isProviderOpen() {
+function isProviderOpen() {
   return !!providerOverlay && providerOverlay.classList.contains("open");
 }
 
-export function openProviderForm(mode, entry) {
+function openProviderForm(mode, entry) {
   if (!providerOverlay || !providerFormHost) return;
   S.state.providerForm = { mode, entry: entry || null };
   providerReturnFocus = document.activeElement;
@@ -1060,14 +1077,14 @@ export function openProviderForm(mode, entry) {
   }, 0);
 }
 
-export function hideProviderOverlay() {
+function hideProviderOverlay() {
   if (!providerOverlay) return;
   providerOverlay.classList.remove("open");
   if (providerReturnFocus && providerReturnFocus.focus) providerReturnFocus.focus();
   providerReturnFocus = null;
 }
 
-export function closeProviderForm() {
+function closeProviderForm() {
   if (!isProviderOpen()) return;
   S.state.providerForm = null;
   hideProviderOverlay();

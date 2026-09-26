@@ -20,14 +20,14 @@ describe("webui assets", () => {
   // guard: the feed renders the plan card from a dedicated SSE `plan` event.
   it("wires the plan event to the .planblock feed card", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('addEventListener("plan"');
+    expect(js(a)).toContain('["plan", onPlan]');
     expect(js(a)).toContain("planblock");
     expect(a.css).toContain(".planblock");
   });
 
   it("wires the question event to an interactive .q block posting /api/answer", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('addEventListener("question"');
+    expect(js(a)).toContain('["question", onQuestion]');
     expect(js(a)).toContain("/api/answer");
     expect(js(a)).toContain("qopt");
     expect(a.css).toContain(".q .qopt");
@@ -35,7 +35,7 @@ describe("webui assets", () => {
 
   it("wires the OutputBus log event and the immediate busy indicator", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('addEventListener("log"');
+    expect(js(a)).toContain('["log", onLog]');
     expect(js(a)).toContain("showBusy(");
     expect(a.css).toContain(".busy .busytime");
   });
@@ -55,8 +55,8 @@ describe("webui assets", () => {
 
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('addEventListener("reasoning"');
-    expect(js(a)).toContain('addEventListener("meta"');
+    expect(js(a)).toContain('["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)]');
+    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId)]');
     expect(js(a)).not.toContain("finishMeta");
   });
 
@@ -99,7 +99,7 @@ describe("webui assets", () => {
 
   it("wires the critic SSE event and the Agent settings panel (MoE + critic keys)", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('addEventListener("critic"');
+    expect(js(a)).toContain('["critic", onCritic]');
     expect(js(a)).toContain("onCritic");
     expect(js(a)).toContain("critic.enabled");
     expect(js(a)).toContain("moe.enabled");

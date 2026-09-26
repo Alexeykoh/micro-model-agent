@@ -18,7 +18,7 @@ import { openConfirm, setIndicator } from "./dialog.js";
 
 let sessionsErrTimer = null;
 
-export function renderTabstrip() {
+function renderTabstrip() {
   tabstripEl.textContent = "";
   S.tabs.forEach((item) => {
     const on = item.id === S.activeTabId;
@@ -123,7 +123,7 @@ export function openTab(id, name, kind, server) {
   syncUrl();
 }
 
-export function closeTab(id) {
+function closeTab(id) {
   const i = S.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
   S.tabs = S.tabs.filter((x) => x.id !== id);
@@ -201,7 +201,7 @@ export function renderSessionsDropdown() {
   }
 }
 
-export function sessionRow(s, isActive) {
+function sessionRow(s, isActive) {
   const row = el("div", "si si-row" + (isActive ? " on" : ""));
   const name = s.name || String(s.id);
   const main = el("button", "dd-row-main");
@@ -234,7 +234,7 @@ export function sessionRow(s, isActive) {
 }
 
 // --- session delete: confirmation dialog --------------------------------
-export function confirmDeleteSession(id, name) {
+function confirmDeleteSession(id, name) {
   openConfirm({
     title: t("web.sessions.confirm_title"),
     body: t("web.sessions.confirm_body", { name }),
@@ -242,7 +242,7 @@ export function confirmDeleteSession(id, name) {
   });
 }
 
-export function showSessionsError(msg) {
+function showSessionsError(msg) {
   S.state.sessionsError = msg;
   renderSessionsDropdown();
   if (sessionsErrTimer) clearTimeout(sessionsErrTimer);
@@ -252,7 +252,7 @@ export function showSessionsError(msg) {
   }, 4500);
 }
 
-export async function deleteSession(id) {
+async function deleteSession(id) {
   const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
   if (!r.ok) {
     const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
@@ -281,7 +281,7 @@ document.addEventListener("click", () => {
   closeCmdk();
 });
 
-export function setAttachError(msg) {
+function setAttachError(msg) {
   if (!attachErr) return;
   attachErr.textContent = msg;
   attachErr.hidden = false;
@@ -291,7 +291,7 @@ export function setAttachError(msg) {
   }, 4000);
 }
 
-export function renderAttachments() {
+function renderAttachments() {
   if (!attachStrip) return;
   attachStrip.textContent = "";
   attachStrip.hidden = S.attachments.length === 0;
@@ -315,12 +315,12 @@ export function renderAttachments() {
   });
 }
 
-export function clearAttachments() {
+function clearAttachments() {
   S.attachments = [];
   renderAttachments();
 }
 
-export function readAsDataUrl(file) {
+function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(String(fr.result));
@@ -329,7 +329,7 @@ export function readAsDataUrl(file) {
   });
 }
 
-export async function addFiles(files) {
+async function addFiles(files) {
   let err = "";
   for (const file of files) {
     if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
@@ -363,7 +363,7 @@ export async function addFiles(files) {
   if (err) setAttachError(err);
 }
 
-export function userMessageNode(text, images) {
+function userMessageNode(text, images) {
   const node = el("div", "u", text);
   (images || []).forEach((src) => {
     const img = document.createElement("img");
@@ -437,12 +437,12 @@ export async function loadCommands() {
   if (r.ok && r.data && Array.isArray(r.data.commands)) webCommands = r.data.commands;
 }
 
-export function slashToken() {
+function slashToken() {
   const v = inp.value;
   return v.startsWith("/") && !/\s/.test(v) ? v : null;
 }
 
-export function closeCmdk() {
+function closeCmdk() {
   if (cmdk.hidden) return;
   cmdk.hidden = true;
   cmdk.textContent = "";
@@ -452,13 +452,13 @@ export function closeCmdk() {
   inp.removeAttribute("aria-activedescendant");
 }
 
-export function highlightCmdk() {
+function highlightCmdk() {
   Array.from(cmdk.children).forEach((node, i) => node.classList.toggle("on", i === cmdkIndex));
   const on = cmdk.children[cmdkIndex];
   if (on) inp.setAttribute("aria-activedescendant", on.id);
 }
 
-export function updateCmdk() {
+function updateCmdk() {
   const token = slashToken();
   if (token === null || !webCommands.length) {
     closeCmdk();
@@ -492,7 +492,7 @@ export function updateCmdk() {
   highlightCmdk();
 }
 
-export function acceptCmdk(i) {
+function acceptCmdk(i) {
   const c = cmdkItems[i];
   if (!c) return;
   inp.value = "/" + c.name + " ";
@@ -503,12 +503,12 @@ export function acceptCmdk(i) {
 
 // Grow the composer with its content up to a max, then scroll.
 const INPUT_MAX_PX = 200;
-export function autogrow() {
+function autogrow() {
   if (!inp) return;
   inp.style.height = "auto";
   inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
 }
-export function clearInput() {
+function clearInput() {
   inp.value = "";
   autogrow();
   closeCmdk();
@@ -519,7 +519,7 @@ if (inp)
     updateCmdk();
   });
 
-export async function send() {
+async function send() {
   const text = inp.value.trim();
   const images = S.attachments.slice();
   if (!text && !images.length) return;
@@ -537,6 +537,8 @@ export async function send() {
     appendTo(feed, el("div", "u", text));
     clearInput();
     const name = text.slice(1).split(/\s+/)[0].toLowerCase();
+    // `/clear` and `/new` never reach the server: both are pure browser-side
+    // feed/tab operations (the server has no feed to clear).
     if (name === "clear") {
       clearFeed(feed);
       return;
@@ -573,7 +575,7 @@ export async function send() {
   }
 }
 
-export async function interrupt() {
+async function interrupt() {
   if (!S.state.busy) return;
   await api("/api/interrupt", { method: "POST", body: {} });
 }

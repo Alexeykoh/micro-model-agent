@@ -133,21 +133,6 @@ b.addEventListener("click", onClick);
 return b;
 }
 
-// Upgrade an existing non-button node (a span/div kept for layout) into a
-// keyboard-activatable control.
-export function activate(node, fn) {
-node.setAttribute("role", "button");
-if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
-node.addEventListener("click", fn);
-node.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    fn(e);
-  }
-});
-return node;
-}
-
 // Render raw memory text (`- **date** -- **pattern:** body`) as safe DOM nodes:
 // `**…**` spans become <b>, everything else stays a text node. Never uses
 // innerHTML, so untrusted/model-written content cannot inject markup.

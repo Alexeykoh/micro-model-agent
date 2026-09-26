@@ -93,54 +93,31 @@ function connectSSE() {
       return null;
     }
   };
-  es.addEventListener("text", (e) => {
+// SSE event → feed handler table. `command`/`state`/`error` need envelope
+// checks and stay bespoke below; everything else is `parse → null-guard → call`.
+const handlers = [
+  ["text", (d) => onText(d.chunk || "", d.sessionId)],
+  ["meta", (d) => onMeta(d.chunk || "", d.sessionId)],
+  ["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)],
+  ["phase", (d) => onPhase(d.phase, d.sessionId)],
+  ["tool_start", onToolStart],
+  ["tool_end", onToolEnd],
+  ["plan", onPlan],
+  ["critic", onCritic],
+  ["question", onQuestion],
+  ["turn_end", onTurnEnd],
+  ["log", onLog],
+];
+for (const [event, fn] of handlers) {
+  es.addEventListener(event, (e) => {
     const d = parse(e);
-    if (d) onText(d.chunk || "", d.sessionId);
+    if (d) fn(d);
   });
-  es.addEventListener("meta", (e) => {
-    const d = parse(e);
-    if (d) onMeta(d.chunk || "", d.sessionId);
-  });
-  es.addEventListener("reasoning", (e) => {
-    const d = parse(e);
-    if (d) onReasoning(d.chunk || "", d.sessionId);
-  });
-  es.addEventListener("phase", (e) => {
-    const d = parse(e);
-    if (d) onPhase(d.phase, d.sessionId);
-  });
-  es.addEventListener("tool_start", (e) => {
-    const d = parse(e);
-    if (d) onToolStart(d);
-  });
-  es.addEventListener("tool_end", (e) => {
-    const d = parse(e);
-    if (d) onToolEnd(d);
-  });
-  es.addEventListener("plan", (e) => {
-    const d = parse(e);
-    if (d) onPlan(d);
-  });
-  es.addEventListener("critic", (e) => {
-    const d = parse(e);
-    if (d) onCritic(d);
-  });
-  es.addEventListener("question", (e) => {
-    const d = parse(e);
-    if (d) onQuestion(d);
-  });
-  es.addEventListener("turn_end", (e) => {
-    const d = parse(e);
-    if (d) onTurnEnd(d);
-  });
-  es.addEventListener("command", (e) => {
-    const d = parse(e);
-    if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
-  });
-  es.addEventListener("log", (e) => {
-    const d = parse(e);
-    if (d) onLog(d);
-  });
+}
+es.addEventListener("command", (e) => {
+  const d = parse(e);
+  if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
+});
   es.addEventListener("state", (e) => {
     const d = parse(e);
     if (d) {

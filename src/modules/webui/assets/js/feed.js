@@ -13,13 +13,13 @@ FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
 categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine, fmtTokens,
 } from "./format.js";
 
-export function insertAfter(ref, node) {
+function insertAfter(ref, node) {
   if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
   else appendTo(liveFeed(), node);
 }
 
 
-export function emptyView() {
+function emptyView() {
   const wrap = el("div", "empty");
   wrap.appendChild(el("span", "g", "✦"));
   wrap.appendChild(document.createTextNode(" " + t("web.empty.title")));
@@ -59,7 +59,7 @@ export function liveFeed() {
 
 // Route a server event to the tab that owns its session (item from `broadcast`
 // enrichment); fall back to the live/active tab for events without one.
-export function feedForEvent(sessionId) {
+function feedForEvent(sessionId) {
   if (sessionId) {
     const tab = S.tabs.find((x) => x.id === sessionId);
     if (tab) return tab.feed;
@@ -67,11 +67,11 @@ export function feedForEvent(sessionId) {
   return liveFeed();
 }
 
-export function nearBottom() {
+function nearBottom() {
   return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 140;
 }
 
-export function scroll() {
+function scroll() {
   if (nearBottom()) msgs.scrollTop = msgs.scrollHeight;
 }
 
@@ -82,7 +82,7 @@ export function appendTo(feed, node) {
   return node;
 }
 
-export function append(node) {
+function append(node) {
   return appendTo(liveFeed(), node);
 }
 
@@ -91,7 +91,7 @@ export function clearEmpty(feed) {
   if (empty) empty.remove();
 }
 
-export function clearBusy(feed) {
+function clearBusy(feed) {
   if (S.busyTimer) {
     clearInterval(S.busyTimer);
     S.busyTimer = null;
@@ -133,7 +133,7 @@ export function showBusy(feed) {
   }, 1000);
 }
 
-export function flushRun() {
+function flushRun() {
   if (S.runCount <= 0) {
     resetRun();
     return;
@@ -156,7 +156,7 @@ export function flushRun() {
   resetRun();
 }
 
-export function resetRun() {
+function resetRun() {
   S.runCount = 0;
   S.runFails = 0;
   S.runReconOnly = true;
@@ -166,7 +166,7 @@ export function resetRun() {
 
 // Options passed to the streaming Markdown renderer: localized code-block
 // copy labels. Highlighting is applied by `md.js` once a fence closes.
-export function mdOpts() {
+function mdOpts() {
   return {
     copyLabel: t("web.code.copy"),
     copiedLabel: t("web.code.copied"),
@@ -213,7 +213,7 @@ export function finishThink() {
 
 // Build the collapsible reasoning block. The global `.think-h` click handler
 // depends on this exact structure: wrap > [head, body], body carries `hidden`.
-export function buildThinkBlock(withDur) {
+function buildThinkBlock(withDur) {
   const wrap = el("div", "think");
   const head = el("button", "think-h");
   head.type = "button";
@@ -293,7 +293,7 @@ export function onToolStart(data) {
   S.runCount++;
 }
 
-export function renderToolOutput(line, text) {
+function renderToolOutput(line, text) {
   if (typeof text !== "string" || !text) return;
   const wrap = el("div", "toolout");
   const code = el("div", "code");
@@ -315,7 +315,7 @@ export function renderToolOutput(line, text) {
   else appendTo(feed, wrap);
 }
 
-export function safeUrl(url) {
+function safeUrl(url) {
   if (typeof url !== "string" || !url) return null;
   try {
     const u = new URL(url, location.href);
@@ -328,7 +328,7 @@ export function safeUrl(url) {
   return null;
 }
 
-export function cardFor(name, args, sid) {
+function cardFor(name, args, sid) {
   const feed = feedForEvent(sid);
   if (!feed) return null;
   if (FILE_TOOLS.indexOf(name) !== -1) {
@@ -462,7 +462,7 @@ export function resetTurnText() {
 }
 
 // Per-message copy actions (whole response as plain text / as Markdown).
-export function copyAction(payload, labelKey) {
+function copyAction(payload, labelKey) {
   const btn = el("button", "act-btn", t(labelKey));
   btn.type = "button";
   btn.addEventListener("click", () => {
@@ -476,7 +476,7 @@ export function copyAction(payload, labelKey) {
   return btn;
 }
 
-export function appendActionsRow(feed, plain, markdown) {
+function appendActionsRow(feed, plain, markdown) {
   const text = String(plain == null ? "" : plain);
   const md = String(markdown == null ? "" : markdown);
   if (!feed || (!text.trim() && !md.trim())) return;
@@ -542,20 +542,20 @@ export function onCritic(data) {
   if (critical) announce(label);
 }
 
-export function renderAssistantText(feed, text) {
+function renderAssistantText(feed, text) {
   const raw = String(text == null ? "" : text);
   if (!raw.trim()) return;
   const root = renderMarkdown(feed, raw, mdOpts());
   appendActionsRow(feed, root.innerText || root.textContent || "", raw);
 }
 
-export function renderThinkBlock(feed, text) {
+function renderThinkBlock(feed, text) {
   const { wrap, body } = buildThinkBlock(false);
   body.textContent = text || "";
   feed.appendChild(wrap);
 }
 
-export function renderHistoryAct(feed, entry, statusNodes) {
+function renderHistoryAct(feed, entry, statusNodes) {
   const line = el("div", "act " + categoryOf(entry.name));
   line.appendChild(el("span", "g", "◇"));
   line.appendChild(el("span", "lab", labelOf(entry.name)));
@@ -570,7 +570,7 @@ export function renderHistoryAct(feed, entry, statusNodes) {
   if (entry.toolCallId) statusNodes.set(entry.toolCallId, status);
 }
 
-export function renderHistoryResult(feed, entry, statusNodes) {
+function renderHistoryResult(feed, entry, statusNodes) {
   const dur = formatMs(entry.duration);
   const mark = (entry.success ? " ✓" : " ✗") + (dur ? " " + dur : "");
   const status = entry.toolCallId ? statusNodes.get(entry.toolCallId) : null;
@@ -587,7 +587,7 @@ export function renderHistoryResult(feed, entry, statusNodes) {
   feed.appendChild(line);
 }
 
-export function renderHistory(feed, entries) {
+function renderHistory(feed, entries) {
   const statusNodes = new Map();
   entries.forEach((entry) => {
     if (!entry || typeof entry.kind !== "string") return;
@@ -660,7 +660,7 @@ export function syncUrl() {
 
 // One marking for a plan step, shared by the sidebar (`renderPlan`) and the
 // feed card (`onPlan`): status class + leading glyph for done/failed/current.
-export function planStepMark(step, isCurrent) {
+function planStepMark(step, isCurrent) {
   const status =
     step.status === "done" ? "done" : step.status === "failed" ? "fail" : isCurrent ? "cur" : "";
   const glyph =
@@ -723,7 +723,7 @@ export function onPlan(data) {
 
 // `? ` glyph on the last line, matching the terminal menu (the tool may have
 // already prefixed it — don't double it).
-export function questionLabel(text) {
+function questionLabel(text) {
   const lines = String(text).split("\n");
   const last = lines[lines.length - 1];
   if (/^\s*\?/.test(last)) return String(text);
@@ -731,17 +731,12 @@ export function questionLabel(text) {
   return lines.join("\n");
 }
 
-export function onQuestion(data) {
-  if (!data || typeof data.text !== "string") return;
-  const feed = feedForEvent(data.sessionId);
-  if (!feed) return;
-  clearEmpty(feed);
-  const promptText = questionLabel(data.text);
+// Answered-state + settle wiring shared by both question kinds. `display` is
+// what the user sees; `raw` is exactly what goes to `/api/answer`.
+function makeQuestionBlock(feed, promptText, id) {
   const block = el("div", "q");
   block.appendChild(el("div", "qtext", promptText));
   let answered = false;
-
-  // `display` is what the user sees; `raw` is exactly what goes to `/api/answer`.
   const settle = (display, raw) => {
     if (answered) return;
     answered = true;
@@ -749,95 +744,105 @@ export function onQuestion(data) {
     block.textContent = "";
     block.appendChild(el("div", "qtext", promptText));
     block.appendChild(el("div", "qans", "↳ " + (String(display || "").trim() || t("web.question.answered"))));
-    api("/api/answer", { method: "POST", body: { id: data.id, value: raw } });
+    api("/api/answer", { method: "POST", body: { id, value: raw } });
     if (feed === activeFeed()) scroll();
   };
+  return { block, feed, settle, isAnswered: () => answered };
+}
 
-  // Free-text prompt (a `text` question, or the tool's follow-up after the
-  // "own answer" choice — see `askUser`/`CUSTOM_INDEX`).
-  const textInput = (placeholder) => {
-    const wrap = el("div", "qcustom");
-    const input = el("input", "qinput");
-    input.type = "text";
-    input.placeholder = placeholder;
-    input.setAttribute("aria-label", placeholder);
-    input.addEventListener("keydown", (e) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const value = input.value.trim();
-        if (value) settle(value, value);
+// Free-text prompt (a `text` question, or the tool's follow-up after the
+// "own answer" choice — see `askUser`/`CUSTOM_INDEX`).
+function questionTextInput(q, placeholder) {
+  const wrap = el("div", "qcustom");
+  const input = el("input", "qinput");
+  input.type = "text";
+  input.placeholder = placeholder;
+  input.setAttribute("aria-label", placeholder);
+  input.addEventListener("keydown", (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const value = input.value.trim();
+      if (value) q.settle(value, value);
+    }
+  });
+  wrap.appendChild(input);
+  wrap.appendChild(
+    link(t("web.question.custom_send"), "", () => {
+      const value = input.value.trim();
+      if (value) q.settle(value, value);
+    }),
+  );
+  if (q.feed === activeFeed()) setTimeout(() => input.focus(), 0);
+  return wrap;
+}
+
+// Choice prompt: single-select settles on click, multi-select collects into a
+// send button. The "own answer" entry maps to CUSTOM_INDEX (-1) so the tool
+// then asks the free-text follow-up.
+function questionChoice(q, data, options) {
+  const multiple = !!data.multiple;
+  const allowCustom = !!data.allowCustom;
+  const entries = options.map((label) => ({ label, raw: null }));
+  if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
+  const rawOf = (i) => (entries[i].raw != null ? entries[i].raw : i);
+  const opts = el("div", "opts");
+  const selected = [];
+  let sendBtn = null;
+  entries.forEach((entry, i) => {
+    const row = el("button", "qopt", i + 1 + ". " + entry.label);
+    row.type = "button";
+    row.setAttribute("aria-checked", "false");
+    row.addEventListener("click", () => {
+      if (q.isAnswered()) return;
+      if (multiple) {
+        const pos = selected.indexOf(i);
+        if (pos === -1) {
+          selected.push(i);
+          row.classList.add("on");
+          row.setAttribute("aria-checked", "true");
+        } else {
+          selected.splice(pos, 1);
+          row.classList.remove("on");
+          row.setAttribute("aria-checked", "false");
+        }
+        if (sendBtn) sendBtn.disabled = selected.length === 0;
+      } else {
+        row.setAttribute("aria-checked", "true");
+        q.settle(entry.label, [rawOf(i)]);
       }
     });
-    wrap.appendChild(input);
-    wrap.appendChild(
-      link(t("web.question.custom_send"), "", () => {
-        const value = input.value.trim();
-        if (value) settle(value, value);
-      }),
-    );
-    if (feed === activeFeed()) setTimeout(() => input.focus(), 0);
-    return wrap;
-  };
-
-  const options = Array.isArray(data.options) ? data.options : [];
-  if (data.kind === "choice" && options.length) {
-    const multiple = !!data.multiple;
-    const allowCustom = !!data.allowCustom;
-    // UI entries; the "own answer" entry maps to CUSTOM_INDEX (-1) so the tool
-    // then asks the free-text follow-up.
-    const entries = options.map((label) => ({ label, raw: null }));
-    if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
-    const rawOf = (i) => (entries[i].raw != null ? entries[i].raw : i);
-    const opts = el("div", "opts");
-    const selected = [];
-    let sendBtn = null;
-    entries.forEach((entry, i) => {
-      const row = el("button", "qopt", i + 1 + ". " + entry.label);
-      row.type = "button";
-      row.setAttribute("aria-checked", "false");
-      row.addEventListener("click", () => {
-        if (answered) return;
-        if (multiple) {
-          const pos = selected.indexOf(i);
-          if (pos === -1) {
-            selected.push(i);
-            row.classList.add("on");
-            row.setAttribute("aria-checked", "true");
-          } else {
-            selected.splice(pos, 1);
-            row.classList.remove("on");
-            row.setAttribute("aria-checked", "false");
-          }
-          if (sendBtn) sendBtn.disabled = selected.length === 0;
-        } else {
-          row.setAttribute("aria-checked", "true");
-          settle(entry.label, [rawOf(i)]);
-        }
-      });
-      opts.appendChild(row);
+    opts.appendChild(row);
+  });
+  q.block.appendChild(opts);
+  if (multiple) {
+    q.block.appendChild(el("div", "qmulti-hint", t("web.question.multi_hint")));
+    sendBtn = el("button", "qsend", t("web.question.send"));
+    sendBtn.type = "button";
+    sendBtn.disabled = true;
+    sendBtn.addEventListener("click", () => {
+      if (q.isAnswered() || !selected.length) return;
+      const chosen = selected.slice().sort((a, b) => a - b);
+      q.settle(chosen.map((i) => entries[i].label).join(", "), chosen.map(rawOf));
     });
-    block.appendChild(opts);
-    if (multiple) {
-      block.appendChild(el("div", "qmulti-hint", t("web.question.multi_hint")));
-      sendBtn = el("button", "qsend", t("web.question.send"));
-      sendBtn.type = "button";
-      sendBtn.disabled = true;
-      sendBtn.addEventListener("click", () => {
-        if (answered || !selected.length) return;
-        const chosen = selected.slice().sort((a, b) => a - b);
-        settle(chosen.map((i) => entries[i].label).join(", "), chosen.map(rawOf));
-      });
-      block.appendChild(sendBtn);
-    }
-  } else {
-    block.appendChild(textInput(t("web.question.placeholder")));
+    q.block.appendChild(sendBtn);
   }
-  appendTo(feed, block);
+}
+
+export function onQuestion(data) {
+  if (!data || typeof data.text !== "string") return;
+  const feed = feedForEvent(data.sessionId);
+  if (!feed) return;
+  clearEmpty(feed);
+  const q = makeQuestionBlock(feed, questionLabel(data.text), data.id);
+  const options = Array.isArray(data.options) ? data.options : [];
+  if (data.kind === "choice" && options.length) questionChoice(q, data, options);
+  else q.block.appendChild(questionTextInput(q, t("web.question.placeholder")));
+  appendTo(feed, q.block);
   if (feed === activeFeed()) scroll();
 }
 
-export function usageRow(label, value, cls) {
+function usageRow(label, value, cls) {
   const row = el("div", "kv");
   row.appendChild(el("span", "", label));
   row.appendChild(el("b", cls || "", value));
@@ -845,7 +850,7 @@ export function usageRow(label, value, cls) {
 }
 
 // Session row with a copy button next to the id (icon-only, ✓ on success).
-export function usageSessionRow(sessionId) {
+function usageSessionRow(sessionId) {
   const row = el("div", "kv");
   row.appendChild(el("span", "", t("web.usage.session")));
   const val = el("span", "kv-val");
@@ -934,7 +939,7 @@ export function renderWorkspace(h) {
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
-export function envItem(label, values) {
+function envItem(label, values) {
   const item = el("div", "env-item");
   item.appendChild(el("div", "env-k", label));
   values.forEach((val) => {
