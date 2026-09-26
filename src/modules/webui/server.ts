@@ -32,14 +32,6 @@ import type { WebUiState, WebUiAssets } from "./state";
 
 export { tryOpenBrowser } from "./util";
 
-const MAX_CLIENTS = parseMaxClients(process.env.MMA_WEBUI_MAX_CLIENTS);
-
-/** Accept only a positive integer; anything malformed falls back to 5. */
-function parseMaxClients(raw: string | undefined): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : 5;
-}
-
 /** Static routes served verbatim (never template-processed). */
 const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
   "/index.html": { type: "text/html; charset=utf-8", key: "html" },
@@ -59,7 +51,7 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
  * events unboundedly — a live view is not worth an OOM.
  */
 function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  if (s.clients.size >= MAX_CLIENTS) {
+  if (s.clients.size >= s.maxClients) {
     sendJson(res, 503, { error: "too many clients" });
     return;
   }
@@ -101,109 +93,86 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
   }
 }
 
+/** Exact `METHOD path` routes (rule #17: handler map, no `if` chain). */
+const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
+  "GET /api/state": (_req, res, s) => {
+    sendJson(res, 200, { busy: s.busy, state: s.bridge?.getState?.() ?? null });
+  },
+  "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
+  "GET /api/config": (_req, res, s) => handleConfigGet(res, s),
+  "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
+  "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
+  "GET /api/i18n": (_req, res, s) => handleI18nGet(res, s),
+  "GET /api/commands": (_req, res) => {
+    sendJson(res, 200, { commands: webCommandList() });
+  },
+  "GET /api/models": (_req, res, s) => handleModelsGet(res, s),
+  "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
+  "POST /api/interrupt": (_req, res, s) => handleInterruptPost(res, s),
+};
+
+/**
+ * Prefix-group dispatchers (sessions/settings/providers/file/setup own their
+ * sub-paths). Tried after the exact table; each reports whether it handled
+ * the request.
+ */
+const API_GROUPS: Array<(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: URL,
+  s: WebUiState,
+) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi];
+
 /** REST handler for `/api/*`; assumes auth + same-origin already checked. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
-  if (handleSetupApi(req, res, reqUrl, s)) {
+  const route = API_ROUTES[`${req.method} ${reqUrl.pathname}`];
+  if (route) {
+    route(req, res, s);
     return;
   }
-
-  if (reqUrl.pathname === "/api/state" && req.method === "GET") {
-    sendJson(res, 200, { busy: s.busy, state: s.bridge?.getState?.() ?? null });
-    return;
+  for (const group of API_GROUPS) {
+    if (group(req, res, reqUrl, s)) return;
   }
-
-  if (reqUrl.pathname === "/api/message" && req.method === "POST") {
-    handleMessagePost(req, res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/config" && req.method === "GET") {
-    handleConfigGet(res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/config" && req.method === "POST") {
-    handleConfigPost(req, res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/answer" && req.method === "POST") {
-    handleAnswerPost(req, res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/i18n" && req.method === "GET") {
-    handleI18nGet(res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/commands" && req.method === "GET") {
-    sendJson(res, 200, { commands: webCommandList() });
-    return;
-  }
-
-  if (handleSessionsApi(req, res, reqUrl, s)) {
-    return;
-  }
-
-  if (handleSettingsApi(req, res, reqUrl, s)) {
-    return;
-  }
-
-  if (handleProvidersApi(req, res, reqUrl, s)) {
-    return;
-  }
-
-  if (handleFileApi(req, res, reqUrl, s)) {
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/models" && req.method === "GET") {
-    handleModelsGet(res, s);
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/command" && req.method === "POST") {
-    if (s.setupRequired) {
-      sendJson(res, 409, { error: "setup_required" });
-      return;
-    }
-    const bridge = s.bridge;
-    readBody(req, s.maxBodyBytes)
-      .then((raw) => {
-        let line = "";
-        // Malformed body: the dispatcher ignores a non-slash line, so this is
-        // a harmless no-op rather than a 400.
-        const rec = parseJsonBody(raw) ?? {};
-        if (typeof rec.line === "string") line = rec.line;
-        // Dispatch is fire-and-forget: output streams over SSE as `command`
-        // events, so the POST only acknowledges acceptance. A host error must
-        // never become a 5xx.
-        Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
-        sendJson(res, 202, { ok: true });
-      })
-      .catch((err: unknown) => {
-        readBodyError(req, res, err);
-      });
-    return;
-  }
-
-  if (reqUrl.pathname === "/api/interrupt" && req.method === "POST") {
-    if (!s.busy && !s.bridge?.isBusy()) {
-      sendJson(res, 409, { error: "idle" });
-      return;
-    }
-    // Do NOT clear `busy` here: the forwarder's `onTurnEnd` owns the reset for
-    // any turn that actually started. Clearing now would unlock the UI while the
-    // aborted turn is still unwinding and let a second submit slip in. If the
-    // host is not actually running (reservation only), `interrupt()` is a no-op
-    // and the pending submit path releases the slot.
-    s.bridge?.interrupt();
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-
   sendJson(res, 404, { error: "not found" });
+}
+
+/** `POST /api/command` — fire-and-forget dispatch, output streams over SSE. */
+function handleCommandPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+  if (s.setupRequired) {
+    sendJson(res, 409, { error: "setup_required" });
+    return;
+  }
+  const bridge = s.bridge;
+  readBody(req, s.maxBodyBytes)
+    .then((raw) => {
+      let line = "";
+      // Malformed body: the dispatcher ignores a non-slash line, so this is
+      // a harmless no-op rather than a 400.
+      const rec = parseJsonBody(raw) ?? {};
+      if (typeof rec.line === "string") line = rec.line;
+      // A host error must never become a 5xx: the POST only acknowledges
+      // acceptance, output streams over SSE as `command` events.
+      Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
+      sendJson(res, 202, { ok: true });
+    })
+    .catch((err: unknown) => {
+      readBodyError(req, res, err);
+    });
+}
+
+/** `POST /api/interrupt` — abort the running turn without unlocking early. */
+function handleInterruptPost(res: ServerResponse, s: WebUiState): void {
+  if (!s.busy && !s.bridge?.isBusy()) {
+    sendJson(res, 409, { error: "idle" });
+    return;
+  }
+  // Do NOT clear `busy` here: the forwarder's `onTurnEnd` owns the reset for
+  // any turn that actually started. Clearing now would unlock the UI while the
+  // aborted turn is still unwinding and let a second submit slip in. If the
+  // host is not actually running (reservation only), `interrupt()` is a no-op
+  // and the pending submit path releases the slot.
+  s.bridge?.interrupt();
+  sendJson(res, 200, { ok: true });
 }
 
 export function handleRequest(

@@ -126,6 +126,8 @@ export interface WebUiState {
   historyTail: number;
   /** Transport cap for a POST body; overridable in tests to exercise 413. */
   maxBodyBytes: number;
+  /** SSE client cap (env `MMA_WEBUI_MAX_CLIENTS`, default 5); per-state so tests can override. */
+  maxClients: number;
   /** Usage metrics from the most recent completed turn (see {@link UsageSnapshot}). */
   usage?: UsageSnapshot;
   /**
@@ -190,6 +192,12 @@ export interface WebUiState {
   setup?: SetupDisplay;
 }
 
+/** Accept only a positive integer; anything malformed falls back to 5. */
+export function parseMaxClients(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 5;
+}
+
 export function createWebUiState(): WebUiState {
   return {
     server: null,
@@ -206,6 +214,7 @@ export function createWebUiState(): WebUiState {
     minPostIntervalMs: 500,
     historyTail: 200,
     maxBodyBytes: MAX_BODY_BYTES,
+    maxClients: parseMaxClients(process.env.MMA_WEBUI_MAX_CLIENTS),
     pendingQuestions: new Map(),
     setupRequired: false,
   };
