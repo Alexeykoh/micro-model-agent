@@ -133,7 +133,7 @@ export class SessionManager {
     const meta = this.store.loadMeta(id);
     if (!meta) return false;
     if ((meta.messageCount ?? 0) === 0) return true;
-    let history;
+    let history: SessionMessage[];
     try {
       history = this.getHistory(id);
     } catch {

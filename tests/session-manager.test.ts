@@ -195,4 +195,38 @@ describe("SessionManager", () => {
     expect(manager.get(stale.id)).toBeNull();
     expect(manager.get(fresh.id)).not.toBeNull();
   });
+
+  it("pruneEmpty treats assistant-only and whitespace user text as empty", () => {
+    const now = new Date().toISOString();
+    const mk = (id: string, name: string) => ({
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      messageCount: 0,
+      model: "m",
+      contextWindow: 1000,
+      projectDir: "/test",
+    });
+    store.saveMeta("assist1", mk("assist1", "AssistantOnly"));
+    store.appendMessage("assist1", { role: "assistant", content: "hello", timestamp: now });
+    store.saveMeta("ws1", mk("ws1", "Whitespace"));
+    store.appendMessage("ws1", { role: "user", content: "   ", timestamp: now });
+    store.saveMeta("real1", mk("real1", "Real"));
+    store.appendMessage("real1", { role: "user", content: "hi", timestamp: now });
+    store.saveMeta("fresh1", mk("fresh1", "Fresh"));
+    const deleted = manager.pruneEmpty("fresh1");
+    expect(deleted).toContain("assist1");
+    expect(deleted).toContain("ws1");
+    expect(deleted).not.toContain("real1");
+    expect(deleted).not.toContain("fresh1");
+    expect(manager.get("real1")).not.toBeNull();
+  });
+
+  it("isEmptySession is fail-open for unknown ids and pruneEmpty never throws", () => {
+    expect(manager.isEmptySession("ghost")).toBe(false);
+    const fresh = manager.create("Fresh");
+    expect(() => manager.pruneEmpty(fresh.id)).not.toThrow();
+    expect(manager.get(fresh.id)).not.toBeNull();
+  });
 });
