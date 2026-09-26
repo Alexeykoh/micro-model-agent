@@ -45,54 +45,41 @@ Run: `bun test tests/webui-*.test.ts` + `bunx tsc --noEmit`. Каждый фай
 
 ---
 
-## Phase 2: `module.ts` — разрезать god-function
+## Phase 2: `module.ts` — разрезать god-function (done)
 
-**Files:** Modify `src/modules/webui/module.ts` (388 → ≤300); New `model-cache.ts`, `run-agent.ts` (или секции внутри `module.ts` как чистые функции).
-
-- [ ] **Step 1: вынести model-cache**
-  `refreshModels` + `modelCache` → `makeModelCache(deps)` с `get/refresh`. `module.ts` только wires.
-- [ ] **Step 2: вынести `makeRunAgent`**
-  `runAgent` (tool id matching, usage capture, broadcast) → отдельная фабрика с deps `{agent, execModule, forwarder, state}`. Чистые `callFor/resultFor/startId/endId` — рядом.
-- [ ] **Step 3: вынести `makeHost`**
-  Сборка `WebHost` + `getState` projection — отдельно, `buildHostState` уже чистый.
-
-Run: `bun test tests/web-host.test.ts tests/webui-smoke.test.ts` + `tsc --noEmit`.
+`module.ts` 407→253; новые `host-state.ts` (снапшот+usage+plan), `run-agent.ts` (турн-раннер), `model-cache.ts`. Тестовые импорты сохранены через реэкспорты.
 
 ---
 
-## Phase 3: Фронт — ES-модули (по одному шагу, каждый грузится и работает)
+## Phase 3: Фронт — ES-модули (done)
 
-Порядок — от независимого к связанному; после каждого шага страница открывается (`bun run web:dev`, e2e smoke).
-
-- [ ] **Step 1: `js/api.js` + `js/dom.js` (`el`, `icon`, `link`)**
-  Вынести `api()`, `el/icon/setIcon/link/activate` как есть. `app.js` импортит. Проверка: страница грузится, feed рендерится.
-- [ ] **Step 2: `js/state.js` + `js/i18n.js` (`t`, `pluralCount`, `loadI18n`)**
-  `state`, `tabs`-метаданные позже; сейчас только глобальный store + словарь.
-- [ ] **Step 3: `js/feed.js`**
-  `onText/onReasoning/onMeta/onPhase/onToolStart/onToolEnd/onTurnEnd/onCritic/onLog/onCommandOutput` + `renderHistory*`. Самый большой кусок (~600 строк) — выносить целиком, не рефакторя.
-- [ ] **Step 4: `js/tabs.js` + `js/composer.js` (send/attach/cmdk)**
-- [ ] **Step 5: `js/settings/*` (generic/model-providers/memory/skills/plugins/security/ui)**
-- [ ] **Step 6: `js/dialog.js` (settings/provider/confirm overlay) — объединить focus-trap**
-- [ ] **Step 7: `app.js` = только `boot()` + wiring; `index.html` грузит модули**
-
-Run после каждого: `bun run web:dev` вручную + `bun run test:e2e` (harness). E2E `web-provider-dialog` — регресс диалогов.
+Итог: `app.js` 3462→265 (shell: boot/SSE/renderState/i18n); новые `js/dom.js`, `js/api.js`,
+`js/i18n.js`, `js/store.js` (S + hooks), `js/format.js` (+contextLabel), `js/feed.js` (~980:
+стрим/карточки/история/сайдбар), `js/tabs.js` (~670: табы/сессии/композер/лоадеры),
+`js/settings.js` (~1150: панели/провайдеры/postConfig/оверлеи/тема — оставлен целым
+сознательно: разрез панелей дал бы цикл settings↔panels), `js/dialog.js` (тост+confirm).
+DAG ацикличен: app → settings → tabs → {feed, dialog}; feed → {dom, api, i18n, store,
+format}; settings → {tabs (closeAllMenus/setSessOpen), dialog}. Связь locale — хук
+`S.hooks.applyStaticI18n`. Сервер отдаёт `/js/*` (`jsModules` в ассетах).
+Проверки каждого шага: `node --check`, `tsc --checkJs` (TS2304), обход import-графа
+через живой сервер, `bun test tests/webui-*`.
 
 ---
 
-## Phase 4: Фронт — дедуп (только после Phase 3, когда модули изолированы)
+## Phase 4: Фронт — дедуп (done)
 
-- [ ] **Step 1: один `planGlyph(status)` + `planRow(step)`** — вместо `renderPlan`/`onPlan` копий
-- [ ] **Step 2: один `makeToggle(value, onChange)`** — settings/MCP/enum
-- [ ] **Step 3: один `trapFocus(overlay)` + `openDialog/closeDialog`** — три оверлея
-- [ ] **Step 4: очередь `toast()`** — вместо затирающих `setIndicator` из 15 мест
-- [ ] **Step 5: `HELP` команды → ключи i18n** (backend `commands.ts`)
+- [x] `planStepMark(step, isCurrent)` в `feed.js` — вместо копий в `renderPlan`/`onPlan`
+- [x] `makeToggle(on, onFlip)` в `dom.js` — bool-контрол + MCP-переключатель
+- [x] `trapTab(container, e)` в `dialog.js` — settings- и provider-оверлеи (confirm оставил свой двухкнопочный вариант сознательно)
+- [x] очередь тостов в `setIndicator` (`dialog.js`, cap 3) — вместо затирания
+- [x] `HELP` → ключи `web.command.*` (en+ru), `webCommandList`/`/help` резолвят через `t()`
 
 ---
 
-## Phase 5: `styles.css` (1047 строк) + мелочи (в скоупе)
+## Phase 5: `styles.css` + мелочи (done)
 
-- [ ] Разбить по секциям комментариями (feed/composer/settings/dialogs), без смены стилей
-- [ ] Мелочи: `MAX_CLIENTS` в `createWebUiState()`; `catch` в `handleProvidersDelete`; `HELP` в `commands.ts` → ключи i18n
+- [x] Верхнеуровневые баннеры секций (токены/topbar/чат/композер/сайдбар/модалка) — только комментарии, стили не тронуты (файл и так комментирован построчно)
+- [x] Мелочи: `maxClients` в `createWebUiState()`; `catch` в `handleProvidersDelete`; `HELP` → i18n (см. Phase 4)
 
 ---
 
