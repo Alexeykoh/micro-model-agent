@@ -71,6 +71,12 @@ bun run mma "<prompt>" --json
 # Dev mode (watch)
 bun run dev
 
+# Web dev mode (watch + live asset reload, no browser auto-open)
+bun run web:dev
+
+# E2E web scenarios (isolated MMA_CONFIG_DIR, Playwright; on explicit request only)
+bun run test:e2e
+
 # Build (bundle + copy skills — use this for npm releases)
 bun run build:prod
 
