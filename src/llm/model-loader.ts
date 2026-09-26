@@ -1,5 +1,4 @@
 import type { Logger } from "../logger/app-logger";
-import type { ModelCapabilities } from "../config/types";
 
 export interface ModelLoadConfig {
   model: string;
@@ -17,96 +16,29 @@ export interface LoadResult {
   error?: string;
 }
 
-/** Result of the startup context probe: what the model is ACTUALLY loaded with. */
-export interface ContextProbeResult {
-  model: string;
-  /** Context length of the loaded instance (tokens). */
-  actual: number;
-}
+// Live context-probe helpers live in ./provider-context.ts and
+// ./models-dev.ts; re-exported here so existing importers keep working.
+export {
+  probeModel,
+  getLoadedContextLength,
+  probeProviderContext,
+  type ContextProbeResult,
+  type ModelProbeResult,
+  type ProviderContextOpts,
+} from "./provider-context";
 
-/** Result of the native model probe: context window + advertised capabilities. */
-export interface ModelProbeResult {
-  model: string;
-  /** Context length of the loaded instance (tokens). */
-  contextLength: number;
-  /** Advertised capabilities, when the backend reports them (LM Studio). */
-  capabilities?: ModelCapabilities;
-}
-
-/** Minimal shape of an LM Studio `/api/v1/models` entry we consume. */
-interface LmStudioModel {
-  key?: string;
-  name?: string;
-  max_context_length?: number;
-  loaded_instances?: Array<{ config?: { context_length?: number } }>;
-  capabilities?: { vision?: boolean; trained_for_tool_use?: boolean };
-}
-interface LmStudioModelsResponse {
-  models?: LmStudioModel[];
-}
 interface LmStudioLoadResponse {
   load_time_seconds?: number;
   loadTime?: number;
 }
 
-/**
- * Ask the backend's native API (LM Studio `/api/v1/models`) for the loaded
- * model's context length AND advertised capabilities. Context length prefers
- * the running instance (`loaded_instances[].config.context_length`), falling
- * back to `max_context_length`. Capabilities are read from `capabilities`
- * (`vision`, `trained_for_tool_use`) when present — this is the single source
- * of truth that replaces name-based vision guessing.
- *
- * Returns null when the endpoint is unavailable (not LM Studio), the model is
- * not found/loaded, or the request fails — the caller must degrade silently.
- */
-export async function probeModel(
-  baseUrl: string,
-  model: string,
-  timeoutMs = 3000,
-): Promise<ModelProbeResult | null> {
-  const base = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
-  try {
-    const response = await fetch(`${base}/api/v1/models`, {
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as LmStudioModelsResponse;
-    const models = data.models ?? [];
-    const found = models.find(
-      (m) => m.key === model || m.name === model || (m.key ? model.includes(m.key) : false),
-    );
-    if (!found) return null;
-    const loadedInstance = (found.loaded_instances ?? [])[0];
-    const contextLength = loadedInstance?.config?.context_length ?? found.max_context_length;
-    if (typeof contextLength !== "number" || contextLength <= 0) return null;
-
-    const raw = found.capabilities;
-    let capabilities: ModelCapabilities | undefined;
-    if (raw && typeof raw.vision === "boolean") {
-      capabilities = { vision: raw.vision };
-      if (typeof raw.trained_for_tool_use === "boolean") {
-        capabilities.tools = raw.trained_for_tool_use;
-      }
-    }
-
-    return { model: found.key ?? found.name ?? model, contextLength, capabilities };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Thin context-only projection of {@link probeModel}. Kept for callers that
- * only need the context window (banner, context-probe diagnostics).
- */
-export async function getLoadedContextLength(
-  baseUrl: string,
-  model: string,
-  timeoutMs = 3000,
-): Promise<ContextProbeResult | null> {
-  const probe = await probeModel(baseUrl, model, timeoutMs);
-  return probe ? { model: probe.model, actual: probe.contextLength } : null;
+/** Native `/api/v1/models` shape the loader itself reads (loaded check). */
+interface LmStudioStatusResponse {
+  models?: Array<{
+    key?: string;
+    name?: string;
+    loaded_instances?: Array<{ config?: { context_length?: number } }>;
+  }>;
 }
 
 export class ModelLoader {
@@ -146,7 +78,7 @@ export class ModelLoader {
 
       if (!response.ok) return false;
 
-      const data = (await response.json()) as LmStudioModelsResponse;
+      const data = (await response.json()) as LmStudioStatusResponse;
       const models = data.models ?? [];
 
       const found = models.find((m) => m.key === model || m.name === model);

@@ -4,6 +4,14 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-09-26
+
+### Added
+
+- **Provider context auto-detect** (`src/llm/provider-context.ts`, `src/llm/models-dev.ts`, `src/core/bootstrap.ts`, `src/core/agent.ts`): MMA now asks the active backend for the context window it actually serves and adopts it as the effective `contextWindow` (provider wins over config, in-memory only). Probe chain: LM Studio native (loaded instance, not card maximum) → Ollama native (`/api/ps` → `/api/show`) → llama.cpp `/props` (`n_ctx`) → OpenAI-compat `/models` metadata (`context_length`, vLLM `max_model_len`, OpenRouter `top_provider.context_length`) → models.dev catalog (last resort for OpenCode Zen/Go, whose own `/models` returns bare ids; slim `id → context` disk cache `~/.mma/models-dev-cache.json`, 24h TTL, fail-open). Applied at startup via `applyProbedContext` (late `agent.reconfigure` so budgets follow; skipped on manual override or after a turn ran) and in `Agent.reconfigure` on model/provider switches. `HostStateSnapshot.contextWindow` + `renderState` keep the web topbar in sync.
+- **Active provider endpoint resolution** (`src/modules/providers/manager.ts`): new `activeProviderEndpoint()` resolves `{baseUrl, apiKey, type}` from `provider.active` in `entries` (fallback: legacy flat fields). The context probe, model autoload and reasoning-probe cache key used the stale flat fields after `/provider use` (observed: flat `localhost:1234` while `opencode-go` was active, so Zen was never probed).
+- **LM Studio as a first-class provider** (`src/modules/providers/presets.ts`): new `lmstudio` builtin type (fixed `http://localhost:1234/v1` URL, no key, model list, local prompt-cache) on the same OpenAI-compatible transport, so native discovery travels with it instead of hiding inside a generic `openai-compat` entry. Wired everywhere a type matters: terminal/web setup wizards (port scan + `not-needed` key), web provider form presets and type suggestions, `mma provider add lmstudio`. The old `openai-compat`-typed local preset is retired (existing entries keep working).
+
 ## [2.7.0] - 2026-09-25
 
 ### Added

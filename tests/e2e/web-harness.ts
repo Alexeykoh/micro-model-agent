@@ -51,10 +51,14 @@ function sleep(ms: number): Promise<void> {
 /**
  * Seed an isolated `MMA_CONFIG_DIR` with a non-virgin dummy config.
  * Pure filesystem helper — unit-tested without spawning anything.
+ * `providerBaseUrl` overrides the dummy backend so scenarios that assert on
+ * probe behavior don't accidentally discover a real server on the box
+ * (e.g. a lived-in LM Studio on :1234).
  */
-export function seedE2EConfigDir(dir: string): string {
+export function seedE2EConfigDir(dir: string, opts?: { providerBaseUrl?: string }): string {
   mkdirSync(dir, { recursive: true });
   const config = structuredClone(DEFAULTS);
+  if (opts?.providerBaseUrl) config.provider.baseUrl = opts.providerBaseUrl;
   writeFileSync(join(dir, "config.json"), JSON.stringify(config, null, 2));
   return join(dir, "config.json");
 }
@@ -131,9 +135,11 @@ function persistLogs(artifactsDir: string, log: OutputLog): void {
 export async function startE2EServer(opts?: {
   port?: number;
   artifactsDir?: string;
+  /** Override the dummy provider URL (hermetic probe scenarios). */
+  providerBaseUrl?: string;
 }): Promise<E2EConfig> {
   const dir = mkdtempSync(join(tmpdir(), "mma-web-e2e-"));
-  seedE2EConfigDir(dir);
+  seedE2EConfigDir(dir, { providerBaseUrl: opts?.providerBaseUrl });
   const artifactsDir = opts?.artifactsDir ?? join(ARTIFACTS_ROOT, `run-${Date.now()}`);
   mkdirSync(artifactsDir, { recursive: true });
 

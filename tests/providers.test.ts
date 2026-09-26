@@ -89,6 +89,22 @@ describe("providers module", () => {
       expect(anthropic?.capabilities.tools).toBe(false);
       expect(anthropic?.capabilities.requiresKey).toBe(true);
     });
+
+    it("registers lmstudio as a first-class local preset", () => {
+      const lmstudio = BUILTIN_PROVIDERS.find((p) => p.type === "lmstudio");
+      expect(lmstudio).toBeDefined();
+      expect(lmstudio?.baseUrl).toBe("http://localhost:1234/v1");
+      expect(lmstudio?.capabilities.requiresKey).toBe(false);
+      expect(lmstudio?.capabilities.listModels).toBe(true);
+      expect(HOSTED_BASE_URLS["lmstudio"]).toBe("http://localhost:1234/v1");
+      const provider = createProvider("lmstudio", {
+        model: "qwen/qwen3.5-9b",
+        baseUrl: "http://localhost:1234/v1",
+        contextWindow: 32768,
+      });
+      expect(provider.model).toBe("qwen/qwen3.5-9b");
+      expect(provider.contextWindow).toBe(32768);
+    });
   });
 
   describe("ProviderManager", () => {

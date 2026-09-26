@@ -77,6 +77,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     sessionName: meta?.name,
     model: deps.config.model,
     provider: deps.config.provider?.active,
+    contextWindow: deps.config.contextWindow,
     contextUsed: deps.usage?.contextUsed,
     contextLimit: deps.usage?.contextLimit,
     costUsd: deps.usage?.costUsd,

@@ -277,6 +277,51 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Правило `PROTECTED PATHS`** в системном промпте (`buildSystemInfo`): модель не трогает такие пути без явного
   подтверждения и не обходит запрет через `bash`. i18n: `file.protected_path_ask` (en+ru).
 
+### Provider Context Auto-Detect (2.8.0)
+- **Провайдер — первый источник контекста:** `probeProviderContext` (`src/llm/model-loader.ts`) спрашивает
+  активный бэкенд о **фактически отдаваемом** окне (загруженный инстанс, не максимум карточки модели):
+  LM Studio native (`loaded_instances[].config.context_length` → `max_context_length`) → Ollama native
+  (`/api/ps` → `/api/show` `model_info`) → llama.cpp `/props` (`n_ctx`) → OpenAI-compat `/models`-метаданные
+  (`context_length`/`context_window`/`max_model_len`/`n_ctx`, incl. OpenRouter `top_provider.context_length`) →
+  models.dev-каталог (`src/llm/models-dev.ts`, только для Zen/Go — их собственный `/models` вживую
+  возвращает голые id без контекста; `opencode`-секция `api.json` маппится по тем же bare id).
+  Голый OpenAI-совместимый `/models` (только id) → `null`, конфиг сохраняется (fail-open).
+- **Активная запись, не legacy-плоские поля:** `activeProviderEndpoint` (`src/modules/providers/manager.ts`)
+  резолвит `{baseUrl, apiKey, type}` по `provider.active` из `entries` (фолбэк — плоские поля).
+  Плоские поля протухают после `/provider use` (наблюдено: flat `localhost:1234` при активном `opencode-go` —
+  Zen вообще не опрашивался). Используют: пробник, autoload, reasoning-cache-key (bootstrap),
+  identity-сравнение (reconfigure).
+- **models.dev-кэш:** slim-проекция (`id → context`) в `~/.mma/models-dev-cache.json`
+  (override `MMA_MODELS_DEV_CACHE`), TTL 24h как у reasoning-пробника; stale-кэш используется при офлайне.
+- **Применение:** bootstrap (фон, `src/core/bootstrap.ts`) и `Agent.reconfigure` (только при смене
+  модели/провайдера, `src/core/agent.ts`) перезаписывают `config.contextWindow` значением провайдера
+  (in-memory, в файл не пишется) и пишут `Context probe: auto-set …` в `logSilent`. Смена детектится
+  по значению (`Agent.lastProbeIdentity`: все write-пути мутируют живой конфиг in place и передают
+  тот же объект — сравнение prev/next ничего бы не увидело). Пробник резолвится
+  уже после создания `ContextManager`/провайдера, поэтому `applyProbedContext` (там же) делает поздний
+  `agent.reconfigure` — иначе бюджеты остались бы на стартовом окне; скип, если значение переопределено
+  вручную или ход уже был (`currentIteration !== 0`). Ручной `mma context <N>` / `/config contextWindow <N>`
+  после этого действует до конца сессии. Диагностика пробника — только `logSilent` (контракт
+  `tests/core/bootstrap.test.ts`: в консоль/шину не попадает).
+- **Живой топбар:** `HostStateSnapshot.contextWindow` (`src/core/host.ts`, `webui/host-state.ts`) +
+  `renderState` в `assets/app.js` подтягивает селектор при расхождении — иначе топбар навсегда показывал
+  стартовые 32K.
+- **Тесты:** `tests/llm/provider-context-probe.test.ts` (16 кейсов на моке `fetch`),
+  `tests/core/bootstrap-probe-apply.test.ts` (late-apply), `tests/providers/active-endpoint.test.ts`.
+
+### LM Studio Provider (2.8.0)
+
+- **Отдельный тип `lmstudio`** (`src/modules/providers/presets.ts`, после `openai-compat` в `BUILTIN_PROVIDERS`):
+  тот же OpenAI-совместимый транспорт (`create: openaiCompat`), фиксированный `http://localhost:1234/v1`,
+  `requiresKey: false`, `listModels: true`, локальный prompt-cache. Native discovery (`/api/v1/models` —
+  загруженный контекст + capabilities) работает через общий пробник по `baseUrl` независимо от типа.
+- **Wiring:** оба setup-визарда (скан портов + ключ `not-needed`, `setup.ts`/`setup.js`), web-форма
+  (`buildProviderPresets`, подсказки типов в `settings.js`), CLI (`HOSTED_BASE_URLS` → `mma provider add lmstudio`
+  без `--url`). Старый локальный пресет `lmstudio` типа `openai-compat` удалён из `providers-view.ts`
+  (существующие записи продолжают работать).
+- **Тесты:** `tests/providers.test.ts` (регистрация типа, URL, сборка провайдера), `tests/webui-providers.test.ts`
+  (пресет `lmstudio` с новым типом).
+
 ### Chat UI Style (canonical) — 1.5.0
 
 **Единственный верный источник стиля чат-вывода — [docs/design/ui/STYLE.md](./docs/design/ui/STYLE.md)**
@@ -446,7 +491,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
   и ограниченный read-only tool-loop (`critic.tools`).
 
-### Current Version: 2.7.0
+### Current Version: 2.8.0
 
 ### Changelog
 

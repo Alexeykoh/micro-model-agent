@@ -53,8 +53,38 @@ const OPENAI_COMPAT: ProviderSpec = {
   create: openaiCompat,
 };
 
-const OPENROUTER: ProviderSpec = {
-  type: "openrouter",
+/** LM Studio as a first-class provider: same OpenAI-compatible transport,
+ *  but its own type so the native discovery (`/api/v1/models` loaded context,
+ *  capabilities) and the fixed default URL travel with it instead of hiding
+ *  inside a generic `openai-compat` entry. */
+const LMSTUDIO: ProviderSpec = {
+  type: "lmstudio",
+  label: "LM Studio (localhost:1234)",
+  baseUrl: "http://localhost:1234/v1",
+  capabilities: {
+    streaming: true,
+    tools: true,
+    vision: false,
+    reasoningStrategy: "prompt-tag",
+    listModels: true,
+    requiresKey: false,
+    auth: "bearer",
+    // Тот же локальный KV-кеш, что и у generic openai-compat.
+    cache: {
+      mechanism: "local",
+      report: "openai",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: false,
+      requestStreamUsage: true,
+    },
+  },
+  create: openaiCompat,
+};
+
+const OPENROUTER: ProviderSpec = {  type: "openrouter",
   label: "OpenRouter (openrouter.ai)",
   baseUrl: "https://openrouter.ai/api/v1",
   capabilities: {
@@ -197,6 +227,7 @@ const OPENCODE_GO: ProviderSpec = {
 /** All builtin provider presets. */
 export const BUILTIN_PROVIDERS: ProviderSpec[] = [
   OPENAI_COMPAT,
+  LMSTUDIO,
   OPENROUTER,
   OPENAI,
   ANTHROPIC,

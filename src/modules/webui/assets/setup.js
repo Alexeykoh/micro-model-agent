@@ -258,7 +258,7 @@
     });
     box.appendChild(field(tr("web.setup.provider.base_url"), input));
 
-    if (state.answers.provider === "openai-compat") {
+    if (state.answers.provider === "openai-compat" || state.answers.provider === "lmstudio") {
       const scan = h("button", "setup-btn", tr("web.setup.provider.scan"));
       scan.type = "button";
       const results = h("div");
