@@ -1,6 +1,7 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
+import { getMessageText } from "../../llm/provider";
 import type {
   SessionIsolationConfig,
   SessionContext,
@@ -120,6 +121,37 @@ export class SessionManager {
     meta.name = name;
     meta.nameSource = source;
     this.store.saveMeta(id, meta);
+  }
+
+  /** True when the session has no user message with non-empty text. Fail-open: read errors count as non-empty. */
+  isEmptySession(id: string): boolean {
+    const meta = this.store.loadMeta(id);
+    if (!meta) return false;
+    if ((meta.messageCount ?? 0) === 0) return true;
+    let history;
+    try {
+      history = this.getHistory(id);
+    } catch {
+      return false;
+    }
+    return !history.some((m) => m.role === "user" && getMessageText(m.content).trim().length > 0);
+  }
+
+  /** Delete all empty sessions except `excludeId`. Returns deleted ids. Never throws. */
+  pruneEmpty(excludeId?: string): string[] {
+    const deleted: string[] = [];
+    for (const s of this.store.listSessions()) {
+      if (s.id === excludeId) continue;
+      try {
+        if (this.isEmptySession(s.id)) {
+          this.delete(s.id);
+          deleted.push(s.id);
+        }
+      } catch {
+        // fail-open: skip unreadable sessions
+      }
+    }
+    return deleted;
   }
 
   getActive(): string | null {

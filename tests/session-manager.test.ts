@@ -156,4 +156,19 @@ describe("SessionManager", () => {
     mgr.rename(s.id, "user title");
     expect(mgr.get(s.id)!.nameSource).toBe("manual");
   });
+
+  it("pruneEmpty removes sessions without user messages and keeps the rest", () => {
+    const empty = manager.create("Empty");
+    const withUser = manager.create("Real");
+    manager.setActive(withUser.id);
+    manager.appendMessage({ role: "user", content: "hi", timestamp: new Date().toISOString() });
+    manager.setActive(empty.id);
+    const fresh = manager.create("Fresh");
+    const deleted = manager.pruneEmpty(fresh.id);
+    expect(deleted).toContain(empty.id);
+    expect(deleted).not.toContain(withUser.id);
+    expect(deleted).not.toContain(fresh.id);
+    expect(manager.get(empty.id)).toBeNull();
+    expect(manager.get(withUser.id)).not.toBeNull();
+  });
 });
