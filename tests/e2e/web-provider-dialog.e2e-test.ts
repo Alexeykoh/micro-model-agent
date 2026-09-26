@@ -17,81 +17,11 @@
  * Skips gracefully without a Chromium binary, and never runs under Bun
  * (Playwright's pipe transport hangs there — same guard as webui-smoke).
  */
-import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { describe, expect } from "vitest";
 import { join } from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
-import {
-  startE2EServer,
-  stopE2EServer,
-  expectNonVirgin,
-  artifactsDirFor,
-  type E2EConfig,
-} from "./web-harness";
-
-function isMissingBrowserError(err: unknown): boolean {
-  return /Executable doesn't exist|is not found|looks like Playwright was just installed/i.test(
-    String((err as { message?: string } | null)?.message ?? err),
-  );
-}
-
-/** Bundled Chromium revision, only if the binary actually exists. */
-function bundledChromiumPath(): string | null {
-  try {
-    const bundled = chromium.executablePath();
-    return bundled && existsSync(bundled) ? bundled : null;
-  } catch {
-    return null;
-  }
-}
-
-function discoverChromium(): string | null {
-  const env = process.env.MMA_BROWSER_EXECUTABLE?.trim();
-  if (env && existsSync(env)) return env;
-  return bundledChromiumPath();
-}
-
-const CHROMIUM = discoverChromium();
-const CAN_RUN = CHROMIUM !== null && !process.versions.bun;
-// Static skip: Bun never enters the body (dynamic ctx.skip() hangs under Bun).
-const e2e = CAN_RUN ? it : it.skip;
-
-interface Launched {
-  browser: Browser;
-  page: Page;
-  errors: string[];
-}
-
-function writeArtifacts(
-  dir: string,
-  name: string,
-  data: { html?: string; consoleErrors: string[]; extra?: Record<string, unknown> },
-): void {
-  mkdirSync(dir, { recursive: true });
-  if (data.html !== undefined) writeFileSync(join(dir, `${name}.html`), data.html);
-  writeFileSync(join(dir, `${name}.console.log`), data.consoleErrors.join("\n"));
-  writeFileSync(
-    join(dir, `${name}.result.json`),
-    JSON.stringify({ scenario: name, errors: data.consoleErrors, ...data.extra }, null, 2),
-  );
-}
-
-async function launch(url: string): Promise<Launched> {
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath: CHROMIUM ?? undefined,
-    timeout: 15_000,
-  });
-  const page = await browser.newPage();
-  const errors: string[] = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
-  });
-  page.on("pageerror", (err) => errors.push(err.message));
-  await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 15_000 });
-  await page.waitForSelector(".bar-top", { timeout: 10_000 });
-  return { browser, page, errors };
-}
+import type { Page } from "playwright";
+import { expectNonVirgin } from "./web-harness";
+import { e2e, launch, withE2E, artifactsDirFor, writeArtifacts, type Launched } from "./web-helpers";
 
 async function openModelPanel(page: Page): Promise<void> {
   await page.click("#openSettings");
@@ -155,26 +85,6 @@ async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promis
   };
   expect((saved.entries ?? []).some((e) => e.label === label)).toBe(true);
   return label;
-}
-
-/** Run `fn` with a booted server + browser, always stopping both. */
-async function withE2E(dir: string, fn: (srv: E2EConfig, l: Launched) => Promise<void>): Promise<void> {
-  const srv = await startE2EServer({ artifactsDir: dir });
-  let browser: Browser | null = null;
-  try {
-    let launched: Launched;
-    try {
-      launched = await launch(srv.baseUrl);
-    } catch (err) {
-      if (isMissingBrowserError(err)) return;
-      throw err;
-    }
-    browser = launched.browser;
-    await fn(srv, launched);
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-    await stopE2EServer(srv);
-  }
 }
 
 describe("web e2e (isolated MMA_CONFIG_DIR)", () => {

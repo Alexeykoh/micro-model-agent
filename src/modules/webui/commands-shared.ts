@@ -7,6 +7,7 @@
  * helpers here avoids an import cycle between the two handler modules.
  */
 import type { AppConfig } from "../../config/types";
+import { setLocale } from "../../i18n";
 import { setConfigValue } from "../../config/registry";
 import type { WebUiState } from "./state";
 
@@ -60,6 +61,10 @@ export async function applyConfigWrite(
     out(`↳ ${configErrorText(result.reason, result.input, result.key)}`);
     return;
   }
+  // `locale` has `reconfigure: false` (registry), so nothing else applies it
+  // to the process-wide i18n state. Do it here so server-side output and the
+  // browser's re-fetched dictionary agree immediately (mirrors `handleConfigPost`).
+  if (result.key === "locale") setLocale(cfg.locale);
   let note = "saved";
   try {
     state.saveConfig?.(cfg);
