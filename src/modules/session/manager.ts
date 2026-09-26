@@ -80,6 +80,11 @@ export class SessionManager {
     this.store.saveMeta(id, meta);
     this.activeId = id;
     this.enforceMaxSessions();
+    try {
+      this.pruneEmpty(id);
+    } catch {
+      // fail-open: auto-prune must never break session creation
+    }
 
     // Create session context
     const context = createSessionContext(

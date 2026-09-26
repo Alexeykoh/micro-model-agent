@@ -42,16 +42,20 @@ describe("SessionManager", () => {
   });
 
   it("should list sessions in reverse chronological order", () => {
-    manager.create("First");
-    manager.create("Second");
+    const a = manager.create("First");
+    manager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });
+    const b = manager.create("Second");
+    manager.appendMessage({ role: "user", content: "m2", timestamp: new Date().toISOString() });
     manager.create("Third");
     const list = manager.list();
     expect(list).toHaveLength(3);
     expect(list[0].name).toBe("Third");
+    expect([a.id, b.id]).toContain(list[1].id);
   });
 
   it("should set and get active session", () => {
     const s1 = manager.create("S1");
+    manager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });
     const s2 = manager.create("S2");
     expect(manager.getActive()).toBe(s2.id);
     manager.setActive(s1.id);
@@ -121,7 +125,9 @@ describe("SessionManager", () => {
       maxSessions: 2,
     });
     limitedManager.create("S1");
+    limitedManager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });
     limitedManager.create("S2");
+    limitedManager.appendMessage({ role: "user", content: "m2", timestamp: new Date().toISOString() });
     limitedManager.create("S3");
     const list = limitedManager.list();
     expect(list).toHaveLength(2);
@@ -158,17 +164,35 @@ describe("SessionManager", () => {
   });
 
   it("pruneEmpty removes sessions without user messages and keeps the rest", () => {
-    const empty = manager.create("Empty");
-    const withUser = manager.create("Real");
-    manager.setActive(withUser.id);
-    manager.appendMessage({ role: "user", content: "hi", timestamp: new Date().toISOString() });
-    manager.setActive(empty.id);
+    // Seed via the store: manager.create() would auto-prune, so bypass it
+    // to stage coexisting empty sessions.
+    const now = new Date().toISOString();
+    const mk = (id: string, name: string) => ({
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      messageCount: 0,
+      model: "m",
+      contextWindow: 1000,
+      projectDir: "/test",
+    });
+    store.saveMeta("empty1", mk("empty1", "Empty"));
+    store.saveMeta("real1", mk("real1", "Real"));
+    store.appendMessage("real1", { role: "user", content: "hi", timestamp: now });
+    store.saveMeta("fresh1", mk("fresh1", "Fresh"));
+    const deleted = manager.pruneEmpty("fresh1");
+    expect(deleted).toContain("empty1");
+    expect(deleted).not.toContain("real1");
+    expect(deleted).not.toContain("fresh1");
+    expect(manager.get("empty1")).toBeNull();
+    expect(manager.get("real1")).not.toBeNull();
+  });
+
+  it("create auto-prunes older empty sessions but keeps the new one", () => {
+    const stale = manager.create("Stale");
     const fresh = manager.create("Fresh");
-    const deleted = manager.pruneEmpty(fresh.id);
-    expect(deleted).toContain(empty.id);
-    expect(deleted).not.toContain(withUser.id);
-    expect(deleted).not.toContain(fresh.id);
-    expect(manager.get(empty.id)).toBeNull();
-    expect(manager.get(withUser.id)).not.toBeNull();
+    expect(manager.get(stale.id)).toBeNull();
+    expect(manager.get(fresh.id)).not.toBeNull();
   });
 });
