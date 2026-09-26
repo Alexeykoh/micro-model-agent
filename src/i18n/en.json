@@ -991,6 +991,7 @@
   "web.topbar.new_chat": "new chat",
   "web.topbar.settings": "settings",
   "web.topbar.all_sessions": "all sessions",
+  "web.topbar.sidebar": "sidebar",
   "web.topbar.close": "close",
   "web.conn.reconnecting": "reconnecting…",
   "web.sidebar.plan": "plan",

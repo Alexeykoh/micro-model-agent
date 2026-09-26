@@ -36,6 +36,22 @@ document.querySelectorAll("[data-collapse]").forEach((head) => {
   });
 });
 
+// Mobile sidebar: hidden by CSS under 760px, opened as an overlay drawer.
+const sidebarBtn = document.getElementById("toggleSidebar");
+if (sidebarBtn) {
+  sidebarBtn.addEventListener("click", () => {
+    const open = document.body.classList.toggle("sb-open");
+    sidebarBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !document.body.classList.contains("sb-open")) return;
+    const tag = document.activeElement ? String(document.activeElement.tagName) : "";
+    if (tag === "TEXTAREA" || tag === "INPUT") return;
+    document.body.classList.remove("sb-open");
+    sidebarBtn.setAttribute("aria-expanded", "false");
+  });
+}
+
 function renderState(snapshot, busy) {
   S.state.host = snapshot || {};
   S.state.busy = !!busy;
@@ -159,6 +175,7 @@ function applyStaticI18n() {
   const controls = {
     newChat: ["plus", t("web.topbar.new_chat")],
     sessBtn: ["menu", t("web.topbar.all_sessions")],
+    toggleSidebar: ["panel", t("web.topbar.sidebar")],
     openSettings: ["settings", t("web.topbar.settings")],
     attachBtn: ["image", t("web.attach.title")],
     closeSettings: ["x", t("web.topbar.close")],

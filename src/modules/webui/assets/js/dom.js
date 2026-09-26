@@ -70,6 +70,10 @@ refresh: [
 "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
 "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
 "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
+panel: [
+  ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],
+  ["line", { x1: 15, y1: 3, x2: 15, y2: 21 }],
+],
 square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
 copy: [
   ["rect", { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 }],
