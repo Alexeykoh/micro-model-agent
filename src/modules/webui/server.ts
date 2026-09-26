@@ -18,6 +18,7 @@ import {
   sendJson,
   setAuthCookie,
 } from "./util";
+import { parseJsonBody } from "./body";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
 import { handleI18nGet } from "./i18n-api";
 import { webCommandList } from "./commands";
@@ -171,13 +172,10 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
     readBody(req, s.maxBodyBytes)
       .then((raw) => {
         let line = "";
-        try {
-          const parsed = JSON.parse(raw) as { line?: unknown };
-          if (typeof parsed.line === "string") line = parsed.line;
-        } catch {
-          // Malformed body: the dispatcher ignores a non-slash line, so this is
-          // a harmless no-op rather than a 400.
-        }
+        // Malformed body: the dispatcher ignores a non-slash line, so this is
+        // a harmless no-op rather than a 400.
+        const rec = parseJsonBody(raw) ?? {};
+        if (typeof rec.line === "string") line = rec.line;
         // Dispatch is fire-and-forget: output streams over SSE as `command`
         // events, so the POST only acknowledges acceptance. A host error must
         // never become a 5xx.

@@ -13,7 +13,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AppConfig, ProviderEntry } from "../../config/types";
 import { providerEntryName, providerNameTaken } from "../providers/naming";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
-import { readBody, readBodyError, sendJson } from "./util";
+import { readBodyError, sendJson } from "./util";
+import { readJsonBody } from "./body";
 import type { WebUiState } from "./state";
 
 /** Redacted provider entry rendered by the settings UI. */
@@ -235,17 +236,12 @@ export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s
     return;
   }
   const config = s.config;
-  readBody(req, s.maxBodyBytes)
-    .then(async (raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const input = parseProviderInput(rec);
       if (!input) {
         sendJson(res, 400, { ok: false, error: "invalid-provider" });

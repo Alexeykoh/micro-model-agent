@@ -6,7 +6,8 @@
  * enforced upstream in `server.ts`; this function assumes both passed.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readBody, readBodyError, sendJson } from "./util";
+import { readBodyError, sendJson } from "./util";
+import { readJsonBody } from "./body";
 import { resolveAnswer } from "./prompt-io";
 import type { WebUiState } from "./state";
 
@@ -15,17 +16,12 @@ import type { WebUiState } from "./state";
  * questions and a `number[]` of option indices for choice questions.
  */
 export function handleAnswerPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
         sendJson(res, 400, { error: "invalid body" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const id = typeof rec.id === "string" ? rec.id : "";
       if (!id) {
         sendJson(res, 400, { error: "invalid body" });

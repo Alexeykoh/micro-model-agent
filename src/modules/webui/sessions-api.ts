@@ -12,6 +12,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionHistory } from "./history-api";
 import { readBody, readBodyError, sendJson } from "./util";
+import { parseJsonBody, readJsonBody } from "./body";
 import type { WebUiState } from "./state";
 
 /** `GET /api/sessions` — list sessions (id/name/updatedAt/model/messageCount). */
@@ -52,15 +53,11 @@ export function handleSessionCreate(
     .then((raw) => {
       let name: string | undefined;
       if (raw.trim()) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
+        const rec = parseJsonBody(raw);
+        if (!rec) {
           sendJson(res, 400, { error: "invalid JSON" });
           return;
         }
-        const rec =
-          typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
         if (typeof rec.name === "string" && rec.name.trim()) name = rec.name.trim();
       }
       try {
@@ -96,17 +93,12 @@ export function handleSessionActivate(
     return;
   }
   const manager = s.sessionManager;
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
         sendJson(res, 400, { error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const id = typeof rec.id === "string" ? rec.id : "";
       if (!id) {
         sendJson(res, 400, { error: "missing id" });
