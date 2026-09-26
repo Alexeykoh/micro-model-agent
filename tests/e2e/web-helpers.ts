@@ -154,6 +154,58 @@ export async function apiGet(baseUrl: string, path: string): Promise<{ status: n
   return { status: res.status, json: (await res.json()) as never };
 }
 
+/** Session ids on the isolated server. */
+export async function sessionIds(baseUrl: string): Promise<string[]> {
+  const body = (await apiGet(baseUrl, "/api/sessions")).json as {
+    sessions: Array<{ id: string }>;
+  };
+  return body.sessions.map((s) => s.id);
+}
+
+/** Session count on the isolated server. */
+export async function sessionCount(baseUrl: string): Promise<number> {
+  return (await sessionIds(baseUrl)).length;
+}
+
+/** Create a session through the topbar button; return the created id. */
+export async function createSessionTopbar(page: Page, baseUrl: string): Promise<string> {
+  const before = await sessionIds(baseUrl);
+  await page.click("#newChat");
+  let created = "";
+  await expect
+    .poll(async () => {
+      const ids = await sessionIds(baseUrl);
+      created = ids.filter((id) => !before.includes(id)).join();
+      return created;
+    })
+    .not.toBe("");
+  return created;
+}
+
+/**
+ * Wait until the open dropdown shows `id` as active. The active badge follows
+ * the 2s `/api/state` poll, so deleting earlier can offer a stale victim —
+ * which the server then correctly refuses with 409.
+ */
+export async function waitActiveBadge(page: Page, id: string): Promise<void> {
+  await page.click("#sessBtn");
+  await page.waitForFunction(
+    (wanted) => document.querySelector("#sessActiveList .si .id")?.textContent?.trim() === wanted,
+    id,
+    { timeout: 20_000 },
+  );
+}
+
+/** First dropdown row carrying a delete control (the active row has none). */
+export async function deletableRow(page: Page): Promise<number> {
+  const rows = page.locator(".dd-menu .si-row");
+  const n = await rows.count();
+  for (let i = 0; i < n; i++) {
+    if ((await rows.nth(i).locator(".del-btn").count()) > 0) return i;
+  }
+  return -1;
+}
+
 /**
  * First session of the isolated server. Deliberately branch-free (the
  * complexity gate counts every `?.`/`??`): a broken server fails loudly with

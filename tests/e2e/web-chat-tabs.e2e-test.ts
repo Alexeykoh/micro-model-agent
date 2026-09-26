@@ -17,6 +17,10 @@ import {
   e2e,
   withE2E,
   waitForLiveTab,
+  createSessionTopbar,
+  waitActiveBadge,
+  deletableRow,
+  sessionCount,
   sendLine,
   waitCmdOut,
   apiGet,
@@ -89,6 +93,7 @@ describe("web e2e: chat, tabs, sessions, files", () => {
       const dir = artifactsDirFor("tabs-new");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
         const tabCount = () => page.locator(".stab").count();
+        await waitForLiveTab(page);
         const before = await tabCount();
         await page.click("#newChat");
         await expect.poll(tabCount, { timeout: 15_000 }).toBe(before + 1);
@@ -114,36 +119,17 @@ describe("web e2e: chat, tabs, sessions, files", () => {
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         const { baseUrl } = srv;
         await waitForLiveTab(page);
-        await page.click("#newChat");
-        await page.waitForFunction(
-          () => document.querySelectorAll(".stab").length >= 2,
-          { timeout: 15_000 },
-        );
-
-        await page.click("#sessBtn");
+        const created = await createSessionTopbar(page, baseUrl);
+        await waitActiveBadge(page, created);
+        const before = await sessionCount(baseUrl);
+        const victimRow = await deletableRow(page, created);
+        expect(victimRow).toBeGreaterThan(-1);
         const rows = page.locator(".dd-menu .si-row");
-        const n = await rows.count();
-        expect(n).toBeGreaterThanOrEqual(2);
-        // The auto-opened session is active and has no delete control; take
-        // the last row, switching to the first one first when needed.
-        let victimRow = n - 1;
-        if ((await rows.nth(victimRow).locator(".del-btn").count()) === 0) {
-          await page.locator(".dd-menu .si .dd-row-main").first().click();
-          await page.click("#sessBtn");
-          victimRow = (await page.locator(".dd-menu .si-row").count()) - 1;
-        }
-        await page.locator(".dd-menu .si-row").nth(victimRow).locator(".del-btn").click();
+        await rows.nth(victimRow).locator(".del-btn").click();
         await page.waitForSelector("#confirmOverlay.open", { timeout: 10_000 });
         await page.screenshot({ path: `${dir}/confirm.png` });
         await page.click("#confirmAccept");
-        await expect
-          .poll(
-            async () =>
-              ((await apiGet(baseUrl, "/api/sessions")).json as { sessions?: unknown[] }).sessions
-                ?.length,
-            { timeout: 15_000 },
-          )
-          .toBe(n - 1);
+        await expect.poll(() => sessionCount(baseUrl), { timeout: 15_000 }).toBe(before - 1);
         writeArtifacts(dir, "tabs-delete", { html: await page.content(), consoleErrors: errors });
         expect(errors).toEqual([]);
       });
