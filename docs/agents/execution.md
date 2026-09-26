@@ -107,9 +107,12 @@ If `orchestrator.model` configured: larger model handles planning, conflict reso
 LLM response → ConfidenceCheck (short/repetitive)
              → FactualCheck (paths vs known set)
              → ConsistencyCheck (decision reversal)
+             → SuccessClaimCheck (strong "done/published" claim vs recent tool errors)
 ```
 
 Results: `pass` → show | `warn` → show with ⚠️ | `retry` → re-call LLM | `block` (3+ retries) → ask user
+
+- **Success-claim check** (`src/modules/hallucination/success-claim.ts`, wired in `src/core/agent/hallucination-gate.ts`): a strong completion claim together with error signals in the last 10 tool outputs and no hedging in the answer triggers exactly one bounded re-check (`MAX_CLAIM_CHECK_RETRIES = 1`, `hall.claim_contradiction`), then fails open (accept as-is) — never a block. Deterministic (regex + tool success flags, no LLM); Cyrillic-aware word boundaries (`\b` is ASCII-only in JS).
 
 ## Migration Safety
 

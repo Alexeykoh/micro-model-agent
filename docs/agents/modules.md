@@ -27,11 +27,11 @@ Sessions persist conversation history to `~/.mma/sessions/<id>/` as `meta.json`,
 ```bash
 mma session list              # List all sessions
 mma session show <id>         # Show session details
-mma session export <id>       # Export a session (--format md|json|jsonl, --out <path>, --no-redact)
+mma session export <id>       # Export a session (--format md|json|jsonl, --out <path>, --no-redact, --compact)
 mma session delete <id>       # Delete a session
 ```
 
-REPL equivalents include `/export [<id|name>] [--format md|json|jsonl] [--out <path>] [--no-redact]` (default file `~/.mma/exports/<name>-<id8>.<ext>`, secrets redacted).
+REPL equivalents include `/export [<id|name>] [--format md|json|jsonl] [--out <path>] [--no-redact] [--compact]` (default file `~/.mma/exports/<name>-<id8>.<ext>`, secrets redacted). `--compact` drops tool result bodies (md/json) and prompt-snapshot entries (`context`, `tool_defs`, `tool_result`, `llm_usage` in jsonl) for a readable report; `tool_call` one-liners stay.
 
 ### Data layout
 

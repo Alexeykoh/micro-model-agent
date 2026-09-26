@@ -2,6 +2,7 @@ import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
 import { MAX_PREVIEW_LINES } from "./preview";
+import { lookupProcess } from "./process-ids";
 
 const DEFAULT_TAIL = MAX_PREVIEW_LINES;
 /** Cap matching the tool description; this tool skips budget truncation. */
@@ -10,7 +11,7 @@ const MAX_TAIL = 300;
 export const processLogTool: ToolDefinition = {
   name: "process_log",
   icon: "📜",
-  description: `Show the buffered output of a background process started via bash. Shows the last ${DEFAULT_TAIL} lines by default. Use after starting a dev server to verify it came up without errors, and while it runs to check its state.`,
+  description: `Show the buffered output of a background process started via bash. Shows the last ${DEFAULT_TAIL} lines by default. Use after starting a dev server to verify it came up without errors, and while it runs to check its state. For a finite task that should complete, prefer process_wait over polling this tool.`,
   tags: ["shell"],
   boundedOutput: true,
   parameters: {
@@ -25,19 +26,9 @@ export const processLogTool: ToolDefinition = {
     required: ["id"],
   },
   handler: async (_ctx, args) => {
-    if (args.id === undefined || String(args.id).trim() === "") {
-      const known = processRegistry.list();
-      const ids = known.map((p) => p.id);
-      const listPart = ids.length
-        ? `\n${t("proc.list_header")}: ${ids.join(", ")}`
-        : `\n${t("proc.missing_id_list")}`;
-      return { success: false, output: `${t("proc.missing_id")}${listPart}` };
-    }
-    const id = String(args.id);
-    const entry = processRegistry.get(id);
-    if (!entry) {
-      return { success: false, output: t("proc.not_found", { id }) };
-    }
+    const found = lookupProcess(args);
+    if (!found.ok) return { success: false, output: found.output };
+    const { id, entry } = found;
     const status =
       entry.status === "running"
         ? t("proc.status_running")

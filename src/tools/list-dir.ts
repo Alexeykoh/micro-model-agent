@@ -15,6 +15,7 @@ export const listDirTool: ToolDefinition = {
   description: `List files and directories in a given path. Shows up to ${MAX_PREVIEW_LINES} entries by default.`,
   tags: ["file"],
   boundedOutput: true,
+  cacheable: true,
   parameters: {
     type: "object",
     properties: {

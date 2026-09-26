@@ -37,6 +37,8 @@ export interface LoopState {
 
   /** Счётчик повторов при вердикте халлюцинации "retry". */
   hallucinationRetries: number;
+  /** Счётчик перепроверок заявления об успехе (success-claim check). */
+  claimCheckRetries: number;
 
   /** Подпись последнего пакета тулов (имя + JSON аргументов) для детекции повторов. */
   lastToolSignature: string;
@@ -150,6 +152,7 @@ export function createLoopState(): LoopState {
     lastModelText: "",
     lastForcedCompactionIteration: -FORCED_COMPACTION_COOLDOWN,
     hallucinationRetries: 0,
+    claimCheckRetries: 0,
     lastToolSignature: "",
     consecutiveToolFailures: 0,
     consecutiveToolSuccesses: 0,

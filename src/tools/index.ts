@@ -22,6 +22,7 @@ import { bashTool } from "./bash";
 import { processListTool } from "./process-list";
 import { processLogTool } from "./process-log";
 import { processKillTool } from "./process-kill";
+import { processWaitTool } from "./process-wait";
 import { subagentTool } from "./subagent";
 import { chunkQueryTool } from "./chunk-query";
 import { webSearchTool } from "./web-search";
@@ -66,6 +67,7 @@ export {
   processListTool,
   processLogTool,
   processKillTool,
+  processWaitTool,
   webSearchTool,
   webFetchTool,
   webBrowseTool,
@@ -107,6 +109,7 @@ export function registerAllTools(
     processListTool,
     processLogTool,
     processKillTool,
+    processWaitTool,
     webSearchTool,
     webFetchTool,
     webBrowseTool,

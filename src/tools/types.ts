@@ -28,6 +28,23 @@ export interface ToolDefinition {
    * model believe files were truncated and re-read them forever.
    */
   boundedOutput?: boolean;
+  /**
+   * Deterministic read-only tool: the executor memoizes successful results
+   * (keyed by session + name + arguments, 120s TTL) and serves repeats
+   * without re-running the handler. Mark only tools that cannot mutate
+   * anything and whose output is stable while no mutating tool runs —
+   * any non-cacheable execution wipes the memo. Model-facing behavior is
+   * unchanged (the stored result goes through the same post-processing).
+   */
+  cacheable?: boolean;
+  /**
+   * The tool manages its own memo entries via `ctx.toolExecutor`
+   * (`memoGet`/`memoSet`/`memoInvalidate`) because cacheability depends on
+   * the arguments (e.g. bash: `npm view` is memoizable, `npm publish` is
+   * not). The executor skips auto-invalidation for such tools — the tool
+   * itself must invalidate on anything that may mutate.
+   */
+  manualMemo?: boolean;
   handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
