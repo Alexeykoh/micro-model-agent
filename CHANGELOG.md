@@ -4,6 +4,20 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.0] - 2026-09-26
+
+### Added
+
+- **`process_wait` tool** (`src/tools/bash.ts`, wired into `manage_hint`, `bash`/`process_log` descriptions and the hidden-tool redirect list): a single blocking wait on a background process (`id`/`timeoutMs`/`tail`) that returns the buffered tail when it exits — replaces `process_log` polling loops and `ping`/`sleep` delays.
+- **Result memoization** (`src/tools/executor.ts`, `src/tools/bash.ts`): read-only tools (`read_file`/`list_dir`/`glob`/`grep`/`file_info`) plus single, read-only bash commands are cached per session (120s TTL), wiped by any mutation. Repeats of the same read no longer re-execute.
+- **Success-claim check** (`src/modules/hallucination/success-claim.ts`, wired into `src/core/agent/hallucination-gate.ts`): a strong completion claim ("done"/"published") together with error signals in the last 10 tool outputs and no hedging triggers one bounded re-check (`MAX_CLAIM_CHECK_RETRIES = 1`, `hall.claim_contradiction`), then fails open — never a block. Deterministic (regex + tool success flags, no LLM), Cyrillic-aware.
+- **`session export --compact`** (`src/cli/commands.ts`, `src/modules/session/export.ts`): human-readable export without tool-result dumps.
+
+### Fixed
+
+- **repeats made visible**: `getStuckReason` now surfaces repetitive calls (previously a warning key with no logged reason); `process_log` poll loops point at `process_wait`; the quiet renderer folds consecutive identical action lines into a single `xN` line.
+- **web think-toggle alignment** (`src/modules/webui/assets/styles.css`, web `action.hide/show` i18n): dropped the `▾`/`▸` glyphs from the toggle labels in favor of an inline-flex SVG slot, fixing the alignment.
+
 ## [2.8.0] - 2026-09-26
 
 ### Added
