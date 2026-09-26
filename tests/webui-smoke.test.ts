@@ -130,7 +130,7 @@ describe("webui smoke", () => {
   );
 
   smoke(
-    "renders a named session tab with the full session id once a session is active",
+    "renders a named session tab; the full session id is in the tooltip and copyable from the sidebar",
     async (ctx) => {
       const { state, dir } = makeState();
       state.bridge = {
@@ -166,7 +166,9 @@ describe("webui smoke", () => {
 
         expect(await page.locator(".stab").count()).toBe(1);
         expect(await page.locator(".stab .name").innerText()).toBe("My session");
-        expect(await page.locator(".stab .sid").innerText()).toBe("abcd1234");
+        // The id is in the hover tooltip (not inline) and copyable from the sidebar.
+        expect(await page.locator(".stab").first().getAttribute("title")).toBe("abcd1234");
+        expect(await page.locator("#usage .copy-btn").count()).toBe(1);
 
         const box = await page.locator(".stab").first().boundingBox();
         expect(box).not.toBeNull();
@@ -339,8 +341,8 @@ describe("webui smoke", () => {
         await page.click("#sessBtn");
         await page.waitForSelector(".dd-menu .si-row.on", { timeout: 5_000 });
 
-        // The full session id is shown in the tab and in the list (not truncated).
-        expect(await page.locator(".stab .sid").first().innerText()).toBe("aaaa1111");
+        // The full session id is in the tab tooltip and in the list (not truncated).
+        expect(await page.locator(".stab").first().getAttribute("title")).toBe("aaaa1111");
         expect(await page.locator("#sessActiveList .si-row .id").innerText()).toBe("aaaa1111");
 
         // The active session has no delete control; only the other session does.

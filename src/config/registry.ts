@@ -453,6 +453,26 @@ export interface ConfigSetErrorFail {
 }
 export type ConfigSetResult = ConfigSetOk | ConfigSetErrorFail;
 
+/**
+ * Keep `provider.models` (the last model used per provider) in sync. Setting
+ * `model` records it under the active provider; switching `provider.active`
+ * restores that provider's remembered model, so a switch never silently keeps
+ * a model the new backend does not serve.
+ */
+function applyProviderModelMemory(config: AppConfig, key: string, value: unknown): void {
+  const provider = config.provider;
+  const activeName = provider.active ?? provider.type;
+  if (key === "model") {
+    if (!activeName) return;
+    provider.models = { ...(provider.models ?? {}), [activeName]: String(value) };
+    return;
+  }
+  if (key === "provider.active") {
+    const remembered = provider.models?.[String(value)];
+    if (remembered) config.model = remembered;
+  }
+}
+
 export function setConfigValue(config: AppConfig, name: string, raw: string): ConfigSetResult {
   const def = resolveConfigKey(name);
   if (!def) return { ok: false, reason: "unknown-key", input: name };
@@ -465,6 +485,7 @@ export function setConfigValue(config: AppConfig, name: string, raw: string): Co
   if (extra) return { ok: false, reason: extra, input: name, key: def.key, def };
 
   def.set!(config, parsed.value);
+  applyProviderModelMemory(config, def.key, parsed.value);
   return {
     ok: true,
     key: def.key,

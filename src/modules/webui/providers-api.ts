@@ -11,6 +11,8 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AppConfig, ProviderEntry } from "../../config/types";
+import { providerEntryName, providerNameTaken } from "../providers/naming";
+import { BUILTIN_PROVIDERS } from "../providers/presets";
 import { readBody, readBodyError, sendJson } from "./util";
 import type { WebUiState } from "./state";
 
@@ -26,8 +28,49 @@ export interface ProviderView {
   hasApiKey: boolean;
 }
 
+/** A builtin provider template offered as a one-click choice in the UI. */
+export interface ProviderPresetView {
+  /** Unique UI key (`type` for builtins, a stable slug for local presets). */
+  id: string;
+  /** Registry provider type written to the config. */
+  type: string;
+  /** Suggested provider name (must stay unique across entries). */
+  name: string;
+  label: string;
+  baseUrl?: string;
+}
+
+/**
+ * Named local endpoints: same `openai-compat` type, well-known base URLs, so a
+ * local setup needs no URL knowledge either.
+ */
+const LOCAL_PRESETS: ProviderPresetView[] = [
+  { id: "lmstudio", type: "openai-compat", name: "lmstudio", label: "LM Studio (localhost:1234)", baseUrl: "http://localhost:1234/v1" },
+  { id: "ollama", type: "openai-compat", name: "ollama", label: "Ollama (localhost:11434)", baseUrl: "http://localhost:11434/v1" },
+  { id: "vllm", type: "openai-compat", name: "vllm", label: "vLLM (localhost:8000)", baseUrl: "http://localhost:8000/v1" },
+];
+
+/** Builtin presets with their fixed base URLs (hosted providers carry one). */
+export function buildProviderPresets(): ProviderPresetView[] {
+  const builtin: ProviderPresetView[] = BUILTIN_PROVIDERS.map((spec) => {
+    const preset: ProviderPresetView = {
+      id: spec.type,
+      type: spec.type,
+      name: spec.type,
+      label: spec.label,
+    };
+    if (spec.baseUrl) preset.baseUrl = spec.baseUrl;
+    return preset;
+  });
+  return [...builtin, ...LOCAL_PRESETS];
+}
+
 /** Normalize `config.provider` into a display list + active name. */
-export function buildProviderViews(config: AppConfig): { entries: ProviderView[]; active: string } {
+export function buildProviderViews(config: AppConfig): {
+  entries: ProviderView[];
+  active: string;
+  presets: ProviderPresetView[];
+} {
   const provider = config.provider;
   const raw: ProviderEntry[] =
     Array.isArray(provider.entries) && provider.entries.length > 0
@@ -48,7 +91,7 @@ export function buildProviderViews(config: AppConfig): { entries: ProviderView[]
     }
     return view;
   });
-  return { entries, active: provider.active || provider.type };
+  return { entries, active: provider.active || provider.type, presets: buildProviderPresets() };
 }
 
 /** `GET /api/providers` — redacted entries + active name. */
@@ -69,6 +112,8 @@ interface ProviderInput {
   priority?: number;
   rpm?: number;
   parallel?: number;
+  /** Current name of the entry being edited; absent when creating a new one. */
+  originalName?: string;
 }
 
 function optionalInt(rec: Record<string, unknown>, key: string, min: number): number | null | undefined {
@@ -86,6 +131,9 @@ function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null 
   if (!type || !baseUrl) return null;
   if (rec.apiKey !== undefined && rec.apiKey !== null && typeof rec.apiKey !== "string") return null;
   if (rec.label !== undefined && rec.label !== null && typeof rec.label !== "string") return null;
+  if (rec.originalName !== undefined && rec.originalName !== null && typeof rec.originalName !== "string") {
+    return null;
+  }
 
   const contextWindow = optionalInt(rec, "contextWindow", 1024);
   const priority = optionalInt(rec, "priority", 0);
@@ -95,6 +143,9 @@ function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null 
 
   const input: ProviderInput = { type, baseUrl };
   if (typeof rec.label === "string" && rec.label.trim()) input.label = rec.label.trim();
+  if (typeof rec.originalName === "string" && rec.originalName.trim()) {
+    input.originalName = rec.originalName.trim();
+  }
   if (typeof rec.apiKey === "string" && rec.apiKey.trim()) input.apiKey = rec.apiKey.trim();
   if (contextWindow !== undefined) input.contextWindow = contextWindow;
   if (priority !== undefined) input.priority = priority;
@@ -111,14 +162,45 @@ function mirrorLegacy(config: AppConfig, entry: ProviderEntry): void {
 }
 
 /**
- * Add or update a provider entry. Matching is by `label` (or `type` when no
- * label is given) against an entry's label/type. Returns the entry name.
+ * Existing entries, seeding the legacy single-provider config first. A legacy
+ * config (`provider.type`/`baseUrl` with no `entries`) must survive the first
+ * add, otherwise the new entry would silently replace it.
  */
-export function upsertProvider(config: AppConfig, input: ProviderInput): string {
+function seededEntries(config: AppConfig): ProviderEntry[] {
   const provider = config.provider;
   const entries = Array.isArray(provider.entries) ? [...provider.entries] : [];
+  if (entries.length === 0 && provider.type) {
+    entries.push({
+      type: provider.type,
+      label: provider.active || provider.type,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+    });
+  }
+  return entries;
+}
+
+export type UpsertProviderResult =
+  | { ok: true; name: string }
+  | { ok: false; error: "name-conflict" };
+
+/**
+ * Create a provider entry, or update the one named by `input.originalName`.
+ * A POST without `originalName` always creates. Rejects a name that collides
+ * with another entry's label/type. Returns the written entry name.
+ */
+export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertProviderResult {
+  const provider = config.provider;
+  const entries = seededEntries(config);
   const name = input.label || input.type;
-  const idx = entries.findIndex((e) => (e.label || e.type) === name || e.type === name);
+  if (providerNameTaken(entries, name, input.originalName)) {
+    return { ok: false, error: "name-conflict" };
+  }
+  const idx = input.originalName
+    ? entries.findIndex(
+        (e) => providerEntryName(e) === input.originalName || e.type === input.originalName,
+      )
+    : -1;
 
   const entry: ProviderEntry = idx >= 0 ? { ...entries[idx] } : { type: input.type, baseUrl: input.baseUrl };
   entry.type = input.type;
@@ -139,10 +221,11 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): string 
   else entries.push(entry);
   config.provider.entries = entries;
 
-  const active = provider.active || provider.type;
-  if (!provider.active) config.provider.active = entry.label || entry.type;
-  if ((entry.label || entry.type) === active || entries.length === 1) mirrorLegacy(config, entry);
-  return entry.label || entry.type;
+  // Keep the existing/first provider active; only a first-ever provider becomes active.
+  const wasActive = provider.active || provider.type;
+  if (!provider.active) config.provider.active = providerEntryName(entries[0]);
+  if (providerEntryName(entry) === wasActive || entries.length === 1) mirrorLegacy(config, entry);
+  return { ok: true, name: providerEntryName(entry) };
 }
 
 /** `POST /api/providers` — add/update, persist, reconfigure. */
@@ -168,9 +251,13 @@ export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s
         sendJson(res, 400, { ok: false, error: "invalid-provider" });
         return;
       }
-      const name = upsertProvider(config, input);
-      const result = await persistAndReconfigure(s, config);
-      sendJson(res, 200, { ok: true, name, ...buildProviderViews(config), ...result });
+      const result = upsertProvider(config, input);
+      if (!result.ok) {
+        sendJson(res, 409, { ok: false, error: "name-conflict" });
+        return;
+      }
+      const persisted = await persistAndReconfigure(s, config);
+      sendJson(res, 200, { ok: true, name: result.name, ...buildProviderViews(config), ...persisted });
     })
     .catch((err: unknown) => {
       readBodyError(req, res, err);

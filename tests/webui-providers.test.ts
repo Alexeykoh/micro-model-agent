@@ -33,6 +33,7 @@ function testConfig(): AppConfig {
 interface ProviderBody {
   entries: Array<{ label: string; type: string; hasApiKey: boolean; rpm?: number; parallel?: number }>;
   active: string;
+  presets?: Array<{ id: string; type: string; name: string; label: string; baseUrl?: string }>;
   name?: string;
   ok?: boolean;
   persisted?: boolean;
@@ -54,6 +55,14 @@ describe("webui providers REST", () => {
       expect(body.entries[1].hasApiKey).toBe(false);
       expect(body.entries[0].rpm).toBe(120);
       expect(body.entries[0].parallel).toBe(2);
+      // Builtin presets are exposed so the form can fill type/URL in one click.
+      const openrouter = body.presets?.find((p) => p.type === "openrouter");
+      expect(openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
+      expect(body.presets?.some((p) => p.type === "openai-compat")).toBe(true);
+      // Named local presets map to openai-compat with a known local URL.
+      const lmstudio = body.presets?.find((p) => p.id === "lmstudio");
+      expect(lmstudio?.type).toBe("openai-compat");
+      expect(lmstudio?.baseUrl).toBe("http://localhost:1234/v1");
     });
   });
 
@@ -101,6 +110,7 @@ describe("webui providers REST", () => {
       const res = await postJson(base, "/api/providers", {
         type: "openai-compat",
         label: "local",
+        originalName: "local",
         baseUrl: "http://localhost:9999/v1",
         contextWindow: 65536,
       });
@@ -112,6 +122,58 @@ describe("webui providers REST", () => {
       expect(local?.contextWindow).toBe(65536);
       // Key not sent on update → preserved.
       expect(local?.apiKey).toBe("sk-local-secret");
+    });
+  });
+
+  it("seeds the legacy single-provider config instead of dropping it", async () => {
+    const s = createWebUiState();
+    const cfg = structuredClone(DEFAULTS);
+    cfg.provider = {
+      type: "openai-compat",
+      baseUrl: "http://localhost:1234/v1",
+      apiKey: "not-needed",
+    };
+    s.config = cfg;
+    s.saveConfig = () => {};
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/providers", {
+        type: "openrouter",
+        label: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+      });
+      expect(res.status).toBe(200);
+      const entries = s.config?.provider.entries ?? [];
+      expect(entries.map((e) => e.label || e.type)).toEqual(["openai-compat", "openrouter"]);
+      // The pre-existing provider stays active; the legacy flat fields are intact.
+      expect(s.config?.provider.active).toBe("openai-compat");
+      expect(s.config?.provider.type).toBe("openai-compat");
+      expect(s.config?.provider.baseUrl).toBe("http://localhost:1234/v1");
+    });
+  });
+
+  it("rejects a provider name that is already taken with 409 name-conflict", async () => {    const s = createWebUiState();
+    s.config = testConfig();
+    let saved = 0;
+    s.saveConfig = () => {
+      saved++;
+    };
+    await withServer(s, async (base) => {
+      const dupLabel = await postJson(base, "/api/providers", {
+        type: "openai-compat",
+        label: "local",
+        baseUrl: "http://x/v1",
+      });
+      expect(dupLabel.status).toBe(409);
+      expect(dupLabel.json.error).toBe("name-conflict");
+
+      // `openai-compat` is the type of the differently-labelled `local` entry.
+      const typeAlias = await postJson(base, "/api/providers", {
+        type: "openai-compat",
+        label: "openai-compat",
+        baseUrl: "http://x/v1",
+      });
+      expect(typeAlias.status).toBe(409);
+      expect(saved).toBe(0);
     });
   });
 

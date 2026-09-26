@@ -45,6 +45,9 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
+  "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },
+  "/smd.js": { type: "text/javascript; charset=utf-8", key: "smdJs" },
+  "/hljs.js": { type: "text/javascript; charset=utf-8", key: "hljsJs" },
 };
 
 /**
@@ -235,10 +238,12 @@ export function handleRequest(
 
   const asset = STATIC_ASSETS[reqUrl.pathname === "/" ? "/index.html" : reqUrl.pathname];
   if (asset) {
-    // Assets are read once at server start; no-store keeps the browser from
-    // caching a stale UI across restarts during development.
+    // Re-read from disk when possible so editing the assets is picked up without
+    // a restart; `no-store` keeps the browser from caching a stale UI. The fixed
+    // snapshot passed to `startServer` is the fallback (tests, read failures).
+    const src = s.assetSource ? s.assetSource() : assets;
     res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
-    res.end(assets[asset.key] ?? "");
+    res.end(src[asset.key] ?? assets[asset.key] ?? "");
     return;
   }
 

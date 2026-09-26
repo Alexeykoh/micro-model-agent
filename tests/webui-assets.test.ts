@@ -99,4 +99,56 @@ describe("webui assets", () => {
     expect(a.html).toContain('data-p="agent"');
     expect(a.html).toContain('data-panel="agent"');
   });
+
+  it("ships the streaming markdown renderer with vendored smd + highlight.js", () => {
+    const a = loadAssets();
+    expect(a.mdJs).toBeTruthy();
+    expect(a.mdJs).toContain("mountMarkdown");
+    expect(a.mdJs).toContain("renderMarkdown");
+    expect(a.mdJs).toContain("copyText");
+    expect(a.mdJs).toContain('from "./smd.js"');
+    expect(a.mdJs).toContain("hljs");
+    expect(a.smdJs).toContain("parser_write");
+    expect(a.hljsJs.length).toBeGreaterThan(1000);
+  });
+
+  it("renders answers through the streaming markdown module", () => {
+    const a = loadAssets();
+    expect(a.js).toContain('from "./md.js"');
+    expect(a.js).toContain("mountMarkdown(");
+    expect(a.js).toContain("renderMarkdown(");
+    expect(a.js).not.toContain("parseFences");
+    expect(a.js).toContain("appendActionsRow");
+  });
+
+  it("loads hljs and the module app, and styles code blocks + copy actions", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('src="/hljs.js"');
+    expect(a.html).toContain('type="module" src="/app.js"');
+    expect(a.css).toContain(".codeblock");
+    expect(a.css).toContain(".cb-copy");
+    expect(a.css).toContain(".hljs-keyword");
+    expect(a.css).toContain(".msg-actions");
+  });
+
+  it("groups the model/provider settings into sections with an add affordance", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("settingsSection(");
+    expect(a.js).toContain("web.settings.section_providers");
+    expect(a.js).toContain("provider_make_active");
+    expect(a.js).toContain("provider_advanced");
+    expect(a.html).toContain('data-panel="model"');
+    expect(a.css).toContain(".settings-section");
+    expect(a.css).toContain(".provider-item");
+    expect(a.css).toContain(".sec-add");
+    expect(a.css).toContain(".pform-adv");
+  });
+
+  it("offers one-click builtin provider presets in the form", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("state.providerPresets");
+    expect(a.js).toContain("provider_preset");
+    expect(a.js).toContain("provider_custom");
+    expect(a.css).toContain(".pform-field select");
+  });
 });

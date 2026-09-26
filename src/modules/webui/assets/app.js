@@ -1,3 +1,5 @@
+import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
+
 (() => {
   "use strict";
 
@@ -72,6 +74,7 @@
     skills: undefined,
     pluginsData: undefined,
     providers: undefined,
+    providerPresets: [],
     providerForm: null,
     // Transient error shown inline in the sessions dropdown (visible without the modal).
     sessionsError: null,
@@ -85,13 +88,18 @@
   let attachErrTimer = null;
 
   let curText = null;
-  let curTextNodes = [];
+  let curMd = null;
+  let turnMd = "";
+  let turnRoots = [];
   let curThink = null;
   let lastPlanSig = null;
   let lastUsageSig = null;
   let lastEnvSig = null;
   let runCount = 0;
   let runFails = 0;
+  let runReconOnly = true;
+  let runNodes = [];
+  let runDuration = 0;
   let busyTimer = null;
   const pendingArgs = new Map();
   const toolNodes = new Map();
@@ -140,6 +148,11 @@
     "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
     "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
     square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
+    copy: [
+      ["rect", { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 }],
+      ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }],
+    ],
+    check: [["path", { d: "M20 6 9 17l-5-5" }]],
   };
 
   function icon(name, cls) {
@@ -338,6 +351,31 @@
     return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
   }
 
+  // Effective chat verbosity, mirroring `resolveVerbosity` in src/ui/theme.ts:
+  // explicit `ui.verbosity` wins; the legacy boolean maps to verbose/quiet. A
+  // fresh config defaults to `quiet`, so the web feed matches the terminal.
+  function verbosity() {
+    const ui = (state.config && state.config.ui) || {};
+    if (ui.verbosity) return ui.verbosity;
+    return ui.verbose ? "verbose" : "quiet";
+  }
+
+  // First non-empty line of a tool result — the calm one-line cause shown in
+  // quiet mode instead of the whole model-facing body.
+  function firstOutputLine(text) {
+    if (typeof text !== "string" || !text) return "";
+    for (const raw of text.split("\n")) {
+      const line = raw.trim();
+      if (line) return line.length > 200 ? line.slice(0, 197) + "…" : line;
+    }
+    return "";
+  }
+
+  function insertAfter(ref, node) {
+    if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
+    else appendTo(liveFeed(), node);
+  }
+
   function relTime(ts) {
     if (!ts) return "";
     const diff = Date.now() - new Date(ts).getTime();
@@ -466,67 +504,53 @@
   }
 
   function flushRun() {
-    if (runCount <= 0) return;
-    const feed = liveFeed();
-    const line = el("div", "grouped");
-    line.appendChild(el("span", "pipe", "│"));
-    const fails = runFails > 0 ? " · " + runFails + " ✗" : " ✓";
-    line.appendChild(document.createTextNode(" " + pluralCount("web.action.actions", runCount) + fails));
-    appendTo(feed, line);
+    if (runCount <= 0) {
+      resetRun();
+      return;
+    }
+    // Quiet: a run of successful read-only actions folds into one summary line,
+    // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
+    // and `verbose` keep the individual action lines and add nothing.
+    if (verbosity() === "quiet" && runReconOnly && runFails === 0 && runCount > 1) {
+      runNodes.forEach((node) => node.remove());
+      const line = el("div", "grouped");
+      line.appendChild(el("span", "pipe", "│"));
+      const dur = formatMs(runDuration);
+      line.appendChild(
+        document.createTextNode(
+          " " + pluralCount("web.action.actions", runCount) + " ✓" + (dur ? " · " + dur : ""),
+        ),
+      );
+      appendTo(liveFeed(), line);
+    }
+    resetRun();
+  }
+
+  function resetRun() {
     runCount = 0;
     runFails = 0;
+    runReconOnly = true;
+    runNodes = [];
+    runDuration = 0;
   }
 
-  function parseFences(text) {
-    const lines = String(text).split("\n");
-    const parts = [];
-    let textBuf = [];
-    let codeBuf = [];
-    let inCode = false;
-    const flushText = () => {
-      if (textBuf.length) {
-        parts.push({ type: "text", content: textBuf.join("\n") });
-        textBuf = [];
-      }
+  // Options passed to the streaming Markdown renderer: localized code-block
+  // copy labels. Highlighting is applied by `md.js` once a fence closes.
+  function mdOpts() {
+    return {
+      copyLabel: t("web.code.copy"),
+      copiedLabel: t("web.code.copied"),
+      copyFailedLabel: t("web.code.copy_failed"),
     };
-    for (const line of lines) {
-      if (/^\s*```/.test(line)) {
-        if (!inCode) {
-          flushText();
-          inCode = true;
-          codeBuf = [];
-        } else {
-          parts.push({ type: "code", content: codeBuf.join("\n") });
-          inCode = false;
-          codeBuf = [];
-        }
-        continue;
-      }
-      if (inCode) codeBuf.push(line);
-      else textBuf.push(line);
-    }
-    if (inCode) parts.push({ type: "code", content: codeBuf.join("\n") });
-    else flushText();
-    return parts;
   }
 
-  function renderTextSegment(feed, raw) {
-    curTextNodes.forEach((n) => n.remove());
-    curTextNodes = [];
-    parseFences(raw).forEach((part) => {
-      if (part.type === "code") {
-        const code = el("div", "code");
-        code.textContent = part.content;
-        feed.appendChild(code);
-        curTextNodes.push(code);
-      } else if (part.content) {
-        const ans = el("div", "ans");
-        ans.textContent = part.content;
-        feed.appendChild(ans);
-        curTextNodes.push(ans);
-      }
-    });
-    if (feed === activeFeed()) scroll();
+  // Close the active Markdown segment (if any) and clear the text state.
+  function finishMd() {
+    if (curMd) {
+      curMd.end();
+      curMd = null;
+    }
+    curText = null;
   }
 
   function onText(chunk, sid) {
@@ -540,10 +564,13 @@
     if (curText == null) {
       flushRun();
       curText = "";
-      curTextNodes = [];
+      curMd = mountMarkdown(feed, mdOpts());
+      turnRoots.push(curMd.root);
     }
     curText += chunk;
-    renderTextSegment(feed, curText);
+    turnMd += chunk;
+    curMd.write(chunk);
+    if (feed === activeFeed()) scroll();
   }
 
   function finishThink() {
@@ -578,7 +605,7 @@
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
-    curText = null;
+    finishMd();
     if (!curThink) {
       flushRun();
       const { wrap, head, body } = buildThinkBlock(true);
@@ -597,7 +624,7 @@
     const text = (chunk || "").trim();
     if (!feed || !text) return;
     clearEmpty(feed);
-    curText = null;
+    finishMd();
     const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
     appendTo(feed, el("div", warn ? "metaln warn" : "metaln", text));
     if (feed === activeFeed()) scroll();
@@ -617,7 +644,7 @@
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
-    curText = null;
+    finishMd();
     finishThink();
     pendingArgs.set(data.toolCallId, data.args || {});
     const line = el("div", "act " + categoryOf(data.name));
@@ -632,6 +659,7 @@
     line.appendChild(status);
     appendTo(feed, line);
     toolNodes.set(data.toolCallId, { status, line });
+    if (categoryOf(data.name) !== "recon") runReconOnly = false;
     runCount++;
   }
 
@@ -672,10 +700,10 @@
 
   function cardFor(name, args, sid) {
     const feed = feedForEvent(sid);
-    if (!feed) return;
+    if (!feed) return null;
     if (FILE_TOOLS.indexOf(name) !== -1) {
       const path = args.path || args.file || args.dir;
-      if (!path) return;
+      if (!path) return null;
       const card = el("div", "filecard");
       const top = el("div", "fc-top");
       top.appendChild(el("span", "g", "◇"));
@@ -694,7 +722,7 @@
       }
       card.appendChild(bottom);
       appendTo(feed, card);
-      return;
+      return card;
     }
     if (LINK_TOOLS.indexOf(name) !== -1 && args.url) {
       const line = el("div", "linkline");
@@ -716,14 +744,16 @@
         line.appendChild(el("span", "", args.url));
       }
       appendTo(feed, line);
-      return;
+      return line;
     }
     if (IMAGE_TOOLS.indexOf(name) !== -1) {
       const card = el("div", "imgcard");
       card.appendChild(el("div", "ph", "◧ " + t("web.card.screenshot")));
       card.appendChild(el("div", "cap", name === "attach_image" ? t("web.card.attached_image") : t("web.card.browser_viewport")));
       appendTo(feed, card);
+      return card;
     }
+    return null;
   }
 
   function onToolEnd(data) {
@@ -735,11 +765,27 @@
       if (!data.success) {
         node.status.classList.add("fail");
         runFails++;
+        runReconOnly = false;
       }
     }
     toolNodes.delete(data.toolCallId);
     const args = pendingArgs.get(data.toolCallId) || {};
     pendingArgs.delete(data.toolCallId);
+    if (verbosity() === "quiet") {
+      // Quiet hides tool bodies. Track successful nodes so a run of read-only
+      // actions can fold at the next segment; a failure keeps its line and adds
+      // a single `↳` cause instead of the whole model-facing body.
+      if (data.success) {
+        if (line) runNodes.push(line);
+        const card = cardFor(data.name, args, data.sessionId);
+        if (card) runNodes.push(card);
+        runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+      } else {
+        const cause = firstOutputLine(data.output);
+        if (cause) insertAfter(line, el("div", "detail", "↳ " + cause));
+      }
+      return;
+    }
     if (data.success) cardFor(data.name, args, data.sessionId);
     renderToolOutput(line, data.output);
   }
@@ -749,11 +795,14 @@
     const feed = feedForEvent(data.sessionId);
     clearBusy(feed);
     finishThink();
-    curText = null;
+    finishMd();
     flushRun();
     const owner = tabs.find((x) => x.id === data.sessionId);
     if (owner) owner.planCard = null;
-    if (!feed) return;
+    if (!feed) {
+      resetTurnText();
+      return;
+    }
     if (data.success === false) {
       if (data.interrupted) {
         appendTo(feed, el("div", "warnline", "⚠ " + t("web.turn.stopped")));
@@ -769,9 +818,42 @@
       }
       if (typeof data.durationMs === "number") parts.push(formatMs(data.durationMs));
       if (parts.length) appendTo(feed, el("div", "metric", "⟡ " + parts.join(" · ")));
-      appendTo(feed, el("div", "sysline", "— " + t("web.turn.end", { count: data.toolCalls || 0 }) + " —"));
+      // The visible turn-end banner is redundant noise; keep the screen-reader cue.
       announce(t("web.turn.end", { count: data.toolCalls || 0 }));
     }
+    const plain = turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
+    appendActionsRow(feed, plain, turnMd);
+    resetTurnText();
+  }
+
+  function resetTurnText() {
+    turnMd = "";
+    turnRoots = [];
+  }
+
+  // Per-message copy actions (whole response as plain text / as Markdown).
+  function copyAction(payload, labelKey) {
+    const btn = el("button", "act-btn", t(labelKey));
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      copyText(payload).then((ok) => {
+        btn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
+        window.setTimeout(() => {
+          btn.textContent = t(labelKey);
+        }, 1400);
+      });
+    });
+    return btn;
+  }
+
+  function appendActionsRow(feed, plain, markdown) {
+    const text = String(plain == null ? "" : plain);
+    const md = String(markdown == null ? "" : markdown);
+    if (!feed || (!text.trim() && !md.trim())) return;
+    const bar = el("div", "msg-actions");
+    if (text.trim()) bar.appendChild(copyAction(text, "web.msg.copy"));
+    if (md.trim()) bar.appendChild(copyAction(md, "web.msg.copy_md"));
+    appendTo(feed, bar);
   }
 
   function onErrorEvent(data) {
@@ -809,16 +891,10 @@
   // In-loop critic verdict (concern/critical). Mirrors the terminal verbosity
   // (quiet hides, normal shows one line, verbose adds the summary). The
   // repair/advice directive itself is model-facing and never sent here.
-  function criticVerbosity() {
-    const ui = (state.config && state.config.ui) || {};
-    if (ui.verbosity) return ui.verbosity;
-    return ui.verbose ? "verbose" : "quiet";
-  }
-
   function onCritic(data) {
     if (!data || (data.status !== "concern" && data.status !== "critical")) return;
-    const verbosity = criticVerbosity();
-    if (verbosity === "quiet") return;
+    const level = verbosity();
+    if (level === "quiet") return;
     const feed = feedForEvent(data.sessionId) || activeFeed();
     if (!feed) return;
     const critical = data.status === "critical" || data.repair === true;
@@ -828,7 +904,7 @@
     const line = el("div", critical ? "warnline" : "detail");
     line.textContent = (critical ? "⚠ " : "⟡ ") + label;
     appendTo(feed, line);
-    if (verbosity === "verbose" && typeof data.summary === "string" && data.summary) {
+    if (level === "verbose" && typeof data.summary === "string" && data.summary) {
       const detail = el("div", "detail");
       detail.textContent = "↳ " + data.summary;
       appendTo(feed, detail);
@@ -837,15 +913,10 @@
   }
 
   function renderAssistantText(feed, text) {
-    parseFences(String(text)).forEach((part) => {
-      if (part.type === "code") {
-        const code = el("div", "code");
-        code.textContent = part.content;
-        feed.appendChild(code);
-      } else if (part.content) {
-        feed.appendChild(el("div", "ans", part.content));
-      }
-    });
+    const raw = String(text == null ? "" : text);
+    if (!raw.trim()) return;
+    const root = renderMarkdown(feed, raw, mdOpts());
+    appendActionsRow(feed, root.innerText || root.textContent || "", raw);
   }
 
   function renderThinkBlock(feed, text) {
@@ -923,7 +994,7 @@
   }
 
   function feedHasContent(feed) {
-    return !!feed.querySelector(".u, .ans, .code, .act, .think, .metaln, .errline, .sysline");
+    return !!feed.querySelector(".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline");
   }
 
   async function loadHistory(tab) {
@@ -954,16 +1025,18 @@
     tabs.forEach((item) => {
       const on = item.id === activeTabId;
       const label = item.name || item.id;
+      // The id lives in the tooltip (and the sidebar copy button), not inline,
+      // so the session name keeps the tab width.
+      const tip = item.kind === "session" ? String(item.id) : label;
       const tab = el("div", "stab" + (on ? " on" : ""));
       tab.setAttribute("role", "tab");
       tab.setAttribute("tabindex", on ? "0" : "-1");
       tab.setAttribute("aria-selected", on ? "true" : "false");
       tab.setAttribute("aria-label", label);
-      tab.title = label;
+      tab.title = tip;
       const nameEl = el("span", "name", label);
-      nameEl.title = label;
+      nameEl.title = tip;
       tab.appendChild(nameEl);
-      if (item.kind === "session") tab.appendChild(el("span", "sid", String(item.id)));
       const x = el("button", "stab-x");
       x.type = "button";
       x.title = t("web.topbar.close");
@@ -1477,7 +1550,8 @@
       return;
     }
     clearEmpty(feed);
-    curText = null;
+    finishMd();
+    resetTurnText();
     finishThink();
     if (text.startsWith("/")) {
       appendTo(feed, el("div", "u", text));
@@ -1773,6 +1847,12 @@
         applyStaticI18n();
         renderSettings();
       }
+      // A provider switch restores the per-provider model; a model change
+      // updates that provider's remembered model. Re-read both server-side.
+      if (key === "provider.active" || key === "model") {
+        await loadConfig();
+        await loadModels();
+      }
       renderSelectors();
       if (refreshSettings) renderSettings();
       return true;
@@ -2000,6 +2080,32 @@
     return row;
   }
 
+  // Session row with a copy button next to the id (icon-only, ✓ on success).
+  function usageSessionRow(sessionId) {
+    const row = el("div", "kv");
+    row.appendChild(el("span", "", t("web.usage.session")));
+    const val = el("span", "kv-val");
+    if (!sessionId) {
+      val.appendChild(el("b", "", "—"));
+    } else {
+      val.appendChild(el("b", "", sessionId));
+      const btn = el("button", "copy-btn");
+      btn.type = "button";
+      btn.title = t("web.usage.copy_id");
+      btn.setAttribute("aria-label", t("web.usage.copy_id"));
+      btn.appendChild(icon("copy"));
+      btn.addEventListener("click", () => {
+        copyText(sessionId).then((ok) => {
+          btn.replaceChildren(icon(ok ? "check" : "copy"));
+          setTimeout(() => btn.replaceChildren(icon("copy")), 1500);
+        });
+      });
+      val.appendChild(btn);
+    }
+    row.appendChild(val);
+    return row;
+  }
+
   function renderUsage(h) {
     const cfg = state.config || {};
     const sig = JSON.stringify([
@@ -2010,8 +2116,8 @@
     if (sig === lastUsageSig) return;
     lastUsageSig = sig;
     usageEl.textContent = "";
-    const sid = h.sessionId ? String(h.sessionId) : "—";
-    usageEl.appendChild(usageRow(t("web.usage.session"), sid));
+    const sid = h.sessionId ? String(h.sessionId) : "";
+    usageEl.appendChild(usageSessionRow(sid));
     usageEl.appendChild(usageRow(t("web.usage.model"), h.model || cfg.model || "—"));
     const used = typeof h.contextUsed === "number" ? h.contextUsed : null;
     const limit = typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null;
@@ -2135,6 +2241,7 @@
   async function loadProviders() {
     const r = await api("/api/providers");
     state.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
+    state.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
     renderModelPanel();
   }
 
@@ -2439,29 +2546,125 @@
     return input;
   }
 
+  // A titled group inside a settings panel (models / providers).
+  function settingsSection(titleKey) {
+    const sec = el("div", "settings-section");
+    const head = el("div", "sec-head");
+    head.appendChild(el("span", "sec-title", t(titleKey)));
+    sec.appendChild(head);
+    const body = el("div", "sec-body");
+    sec.appendChild(body);
+    return { el: sec, head, body };
+  }
+
+  // Compact action control used inside list items (use / edit / delete).
+  function chip(label, cls, onClick) {
+    const b = el("button", "chip" + (cls ? " " + cls : ""), label);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  // Suggestions for the provider form: known provider types and common base URLs.
+  function providerHints() {
+    const frag = document.createDocumentFragment();
+    const types = el("datalist");
+    types.id = "providerTypes";
+    ["openai-compat", "openrouter", "openai", "anthropic", "opencode-zen", "opencode-go"].forEach((v) => {
+      const o = el("option");
+      o.value = v;
+      types.appendChild(o);
+    });
+    const urls = el("datalist");
+    urls.id = "providerBaseUrls";
+    [
+      ["LM Studio", "http://localhost:1234/v1"],
+      ["Ollama", "http://localhost:11434/v1"],
+      ["OpenRouter", "https://openrouter.ai/api/v1"],
+      ["OpenAI", "https://api.openai.com/v1"],
+      ["Anthropic", "https://api.anthropic.com"],
+    ].forEach(([label, value]) => {
+      const o = el("option");
+      o.value = value;
+      o.label = label;
+      urls.appendChild(o);
+    });
+    frag.appendChild(types);
+    frag.appendChild(urls);
+    return frag;
+  }
+
   function providerForm() {
+    const mode = (state.providerForm && state.providerForm.mode) || "add";
     const editing = (state.providerForm && state.providerForm.entry) || {};
     const box = el("div", "pform");
-    const grid = el("div", "pform-grid");
 
+    // One-click preset: selecting a builtin fills type/label/base URL, so hosted
+    // providers need no URL knowledge. `custom` leaves the fields free.
+    const presets = state.providerPresets || [];
+    let presetSel = null;
+    if (presets.length) {
+      presetSel = el("select", "pform-preset");
+      const custom = el("option", "", t("web.settings.provider_custom"));
+      custom.value = "";
+      presetSel.appendChild(custom);
+      presets.forEach((p) => {
+        const o = el("option", "", p.label || p.type);
+        o.value = p.id;
+        presetSel.appendChild(o);
+      });
+      const match =
+        presets.find((p) => p.type === editing.type && p.baseUrl && p.baseUrl === editing.baseUrl) ||
+        presets.find((p) => p.type === editing.type && !p.baseUrl) ||
+        presets.find((p) => p.type === editing.type);
+      if (match) presetSel.value = match.id;
+      box.appendChild(pfield("web.settings.provider_preset", presetSel));
+    }
+
+    const grid = el("div", "pform-grid");
     const fType = providerInput(editing.type, "text", "openai-compat");
+    fType.setAttribute("list", "providerTypes");
     const fLabel = providerInput(editing.label, "text", "my-provider");
     const fBase = providerInput(editing.baseUrl, "text", "http://localhost:1234/v1");
+    fBase.setAttribute("list", "providerBaseUrls");
     const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
-    const fCtx = providerInput(editing.contextWindow, "number", "32768");
-    const fPrio = providerInput(editing.priority, "number", "0");
-    const fRpm = providerInput(editing.rpm, "number", "60");
-    const fPar = providerInput(editing.parallel, "number", "1");
 
     grid.appendChild(pfield("web.settings.provider_type", fType));
     grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
     grid.appendChild(pfield("web.settings.provider_baseurl", fBase));
     grid.appendChild(pfield("web.settings.provider_apikey", fKey));
-    grid.appendChild(pfield("web.settings.provider_context", fCtx));
-    grid.appendChild(pfield("web.settings.provider_priority", fPrio));
-    grid.appendChild(pfield("web.settings.provider_rpm", fRpm));
-    grid.appendChild(pfield("web.settings.provider_parallel", fPar));
     box.appendChild(grid);
+
+    if (presetSel) {
+      presetSel.addEventListener("change", () => {
+        const p = presets.find((x) => x.id === presetSel.value);
+        if (!p) return;
+        fType.value = p.type;
+        if (mode === "add" || !fLabel.value.trim()) fLabel.value = p.name;
+        fBase.value = p.baseUrl || "";
+      });
+      fType.addEventListener("input", () => {
+        const sel = presets.find((x) => x.id === presetSel.value);
+        if (!sel || fType.value.trim() !== sel.type) presetSel.value = "";
+      });
+    }
+
+    // Optional tuning fields stay collapsed so the form reads as "type + URL".
+    const adv = el("details", "pform-adv");
+    adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
+    const advGrid = el("div", "pform-grid");
+    const fCtx = providerInput(editing.contextWindow, "number", "32768");
+    const fPrio = providerInput(editing.priority, "number", "0");
+    const fRpm = providerInput(editing.rpm, "number", "60");
+    const fPar = providerInput(editing.parallel, "number", "1");
+    advGrid.appendChild(pfield("web.settings.provider_context", fCtx));
+    advGrid.appendChild(pfield("web.settings.provider_priority", fPrio));
+    advGrid.appendChild(pfield("web.settings.provider_rpm", fRpm));
+    advGrid.appendChild(pfield("web.settings.provider_parallel", fPar));
+    adv.appendChild(advGrid);
+    box.appendChild(adv);
+
+    box.appendChild(providerHints());
 
     const actions = el("div", "pform-actions");
     const save = link(t("web.settings.save"), "", async () => {
@@ -2474,6 +2677,10 @@
       const body = { type, baseUrl };
       const label = fLabel.value.trim();
       if (label) body.label = label;
+      if (mode === "edit") {
+        const original = providerName(editing);
+        if (original && original !== "—") body.originalName = original;
+      }
       const key = fKey.value.trim();
       if (key && key !== "***") body.apiKey = key;
       const nums = [
@@ -2497,16 +2704,18 @@
         const persisted = r.data.persisted !== false;
         state.providerForm = null;
         setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
+        hideProviderOverlay();
         await loadProviders();
         await loadConfig();
       } else {
-        setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+        const err = (r.data && r.data.error) || "";
+        setIndicator(
+          err === "name-conflict" ? t("web.settings.provider_name_conflict") : err || t("web.settings.save_failed"),
+          true,
+        );
       }
     });
-    const cancel = link(t("web.settings.cancel"), "dim", () => {
-      state.providerForm = null;
-      renderModelPanel();
-    });
+    const cancel = link(t("web.settings.cancel"), "dim", () => closeProviderForm());
     actions.appendChild(save);
     actions.appendChild(cancel);
     box.appendChild(actions);
@@ -2519,12 +2728,14 @@
     container.textContent = "";
     const cfg = state.config || {};
 
+    // --- Model section ---
+    const modelSec = settingsSection("web.settings.section_models");
     const search = el("input", "searchbox");
     search.placeholder = t("web.settings.search_models");
     search.setAttribute("aria-label", t("web.settings.search_models"));
-    container.appendChild(search);
-    const list = el("div");
-    container.appendChild(list);
+    modelSec.body.appendChild(search);
+    const list = el("div", "model-list");
+    modelSec.body.appendChild(list);
     const draw = () => {
       list.textContent = "";
       const q = search.value.trim().toLowerCase();
@@ -2535,50 +2746,58 @@
       }
       models.forEach((m) => {
         const active = m === cfg.model;
-        const r = el("div", "row");
-        const nameEl = el("span", active ? "val accent" : "", m);
+        const item = el("div", "model-item" + (active ? " active" : ""));
+        const nameEl = el("span", "m-name", m);
         nameEl.title = m;
-        r.appendChild(nameEl);
+        item.appendChild(nameEl);
         if (active) {
-          r.appendChild(el("span", "val dim", contextLabel() + " · " + t("web.settings.active_check")));
+          item.appendChild(el("span", "m-meta", contextLabel() + " · " + t("web.settings.active_check")));
         } else {
-          r.appendChild(link(t("web.settings.use"), "", () => postConfig("model", m, true)));
+          item.appendChild(chip(t("web.settings.use"), "", () => postConfig("model", m, true)));
         }
-        list.appendChild(r);
+        list.appendChild(item);
       });
     };
     search.addEventListener("input", draw);
     draw();
+    container.appendChild(modelSec.el);
 
-    const entries = providerEntries();
+    // --- Providers section ---
+    const provSec = settingsSection("web.settings.section_providers");
+    const addBtn = el("button", "sec-add");
+    addBtn.type = "button";
+    addBtn.setAttribute("aria-haspopup", "dialog");
+    addBtn.appendChild(icon("plus"));
+    addBtn.appendChild(el("span", "", t("web.settings.add_provider")));
+    addBtn.addEventListener("click", () => openProviderForm("add", null));
+    provSec.head.appendChild(addBtn);
+
+    const entries = providerEntries().filter((e) => {
+      const n = providerName(e);
+      return n && n !== "—";
+    });
     const activeName = (state.providers && state.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
-    const activeVal = el("span", "val", activeName);
-    activeVal.title = activeName;
-    container.appendChild(row(t("web.settings.active_provider"), activeVal));
-
-    const provList = el("div", "settings-list");
+    const provList = el("div", "provider-list");
     entries.forEach((entry) => {
       const name = providerName(entry);
-      if (!name || name === "—") return;
-      const line = el("div", "list-line");
-      const nameEl = el("span", "name", name);
-      nameEl.title = name;
-      line.appendChild(nameEl);
-      line.appendChild(el("span", "src", providerMeta(entry)));
-      if (name === activeName) {
-        line.appendChild(el("span", "st", t("web.settings.active")));
-      } else {
-        line.appendChild(link(t("web.settings.use"), "", () => postConfig("provider.active", name, true)));
+      const active = name === activeName;
+      const item = el("div", "provider-item" + (active ? " active" : ""));
+      const head = el("div", "p-head");
+      head.appendChild(el("span", "p-name", name));
+      if (active) head.appendChild(el("span", "badge on", t("web.settings.active")));
+      item.appendChild(head);
+      const meta = providerMeta(entry);
+      if (meta) item.appendChild(el("div", "p-meta", meta));
+      const actions = el("div", "p-actions");
+      if (!active) {
+        actions.appendChild(chip(t("web.settings.provider_make_active"), "", () => postConfig("provider.active", name, true)));
       }
-      line.appendChild(
-        link(t("web.settings.edit"), "", () => {
-          state.providerForm = { mode: "edit", entry };
-          renderModelPanel();
-        }),
+      actions.appendChild(
+        chip(t("web.settings.edit"), "", () => openProviderForm("edit", entry)),
       );
-      if (name !== activeName) {
-        line.appendChild(
-          link(t("web.settings.delete"), "danger", async () => {
+      if (!active) {
+        actions.appendChild(
+          chip(t("web.settings.delete"), "danger", async () => {
             const r = await api("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
             if (r.ok && r.data && r.data.ok) {
               setIndicator(t("web.settings.saved"));
@@ -2591,17 +2810,12 @@
           }),
         );
       }
-      provList.appendChild(line);
+      item.appendChild(actions);
+      provList.appendChild(item);
     });
-    container.appendChild(provList);
-
-    container.appendChild(
-      link(t("web.settings.add_provider"), "add-provider", () => {
-        state.providerForm = { mode: "add", entry: null };
-        renderModelPanel();
-      }),
-    );
-    if (state.providerForm) container.appendChild(providerForm());
+    if (!entries.length) provList.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
+    provSec.body.appendChild(provList);
+    container.appendChild(provSec.el);
   }
 
   function renderUiPanel() {
@@ -3028,6 +3242,8 @@
     if (active) setTimeout(() => active.focus(), 0);
   }
   function closeSettings() {
+    hideProviderOverlay();
+    state.providerForm = null;
     overlay.classList.remove("open");
     settingsBtn.setAttribute("aria-expanded", "false");
     if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
@@ -3056,8 +3272,79 @@
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && overlay.classList.contains("open")) closeSettings();
+    if (e.key !== "Escape") return;
+    if (isProviderOpen()) return; // handled by the provider dialog / nested Esc below
+    if (overlay.classList.contains("open")) closeSettings();
   });
+
+  // --- nested provider add/edit dialog (opens above the settings modal) ---
+  const providerOverlay = document.getElementById("providerOverlay");
+  const providerFormHost = document.getElementById("providerFormHost");
+  const providerFormTitle = document.getElementById("providerFormTitle");
+  const closeProviderBtn = document.getElementById("closeProvider");
+  let providerReturnFocus = null;
+
+  function isProviderOpen() {
+    return !!providerOverlay && providerOverlay.classList.contains("open");
+  }
+
+  function openProviderForm(mode, entry) {
+    if (!providerOverlay || !providerFormHost) return;
+    state.providerForm = { mode, entry: entry || null };
+    providerReturnFocus = document.activeElement;
+    providerFormTitle.textContent = t(
+      mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title",
+    );
+    providerFormHost.textContent = "";
+    providerFormHost.appendChild(providerForm());
+    providerOverlay.classList.add("open");
+    setTimeout(() => {
+      const first = providerFormHost.querySelector("input, select");
+      if (first) first.focus();
+    }, 0);
+  }
+
+  function hideProviderOverlay() {
+    if (!providerOverlay) return;
+    providerOverlay.classList.remove("open");
+    if (providerReturnFocus && providerReturnFocus.focus) providerReturnFocus.focus();
+    providerReturnFocus = null;
+  }
+
+  function closeProviderForm() {
+    if (!isProviderOpen()) return;
+    state.providerForm = null;
+    hideProviderOverlay();
+    renderModelPanel();
+  }
+
+  if (providerOverlay) {
+    if (closeProviderBtn) closeProviderBtn.addEventListener("click", closeProviderForm);
+    providerOverlay.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (e.target === providerOverlay) closeProviderForm();
+    });
+    // Keep Tab inside the nested dialog while it is open.
+    providerOverlay.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const items = Array.from(
+        providerOverlay.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => node.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  }
+
 
   // --- generic confirmation dialog (alertdialog) -------------------------
   const confirmOverlay = document.getElementById("confirmOverlay");
@@ -3111,7 +3398,8 @@
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
+    if (isProviderOpen()) closeProviderForm();
+    else if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
     else if (overlay.classList.contains("open")) closeSettings();
   });
 

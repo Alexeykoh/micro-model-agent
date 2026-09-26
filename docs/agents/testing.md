@@ -80,6 +80,74 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
    - Повторный `/meet` во время активного знакомства печатает подсказку
      `Знакомство уже идёт. Выполни /meet stop, чтобы завершить.` (без перезапуска интервью).
 
+## Тестирование web UI (Playwright)
+
+Веб-интерфейс (`mma web`) проверяем **через Playwright**, а не глазами по скриншотам.
+Repos уже зависит от `playwright` (см. `package.json`); браузеры стоят в
+`%LOCALAPPDATA%\ms-playwright`.
+
+> **⚠️ Правило:** Playwright запускается **только по явной команде пользователя**. Без его
+> просьбы агент не открывает браузер и не гоняет UI-сценарии сам — это медленно и создаёт
+> внешние процессы (то же касается поднятия `mma web` «на всякий случай»).
+
+**Запуск сервера** — контролируемо, фоном, не блокируя работу (всегда из корня репо, иначе bun
+подхватит глобальный `mma` — см. правило 5 выше):
+
+```powershell
+# фоном + логи в файл + PID в переменной (не держит сессию, можно проверять/останавливать)
+$p = Start-Process bun -ArgumentList 'run','src/cli/main.ts','web','--port','4319','--host','127.0.0.1','--no-open' `
+  -WorkingDirectory 'E:\projects\micro-models-agent' `
+  -RedirectStandardOutput "$env:TEMP\mma-web.out.log" -RedirectStandardError "$env:TEMP\mma-web.err.log" `
+  -PassThru -WindowStyle Hidden
+$p.Id                                    # PID — в файл/переменную
+(Invoke-WebRequest http://127.0.0.1:4319/ -UseBasicParsing).StatusCode   # readiness-поллинг: 200
+# ... работа ...
+Stop-Process -Id $p.Id                    # остановка по PID
+```
+
+- **Логи** — только через файлы (`$env:TEMP\mma-web.*.log`); не выводить `mma web` в «передний план».
+- **Readiness** — поллить `/` или `/api/providers` до `200`, а не `Start-Sleep` вслепую.
+- **Остановка** — строго по сохранённому PID (`Stop-Process -Id`), не «убить все bun».
+- **Ассеты перечитываются на каждый запрос** (`WebUiState.assetSource` → `loadAssets()`), поэтому
+  правки `src/modules/webui/assets/*` видны в браузере **без рестарта**. Изменения в `src/**/*.ts`
+  (серверная логика) по-прежнему требуют перезапуска сервера.
+
+**Скрипт-драйвер** (видимый браузер, замедление, чтобы наблюдать шаги; запускать только по просьбе):
+
+```js
+import { chromium } from "playwright";
+const browser = await chromium.launch({ headless: false, slowMo: 400, args: ["--start-maximized"] });
+const page = await browser.newPage({ viewport: null });
+await page.goto("http://127.0.0.1:4319/");
+```
+
+Альтернатива без своего скрипта — **Playwright MCP** в opencode (`@playwright/mcp`, прописан в
+`~/.config/opencode/opencode.jsonc`): после рестарта opencode браузером можно «тыкать» интерактивно.
+
+**Опорные селекторы (стабильные якоря UI):**
+
+| Что | Селектор |
+| --- | --- |
+| открыть настройки | `#openSettings` |
+| вкладка «Модель и провайдер» | `[data-p="model"]` |
+| панель настроек | `[data-panel="model"]` |
+| «+ добавить» / шаблон / доп. поля | `.sec-add`, `.pform-preset`, `.pform-adv` |
+| вложенный поп-ап провайдера | `#providerOverlay` (`.overlay-nested.open`), `#providerFormHost`, `#providerFormTitle` |
+| список моделей | `.model-item` (`.active` — выбранная) |
+| список провайдеров | `.provider-item` (`.chip` действия, `.chip.danger` — удалить) |
+
+**⚠️ Не гоняй пишущие проверки по реальному `~/.mma`.** Добавление/удаление провайдера живьём
+мутирует рабочий конфиг. Указывай `MMA_CONFIG_DIR` на временную папку с валидным `config.json`
+(или доменами), запускай сервер с ней — UI будет изолирован.
+
+**Ключевые инварианты (проверять в сценарии):**
+
+1. Список моделей соответствует **активному** провайдеру и обновляется после переключения
+   (`postConfig("provider.active")` → `reconfigure` → `/api/models`).
+2. Добавление провайдера на легаси-конфиге (`provider.type` без `entries`) **не затирает**
+   существующий — он попадает в `entries[0]` и остаётся активным.
+3. Имя нового/переименованного провайдера уникально (коллизия → `409 name-conflict`).
+
 ## Наблюдения за маленькими моделями
 
 > **Журнал:** [docs/small-model-observations.md](./docs/small-model-observations.md)

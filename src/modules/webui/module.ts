@@ -124,6 +124,44 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
   if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
   return usage;
 }
+
+/**
+ * Agent surface the web reconfigure hook needs. Narrow so tests can stub it
+ * without constructing a real `Agent` (which would drag in the whole loop).
+ */
+export interface WebReconfigurableAgent {
+  reconfigure(config: AppConfig): void | Promise<void>;
+  readonly contextManager: { getBudget(): { history: number } };
+}
+
+/**
+ * Build the web-owned `reconfigure` hook. `reconfigure` may resize the context
+ * window/budget, so the cached sidebar limit (the previous turn's
+ * `budget.history`) goes stale. Re-read the live budget and push a `state`
+ * event so the browser updates immediately, without waiting for the next turn
+ * or the 2s `/api/state` poll.
+ */
+export function makeReconfigure(
+  state: WebUiState,
+  agent: WebReconfigurableAgent,
+  after?: () => Promise<void> | void,
+): (config: AppConfig) => Promise<void> {
+  return async (config) => {
+    await agent.reconfigure(config);
+    state.usage = { ...state.usage, contextLimit: agent.contextManager.getBudget().history };
+    // Provider may have changed: refresh the per-provider model list first so the
+    // client's follow-up `/api/models` sees the new provider's models.
+    if (after) {
+      try {
+        await after();
+      } catch {
+        /* keep the reconfigure result even if the model refresh fails */
+      }
+    }
+    broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
+  };
+}
+
 /**
  * Resolve the plan snapshot to broadcast after a tool ends. Only `plan`/`todo`
  * tools mutate the active plan, so any other tool yields `null` (no event).
@@ -184,7 +222,6 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.agentsMd = deps.agentsMd;
   if (deps.indexer) state.projectMapStats = () => deps.indexer?.stats() ?? null;
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
-  state.reconfigure = (config) => deps.agent.reconfigure(config);
 
   // Web-only interactive tools: `question`/`approve` run over SSE + `/api/answer`.
   installWebPromptIO({
@@ -195,25 +232,32 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
 
   // Model list cache: the endpoint is synchronous, the provider call is not.
-  // Refresh once at startup (best-effort) and serve the cache thereafter.
+  // Refresh once at startup (best-effort) and again on every reconfigure so the
+  // list follows the active provider instead of going stale.
   const modelCache: string[] = [];
+  const refreshModels = async (): Promise<void> => {
+    try {
+      const cfg = deps.config;
+      const name = cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
+      const provider = deps.agent.getProviderFor(name);
+      if (!provider) return;
+      const models = await provider.listModels();
+      modelCache.splice(0, modelCache.length, ...models.slice().sort());
+    } catch {
+      // Offline provider: keep the previous list rather than failing.
+    }
+  };
   if (deps.knownModels) {
     state.knownModels = deps.knownModels;
   } else {
     state.knownModels = () => modelCache;
-    void (async () => {
-      try {
-        const cfg = deps.config;
-        const name = cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
-        const provider = deps.agent.getProviderFor(name);
-        if (!provider) return;
-        const models = await provider.listModels();
-        if (models.length > 0) modelCache.splice(0, modelCache.length, ...models.sort());
-      } catch {
-        // Offline provider: serve an empty list rather than failing startup.
-      }
-    })();
+    void refreshModels();
   }
+  state.reconfigure = makeReconfigure(
+    state,
+    deps.agent,
+    deps.knownModels ? undefined : refreshModels,
+  );
 
   const forwarder = makeForwarder(state);
   const stopOutputForwarding = installOutputForwarding(state);
@@ -344,6 +388,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
 
   state.bridge = host;
+  // Serve assets fresh from disk so editing `assets/*` needs no server restart.
+  state.assetSource = loadAssets;
   const url = startServer(loadAssets(), state);
 
   return {

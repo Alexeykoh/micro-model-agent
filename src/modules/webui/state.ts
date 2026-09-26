@@ -47,6 +47,12 @@ export interface WebUiAssets {
    * fixtures that only exercise the chat surface stay valid.
    */
   setupJs?: string;
+  /** Streaming Markdown module (`/md.js`). */
+  mdJs?: string;
+  /** Vendored streaming-markdown parser (`/smd.js`, ESM). */
+  smdJs?: string;
+  /** Vendored highlight.js bundle (`/hljs.js`, exposes `window.hljs`). */
+  hljsJs?: string;
 }
 
 /**
@@ -138,6 +144,12 @@ export interface WebUiState {
   saveConfig?: (config: AppConfig) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /**
+   * Re-read the static web assets from disk per request. Wired by `module.ts`
+   * so editing `assets/*` is picked up without restarting `mma web`; tests can
+   * leave it unset and rely on the fixed snapshot passed to `startServer`.
+   */
+  assetSource?: () => WebUiAssets;
   /** Agent workspace (`-d` dir) for the sidebar "environment" section + `/status`. */
   workspace?: string;
   /** Loaded AGENTS.md sources (project + global), or `disabled` via `--no-agents-md`. */
