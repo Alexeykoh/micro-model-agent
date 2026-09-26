@@ -3,14 +3,14 @@
 // share from tabs; confirm/toast from dialog. Never imports app (the locale
 // refresh reaches the app shell through the store hooks registry).
 import {
-  el, icon, link, inlineTextNodes, connStatus,
+  el, icon, link, inlineTextNodes, connStatus, makeToggle,
 } from "./dom.js";
 import { api } from "./api.js";
 import { t, loadI18n } from "./i18n.js";
 import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
-import { setIndicator, closeConfirm, confirmOverlay } from "./dialog.js";
+import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
 
   export function setSelButton(btn, label, value) {
     btn.textContent = label + ":";
@@ -276,17 +276,10 @@ import { setIndicator, closeConfirm, confirmOverlay } from "./dialog.js";
   export function configControl(def, key) {
     const value = S.state.config ? getPath(S.state.config, key) : undefined;
     if (def.valueType === "bool") {
-      const toggle = el("button", "toggle" + (value ? " on" : ""));
-      toggle.type = "button";
-      toggle.setAttribute("role", "switch");
-      toggle.setAttribute("aria-checked", value ? "true" : "false");
-      toggle.addEventListener("click", () => {
-        const next = !toggle.classList.contains("on");
-        toggle.classList.toggle("on", next);
-        toggle.setAttribute("aria-checked", next ? "true" : "false");
+      return makeToggle(!!value, (next) => {
         postConfig(key, next, false);
+        return true;
       });
-      return toggle;
     }
     if (def.valueType === "enum") {
       const seg = el("span", "seg");
@@ -905,25 +898,21 @@ import { setIndicator, closeConfirm, confirmOverlay } from "./dialog.js";
     (data.mcp || []).forEach((m) => {
       const line = el("div", "list-line");
       const on = m.status !== "disabled";
-      const toggle = el("button", "toggle" + (on ? " on" : ""));
-      toggle.type = "button";
-      toggle.setAttribute("role", "switch");
-      toggle.setAttribute("aria-checked", on ? "true" : "false");
-      toggle.title = on ? t("web.settings.mcp_disable") : t("web.settings.mcp_enable");
-      toggle.setAttribute("aria-label", toggle.title);
-      toggle.addEventListener("click", async () => {
-        const next = !toggle.classList.contains("on");
-        const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), {
+      const toggle = makeToggle(on, (next) => {
+        api("/api/mcp/" + encodeURIComponent(m.id || m.name), {
           method: "POST",
           body: { enabled: next },
+        }).then(async (r) => {
+          if (r.ok && r.data && r.data.ok) {
+            setIndicator(t("web.settings.mcp_saved"), false);
+            await loadPlugins();
+          } else {
+            setIndicator(t("web.settings.save_failed"), true);
+          }
         });
-        if (r.ok && r.data && r.data.ok) {
-          setIndicator(t("web.settings.mcp_saved"), false);
-          await loadPlugins();
-        } else {
-          setIndicator(t("web.settings.save_failed"), true);
-        }
       });
+      toggle.title = on ? t("web.settings.mcp_disable") : t("web.settings.mcp_enable");
+      toggle.setAttribute("aria-label", toggle.title);
       line.appendChild(toggle);
       const nameEl = el("span", "name", m.name);
       nameEl.title = m.name;
@@ -1043,22 +1032,7 @@ import { setIndicator, closeConfirm, confirmOverlay } from "./dialog.js";
     if (e.target === overlay) closeSettings();
   });
   // Trap Tab inside the dialog while it is open.
-  overlay.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const items = Array.from(
-      overlay.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'),
-    ).filter((node) => node.offsetParent !== null);
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  });
+  overlay.addEventListener("keydown", (e) => trapTab(overlay, e));
 
   const providerOverlay = document.getElementById("providerOverlay");
   const providerFormHost = document.getElementById("providerFormHost");
@@ -1107,24 +1081,7 @@ import { setIndicator, closeConfirm, confirmOverlay } from "./dialog.js";
       if (e.target === providerOverlay) closeProviderForm();
     });
     // Keep Tab inside the nested dialog while it is open.
-    providerOverlay.addEventListener("keydown", (e) => {
-      if (e.key !== "Tab") return;
-      const items = Array.from(
-        providerOverlay.querySelectorAll(
-          'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((node) => node.offsetParent !== null);
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    });
+    providerOverlay.addEventListener("keydown", (e) => trapTab(providerOverlay, e));
   }
 
   document.addEventListener("keydown", (e) => {

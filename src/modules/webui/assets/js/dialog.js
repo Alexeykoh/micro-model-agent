@@ -4,15 +4,56 @@ import { saveIndicator } from "./dom.js";
 import { t } from "./i18n.js";
 
 let indicatorTimer = null;
+const indicatorQueue = [];
+let indicatorShowing = false;
 
-  export function setIndicator(msg, fail) {
-    if (!saveIndicator) return;
-    saveIndicator.textContent = msg;
-    saveIndicator.classList.toggle("fail", !!fail);
-    saveIndicator.classList.add("show");
-    clearTimeout(indicatorTimer);
-    indicatorTimer = setTimeout(() => saveIndicator.classList.remove("show"), 2400);
+function showNextIndicator() {
+  if (!saveIndicator) return;
+  const next = indicatorQueue.shift();
+  if (next === undefined) {
+    indicatorShowing = false;
+    return;
   }
+  indicatorShowing = true;
+  saveIndicator.textContent = next.msg;
+  saveIndicator.classList.toggle("fail", !!next.fail);
+  saveIndicator.classList.add("show");
+  clearTimeout(indicatorTimer);
+  indicatorTimer = setTimeout(() => {
+    saveIndicator.classList.remove("show");
+    // Brief gap so a repeated message visibly re-appears instead of blending.
+    setTimeout(showNextIndicator, 150);
+  }, 2400);
+}
+
+// Save toast. Overlapping messages queue (cap 3) instead of overwriting —
+// a single message behaves exactly as before (2.4s, then hide).
+export function setIndicator(msg, fail) {
+  if (!saveIndicator) return;
+  indicatorQueue.push({ msg, fail });
+  if (indicatorQueue.length > 3) indicatorQueue.splice(0, indicatorQueue.length - 3);
+  if (!indicatorShowing) showNextIndicator();
+}
+
+// Keep Tab cycling inside an open overlay dialog (focus trap). The confirm
+// dialog keeps its own two-button variant below — it always traps, even with
+// a single visible action.
+export function trapTab(container, e) {
+  if (e.key !== "Tab") return;
+  const items = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'),
+  ).filter((node) => node.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
 
   export const confirmOverlay = document.getElementById("confirmOverlay");
   const confirmTitle = document.getElementById("confirmTitle");

@@ -658,6 +658,16 @@ import {
     history.replaceState(null, "", url);
   }
 
+  // One marking for a plan step, shared by the sidebar (`renderPlan`) and the
+  // feed card (`onPlan`): status class + leading glyph for done/failed/current.
+  export function planStepMark(step, isCurrent) {
+    const status =
+      step.status === "done" ? "done" : step.status === "failed" ? "fail" : isCurrent ? "cur" : "";
+    const glyph =
+      step.status === "done" ? "✓ " : step.status === "failed" ? "✗ " : isCurrent ? "▸ " : "○ ";
+    return { status, glyph };
+  }
+
   export function renderPlan(plan) {
     // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
     // reset it would cause) when the snapshot is unchanged.
@@ -684,8 +694,7 @@ import {
     planEl.appendChild(bar);
     plan.steps.forEach((step, i) => {
       const current = i === plan.currentIndex && step.status !== "done" && step.status !== "failed";
-      const status = step.status === "done" ? "done" : step.status === "failed" ? "fail" : current ? "cur" : "";
-      const glyph = step.status === "done" ? "✓ " : step.status === "failed" ? "✗ " : current ? "▸ " : "○ ";
+      const { status, glyph } = planStepMark(step, current);
       planEl.appendChild(el("div", ("plan-step " + status).trim(), glyph + step.text));
     });
   }
@@ -706,10 +715,7 @@ import {
     const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
     card.appendChild(el("div", "ph2", "◇ " + pluralCount("web.plan.heading", total)));
     data.steps.forEach((step, i) => {
-      const status =
-        step.status === "done" ? "done" : step.status === "failed" ? "fail" : i === cur ? "cur" : "";
-      const glyph =
-        step.status === "done" ? "✓ " : step.status === "failed" ? "✗ " : i === cur ? "▸ " : "○ ";
+      const { status, glyph } = planStepMark(step, i === cur);
       card.appendChild(el("div", ("st " + status).trim(), glyph + step.text));
     });
     if (feed === activeFeed()) scroll();

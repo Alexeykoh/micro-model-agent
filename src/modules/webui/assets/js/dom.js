@@ -107,6 +107,24 @@ export function setIcon(button, name, label) {
   return button;
 }
 
+// Accessible on/off switch (`role=switch`). `onFlip(next)` runs on click; the
+// switch flips itself only when `onFlip` returns truthy — async callers that
+// re-render instead (MCP list) return nothing and keep server truth.
+export function makeToggle(on, onFlip) {
+  const b = el("button", "toggle" + (on ? " on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "switch");
+  b.setAttribute("aria-checked", on ? "true" : "false");
+  b.addEventListener("click", () => {
+    const next = !b.classList.contains("on");
+    if (onFlip(next)) {
+      b.classList.toggle("on", next);
+      b.setAttribute("aria-checked", next ? "true" : "false");
+    }
+  });
+  return b;
+}
+
 // Text action control (`edit`, `forget`, `add`, …) as a focusable <button>.
 export function link(label, cls, onClick) {
   const b = el("button", "linkbtn" + (cls ? " " + cls : ""), label);
