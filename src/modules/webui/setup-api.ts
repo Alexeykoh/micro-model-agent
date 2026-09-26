@@ -26,6 +26,8 @@ import {
 import { broadcast } from "./state";
 import type { WebUiState } from "./state";
 import { readBody, readBodyError, sendJson } from "./util";
+import { readJsonBody } from "./body";
+import { persistAndReconfigure } from "./persist";
 
 function str(rec: Record<string, unknown>, key: string): string {
   const v = rec[key];
@@ -97,13 +99,9 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: We
 
 /** `POST /api/setup/models {baseUrl, apiKey}` — list model ids from a provider. */
 export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  readBody(req, s.maxBodyBytes)
-    .then(async (raw) => {
-      let rec: Record<string, unknown> = {};
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) rec = parsed as Record<string, unknown>;
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
@@ -122,13 +120,9 @@ export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: 
 
 /** `POST /api/setup/test {baseUrl, apiKey, model}` — cheap chat probe. */
 export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  readBody(req, s.maxBodyBytes)
-    .then(async (raw) => {
-      let rec: Record<string, unknown> = {};
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) rec = parsed as Record<string, unknown>;
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
@@ -152,13 +146,9 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: We
  * /api/setup` writes the chosen locale into the config).
  */
 export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let rec: Record<string, unknown> = {};
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) rec = parsed as Record<string, unknown>;
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
@@ -186,17 +176,12 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: We
     return;
   }
   const config = s.config;
-  readBody(req, s.maxBodyBytes)
-    .then(async (raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const answers = parseSetupAnswers(rec);
       if (!answers) {
         sendJson(res, 400, { ok: false, error: "invalid-answers" });
@@ -206,21 +191,7 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: We
       applyAnswersToConfig(config, answers);
       setLocale(config.locale);
 
-      let persisted = true;
-      let warning: string | undefined;
-      try {
-        s.saveConfig?.(config);
-      } catch {
-        persisted = false;
-        warning = "config not persisted";
-      }
-      if (s.reconfigure) {
-        try {
-          await s.reconfigure(config);
-        } catch {
-          warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
-        }
-      }
+      const { persisted, warning } = await persistAndReconfigure(s, config);
 
       s.setupRequired = false;
       broadcast({ type: "setup_done", ts: Date.now() }, s);

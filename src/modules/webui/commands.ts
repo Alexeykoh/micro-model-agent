@@ -12,6 +12,7 @@
  * deliberately out of scope — see `HELP` for the supported subset.
  */
 import type { AppConfig } from "../../config/types";
+import { t } from "../../i18n";
 import { canonicalKeys, getConfigValue } from "../../config/registry";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import { errMsg } from "../../utils/error";
@@ -20,21 +21,25 @@ import { makeSettingsHandlers } from "./commands-settings";
 import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
 import { broadcast, type WebUiState } from "./state";
 
-/** Supported subset, surfaced by `/help` (one line each). */
-const HELP: Array<{ usage: string; desc: string }> = [
-  { usage: "/help", desc: "list web commands" },
-  { usage: "/status", desc: "model · provider · context · session · verbosity" },
-  { usage: "/config <key> [value]", desc: "read or write a config key" },
-  { usage: "/model list | /model use <name>", desc: "list or switch model" },
-  { usage: "/provider list | /provider use <name>", desc: "list or switch provider" },
-  { usage: "/reasoning [show|hide|on|off|level <lvl>]", desc: "reasoning display and level" },
-  { usage: "/verbose <quiet|normal|verbose>", desc: "set UI verbosity" },
-  { usage: "/context [<tokens>]", desc: "show or set the context window" },
-  { usage: "/session list | /session use <id>", desc: "list or activate a session" },
-  { usage: "/export [md|json|jsonl]", desc: "export the active session to a file" },
-  { usage: "/memory [get|set|unset|find|forget]", desc: "inspect or edit global memory" },
-  { usage: "/clear", desc: "clear the feed (browser-side)" },
-  { usage: "/new", desc: "open a new chat tab (browser-side)" },
+/**
+ * Supported subset, surfaced by `/help` (one line each). Descriptions are
+ * i18n keys (`web.command.*`) resolved at emit time so `/help` and
+ * `GET /api/commands` follow the server locale.
+ */
+const HELP: Array<{ usage: string; descKey: string }> = [
+  { usage: "/help", descKey: "web.command.help" },
+  { usage: "/status", descKey: "web.command.status" },
+  { usage: "/config <key> [value]", descKey: "web.command.config" },
+  { usage: "/model list | /model use <name>", descKey: "web.command.model" },
+  { usage: "/provider list | /provider use <name>", descKey: "web.command.provider" },
+  { usage: "/reasoning [show|hide|on|off|level <lvl>]", descKey: "web.command.reasoning" },
+  { usage: "/verbose <quiet|normal|verbose>", descKey: "web.command.verbose" },
+  { usage: "/context [<tokens>]", descKey: "web.command.context" },
+  { usage: "/session list | /session use <id>", descKey: "web.command.session" },
+  { usage: "/export [md|json|jsonl]", descKey: "web.command.export" },
+  { usage: "/memory [get|set|unset|find|forget]", descKey: "web.command.memory" },
+  { usage: "/clear", descKey: "web.command.clear" },
+  { usage: "/new", descKey: "web.command.new" },
 ];
 
 /** `GET /api/commands` payload: name + usage + desc per supported command. */
@@ -42,7 +47,7 @@ export function webCommandList(): Array<{ name: string; usage: string; desc: str
   return HELP.map((h) => ({
     name: h.usage.slice(1).split(/[\s|]/)[0],
     usage: h.usage,
-    desc: h.desc,
+    desc: t(h.descKey),
   }));
 }
 
@@ -63,7 +68,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
   const out: Out = (text) => raw(redactContextSecrets(text));
 
   const handlers: Record<string, Handler> = {
-    help: (_args, o) => HELP.forEach((h) => o(`${h.usage}  ·  ${h.desc}`)),
+    help: (_args, o) => HELP.forEach((h) => o(`${h.usage}  ·  ${t(h.descKey)}`)),
     status: (_args, o) => withConfig(state, o, (cfg) => status(cfg, state, o)),
     config: (args, o) => withConfig(state, o, (cfg) => configCmd(cfg, args, o, state)),
     model: (args, o) => withConfig(state, o, (cfg) => modelCmd(cfg, args, o, state)),

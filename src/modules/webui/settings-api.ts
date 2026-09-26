@@ -11,7 +11,8 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { redactContextSecrets } from "../../core/agent/context-log";
-import { readBody, readBodyError, sendJson } from "./util";
+import { readBodyError, sendJson } from "./util";
+import { readJsonBody } from "./body";
 import type { WebUiState } from "./state";
 
 /** Append-only memory categories (mirrors `memory-commands.ts` / `MemoryStore`). */
@@ -68,17 +69,12 @@ export function handleMemoryPost(
     return;
   }
   const store = s.memory;
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const category = typeof rec.category === "string" ? rec.category : "";
       const text = typeof rec.text === "string" ? rec.text.trim() : "";
       if (!isCategory(category) || text.length === 0) {
@@ -186,17 +182,12 @@ export function handleMcpToggle(
     sendJson(res, 404, { ok: false, error: "not_found" });
     return;
   }
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       if (typeof rec.enabled !== "boolean") {
         sendJson(res, 400, { ok: false, error: "invalid-enabled" });
         return;

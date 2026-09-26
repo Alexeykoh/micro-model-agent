@@ -15,7 +15,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../i18n";
 import { redactConfigSecrets } from "../../config/redact";
 import { configDefs, setConfigValue } from "../../config/registry";
-import { readBody, readBodyError, sendJson } from "./util";
+import { readBodyError, sendJson } from "./util";
+import { readJsonBody } from "./body";
+import { persistAndReconfigure } from "./persist";
 import type { WebUiState } from "./state";
 
 /** Registry entry shape consumed by the settings UI. */
@@ -92,17 +94,12 @@ export function handleConfigPost(
     return;
   }
   const config = s.config;
-  readBody(req, s.maxBodyBytes)
-    .then(async (raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
         sendJson(res, 400, { ok: false, error: "invalid JSON" });
         return;
       }
-      const rec =
-        typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
       const key = typeof rec.key === "string" ? rec.key : "";
       const rawValue = toRawValue(rec.value);
       if (!key || rawValue === null) {
@@ -121,23 +118,19 @@ export function handleConfigPost(
       // browser's re-fetched dictionary agree immediately.
       if (key === "locale") setLocale(config.locale);
 
-      // Persist first, then reconfigure. Neither failure is swallowed: the UI
-      // needs `persisted`/`warning` to tell "saved" from "changed in memory
-      // only". A failed write must not leave the agent pointing at settings
-      // that were never saved; a failed reconfigure leaves it inconsistent.
+      // Persist first, then reconfigure — but only when the registry says the
+      // key needs a reconfigure; otherwise the shared step would needlessly
+      // refresh providers/models on every keystroke.
       let persisted = true;
       let warning: string | undefined;
-      try {
-        s.saveConfig?.(config);
-      } catch {
-        persisted = false;
-        warning = "config not persisted";
-      }
-      if (result.reconfigure && s.reconfigure) {
+      if (result.reconfigure) {
+        ({ persisted, warning } = await persistAndReconfigure(s, config));
+      } else {
         try {
-          await s.reconfigure(config);
+          s.saveConfig?.(config);
         } catch {
-          warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
+          persisted = false;
+          warning = "config not persisted";
         }
       }
       const body: Record<string, unknown> = {

@@ -1,73 +1,80 @@
 import { describe, it, expect } from "vitest";
 import { loadAssets } from "../src/modules/webui/assets";
+import type { WebUiAssets } from "../src/modules/webui/state";
+
+// Frontend is split into ES modules (`app.js` + `js/*.js`); source-level
+// guards search the combined bundle source, mirroring the browser import graph.
+function js(a: WebUiAssets): string {
+  return [a.js, ...Object.values(a.jsModules ?? {})].join("\n");
+}
 
 describe("webui assets", () => {
   it("loads html/css/js from disk", () => {
     const a = loadAssets();
     expect(a.html).toContain("<!DOCTYPE html>");
     expect(a.css.length).toBeGreaterThan(10);
-    expect(a.js).toContain("EventSource");
+    expect(js(a)).toContain("EventSource");
   });
 
   // No DOM harness is available in the unit test env, so this is a source-level
   // guard: the feed renders the plan card from a dedicated SSE `plan` event.
   it("wires the plan event to the .planblock feed card", () => {
     const a = loadAssets();
-    expect(a.js).toContain('addEventListener("plan"');
-    expect(a.js).toContain("planblock");
+    expect(js(a)).toContain('["plan", onPlan]');
+    expect(js(a)).toContain("planblock");
     expect(a.css).toContain(".planblock");
   });
 
   it("wires the question event to an interactive .q block posting /api/answer", () => {
     const a = loadAssets();
-    expect(a.js).toContain('addEventListener("question"');
-    expect(a.js).toContain("/api/answer");
-    expect(a.js).toContain("qopt");
+    expect(js(a)).toContain('["question", onQuestion]');
+    expect(js(a)).toContain("/api/answer");
+    expect(js(a)).toContain("qopt");
     expect(a.css).toContain(".q .qopt");
   });
 
   it("wires the OutputBus log event and the immediate busy indicator", () => {
     const a = loadAssets();
-    expect(a.js).toContain('addEventListener("log"');
-    expect(a.js).toContain("showBusy(");
+    expect(js(a)).toContain('["log", onLog]');
+    expect(js(a)).toContain("showBusy(");
     expect(a.css).toContain(".busy .busytime");
   });
 
   it("wires the file card's Open link to /api/file in a new tab", () => {
     const a = loadAssets();
-    expect(a.js).toMatch(/el\("a", "fc-open"[\s\S]{0,200}?target = "_blank"/);
-    expect(a.js).toContain('openLink.rel = "noopener noreferrer"');
-    expect(a.js).not.toContain("&token=");
+    expect(js(a)).toMatch(/el\("a", "fc-open"[\s\S]{0,200}?target = "_blank"/);
+    expect(js(a)).toContain('openLink.rel = "noopener noreferrer"');
+    expect(js(a)).not.toContain("&token=");
     expect(a.css).toContain(".filecard .fc-open");
   });
 
   it("renders reasoning blocks collapsed by default", () => {
     const a = loadAssets();
-    expect(a.js).toContain('"think-body hidden"');
+    expect(js(a)).toContain('"think-body hidden"');
   });
 
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
-    expect(a.js).toContain('addEventListener("reasoning"');
-    expect(a.js).toContain('addEventListener("meta"');
-    expect(a.js).not.toContain("finishMeta");
+    expect(js(a)).toContain('["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)]');
+    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId)]');
+    expect(js(a)).not.toContain("finishMeta");
   });
 
   it("renders generic meta as always-visible lines", () => {
     const a = loadAssets();
-    expect(a.js).toContain("metaln");
+    expect(js(a)).toContain("metaln");
     expect(a.css).toContain(".metaln");
     expect(a.css).toContain(".metaln.warn");
   });
 
   it("persists the active session in the URL and restores it on boot", () => {
     const a = loadAssets();
-    expect(a.js).toContain("replaceState");
-    expect(a.js).toContain('searchParams.set("session"');
-    expect(a.js).toContain('searchParams.delete("session")');
-    expect(a.js).toContain('URLSearchParams(location.search).get("session")');
-    expect(a.js).toMatch(/openTab\(initialSession/);
-    expect(a.js).toContain("if (!feedHasContent(tab.feed)) tab.historyLoaded = false;");
+    expect(js(a)).toContain("replaceState");
+    expect(js(a)).toContain('searchParams.set("session"');
+    expect(js(a)).toContain('searchParams.delete("session")');
+    expect(js(a)).toContain('URLSearchParams(location.search).get("session")');
+    expect(js(a)).toMatch(/openTab\(initialSession/);
+    expect(js(a)).toContain("if (!feedHasContent(tab.feed)) tab.historyLoaded = false;");
   });
 
   it("ships the first-run setup gate and wizard assets", () => {
@@ -87,15 +94,15 @@ describe("webui assets", () => {
     expect(a.setupJs).toContain('"/api/setup/models"');
     expect(a.setupJs).toContain('"/api/setup/test"');
     expect(a.setupJs).toContain('"/api/setup/locale"');
-    expect(a.js).toContain("window.MmaSetup");
+    expect(js(a)).toContain("window.MmaSetup");
   });
 
   it("wires the critic SSE event and the Agent settings panel (MoE + critic keys)", () => {
     const a = loadAssets();
-    expect(a.js).toContain('addEventListener("critic"');
-    expect(a.js).toContain("onCritic");
-    expect(a.js).toContain("critic.enabled");
-    expect(a.js).toContain("moe.enabled");
+    expect(js(a)).toContain('["critic", onCritic]');
+    expect(js(a)).toContain("onCritic");
+    expect(js(a)).toContain("critic.enabled");
+    expect(js(a)).toContain("moe.enabled");
     expect(a.html).toContain('data-p="agent"');
     expect(a.html).toContain('data-panel="agent"');
   });
@@ -114,11 +121,11 @@ describe("webui assets", () => {
 
   it("renders answers through the streaming markdown module", () => {
     const a = loadAssets();
-    expect(a.js).toContain('from "./md.js"');
-    expect(a.js).toContain("mountMarkdown(");
-    expect(a.js).toContain("renderMarkdown(");
-    expect(a.js).not.toContain("parseFences");
-    expect(a.js).toContain("appendActionsRow");
+    expect(js(a)).toMatch(/from "\.{1,2}\/md\.js"/);
+    expect(js(a)).toContain("mountMarkdown(");
+    expect(js(a)).toContain("renderMarkdown(");
+    expect(js(a)).not.toContain("parseFences");
+    expect(js(a)).toContain("appendActionsRow");
   });
 
   it("loads hljs and the module app, and styles code blocks + copy actions", () => {
@@ -133,10 +140,10 @@ describe("webui assets", () => {
 
   it("groups the model/provider settings into sections with an add affordance", () => {
     const a = loadAssets();
-    expect(a.js).toContain("settingsSection(");
-    expect(a.js).toContain("web.settings.section_providers");
-    expect(a.js).toContain("provider_make_active");
-    expect(a.js).toContain("provider_advanced");
+    expect(js(a)).toContain("settingsSection(");
+    expect(js(a)).toContain("web.settings.section_providers");
+    expect(js(a)).toContain("provider_make_active");
+    expect(js(a)).toContain("provider_advanced");
     expect(a.html).toContain('data-panel="model"');
     expect(a.css).toContain(".settings-section");
     expect(a.css).toContain(".provider-item");
@@ -146,9 +153,9 @@ describe("webui assets", () => {
 
   it("offers one-click builtin provider presets in the form", () => {
     const a = loadAssets();
-    expect(a.js).toContain("state.providerPresets");
-    expect(a.js).toContain("provider_preset");
-    expect(a.js).toContain("provider_custom");
+    expect(js(a)).toContain("state.providerPresets");
+    expect(js(a)).toContain("provider_preset");
+    expect(js(a)).toContain("provider_custom");
     expect(a.css).toContain(".pform-field select");
   });
 });
