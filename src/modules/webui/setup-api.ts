@@ -27,6 +27,7 @@ import { broadcast } from "./state";
 import type { WebUiState } from "./state";
 import { readBody, readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
+import { persistAndReconfigure } from "./persist";
 
 function str(rec: Record<string, unknown>, key: string): string {
   const v = rec[key];
@@ -190,21 +191,7 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: We
       applyAnswersToConfig(config, answers);
       setLocale(config.locale);
 
-      let persisted = true;
-      let warning: string | undefined;
-      try {
-        s.saveConfig?.(config);
-      } catch {
-        persisted = false;
-        warning = "config not persisted";
-      }
-      if (s.reconfigure) {
-        try {
-          await s.reconfigure(config);
-        } catch {
-          warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
-        }
-      }
+      const { persisted, warning } = await persistAndReconfigure(s, config);
 
       s.setupRequired = false;
       broadcast({ type: "setup_done", ts: Date.now() }, s);

@@ -17,6 +17,7 @@ import { redactConfigSecrets } from "../../config/redact";
 import { configDefs, setConfigValue } from "../../config/registry";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
+import { persistAndReconfigure } from "./persist";
 import type { WebUiState } from "./state";
 
 /** Registry entry shape consumed by the settings UI. */
@@ -117,23 +118,19 @@ export function handleConfigPost(
       // browser's re-fetched dictionary agree immediately.
       if (key === "locale") setLocale(config.locale);
 
-      // Persist first, then reconfigure. Neither failure is swallowed: the UI
-      // needs `persisted`/`warning` to tell "saved" from "changed in memory
-      // only". A failed write must not leave the agent pointing at settings
-      // that were never saved; a failed reconfigure leaves it inconsistent.
+      // Persist first, then reconfigure — but only when the registry says the
+      // key needs a reconfigure; otherwise the shared step would needlessly
+      // refresh providers/models on every keystroke.
       let persisted = true;
       let warning: string | undefined;
-      try {
-        s.saveConfig?.(config);
-      } catch {
-        persisted = false;
-        warning = "config not persisted";
-      }
-      if (result.reconfigure && s.reconfigure) {
+      if (result.reconfigure) {
+        ({ persisted, warning } = await persistAndReconfigure(s, config));
+      } else {
         try {
-          await s.reconfigure(config);
+          s.saveConfig?.(config);
         } catch {
-          warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
+          persisted = false;
+          warning = "config not persisted";
         }
       }
       const body: Record<string, unknown> = {

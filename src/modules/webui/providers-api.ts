@@ -15,6 +15,7 @@ import { providerEntryName, providerNameTaken } from "../providers/naming";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
+import { persistAndReconfigure } from "./persist";
 import type { WebUiState } from "./state";
 
 /** Redacted provider entry rendered by the settings UI. */
@@ -297,31 +298,6 @@ export function handleProvidersDelete(res: ServerResponse, name: string, s: WebU
   void persistAndReconfigure(s, config).then((result) => {
     sendJson(res, 200, { ok: true, ...buildProviderViews(config), ...result });
   });
-}
-
-/** Persist first, then reconfigure; neither failure is swallowed. */
-async function persistAndReconfigure(
-  s: WebUiState,
-  config: AppConfig,
-): Promise<{ persisted: boolean; warning?: string }> {
-  let persisted = true;
-  let warning: string | undefined;
-  try {
-    s.saveConfig?.(config);
-  } catch {
-    persisted = false;
-    warning = "config not persisted";
-  }
-  if (s.reconfigure) {
-    try {
-      await s.reconfigure(config);
-    } catch {
-      warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
-    }
-  }
-  const out: { persisted: boolean; warning?: string } = { persisted };
-  if (warning) out.warning = warning;
-  return out;
 }
 
 /** Dispatch `/api/providers*`; returns whether the request was handled. */
