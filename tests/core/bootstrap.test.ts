@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { bootstrap, buildSystemInfo } from "../../src/core/bootstrap";
+import { bootstrap, buildSystemInfo, resolveBaseDir } from "../../src/core/bootstrap";
 import { Logger } from "../../src/logger/app-logger";
 import { defaultOutputBus, type OutputEvent } from "../../src/output";
 import { resetProbeCache } from "../../src/modules/reasoning/probe";
@@ -303,5 +303,39 @@ describe("bootstrap", () => {
 
     const disabled = buildSystemInfo({ model: "m", security: { ...sec, enabled: false } } as any, "/tmp", "win32");
     expect(disabled).not.toContain("SECURITY RESTRICTIONS");
+  });
+
+  describe("resolveBaseDir", () => {
+    it("returns cwd when no project dir is given", () => {
+      expect(resolveBaseDir()).toBe(process.cwd());
+      expect(resolveBaseDir("")).toBe(process.cwd());
+    });
+
+    it("resolves an existing directory", () => {
+      const dir = tempDir();
+      try {
+        expect(resolveBaseDir(dir)).toBe(dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("throws loudly on a missing directory (split quote / trailing backslash)", () => {
+      const missing = join(tmpdir(), `mma-no-such-dir-${Date.now()}`);
+      expect(() => resolveBaseDir(missing)).toThrow(/workspace directory does not exist/);
+      // The classic shell-split fragment: error echoes what was received.
+      expect(() => resolveBaseDir(missing)).toThrow(JSON.stringify(missing).slice(0, 20));
+    });
+
+    it("throws when the path is a file, not a directory", () => {
+      const dir = tempDir();
+      try {
+        const file = join(dir, "f.txt");
+        writeFileSync(file, "x");
+        expect(() => resolveBaseDir(file)).toThrow(/workspace directory does not exist/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 });
