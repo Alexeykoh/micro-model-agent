@@ -1041,7 +1041,24 @@ function registerSessionCommands(ctx: ReplContext): void {
     description: t("repl.sessions"),
     aliases: ["ls"],
     usage: t("repl.sessions_usage"),
-    action: () => {
+    action: (args: string[]) => {
+      if (args[0] === "prune") {
+        const dry = args.includes("--dry-run");
+        const active = ctx.sessionManager!.getActive();
+        const candidates = ctx.sessionManager!.list().filter(
+          (s) => s.id !== active && ctx.sessionManager!.isEmptySession(s.id),
+        );
+        if (candidates.length === 0) {
+          ctx.output.writeLine(t("session.prune_empty"));
+          return;
+        }
+        if (!dry) ctx.sessionManager!.pruneEmpty(active ?? undefined);
+        ctx.output.writeLine(t(dry ? "session.prune_dry" : "session.pruned", { n: candidates.length }));
+        for (const s of candidates) {
+          ctx.output.writeLine(pc.dim(`   ${s.id.slice(0, 12)}  ${s.name}`));
+        }
+        return;
+      }
       const sessions = ctx.sessionManager!.list();
       const active = ctx.sessionManager!.getActive();
       if (sessions.length === 0) {
