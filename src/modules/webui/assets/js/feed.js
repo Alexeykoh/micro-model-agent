@@ -969,3 +969,16 @@ import {
     );
   }
 
+  // Global `.think-h` toggle (depends on the wrap > [head, body] structure
+  // built by `buildThinkBlock`).
+  msgs.addEventListener("click", (e) => {
+    const head = e.target.closest(".think-h");
+    if (!head) return;
+    const body = head.nextElementSibling;
+    if (!body) return;
+    const hidden = body.classList.toggle("hidden");
+    head.setAttribute("aria-expanded", hidden ? "false" : "true");
+    const tog = head.querySelector(".tog");
+    if (tog) setIcon(tog, hidden ? "chevron-right" : "chevron-down", t(hidden ? "web.action.show" : "web.action.hide"));
+  });
+

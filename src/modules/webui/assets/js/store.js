@@ -72,3 +72,8 @@ export function getPath(obj, path) {
   }
   return cur;
 }
+// Cross-module UI hooks, registered by `app.js` boot. Lets settings-level
+// writes refresh app-shell chrome (locale) without importing app — keeps the
+// module DAG acyclic (app → settings → tabs; dialog is a leaf).
+export const hooks = { applyStaticI18n: null };
+

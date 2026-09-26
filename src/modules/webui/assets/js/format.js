@@ -106,3 +106,9 @@ export function relTime(ts) {
 export function fmtTokens(n) {
   return n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n);
 }
+// Compact context-window label for selectors and the model panel.
+export function contextLabel() {
+  const n = (S.state.config && S.state.config.contextWindow) || 0;
+  return n ? Math.round(n / 1024) + "K" : "—";
+}
+
