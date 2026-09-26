@@ -676,7 +676,8 @@ function buildSessionCommands(program: Command): void {
     .option("--format <format>", t("cli.export_format"), "md")
     .option("--out <path>", t("cli.export_out"))
     .option("--no-redact", t("cli.export_no_redact"))
-    .action(async (id: string, opts: { format: string; out?: string; redact: boolean }) => {
+    .option("--compact", t("cli.export_compact"))
+    .action(async (id: string, opts: { format: string; out?: string; redact: boolean; compact?: boolean }) => {
       const { sessionManager } = await bootstrap();
       const meta =
         sessionManager.get(id) ??
@@ -697,7 +698,10 @@ function buildSessionCommands(program: Command): void {
         getDefaultChannel().writeLine(t("export.empty"));
         return;
       }
-      const text = redactExport(formatExport({ meta, messages, log }, format), opts.redact);
+      const text = redactExport(
+        formatExport({ meta, messages, log }, format, { compact: opts.compact }),
+        opts.redact,
+      );
       if (opts.out === "-") {
         getDefaultChannel().writeLine(text);
         return;

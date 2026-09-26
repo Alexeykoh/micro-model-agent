@@ -18,7 +18,7 @@ function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
   return { text: () => parts.join(""), stream };
 }
 
-function makeRenderer(opts: { rich: boolean }): {
+function makeRenderer(opts: { rich: boolean; verbosity?: "quiet" | "normal" | "verbose" }): {
   renderer: Renderer;
   text: () => string;
 } {
@@ -33,6 +33,7 @@ function makeRenderer(opts: { rich: boolean }): {
     spinner: false,
     channel,
     width: 60,
+    verbosity: opts.verbosity,
   });
   return { renderer, text: out.text };
 }
@@ -567,5 +568,46 @@ describe("criticVerdict", () => {
     });
     expect(out.text()).toContain("repairing");
     expect(out.text()).toContain("result.txt is wrong");
+  });
+});
+
+describe("quiet repeat folding (ses_muih0ah5)", () => {
+  function runBash(renderer: Renderer, duration: number, error = false): void {
+    renderer.toolStart("bash", { command: "npm view x version" });
+    renderer.toolEnd("bash", duration, error);
+  }
+
+  it("folds three identical successful actions into one ×3 line", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    runBash(renderer, 20);
+    runBash(renderer, 30);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("×3");
+    expect(out.match(/✓/g)?.length).toBe(1);
+  });
+
+  it("prints distinct actions on separate lines without folding", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    renderer.toolStart("write_file", { path: "a.txt" });
+    renderer.toolEnd("write_file", 5, false);
+    runBash(renderer, 10);
+    renderer.flush();
+    const out = text();
+    expect(out).not.toContain("×");
+    expect(out.match(/✓/g)?.length).toBe(3);
+  });
+
+  it("an error flushes the folded run and prints separately", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    runBash(renderer, 10);
+    runBash(renderer, 5, true);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("×2");
+    expect(out).toContain("✗");
   });
 });

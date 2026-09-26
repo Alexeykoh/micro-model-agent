@@ -1225,6 +1225,7 @@ function registerSessionCommands(ctx: ReplContext): void {
       let format: ExportFormat = "md";
       let out: string | undefined;
       let redact = true;
+      let compact = false;
       const positional: string[] = [];
       for (let i = 0; i < args.length; i++) {
         const a = args[i];
@@ -1244,6 +1245,8 @@ function registerSessionCommands(ctx: ReplContext): void {
           out = v;
         } else if (a === "--no-redact") {
           redact = false;
+        } else if (a === "--compact") {
+          compact = true;
         } else {
           positional.push(a);
         }
@@ -1275,7 +1278,7 @@ function registerSessionCommands(ctx: ReplContext): void {
         return;
       }
       const text = redactExport(
-        formatExport({ meta: match, messages, log }, format),
+        formatExport({ meta: match, messages, log }, format, { compact }),
         redact,
       );
       if (out === "-") {

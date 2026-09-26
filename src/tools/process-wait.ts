@@ -1,0 +1,73 @@
+import type { ToolDefinition } from "./types";
+import { processRegistry } from "../modules/processes";
+import { t } from "../i18n/index";
+import { lookupProcess } from "./process-ids";
+
+/**
+ * Default wait: long enough to absorb a typical test/build run, short enough
+ * to stay under the executor timeout. The tool-level `timeoutMs` below gives
+ * headroom for an explicit longer wait (clamped by MAX_WAIT_MS).
+ */
+const DEFAULT_WAIT_MS = 30000;
+const MAX_WAIT_MS = 110000;
+const DEFAULT_TAIL = 20;
+const MAX_TAIL = 100;
+
+export const processWaitTool: ToolDefinition = {
+  name: "process_wait",
+  icon: "⏳",
+  description:
+    "Wait for a background process started via bash to finish, instead of polling process_log or sleeping (ping/timeout/sleep commands). Blocks up to timeoutMs, then reports whether the process exited (with its exit code and recent output) or is still running. For dev servers/watchers that never exit, use process_log to inspect and process_kill to stop them.",
+  tags: ["shell"],
+  boundedOutput: true,
+  timeoutMs: 120000,
+  parameters: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Process id from bash output or process_list" },
+      timeoutMs: {
+        type: "number",
+        description: `How long to wait in milliseconds (default: ${DEFAULT_WAIT_MS}, max ${MAX_WAIT_MS})`,
+      },
+      tail: {
+        type: "number",
+        description: `Number of trailing output lines to include (default: ${DEFAULT_TAIL}, max ${MAX_TAIL})`,
+      },
+    },
+    required: ["id"],
+  },
+  handler: async (_ctx, args) => {
+    const found = lookupProcess(args);
+    if (!found.ok) return { success: false, output: found.output };
+    const { id } = found;
+    const waitMs = Math.min(
+      MAX_WAIT_MS,
+      Math.max(1000, typeof args.timeoutMs === "number" ? Math.floor(args.timeoutMs) : DEFAULT_WAIT_MS),
+    );
+    const started = Date.now();
+    await processRegistry.waitForExit(id, waitMs);
+    const elapsed = Date.now() - started;
+    const entry = processRegistry.get(id);
+    if (!entry) {
+      return { success: false, output: t("proc.not_found", { id }) };
+    }
+    const tail = Math.min(
+      MAX_TAIL,
+      Math.max(1, typeof args.tail === "number" ? Math.floor(args.tail) : DEFAULT_TAIL),
+    );
+    const log = processRegistry.getLog(id, tail);
+    const logPart = log ? `\n${log}` : `\n${t("proc.log_empty")}`;
+    if (entry.status !== "running") {
+      const status =
+        entry.status === "exited" ? t("proc.status_exited") : t("proc.status_killed");
+      return {
+        success: true,
+        output: `${t("proc.wait_exited", { id, ms: elapsed, status, code: entry.exitCode ?? "?" })}${logPart}`,
+      };
+    }
+    return {
+      success: true,
+      output: `${t("proc.wait_running", { id, ms: elapsed })}\n${t("proc.wait_hint", { id })}${logPart}`,
+    };
+  },
+};

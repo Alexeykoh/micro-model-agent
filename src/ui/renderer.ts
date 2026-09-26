@@ -270,6 +270,20 @@ export class Renderer {
   private thinkingLabel = "";
   private textStarted = false;
   private reconBuffer: ReconItem[] = [];
+  /**
+   * One-step-deferred action line (quiet mode): lets an identical repeat
+   * fold into a `×N` line. Always flushed before anything newer prints.
+   */
+  private pendingFooter: {
+    key: string;
+    leadMark: string;
+    tool: string;
+    label: string;
+    summary: string;
+    duration: number;
+  } | null = null;
+  private repeatCount = 0;
+  private repeatMs = 0;
   private outputLineCount = 0;
   private outputSuppressed = false;
 
@@ -466,6 +480,9 @@ export class Renderer {
 
   /** Emit a buffered run of read-only actions (quiet mode). */
   private flushRecon(): void {
+    // A deferred action line is always older than any buffered recon run —
+    // print it first so the chat stays chronological.
+    this.flushPendingFooter();
     if (this.reconBuffer.length === 0) return;
     const items = this.reconBuffer;
     this.reconBuffer = [];
@@ -480,6 +497,24 @@ export class Renderer {
     const label = t("ui.actions_summary", { count: String(items.length) });
     this.channel.writeRaw(
       `${pc.dim(glyph.group)} ${label} ${successMark()} ${pc.dim(`· ${formatDuration(total)}`)} ${pc.dim("· /verbose")}\n`,
+    );
+  }
+
+  /** Print a deferred action line, folding repeats into one `×N` line. */
+  private flushPendingFooter(): void {
+    const p = this.pendingFooter;
+    if (!p) return;
+    this.pendingFooter = null;
+    const times = this.repeatCount + 1;
+    const total = p.duration + this.repeatMs;
+    this.repeatCount = 0;
+    this.repeatMs = 0;
+    const head = `${p.leadMark} ${toolAccent(p.tool)(p.label)}${
+      p.summary ? ` ${pc.dim("·")} ${pc.dim(p.summary)}` : ""
+    }`;
+    const timesPart = times > 1 ? ` ${pc.dim(`×${times}`)}` : "";
+    this.channel.writeRaw(
+      `${head}  ${successMark()} ${pc.dim(formatDuration(total))}${timesPart}\n`,
     );
   }
 
@@ -542,30 +577,7 @@ export class Renderer {
       tail += `  ${pc.dim("cost")} ${pc.yellow(formatUsd(costUsd))}`;
     }
     if (deferred) {
-      // Quiet mode: fold the deferred header into a single action line.
-      // A run of successful read-only tools is buffered and summarized.
-      if (!error && RECON_TOOLS.has(this.card.tool)) {
-        this.reconBuffer.push({
-          tool: this.card.tool,
-          mark: leadMark,
-          label,
-          summary,
-          duration,
-        });
-        this.recordLast(label, summary, error, duration);
-        this.card = null;
-        return;
-      }
-      this.flushRecon();
-      const head = `${leadMark} ${toolAccent(this.card.tool)(label)}${
-        summary ? ` ${pc.dim("·")} ${pc.dim(summary)}` : ""
-      }`;
-      this.channel.writeRaw(`${head}  ${tail}\n`);
-      if (error && firstBody) {
-        const soft = firstBody.startsWith("⚠");
-        const color = soft ? pc.yellow : pc.red;
-        this.channel.writeRaw(`${GUTTER}${pc.dim(glyph.detail)} ${color(firstBody)}\n`);
-      }
+      this.toolEndDeferred(tail, duration, error);
     } else {
       const footer = `${GUTTER}${tail}`;
       this.channel.writeRaw(`${footer}\n`);
@@ -577,6 +589,56 @@ export class Renderer {
     }
     this.recordLast(label, summary, error, duration);
     this.card = null;
+  }
+
+  /**
+   * Quiet-mode footer: fold the deferred header into a single action line.
+   * Successful read-only tools buffer into a recon summary; consecutive
+   * identical successful actions fold into one `×N` line; anything else
+   * buffers one step so a repeat can still fold into it. Errors print now.
+   */
+  private toolEndDeferred(tail: string, duration: number, error: boolean | undefined): void {
+    const card = this.card;
+    if (!card) return;
+    const { label, summary, mark: leadMark, firstBody } = card;
+    // A run of successful read-only tools is buffered and summarized.
+    if (!error && RECON_TOOLS.has(card.tool)) {
+      this.flushPendingFooter();
+      this.reconBuffer.push({ tool: card.tool, mark: leadMark, label, summary, duration });
+      return;
+    }
+    // Collapse consecutive identical successful actions (poll loops,
+    // repeated status checks) into one `×N` line instead of N lines.
+    const repeatKey = `${card.tool}::${label}::${summary}`;
+    if (!error && this.pendingFooter?.key === repeatKey) {
+      this.repeatCount += 1;
+      this.repeatMs += duration;
+      return;
+    }
+    this.flushPendingFooter();
+    this.flushRecon();
+    if (!error) {
+      // Buffer one step: the line prints on the next action (or any
+      // flush), so an identical repeat can fold into it.
+      this.pendingFooter = {
+        key: repeatKey,
+        leadMark,
+        tool: card.tool,
+        label,
+        summary,
+        duration,
+      };
+      return;
+    }
+    const head = `${leadMark} ${toolAccent(card.tool)(label)}${
+      summary ? ` ${pc.dim("·")} ${pc.dim(summary)}` : ""
+    }`;
+    this.channel.writeRaw(`${head}  ${tail}\n`);
+    if (error && firstBody) {
+      const soft = firstBody.startsWith("⚠");
+      const color = soft ? pc.yellow : pc.red;
+      this.channel.writeRaw(`${GUTTER}${pc.dim(glyph.detail)} ${color(firstBody)}\n`);
+    }
   }
 
   /** Remember the action for `Ctrl+O` reprint (survives the run). */

@@ -38,6 +38,12 @@ export const FORCED_COMPACTION_COOLDOWN = 3;
 export const MAX_LLM_ERROR_RETRIES = 2;
 /** Макс. повторов при вердикте халлюцинации "retry". */
 export const MAX_HALLUCINATION_RETRIES = 3;
+/**
+ * Макс. перепроверок заявления об успехе против свежих результатов тулов
+ * (success-claim check). Одна попытка: либо модель сверяется и правит
+ * формулировку, либо ответ принимается как есть (fail-open, не блок).
+ */
+export const MAX_CLAIM_CHECK_RETRIES = 1;
 /** Порог подряд идущих неудач тулов до сообщения о восстановлении. */
 export const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
 /**

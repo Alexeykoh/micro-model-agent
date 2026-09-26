@@ -5,10 +5,32 @@ import { t } from "../i18n/index";
 
 const TOOL_EXECUTION_TIMEOUT_MS = 60000;
 
+/** Memo entry lifetime — bounds staleness from out-of-band changes. */
+const MEMO_TTL_MS = 120000;
+const MEMO_MAX_ENTRIES = 100;
+
+/** Stable stringify: sorted keys, so arg order never splits the memo key. */
+function stableArgsKey(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableArgsKey);
+  if (value && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((k) => [k, stableArgsKey((value as Record<string, unknown>)[k])]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
 export class ToolExecutor {
   private registry: ToolRegistry;
   private ctx: ToolContext;
   private pluginManager: PluginManager;
+  /**
+   * Session-scoped memo of deterministic read-only results
+   * (`ToolDefinition.cacheable` + manual entries from `manualMemo` tools
+   * such as bash). Key: `sessionId::name::stableArgs`.
+   */
+  private memo = new Map<string, { result: ToolResult; at: number }>();
 
   constructor(registry: ToolRegistry, ctx: ToolContext, pluginManager: PluginManager) {
     this.registry = registry;
@@ -48,6 +70,39 @@ export class ToolExecutor {
   /** Whether a tool with this name is registered (used before redirects). */
   hasTool(name: string): boolean {
     return this.registry.has(name);
+  }
+
+  private memoKey(name: string, args: Record<string, unknown>): string {
+    return `${this.ctx.sessionId ?? ""}::${name}::${JSON.stringify(stableArgsKey(args))}`;
+  }
+
+  /**
+   * Memo read for `manualMemo` tools (bash). Returns a detached copy —
+   * callers must set `toolCallId` themselves.
+   */
+  memoGet(name: string, args: Record<string, unknown>): ToolResult | undefined {
+    const hit = this.memo.get(this.memoKey(name, args));
+    if (!hit) return undefined;
+    if (Date.now() - hit.at > MEMO_TTL_MS) {
+      this.memo.delete(this.memoKey(name, args));
+      return undefined;
+    }
+    return { ...hit.result };
+  }
+
+  /** Memo write for `manualMemo` tools. Stores a detached copy. */
+  memoSet(name: string, args: Record<string, unknown>, result: ToolResult): void {
+    const key = this.memoKey(name, args);
+    if (!this.memo.has(key) && this.memo.size >= MEMO_MAX_ENTRIES) {
+      const oldest = this.memo.keys().next();
+      if (!oldest.done) this.memo.delete(oldest.value);
+    }
+    this.memo.set(key, { result: { ...result }, at: Date.now() });
+  }
+
+  /** Wipe the memo — called after anything that may have mutated state. */
+  memoInvalidate(): void {
+    this.memo.clear();
   }
 
   /**
@@ -102,11 +157,15 @@ export class ToolExecutor {
     }
 
     let result: ToolResult;
+    // Memoized repeat of a deterministic read (ToolDefinition.cacheable):
+    // skip the handler; the shared tail below (post-tool plugins, logging)
+    // still runs so a memo hit is indistinguishable from a fresh run.
+    const memoHit = tool.cacheable ? this.memoGet(call.name, call.arguments) : undefined;
     try {
       this.ctx.activeCallId = call.id;
       if (tool.interactive) {
         // Interactive tools wait for user input — no timeout.
-        result = await tool.handler(this.ctx, call.arguments);
+        result = memoHit ?? (await tool.handler(this.ctx, call.arguments));
       } else {
         const timeoutMs = tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS;
         const failFast = (message: string) => {
@@ -137,7 +196,7 @@ export class ToolExecutor {
           }, timeoutMs);
         });
         const racePromises: Promise<ToolResult>[] = [
-          tool.handler(this.ctx, call.arguments),
+          memoHit ? Promise.resolve(memoHit) : tool.handler(this.ctx, call.arguments),
           timeoutPromise,
         ];
         if (signal) {
@@ -178,6 +237,17 @@ export class ToolExecutor {
         output: `${t("error.prefix")}${e.message}`,
         toolCallId: call.id,
       };
+    }
+
+    if (!memoHit) {
+      // Successful deterministic reads are memoized; anything else that ran
+      // may have mutated state (even a failed command can half-apply), so it
+      // wipes the memo. `manualMemo` tools (bash) manage their own entries.
+      if (tool.cacheable && result.success) {
+        this.memoSet(call.name, call.arguments, result);
+      } else if (!tool.cacheable && !tool.manualMemo) {
+        this.memoInvalidate();
+      }
     }
 
     // After an abort the tool's work is discarded (the agent loop breaks

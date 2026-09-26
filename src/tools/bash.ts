@@ -358,7 +358,82 @@ const INTERACTIVE_PROMPT_RE =
   /operation (?:cancelled|canceled|aborted)|stdin is not a tty|not a tty|cannot prompt without a tty/i;
 
 /** process-management tools hidden behind enable_tools (tag "shell"). */
-const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill"];
+const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill", "process_wait"];
+
+/**
+ * Read-only command prefixes eligible for result memoization (see
+ * `manualMemo` on the tool). Heuristic, deliberately narrow: single
+ * invocations that cannot mutate by construction. Anything compound
+ * (`&`, `|`, `<`, `>`, `;`) is never memoized. A 120s TTL in the executor
+ * bounds staleness from out-of-band changes.
+ */
+const READONLY_COMMAND_PREFIXES = [
+  "git status",
+  "git log",
+  "git diff",
+  "git branch",
+  "git tag",
+  "git rev-parse",
+  "git ls-remote",
+  "git remote",
+  "git show",
+  "npm view",
+  "npm list",
+  "npm config get",
+  "npm whoami",
+  "npm ping",
+  "npm --version",
+  "node --version",
+  "python --version",
+  "python3 --version",
+  "bun --version",
+  "git --version",
+  "dir",
+  "ls",
+  "echo",
+  "type",
+  "where",
+  "which",
+  "cat",
+];
+
+const READONLY_COMMAND_PATTERNS = READONLY_COMMAND_PREFIXES.map(
+  (p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`),
+);
+
+/**
+ * Whether a (post-adaptation) shell command is a single read-only
+ * invocation whose successful result may be memoized. Exported for tests.
+ */
+export function isMemoizableCommand(command: string): boolean {
+  const cmd = command.trim().toLowerCase();
+  if (!cmd || /[|<>;&]/.test(cmd)) return false;
+  return READONLY_COMMAND_PATTERNS.some((re) => re.test(cmd));
+}
+
+// Defensive memo access: hand-rolled ToolExecutor stubs in tests (and any
+// future minimal executor) may lack the memo methods — treat as a miss.
+function memoRead(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): import("./types").ToolResult | undefined {
+  const get = ctx.toolExecutor?.memoGet;
+  return typeof get === "function" ? get.call(ctx.toolExecutor, "bash", args) : undefined;
+}
+
+function memoWrite(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+  result: import("./types").ToolResult,
+): void {
+  const set = ctx.toolExecutor?.memoSet;
+  if (typeof set === "function") set.call(ctx.toolExecutor, "bash", args, result);
+}
+
+function memoClear(ctx: ToolContext): void {
+  const clear = ctx.toolExecutor?.memoInvalidate;
+  if (typeof clear === "function") clear.call(ctx.toolExecutor);
+}
 
 /**
  * Разрешение bash-security-конфига: session-изоляция поверх глобального,
@@ -502,7 +577,7 @@ export const bashTool: ToolDefinition = {
   name: "bash",
   icon: "💻",
   description:
-    "Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_kill. Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Sequential commands: use && (a leading ; is auto-converted to &).",
+    "Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_wait, process_kill. For a finite background task prefer a single process_wait over polling process_log or sleeping (never use ping/timeout/sleep as a delay). Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Sequential commands: use && (a leading ; is auto-converted to &).",
   tags: ["shell", "code"],
   parameters: {
     type: "object",
@@ -520,6 +595,8 @@ export const bashTool: ToolDefinition = {
     },
     required: ["command"],
   },
+  /** Cacheability is per-command (see isMemoizableCommand) — managed here. */
+  manualMemo: true,
   handler: async (ctx, args) => {
     const originalCommand = String(args.command);
 
@@ -605,6 +682,19 @@ export const bashTool: ToolDefinition = {
       );
     }
 
+    // Result memo (manualMemo, after the security gate so a block is never
+    // masked by a stored result): single read-only invocations are served
+    // from the executor memo; anything else may mutate and wipes it.
+    // Background launches are never memoized (process ids are single-use).
+    const memoKey = { command, workdir };
+    const memoizable = args.background !== true && isMemoizableCommand(command);
+    if (memoizable) {
+      const hit = memoRead(ctx, memoKey);
+      if (hit) return { ...hit };
+    } else {
+      memoClear(ctx);
+    }
+
     const entry = processRegistry.start(command, workdir, ctx.sessionId);
     if (ctx.activeCallId) {
       // Let the executor abort/kill the child during the grace window.
@@ -641,6 +731,10 @@ export const bashTool: ToolDefinition = {
           securityConfig,
         });
 
+        // Successful read-only runs are memoized (failures may be transient).
+        if (memoizable && code === 0) {
+          memoWrite(ctx, memoKey, { success: true, output });
+        }
         return { success: code === 0, output };
       }
 

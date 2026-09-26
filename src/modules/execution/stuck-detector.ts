@@ -673,10 +673,16 @@ export class StuckDetector {
   getRepetitiveToolMessage(): string {
     if (!this.hasRepetitiveToolCalls()) return "";
     const last = this.recentToolCalls[this.recentToolCalls.length - 1];
-    return t("exec.repetitive_tool", {
+    const base = t("exec.repetitive_tool", {
       tool: last.name,
       count: this.repetitionThreshold,
     });
+    // Polling a background process one check at a time burns an LLM call per
+    // poll — point at the single blocking wait instead.
+    if (last.name === "process_log") {
+      return `${base} ${t("exec.repetitive_process_log_hint")}`;
+    }
+    return base;
   }
 
   /**
@@ -719,6 +725,12 @@ export class StuckDetector {
     }
     if (this.hasConsecutiveFailures()) {
       return t("exec.consecutive_failures", { count: String(this.consecutiveFailures) });
+    }
+    // Repetitive identical calls are a loop even when nothing fails (e.g. a
+    // process_log poll cycle) — without this branch they stayed invisible:
+    // getWarningKey reported "repetitive" but no reason was ever logged.
+    if (this.hasRepetitiveToolCalls()) {
+      return this.getRepetitiveToolMessage();
     }
     if (this.hasReadOnlyLoop()) {
       return t("exec.read_only_loop", {

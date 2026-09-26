@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
+import { lookupProcess } from "./process-ids";
 
 export const processKillTool: ToolDefinition = {
   name: "process_kill",
@@ -16,21 +17,11 @@ export const processKillTool: ToolDefinition = {
     required: ["id"],
   },
   handler: async (_ctx, args) => {
-    if (args.id === undefined || String(args.id).trim() === "") {
-      // ses_mt4fn58c: `process_kill -p=5173` produced "Process not found:
-      // undefined" — no hint about the correct format. Answer with usage.
-      const known = processRegistry.list();
-      const ids = known.map((p) => p.id);
-      const listPart = ids.length
-        ? `\n${t("proc.list_header")}: ${ids.join(", ")}`
-        : `\n${t("proc.missing_id_list")}`;
-      return { success: false, output: `${t("proc.missing_id")}${listPart}` };
-    }
-    const id = String(args.id);
-    const entry = processRegistry.get(id);
-    if (!entry) {
-      return { success: false, output: t("proc.not_found", { id }) };
-    }
+    // ses_mt4fn58c: `process_kill -p=5173` produced "Process not found:
+    // undefined" — no hint about the correct format. Answer with usage.
+    const found = lookupProcess(args);
+    if (!found.ok) return { success: false, output: found.output };
+    const { id, entry } = found;
     const killed = processRegistry.kill(id);
     if (!killed) {
       return { success: false, output: t("proc.kill_failed", { id }) };

@@ -76,6 +76,7 @@ const CATEGORY_TOOLS: Record<ToolCategory, ReadonlySet<string>> = {
     "session_info",
     "process_list",
     "process_log",
+    "process_wait",
   ]),
   mutate: new Set([
     "write_file",

@@ -301,6 +301,26 @@ describe("StuckDetector", () => {
     expect(detector.hasConsecutiveFailures()).toBe(false);
     expect(detector.getIterationsOnCurrentStep()).toBe(1);
   });
+
+  it("surfaces repetitive identical calls in getStuckReason (ses_muih0ah5)", () => {
+    // 10 consecutive process_log polls + repeated npm views never produced a
+    // single stuck-warning: getStuckReason had no repetitive branch, so the
+    // repeat loop stayed invisible in logs and chat.
+    for (let i = 0; i < 3; i++) {
+      detector.recordToolCall("bash", { command: "npm view micro-models-agent version" });
+    }
+    expect(detector.hasRepetitiveToolCalls()).toBe(true);
+    expect(detector.getWarningKey()).toBe("repetitive");
+    expect(detector.getStuckReason()).toContain("bash");
+  });
+
+  it("points repeated process_log polls at process_wait", () => {
+    for (let i = 0; i < 3; i++) {
+      detector.recordToolCall("process_log", { id: "proc_1" });
+    }
+    expect(detector.getRecoveryMessage()).toContain("process_wait");
+    expect(detector.getStuckReason()).toContain("process_wait");
+  });
 });
 
 describe("StuckDetector hint/recovery dedup (P3)", () => {

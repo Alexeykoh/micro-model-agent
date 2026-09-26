@@ -258,7 +258,7 @@ No configuration needed — Bun.Image is built into Bun 1.3.14+.
 - **`alwaysOn` flag** on `ToolDefinition` (`src/tools/types.ts`) — tools that survive any tag filter; `getAllForLLM()`/`getByTags()`/`filterToolsByTags()` all keep them. Structural tools `plan`/`todo`/`verify`/`project_map`/`lsp_check`/`session_info` are `alwaysOn`, so plan enforcement, LSP checks and session self-inspection survive narrowing.
 - **`enable_tools` tool** (`src/tools/enable-tools.ts`, `alwaysOn`) — the model pushes tags (e.g. `["research"]`) into the shared mutable `activeToolTags` array; the agent loop recomputes the LLM tool set **every iteration** (`agent.ts`), so enabled tools appear next turn.
 - **Hidden-tools prompt block** (`src/tools/hidden-tools-block.ts`, wired via `getDynamicPromptBlocks` in `bootstrap.ts`) — lists tag-grouped hidden tools so the model knows they exist and can call `enable_tools` or route via `subagent tool_tags`.
-- **Default set (18):** file tools, bash (code), subagent, chunk_query, download_file, mcp_call, pipeline_run + alwaysOn (plan/todo/verify/project_map/lsp_check/session_info/enable_tools). **Hidden (11):** web_search/web_fetch/web_browse (research), browser, attach_image, process_list/process_log/process_kill, remember/recall, search_history.
+- **Default set (18):** file tools, bash (code), subagent, chunk_query, download_file, mcp_call, pipeline_run + alwaysOn (plan/todo/verify/project_map/lsp_check/session_info/enable_tools). **Hidden (11):** web_search/web_fetch/web_browse (research), browser, attach_image, process_list/process_log/process_kill/process_wait, remember/recall, search_history.
 
 ## Session Self-Inspection
 
@@ -288,7 +288,16 @@ Long-running commands (dev servers, watchers) no longer block the agent.
 | `process_list` | List background processes: id, PID, command, status, last output line                                               |
 | `process_log`  | Show buffered output of a background process (`id`, optional `tail`)                                                |
 | `process_kill` | Kill a background process tree (`id`) — works even though `kill`/`pkill` are blocked by the bash security blacklist |
+| `process_wait` | Block until a background process finishes (`id`, `timeoutMs` default 30s/max 110s, short `tail`) — one call instead of polling `process_log` or sleeping via ping |
 
 - PIDs are tracked in `src/modules/processes/registry.ts` (per-session, capped at 20 entries, 2000 log lines each). Windows output is decoded from the OEM code page (CP866) so Cyrillic is not garbled. Output buffers are capped.
 - Windows: processes are killed with `taskkill /pid <pid> /T /F`; POSIX: process-group kill (`detached` spawn).
 - `Agent.shutdown()` kills all remaining background processes (no orphans).
+
+### Result Memoization
+
+Repeated deterministic reads do not re-run (each repeat used to cost a full LLM iteration plus chat lines):
+
+- **`cacheable` flag** on `ToolDefinition` (`src/tools/types.ts`) — the executor (`src/tools/executor.ts`) memoizes successful results keyed by session + tool + arguments (120s TTL, 100 entries). Marked: `read_file`, `list_dir`, `glob`, `grep`, `file_info`. Any non-cacheable execution wipes the memo (even a failed command can half-apply).
+- **`manualMemo` + `isMemoizableCommand`** (`src/tools/bash.ts`) — bash manages its own entries because cacheability is per-command: single read-only invocations (`npm view`, `git status/log/diff`, `dir`/`ls`, `echo`, `--version` queries; never compound `&||<>;` commands, never `background:true`) are served from the memo; anything else invalidates it. Only successes are stored (failures may be transient).
+- The repetitive-call warning (`StuckDetector`) points `process_log` poll loops at `process_wait` (`exec.repetitive_process_log_hint`).

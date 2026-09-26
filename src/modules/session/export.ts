@@ -17,6 +17,11 @@ export interface ExportBundle {
   log: SessionLogEntry[];
 }
 
+/** `--compact`: human-readable export without tool result dumps. */
+export interface ExportOptions {
+  compact?: boolean;
+}
+
 function roleHeading(role: string): string {
   switch (role) {
     case "user":
@@ -32,7 +37,11 @@ function roleHeading(role: string): string {
   }
 }
 
-export function renderSessionMarkdown(meta: SessionMeta | null, messages: SessionMessage[]): string {
+export function renderSessionMarkdown(
+  meta: SessionMeta | null,
+  messages: SessionMessage[],
+  opts?: ExportOptions,
+): string {
   const lines: string[] = [];
   const name = meta?.name ?? "session";
   const id = meta?.id ?? "unknown";
@@ -50,40 +59,60 @@ export function renderSessionMarkdown(meta: SessionMeta | null, messages: Sessio
   lines.push("");
 
   for (const msg of messages) {
-    const heading = roleHeading(msg.role);
-    const nameSuffix = msg.name ? ` (${msg.name})` : "";
-    lines.push(`## ${heading}${nameSuffix}`);
-    lines.push("");
-    const text = getMessageText(msg.content);
-    lines.push(text.length > 0 ? text : "_(empty)_");
-    lines.push("");
-    if (Array.isArray(msg.tool_calls)) {
-      for (const tc of msg.tool_calls) {
-        lines.push(`- tool_call: \`${tc.function.name}\` ${tc.function.arguments}`);
-      }
-      lines.push("");
-    }
+    appendMessageLines(lines, msg, opts);
   }
 
   return lines.join("\n");
 }
 
-export function buildSessionJson(meta: SessionMeta | null, messages: SessionMessage[]): string {
-  return JSON.stringify({ meta, messages }, null, 2);
+function appendMessageLines(lines: string[], msg: SessionMessage, opts?: ExportOptions): void {
+  // Compact mode drops tool result bodies (the bulk of long sessions);
+  // the `- tool_call:` one-liners on assistant turns still show what ran.
+  if (opts?.compact && msg.role === "tool") return;
+  const heading = roleHeading(msg.role);
+  const nameSuffix = msg.name ? ` (${msg.name})` : "";
+  lines.push(`## ${heading}${nameSuffix}`);
+  lines.push("");
+  const text = getMessageText(msg.content);
+  lines.push(text.length > 0 ? text : "_(empty)_");
+  lines.push("");
+  if (Array.isArray(msg.tool_calls)) {
+    for (const tc of msg.tool_calls) {
+      lines.push(`- tool_call: \`${tc.function.name}\` ${tc.function.arguments}`);
+    }
+    lines.push("");
+  }
 }
 
-export function buildSessionJsonl(log: SessionLogEntry[]): string {
-  return log.map((e) => JSON.stringify(e)).join("\n");
+export function buildSessionJson(
+  meta: SessionMeta | null,
+  messages: SessionMessage[],
+  opts?: ExportOptions,
+): string {
+  const list = opts?.compact ? messages.filter((m) => m.role !== "tool") : messages;
+  return JSON.stringify({ meta, messages: list }, null, 2);
 }
 
-export function formatExport(bundle: ExportBundle, format: ExportFormat): string {
+/** Bulky prompt-snapshot entries dropped by --compact (human reading). */
+const COMPACT_JSONL_DROP = new Set(["context", "tool_defs", "tool_result", "llm_usage"]);
+
+export function buildSessionJsonl(log: SessionLogEntry[], opts?: ExportOptions): string {
+  const list = opts?.compact ? log.filter((e) => !COMPACT_JSONL_DROP.has(e.type)) : log;
+  return list.map((e) => JSON.stringify(e)).join("\n");
+}
+
+export function formatExport(
+  bundle: ExportBundle,
+  format: ExportFormat,
+  opts?: ExportOptions,
+): string {
   switch (format) {
     case "md":
-      return renderSessionMarkdown(bundle.meta, bundle.messages);
+      return renderSessionMarkdown(bundle.meta, bundle.messages, opts);
     case "json":
-      return buildSessionJson(bundle.meta, bundle.messages);
+      return buildSessionJson(bundle.meta, bundle.messages, opts);
     case "jsonl":
-      return buildSessionJsonl(bundle.log);
+      return buildSessionJsonl(bundle.log, opts);
   }
 }
 
