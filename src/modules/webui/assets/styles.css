@@ -158,6 +158,7 @@ body {
 .icon-btn:hover { background: var(--hover-bg); color: var(--fg); }
 .icon-btn.primary { color: var(--accent); }
 #openSettings { margin-left: auto; margin-right: 6px; }
+#toggleSidebar { display: none; }
 .conn { color: var(--dim-a); font-size: 11.5px; white-space: nowrap; }
 .tabstrip {
   display: flex; gap: 4px; align-items: center; overflow-x: auto;
@@ -984,13 +985,19 @@ button.toggle:disabled { opacity: .5; cursor: default; }
 @media (max-width: 760px) {
   .bar-top { gap: 8px; padding: 8px 10px; }
   .conn { display: none; }
+  /* Sidebar toggle lives next to settings; settings keeps the right edge. */
+  #toggleSidebar { display: inline-flex; }
+  #openSettings { margin-left: 0; }
   .layout { flex-direction: column; }
   .chat { min-height: 0; }
-  .sb {
-    width: 100%; min-width: 0; max-height: 42vh;
-    border-left: none; border-top: 1px solid var(--border);
+  /* Phones: sidebar hidden, opens as an overlay drawer via body.sb-open. */
+  .sb { display: none; }
+  body.sb-open .sb {
+    display: flex; position: fixed; top: 41px; right: 0; bottom: 0; z-index: 45;
+    width: min(320px, 85vw); min-width: 0; max-height: none;
+    border-left: 1px solid var(--border); border-top: none;
+    box-shadow: var(--shadow-dd);
   }
-  .sec.usage-sec { max-height: 50%; }
   .msgs { padding: 14px; }
   .input-area { margin: 10px 14px 12px; }
   .inp-meta { flex-wrap: wrap; gap: 8px; }

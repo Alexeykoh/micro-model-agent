@@ -991,6 +991,7 @@
   "web.topbar.new_chat": "новый чат",
   "web.topbar.settings": "настройки",
   "web.topbar.all_sessions": "все сессии",
+  "web.topbar.sidebar": "сайдбар",
   "web.topbar.close": "закрыть",
   "web.conn.reconnecting": "переподключение…",
   "web.sidebar.plan": "план",
