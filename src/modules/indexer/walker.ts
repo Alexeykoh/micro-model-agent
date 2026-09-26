@@ -28,6 +28,12 @@ const IGNORE_DIRS = new Set([
   ".hg",
   ".svn",
   ".mma",
+  // MMA dev / agent / tooling dirs — never project source (mirror .gitignore,
+  // so a dev checkout's map is not flooded by test sandboxes / agent scratch).
+  "_testing",
+  ".superpowers",
+  ".opencode",
+  ".fallow",
   // Node / JS bundlers
   "node_modules",
   "dist",
@@ -73,13 +79,40 @@ export function isIgnoredDirName(name: string): boolean {
   return IGNORE_DIRS.has(name.toLowerCase());
 }
 
+/** Lockfiles — generated, never project source. */
+const IGNORE_FILE_NAMES = new Set([
+  "package-lock.json",
+  "bun.lock",
+  "bun.lockb",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  // Vendored third-party web bundles (minified; their symbols are noise).
+  "hljs.js",
+  "smd.js",
+]);
+
+/** Tooling config/baseline families that are not project source. */
+const IGNORE_FILE_PREFIXES = [".fallow"];
+
+/** True when a file name is ignored (case-insensitive prefix/exact match). */
+export function isIgnoredFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    IGNORE_FILE_NAMES.has(lower) ||
+    lower.endsWith(".min.js") ||
+    IGNORE_FILE_PREFIXES.some((p) => lower.startsWith(p))
+  );
+}
+
 /**
  * True when any path SEGMENT is an ignored directory. Segment-based (not a
  * substring) so short names like `env`/`out`/`obj` do not black out
  * `environment.ts` or `about/`.
  */
 function isIgnoredPath(filename: string): boolean {
-  return filename.split(/[\\/]/).some((segment) => isIgnoredDirName(segment));
+  const segments = filename.split(/[\\/]/);
+  const base = segments[segments.length - 1] ?? "";
+  return segments.some((segment) => isIgnoredDirName(segment)) || isIgnoredFileName(base);
 }
 
 export interface IndexedFile {
@@ -156,6 +189,7 @@ export class Indexer {
               walkDir(fullPath);
             }
           } else if (stat.isFile()) {
+            if (isIgnoredFileName(entry)) continue;
             const language = languageIdForExt(extname(entry).toLowerCase());
             if (language) {
               visit(fullPath, relPath, language, stat);

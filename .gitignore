@@ -6,6 +6,7 @@ blog_api_test/
 *.log
 *.tgz
 multi-*.txt
+session-*.md
 _testing/
 images*.jpg
 certification/report-*.json

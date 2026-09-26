@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **model list now follows the active provider** (`src/modules/webui/module.ts`): the web model cache was built once at startup and never refreshed, so after switching provider the settings/selector still showed the previous provider's models. It is refreshed on every `reconfigure` (`makeReconfigure(..., after)`), so `/api/models` reflects the newly active provider.
 - **adding a provider no longer drops the legacy config** (`src/modules/webui/providers-api.ts`): on a legacy single-provider config (`provider.type`/`baseUrl` without `entries`) the first add used to create `entries` from scratch and switch `active`, replacing the working provider. The legacy entry is now seeded into `entries[0]` and stays active.
+- **project map ignores dev-only dirs/files** (`src/modules/indexer/walker.ts`): the walker now skips `_testing`, `.superpowers`, `.opencode`, `.fallow` (mirroring `.gitignore`), lockfiles (`package-lock.json`, `bun.lock`, `yarn.lock`, …), `.fallow*` files and vendored/minified bundles (`hljs.js`, `smd.js`, `*.min.js`). A dev checkout's map is no longer flooded (this repo: 860 → 774 files); the same filter now also gates the FS watcher.
+- **removed a stray committed session export** (`session-ses_fdd1.md` at the repo root) and `.gitignore` now ignores `session-*.md`.
 
 ## [2.6.0] - 2026-09-25
 
