@@ -53,6 +53,12 @@ export interface WebUiAssets {
   smdJs?: string;
   /** Vendored highlight.js bundle (`/hljs.js`, exposes `window.hljs`). */
   hljsJs?: string;
+  /**
+   * Split frontend modules (`/js/*.js`, relative imports from `/app.js`).
+   * Optional so lightweight test fixtures that only exercise the chat surface
+   * stay valid. Keyed by path without the leading slash (`js/api.js`).
+   */
+  jsModules?: Record<string, string>;
 }
 
 /**

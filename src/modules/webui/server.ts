@@ -214,6 +214,19 @@ export function handleRequest(
     return;
   }
 
+  // Split frontend modules (`/js/*.js`, relative ESM imports from `/app.js`).
+  // Same live-reload semantics as the static assets above.
+  if (reqUrl.pathname.startsWith("/js/") && reqUrl.pathname.endsWith(".js")) {
+    const key = reqUrl.pathname.slice(1);
+    const src = s.assetSource ? s.assetSource() : assets;
+    const body = src.jsModules?.[key] ?? assets.jsModules?.[key];
+    if (body !== undefined) {
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(body);
+      return;
+    }
+  }
+
   if (reqUrl.pathname.startsWith("/api/")) {
     if (!checkAuth(req, reqUrl, s)) {
       sendJson(res, 401, { error: "unauthorized" });

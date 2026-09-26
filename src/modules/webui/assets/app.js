@@ -1,393 +1,32 @@
 import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
+import {
+  msgs, inp, tabstripEl, planEl, planCountEl, usageEl, envEl, wsLine,
+  saveIndicator, attachStrip, attachErr, imgPicker, connStatus, liveEl,
+  sendBtn, announce, el, icon, setIcon, link, activate, inlineTextNodes,
+} from "./js/dom.js";
+import { api, token } from "./js/api.js";
+import { I18N, t, pluralCount, loadI18n } from "./js/i18n.js";
+import { S, setPath, getPath } from "./js/store.js";
+import {
+  CATEGORIES, FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
+  categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine, relTime,
+} from "./js/format.js";
 
-(() => {
-  "use strict";
 
-  const token = new URLSearchParams(location.search).get("token") || "";
-  const THEME_KEY = "mma-theme";
-  const MAX_IMAGES = 3;
-  const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
-  const msgs = document.getElementById("msgs");
-  const inp = document.getElementById("inp");
-  const tabstripEl = document.getElementById("tabstrip");
-  const planEl = document.getElementById("plan");
-  const planCountEl = document.getElementById("planCount");
-  const usageEl = document.getElementById("usage");
-  const envEl = document.getElementById("env");
-  const wsLine = document.getElementById("wsLine");
-  const saveIndicator = document.getElementById("saveIndicator");
-  const attachStrip = document.getElementById("attachStrip");
-  const attachErr = document.getElementById("attachErr");
-  const imgPicker = document.getElementById("imgPicker");
-  const connStatus = document.getElementById("connStatus");
-  const liveEl = document.getElementById("live");
-  const sendBtn = document.getElementById("sendBtn");
 
-  // Announce a short status line to assistive tech (turn end, warnings/errors).
-  // Clearing first forces repeats to be re-announced.
-  function announce(text) {
-    if (!liveEl || !text) return;
-    liveEl.textContent = "";
-    setTimeout(() => {
-      liveEl.textContent = text;
-    }, 30);
-  }
 
-  const CATEGORIES = {
-    recon: [
-      "read_file", "list_dir", "glob", "grep", "file_info", "project_map",
-      "chunk_query", "web_search", "web_fetch", "history", "recall",
-      "process_list", "process_log",
-    ],
-    mutate: [
-      "write_file", "edit_file", "create_dir", "delete_file", "move_file",
-      "attach_image",
-    ],
-    execute: [
-      "bash", "process_kill", "pipeline_run", "browser", "download_file",
-      "subagent", "mcp_call",
-    ],
-    meta: [
-      "plan", "todo", "verify", "lsp_check", "enable_tools", "set_thinking",
-      "load_skill", "remember",
-    ],
-  };
 
-  const FILE_TOOLS = ["read_file", "write_file", "edit_file", "list_dir", "delete_file", "move_file", "file_info"];
-  // Tools whose `path` argument points at a readable file the viewer can open.
-  // `list_dir` is a directory, `delete_file`/`move_file` leave the file gone.
-  const OPENABLE_TOOLS = ["read_file", "write_file", "edit_file", "file_info"];
-  const IMAGE_TOOLS = ["attach_image", "browser"];
-  const LINK_TOOLS = ["web_fetch", "download_file"];
 
-  const state = {
-    config: null,
-    registry: [],
-    webToken: null,
-    models: [],
-    sessions: [],
-    host: {},
-    busy: false,
-    activeSessionId: null,
-    memory: undefined,
-    skills: undefined,
-    pluginsData: undefined,
-    providers: undefined,
-    providerPresets: [],
-    providerForm: null,
-    // Transient error shown inline in the sessions dropdown (visible without the modal).
-    sessionsError: null,
-  };
 
-  let tabs = [];
-  let activeTabId = null;
-  let liveTabId = null;
-  let newSeq = 0;
-  let attachments = [];
-  let attachErrTimer = null;
 
-  let curText = null;
-  let curMd = null;
-  let turnMd = "";
-  let turnRoots = [];
-  let curThink = null;
-  let lastPlanSig = null;
-  let lastUsageSig = null;
-  let lastEnvSig = null;
-  let runCount = 0;
-  let runFails = 0;
-  let runReconOnly = true;
-  let runNodes = [];
-  let runDuration = 0;
-  let busyTimer = null;
-  const pendingArgs = new Map();
-  const toolNodes = new Map();
 
-  function el(tag, cls, text) {
-    const node = document.createElement(tag);
-    if (cls) node.className = cls;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
-  // --- Lucide icons (MIT), inlined: chrome only. Chat status glyphs (◇ ✓ ✗ ✦ ⟡ …)
-  // stay textual per docs/design/ui/STYLE.md; icons replace emoji/gear chrome.
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const ICONS = {
-    plus: [["path", { d: "M5 12h14" }], ["path", { d: "M12 5v14" }]],
-    menu: [
-      ["line", { x1: 4, y1: 6, x2: 20, y2: 6 }],
-      ["line", { x1: 4, y1: 12, x2: 20, y2: 12 }],
-      ["line", { x1: 4, y1: 18, x2: 20, y2: 18 }],
-    ],
-    settings: [
-      ["path", { d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }],
-      ["circle", { cx: 12, cy: 12, r: 3 }],
-    ],
-    image: [
-      ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],
-      ["circle", { cx: 9, cy: 9, r: 2 }],
-      ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" }],
-    ],
-    x: [["path", { d: "M18 6 6 18" }], ["path", { d: "m6 6 12 12" }]],
-    trash: [
-      ["path", { d: "M3 6h18" }],
-      ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }],
-      ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }],
-      ["line", { x1: 10, y1: 11, x2: 10, y2: 17 }],
-      ["line", { x1: 14, y1: 11, x2: 14, y2: 17 }],
-    ],
-    refresh: [
-      ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }],
-      ["path", { d: "M21 3v5h-5" }],
-      ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
-      ["path", { d: "M8 21H3v-5" }],
-    ],
-    "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
-    "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
-    "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
-    square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
-    copy: [
-      ["rect", { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 }],
-      ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }],
-    ],
-    check: [["path", { d: "M20 6 9 17l-5-5" }]],
-  };
-
-  function icon(name, cls) {
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    svg.setAttribute("class", "svg-icon" + (cls ? " " + cls : ""));
-    (ICONS[name] || []).forEach(([tag, attrs]) => {
-      const child = document.createElementNS(SVG_NS, tag);
-      Object.keys(attrs).forEach((k) => child.setAttribute(k, String(attrs[k])));
-      svg.appendChild(child);
-    });
-    return svg;
-  }
-
-  // Replace a node's contents with an icon + optional label, keeping it a real
-  // control. Returns the label node so callers can preserve text-only updates.
-  function setIcon(button, name, label) {
-    if (!button) return null;
-    button.textContent = "";
-    button.appendChild(icon(name));
-    if (label != null) button.appendChild(el("span", "", label));
-    return button;
-  }
-
-  // Text action control (`edit`, `forget`, `add`, …) as a focusable <button>.
-  function link(label, cls, onClick) {
-    const b = el("button", "linkbtn" + (cls ? " " + cls : ""), label);
-    b.type = "button";
-    b.addEventListener("click", onClick);
-    return b;
-  }
-
-  // Upgrade an existing non-button node (a span/div kept for layout) into a
-  // keyboard-activatable control.
-  function activate(node, fn) {
-    node.setAttribute("role", "button");
-    if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
-    node.addEventListener("click", fn);
-    node.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        fn(e);
-      }
-    });
-    return node;
-  }
-
-  // Render raw memory text (`- **date** -- **pattern:** body`) as safe DOM nodes:
-  // `**…**` spans become <b>, everything else stays a text node. Never uses
-  // innerHTML, so untrusted/model-written content cannot inject markup.
-  function inlineTextNodes(text) {
-    const frag = document.createDocumentFragment();
-    const raw = String(text == null ? "" : text).replace(/^-\s*/, "");
-    raw.split("**").forEach((part, i) => {
-      if (part === "") return;
-      if (i % 2 === 1) {
-        const b = document.createElement("b");
-        b.textContent = part;
-        frag.appendChild(b);
-      } else {
-        frag.appendChild(document.createTextNode(part));
-      }
-    });
-    return frag;
-  }
-
-  function setPath(obj, path, value) {
-    const parts = path.split(".");
-    let cur = obj;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (cur[parts[i]] == null || typeof cur[parts[i]] !== "object") cur[parts[i]] = {};
-      cur = cur[parts[i]];
-    }
-    cur[parts[parts.length - 1]] = value;
-  }
-
-  function getPath(obj, path) {
-    const parts = path.split(".");
-    let cur = obj;
-    for (const p of parts) {
-      if (cur == null || typeof cur !== "object") return undefined;
-      cur = cur[p];
-    }
-    return cur;
-  }
-
-  async function api(path, opts = {}) {
-    const headers = Object.assign({}, opts.headers || {});
-    if (opts.body !== undefined) headers["content-type"] = "application/json";
-    if (token) headers["x-mma-token"] = token;
-    let res;
-    try {
-      res = await fetch(path, {
-        method: opts.method || "GET",
-        headers,
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      });
-    } catch (err) {
-      return { ok: false, status: 0, data: null };
-    }
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (err) {
-      data = null;
-    }
-    return { ok: res.ok, status: res.status, data };
-  }
-
-  const I18N = { locale: "en", dicts: {} };
-
-  function t(key, params) {
-    const dict = I18N.dicts[I18N.locale] || I18N.dicts.en || {};
-    const en = I18N.dicts.en || {};
-    let template = dict[key];
-    if (template === undefined) template = en[key];
-    if (template === undefined) return key;
-    if (params) {
-      Object.keys(params).forEach((k) => {
-        template = template.split("{" + k + "}").join(String(params[k]));
-      });
-    }
-    return template;
-  }
-
-  // Plural form for a `{count}` template: uses `baseKey_one|_few|_many`
-  // (RU one/few/many; EN one/many) and falls back to `baseKey` if absent.
-  function pluralCount(baseKey, n) {
-    let form;
-    if (I18N.locale === "ru") {
-      const m10 = n % 10;
-      const m100 = n % 100;
-      if (m10 === 1 && m100 !== 11) form = "one";
-      else if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) form = "few";
-      else form = "many";
-    } else {
-      form = n === 1 ? "one" : "many";
-    }
-    const key = baseKey + "_" + form;
-    const s = t(key, { count: n });
-    return s === key ? t(baseKey, { count: n }) : s;
-  }
-
-  async function loadI18n() {
-    const r = await api("/api/i18n");
-    if (r.ok && r.data) {
-      I18N.locale = r.data.locale || "en";
-      I18N.dicts = r.data.dicts || {};
-    }
-  }
-
-  function categoryOf(name) {
-    for (const cat of Object.keys(CATEGORIES)) {
-      if (CATEGORIES[cat].indexOf(name) !== -1) return cat;
-    }
-    return "meta";
-  }
-
-  // Friendly, localized tool label from `tool.friendly.*`; humanize unknown names.
-  function labelOf(name) {
-    const key = "tool.friendly." + name;
-    const s = t(key);
-    if (s !== key) return s;
-    const human = String(name).replace(/_/g, " ");
-    return human.charAt(0).toUpperCase() + human.slice(1);
-  }
-
-  function argText(args) {
-    if (!args || typeof args !== "object") return "";
-    const keys = ["path", "file", "dir", "command", "query", "url", "pattern", "name", "id", "text", "prompt"];
-    for (const key of keys) {
-      if (typeof args[key] === "string" && args[key]) return args[key];
-    }
-    const keys2 = Object.keys(args);
-    if (!keys2.length) return "";
-    const val = args[keys2[0]];
-    if (typeof val === "string") return val;
-    if (typeof val === "number" || typeof val === "boolean") return String(val);
-    try {
-      const json = JSON.stringify(args);
-      return json === "{}" ? "" : json.slice(0, 120);
-    } catch (err) {
-      return "";
-    }
-  }
-
-  function formatMs(ms) {
-    if (typeof ms !== "number" || !isFinite(ms)) return "";
-    return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
-  }
-
-  // Effective chat verbosity, mirroring `resolveVerbosity` in src/ui/theme.ts:
-  // explicit `ui.verbosity` wins; the legacy boolean maps to verbose/quiet. A
-  // fresh config defaults to `quiet`, so the web feed matches the terminal.
-  function verbosity() {
-    const ui = (state.config && state.config.ui) || {};
-    if (ui.verbosity) return ui.verbosity;
-    return ui.verbose ? "verbose" : "quiet";
-  }
-
-  // First non-empty line of a tool result — the calm one-line cause shown in
-  // quiet mode instead of the whole model-facing body.
-  function firstOutputLine(text) {
-    if (typeof text !== "string" || !text) return "";
-    for (const raw of text.split("\n")) {
-      const line = raw.trim();
-      if (line) return line.length > 200 ? line.slice(0, 197) + "…" : line;
-    }
-    return "";
-  }
 
   function insertAfter(ref, node) {
     if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
     else appendTo(liveFeed(), node);
   }
 
-  function relTime(ts) {
-    if (!ts) return "";
-    const diff = Date.now() - new Date(ts).getTime();
-    if (!isFinite(diff) || diff < 0) return "";
-    const min = Math.floor(diff / 60000);
-    if (min < 1) return "now";
-    if (min < 60) return min + "m";
-    const hrs = Math.floor(min / 60);
-    if (hrs < 24) return hrs + "h";
-    const days = Math.floor(hrs / 24);
-    return days + "d";
-  }
 
   function emptyView() {
     const wrap = el("div", "empty");
@@ -412,18 +51,18 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   function clearFeed(feed) {
     if (!feed) return;
     feed.replaceChildren(emptyView());
-    const tab = tabs.find((x) => x.feed === feed);
+    const tab = S.tabs.find((x) => x.feed === feed);
     if (tab) tab.planCard = null;
     if (feed === activeFeed()) scroll();
   }
 
   function activeFeed() {
-    const tab = tabs.find((x) => x.id === activeTabId);
+    const tab = S.tabs.find((x) => x.id === S.activeTabId);
     return tab ? tab.feed : null;
   }
 
   function liveFeed() {
-    const tab = tabs.find((x) => x.id === liveTabId) || tabs.find((x) => x.id === activeTabId);
+    const tab = S.tabs.find((x) => x.id === S.liveTabId) || S.tabs.find((x) => x.id === S.activeTabId);
     return tab ? tab.feed : null;
   }
 
@@ -431,7 +70,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   // enrichment); fall back to the live/active tab for events without one.
   function feedForEvent(sessionId) {
     if (sessionId) {
-      const tab = tabs.find((x) => x.id === sessionId);
+      const tab = S.tabs.find((x) => x.id === sessionId);
       if (tab) return tab.feed;
     }
     return liveFeed();
@@ -462,9 +101,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function clearBusy(feed) {
-    if (busyTimer) {
-      clearInterval(busyTimer);
-      busyTimer = null;
+    if (S.busyTimer) {
+      clearInterval(S.busyTimer);
+      S.busyTimer = null;
     }
     feed = feed || liveFeed();
     if (!feed) return;
@@ -481,9 +120,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (!feed) return;
     clearEmpty(feed);
     if (feed.querySelector(".busy")) return;
-    if (busyTimer) {
-      clearInterval(busyTimer);
-      busyTimer = null;
+    if (S.busyTimer) {
+      clearInterval(S.busyTimer);
+      S.busyTimer = null;
     }
     const line = el("div", "busy");
     line.appendChild(el("span", "spin", "✦"));
@@ -493,10 +132,10 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     line.appendChild(el("span", "", "· " + t("web.input.esc")));
     appendTo(feed, line);
     const started = Date.now();
-    busyTimer = setInterval(() => {
+    S.busyTimer = setInterval(() => {
       if (!line.parentNode) {
-        clearInterval(busyTimer);
-        busyTimer = null;
+        clearInterval(S.busyTimer);
+        S.busyTimer = null;
         return;
       }
       time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
@@ -504,21 +143,21 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function flushRun() {
-    if (runCount <= 0) {
+    if (S.runCount <= 0) {
       resetRun();
       return;
     }
     // Quiet: a run of successful read-only actions folds into one summary line,
     // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
     // and `verbose` keep the individual action lines and add nothing.
-    if (verbosity() === "quiet" && runReconOnly && runFails === 0 && runCount > 1) {
-      runNodes.forEach((node) => node.remove());
+    if (verbosity() === "quiet" && S.runReconOnly && S.runFails === 0 && S.runCount > 1) {
+      S.runNodes.forEach((node) => node.remove());
       const line = el("div", "grouped");
       line.appendChild(el("span", "pipe", "│"));
-      const dur = formatMs(runDuration);
+      const dur = formatMs(S.runDuration);
       line.appendChild(
         document.createTextNode(
-          " " + pluralCount("web.action.actions", runCount) + " ✓" + (dur ? " · " + dur : ""),
+          " " + pluralCount("web.action.actions", S.runCount) + " ✓" + (dur ? " · " + dur : ""),
         ),
       );
       appendTo(liveFeed(), line);
@@ -527,11 +166,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function resetRun() {
-    runCount = 0;
-    runFails = 0;
-    runReconOnly = true;
-    runNodes = [];
-    runDuration = 0;
+    S.runCount = 0;
+    S.runFails = 0;
+    S.runReconOnly = true;
+    S.runNodes = [];
+    S.runDuration = 0;
   }
 
   // Options passed to the streaming Markdown renderer: localized code-block
@@ -544,13 +183,13 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     };
   }
 
-  // Close the active Markdown segment (if any) and clear the text state.
+  // Close the active Markdown segment (if any) and clear the text S.state.
   function finishMd() {
-    if (curMd) {
-      curMd.end();
-      curMd = null;
+    if (S.curMd) {
+      S.curMd.end();
+      S.curMd = null;
     }
-    curText = null;
+    S.curText = null;
   }
 
   function onText(chunk, sid) {
@@ -558,27 +197,27 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     clearBusy(feed);
     if (!feed) return;
     clearEmpty(feed);
-    if (curThink) {
+    if (S.curThink) {
       finishThink();
     }
-    if (curText == null) {
+    if (S.curText == null) {
       flushRun();
-      curText = "";
-      curMd = mountMarkdown(feed, mdOpts());
-      turnRoots.push(curMd.root);
+      S.curText = "";
+      S.curMd = mountMarkdown(feed, mdOpts());
+      S.turnRoots.push(S.curMd.root);
     }
-    curText += chunk;
-    turnMd += chunk;
-    curMd.write(chunk);
+    S.curText += chunk;
+    S.turnMd += chunk;
+    S.curMd.write(chunk);
     if (feed === activeFeed()) scroll();
   }
 
   function finishThink() {
-    if (curThink && curThink.startedAt) {
-      const dur = curThink.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - curThink.startedAt) / 1000).toFixed(1) + "s";
+    if (S.curThink && S.curThink.startedAt) {
+      const dur = S.curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - S.curThink.startedAt) / 1000).toFixed(1) + "s";
     }
-    curThink = null;
+    S.curThink = null;
   }
 
   // Build the collapsible reasoning block. The global `.think-h` click handler
@@ -606,13 +245,13 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (!feed) return;
     clearEmpty(feed);
     finishMd();
-    if (!curThink) {
+    if (!S.curThink) {
       flushRun();
       const { wrap, head, body } = buildThinkBlock(true);
       appendTo(feed, wrap);
-      curThink = { wrap, head, body, startedAt: Date.now() };
+      S.curThink = { wrap, head, body, startedAt: Date.now() };
     }
-    curThink.body.textContent += chunk;
+    S.curThink.body.textContent += chunk;
     if (feed === activeFeed()) scroll();
   }
 
@@ -646,7 +285,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     clearEmpty(feed);
     finishMd();
     finishThink();
-    pendingArgs.set(data.toolCallId, data.args || {});
+    S.pendingArgs.set(data.toolCallId, data.args || {});
     const line = el("div", "act " + categoryOf(data.name));
     line.appendChild(el("span", "g", "◇"));
     line.appendChild(el("span", "lab", labelOf(data.name)));
@@ -658,9 +297,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const status = el("span", "ok", "");
     line.appendChild(status);
     appendTo(feed, line);
-    toolNodes.set(data.toolCallId, { status, line });
-    if (categoryOf(data.name) !== "recon") runReconOnly = false;
-    runCount++;
+    S.toolNodes.set(data.toolCallId, { status, line });
+    if (categoryOf(data.name) !== "recon") S.runReconOnly = false;
+    S.runCount++;
   }
 
   function renderToolOutput(line, text) {
@@ -757,29 +396,29 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function onToolEnd(data) {
-    const node = toolNodes.get(data.toolCallId);
+    const node = S.toolNodes.get(data.toolCallId);
     const line = node ? node.line : null;
     if (node) {
       const dur = formatMs(data.durationMs);
       node.status.textContent = data.success ? " ✓" + (dur ? " " + dur : "") : " ✗" + (dur ? " " + dur : "");
       if (!data.success) {
         node.status.classList.add("fail");
-        runFails++;
-        runReconOnly = false;
+        S.runFails++;
+        S.runReconOnly = false;
       }
     }
-    toolNodes.delete(data.toolCallId);
-    const args = pendingArgs.get(data.toolCallId) || {};
-    pendingArgs.delete(data.toolCallId);
+    S.toolNodes.delete(data.toolCallId);
+    const args = S.pendingArgs.get(data.toolCallId) || {};
+    S.pendingArgs.delete(data.toolCallId);
     if (verbosity() === "quiet") {
       // Quiet hides tool bodies. Track successful nodes so a run of read-only
       // actions can fold at the next segment; a failure keeps its line and adds
       // a single `↳` cause instead of the whole model-facing body.
       if (data.success) {
-        if (line) runNodes.push(line);
+        if (line) S.runNodes.push(line);
         const card = cardFor(data.name, args, data.sessionId);
-        if (card) runNodes.push(card);
-        runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+        if (card) S.runNodes.push(card);
+        S.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
       } else {
         const cause = firstOutputLine(data.output);
         if (cause) insertAfter(line, el("div", "detail", "↳ " + cause));
@@ -791,13 +430,13 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function onTurnEnd(data) {
-    state.busy = false;
+    S.state.busy = false;
     const feed = feedForEvent(data.sessionId);
     clearBusy(feed);
     finishThink();
     finishMd();
     flushRun();
-    const owner = tabs.find((x) => x.id === data.sessionId);
+    const owner = S.tabs.find((x) => x.id === data.sessionId);
     if (owner) owner.planCard = null;
     if (!feed) {
       resetTurnText();
@@ -821,14 +460,14 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       // The visible turn-end banner is redundant noise; keep the screen-reader cue.
       announce(t("web.turn.end", { count: data.toolCalls || 0 }));
     }
-    const plain = turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
-    appendActionsRow(feed, plain, turnMd);
+    const plain = S.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
+    appendActionsRow(feed, plain, S.turnMd);
     resetTurnText();
   }
 
   function resetTurnText() {
-    turnMd = "";
-    turnRoots = [];
+    S.turnMd = "";
+    S.turnRoots = [];
   }
 
   // Per-message copy actions (whole response as plain text / as Markdown).
@@ -1022,8 +661,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   function renderTabstrip() {
     tabstripEl.textContent = "";
-    tabs.forEach((item) => {
-      const on = item.id === activeTabId;
+    S.tabs.forEach((item) => {
+      const on = item.id === S.activeTabId;
       const label = item.name || item.id;
       // The id lives in the tooltip (and the sidebar copy button), not inline,
       // so the session name keeps the tab width.
@@ -1073,7 +712,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   // Only the active tab is persisted; the token param is preserved as-is.
   function syncUrl() {
     const url = new URL(location.href);
-    const tab = tabs.find((x) => x.id === activeTabId);
+    const tab = S.tabs.find((x) => x.id === S.activeTabId);
     if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
     else url.searchParams.delete("session");
     history.replaceState(null, "", url);
@@ -1081,14 +720,14 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   function updateTabName(id, name) {
     if (!id || !name) return;
-    const tab = tabs.find((x) => x.id === id);
+    const tab = S.tabs.find((x) => x.id === id);
     if (tab && tab.name !== name) {
       tab.name = name;
       renderTabstrip();
     }
     // Patch the session list too, otherwise the dropdown keeps the stale name
     // until the next `loadSessions()` poll (15s).
-    const sess = state.sessions.find((s) => s.id === id);
+    const sess = S.state.sessions.find((s) => s.id === id);
     if (sess && sess.name !== name) {
       sess.name = name;
       renderSessionsDropdown();
@@ -1096,7 +735,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function openTab(id, name, kind, server) {
-    let tab = tabs.find((x) => x.id === id);
+    let tab = S.tabs.find((x) => x.id === id);
     if (!tab) {
       tab = {
         id,
@@ -1107,12 +746,12 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
         historyLoading: false,
         planCard: null,
       };
-      tabs.push(tab);
+      S.tabs.push(tab);
     } else if (name) {
       tab.name = name;
     }
-    activeTabId = id;
-    liveTabId = id;
+    S.activeTabId = id;
+    S.liveTabId = id;
     msgs.replaceChildren(tab.feed);
     renderTabstrip();
     renderSessionsDropdown();
@@ -1133,18 +772,18 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function closeTab(id) {
-    const i = tabs.findIndex((x) => x.id === id);
+    const i = S.tabs.findIndex((x) => x.id === id);
     if (i === -1) return;
-    tabs = tabs.filter((x) => x.id !== id);
-    if (activeTabId === id) {
-      const next = tabs[Math.min(i, tabs.length - 1)];
+    S.tabs = S.tabs.filter((x) => x.id !== id);
+    if (S.activeTabId === id) {
+      const next = S.tabs[Math.min(i, S.tabs.length - 1)];
       if (next) {
-        activeTabId = next.id;
-        liveTabId = next.id;
+        S.activeTabId = next.id;
+        S.liveTabId = next.id;
         msgs.replaceChildren(next.feed);
       } else {
-        activeTabId = null;
-        liveTabId = null;
+        S.activeTabId = null;
+        S.liveTabId = null;
         showEmptyFeed();
       }
     }
@@ -1163,8 +802,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     }
     // Server-side creation failed (no manager / offline): keep a local-only tab
     // so the user is not blocked, but surface the failure.
-    newSeq++;
-    openTab("new" + newSeq, t("web.empty.title"), "new", false);
+    S.newSeq++;
+    openTab("new" + S.newSeq, t("web.empty.title"), "new", false);
     setIndicator(t("web.sessions.create_failed"), true);
   }
 
@@ -1182,8 +821,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const recentList = document.getElementById("sessRecentList");
     activeList.textContent = "";
     recentList.textContent = "";
-    const activeId = state.activeSessionId;
-    const sorted = state.sessions.slice().sort((a, b) => {
+    const activeId = S.state.activeSessionId;
+    const sorted = S.state.sessions.slice().sort((a, b) => {
       const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return bt - at;
@@ -1205,8 +844,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (!recentList.childNodes.length) {
       recentList.appendChild(el("div", "si", t("web.sessions.none")));
     }
-    if (state.sessionsError) {
-      recentList.appendChild(el("div", "dd-err", state.sessionsError));
+    if (S.state.sessionsError) {
+      recentList.appendChild(el("div", "dd-err", S.state.sessionsError));
     }
   }
 
@@ -1252,11 +891,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function showSessionsError(msg) {
-    state.sessionsError = msg;
+    S.state.sessionsError = msg;
     renderSessionsDropdown();
     if (sessionsErrTimer) clearTimeout(sessionsErrTimer);
     sessionsErrTimer = setTimeout(() => {
-      state.sessionsError = null;
+      S.state.sessionsError = null;
       renderSessionsDropdown();
     }, 4500);
   }
@@ -1267,7 +906,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
       showSessionsError(code === "active_session" ? t("web.sessions.active_guard") : t("web.sessions.delete_failed"));
     } else {
-      state.sessionsError = null;
+      S.state.sessionsError = null;
     }
     await loadSessions();
   }
@@ -1305,8 +944,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (!attachErr) return;
     attachErr.textContent = msg;
     attachErr.hidden = false;
-    clearTimeout(attachErrTimer);
-    attachErrTimer = setTimeout(() => {
+    clearTimeout(S.attachErrTimer);
+    S.attachErrTimer = setTimeout(() => {
       attachErr.hidden = true;
     }, 4000);
   }
@@ -1314,8 +953,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   function renderAttachments() {
     if (!attachStrip) return;
     attachStrip.textContent = "";
-    attachStrip.hidden = attachments.length === 0;
-    attachments.forEach((src, i) => {
+    attachStrip.hidden = S.attachments.length === 0;
+    S.attachments.forEach((src, i) => {
       const thumb = el("div", "thumb");
       const img = document.createElement("img");
       img.alt = "";
@@ -1327,7 +966,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       rm.setAttribute("aria-label", t("web.attach.remove"));
       rm.appendChild(icon("x"));
       rm.addEventListener("click", () => {
-        attachments.splice(i, 1);
+        S.attachments.splice(i, 1);
         renderAttachments();
       });
       thumb.appendChild(rm);
@@ -1336,7 +975,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function clearAttachments() {
-    attachments = [];
+    S.attachments = [];
     renderAttachments();
   }
 
@@ -1356,7 +995,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
         err = t("web.attach.only_images");
         continue;
       }
-      if (attachments.length >= MAX_IMAGES) {
+      if (S.attachments.length >= MAX_IMAGES) {
         err = t("web.attach.too_many", { max: MAX_IMAGES });
         break;
       }
@@ -1370,11 +1009,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
           err = t("web.attach.invalid");
           continue;
         }
-        if (attachments.length >= MAX_IMAGES) {
+        if (S.attachments.length >= MAX_IMAGES) {
           err = t("web.attach.too_many", { max: MAX_IMAGES });
           break;
         }
-        attachments.push(url);
+        S.attachments.push(url);
       } catch (e) {
         err = t("web.attach.read_failed");
       }
@@ -1541,10 +1180,10 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   async function send() {
     const text = inp.value.trim();
-    const images = attachments.slice();
+    const images = S.attachments.slice();
     if (!text && !images.length) return;
     const feed = liveFeed() || activeFeed();
-    if (state.busy) {
+    if (S.state.busy) {
       // Don't drop the input silently: tell the user a turn is still running.
       if (feed) appendTo(feed, el("div", "warnline", "⚠ " + t("web.input.busy")));
       return;
@@ -1574,9 +1213,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (feed && feed.querySelector(".startbanner") === null && feed.querySelector(".u") === null) {
       const banner = el("div", "startbanner");
       banner.appendChild(document.createTextNode(t("web.start.label") + " "));
-      banner.appendChild(el("b", "", (state.config && state.config.model) || state.host.model || "—"));
-      const sessionPart = state.host.sessionId ? " · " + t("web.start.session") + " " + String(state.host.sessionId) : "";
-      banner.appendChild(document.createTextNode(" · " + (state.host.provider || (state.config && state.config.provider && state.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
+      banner.appendChild(el("b", "", (S.state.config && S.state.config.model) || S.state.host.model || "—"));
+      const sessionPart = S.state.host.sessionId ? " · " + t("web.start.session") + " " + String(S.state.host.sessionId) : "";
+      banner.appendChild(document.createTextNode(" · " + (S.state.host.provider || (S.state.config && S.state.config.provider && S.state.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
       feed.insertBefore(banner, feed.firstChild);
     }
     appendTo(feed, userMessageNode(text, images));
@@ -1594,7 +1233,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   async function interrupt() {
-    if (!state.busy) return;
+    if (!S.state.busy) return;
     await api("/api/interrupt", { method: "POST", body: {} });
   }
 
@@ -1648,7 +1287,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   if (sendBtn) {
     sendBtn.addEventListener("click", () => {
-      if (state.busy) interrupt();
+      if (S.state.busy) interrupt();
       else send();
     });
   }
@@ -1673,7 +1312,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   });
 
   function contextLabel() {
-    const n = (state.config && state.config.contextWindow) || 0;
+    const n = (S.state.config && S.state.config.contextWindow) || 0;
     return n ? Math.round(n / 1024) + "K" : "—";
   }
 
@@ -1721,16 +1360,16 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function renderSelectors() {
-    const cfg = state.config || {};
+    const cfg = S.state.config || {};
     const provider = cfg.provider || {};
 
     setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
     const modelMenu = document.getElementById("selModelMenu");
     modelMenu.textContent = "";
-    if (!state.models.length) {
+    if (!S.state.models.length) {
       modelMenu.appendChild(el("div", "mi dim", t("web.selectors.no_models")));
     } else {
-      state.models.forEach((m) => {
+      S.state.models.forEach((m) => {
         modelMenu.appendChild(menuItem(m, "", m === cfg.model, () => postConfig("model", m, true)));
       });
     }
@@ -1841,7 +1480,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (r.ok && r.data && r.data.ok) {
       const persisted = r.data.persisted !== false;
       setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
-      if (state.config && r.data.value !== undefined) setPath(state.config, key, r.data.value);
+      if (S.state.config && r.data.value !== undefined) setPath(S.state.config, key, r.data.value);
       if (key === "locale") {
         await loadI18n();
         applyStaticI18n();
@@ -1865,38 +1504,38 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   // Reflect the busy flag on the composer so a turn in progress is visible and
   // `aria-busy` is honest for assistive tech.
   function reflectBusy() {
-    if (inp) inp.setAttribute("aria-busy", state.busy ? "true" : "false");
+    if (inp) inp.setAttribute("aria-busy", S.state.busy ? "true" : "false");
     const area = document.querySelector(".input-area");
-    if (area) area.classList.toggle("busy", state.busy);
+    if (area) area.classList.toggle("busy", S.state.busy);
     // Send button doubles as stop while a turn is running; the Esc hint is only
     // meaningful then.
     if (sendBtn) {
-      const label = state.busy ? t("web.input.stop") : t("web.input.send");
+      const label = S.state.busy ? t("web.input.stop") : t("web.input.send");
       sendBtn.textContent = "";
-      sendBtn.appendChild(icon(state.busy ? "square" : "arrow-up"));
-      sendBtn.classList.toggle("busy", state.busy);
+      sendBtn.appendChild(icon(S.state.busy ? "square" : "arrow-up"));
+      sendBtn.classList.toggle("busy", S.state.busy);
       sendBtn.title = label;
       sendBtn.setAttribute("aria-label", label);
     }
     const escHint = document.getElementById("hintEsc");
-    if (escHint) escHint.hidden = !state.busy;
+    if (escHint) escHint.hidden = !S.state.busy;
   }
 
   function renderState(snapshot, busy) {
-    state.host = snapshot || {};
-    state.busy = !!busy;
+    S.state.host = snapshot || {};
+    S.state.busy = !!busy;
     reflectBusy();
-    const sessionId = state.host.sessionId || null;
-    state.activeSessionId = sessionId;
-    if (sessionId && !tabs.some((x) => x.id === sessionId)) {
-      openTab(sessionId, state.host.sessionName || String(sessionId), "session", false);
+    const sessionId = S.state.host.sessionId || null;
+    S.state.activeSessionId = sessionId;
+    if (sessionId && !S.tabs.some((x) => x.id === sessionId)) {
+      openTab(sessionId, S.state.host.sessionName || String(sessionId), "session", false);
     }
-    if (sessionId) updateTabName(sessionId, state.host.sessionName);
-    if (!tabs.length) showEmptyFeed();
-    renderPlan(state.host.plan);
-    renderUsage(state.host);
-    renderEnvironment(state.host);
-    renderWorkspace(state.host);
+    if (sessionId) updateTabName(sessionId, S.state.host.sessionName);
+    if (!S.tabs.length) showEmptyFeed();
+    renderPlan(S.state.host.plan);
+    renderUsage(S.state.host);
+    renderEnvironment(S.state.host);
+    renderWorkspace(S.state.host);
     renderSessionsDropdown();
   }
 
@@ -1904,8 +1543,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
     // reset it would cause) when the snapshot is unchanged.
     const sig = JSON.stringify([plan, I18N.locale]);
-    if (sig === lastPlanSig) return;
-    lastPlanSig = sig;
+    if (sig === S.lastPlanSig) return;
+    S.lastPlanSig = sig;
     planEl.textContent = "";
     if (!plan || !Array.isArray(plan.steps) || !plan.steps.length) {
       planCountEl.textContent = "";
@@ -1936,7 +1575,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const feed = feedForEvent(data && data.sessionId);
     if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
     clearEmpty(feed);
-    const tab = tabs.find((x) => x.feed === feed);
+    const tab = S.tabs.find((x) => x.feed === feed);
     let card = tab ? tab.planCard : null;
     if (!card || card.parentNode !== feed) {
       card = el("div", "planblock");
@@ -2107,14 +1746,14 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function renderUsage(h) {
-    const cfg = state.config || {};
+    const cfg = S.state.config || {};
     const sig = JSON.stringify([
       h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
       h.compactionCount, h.contextQuality, h.contextProbe, cfg.model, cfg.contextWindow,
       I18N.locale,
     ]);
-    if (sig === lastUsageSig) return;
-    lastUsageSig = sig;
+    if (sig === S.lastUsageSig) return;
+    S.lastUsageSig = sig;
     usageEl.textContent = "";
     const sid = h.sessionId ? String(h.sessionId) : "";
     usageEl.appendChild(usageSessionRow(sid));
@@ -2186,8 +1825,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const files = h.instructions && !disabled ? h.instructions.files || [] : [];
     const map = h.projectMap || null;
     const sig = JSON.stringify([disabled, files, map, I18N.locale]);
-    if (sig === lastEnvSig) return;
-    lastEnvSig = sig;
+    if (sig === S.lastEnvSig) return;
+    S.lastEnvSig = sig;
     envEl.textContent = "";
     envEl.appendChild(
       envItem(
@@ -2224,9 +1863,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   async function loadConfig() {
     const r = await api("/api/config");
     if (!r.ok || !r.data) return;
-    state.config = r.data.config || {};
-    state.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
-    state.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+    S.state.config = r.data.config || {};
+    S.state.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
+    S.state.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
     renderSelectors();
     renderSettings();
   }
@@ -2234,26 +1873,26 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   async function loadModels() {
     const r = await api("/api/models");
     if (!r.ok || !r.data) return;
-    state.models = Array.isArray(r.data.models) ? r.data.models : [];
+    S.state.models = Array.isArray(r.data.models) ? r.data.models : [];
     renderSelectors();
   }
 
   async function loadProviders() {
     const r = await api("/api/providers");
-    state.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
-    state.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
+    S.state.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
+    S.state.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
     renderModelPanel();
   }
 
   async function loadSessions() {
     const r = await api("/api/sessions");
     if (!r.ok || !r.data) return;
-    state.sessions = Array.isArray(r.data.sessions) ? r.data.sessions : [];
+    S.state.sessions = Array.isArray(r.data.sessions) ? r.data.sessions : [];
     renderSessionsDropdown();
   }
 
-  // Connection-state banner: shown while the SSE stream is down. The server
-  // never replays events, so a reconnect only resyncs state — the feed keeps
+  // Connection-S.state banner: shown while the SSE stream is down. The server
+  // never replays events, so a reconnect only resyncs S.state — the feed keeps
   // whatever the live session already rendered (no duplication).
   function setConnStatus(disconnected) {
     if (!connStatus) return;
@@ -2263,7 +1902,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   function resyncAfterReconnect() {
     refresh();
-    const tab = tabs.find((x) => x.id === activeTabId);
+    const tab = S.tabs.find((x) => x.id === S.activeTabId);
     if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
       tab.historyLoaded = false;
       loadHistory(tab);
@@ -2345,11 +1984,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     es.addEventListener("state", (e) => {
       const d = parse(e);
       if (d) {
-        state.busy = !!d.busy;
+        S.state.busy = !!d.busy;
         reflectBusy();
         if (d.usage && typeof d.usage === "object") {
-          state.host = Object.assign({}, state.host, d.usage);
-          renderUsage(state.host);
+          S.state.host = Object.assign({}, S.state.host, d.usage);
+          renderUsage(S.state.host);
         }
       }
     });
@@ -2398,7 +2037,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function defFor(key) {
-    return state.registry.find((d) => d.key === key) || null;
+    return S.state.registry.find((d) => d.key === key) || null;
   }
 
   function row(label, control, desc) {
@@ -2424,7 +2063,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function configControl(def, key) {
-    const value = state.config ? getPath(state.config, key) : undefined;
+    const value = S.state.config ? getPath(S.state.config, key) : undefined;
     if (def.valueType === "bool") {
       const toggle = el("button", "toggle" + (value ? " on" : ""));
       toggle.type = "button";
@@ -2493,10 +2132,10 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function providerEntries() {
-    if (state.providers && Array.isArray(state.providers.entries) && state.providers.entries.length) {
-      return state.providers.entries;
+    if (S.state.providers && Array.isArray(S.state.providers.entries) && S.state.providers.entries.length) {
+      return S.state.providers.entries;
     }
-    const provider = (state.config && state.config.provider) || {};
+    const provider = (S.state.config && S.state.config.provider) || {};
     if (Array.isArray(provider.entries) && provider.entries.length) {
       return provider.entries.map((e) => ({
         type: e.type,
@@ -2595,13 +2234,13 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   function providerForm() {
-    const mode = (state.providerForm && state.providerForm.mode) || "add";
-    const editing = (state.providerForm && state.providerForm.entry) || {};
+    const mode = (S.state.providerForm && S.state.providerForm.mode) || "add";
+    const editing = (S.state.providerForm && S.state.providerForm.entry) || {};
     const box = el("div", "pform");
 
     // One-click preset: selecting a builtin fills type/label/base URL, so hosted
     // providers need no URL knowledge. `custom` leaves the fields free.
-    const presets = state.providerPresets || [];
+    const presets = S.state.providerPresets || [];
     let presetSel = null;
     if (presets.length) {
       presetSel = el("select", "pform-preset");
@@ -2702,7 +2341,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       const r = await api("/api/providers", { method: "POST", body });
       if (r.ok && r.data && r.data.ok) {
         const persisted = r.data.persisted !== false;
-        state.providerForm = null;
+        S.state.providerForm = null;
         setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
         hideProviderOverlay();
         await loadProviders();
@@ -2726,7 +2365,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const container = document.querySelector('[data-panel="model"]');
     if (!container) return;
     container.textContent = "";
-    const cfg = state.config || {};
+    const cfg = S.state.config || {};
 
     // --- Model section ---
     const modelSec = settingsSection("web.settings.section_models");
@@ -2739,9 +2378,9 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const draw = () => {
       list.textContent = "";
       const q = search.value.trim().toLowerCase();
-      const models = state.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
+      const models = S.state.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
       if (!models.length) {
-        list.appendChild(el("div", "placeholder", state.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
+        list.appendChild(el("div", "placeholder", S.state.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
         return;
       }
       models.forEach((m) => {
@@ -2776,7 +2415,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       const n = providerName(e);
       return n && n !== "—";
     });
-    const activeName = (state.providers && state.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
+    const activeName = (S.state.providers && S.state.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
     const provList = el("div", "provider-list");
     entries.forEach((entry) => {
       const name = providerName(entry);
@@ -2851,7 +2490,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
       container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
     });
     container.appendChild(
-      row(t("web.settings.web_token"), el("span", "val dim", state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
+      row(t("web.settings.web_token"), el("span", "val dim", S.state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
     );
     const note = el("div", "placeholder");
     note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
@@ -2879,11 +2518,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const container = document.querySelector('[data-panel="memory"]');
     if (!container) return;
     container.textContent = "";
-    if (state.memory === undefined || state.memory === null) {
-      container.appendChild(placeholderFor(state.memory, t("web.settings.memory_unavailable")));
+    if (S.state.memory === undefined || S.state.memory === null) {
+      container.appendChild(placeholderFor(S.state.memory, t("web.settings.memory_unavailable")));
       return;
     }
-    const data = state.memory;
+    const data = S.state.memory;
 
     const addRow = el("div", "mem-add");
     const catSel = el("select");
@@ -2980,18 +2619,18 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const container = document.querySelector('[data-panel="skills"]');
     if (!container) return;
     container.textContent = "";
-    if (state.skills === undefined || state.skills === null) {
-      container.appendChild(placeholderFor(state.skills, t("web.settings.skills_unavailable")));
+    if (S.state.skills === undefined || S.state.skills === null) {
+      container.appendChild(placeholderFor(S.state.skills, t("web.settings.skills_unavailable")));
       return;
     }
-    if (!state.skills.length) {
+    if (!S.state.skills.length) {
       const empty = el("div", "placeholder");
       empty.textContent = t("web.settings.no_skills");
       container.appendChild(empty);
       return;
     }
     const list = el("div", "settings-list");
-    state.skills.forEach((s) => {
+    S.state.skills.forEach((s) => {
       const item = el("div", "skill-item");
       const head = el("div", "skill-head");
       head.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
@@ -3014,11 +2653,11 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const container = document.querySelector('[data-panel="plugins"]');
     if (!container) return;
     container.textContent = "";
-    if (state.pluginsData === undefined || state.pluginsData === null) {
-      container.appendChild(placeholderFor(state.pluginsData, t("web.settings.plugins_unavailable")));
+    if (S.state.pluginsData === undefined || S.state.pluginsData === null) {
+      container.appendChild(placeholderFor(S.state.pluginsData, t("web.settings.plugins_unavailable")));
       return;
     }
-    const data = state.pluginsData;
+    const data = S.state.pluginsData;
     const list = el("div", "settings-list");
     list.appendChild(groupHeader(t("web.settings.plugins_header"), (data.plugins || []).length));
     if (!(data.plugins || []).length) {
@@ -3091,19 +2730,19 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   async function loadMemory() {
     const r = await api("/api/memory");
-    state.memory = r.ok && r.data ? r.data : null;
+    S.state.memory = r.ok && r.data ? r.data : null;
     renderMemoryPanel();
   }
 
   async function loadSkills() {
     const r = await api("/api/skills");
-    state.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
+    S.state.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
     renderSkillsPanel();
   }
 
   async function loadPlugins() {
     const r = await api("/api/plugins");
-    state.pluginsData =
+    S.state.pluginsData =
       r.ok && r.data
         ? { plugins: r.data.plugins || [], mcp: r.data.mcp || [] }
         : null;
@@ -3243,7 +2882,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
   function closeSettings() {
     hideProviderOverlay();
-    state.providerForm = null;
+    S.state.providerForm = null;
     overlay.classList.remove("open");
     settingsBtn.setAttribute("aria-expanded", "false");
     if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
@@ -3290,7 +2929,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   function openProviderForm(mode, entry) {
     if (!providerOverlay || !providerFormHost) return;
-    state.providerForm = { mode, entry: entry || null };
+    S.state.providerForm = { mode, entry: entry || null };
     providerReturnFocus = document.activeElement;
     providerFormTitle.textContent = t(
       mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title",
@@ -3313,7 +2952,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   function closeProviderForm() {
     if (!isProviderOpen()) return;
-    state.providerForm = null;
+    S.state.providerForm = null;
     hideProviderOverlay();
     renderModelPanel();
   }
@@ -3450,7 +3089,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     // Restore the session from the URL AFTER the first refresh: `renderState`
     // may auto-open the server's active session, and the requested one must win.
     if (initialSession) {
-      const meta = state.sessions.find((s) => s.id === initialSession);
+      const meta = S.state.sessions.find((s) => s.id === initialSession);
       if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
     }
     connectSSE();
@@ -3459,4 +3098,3 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
   }
 
   boot();
-})();
