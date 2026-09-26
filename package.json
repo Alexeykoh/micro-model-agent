@@ -23,6 +23,7 @@
     "build:clean": "cmd /c \"if exist dist rmdir /s /q dist\"",
     "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --external playwright",
     "dev": "bun --watch src/cli/main.ts",
+    "web:dev": "bun --watch src/cli/main.ts web --no-open",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -33,6 +34,7 @@
     "fallow:baseline": "fallow dead-code --save-baseline .fallow-baseline.json",
     "fallow:security": "fallow security",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "format": "prettier --write \"src/**/*.{ts,js,mjs,json}\" \"tests/**/*.{ts,js,json}\" \"scripts/**/*.ts\" \"*.{ts,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,mjs,json}\" \"tests/**/*.{ts,js,json}\" \"scripts/**/*.ts\" \"*.{ts,json}\""
   },

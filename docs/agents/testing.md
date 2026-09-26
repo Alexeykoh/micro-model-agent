@@ -112,6 +112,34 @@ Stop-Process -Id $p.Id                    # остановка по PID
   правки `src/modules/webui/assets/*` видны в браузере **без рестарта**. Изменения в `src/**/*.ts`
   (серверная логика) по-прежнему требуют перезапуска сервера.
 
+**Dev-режим** — для правок серверной логики с автоперезапуском:
+
+```bash
+bun run web:dev                  # bun --watch src/cli/main.ts web --no-open
+bun run web:dev -- --port 4319   # с фиксированным портом
+```
+
+`--watch` перезапускает сервер при изменении `src/**/*.ts`; правки
+`src/modules/webui/assets/*` подхватываются и так (live reload ассетов, см. выше).
+
+**E2E-харнесс** — изолированный прогон настоящего `mma web` (`tests/e2e/web-harness.ts`):
+
+```bash
+bun run test:e2e   # vitest run --config vitest.e2e.config.ts (только по явной просьбе)
+```
+
+- Харнесс сидит изолированный `MMA_CONFIG_DIR` во временной папке (`seedE2EConfigDir`
+  с не-виргин dummy-конфигом — setup-гейт закрыт, внешних сетевых вызовов нет),
+  поднимает `bun run src/cli/main.ts web --host 127.0.0.1 --no-open` дочерним процессом,
+  ждёт URL из stdout + readiness `/` до `200`, после сценария останавливает процесс
+  по хендлу и удаляет временный конфиг. Реальный `~/.mma` не затрагивается.
+- Сценарии (`tests/e2e/*.e2e-test.ts`, отдельный конфиг — не входят в `bun test`):
+  `web-provider-dialog` (boot + вложенный поп-ап провайдера: open/Esc/backdrop/save).
+  Без бинарника Chromium или под Bun — graceful skip (тот же гард, что в `webui-smoke`).
+- Артефакты каждого сценария — в `_testing/web-e2e/<scenario>/` (gitignored):
+  `*.png` скриншоты ключевых шагов, `*.html` снапшот DOM, `*.console.log` ошибки консоли,
+  `*.result.json` итог, `server.{out,err}.log` логи сервера.
+
 **Скрипт-драйвер** (видимый браузер, замедление, чтобы наблюдать шаги; запускать только по просьбе):
 
 ```js

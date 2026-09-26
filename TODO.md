@@ -300,6 +300,9 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [x] Фикс: список моделей следует за активным провайдером (refresh on reconfigure).
 - [x] Фикс: добавление провайдера не затирает легаси-конфиг (seed `entries[0]`).
 
-- [x] (2026-09-26) Вложенный поп-ап провайдера проверен (add/edit/Esc/backdrop, ошибок нет) и закоммичен.
-  `assets/*` теперь перечитываются на каждый запрос — правки UI видны без рестарта сервера.
-  Playwright — только по явной команде пользователя (правило в AGENTS.md и docs/agents/testing.md).
+- [x] (2026-09-26) Нормально тестировать web UI: `bun run web:dev` (watch + live asset reload),
+  изолированный `MMA_CONFIG_DIR` e2e-харнесс (`tests/e2e/web-harness.ts`, реальный `mma web` дочерним
+  процессом, реальный `~/.mma` не затрагивается), Playwright-сценарии с артефактами
+  (`tests/e2e/web-provider-dialog.e2e-test.ts`: boot + вложенный поп-ап провайдера —
+  open/Esc/backdrop/save; артефакты в `_testing/web-e2e/<scenario>/`), запуск `bun run test:e2e`
+  (`vitest.e2e.config.ts`, только по явной просьбе). Ветка `chore/web-e2e-harness`.
