@@ -239,6 +239,8 @@ body {
 .ans { color: var(--ans); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .think-h { color: var(--think); cursor: pointer; user-select: none; display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
 .think-h .dur, .think-h .tog { color: var(--dim-b); }
+.think-h .tog { display: inline-flex; align-items: center; gap: 4px; }
+.think-h .tog .svg-icon { width: 12px; height: 12px; }
 .think-h .tog:hover { color: var(--dim-a); }
 .think-body { color: var(--dim-c); padding-left: 18px; white-space: pre-wrap; font-size: 12.5px; overflow-wrap: anywhere; }
 .think-body.hidden { display: none; }
