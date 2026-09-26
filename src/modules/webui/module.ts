@@ -388,6 +388,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
 
   state.bridge = host;
+  // Serve assets fresh from disk so editing `assets/*` needs no server restart.
+  state.assetSource = loadAssets;
   const url = startServer(loadAssets(), state);
 
   return {

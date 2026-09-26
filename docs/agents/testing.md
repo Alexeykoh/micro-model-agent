@@ -82,17 +82,37 @@ bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-�
 
 ## Тестирование web UI (Playwright)
 
-Веб-интерфейс (`mma web`) тестируем **через Playwright**, а не глазами в браузере по скриншотам.
+Веб-интерфейс (`mma web`) проверяем **через Playwright**, а не глазами по скриншотам.
 Repos уже зависит от `playwright` (см. `package.json`); браузеры стоят в
 `%LOCALAPPDATA%\ms-playwright`.
 
-**Запуск сервера** (всегда из корня репо, иначе bun подхватит глобальный `mma` — см. правило 5 выше):
+> **⚠️ Правило:** Playwright запускается **только по явной команде пользователя**. Без его
+> просьбы агент не открывает браузер и не гоняет UI-сценарии сам — это медленно и создаёт
+> внешние процессы (то же касается поднятия `mma web` «на всякий случай»).
 
-```bash
-bun run src/cli/main.ts web --port 4319 --host 127.0.0.1 --no-open
+**Запуск сервера** — контролируемо, фоном, не блокируя работу (всегда из корня репо, иначе bun
+подхватит глобальный `mma` — см. правило 5 выше):
+
+```powershell
+# фоном + логи в файл + PID в переменной (не держит сессию, можно проверять/останавливать)
+$p = Start-Process bun -ArgumentList 'run','src/cli/main.ts','web','--port','4319','--host','127.0.0.1','--no-open' `
+  -WorkingDirectory 'E:\projects\micro-models-agent' `
+  -RedirectStandardOutput "$env:TEMP\mma-web.out.log" -RedirectStandardError "$env:TEMP\mma-web.err.log" `
+  -PassThru -WindowStyle Hidden
+$p.Id                                    # PID — в файл/переменную
+(Invoke-WebRequest http://127.0.0.1:4319/ -UseBasicParsing).StatusCode   # readiness-поллинг: 200
+# ... работа ...
+Stop-Process -Id $p.Id                    # остановка по PID
 ```
 
-**Скрипт-драйвер** (видимый браузер, замедление, чтобы наблюдать шаги):
+- **Логи** — только через файлы (`$env:TEMP\mma-web.*.log`); не выводить `mma web` в «передний план».
+- **Readiness** — поллить `/` или `/api/providers` до `200`, а не `Start-Sleep` вслепую.
+- **Остановка** — строго по сохранённому PID (`Stop-Process -Id`), не «убить все bun».
+- **Ассеты перечитываются на каждый запрос** (`WebUiState.assetSource` → `loadAssets()`), поэтому
+  правки `src/modules/webui/assets/*` видны в браузере **без рестарта**. Изменения в `src/**/*.ts`
+  (серверная логика) по-прежнему требуют перезапуска сервера.
+
+**Скрипт-драйвер** (видимый браузер, замедление, чтобы наблюдать шаги; запускать только по просьбе):
 
 ```js
 import { chromium } from "playwright";
@@ -112,6 +132,7 @@ await page.goto("http://127.0.0.1:4319/");
 | вкладка «Модель и провайдер» | `[data-p="model"]` |
 | панель настроек | `[data-panel="model"]` |
 | «+ добавить» / шаблон / доп. поля | `.sec-add`, `.pform-preset`, `.pform-adv` |
+| вложенный поп-ап провайдера | `#providerOverlay` (`.overlay-nested.open`), `#providerFormHost`, `#providerFormTitle` |
 | список моделей | `.model-item` (`.active` — выбранная) |
 | список провайдеров | `.provider-item` (`.chip` действия, `.chip.danger` — удалить) |
 

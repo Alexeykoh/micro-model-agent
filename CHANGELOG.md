@@ -17,11 +17,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **per-provider model memory** (`src/config/registry.ts`, `src/config/types.ts`): the model you last used with a provider is stored in `provider.models[name]` (written on every `model` change) and restored when you switch back via `provider.active` — the global `config.model` no longer silently carries over a model the new backend does not serve. Additive config field, no migration.
 - **provider name guard** (`src/modules/providers/naming.ts`, `src/modules/webui/providers-api.ts`, CLI add): a new/renamed provider must not collide with another entry's `label` or `type`; conflicts are rejected (`409 name-conflict`, `cli.provider_name_conflict`) instead of silently editing the wrong entry. Web edits send `originalName` so an entry can keep its own name.
 - **one-click provider presets in the settings form** (`src/modules/webui/providers-api.ts`, `assets/app.js`): `GET /api/providers` now returns `presets` (the builtin providers with their fixed base URLs, plus named local endpoints **LM Studio / Ollama / vLLM** that map to `openai-compat` with their well-known URLs) and the add/edit form shows a **preset** select that fills `type`, `label` and `baseUrl` in one click — neither hosted nor local providers require typing a URL by hand. New i18n keys `web.settings.provider_preset/provider_custom` (en+ru).
+- **provider add/edit as a nested dialog** (`assets/index.html`, `app.js`, `styles.css`): adding or editing a provider now opens its own dialog **above the settings modal** (`#providerOverlay`, header + form, Esc / backdrop / ✕ to close, Tab focus-trap) instead of an inline block that was crammed into the panel; the form got roomier vertical spacing.
 
 ### Changed
 
 - **`app.js`** is now an ES module importing `./md.js`; `renderAssistantText` and the live `text` stream share one renderer, and `parseFences`/`renderTextSegment` are removed.
 - **`feedHasContent`** now recognizes `.md` blocks.
+- **web assets are served fresh per request** (`src/modules/webui/state.ts`, `module.ts`, `server.ts`): editing `src/modules/webui/assets/*` is now visible in the browser without restarting `mma web` (`WebUiState.assetSource` re-reads them on each static request; server `src/**/*.ts` changes still need a restart).
 
 ### Fixed
 

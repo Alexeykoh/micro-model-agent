@@ -662,6 +662,16 @@ body.light .kv .wn { color: var(--yellow); }
 .confirm-actions .linkbtn:hover { text-decoration: none; background: var(--hover-bg-2); }
 .confirm-actions .linkbtn.danger { border-color: var(--red-strong); color: var(--red-strong); }
 .confirm-actions .linkbtn.danger:hover { background: var(--x-hover-bg); }
+
+/* nested provider add/edit dialog (opens above the settings modal) */
+.overlay.overlay-nested { z-index: 60; }
+.modal.modal-provider {
+  width: min(520px, 92vw); height: auto; max-height: 88vh; border-radius: 8px;
+}
+.provider-body { display: block; padding: 20px 22px 22px; overflow-y: auto; }
+.provider-body .pform {
+  margin: 0; padding: 0; border: 0; background: none;
+}
 .menu-col {
   width: 200px; min-width: 200px; padding: 12px 8px;
   border-right: 1px solid var(--border); overflow-y: auto;
@@ -849,19 +859,21 @@ body.light .toggle { background: var(--toggle-off); }
 .pform-title { font-size: 12.5px; color: var(--fg); margin-bottom: 10px; }
 .pform-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 8px 12px;
+  gap: 14px;
 }
-.pform-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pform-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .pform-field label { font-size: 11px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
 .pform-field input,
 .pform-field select {
   background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
-  color: var(--fg); font: inherit; font-size: 12.5px; padding: 5px 8px; width: 100%; min-width: 0;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
 }
-.pform-adv { margin-top: 10px; }
+/* preset row sits above the field grid — keep it off the fields */
+.provider-body .pform > .pform-field { margin-bottom: 16px; }
+.pform-adv { margin-top: 18px; }
 .pform-adv summary { cursor: pointer; font-size: 11.5px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
-.pform-adv .pform-grid { margin-top: 8px; }
-.pform-actions { display: flex; gap: 14px; align-items: center; padding-top: 10px; }
+.pform-adv .pform-grid { margin-top: 12px; }
+.pform-actions { display: flex; gap: 14px; align-items: center; padding-top: 22px; }
 .pform-actions .linkbtn.dim { color: var(--dim-a); }
 .settings-note { color: var(--dim-b); font-size: 11.5px; line-height: 1.7; padding: 8px 0 4px; }
 

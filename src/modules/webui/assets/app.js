@@ -2598,9 +2598,6 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     const mode = (state.providerForm && state.providerForm.mode) || "add";
     const editing = (state.providerForm && state.providerForm.entry) || {};
     const box = el("div", "pform");
-    box.appendChild(
-      el("div", "pform-title", t(mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title")),
-    );
 
     // One-click preset: selecting a builtin fills type/label/base URL, so hosted
     // providers need no URL knowledge. `custom` leaves the fields free.
@@ -2707,6 +2704,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
         const persisted = r.data.persisted !== false;
         state.providerForm = null;
         setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
+        hideProviderOverlay();
         await loadProviders();
         await loadConfig();
       } else {
@@ -2717,10 +2715,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
         );
       }
     });
-    const cancel = link(t("web.settings.cancel"), "dim", () => {
-      state.providerForm = null;
-      renderModelPanel();
-    });
+    const cancel = link(t("web.settings.cancel"), "dim", () => closeProviderForm());
     actions.appendChild(save);
     actions.appendChild(cancel);
     box.appendChild(actions);
@@ -2769,16 +2764,12 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
     // --- Providers section ---
     const provSec = settingsSection("web.settings.section_providers");
-    const addOpen = !!(state.providerForm && state.providerForm.mode === "add");
     const addBtn = el("button", "sec-add");
     addBtn.type = "button";
-    addBtn.setAttribute("aria-expanded", addOpen ? "true" : "false");
+    addBtn.setAttribute("aria-haspopup", "dialog");
     addBtn.appendChild(icon("plus"));
     addBtn.appendChild(el("span", "", t("web.settings.add_provider")));
-    addBtn.addEventListener("click", () => {
-      state.providerForm = addOpen ? null : { mode: "add", entry: null };
-      renderModelPanel();
-    });
+    addBtn.addEventListener("click", () => openProviderForm("add", null));
     provSec.head.appendChild(addBtn);
 
     const entries = providerEntries().filter((e) => {
@@ -2802,10 +2793,7 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
         actions.appendChild(chip(t("web.settings.provider_make_active"), "", () => postConfig("provider.active", name, true)));
       }
       actions.appendChild(
-        chip(t("web.settings.edit"), "", () => {
-          state.providerForm = { mode: "edit", entry };
-          renderModelPanel();
-        }),
+        chip(t("web.settings.edit"), "", () => openProviderForm("edit", entry)),
       );
       if (!active) {
         actions.appendChild(
@@ -2828,13 +2816,6 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (!entries.length) provList.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
     provSec.body.appendChild(provList);
     container.appendChild(provSec.el);
-
-    if (state.providerForm) {
-      const form = providerForm();
-      provSec.body.appendChild(form);
-      const first = form.querySelector("input");
-      if (first) first.focus();
-    }
   }
 
   function renderUiPanel() {
@@ -3261,6 +3242,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     if (active) setTimeout(() => active.focus(), 0);
   }
   function closeSettings() {
+    hideProviderOverlay();
+    state.providerForm = null;
     overlay.classList.remove("open");
     settingsBtn.setAttribute("aria-expanded", "false");
     if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
@@ -3289,8 +3272,79 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && overlay.classList.contains("open")) closeSettings();
+    if (e.key !== "Escape") return;
+    if (isProviderOpen()) return; // handled by the provider dialog / nested Esc below
+    if (overlay.classList.contains("open")) closeSettings();
   });
+
+  // --- nested provider add/edit dialog (opens above the settings modal) ---
+  const providerOverlay = document.getElementById("providerOverlay");
+  const providerFormHost = document.getElementById("providerFormHost");
+  const providerFormTitle = document.getElementById("providerFormTitle");
+  const closeProviderBtn = document.getElementById("closeProvider");
+  let providerReturnFocus = null;
+
+  function isProviderOpen() {
+    return !!providerOverlay && providerOverlay.classList.contains("open");
+  }
+
+  function openProviderForm(mode, entry) {
+    if (!providerOverlay || !providerFormHost) return;
+    state.providerForm = { mode, entry: entry || null };
+    providerReturnFocus = document.activeElement;
+    providerFormTitle.textContent = t(
+      mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title",
+    );
+    providerFormHost.textContent = "";
+    providerFormHost.appendChild(providerForm());
+    providerOverlay.classList.add("open");
+    setTimeout(() => {
+      const first = providerFormHost.querySelector("input, select");
+      if (first) first.focus();
+    }, 0);
+  }
+
+  function hideProviderOverlay() {
+    if (!providerOverlay) return;
+    providerOverlay.classList.remove("open");
+    if (providerReturnFocus && providerReturnFocus.focus) providerReturnFocus.focus();
+    providerReturnFocus = null;
+  }
+
+  function closeProviderForm() {
+    if (!isProviderOpen()) return;
+    state.providerForm = null;
+    hideProviderOverlay();
+    renderModelPanel();
+  }
+
+  if (providerOverlay) {
+    if (closeProviderBtn) closeProviderBtn.addEventListener("click", closeProviderForm);
+    providerOverlay.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (e.target === providerOverlay) closeProviderForm();
+    });
+    // Keep Tab inside the nested dialog while it is open.
+    providerOverlay.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const items = Array.from(
+        providerOverlay.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => node.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  }
+
 
   // --- generic confirmation dialog (alertdialog) -------------------------
   const confirmOverlay = document.getElementById("confirmOverlay");
@@ -3344,7 +3398,8 @@ import { mountMarkdown, renderMarkdown, copyText } from "./md.js";
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
+    if (isProviderOpen()) closeProviderForm();
+    else if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
     else if (overlay.classList.contains("open")) closeSettings();
   });
 
