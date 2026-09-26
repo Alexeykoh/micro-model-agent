@@ -17,10 +17,7 @@ import type { AppConfig } from "../../config/types";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import type { MemoryStore } from "../../modules/memory/store";
-import type { Host, HostStateSnapshot } from "../../core/host";
-import type { AgentResult, ToolEvent } from "../../core/types";
-import type { ToolCall, ToolResult } from "../../tools/types";
-import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
+import type { Host } from "../../core/host";
 import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
@@ -28,16 +25,29 @@ import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
 import { installOutputForwarding } from "./log-forward";
-import { cancelPendingQuestions, installWebPromptIO, type PromptIORegistry } from "./prompt-io";
+import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
+import { makeModelCache } from "./model-cache";
+import { makeRunAgent } from "./run-agent";
+import { buildHostState, type WebIndexer } from "./host-state";
+import { cancelPendingQuestions } from "./prompt-io";
 import {
   broadcast,
   createWebUiState,
-  type UsageSnapshot,
   type WebPluginManager,
   type WebSkillsModule,
   type WebUiState,
 } from "./state";
+
+// Pure snapshot helpers live in `./host-state`; re-exported so existing
+// importers (`webui-usage`, `webui-plan` tests) keep working.
+export {
+  buildHostState,
+  captureUsage,
+  planEventFor,
+  type HostStateInput,
+  type WebIndexer,
+} from "./host-state";
 
 export interface WebUiDeps {
   agent: Agent;
@@ -85,47 +95,6 @@ export interface WebUiHandle {
 }
 
 /**
- * Narrow inputs `buildHostState` reads. Kept separate from {@link WebUiDeps} so
- * the snapshot projection is testable without constructing a full `Agent`.
- * `WebUiDeps` satisfies this structurally.
- */
-export interface HostStateInput {
-  config: AppConfig;
-  sessionManager?: Pick<SessionManager, "getActiveMeta">;
-  execModule?: Pick<ExecutionModule, "getActivePlan">;
-  usage?: UsageSnapshot;
-  contextProbe?: { model: string; actual: number } | null;
-  workspace?: string;
-  instructions?: { files: string[]; disabled: boolean };
-  projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number } | null;
-}
-
-/** Structural subset of the indexer module the sidebar needs (avoids a hard dep). */
-export interface WebIndexer {
-  buildIndex(): Promise<unknown>;
-  stats(): { files: number; symbols: number; tokens: number } | null;
-}
-/**
- * Capture the usage-bearing subset of an `AgentResult` into a
- * {@link UsageSnapshot}. Undefined fields are omitted so a partial result never
- * overwrites a previously known value with a blank cell.
- */
-export function captureUsage(result: AgentResult, fallbackLimit?: number): UsageSnapshot {
-  const usage: UsageSnapshot = {};
-  if (typeof result.contextUsed === "number") usage.contextUsed = result.contextUsed;
-  const limit = typeof result.contextLimit === "number" ? result.contextLimit : fallbackLimit;
-  if (typeof limit === "number") usage.contextLimit = limit;
-  if (typeof result.totalCost === "number") usage.costUsd = result.totalCost;
-  if (typeof result.compactionCount === "number") usage.compactionCount = result.compactionCount;
-  if (result.cache) {
-    if (typeof result.cache.hitRate === "number") usage.cacheHitRate = result.cache.hitRate;
-    if (typeof result.cache.saved === "number") usage.cacheSaved = result.cache.saved;
-  }
-  if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
-  return usage;
-}
-
-/**
  * Agent surface the web reconfigure hook needs. Narrow so tests can stub it
  * without constructing a real `Agent` (which would drag in the whole loop).
  */
@@ -163,41 +132,6 @@ export function makeReconfigure(
 }
 
 /**
- * Resolve the plan snapshot to broadcast after a tool ends. Only `plan`/`todo`
- * tools mutate the active plan, so any other tool yields `null` (no event).
- * Pure so the hook is testable without booting the agent/server.
- */
-export function planEventFor(
-  toolName: string,
-  execModule?: Pick<ExecutionModule, "getActivePlan">,
-): HostStateSnapshot["plan"] | null {
-  if (toolName !== "plan" && toolName !== "todo") return null;
-  return planSnapshotFromModule(adaptActivePlan(execModule?.getActivePlan()));
-}
-
-/** Build the host snapshot from live module state (correction #6). */
-export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSnapshot {
-  const meta = deps.sessionManager?.getActiveMeta();
-  return {
-    busy,
-    sessionId: meta?.id,
-    sessionName: meta?.name,
-    model: deps.config.model,
-    provider: deps.config.provider?.active,
-    contextUsed: deps.usage?.contextUsed,
-    contextLimit: deps.usage?.contextLimit,
-    costUsd: deps.usage?.costUsd,
-    compactionCount: deps.usage?.compactionCount,
-    cacheHitRate: deps.usage?.cacheHitRate,
-    contextQuality: deps.usage?.contextQuality,
-    contextProbe: deps.contextProbe,
-    workspace: deps.workspace,
-    instructions: deps.instructions,
-    projectMap: deps.projectMap ?? undefined,
-    plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
-  };
-}
-/**
  * Start the browser UI. The state is created first, then the `WebHost`, then the
  * server — so the busy flag is shared end-to-end.
  */
@@ -231,32 +165,15 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     toolCtx: deps.toolCtx,
   });
 
-  // Model list cache: the endpoint is synchronous, the provider call is not.
-  // Refresh once at startup (best-effort) and again on every reconfigure so the
-  // list follows the active provider instead of going stale.
-  const modelCache: string[] = [];
-  const refreshModels = async (): Promise<void> => {
-    try {
-      const cfg = deps.config;
-      const name = cfg.provider.active || cfg.provider.entries?.[0]?.label || cfg.provider.type;
-      const provider = deps.agent.getProviderFor(name);
-      if (!provider) return;
-      const models = await provider.listModels();
-      modelCache.splice(0, modelCache.length, ...models.slice().sort());
-    } catch {
-      // Offline provider: keep the previous list rather than failing.
-    }
-  };
-  if (deps.knownModels) {
-    state.knownModels = deps.knownModels;
-  } else {
-    state.knownModels = () => modelCache;
-    void refreshModels();
-  }
+  // Model list: an explicit source wins; otherwise a background cache that
+  // follows the active provider (refreshed on every reconfigure).
+  const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
+  state.knownModels = deps.knownModels ?? modelCache!.get;
+  if (modelCache) void modelCache.refresh();
   state.reconfigure = makeReconfigure(
     state,
     deps.agent,
-    deps.knownModels ? undefined : refreshModels,
+    modelCache ? () => modelCache.refresh() : undefined,
   );
 
   const forwarder = makeForwarder(state);
@@ -275,90 +192,19 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       });
   }
 
-  // `ToolEvent` is renderer-oriented and carries no id. Synthesize one per
-  // `start` and match it on `end` (LIFO per tool name) so the browser can pair
-  // tool_start/tool_end cards (correction #1).
-  const pendingIds = new Map<string, string[]>();
-  let toolSeq = 0;
-  const startId = (tool: string): string => {
-    const id = `t${++toolSeq}`;
-    const stack = pendingIds.get(tool) ?? [];
-    stack.push(id);
-    pendingIds.set(tool, stack);
-    return id;
-  };
-  const endId = (tool: string): string => pendingIds.get(tool)?.pop() ?? `t-stray-${++toolSeq}`;
-  const callFor = (ev: ToolEvent, id: string): ToolCall => ({
-    id,
-    name: ev.tool,
-    arguments: ev.args,
+  const runAgent = makeRunAgent({
+    agent: deps.agent,
+    state,
+    forwarder,
+    sessionManager: deps.sessionManager,
+    execModule: deps.execModule,
+    contextWindow: deps.config.contextWindow,
   });
-  const resultFor = (ev: ToolEvent): ToolResult => ({
-    success: !ev.error,
-    output: ev.output ?? "",
-  });
-
-  // `AgentResult` has no `interrupted` field and `agent.shutdown()` may still
-  // return `success: true`, so track the interrupt locally. The REPL interrupts
-  // via `agent.shutdown()` (repl.ts `interruptRun`); we match it.
-  let interrupted = false;
-  let toolCalls = 0;
-
-  const runAgent = async (text: string): Promise<unknown> => {
-    interrupted = false;
-    toolCalls = 0;
-    state.agentRunning = true;
-    // Own every event of this turn for the session that started it, so SSE
-    // output routes to the right browser tab even if the user switches tabs.
-    state.activeSessionId = deps.sessionManager?.getActiveMeta()?.id;
-    try {
-      const result = await deps.agent.run(
-        text,
-        (chunk) => forwarder.onText(chunk),
-        (meta) => forwarder.onMeta(meta),
-        (ev) => {
-          if (ev.type === "start") {
-            forwarder.onToolStart(callFor(ev, startId(ev.tool)));
-          } else {
-            toolCalls++;
-            forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
-            // A finished `plan`/`todo` tool refreshes the feed's plan card; the
-            // sidebar keeps its own `/api/state` projection.
-            const plan = planEventFor(ev.tool, deps.execModule);
-            if (plan) forwarder.onPlan(plan);
-          }
-        },
-        (phase) => forwarder.onPhase(phase),
-        (reasoning) => forwarder.onReasoning(reasoning),
-        (critic) => forwarder.onCritic(critic),
-      );
-      // Capture usage before `onTurnEnd` so a `state` broadcast right after the
-      // turn already carries the fresh sidebar metrics (the client also polls
-      // `/api/state`, so this is an optimization, not the only path).
-      state.usage = captureUsage(result, deps.config.contextWindow);
-      forwarder.onTurnEnd({
-        success: result.success,
-        durationMs: result.durationMs,
-        toolCalls,
-        interrupted: interrupted || undefined,
-      });
-      broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
-      return result;
-    } catch (err) {
-      forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
-      throw err;
-    }
-  };
 
   const host = new WebHost({
     isBusy: () => state.agentRunning,
-    runAgent,
-    interrupt: () => {
-      interrupted = true;
-      // Unblock any tool waiting on a browser answer before the turn unwinds.
-      cancelPendingQuestions(state);
-      deps.agent.shutdown();
-    },
+    runAgent: runAgent.run,
+    interrupt: () => runAgent.interrupt(),
     // Slash commands run through the shared handler map; output streams over
     // SSE as `command` events (the HTTP POST only acknowledges acceptance).
     executeCommand: makeWebCommands({ state }),

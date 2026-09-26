@@ -12,6 +12,8 @@
 
 **Branch:** `refactor/webui-decompose` (от `master` после мержа `chore/web-e2e-harness`).
 
+**Решения (2026-09-26):** работаем параллельно (backend + фронт независимыми шагами); фронт — крупные модули (5-7 файлов); CSS разбиваем секциями + заодно мелкие фиксы (`MAX_CLIENTS`, `catch` в delete, i18n для `HELP`).
+
 ---
 
 ## File Structure
@@ -23,7 +25,7 @@
 | `src/modules/webui/body.ts` (new) | `parseJsonBody(req)` — один JSON-парсинг на все POST |
 | `src/modules/webui/persist.ts` (new) | один `persistAndReconfigure(s, cfg)` |
 | `src/modules/webui/module.ts` | только wiring: `wireState / initModelCache / makeRunAgent / makeHost` |
-| `src/modules/webui/assets/js/*.js` (new) | `api.js`, `state.js`, `icons.js`, `i18n.js`, `feed.js`, `tabs.js`, `composer.js`, `settings/*`, `dialog.js` |
+| `src/modules/webui/assets/js/*.js` (new) | крупные модули: `api.js` (+dom-хелперы), `state.js` (+i18n), `feed.js`, `tabs.js` (+composer), `settings.js`, `dialog.js` |
 | `src/modules/webui/assets/app.js` | только `boot()` |
 | tests | существующие `webui-*` + `e2e/web-harness` как регресс |
 
@@ -33,16 +35,11 @@
 
 **Files:** Modify `server.ts`, `util.ts`, `config-api.ts`, `providers-api.ts`, `sessions-api.ts`, `settings-api.ts`; New `routes.ts`, `body.ts`, `persist.ts`.
 
-- [ ] **Step 1: `parseJsonBody` в `body.ts` + тесты**
-  Один хелпер `parseJsonBody(req, cap): Promise<Record<string,unknown>>` (400 invalid JSON / 413 через `readBodyError`). Покрыть прямым unit-тестом.
-- [ ] **Step 2: заменить 8 мест ручного `JSON.parse`**
-  `config-api`, `providers-api`, `sessions-api` (create/activate), `settings-api` (memory/mcp), `server.ts` (`/api/command`) — на `parseJsonBody`. `bun test tests/webui-config.test.ts tests/webui-providers.test.ts tests/webui-settings.test.ts`
-- [ ] **Step 3: единый `persistAndReconfigure`**
-  Вынести из `providers-api.ts:307` в `persist.ts`, удалить копию в `config-api.ts:129`. Оба места используют его.
-- [ ] **Step 4: таблица роутов в `server.ts`**
-  `handleApi` if-chain → `ROUTES` map (метод+путь → handler); `handleSessionsApi/SettingsApi/ProvidersApi` остаются как группы, регистрируемые в таблице. Правило #17 соблюдено везде.
-- [ ] **Step 5: мелочи**
-  `MAX_CLIENTS` читать в `createWebUiState()`, не на import-time; `handleProvidersDelete` — добавить `catch` (сейчас `void ... .then()` без обработки).
+- [x] **Step 1: `parseJsonBody` в `body.ts` + тесты** (done: `body.ts` + `tests/webui-body.test.ts`)
+- [x] **Step 2: заменить 12 мест ручного `JSON.parse`** (done: answer/config/providers/sessions×2/settings×2/setup×4/server-command)
+- [x] **Step 3: единый `persistAndReconfigure`** (done: `persist.ts`, используют config/providers/setup)
+- [x] **Step 4: таблица роутов в `server.ts`** (done: `API_ROUTES` + `API_GROUPS`, `handleCommandPost`/`handleInterruptPost` вынесены; server 326→293)
+- [x] **Step 5: мелочи** (done: `maxClients` в `createWebUiState()`; `catch` в delete; сверх плана: view-слой → `providers-view.ts`, providers-api 352→251)
 
 Run: `bun test tests/webui-*.test.ts` + `bunx tsc --noEmit`. Каждый файл ≤300 строк.
 
@@ -92,9 +89,10 @@ Run после каждого: `bun run web:dev` вручную + `bun run test:
 
 ---
 
-## Phase 5 (опционально): `styles.css` (1047 строк)
+## Phase 5: `styles.css` (1047 строк) + мелочи (в скоупе)
 
-- [ ] Разбить по секциям комментариями (feed/composer/settings/dialogs) или на `base/feed/settings/dialogs.css` с `@import`. Только если Phase 3-4 прошли гладко.
+- [ ] Разбить по секциям комментариями (feed/composer/settings/dialogs), без смены стилей
+- [ ] Мелочи: `MAX_CLIENTS` в `createWebUiState()`; `catch` в `handleProvidersDelete`; `HELP` в `commands.ts` → ключи i18n
 
 ---
 
