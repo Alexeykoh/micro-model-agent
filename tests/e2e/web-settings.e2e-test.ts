@@ -26,12 +26,18 @@ const PANELS = [
   "context",
   "reasoning",
   "agent",
+  "network",
+  "browser",
+  "persistence",
+  "retry",
+  "lists",
   "ui",
   "memory",
   "skills",
   "plugins",
   "security",
   "advanced",
+  "advanced-json",
 ];
 
 async function openSettings(page: Launched["page"]): Promise<void> {

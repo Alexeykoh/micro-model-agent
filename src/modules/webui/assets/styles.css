@@ -412,6 +412,9 @@ body.light .imgcard .ph { background: var(--ph-light); }
 .startbanner b { font-weight: 400; color: var(--dim-a); }
 .errline { color: var(--err); padding-left: 26px; overflow-wrap: anywhere; }
 .errline .hint { color: var(--dim-a); display: block; }
+/* settings JSON validation hint — own class so global `.errline` queries
+   (chat turn errors, e2e) never match hidden settings rows. */
+.json-err { color: var(--err); overflow-wrap: anywhere; }
 .grouped { color: var(--dim-a); padding-left: 8px; overflow-wrap: anywhere; }
 .grouped .pipe { color: var(--pipe); }
 .msgs .busy { color: var(--think); display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }

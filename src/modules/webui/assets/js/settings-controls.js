@@ -80,7 +80,7 @@ export function controlFor(def, value, ctx) {
     area.setAttribute("aria-label", ctx.label);
     area.rows = 3;
     area.value = value == null ? "" : JSON.stringify(value, null, 2);
-    const err = el("div", "errline");
+    const err = el("div", "json-err");
     err.hidden = true;
     area.addEventListener("input", () => {
       const r = validateJson(area.value);
