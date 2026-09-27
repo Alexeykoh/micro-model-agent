@@ -217,9 +217,12 @@ const SECTION_KEYS = {
   reasoning: ["showReasoning", "reasoning.mode"],
   security: [
     "security.enabled",
+    "security.bash.enabled",
+    "security.bash.blockDangerousFlags",
     "security.paths.enabled",
     "security.contentScan.enabled",
     "security.sessionEncryption.enabled",
+    "security.network.enabled",
   ],
   advanced: ["logLevel", "version"],
   agent: [

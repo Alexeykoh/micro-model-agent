@@ -80,7 +80,7 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
 }
 
 /** Top-level + nested security toggles, all read live by the tools. */
-type SecurityToggle = "enabled" | "paths" | "contentScan" | "sessionEncryption";
+type SecurityToggle = "enabled" | "bash" | "paths" | "contentScan" | "sessionEncryption" | "network";
 
 function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef {
   return {
@@ -324,9 +324,23 @@ const DEFINITIONS: ConfigKeyDef[] = [
     get: (c) => c.version,
   },
   securityToggle("enabled", "security.enabled"),
+  securityToggle("bash", "security.bash.enabled"),
+  {
+    key: "security.bash.blockDangerousFlags",
+    aliases: [],
+    domain: "security",
+    valueType: "bool",
+    reconfigure: false,
+    get: (c) => c.security?.bash.blockDangerousFlags ?? true,
+    set: (c, v) => {
+      if (!c.security) c.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      c.security.bash.blockDangerousFlags = v as boolean;
+    },
+  },
   securityToggle("paths", "security.paths.enabled"),
   securityToggle("contentScan", "security.contentScan.enabled"),
   securityToggle("sessionEncryption", "security.sessionEncryption.enabled"),
+  securityToggle("network", "security.network.enabled"),
   ...EXTRA_DEFS,
 ];
 

@@ -78,4 +78,15 @@ describe("registry list/json types", () => {
     expect(setConfigValue(cfg, "provider.maxCompletionTokens", "100").ok).toBe(false);
     expect(setConfigValue(cfg, "provider.maxCompletionTokens", "8192").ok).toBe(true);
   });
+  it("resolves bash/network master toggles", async () => {
+    const { resolveConfigKey, setConfigValue, getConfigValue } = await import("../src/config/registry");
+    const { DEFAULTS } = await import("../src/config/defaults");
+    for (const k of ["security.bash.enabled", "security.network.enabled", "security.bash.blockDangerousFlags"]) {
+      expect(resolveConfigKey(k)).not.toBeNull();
+    }
+    const cfg = structuredClone(DEFAULTS);
+    expect(setConfigValue(cfg, "security.bash.enabled", "off").ok).toBe(true);
+    const g = getConfigValue(cfg, "security.bash.enabled");
+    expect(g.ok && (g as { display: string }).display).toBe("off");
+  });
 });
