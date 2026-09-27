@@ -93,15 +93,16 @@ describe("web e2e: settings", () => {
         const titleBefore = await page.textContent("#settingsTitle");
         await page.click('#setMenu [data-p="general"]');
         // Locale is the first row; labels localize after the switch, so the
-        // way back is "the inactive option", not English text.
-        const otherLocale = () =>
-          page.locator('[data-panel="general"] .row').first().locator(".seg button:not(.on)");
-        await page.locator('[data-panel="general"] .seg button', { hasText: "Russian" }).click();
+        // way back is by value, not visible text. (Enum renders as <select>
+        // since full-config-surfaces; was `.seg button` before.)
+        const localeSel = () =>
+          page.locator('[data-panel="general"] .row').first().locator("select");
+        await localeSel().selectOption("ru");
         await expect
           .poll(() => page.textContent("#settingsTitle"), { timeout: 15_000 })
           .not.toBe(titleBefore);
         expect(await page.evaluate(() => document.documentElement.lang)).toBe("ru");
-        await otherLocale().click();
+        await localeSel().selectOption("en");
         await expect
           .poll(() => page.textContent("#settingsTitle"), { timeout: 15_000 })
           .toBe(titleBefore);
