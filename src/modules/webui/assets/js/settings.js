@@ -11,6 +11,7 @@ import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
+import { controlFor, EXTRA_SECTIONS } from "./settings-controls.js";
 
 function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
@@ -231,6 +232,12 @@ const SECTION_KEYS = {
   ],
 };
 
+// New registry keys (generic controls + extra sections) live in
+// `settings-controls.js`; merge additively so existing order is preserved.
+for (const [name, keys] of Object.entries(EXTRA_SECTIONS)) {
+  SECTION_KEYS[name] = [...(SECTION_KEYS[name] || []), ...keys];
+}
+
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
 function configLabel(def) {
@@ -273,55 +280,15 @@ function descFor(key) {
   return d === k ? "" : d;
 }
 
+// Generic per-type control (`settings-controls.js`): bool toggle, enum
+// select, int/share/list/json inputs. `post` funnels through `postConfig`.
 function configControl(def, key) {
   const value = S.state.config ? getPath(S.state.config, key) : undefined;
-  if (def.valueType === "bool") {
-    return makeToggle(!!value, (next) => {
-      postConfig(key, next, false);
-      return true;
-    });
-  }
-  if (def.valueType === "enum") {
-    const seg = el("span", "seg");
-    (def.enum || []).forEach((v) => {
-      const b = el("button", v === value ? "on" : "", enumLabel(v));
-      b.type = "button";
-      b.setAttribute("aria-pressed", v === value ? "true" : "false");
-      b.addEventListener("click", () => {
-        seg.querySelectorAll("button").forEach((x) => {
-          x.classList.remove("on");
-          x.setAttribute("aria-pressed", "false");
-        });
-        b.classList.add("on");
-        b.setAttribute("aria-pressed", "true");
-        postConfig(key, v, false);
-      });
-      seg.appendChild(b);
-    });
-    return seg;
-  }
-  if (def.readOnly) {
-    const ro = el("span", "val dim", value == null ? "—" : String(value));
-    if (value != null) ro.title = String(value);
-    return ro;
-  }
-  const input = el("input");
-  input.setAttribute("aria-label", configLabel(def));
-  if (def.valueType === "int") {
-    input.type = "number";
-    if (def.min != null) input.min = String(def.min);
-    if (def.max != null) input.max = String(def.max);
-    if (def.step != null) input.step = String(def.step);
-    input.value = value == null ? "" : String(value);
-  } else if (def.valueType === "share") {
-    input.value = value == null ? "" : Math.round(Number(value) * 100) + "%";
-  } else {
-    input.value = value == null ? "" : String(value);
-  }
-  input.addEventListener("change", () => {
-    postConfig(key, input.value, false);
+  return controlFor(def, value, {
+    label: configLabel(def),
+    enumLabel,
+    post: (v) => postConfig(key, v, false),
   });
-  return input;
 }
 
 function renderGenericPanel(name, keys) {
@@ -972,6 +939,12 @@ export function renderSettings() {
   renderGenericPanel("context", SECTION_KEYS.context);
   renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
   renderGenericPanel("agent", SECTION_KEYS.agent);
+  renderGenericPanel("network", SECTION_KEYS.network);
+  renderGenericPanel("browser", SECTION_KEYS.browser);
+  renderGenericPanel("persistence", SECTION_KEYS.persistence);
+  renderGenericPanel("retry", SECTION_KEYS.retry);
+  renderGenericPanel("lists", SECTION_KEYS.lists);
+  renderGenericPanel("advanced-json", SECTION_KEYS["advanced-json"]);
   renderUiPanel();
   renderMemoryPanel();
   renderSkillsPanel();
