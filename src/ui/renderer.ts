@@ -3,20 +3,17 @@ import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
 import {
   actionMarkFor,
-  detailMark,
   failureMark,
   glyph,
   successMark,
   formatDuration,
   toolAccent,
-  warningMark,
   type Verbosity,
 } from "./theme";
 import { recordLastAction } from "./action-log";
 
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
-import type { CriticUiEvent } from "../modules/critic/types";
 import { formatCost } from "../modules/pricing/prices";
 import { getDefaultChannel, type OutputChannel } from "../output";
 import { isAbsolute, relative, sep } from "path";
@@ -526,33 +523,6 @@ export class Renderer {
     this.flushRecon();
     for (const line of lines) {
       this.channel.writeRaw(`${line}\n`);
-    }
-  }
-
-  /**
-   * One-line verifier (critic) verdict. Hidden in `quiet`; `normal` shows the
-   * verdict line, `verbose` adds the one-line summary. The repair/advice
-   * directive itself stays model-facing (injected as `<system-summary>`).
-   */
-  criticVerdict(event: CriticUiEvent): void {
-    if (this.verbosity === "quiet") return;
-    this.spinner.stop();
-    this.fmt.flushPartialNow();
-    this.endCard();
-    this.flushRecon();
-    const critical = event.status === "critical" || event.repair;
-    if (critical) {
-      this.channel.writeRaw(`${warningMark()} ${pc.yellow(t("ui.critic_repair"))}\n`);
-    } else {
-      this.channel.writeRaw(
-        `${pc.dim(glyph.metric)} ${pc.dim(t("ui.critic_concern", { count: String(event.issueCount) }))}\n`,
-      );
-    }
-    if (this.verbosity === "verbose" && event.summary) {
-      const line = event.summary.replace(/\s+/g, " ").trim();
-      this.channel.writeRaw(
-        `${GUTTER}${detailMark()} ${pc.dim(line.length > 160 ? `${line.slice(0, 157)}…` : line)}\n`,
-      );
     }
   }
 

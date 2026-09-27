@@ -133,7 +133,12 @@ async function main(): Promise<void> {
 
   // Quiet chat hides structured info logs; --verbose (or a verbose config)
   // brings them back. Set before bootstrap so its own logs respect it.
-  getDefaultChannel().setSuppressInfoLogs(!verboseOpt);
+  // Loop diagnostics (`Logger.diagnostic`) follow the same visibility rule.
+  const applyLogVisibility = (verbose: boolean): void => {
+    getDefaultChannel().setSuppressInfoLogs(!verbose);
+    getDefaultChannel().setShowDiagnostics(verbose);
+  };
+  applyLogVisibility(verboseOpt);
 
   // `web` is long-running: its command action is a no-op and the server is
   // started here, after parse, so it survives the one-shot exit hook (which is
@@ -211,9 +216,7 @@ async function main(): Promise<void> {
       contextLog,
     );
     if (verboseOpt) config.ui.verbosity = "verbose";
-    getDefaultChannel().setSuppressInfoLogs(
-      !(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose"),
-    );
+    applyLogVisibility(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose");
 
     if (legacyDetected) {
       getDefaultChannel().writeLine(pc.yellow(`  ${t("config.legacy_hint")}`), "stderr");
@@ -306,7 +309,6 @@ async function main(): Promise<void> {
           }
         },
         (reasoning) => renderer.reasoning(reasoning),
-        (critic) => renderer.criticVerdict(critic),
       );
     } catch (err) {
       // A throw from the agent loop must not skip shutdown/updater or dump a
@@ -383,9 +385,7 @@ async function main(): Promise<void> {
       contextProbe,
     } = await bootstrap(undefined, projectDir, noAgentsMd, exitOnComplete, reasoningLevel, contextLog);
     if (verboseOpt) config.ui.verbosity = "verbose";
-    getDefaultChannel().setSuppressInfoLogs(
-      !(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose"),
-    );
+    applyLogVisibility(verboseOpt || config.ui.verbose || config.ui.verbosity === "verbose");
 
     const repl = new Repl(
       agent,

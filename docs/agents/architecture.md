@@ -39,6 +39,15 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
 - **Prompt coordination:** `LineEditor` implements `PromptSink`
   (`printAbove`/`isActive`/`clearScreen`); `suspendFrame`/`resumeFrame` and
   `setInputEnabled` let the agent own the terminal during a stream.
+- **Internal diagnostics:** `Logger.diagnostic(level, msg, meta)` emits the same
+  log event with `data.diagnostic = true` (file logging is unchanged).
+  `OutputChannel.setShowDiagnostics(show)` — off by default — drops those events
+  in `onEvent`, so loop internals (hallucination retries, audit/compaction notes,
+  repeated-tool nudges, critic/MoE internals) reach the chat only when
+  `ui.verbosity === "verbose"`; `webui/log-forward.ts` forwards the flag and the
+  client gates the line the same way. User-facing notices (prompt overflow,
+  provider build errors, killed processes) keep using plain `warn`/`info` and are
+  always shown.
 - **Guard:** `tests/output/no-direct-console.test.ts` parses `src/` and
   `examples/` with the TypeScript AST and fails on any `console.*` or
   `process.stdout/stderr.write`, except the documented allowlist (crash-handler,
@@ -287,8 +296,10 @@ in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the
   (repaired with `jsonrepair` first); the gate catches any verify throw. A broken critic can never
   block the agent.
 - **Config:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (`src/config/defaults.ts`).
-- **Observability:** `critic_verdict` / `critic_escalation` entries in `session.jsonl` via
-  `SessionLogger.logCritic`; no chat line (quiet UI).
+- **Observability:** `critic_check` / `critic_verdict` / `critic_escalation` entries in
+  `session.jsonl` via `SessionLogger.logCritic`, plus a `Logger.diagnostic("info", …)` line that
+  is visible on the terminal/web only at `ui.verbosity === "verbose"`. No chat surface renders
+  the verdict: `Renderer.criticVerdict`, the SSE `critic` event and the UI callback were removed.
 - **Phase 2 (deferred):** dedicated critic provider and a bounded read-only tool-loop. v1 uses the
   active provider and the deterministic evidence pack only.
 

@@ -11,7 +11,13 @@ function gateDeps(history: Array<{ role: string; name?: string; content?: unknow
       input: "опубликуй на npm",
       exitOnComplete: false,
       hasFinalAudit: false,
-      logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        diagnostic: () => {},
+      },
       contextManager: {
         addMessage: (m: { role: string; content: string }) => {
           added.push(m);

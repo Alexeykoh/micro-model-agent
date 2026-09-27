@@ -40,6 +40,11 @@ describe("webui assets", () => {
     expect(a.css).toContain(".busy .busytime");
   });
 
+  it("renders diagnostic log lines only in verbose mode", () => {
+    const a = loadAssets();
+    expect(js(a)).toContain('if (data.diagnostic && verbosity() !== "verbose") return;');
+  });
+
   it("wires the file card's Open link to /api/file in a new tab", () => {
     const a = loadAssets();
     expect(js(a)).toMatch(/el\("a", "fc-open"[\s\S]{0,200}?target = "_blank"/);
@@ -97,10 +102,10 @@ describe("webui assets", () => {
     expect(js(a)).toContain("window.MmaSetup");
   });
 
-  it("wires the critic SSE event and the Agent settings panel (MoE + critic keys)", () => {
+  it("wires the Agent settings panel (MoE + critic keys) without a critic SSE handler", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('["critic", onCritic]');
-    expect(js(a)).toContain("onCritic");
+    expect(js(a)).not.toContain('["critic"');
+    expect(js(a)).not.toContain("onCritic");
     expect(js(a)).toContain("critic.enabled");
     expect(js(a)).toContain("moe.enabled");
     expect(a.html).toContain('data-p="agent"');
@@ -157,5 +162,19 @@ describe("webui assets", () => {
     expect(js(a)).toContain("provider_preset");
     expect(js(a)).toContain("provider_custom");
     expect(a.css).toContain(".pform-field select");
+  });
+
+  it("wires the activity rail above the composer", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="railWrap"');
+    expect(a.html).toContain('role="status" aria-live="polite"');
+    expect(a.css).toContain(".rail-wrap.l-line");
+    expect(a.css).toContain(".rl-track");
+    expect(a.css).toContain(".rl-scan");
+    expect(js(a)).toContain("initRail(");
+    expect(js(a)).toContain("railEvent(");
+    expect(js(a)).toContain('["tool_start", "tool_end", "text", "plan"]');
+    expect(js(a)).toContain('"ui.activityRail"');
+    expect(js(a)).toContain("setBusy(S.state.busy)");
   });
 });

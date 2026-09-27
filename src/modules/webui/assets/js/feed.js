@@ -507,6 +507,9 @@ export function onCommandOutput(text, sid) {
 // `textContent` so nothing untrusted is parsed as HTML.
 export function onLog(data) {
   if (!data || typeof data.text !== "string" || !data.text) return;
+  // Internal loop diagnostics (retry counters, audit/compaction internals) are
+  // session-log material — the chat shows them only in verbose mode.
+  if (data.diagnostic && verbosity() !== "verbose") return;
   const feed = feedForEvent(data.sessionId) || activeFeed();
   if (!feed) return;
   const level = data.level;
@@ -518,29 +521,9 @@ export function onLog(data) {
   if (level === "error" || level === "warn") announce(data.text);
 }
 
-// In-loop critic verdict (concern/critical). Mirrors the terminal verbosity
-// (quiet hides, normal shows one line, verbose adds the summary). The
-// repair/advice directive itself is model-facing and never sent here.
-export function onCritic(data) {
-  if (!data || (data.status !== "concern" && data.status !== "critical")) return;
-  const level = verbosity();
-  if (level === "quiet") return;
-  const feed = feedForEvent(data.sessionId) || activeFeed();
-  if (!feed) return;
-  const critical = data.status === "critical" || data.repair === true;
-  const label = critical
-    ? t("web.critic_repair")
-    : pluralCount("web.critic_concern", Number(data.issueCount) || 0);
-  const line = el("div", critical ? "warnline" : "detail");
-  line.textContent = (critical ? "⚠ " : "⟡ ") + label;
-  appendTo(feed, line);
-  if (level === "verbose" && typeof data.summary === "string" && data.summary) {
-    const detail = el("div", "detail");
-    detail.textContent = "↳ " + data.summary;
-    appendTo(feed, detail);
-  }
-  if (critical) announce(label);
-}
+// In-loop critic verdicts are session-log only (`critic_verdict` in
+// `session.jsonl`): the chat keeps user-facing notices and verbose-mode
+// diagnostics, not verifier verdicts.
 
 function renderAssistantText(feed, text) {
   const raw = String(text == null ? "" : text);

@@ -336,7 +336,11 @@ function applyConfigSideEffects(
   result: ConfigSetResult & { ok: true },
 ): void {
   if (result.key === "ui.verbosity") {
-    ctx.output.setSuppressInfoLogs((result.value as string) === "quiet");
+    // Mirror the startup rule (`main.ts`): structured info logs and loop
+    // diagnostics are chat-visible only in verbose mode.
+    const verbose = (result.value as string) === "verbose";
+    ctx.output.setSuppressInfoLogs(!verbose);
+    ctx.output.setShowDiagnostics(verbose);
   } else if (result.key === "reasoning.mode") {
     ctx.agent.setReasoningLevel(result.value as "auto" | "default" | "none" | "low" | "medium" | "high" | "max");
   } else if (result.key === "locale") {

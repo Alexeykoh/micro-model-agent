@@ -6,7 +6,9 @@
  * summarization). In terminal mode these render above the prompt; in web mode
  * nothing forwarded them, so a slow first-run summarization looked like a
  * silent hang. This subscribes to the bus and re-broadcasts the interesting
- * levels as SSE `log` events. `debug` is dropped (terminal-only noise).
+ * levels as SSE `log` events. `debug` is dropped (terminal-only noise); loop
+ * diagnostics are forwarded with `diagnostic: true` and only rendered by the
+ * client in verbose mode.
  *
  * Secrets are redacted with the same point-redaction used elsewhere in the
  * web transport; the browser renders `text` via `textContent`.
@@ -33,6 +35,8 @@ export function installOutputForwarding(
         level: ev.level,
         source: ev.source,
         text: redactContextSecrets(ev.text),
+        // Loop diagnostics are chat-visible only at verbose (client-side gate).
+        diagnostic: ev.data?.diagnostic === true,
       },
       state,
     );

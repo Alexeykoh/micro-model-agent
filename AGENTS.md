@@ -215,6 +215,14 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Упавшие тулы** — в чат идёт только первая непустая строка ошибки (`compactToolError`, `src/core/agent/tool-output.ts`), а не весь model-facing `result.output` с `Hint:`/recovery-директивами.
 - **Спиннеры** — `Renderer` анимирует выполнение тулов (`read_file`/`write_file`/`edit_file`/`bash`/…) и перезапускается на каждой фазе `thinking`; интерактивные (`question`, `approve`) — без спиннера.
 
+### Internal Diagnostics (2.11.0)
+
+- **`Logger.diagnostic(level, msg, meta)`** (`src/logger/app-logger.ts`) — единственная точка для внутренних диагностик петли (hallucination-retry, audit/compaction-инсайды, nudge'и на повторный вызов тула, MoE/critic-внутренности, `LLM warning`). Файловая запись (`<session>/*.log`, `app.jsonl`) не меняется; событие в `OutputBus` получает `data: { diagnostic: true }`.
+- **Терминал:** `OutputChannel.setShowDiagnostics(show)` (дефолт `false`) дропает события с `data.diagnostic` ещё в `onEvent`. Флаг включается только при `ui.verbosity === "verbose"`: на старте — `applyLogVisibility()` (`src/cli/main.ts`), в сессии — `/config ui.verbosity` (`repl-commands.ts`); там же правило для `info`-логов (тоже только verbose).
+- **Web:** `log-forward.ts` пробрасывает `diagnostic` в SSE `log`; `feed.js onLog` рендерит строку только при `verbosity() === "verbose"`.
+- **В чате остаётся только пользовательское**: prompt overflow, `error.provider_build`, `env.killed_processes`, `moe.no_orchestrator`/`moe.plan_failed` — они шлются обычным `logger.warn/info`, а не `diagnostic`.
+- **Вердикт критика в чат не рисуется** — `Renderer.criticVerdict` и SSE `critic` удалены (см. Counter-Agent).
+
 ### Agent Output Fidelity (0.63.2)
 
 - **Обрезание по completion-лимиту** — `max_tokens` (default 8192) шлётся всегда. Если модель уже стримила текст и упёрлась в `finish_reason: "length"`, провайдер теперь отдаёт non-fatal `warning`-чанк (`src/llm/openai-compat.ts`, стрим + non-stream), а агент рендерит его в чат (не попадает в текст ответа/контекст). Обрыв на tool_call/пустом ответе по-прежнему идёт recoverable-ошибкой. Ключ i18n: `error.llm_output_truncated`.
@@ -501,8 +509,9 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`);
   доступны в `/config` и web settings (Advanced), вместе с `moe.enabled`/`moe.maxReplanCycles`.
 - **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
-  (`SessionLogger.logCritic`). Визуально: одна строка вердикта при `ui.verbosity ≥ normal`
-  (терминал — `Renderer.criticVerdict`; web — SSE `critic`), в `quiet` скрыта, в `verbose` +summary;
+  (`SessionLogger.logCritic`) + диагностическая строка `Logger.diagnostic("info", …)` — видна в терминале/web
+  только при `ui.verbosity === "verbose"`. **В чат вердикт не рисуется:** `Renderer.criticVerdict`,
+  SSE `critic`, UI-колбэк `onCritic` и ключи i18n `ui.critic_*`/`web.critic_*` удалены;
   model-facing repair/advice (`<system-summary>`) в чат не попадает. v1 использует активный провайдер +
   детерминированный evidence pack.
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)

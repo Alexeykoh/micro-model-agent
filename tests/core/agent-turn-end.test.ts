@@ -76,6 +76,7 @@ function createMockDeps(chatImpl?: () => AsyncGenerator<any>) {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    diagnostic: vi.fn(),
     logLLMRequest: vi.fn(),
     logLLMResponse: vi.fn(),
     logToolCall: vi.fn(),

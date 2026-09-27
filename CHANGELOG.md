@@ -4,6 +4,14 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Internal loop diagnostics are verbose-only** (`src/logger/app-logger.ts`, `src/output/channel.ts`, `src/cli/main.ts`, `src/cli/repl-commands.ts`): new `Logger.diagnostic(level, msg, meta)` marks loop internals (hallucination retries, audit/compaction notes, repeated-tool nudges, MoE/critic internals, `LLM warning`) with `data.diagnostic` on the output bus. `OutputChannel.setShowDiagnostics()` drops them unless `ui.verbosity === "verbose"`, so chat shows user-facing notices only; file logging (`.log`, `app.jsonl`) is unchanged and diagnostics stay diagnosable. `/config ui.verbosity` now also hides `info` logs outside verbose, matching the startup rule.
+- **Critic verdict no longer renders in chat** (`src/core/agent/critic-gate.ts`, `src/ui/renderer.ts`, `src/modules/webui/forward.ts`, `assets/app.js`, `assets/js/feed.js`): `Renderer.criticVerdict`, the SSE `critic` event, the `onCritic` UI callback and the `ui.critic_*`/`web.critic_*` i18n keys are removed. The verdict remains in `session.jsonl` (`critic_check`/`critic_verdict`/`critic_escalation`) and as a verbose diagnostic line; model-facing repair/advice still goes through `<system-summary>` only.
+- **Hallucination uncertainty line follows the same rule** (`src/core/agent/hallucination-gate.ts`): the `[⚠️ Uncertainty]` meta line is rendered only in verbose mode; the model still receives the retry context.
+
 ## [2.10.0] - 2026-09-27
 
 ### Added

@@ -102,6 +102,23 @@ describe("Logger", () => {
     logger.logSilent("warn", "quiet");
     expect(events).toHaveLength(0);
   });
+
+  it("marks diagnostic events on the bus while normal logs stay unmarked", () => {
+    const bus = new OutputBus();
+    const events = collect(bus);
+    const logger = new Logger("info", "agent", bus);
+
+    logger.diagnostic("warn", "hallucination retry 1/3");
+    logger.warn("user-facing notice");
+
+    expect(events[0]).toMatchObject({
+      level: "warn",
+      kind: "log",
+      text: "hallucination retry 1/3",
+      data: { diagnostic: true },
+    });
+    expect(events[1].data).toBeUndefined();
+  });
 });
 
 describe("Logger file-only logging", () => {
@@ -128,6 +145,21 @@ describe("Logger file-only logging", () => {
     expect(content).toContain("silent-msg");
     expect(content).toContain('"type":"env"');
     expect(events).toHaveLength(0);
+  });
+
+  it("diagnostic() flags the bus event and still appends to app.jsonl", () => {
+    const bus = new OutputBus();
+    const events = collect(bus);
+    const logger = new Logger("info", "agent", bus);
+    logger.setLogDir(dir);
+
+    logger.diagnostic("warn", "empty response on iteration 3");
+
+    expect(events).toHaveLength(1);
+    expect(events[0].data).toEqual({ diagnostic: true });
+    expect(readFileSync(join(dir, "app.jsonl"), "utf-8")).toContain(
+      "empty response on iteration 3",
+    );
   });
 
   it("still writes to files when the injected sink throws", () => {

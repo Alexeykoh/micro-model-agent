@@ -21,12 +21,3 @@ export interface EvidencePack {
   commands: Array<{ command: string; exitCode?: number }>;
   toolDigest: string;
 }
-
-/** UI-facing summary of a non-ok critic verdict (terminal + web feed). */
-export interface CriticUiEvent {
-  status: "concern" | "critical";
-  issueCount: number;
-  summary: string;
-  /** True when the verdict triggered a bounded repair cycle. */
-  repair: boolean;
-}

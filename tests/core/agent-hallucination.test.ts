@@ -87,6 +87,7 @@ describe("Agent hallucination reactions", () => {
       info: () => {},
       warn: () => {},
       error: () => {},
+      diagnostic: () => {},
       logLLMRequest: () => {},
       logLLMResponse: () => {},
       initSessionLog: () => {},
@@ -97,7 +98,7 @@ describe("Agent hallucination reactions", () => {
     ...overrides,
   });
 
-  it("should show warn response with uncertainty prefix", async () => {
+  it("keeps the uncertainty warning out of the chat by default", async () => {
     const mockDeps = createMockDeps({
       hallucinationDetector: {
         validate: () => ({
@@ -114,6 +115,34 @@ describe("Agent hallucination reactions", () => {
     });
 
     const agent = new Agent(mockDeps);
+    const metas: string[] = [];
+    const result = await agent.run("test", undefined, (meta) => metas.push(meta));
+
+    expect(result.success).toBe(true);
+    expect(metas.join("")).not.toContain("[⚠️ Uncertainty]");
+  });
+
+  it("shows the uncertainty warning only in verbose mode", async () => {
+    const mockDeps = createMockDeps({
+      hallucinationDetector: {
+        validate: () => ({
+          status: "warn" as const,
+          reason: "Uncertainty markers detected",
+        }),
+        getConfidenceCheck: () => ({ setPreviousResponse: () => {} }),
+        getConsistencyCheck: () => ({
+          trackDecision: () => {},
+          trackCreatedFile: () => {},
+          trackDeletedFile: () => {},
+        }),
+      } as any,
+    });
+    const verboseDeps = {
+      ...mockDeps,
+      config: { ...mockDeps.config, ui: { verbosity: "verbose" } },
+    } as any;
+
+    const agent = new Agent(verboseDeps);
     const metas: string[] = [];
     const result = await agent.run("test", undefined, (meta) => metas.push(meta));
 

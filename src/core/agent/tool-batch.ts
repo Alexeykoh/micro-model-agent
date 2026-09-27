@@ -157,7 +157,7 @@ export class ToolBatchExecutor {
           synthesizePendingToolResults();
           throw err;
         }
-        logger.warn(`Tool ${call.name} threw: ${errMsg(err)}`);
+        logger.diagnostic("warn", `Tool ${call.name} threw: ${errMsg(err)}`);
         result = {
           success: false,
           output: `${t("error.prefix")}${errMsg(err)}`,
@@ -309,7 +309,10 @@ export class ToolBatchExecutor {
               `Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
               "Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
             );
-            logger.warn(`Recorded repeated ${key} failures to memory (${prev.count}x)`);
+            logger.diagnostic(
+              "warn",
+              `Recorded repeated ${key} failures to memory (${prev.count}x)`,
+            );
           }
         }
       }
@@ -332,7 +335,7 @@ export class ToolBatchExecutor {
       const recoveryMsg = t("exec.consecutive_failures_recovery", {
         count: state.consecutiveToolFailures,
       });
-      logger.warn(`Consecutive tool failures: ${state.consecutiveToolFailures}`);
+      logger.diagnostic("warn", `Consecutive tool failures: ${state.consecutiveToolFailures}`);
       const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
       const taskReminder = t("exec.task_reminder", { task: taskSnippet });
       contextManager.addMessage({

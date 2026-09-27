@@ -112,6 +112,7 @@ function createMockDeps(overrides: Partial<AgentDeps> = {}) {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      diagnostic: vi.fn(),
       logLLMRequest: vi.fn(),
       logLLMResponse: vi.fn(),
       logToolCall: vi.fn(),
@@ -179,23 +180,20 @@ describe("Agent in-loop critic", () => {
     expect(t.provider.chat).toHaveBeenCalledTimes(2);
   });
 
-  it("notifies the UI once per fresh verdict", async () => {
+  it("reports a fresh verdict through diagnostics instead of a chat UI callback", async () => {
     const verify = vi.fn(async () => ({
       status: "critical" as const,
       summary: "broken",
       issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
     }));
     const t = createMockDeps({ criticOverride: { verify } } as any);
-    const onCritic = vi.fn();
     const agent = new Agent(t.deps);
-    await agent.run("do work", undefined, undefined, undefined, undefined, undefined, onCritic);
+    await agent.run("do work");
 
-    expect(onCritic).toHaveBeenCalledTimes(1);
-    expect(onCritic).toHaveBeenCalledWith({
-      status: "critical",
-      issueCount: 1,
-      summary: "broken",
-      repair: true,
-    });
+    const calls = (t.deps.logger.diagnostic as any).mock.calls as any[];
+    expect(calls.some((c) => c[0] === "info" && String(c[1]).includes("Critic critical: broken"))).toBe(
+      true,
+    );
+    expect(calls.some((c) => String(c[1]).includes("repairing"))).toBe(false);
   });
 });

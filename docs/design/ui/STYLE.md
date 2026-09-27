@@ -92,6 +92,9 @@ Raw `[SECURITY BLOCKED]` text is model-facing and must not reach the chat.
 
 The agent's *cognitive* guidance (nudges, recovery directives, `Hint:` blocks) stays
 in the model context and never renders in the chat; only a one-line summary does.
+Internal loop diagnostics (hallucination retries, audit/compaction notes, critic/MoE
+internals) are `verbose`-only too (`Logger.diagnostic` + `OutputChannel.setShowDiagnostics`)
+— they always stay in the session `.log`/`app.jsonl`.
 
 ## Message patterns
 

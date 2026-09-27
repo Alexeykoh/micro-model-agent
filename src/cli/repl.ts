@@ -853,7 +853,6 @@ export class Repl implements ReplContext, Host {
           }
         },
         (reasoning) => renderer.reasoning(reasoning),
-        (critic) => renderer.criticVerdict(critic),
       );
       renderer.flush();
       if (result.provider && result.model) {

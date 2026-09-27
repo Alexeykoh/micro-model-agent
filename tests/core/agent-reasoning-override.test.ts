@@ -110,6 +110,7 @@ function createDeps(overrides?: Record<string, unknown>) {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      diagnostic: vi.fn(),
       logLLMRequest: vi.fn(),
       logLLMResponse: vi.fn(),
       logToolCall: vi.fn(),

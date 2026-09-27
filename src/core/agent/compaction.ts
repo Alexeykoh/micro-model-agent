@@ -72,7 +72,10 @@ export class CompactionService {
       state.lastForcedCompactionIteration = iteration;
       const result = contextManager.compact();
       if (!result) return;
-      this.deps.logger.warn(`Low context quality (${quality}%) — forced compaction`);
+      this.deps.logger.diagnostic(
+        "warn",
+        `Low context quality (${quality}%) — forced compaction`,
+      );
       this.deps.slog.logCompaction({
         reason: `quality-triggered (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%)`,
         iteration,
@@ -89,7 +92,8 @@ export class CompactionService {
     if (currentTokens <= budget.history) return;
     const result = contextManager.compact();
     if (!result) return;
-    this.deps.logger.warn(
+    this.deps.logger.diagnostic(
+      "warn",
       `Context overflow (${currentTokens} > ${budget.history}), forced compaction`,
     );
     this.deps.slog.logCompaction({

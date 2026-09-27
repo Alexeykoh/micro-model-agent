@@ -15,13 +15,19 @@ function fakeClient(chunks: string[]): ServerResponse {
   } as unknown as ServerResponse;
 }
 
+/** One wired forwarder: a web state with a single chunk-collecting client. */
+function setupForwarding(): { chunks: string[]; bus: OutputBus; off: () => void } {
+  const chunks: string[] = [];
+  const s = createWebUiState();
+  s.clients.add(fakeClient(chunks));
+  const bus = new OutputBus();
+  const off = installOutputForwarding(s, bus);
+  return { chunks, bus, off };
+}
+
 describe("webui log forwarding", () => {
   it("broadcasts OutputBus warn events as `log` SSE events", () => {
-    const s = createWebUiState();
-    const chunks: string[] = [];
-    s.clients.add(fakeClient(chunks));
-    const bus = new OutputBus();
-    const off = installOutputForwarding(s, bus);
+    const { chunks, bus, off } = setupForwarding();
 
     bus.log("warn", "probe.context", "system prompt overflow");
 
@@ -37,11 +43,7 @@ describe("webui log forwarding", () => {
   });
 
   it("redacts secrets in forwarded log text", () => {
-    const s = createWebUiState();
-    const chunks: string[] = [];
-    s.clients.add(fakeClient(chunks));
-    const bus = new OutputBus();
-    installOutputForwarding(s, bus);
+    const { chunks, bus } = setupForwarding();
 
     bus.log("error", "mma", "token sk-1234567890abcdefghij leaked");
 
@@ -51,14 +53,22 @@ describe("webui log forwarding", () => {
   });
 
   it("drops debug-level events", () => {
-    const s = createWebUiState();
-    const chunks: string[] = [];
-    s.clients.add(fakeClient(chunks));
-    const bus = new OutputBus();
-    installOutputForwarding(s, bus);
+    const { chunks, bus } = setupForwarding();
 
     bus.log("debug", "mma", "noise");
 
     expect(chunks.join("")).not.toContain("noise");
+  });
+
+  it("carries the diagnostic flag so the client hides it outside verbose", () => {
+    const { chunks, bus } = setupForwarding();
+
+    bus.log("info", "agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "probe.context", "system prompt overflow");
+
+    const wire = chunks.join("");
+    expect(wire).toContain('"diagnostic":true');
+    expect(wire).toContain('"diagnostic":false');
+    expect(wire.split('"diagnostic":true')).toHaveLength(2);
   });
 });

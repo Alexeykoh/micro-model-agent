@@ -85,6 +85,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    diagnostic: vi.fn(),
     logLLMRequest: vi.fn(),
     logLLMResponse: vi.fn(),
     logToolCall: vi.fn(),
@@ -321,7 +322,8 @@ describe("Agent", () => {
     const agent = new Agent(deps as any);
     await agent.run("do it");
 
-    expect(deps.logger.warn).toHaveBeenCalledWith(
+    expect(deps.logger.diagnostic).toHaveBeenCalledWith(
+      "warn",
       expect.stringContaining("Invalid JSON in tool_call arguments"),
     );
     const addMessage = deps.contextManager.addMessage as any;

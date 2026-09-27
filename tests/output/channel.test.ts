@@ -119,6 +119,18 @@ describe("OutputChannel", () => {
     c.writeLine("banner");
     expect(out.data).toBe("");
   });
+  it("drops diagnostic log events unless setShowDiagnostics is on", () => {
+    const { bus, out, c } = ch();
+    bus.log("warn", "agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "agent", "user-facing notice");
+    expect(out.data).not.toContain("internal retry 1/3");
+    expect(out.data).toContain("user-facing notice");
+
+    out.data = "";
+    c.setShowDiagnostics(true);
+    bus.log("warn", "agent", "internal retry 1/3", { diagnostic: true });
+    expect(out.data).toContain("internal retry 1/3");
+  });
   it("keeps quiet across streaming transitions and restores idle when lifted", () => {
     const { bus, out, c } = ch();
     c.setQuiet(true);

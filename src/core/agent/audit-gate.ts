@@ -54,7 +54,7 @@ export class AuditGate {
 
     const { state, logger, contextManager } = deps;
     state.iterAuditRejection = true;
-    logger.warn(`Final audit incomplete: ${audit.summary}`);
+    logger.diagnostic("warn", `Final audit incomplete: ${audit.summary}`);
 
     const steps = audit.pendingSteps.slice(0, 5).join("; ") || "—";
     contextManager.addMessage({
@@ -70,7 +70,8 @@ export class AuditGate {
     state.lastAuditSummary = audit.summary;
 
     if (state.auditRetries >= MAX_AUDIT_RETRIES || deps.iteration >= deps.maxIterations - 1) {
-      logger.warn(
+      logger.diagnostic(
+        "warn",
         `Final audit still incomplete after ${state.auditRetries} retries — reporting failure`,
       );
       state.auditFailed = true;

@@ -510,67 +510,6 @@ describe("deprecated output wrappers", () => {
   });
 });
 
-describe("criticVerdict", () => {
-  it("shows a line in normal and hides it in quiet", () => {
-    const out = makeOut();
-    const channel = new OutputChannel(new OutputBus(), {
-      out: out.stream,
-      err: out.stream,
-      color: false,
-    });
-    const renderer = new Renderer({
-      rich: false,
-      spinner: false,
-      channel,
-      width: 60,
-      verbosity: "normal",
-    });
-    renderer.criticVerdict({ status: "concern", issueCount: 2, summary: "missing file", repair: false });
-    expect(out.text()).toContain("verifier");
-    expect(out.text()).toContain("2");
-
-    const quietOut = makeOut();
-    const quietChannel = new OutputChannel(new OutputBus(), {
-      out: quietOut.stream,
-      err: quietOut.stream,
-      color: false,
-    });
-    const quiet = new Renderer({
-      rich: false,
-      spinner: false,
-      channel: quietChannel,
-      width: 60,
-      verbosity: "quiet",
-    });
-    quiet.criticVerdict({ status: "critical", issueCount: 1, summary: "boom", repair: true });
-    expect(quietOut.text()).toBe("");
-  });
-
-  it("adds the summary detail in verbose", () => {
-    const out = makeOut();
-    const channel = new OutputChannel(new OutputBus(), {
-      out: out.stream,
-      err: out.stream,
-      color: false,
-    });
-    const renderer = new Renderer({
-      rich: false,
-      spinner: false,
-      channel,
-      width: 120,
-      verbosity: "verbose",
-    });
-    renderer.criticVerdict({
-      status: "critical",
-      issueCount: 1,
-      summary: "result.txt is wrong",
-      repair: true,
-    });
-    expect(out.text()).toContain("repairing");
-    expect(out.text()).toContain("result.txt is wrong");
-  });
-});
-
 describe("quiet repeat folding (ses_muih0ah5)", () => {
   function runBash(renderer: Renderer, duration: number, error = false): void {
     renderer.toolStart("bash", { command: "npm view x version" });

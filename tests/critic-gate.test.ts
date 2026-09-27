@@ -8,7 +8,7 @@ function deps(overrides: Partial<any> = {}) {
   return {
     state,
     iteration: 5,
-    logger: { warn: vi.fn(), info: vi.fn() } as any,
+    logger: { warn: vi.fn(), info: vi.fn(), diagnostic: vi.fn() } as any,
     contextManager: { addMessage: vi.fn() } as any,
     slog: { logCritic: vi.fn() } as any,
     task: "do it",
@@ -69,18 +69,25 @@ describe("CriticGate", () => {
     expect(d.slog.logCritic).toHaveBeenCalledWith("critic_check", expect.objectContaining({ beforeFinish: true, mutations: 3 }));
   });
 
-  it("emits one UI event per non-ok verdict (repair flag on critical)", async () => {
-    const onUi = vi.fn();
+  it("logs one critic_verdict entry per non-ok verdict and keeps it out of the chat", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
-    await gate.evaluate(deps({ onUi }));
-    expect(onUi).toHaveBeenCalledTimes(1);
-    expect(onUi).toHaveBeenCalledWith({ status: "critical", issueCount: 1, summary: "broken", repair: true });
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("retry");
+    const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
+    expect(names).toEqual(["critic_check", "critic_verdict", "critic_escalation"]);
+    expect(d.slog.logCritic).toHaveBeenCalledWith(
+      "critic_verdict",
+      expect.objectContaining({ status: "critical", issueCount: 1, summary: "broken" }),
+    );
+    expect(d.logger.diagnostic).toHaveBeenCalledWith("info", expect.stringContaining("Critic critical: broken"));
   });
 
-  it("does not emit a UI event for ok verdicts", async () => {
-    const onUi = vi.fn();
+  it("does not log a verdict (or diagnostic line) for ok verdicts", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
-    await gate.evaluate(deps({ onUi }));
-    expect(onUi).not.toHaveBeenCalled();
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("pass");
+    const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
+    expect(names).toEqual(["critic_check"]);
+    expect(d.logger.diagnostic).not.toHaveBeenCalled();
   });
 });

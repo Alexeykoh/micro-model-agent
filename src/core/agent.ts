@@ -15,6 +15,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
+import { resolveVerbosity } from "../ui/theme";
 import { join } from "path";
 import { projectMmaDir } from "../config/paths";
 import { PromptBuilder } from "./prompt-builder";
@@ -44,7 +45,6 @@ import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
 import { CriticClient } from "../modules/critic/client";
 import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
-import type { CriticUiEvent } from "../modules/critic/types";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -542,7 +542,6 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
-    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     // Reset shutdown flag from previous interrupt
     this.shutdownRequested = false;
@@ -700,7 +699,7 @@ export class Agent {
               baseDir: this.deps.baseDir,
             },
             input,
-            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic),
+            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning),
             {
               onMeta,
               onTool: countTool,
@@ -710,7 +709,7 @@ export class Agent {
               sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
             },
           )
-        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning, onCritic);
+        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
 
       // In MoE mode the single-agent loop (the only writer of assistant turns)
       // never runs — without this the history ends user→user across turns and
@@ -749,7 +748,6 @@ export class Agent {
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
-    onCritic?: (event: CriticUiEvent) => void,
   ): Promise<AgentResult> {
     const {
       config,
@@ -986,7 +984,8 @@ export class Agent {
               // Логируем и сообщаем модели, чтобы она повторила вызов.
               parsedArgs = {};
               malformedToolArgs++;
-              logger.warn(
+              logger.diagnostic(
+                "warn",
                 `Invalid JSON in tool_call arguments for "${chunk.toolCall.name}" (${chunk.toolCall.arguments.length} chars) — passing {}`,
               );
               slog.logError(
@@ -1011,13 +1010,13 @@ export class Agent {
             // cap). Rendered through the text stream so it lands after the
             // partial line without disturbing markdown formatting; it is NOT
             // added to the assistant context/history.
-            logger.warn(`LLM warning: ${chunk.content}`);
+            logger.diagnostic("warn", `LLM warning: ${chunk.content}`);
             onChunk?.(`\n\n> ⚠️ ${chunk.content}\n`);
           }
         }
       } catch (err: any) {
         if (this.shutdownRequested || err?.name === "AbortError") {
-          logger.info("LLM call aborted (interrupt)");
+          logger.diagnostic("info", "LLM call aborted (interrupt)");
           break;
         }
         // Восстановимые ошибки LLM (например, токен-лимит на середине
@@ -1027,7 +1026,8 @@ export class Agent {
         if (err instanceof LlmError && err.recoverable && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
           state.iterRecoverableLlmError = true;
           state.llmErrorRetries++;
-          logger.warn(
+          logger.diagnostic(
+            "warn",
             `Recoverable LLM error, feeding back (${state.llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
           );
           slog.logError(err.message);
@@ -1137,7 +1137,8 @@ export class Agent {
           // in the result. Mutating tools stay nudge-only in interactive
           // sessions (the user keeps control); status tools, which can never
           // make progress by repeating, hard-stop after a few identical calls.
-          logger.info(
+          logger.diagnostic(
+            "info",
             `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
           );
           contextManager.addMessage({
@@ -1159,7 +1160,8 @@ export class Agent {
             state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS_INTERACTIVE &&
             allStatusTools
           ) {
-            logger.warn(
+            logger.diagnostic(
+              "warn",
               `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
             );
             break;
@@ -1219,7 +1221,8 @@ export class Agent {
         }
 
         if (cycleNudges.length > 0) {
-          logger.info(
+          logger.diagnostic(
+            "info",
             `Perfectionism cycle detected (${cycleNudges.length} target(s) at ${MUTATION_CYCLE_NUDGE_THRESHOLD}+ mutations) — nudging model to finalize`,
           );
           contextManager.addMessage({
@@ -1233,7 +1236,8 @@ export class Agent {
         const churnFile = testChurnFile(state.artifactChurn);
         if (churnFile) {
           state.artifactChurn.nudged = true;
-          logger.info(
+          logger.diagnostic(
+            "info",
             `Test/spec artifact churn: "${churnFile}" repeatedly edited with no production changes — nudging to implement or change approach`,
           );
           contextManager.addMessage({
@@ -1260,6 +1264,8 @@ export class Agent {
         contextManager,
         onMeta,
         onChunk,
+        // The uncertainty warn line is diagnostic: verbose mode only.
+        verbose: resolveVerbosity(this.deps.config.ui) === "verbose",
       });
       if (verdict.action === "block") {
         return {
@@ -1307,7 +1313,8 @@ export class Agent {
       if (!textContent?.trim()) {
         if (state.emptyResponseRetries < MAX_EMPTY_RESPONSE_RETRIES) {
           state.emptyResponseRetries++;
-          logger.warn(
+          logger.diagnostic(
+            "warn",
             `Empty response on iteration ${state.iteration} (retry ${state.emptyResponseRetries}/${MAX_EMPTY_RESPONSE_RETRIES})`,
           );
           contextManager.addMessage({
@@ -1317,7 +1324,8 @@ export class Agent {
           continue;
         }
         state.emptyResponseExhausted = true;
-        logger.warn(
+        logger.diagnostic(
+          "warn",
           `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
         );
       }
@@ -1332,7 +1340,6 @@ export class Agent {
         planSummary: this.deps.planSummary?.() ?? undefined,
         toolEvents: gatherTurnToolEvents(contextManager),
         beforeFinish: true,
-        onUi: onCritic,
       });
       if (criticAction === "retry") {
         state.suppressRepetitionRetry = true;

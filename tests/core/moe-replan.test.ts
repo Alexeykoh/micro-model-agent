@@ -88,7 +88,12 @@ function deps(config: AppConfig) {
     config,
     llmProvider: {} as any,
     toolExecutor: { getRegistry: () => ({ getAll: () => [] }) } as any,
-    logger: { debug: () => {}, warn: () => {}, info: () => {} } as any,
+    logger: {
+      debug: () => {},
+      warn: () => {},
+      info: () => {},
+      diagnostic: () => {},
+    } as any,
     baseDir: "/tmp/moe-test",
     orchestratorOverride: fakeOrchestrator(),
     executorOverride: fakeExecutor,

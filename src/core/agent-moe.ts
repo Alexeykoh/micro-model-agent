@@ -169,7 +169,7 @@ export async function runWithMoE(
       const applied = applyAutoFixes(currentPlan, validation.autoFixes);
       const retry = validatePlan(applied, config);
       if (!retry.valid) {
-        logger.warn(`MoE plan validation failed: ${retry.errors.join("; ")}`);
+        logger.diagnostic("warn", `MoE plan validation failed: ${retry.errors.join("; ")}`);
         if (cycle === 1) {
           status(t("moe.plan_fallback"));
           return fallback();

@@ -4,7 +4,7 @@ import { I18N, t, loadI18n } from "./js/i18n.js";
 import { S, hooks } from "./js/store.js";
 import {
 onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
-onTurnEnd, onErrorEvent, onCommandOutput, onLog, onCritic, onPlan, onQuestion,
+onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
 showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace,
 feedHasContent, loadHistory,
 } from "./js/feed.js";
@@ -126,7 +126,6 @@ const handlers = [
   ["tool_start", onToolStart],
   ["tool_end", onToolEnd],
   ["plan", onPlan],
-  ["critic", onCritic],
   ["question", onQuestion],
   ["turn_end", onTurnEnd],
   ["log", onLog],

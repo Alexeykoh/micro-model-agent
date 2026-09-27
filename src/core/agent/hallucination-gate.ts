@@ -29,6 +29,8 @@ export interface HallucinationGateDeps {
   contextManager: ContextManager;
   onMeta?: (meta: string) => void;
   onChunk?: (chunk: string) => void;
+  /** Chat verbosity — the uncertainty warn line prints only in verbose mode. */
+  verbose: boolean;
 }
 
 /**
@@ -80,12 +82,12 @@ export class HallucinationGate {
     const result = await this.detector.validate(textContent);
 
     if (result.status === "block") {
-      logger.warn(`Response blocked: ${result.reason}`);
+      logger.diagnostic("warn", `Response blocked: ${result.reason}`);
       return { action: "block", reason: result.reason || "" };
     }
 
     if (result.status === "warn") {
-      logger.warn(`Hallucination warning: ${result.reason}`);
+      logger.diagnostic("warn", `Hallucination warning: ${result.reason}`);
       this.displayWarnLine(result.reason, deps);
       return { action: "warn" };
     }
@@ -132,18 +134,23 @@ export class HallucinationGate {
       // деградация. Снижаем до предупреждения и пропускаем в acceptance path
       // (сам аудит ограничен MAX_AUDIT_RETRIES).
       state.suppressRepetitionRetry = false;
-      logger.warn(`Audit-triggered re-answer repetition — not counted as hallucination retry`);
+      logger.diagnostic(
+        "warn",
+        `Audit-triggered re-answer repetition — not counted as hallucination retry`,
+      );
       this.displayWarnLine(result.reason, deps);
       return { action: "accept" };
     }
     if (state.hallucinationRetries >= MAX_HALLUCINATION_RETRIES) {
-      logger.warn(
+      logger.diagnostic(
+        "warn",
         `Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
       );
       return { action: "block", reason: t("hall.max_retries_exhausted") };
     }
     state.hallucinationRetries++;
-    logger.warn(
+    logger.diagnostic(
+      "warn",
       `Hallucination retry (${state.hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${result.reason}`,
     );
     if (textContent) {
@@ -179,7 +186,10 @@ export class HallucinationGate {
       tool: contradiction.tool,
       snippet: contradiction.snippet,
     });
-    logger.warn(`Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`);
+    logger.diagnostic(
+      "warn",
+      `Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`,
+    );
     if (textContent) {
       deps.contextManager.addMessage({ role: "assistant", content: textContent });
     }
@@ -190,7 +200,11 @@ export class HallucinationGate {
     return { action: "retry" };
   }
 
-  private displayWarnLine(reason: string | undefined, deps: HallucinationGateDeps): void {    const warnLine = `${t("hall.uncertainty_prefix").trim()} ${reason ?? ""}`;
+  private displayWarnLine(reason: string | undefined, deps: HallucinationGateDeps): void {
+    // Diagnostic: the chat keeps only user-facing notices; the model still gets
+    // the retry context and the verdict stays in the session/app logs.
+    if (!deps.verbose) return;
+    const warnLine = `${t("hall.uncertainty_prefix").trim()} ${reason ?? ""}`;
     if (deps.onMeta) {
       deps.onMeta(`\n${pc.yellow(warnLine)}\n`);
     } else if (deps.onChunk) {

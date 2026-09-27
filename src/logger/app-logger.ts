@@ -127,7 +127,22 @@ export class Logger {
     this.log("error", msg, meta);
   }
 
-  private log(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
+  /**
+   * Internal loop diagnostic (hallucination retries, audit/compaction internals,
+   * critic verdicts, …). Same file/`app.jsonl` persistence as `warn`/`info`, but
+   * the bus event carries `data.diagnostic = true` so chat surfaces drop it
+   * unless `ui.verbosity === "verbose"`.
+   */
+  diagnostic(level: Exclude<LogLevel, "debug">, msg: string, meta?: Record<string, unknown>): void {
+    this.log(level, msg, meta, true);
+  }
+
+  private log(
+    level: LogLevel,
+    msg: string,
+    meta?: Record<string, unknown>,
+    diagnostic?: boolean,
+  ): void {
     if (LEVELS[level] < LEVELS[this.level]) return;
 
     // Sanitize log message to remove sensitive data
@@ -139,7 +154,13 @@ export class Logger {
 
     const line = `${sanitizedMsg}${metaStr}`;
     try {
-      this.sink.emit({ level, source: this.prefix || "mma", kind: "log", text: line });
+      this.sink.emit({
+        level,
+        source: this.prefix || "mma",
+        kind: "log",
+        text: line,
+        data: diagnostic ? { diagnostic: true } : undefined,
+      });
     } catch {
       /* terminal output is best-effort; file logging below must still run */
     }

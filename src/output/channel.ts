@@ -43,6 +43,12 @@ export class OutputChannel {
    * blocks (help, status, command output) are unaffected.
    */
   private suppressInfoLogs = false;
+  /**
+   * Show `data.diagnostic` log events (internal loop diagnostics) on the
+   * terminal. Off by default: diagnostics stay in `.log`/`app.jsonl` and only
+   * surface in chat at `ui.verbosity === "verbose"`.
+   */
+  private showDiagnostics = false;
 
   constructor(
     private bus: OutputBus = defaultOutputBus,
@@ -125,6 +131,11 @@ export class OutputChannel {
     this.suppressInfoLogs = suppress;
   }
 
+  /** Show internal diagnostics (`Logger.diagnostic`) — verbose mode only. */
+  setShowDiagnostics(show: boolean): void {
+    this.showDiagnostics = show;
+  }
+
   writeRaw(text: string, stream: OutputStream = "stdout"): void {
     // Raw output must never jump ahead of queued block lines.
     this.flushBlocks();
@@ -165,10 +176,30 @@ export class OutputChannel {
     this.err.write(text);
   }
 
-  private onEvent(ev: OutputEvent): void {
-    if (this.mode === "quiet") return;
+  /** Modes and log filters that keep an event off the terminal. */
+  private shouldDrop(ev: OutputEvent): boolean {
+    if (this.mode === "quiet") return true;
     // Structured info logs are diagnostics, not chat: quiet mode hides them.
-    if (this.suppressInfoLogs && ev.kind === "log" && ev.level === "info") return;
+    if (this.suppressInfoLogs && ev.kind === "log" && ev.level === "info") return true;
+    // Internal loop diagnostics are session-log material, not chat: only
+    // verbose mode (setShowDiagnostics) puts them on the terminal.
+    if (!this.showDiagnostics && ev.kind === "log" && ev.data?.diagnostic === true) return true;
+    return false;
+  }
+
+  /** Batch a synchronous burst into one printAbove/render (see blockLines). */
+  private queueBlockLine(line: string): void {
+    // Both streams route above the prompt, otherwise a stderr log writes
+    // directly over the active input frame and skips flushBlocks ordering.
+    if (this.blockLines === null) this.blockLines = [];
+    this.blockLines.push(line);
+    if (this.blockFlushScheduled) return;
+    this.blockFlushScheduled = true;
+    queueMicrotask(() => this.flushBlocks());
+  }
+
+  private onEvent(ev: OutputEvent): void {
+    if (this.shouldDrop(ev)) return;
     if (this.mode === "modal") {
       this.queue.push(ev);
       return;
@@ -180,15 +211,7 @@ export class OutputChannel {
     const stream = ev.stream ?? "stdout";
     const line = ev.kind === "block" ? ev.text : formatEventLine(ev, this.color);
     if (this.mode === "idle" && this.sink?.isActive()) {
-      // Batch a synchronous burst into one printAbove/render (see blockLines).
-      // Both streams route above the prompt, otherwise a stderr log writes
-      // directly over the active input frame and skips flushBlocks ordering.
-      if (this.blockLines === null) this.blockLines = [];
-      this.blockLines.push(line);
-      if (!this.blockFlushScheduled) {
-        this.blockFlushScheduled = true;
-        queueMicrotask(() => this.flushBlocks());
-      }
+      this.queueBlockLine(line);
       return;
     }
     // Preserve FIFO ordering: buffered blocks must not be overtaken by an
