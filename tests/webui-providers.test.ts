@@ -232,8 +232,38 @@ describe("webui providers REST", () => {
     });
   });
 
-  it("requires a token when one is configured", async () => {
-    const s = createWebUiState();
+  it("upserts provider cache + completion caps", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { DEFAULTS } = await import("../src/config/defaults");
+    const cfg = structuredClone(DEFAULTS);
+    const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://x/v1", maxCompletionTokens: 16384, cache: { mechanism: "local" } } as never);
+    expect(r.ok).toBe(true);
+    const entries = cfg.provider.entries ?? [];
+    expect(entries.length).toBeGreaterThan(0);
+    const last = entries[entries.length - 1];
+    expect(last.maxCompletionTokens).toBe(16384);
+    expect(last.cache?.mechanism).toBe("local");
+  });
+
+  it("lone legacy-seeded entry + colliding create-POST updates in place (no duplicate, no 409)", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { DEFAULTS } = await import("../src/config/defaults");
+    const cfg = structuredClone(DEFAULTS);
+    const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://new/v1" });
+    expect(r).toEqual({ ok: true, name: "openai-compat" });
+    expect(cfg.provider.entries).toHaveLength(1);
+    expect(cfg.provider.entries?.[0].baseUrl).toBe("http://new/v1");
+  });
+
+  it("multi-entry colliding name without originalName is a name-conflict", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const cfg = testConfig();
+    const r = upsertProvider(cfg, { type: "openai-compat", label: "or", baseUrl: "http://x/v1" });
+    expect(r).toEqual({ ok: false, error: "name-conflict" });
+    expect(cfg.provider.entries).toHaveLength(2);
+  });
+
+  it("requires a token when one is configured", async () => {    const s = createWebUiState();
     s.config = testConfig();
     s.token = "s3cret";
     await withServer(s, async (base) => {

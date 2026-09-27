@@ -79,8 +79,7 @@ describe("webui i18n", () => {
     expect([...enKeys].sort()).toEqual([...ruKeys].sort());
   });
 
-  it("translates every registry key and enum value in both locales", () => {
-    const dicts = getFlatDicts();
+  it("translates every registry key and enum value in both locales", () => {    const dicts = getFlatDicts();
     for (const def of configDefs()) {
       const key = `config.key.${def.key}`;
       expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
@@ -90,6 +89,59 @@ describe("webui i18n", () => {
         expect(typeof dicts.en[ek], `${ek} (en)`).toBe("string");
         expect(typeof dicts.ru[ek], `${ek} (ru)`).toBe("string");
       }
+    }
+  });
+
+  it("names every settings panel in both locales", async () => {
+    // Menu items + panel headers render via t("web.settings." + data-p); a
+    // missing key leaks the raw key into the UI (seen with network/… panels).
+    const { readFileSync } = await import("node:fs");
+    const html = readFileSync(
+      new URL("../src/modules/webui/assets/index.html", import.meta.url),
+      "utf-8",
+    );
+    const panels = [...html.matchAll(/data-p="([a-z0-9-]+)"/g)].map((m) => m[1]);
+    expect(panels.length).toBeGreaterThan(10);
+    const dicts = getFlatDicts();
+    for (const p of new Set(panels)) {
+      const key = `web.settings.${p}`;
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
+    }
+  });
+
+  it("titles and explains every settings section in both locales", async () => {
+    // settings-controls.js is DOM-coupled (via dom.js) — parse the section
+    // table out of the source instead of importing it. `settings.js` adds a few
+    // section titles inline, so scan it too (and `config.field.*` labels).
+    const { readFileSync } = await import("node:fs");
+    const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf-8");
+    const src = read("../src/modules/webui/assets/js/settings-controls.js");
+    const settingsSrc = read("../src/modules/webui/assets/js/settings.js");
+    const titles = [
+      ...[...src.matchAll(/titleKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
+      ...[...settingsSrc.matchAll(/"(web\.settings\.sec\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
+    ];
+    const descs = [...src.matchAll(/descKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]);
+    const fields = [
+      "name",
+      "model",
+      "tool_tags",
+      "max_attempts",
+      "description",
+      "input",
+      "output",
+      "cachedInput",
+      "cacheWrite",
+      "vision",
+      "tools",
+    ].map((f) => `config.field.${f}`);
+    expect(titles.length).toBeGreaterThan(20);
+    expect(descs.length).toBeGreaterThan(15);
+    const dicts = getFlatDicts();
+    for (const key of new Set([...titles, ...descs, ...fields])) {
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
     }
   });
 

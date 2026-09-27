@@ -6,7 +6,7 @@
  *  1. `web boot` — page loads, topbar + composer render, no console errors,
  *     the first-run setup gate stays closed (non-virgin seed).
  *  2. `provider nested dialog` — settings → Model & Provider → "+ add" opens
- *     `#providerOverlay` above the settings modal; Esc closes it; backdrop
+ *     `#subOverlay` above the settings modal; Esc closes it; backdrop
  *     click closes it; filling the form and saving adds the provider to the
  *     list without touching the real `~/.mma`.
  *
@@ -46,26 +46,26 @@ async function checkOverlayChrome(page: Page, dir: string): Promise<void> {
   await page.waitForSelector(".sec-add", { timeout: 10_000 });
 
   await page.click(".sec-add");
-  await page.waitForSelector("#providerOverlay.open", { timeout: 10_000 });
+  await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
   expect(await page.locator("#overlay.open").count()).toBe(1);
   await page.screenshot({ path: join(dir, "dialog-open.png") });
 
   await page.keyboard.press("Escape");
-  await page.waitForSelector("#providerOverlay.open", { state: "hidden", timeout: 10_000 });
+  await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
   expect(await page.locator("#overlay.open").count()).toBe(1);
 
   await page.click(".sec-add");
-  await page.waitForSelector("#providerOverlay.open", { timeout: 10_000 });
+  await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
   await page.mouse.click(5, 5);
-  await page.waitForSelector("#providerOverlay.open", { state: "hidden", timeout: 10_000 });
+  await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
 }
 
 /** Fill the provider form, save, and assert the list grew by one. */
 async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promise<string> {
   const before = await page.locator(".provider-item").count();
   await page.click(".sec-add");
-  await page.waitForSelector("#providerOverlay.open", { timeout: 10_000 });
-  const inputs = page.locator("#providerFormHost input");
+  await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
+  const inputs = page.locator("#subHost input");
   const label = `e2e-prov-${Date.now().toString(36)}`;
   await inputs.nth(0).fill("openai-compat");
   await inputs.nth(1).fill(label);
@@ -73,7 +73,7 @@ async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promis
   await page.screenshot({ path: join(dir, "dialog-filled.png") });
   // Save/cancel are <button class="linkbtn"> (see `link()` in assets/app.js).
   await page.locator(".pform-actions button").first().click();
-  await page.waitForSelector("#providerOverlay.open", { state: "hidden", timeout: 10_000 });
+  await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
   await expect.poll(() => page.locator(".provider-item").count(), { timeout: 10_000 }).toBe(before + 1);
   const names = await page.locator(".provider-item").allInnerTexts();
   expect(names.some((t) => t.includes(label))).toBe(true);

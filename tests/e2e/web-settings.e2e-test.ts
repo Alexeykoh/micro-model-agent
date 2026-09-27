@@ -26,6 +26,9 @@ const PANELS = [
   "context",
   "reasoning",
   "agent",
+  "network",
+  "browser",
+  "sessions",
   "ui",
   "memory",
   "skills",
@@ -93,15 +96,16 @@ describe("web e2e: settings", () => {
         const titleBefore = await page.textContent("#settingsTitle");
         await page.click('#setMenu [data-p="general"]');
         // Locale is the first row; labels localize after the switch, so the
-        // way back is "the inactive option", not English text.
-        const otherLocale = () =>
-          page.locator('[data-panel="general"] .row').first().locator(".seg button:not(.on)");
-        await page.locator('[data-panel="general"] .seg button', { hasText: "Russian" }).click();
+        // way back is by value, not visible text. (Enum renders as <select>
+        // since full-config-surfaces; was `.seg button` before.)
+        const localeSel = () =>
+          page.locator('[data-panel="general"] .row').first().locator("select");
+        await localeSel().selectOption("ru");
         await expect
           .poll(() => page.textContent("#settingsTitle"), { timeout: 15_000 })
           .not.toBe(titleBefore);
         expect(await page.evaluate(() => document.documentElement.lang)).toBe("ru");
-        await otherLocale().click();
+        await localeSel().selectOption("en");
         await expect
           .poll(() => page.textContent("#settingsTitle"), { timeout: 15_000 })
           .toBe(titleBefore);
@@ -165,15 +169,19 @@ describe("web e2e: settings", () => {
   );
 
   e2e(
-    "memory UI add and forget",
+    "memory UI add (nested dialog) and forget",
     async () => {
       const dir = artifactsDirFor("settings-memory");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
         await openSettings(page);
         await page.click('#setMenu [data-p="memory"]');
-        await page.locator('[data-panel="memory"] .mem-add select').selectOption("facts");
-        await page.locator('[data-panel="memory"] .mem-add input').fill("e2e ui memory probe");
-        await page.locator('[data-panel="memory"] .mem-add button').click();
+        // Adding opens the shared nested dialog (category + note).
+        await page.locator('[data-panel="memory"] .sec-add').click();
+        const form = page.locator("#subHost .pform");
+        await form.waitFor({ timeout: 10_000 });
+        await form.locator("select").selectOption("facts");
+        await form.locator("textarea").fill("e2e ui memory probe");
+        await form.locator(".pform-actions button").first().click();
         await page.waitForSelector(".mem-entry", { timeout: 10_000 });
         expect(await page.locator(".mem-entry").allInnerTexts()).toEqual(
           expect.arrayContaining([expect.stringContaining("e2e ui memory probe")]),

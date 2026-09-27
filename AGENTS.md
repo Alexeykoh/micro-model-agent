@@ -46,6 +46,9 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - `src/core/agent.ts` — `executeSingleAgentLoop` (~625 строк) держит состояние `Agent`.
 - `src/cli/repl.ts`, `src/ui/line-editor.ts` (DSR-протокол), `src/modules/execution/stuck-detector.ts`,
   `src/modules/execution/module.ts`.
+- `src/config/registry-extra.ts` (~570 строк), `src/modules/webui/settings-api.ts` (~650 строк) —
+  плоские таблицы `ConfigKeyDef`/REST-хендлеров без shared mutable state; нарезка дала бы
+  искусственные швы по доменам без выигрыша (решение 2026-09-27, full-config-surfaces).
 
 ## Git & Branching
 
@@ -390,6 +393,20 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`/memory`** (`src/cli/onboarding-commands.ts`, handler map): overview + `get/set/unset/find/forget`; единая точка просмотра/правки памяти. `mma setup` — мастер провайдера; `mma init` — его устаревший алиас (печатает подсказку `mma setup`); CLI-генерация `AGENTS.md` — `mma agents init`.
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
+
+### Full Config Surfaces (unreleased)
+
+Дизайн: [docs/plans/2026-09-27-full-config-surfaces.md](./docs/plans/2026-09-27-full-config-surfaces.md).
+
+- **`/config` — все ключи** (`src/config/registry.ts` + `registry-extra.ts`): ~110 ключей, типы `string/int/share/bool/enum` + новые `json` (объекты, лимит 20K, `JSON.parse`) и `list` (массивы строк, в REPL — через запятую). `registry.ts` grandfathered (>300 строк) — новые дефы только в `registry-extra.ts`, мердж конкатом в `DEFINITIONS`; `allConfigNames()`/`configDefs()` подхватывают их автоматически (комплитер без правок).
+- **`mma config set <key> <value> [--force]`** (`src/cli/commands.ts`): по умолчанию валидация через `setConfigValue` (bad value → `cli.config_invalid`, запись не пишется); `--force` — сырая запись по dotted-пути без валидации (escape hatch для битых конфигов).
+- **`/security status` + `/security <key> [value]`** (REPL `repl-commands.ts`, web `commands-settings.ts`, handler-maps по правилу #17): read-only сводка (`security · on/off`, `↳`-строки по STYLE.md, без боксов) + запись отдельных ключей через тот же `setConfigValue`. Web HELP/`/api/commands` подхватывает автоматически.
+- **Web settings — IA + generic controls** (`assets/js/settings-controls.js` → `PANEL_SECTIONS` + `controlFor`: bool→toggle, enum→select, int→number, share→%, list→tag-input, json→textarea с inline-ошибкой). Единственный источник правды: **панель → именованные секции**, имя секции обязано описывать её ключи (никаких бакетов «Дополнительно» с чужими ключами). 14 разделов меню (general/model/context/reasoning/agent/network/browser/sessions/ui/memory/skills/plugins/security/advanced); внутри — карточки-секции с заголовком и однострочным пояснением (`sec-title`/`sec-desc`). Счётчиков в меню нет. Панели с кастомным телом (model/ui/memory/skills/plugins/security) рендерят его первым и добирают секции из таблицы. Тесты-сторожа: каждый ключ реестра ровно в одной секции, у каждой секции есть en+ru подпись.
+- **Settings search** (`settings.js`): индекс строится из той же `PANEL_SECTIONS` + i18n-подписей, поэтому поиск не может разойтись с раскладкой. Результат = подпись + панель + dotted-ключ; выбор переключает панель и подсвечивает строку (`.row-flash`). Меню скрывается за результатами, `Esc` очищает.
+- **Структурные редакторы** (`registry-extra.ts` → `ConfigKeyDef.editor`, рендер в `settings-controls.js`): UI-подсказка, как показывать `list`/`json`, не меняя сам ключ. `kind: "tags"` — чипсы с ✕ и полем добавления (bash/paths/network-списки, `tools.defaultTags`, `dangerousPatterns`); `kind: "checkboxes"` — мультивыбор из фиксированного набора (`auditNotifier.eventTypes`); `kind: "table"` — строки-записи с типизированными колонками (`pricing.overrides`, `experts`, `modelCapabilities`; `columns[].array` = колонка-список, `optional` = можно не заполнять). Таблица валидирует запись на клиенте и **не** постит неполную строку. Редакторы постят JSON-строку; `parseConfigValue` для `list` принимает и JSON-массив, и запятые (значения с запятыми, например `a{1,3}`, больше не ломаются). Метаданные отдаются веб-UI в `GET /api/config` (`registry[].editor`).
+- **Один вложенный диалог** (`#subOverlay`/`openSubDialog` в `settings.js`): правка провайдера, MCP-сервера, LSP-сервера **и добавление записи памяти** открывается поверх настроек (не inline), с focus-trap, возвратом фокуса и закрытием по Esc/фону. `hideProviderOverlay`/inline-формы удалены.
+- **Provider form** (`providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool-флагов), `retry{maxRetries,baseDelay,maxDelay}`; зеркалится в legacy при active. Ошибка валидации — существующий `400 invalid-provider`.
+- **MCP CRUD + LSP read/edit** (web, `settings-api.ts`, таблица `API_ROUTES`): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` обязательны), `GET /api/lsp` + `PUT /api/lsp/:lang` (только `enabled/timeout/command/args`; add/remove серверов — JSON вручную, бинарники host-specific). Всё с `restartRequired: true` (эффект со следующего запуска), персист через общий `persistAndReconfigure`.
 
 ### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.4.0)
 

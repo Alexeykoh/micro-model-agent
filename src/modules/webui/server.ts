@@ -24,7 +24,7 @@ import { handleI18nGet } from "./i18n-api";
 import { webCommandList } from "./commands";
 import { handleAnswerPost } from "./answer-api";
 import { handleSessionsApi } from "./sessions-api";
-import { handleSettingsApi } from "./settings-api";
+import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings-api";
 import { handleProvidersApi } from "./providers-api";
 import { handleFileApi } from "./file-api";
 import { handleSetupApi } from "./setup-api";
@@ -109,6 +109,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/models": (_req, res, s) => handleModelsGet(res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (_req, res, s) => handleInterruptPost(res, s),
+  "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
+  "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
 };
 
 /**

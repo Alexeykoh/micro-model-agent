@@ -2,6 +2,7 @@ import type { AppConfig, ReasoningMode } from "./types";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
+import { EXTRA_DEFS } from "./registry-extra";
 
 /**
  * Central registry of user-facing config keys for `/config` and the sugar
@@ -12,7 +13,7 @@ import { setBudgetShare, type BudgetShareKey } from "./budget";
  * the caller's job (`repl-commands.mutateConfig`), keeping one write path.
  */
 
-export type ConfigValueType = "string" | "int" | "share" | "bool" | "enum";
+export type ConfigValueType = "string" | "int" | "share" | "bool" | "enum" | "json" | "list";
 
 export const REASONING_LEVELS = [
   "auto",
@@ -33,6 +34,30 @@ export const LOCALES = ["en", "ru"] as const;
 export type ConfigErrorReason = "unknown-key" | "read-only" | "invalid-value";
 export type ConfigRangeReason = "range" | "combined";
 
+/**
+ * How a `list`/`json` key should be edited in a GUI. The registry stays the
+ * single source of truth for *what* a key holds; this only says how to show it
+ * (a comma string is fine for `tools.defaultTags` but wrong for regexes that
+ * contain commas). Omitted → a plain input (list) or JSON textarea (json).
+ */
+export interface ConfigEditorSpec {
+  /** `tags` = string chips; `checkboxes` = multiselect; `table` = record rows. */
+  kind: "tags" | "checkboxes" | "table";
+  /** Allowed values for `checkboxes`. */
+  options?: readonly string[];
+  /** Column definitions for `table`. The first column is the record key. */
+  columns?: ReadonlyArray<{
+    key: string;
+    /** `number` renders a number input, `bool` a checkbox. Default: text. */
+    type?: "string" | "number" | "bool";
+    optional?: boolean;
+    /** Text column whose schema value is a list (edited comma-separated). */
+    array?: boolean;
+  }>;
+  /** Free-text hint shown in the row adder (e.g. a regex example). */
+  placeholder?: string;
+}
+
 export interface ConfigKeyDef {
   /** Canonical key — literal config.json path. */
   key: string;
@@ -46,6 +71,8 @@ export interface ConfigKeyDef {
   step?: number;
   reconfigure: boolean;
   readOnly?: boolean;
+  /** GUI rendering hint for `list`/`json` values (see {@link ConfigEditorSpec}). */
+  editor?: ConfigEditorSpec;
   get(config: AppConfig): unknown;
   set?(config: AppConfig, value: unknown): void;
   /** Extra validation beyond type/range (e.g. provider entry existence). */
@@ -79,7 +106,7 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
 }
 
 /** Top-level + nested security toggles, all read live by the tools. */
-type SecurityToggle = "enabled" | "paths" | "contentScan" | "sessionEncryption";
+type SecurityToggle = "enabled" | "bash" | "paths" | "contentScan" | "sessionEncryption" | "network";
 
 function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef {
   return {
@@ -323,9 +350,24 @@ const DEFINITIONS: ConfigKeyDef[] = [
     get: (c) => c.version,
   },
   securityToggle("enabled", "security.enabled"),
+  securityToggle("bash", "security.bash.enabled"),
+  {
+    key: "security.bash.blockDangerousFlags",
+    aliases: [],
+    domain: "security",
+    valueType: "bool",
+    reconfigure: false,
+    get: (c) => c.security?.bash.blockDangerousFlags ?? true,
+    set: (c, v) => {
+      if (!c.security) c.security = structuredClone(DEFAULT_SECURITY_CONFIG);
+      c.security.bash.blockDangerousFlags = v as boolean;
+    },
+  },
   securityToggle("paths", "security.paths.enabled"),
   securityToggle("contentScan", "security.contentScan.enabled"),
   securityToggle("sessionEncryption", "security.sessionEncryption.enabled"),
+  securityToggle("network", "security.network.enabled"),
+  ...EXTRA_DEFS,
 ];
 
 const BY_NAME = new Map<string, ConfigKeyDef>();
@@ -368,6 +410,8 @@ export function allConfigNames(): Array<{ name: string; def: ConfigKeyDef; alias
 
 export function formatConfigValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "on" : "off";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object" && value !== null) return JSON.stringify(value);
   return String(value);
 }
 
@@ -409,6 +453,31 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
       if (isPct) n = n / 100;
       if (!Number.isFinite(n) || n < MIN_SHARE || n > MAX_SHARE) return { ok: false, reason: "invalid" };
       return { ok: true, value: n };
+    }
+    case "list": {
+      if (trimmed.length === 0) return { ok: true, value: [] };
+      // Structured editors post a JSON array (values may contain commas, e.g.
+      // regexes like `a{1,3}`); the REPL keeps the comma syntax.
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+            return { ok: true, value: parsed };
+          }
+        } catch {
+          /* fall through to comma splitting */
+        }
+      }
+      const items = trimmed.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      return { ok: true, value: items };
+    }
+    case "json": {
+      if (trimmed.length > 20000) return { ok: false, reason: "invalid" };
+      try {
+        return { ok: true, value: JSON.parse(trimmed) };
+      } catch {
+        return { ok: false, reason: "invalid" };
+      }
     }
   }
 }

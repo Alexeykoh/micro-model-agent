@@ -35,6 +35,7 @@ const HELP: Array<{ usage: string; descKey: string }> = [
   { usage: "/reasoning [show|hide|on|off|level <lvl>]", descKey: "web.command.reasoning" },
   { usage: "/verbose <quiet|normal|verbose>", descKey: "web.command.verbose" },
   { usage: "/context [<tokens>]", descKey: "web.command.context" },
+  { usage: "/security [status|<key> [value]]", descKey: "web.command.security" },
   { usage: "/session list | /session use <id>", descKey: "web.command.session" },
   { usage: "/export [md|json|jsonl]", descKey: "web.command.export" },
   { usage: "/memory [get|set|unset|find|forget]", descKey: "web.command.memory" },

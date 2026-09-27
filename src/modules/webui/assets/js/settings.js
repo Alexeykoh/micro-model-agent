@@ -11,6 +11,7 @@ import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
+import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings-controls.js";
 
 function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
@@ -210,26 +211,9 @@ export function setConnStatus(disconnected) {
   connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
 }
 
-const SECTION_KEYS = {
-  general: ["locale", "ui.verbosity", "maxToolIterations", "stuckThreshold"],
-  context: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"],
-  reasoning: ["showReasoning", "reasoning.mode"],
-  security: [
-    "security.enabled",
-    "security.paths.enabled",
-    "security.contentScan.enabled",
-    "security.sessionEncryption.enabled",
-  ],
-  advanced: ["logLevel", "version"],
-  agent: [
-    "moe.enabled",
-    "moe.maxReplanCycles",
-    "critic.enabled",
-    "critic.maxCalls",
-    "critic.maxRepairCycles",
-    "critic.timeoutMs",
-  ],
-};
+// Panel → named sections lives in `settings-controls.js` (PANEL_SECTIONS).
+// Custom panels (model/ui/browser…) render a bespoke body first and then their
+// sections; purely generic panels (general/context/…) render sections only.
 
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
@@ -273,66 +257,58 @@ function descFor(key) {
   return d === k ? "" : d;
 }
 
+// Generic per-type control (`settings-controls.js`): bool toggle, enum
+// select, int/share/list/json inputs. `post` funnels through `postConfig`.
 function configControl(def, key) {
   const value = S.state.config ? getPath(S.state.config, key) : undefined;
-  if (def.valueType === "bool") {
-    return makeToggle(!!value, (next) => {
-      postConfig(key, next, false);
-      return true;
-    });
-  }
-  if (def.valueType === "enum") {
-    const seg = el("span", "seg");
-    (def.enum || []).forEach((v) => {
-      const b = el("button", v === value ? "on" : "", enumLabel(v));
-      b.type = "button";
-      b.setAttribute("aria-pressed", v === value ? "true" : "false");
-      b.addEventListener("click", () => {
-        seg.querySelectorAll("button").forEach((x) => {
-          x.classList.remove("on");
-          x.setAttribute("aria-pressed", "false");
-        });
-        b.classList.add("on");
-        b.setAttribute("aria-pressed", "true");
-        postConfig(key, v, false);
-      });
-      seg.appendChild(b);
-    });
-    return seg;
-  }
-  if (def.readOnly) {
-    const ro = el("span", "val dim", value == null ? "—" : String(value));
-    if (value != null) ro.title = String(value);
-    return ro;
-  }
-  const input = el("input");
-  input.setAttribute("aria-label", configLabel(def));
-  if (def.valueType === "int") {
-    input.type = "number";
-    if (def.min != null) input.min = String(def.min);
-    if (def.max != null) input.max = String(def.max);
-    if (def.step != null) input.step = String(def.step);
-    input.value = value == null ? "" : String(value);
-  } else if (def.valueType === "share") {
-    input.value = value == null ? "" : Math.round(Number(value) * 100) + "%";
-  } else {
-    input.value = value == null ? "" : String(value);
-  }
-  input.addEventListener("change", () => {
-    postConfig(key, input.value, false);
+  return controlFor(def, value, {
+    label: configLabel(def),
+    enumLabel,
+    emptyLabel: t("config.enum.none"),
+    fieldLabel: (k) => {
+      const kk = "config.field." + k;
+      const tr = t(kk);
+      return tr === kk ? k : tr;
+    },
+    post: (v) => postConfig(key, v, false),
   });
-  return input;
 }
 
-function renderGenericPanel(name, keys) {
-  const container = document.querySelector('[data-panel="' + name + '"]');
-  if (!container) return;
-  container.textContent = "";
-  keys.forEach((key) => {
+// One titled section card: uppercase title + optional one-line explanation,
+// then its setting rows. Titles come from PANEL_SECTIONS so a section name can
+// never drift from the keys under it.
+function sectionCard(section) {
+  const card = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t(section.titleKey)));
+  card.appendChild(head);
+  if (section.descKey) {
+    const d = t(section.descKey);
+    if (d !== section.descKey) card.appendChild(el("div", "sec-desc", d));
+  }
+  const body = el("div", "sec-body");
+  section.keys.forEach((key) => {
     const def = defFor(key);
     if (!def) return;
-    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+    body.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
   });
+  card.appendChild(body);
+  return card;
+}
+
+// Render the PANEL_SECTIONS table for a panel. Panels with custom bodies call
+// this after their own content so bespoke widgets stay on top.
+function renderSections(panel, sections) {
+  const container = document.querySelector('[data-panel="' + panel + '"]');
+  if (!container) return;
+  sections.forEach((section) => container.appendChild(sectionCard(section)));
+}
+
+function renderPanel(panel) {
+  const container = document.querySelector('[data-panel="' + panel + '"]');
+  if (!container) return;
+  container.textContent = "";
+  renderSections(panel, PANEL_SECTIONS[panel] || []);
 }
 
 function providerEntries() {
@@ -388,6 +364,37 @@ function providerInput(value, type, placeholder) {
   if (value != null) input.value = String(value);
   return input;
 }
+
+function providerSelect(options, value) {
+  const sel = el("select");
+  const none = el("option", "", "—");
+  none.value = "";
+  sel.appendChild(none);
+  options.forEach((v) => {
+    const o = el("option", "", v);
+    o.value = v;
+    if (v === value) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (value == null) sel.value = "";
+  return sel;
+}
+
+function providerCheck(value) {
+  const input = el("input");
+  input.type = "checkbox";
+  input.checked = value === true;
+  return input;
+}
+
+const CACHE_FLAG_KEYS = [
+  "sessionHeader",
+  "requestCachePrompt",
+  "requestPromptCacheKey",
+  "requestSessionId",
+  "requestCacheControl",
+  "requestStreamUsage",
+];
 
 // A titled group inside a settings panel (models / providers).
 function settingsSection(titleKey) {
@@ -481,17 +488,49 @@ function providerAdvancedFields(editing) {
   const adv = el("details", "pform-adv");
   adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
   const advGrid = el("div", "pform-grid");
+  const cache = editing.cache || {};
+  const retry = editing.retry || {};
   const f = {
     ctx: providerInput(editing.contextWindow, "number", "32768"),
     prio: providerInput(editing.priority, "number", "0"),
     rpm: providerInput(editing.rpm, "number", "60"),
     par: providerInput(editing.parallel, "number", "1"),
+    maxTokens: providerInput(editing.maxCompletionTokens, "number", "8192"),
+    cacheMech: providerSelect(["auto", "explicit", "local", "none"], cache.mechanism),
+    cacheReport: providerSelect(["openai", "deepseek", "anthropic", "ollama", "none"], cache.report),
+    retryMax: providerInput(retry.maxRetries, "number", "3"),
+    retryBase: providerInput(retry.baseDelay, "number", "1000"),
+    retryMaxD: providerInput(retry.maxDelay, "number", "30000"),
   };
+  f.cacheFlags = CACHE_FLAG_KEYS.map((key) => {
+    const box = providerCheck(cache[key]);
+    const wrap = el("label", "pform-check");
+    wrap.appendChild(box);
+    wrap.appendChild(el("span", "", key));
+    return { key, box, node: wrap };
+  });
   advGrid.appendChild(pfield("web.settings.provider_context", f.ctx));
   advGrid.appendChild(pfield("web.settings.provider_priority", f.prio));
   advGrid.appendChild(pfield("web.settings.provider_rpm", f.rpm));
   advGrid.appendChild(pfield("web.settings.provider_parallel", f.par));
+  advGrid.appendChild(pfield("web.settings.provider_max_tokens", f.maxTokens));
+  advGrid.appendChild(pfield("web.settings.provider_cache_mechanism", f.cacheMech));
+  advGrid.appendChild(pfield("web.settings.provider_cache_report", f.cacheReport));
   adv.appendChild(advGrid);
+  const retryGroup = el("div", "pform-checks");
+  retryGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_retry")));
+  [["maxRetries", f.retryMax], ["baseDelay", f.retryBase], ["maxDelay", f.retryMaxD]].forEach(([key, input]) => {
+    const wrap = el("label", "pform-check");
+    wrap.appendChild(el("span", "", key));
+    input.setAttribute("aria-label", key);
+    wrap.appendChild(input);
+    retryGroup.appendChild(wrap);
+  });
+  adv.appendChild(retryGroup);
+  const flagGroup = el("div", "pform-checks");
+  flagGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_cache_flags")));
+  f.cacheFlags.forEach(({ node }) => flagGroup.appendChild(node));
+  adv.appendChild(flagGroup);
   return { node: adv, ...f };
 }
 
@@ -519,23 +558,41 @@ async function submitProviderForm(f, mode, editing) {
     ["priority", f.prio, 0],
     ["rpm", f.rpm, 1],
     ["parallel", f.par, 1],
+    ["maxCompletionTokens", f.maxTokens, 512, 128000],
+    ["maxRetries", f.retryMax, 0, 10],
+    ["baseDelay", f.retryBase, 0, 60000],
+    ["maxDelay", f.retryMaxD, 0, 300000],
   ];
+  const retry = {};
   for (const entry of nums) {
     const raw = entry[1].value.trim();
     if (!raw) continue;
     const n = Number(raw);
-    if (!Number.isInteger(n) || n < entry[2]) {
+    const max = entry[3] === undefined ? Number.MAX_SAFE_INTEGER : entry[3];
+    if (!Number.isInteger(n) || n < entry[2] || n > max) {
       setIndicator(t("web.settings.provider_invalid"), true);
       return;
     }
-    body[entry[0]] = n;
+    if (entry[0] === "maxRetries" || entry[0] === "baseDelay" || entry[0] === "maxDelay") {
+      retry[entry[0]] = n;
+    } else {
+      body[entry[0]] = n;
+    }
   }
+  if (Object.keys(retry).length) body.retry = retry;
+  const cache = {};
+  if (f.cacheMech.value) cache.mechanism = f.cacheMech.value;
+  if (f.cacheReport.value) cache.report = f.cacheReport.value;
+  const prevCache = (editing && editing.cache) || {};
+  f.cacheFlags.forEach(({ key, box }) => {
+    if (box.checked !== (prevCache[key] === true)) cache[key] = box.checked;
+  });
+  if (Object.keys(cache).length) body.cache = cache;
   const r = await api("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
-    S.state.providerForm = null;
     setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
-    hideProviderOverlay();
+    closeSubDialog();
     await loadProviders();
     await loadConfig();
   } else {
@@ -676,6 +733,7 @@ function renderModelPanel() {
   if (!entries.length) provList.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
   provSec.body.appendChild(provList);
   container.appendChild(provSec.el);
+  renderSections("model", PANEL_SECTIONS.model || []);
 }
 
 function renderUiPanel() {
@@ -698,25 +756,40 @@ function renderUiPanel() {
     });
     seg.appendChild(b);
   });
-  container.appendChild(row(t("web.settings.theme"), seg));
+  // Theme is a browser-local preference (localStorage), not a config key, so it
+  // gets its own card before the generated sections.
+  const card = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t("web.settings.sec.ui.theme")));
+  card.appendChild(head);
+  const desc = t("web.settings.sec.ui.theme.desc");
+  if (desc !== "web.settings.sec.ui.theme.desc") card.appendChild(el("div", "sec-desc", desc));
+  const body = el("div", "sec-body");
+  body.appendChild(row(t("web.settings.theme"), seg));
+  card.appendChild(body);
+  container.appendChild(card);
+  renderSections("ui", PANEL_SECTIONS.ui || []);
 }
 
 function renderSecurityPanel() {
   const container = document.querySelector('[data-panel="security"]');
   if (!container) return;
   container.textContent = "";
-  SECTION_KEYS.security.forEach((key) => {
-    const def = defFor(key);
-    if (!def) return;
-    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
-  });
-  container.appendChild(
+  renderSections("security", PANEL_SECTIONS.security || []);
+  const access = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t("web.settings.sec.security.access")));
+  access.appendChild(head);
+  const body = el("div", "sec-body");
+  body.appendChild(
     row(t("web.settings.web_token"), el("span", "val dim", S.state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
   );
   const note = el("div", "placeholder");
   note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
   note.appendChild(document.createTextNode(" " + t("web.settings.security_note")));
-  container.appendChild(note);
+  body.appendChild(note);
+  access.appendChild(body);
+  container.appendChild(access);
 }
 
 function placeholderFor(data, empty) {
@@ -735,6 +808,43 @@ function groupHeader(label, count) {
 
 const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"];
 
+/** Nested dialog: pick a memory category and write the note. */
+function openMemoryForm() {
+  const box = el("div", "pform");
+  const grid = el("div", "pform-grid");
+  const catSel = el("select");
+  catSel.setAttribute("aria-label", t("web.settings.memory_category"));
+  MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
+  catSel.value = "facts";
+  grid.appendChild(mcpLiteralField(t("web.settings.memory_category"), catSel));
+  box.appendChild(grid);
+  const area = el("textarea");
+  area.rows = 5;
+  area.placeholder = t("web.settings.new_memory");
+  area.value = "";
+  box.appendChild(mcpLiteralField(t("web.settings.new_memory"), area));
+  const actions = el("div", "pform-actions");
+  actions.appendChild(
+    link(t("web.settings.save"), "", async () => {
+      const text = area.value.trim();
+      if (!text) {
+        area.focus();
+        return;
+      }
+      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
+      if (r.ok && r.data && r.data.ok) {
+        closeSubDialog();
+        await loadMemory();
+      } else {
+        setIndicator(t("web.settings.add_failed"), true);
+      }
+    }),
+  );
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
+  box.appendChild(actions);
+  openSubDialog(t("web.settings.memory_add_title"), box, () => renderMemoryPanel());
+}
+
 function renderMemoryPanel() {
   const container = document.querySelector('[data-panel="memory"]');
   if (!container) return;
@@ -745,30 +855,19 @@ function renderMemoryPanel() {
   }
   const data = S.state.memory;
 
-  const addRow = el("div", "mem-add");
-  const catSel = el("select");
-  catSel.setAttribute("aria-label", t("web.settings.memory_category"));
-  MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
-  catSel.value = "facts";
-  addRow.appendChild(catSel);
-  const textIn = el("input");
-  textIn.placeholder = t("web.settings.new_memory");
-  textIn.setAttribute("aria-label", t("web.settings.new_memory"));
-  addRow.appendChild(textIn);
-  addRow.appendChild(
-    link(t("web.settings.add"), "", async () => {
-      const text = textIn.value.trim();
-      if (!text) return;
-      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
-      if (r.ok && r.data && r.data.ok) {
-        textIn.value = "";
-        await loadMemory();
-      } else {
-        setIndicator(t("web.settings.add_failed"), true);
-      }
-    }),
-  );
-  container.appendChild(addRow);
+  // Adding an entry opens the shared nested dialog: a category + a multi-line
+  // note with room to write, instead of a cramped inline field.
+  const addBtn = el("button", "sec-add");
+  addBtn.type = "button";
+  addBtn.appendChild(icon("plus"));
+  addBtn.appendChild(el("span", "", t("web.settings.add")));
+  addBtn.addEventListener("click", () => openMemoryForm());
+  const addHead = el("div", "sec-head");
+  addHead.appendChild(el("span", "sec-title", t("web.settings.sec.memory.add")));
+  addHead.appendChild(addBtn);
+  const addSec = el("div", "settings-section");
+  addSec.appendChild(addHead);
+  container.appendChild(addSec);
 
   const search = el("input", "searchbox");
   search.placeholder = t("web.settings.search_memory");
@@ -907,6 +1006,12 @@ function renderPluginsPanel() {
   list.appendChild(pnote);
 
   list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
+  const mcpAdd = el("button", "sec-add");
+  mcpAdd.type = "button";
+  mcpAdd.appendChild(icon("plus"));
+  mcpAdd.appendChild(el("span", "", t("web.settings.mcp_add")));
+  mcpAdd.addEventListener("click", () => openMcpForm("add", null));
+  list.appendChild(mcpAdd);
   if (!(data.mcp || []).length) {
     const empty = el("div", "placeholder");
     empty.textContent = t("web.settings.no_mcp");
@@ -935,14 +1040,265 @@ function renderPluginsPanel() {
     nameEl.title = m.name;
     line.appendChild(nameEl);
     line.appendChild(el("span", "st", m.status || "—"));
+    line.appendChild(chip(t("web.settings.edit"), "", () => openMcpForm("edit", m)));
+    line.appendChild(chip(t("web.settings.delete"), "danger", async () => {
+      const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), { method: "DELETE" });
+      if (r.ok && r.data && r.data.ok) {
+        setIndicator(t("web.settings.mcp_saved"), false);
+        await loadPlugins();
+      } else {
+        setIndicator((r.data && r.data.error) || t("web.settings.delete_failed"), true);
+      }
+    }));
     list.appendChild(line);
   });
+  if (S.state.mcpForm) list.appendChild(mcpForm());
   if ((data.mcp || []).length) {
     const mnote = el("div", "settings-note");
     mnote.textContent = t("web.settings.mcp_note");
     list.appendChild(mnote);
   }
+  renderLspSection(list);
   container.appendChild(list);
+}
+
+// Inline MCP add/edit form. Secrets are never echoed by the API, so env/headers
+// start blank — leaving them blank on edit keeps the stored values (patch
+// semantics: absent keys are not touched).
+function mcpLiteralField(label, input) {
+  const f = el("div", "pform-field");
+  const lab = el("label", "", label);
+  f.appendChild(lab);
+  input.setAttribute("aria-label", label);
+  f.appendChild(input);
+  return f;
+}
+
+function mcpForm() {
+  const mode = (S.state.mcpForm && S.state.mcpForm.mode) || "add";
+  const editing = (S.state.mcpForm && S.state.mcpForm.entry) || {};
+  const box = el("div", "pform");
+  const grid = el("div", "pform-grid");
+  const fName = providerInput(editing.name || "", "text", "my-server");
+  const fTransport = providerSelect(["stdio", "sse", "http"], editing.transport || "stdio");
+  const fCommand = providerInput(editing.command || "", "text", "npx");
+  const fUrl = providerInput(editing.url || "", "text", "https://…");
+  grid.appendChild(mcpLiteralField("name", fName));
+  grid.appendChild(mcpLiteralField("transport", fTransport));
+  grid.appendChild(mcpLiteralField("command", fCommand));
+  grid.appendChild(mcpLiteralField("url", fUrl));
+  box.appendChild(grid);
+  const adv = el("details", "pform-adv");
+  adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
+  const fArgs = providerInput(editing.args ? JSON.stringify(editing.args) : "", "text", '["--stdio"]');
+  const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
+  const fEnabled = providerCheck(editing.enabled !== false);
+  adv.appendChild(mcpLiteralField("args (JSON)", fArgs));
+  adv.appendChild(mcpLiteralField("timeout (ms)", fTimeout));
+  const envKeys = Array.isArray(editing.envKeys) ? editing.envKeys : [];
+  const headerKeys = Array.isArray(editing.headerKeys) ? editing.headerKeys : [];
+  const fEnv = el("textarea");
+  fEnv.placeholder = envKeys.length ? "stored: " + envKeys.join(", ") + " — blank keeps" : '{"TOKEN": "…"}';
+  const fHeaders = el("textarea");
+  fHeaders.placeholder = headerKeys.length ? "stored: " + headerKeys.join(", ") + " — blank keeps" : '{"Authorization": "…"}';
+  adv.appendChild(mcpLiteralField("env (JSON)", fEnv));
+  adv.appendChild(mcpLiteralField("headers (JSON)", fHeaders));
+  adv.appendChild(mcpLiteralField("enabled", fEnabled));
+  box.appendChild(adv);
+  const f = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
+  const actions = el("div", "pform-actions");
+  actions.appendChild(link(t("web.settings.save"), "", () => submitMcpForm(f, mode, editing)));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
+  box.appendChild(actions);
+  return box;
+}
+
+/** Open the MCP add/edit nested dialog. */
+function openMcpForm(mode, entry) {
+  S.state.mcpForm = { mode, entry: entry || null };
+  openSubDialog(
+    t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add"),
+    mcpForm(),
+    () => {
+      S.state.mcpForm = null;
+      renderPluginsPanel();
+      void loadPlugins();
+    },
+  );
+}
+
+function parseJsonMap(raw) {
+  const text = raw.trim();
+  if (!text) return { present: false, value: null };
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { present: true, value: null };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { present: true, value: null };
+  if (!Object.values(parsed).every((v) => typeof v === "string")) return { present: true, value: null };
+  return { present: true, value: parsed };
+}
+
+async function submitMcpForm(f, mode, editing) {
+  const name = f.name.value.trim();
+  const transport = f.transport.value || "stdio";
+  const command = f.command.value.trim();
+  const url = f.url.value.trim();
+  if (!name || (transport === "stdio" ? !command : !url)) {
+    setIndicator(t("web.settings.mcp_required"), true);
+    return;
+  }
+  const body = { name, transport };
+  if (command) body.command = command;
+  if (url) body.url = url;
+  const argsRaw = f.args.value.trim();
+  if (argsRaw) {
+    let args = null;
+    try {
+      args = JSON.parse(argsRaw);
+    } catch {
+      args = null;
+    }
+    if (!Array.isArray(args) || !args.every((x) => typeof x === "string")) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    body.args = args;
+  }
+  for (const key of ["env", "headers"]) {
+    const parsed = parseJsonMap(f[key].value);
+    if (parsed.present && !parsed.value) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    if (parsed.present) body[key] = parsed.value;
+  }
+  const timeoutRaw = f.timeout.value.trim();
+  if (timeoutRaw) {
+    const n = Number(timeoutRaw);
+    if (!Number.isInteger(n) || n < 1000 || n > 300000) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    body.timeout = n;
+  }
+  body.enabled = f.enabled.checked;
+  const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
+  const r = await api(target, { method: mode === "edit" ? "PUT" : "POST", body });
+  if (r.ok && r.data && r.data.ok) {
+    setIndicator(t("web.settings.mcp_saved"), false);
+    closeSubDialog();
+  } else {
+    setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+  }
+}
+
+function renderLspSection(list) {
+  const servers = S.state.lsp;
+  list.appendChild(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null));
+  if (servers === undefined || servers === null) {
+    list.appendChild(placeholderFor(servers, t("web.settings.lsp_unavailable")));
+    return;
+  }
+  if (!servers.length) {
+    const empty = el("div", "placeholder");
+    empty.textContent = t("web.settings.no_lsp");
+    list.appendChild(empty);
+  }
+  servers.forEach((entry) => {
+    const line = el("div", "list-line");
+    line.appendChild(el("span", entry.enabled ? "g" : "dim", entry.enabled ? "✓" : "○"));
+    const nameEl = el("span", "name", entry.lang);
+    nameEl.title = entry.lang;
+    line.appendChild(nameEl);
+    const meta = [entry.command, entry.timeout != null ? entry.timeout + " ms" : null].filter(Boolean).join(" · ");
+    if (meta) line.appendChild(el("span", "src", meta));
+    line.appendChild(el("span", "st", entry.enabled ? t("web.settings.enabled") : t("web.settings.disabled")));
+    line.appendChild(chip(t("web.settings.edit"), "", () => openLspForm(entry)));
+    list.appendChild(line);
+  });
+  if (servers.length) {
+    const note = el("div", "settings-note");
+    note.textContent = t("web.settings.lsp_note");
+    list.appendChild(note);
+  }
+}
+
+/** Open the LSP server edit nested dialog. */
+function openLspForm(entry) {
+  S.state.lspForm = { lang: entry.lang, entry };
+  openSubDialog(entry.lang, lspForm(), () => {
+    S.state.lspForm = null;
+    renderPluginsPanel();
+    void loadLsp();
+  });
+}
+
+// LSP server edit form (enabled toggle, timeout, command, args JSON).
+function lspForm() {
+  const editing = (S.state.lspForm && S.state.lspForm.entry) || {};
+  const lang = (S.state.lspForm && S.state.lspForm.lang) || editing.lang || "";
+  const box = el("div", "pform");
+  const grid = el("div", "pform-grid");
+  const fCommand = providerInput(editing.command || "", "text", "npx");
+  const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
+  const fEnabled = providerCheck(editing.enabled !== false);
+  grid.appendChild(mcpLiteralField("command", fCommand));
+  grid.appendChild(mcpLiteralField("timeout (ms)", fTimeout));
+  grid.appendChild(mcpLiteralField("enabled", fEnabled));
+  box.appendChild(grid);
+  const fArgs = el("textarea");
+  fArgs.value = editing.args ? JSON.stringify(editing.args) : "";
+  fArgs.placeholder = '["--stdio"]';
+  box.appendChild(mcpLiteralField("args (JSON)", fArgs));
+  const actions = el("div", "pform-actions");
+  actions.appendChild(link(t("web.settings.save"), "", async () => {
+    const body = {};
+    const command = fCommand.value.trim();
+    if (command) body.command = command;
+    const timeoutRaw = fTimeout.value.trim();
+    if (timeoutRaw) {
+      const n = Number(timeoutRaw);
+      if (!Number.isInteger(n) || n < 1000 || n > 300000) {
+        setIndicator(t("web.settings.provider_invalid"), true);
+        return;
+      }
+      body.timeout = n;
+    }
+    const argsRaw = fArgs.value.trim();
+    if (argsRaw) {
+      let args = null;
+      try {
+        args = JSON.parse(argsRaw);
+      } catch {
+        args = null;
+      }
+      if (!Array.isArray(args) || !args.every((x) => typeof x === "string")) {
+        setIndicator(t("web.settings.provider_invalid"), true);
+        return;
+      }
+      body.args = args;
+    }
+    body.enabled = fEnabled.checked;
+    const r = await api("/api/lsp/" + encodeURIComponent(lang), { method: "PUT", body });
+    if (r.ok && r.data && r.data.ok) {
+      setIndicator(t("web.settings.mcp_saved"), false);
+      closeSubDialog();
+    } else {
+      setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+    }
+  }));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
+  box.appendChild(actions);
+  return box;
+}
+
+export async function loadLsp() {
+  const r = await api("/api/lsp");
+  S.state.lsp = r.ok && r.data && Array.isArray(r.data.servers) ? r.data.servers : null;
+  renderPluginsPanel();
 }
 
 export async function loadMemory() {
@@ -967,17 +1323,18 @@ export async function loadPlugins() {
 }
 
 export function renderSettings() {
-  renderGenericPanel("general", SECTION_KEYS.general);
+  // Generic panels render straight from PANEL_SECTIONS; custom panels
+  // (model/ui/memory/skills/plugins/security) append their sections themselves
+  // or render bespoke widgets alongside.
+  for (const panel of ["general", "context", "reasoning", "agent", "network", "browser", "sessions", "advanced"]) {
+    renderPanel(panel);
+  }
   renderModelPanel();
-  renderGenericPanel("context", SECTION_KEYS.context);
-  renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
-  renderGenericPanel("agent", SECTION_KEYS.agent);
   renderUiPanel();
   renderMemoryPanel();
   renderSkillsPanel();
   renderPluginsPanel();
   renderSecurityPanel();
-  renderGenericPanel("advanced", SECTION_KEYS.advanced);
 }
 
 const overlay = document.getElementById("overlay");
@@ -1025,6 +1382,135 @@ document.querySelectorAll(".content-col .panel").forEach((panel) => {
   panel.setAttribute("aria-labelledby", "tab-" + panel.id.replace(/^p-/, ""));
 });
 
+// ---- settings search -------------------------------------------------------
+// With 100+ keys, scanning a sidebar is slower than typing. The index is the
+// same PANEL_SECTIONS table that renders the panels (plus each key's i18n
+// label/description), so search can never disagree with the layout.
+const setMenuEl = document.getElementById("setMenu");
+const setSearch = document.getElementById("setSearch");
+const setSearchClear = document.getElementById("setSearchClear");
+const setSearchIcon = document.getElementById("setSearchIcon");
+const setResults = document.getElementById("setResults");
+if (setSearchIcon) setSearchIcon.appendChild(icon("search", "set-search-svg"));
+
+function searchIndex() {
+  const owner = keyToPanel();
+  return (S.state.registry || [])
+    .filter((def) => def && typeof def.key === "string")
+    .map((def) => {
+      const label = configLabel(def);
+      return {
+        def,
+        panel: owner.get(def.key) || null,
+        label,
+        desc: descFor(def.key),
+        haystack: `${label} ${def.key} ${descFor(def.key)}`.toLowerCase(),
+      };
+    })
+    .filter((e) => e.panel);
+}
+
+let searchRows = [];
+let searchCursor = -1;
+
+function closeSearch() {
+  if (setSearch) setSearch.value = "";
+  if (setResults) {
+    setResults.hidden = true;
+    setResults.textContent = "";
+  }
+  if (setMenuEl) setMenuEl.hidden = false;
+  if (setSearchClear) setSearchClear.hidden = true;
+  searchRows = [];
+  searchCursor = -1;
+}
+
+function flashRow(panel, key) {
+  const panelEl = document.getElementById("p-" + panel);
+  if (!panelEl) return;
+  const rows = Array.from(panelEl.querySelectorAll(".row"));
+  const def = defFor(key);
+  if (!def) return;
+  const label = configLabel(def);
+  const target = rows.find((r) => {
+    const nameEl = r.querySelector(".row-name");
+    return nameEl && nameEl.textContent === label;
+  });
+  if (!target) return;
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("row-flash");
+  setTimeout(() => target.classList.remove("row-flash"), 1200);
+}
+
+function pickResult(entry) {
+  if (!entry || !entry.panel) return;
+  closeSearch();
+  selectSettingsPanel(entry.panel);
+  flashRow(entry.panel, entry.def.key);
+}
+
+function renderResults(query) {
+  if (!setResults) return;
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    closeSearch();
+    return;
+  }
+  const matches = searchIndex().filter((e) => e.haystack.includes(q));
+  setResults.textContent = "";
+  if (!matches.length) {
+    const empty = el("div", "set-results-empty", t("web.settings.search_empty"));
+    setResults.appendChild(empty);
+  }
+  searchRows = matches.slice(0, 40);
+  searchCursor = searchRows.length ? 0 : -1;
+  searchRows.forEach((entry, i) => {
+    const item = el("div", "set-result" + (i === searchCursor ? " on" : ""));
+    item.setAttribute("role", "option");
+    item.tabIndex = -1;
+    item.appendChild(el("span", "sr-label", entry.label));
+    const panelName = t("web.settings." + entry.panel);
+    item.appendChild(el("span", "sr-panel", panelName === "web.settings." + entry.panel ? entry.panel : panelName));
+    const keyEl = el("span", "sr-key", entry.def.key);
+    keyEl.title = entry.def.key;
+    item.appendChild(keyEl);
+    item.addEventListener("click", () => pickResult(entry));
+    setResults.appendChild(item);
+  });
+  setResults.hidden = false;
+  setMenuEl.hidden = true;
+  setSearchClear.hidden = false;
+}
+
+function moveSearchCursor(delta) {
+  if (!searchRows.length) return;
+  searchCursor = (searchCursor + delta + searchRows.length) % searchRows.length;
+  Array.from(setResults.children).forEach((node, i) => node.classList.toggle("on", i === searchCursor));
+  const active = setResults.children[searchCursor];
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+if (setSearch) {
+  setSearch.addEventListener("input", () => renderResults(setSearch.value));
+  setSearch.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSearchCursor(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSearchCursor(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      pickResult(searchRows[searchCursor]);
+    } else if (e.key === "Escape" && setSearch.value) {
+      // First Esc clears the query; a second one is handled globally (close).
+      e.stopPropagation();
+      closeSearch();
+    }
+  });
+}
+if (setSearchClear) setSearchClear.addEventListener("click", closeSearch);
+
 function openSettings() {
   settingsReturnFocus = document.activeElement;
   overlay.classList.add("open");
@@ -1032,12 +1518,15 @@ function openSettings() {
   void loadMemory();
   void loadSkills();
   void loadPlugins();
+  void loadLsp();
   const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
   if (active) setTimeout(() => active.focus(), 0);
 }
 function closeSettings() {
-  hideProviderOverlay();
+  closeSubDialog();
   S.state.providerForm = null;
+  S.state.mcpForm = null;
+  S.state.lspForm = null;
   overlay.classList.remove("open");
   settingsBtn.setAttribute("aria-expanded", "false");
   if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
@@ -1050,60 +1539,71 @@ overlay.addEventListener("click", (e) => {
 });
 // Trap Tab inside the dialog while it is open.
 overlay.addEventListener("keydown", (e) => trapTab(overlay, e));
+// One nested dialog for every "edit a single thing" flow (provider, MCP
+// server, LSP server). Keeps the settings modal visible behind it, traps Tab
+// and returns focus to the control that opened it.
+const subOverlay = document.getElementById("subOverlay");
+const subHost = document.getElementById("subHost");
+const subTitle = document.getElementById("subTitle");
+const closeSubBtn = document.getElementById("closeSub");
+let subReturnFocus = null;
+let subOnClose = null;
 
-const providerOverlay = document.getElementById("providerOverlay");
-const providerFormHost = document.getElementById("providerFormHost");
-const providerFormTitle = document.getElementById("providerFormTitle");
-const closeProviderBtn = document.getElementById("closeProvider");
-let providerReturnFocus = null;
-
-function isProviderOpen() {
-  return !!providerOverlay && providerOverlay.classList.contains("open");
+export function isSubDialogOpen() {
+  return !!subOverlay && subOverlay.classList.contains("open");
 }
 
-function openProviderForm(mode, entry) {
-  if (!providerOverlay || !providerFormHost) return;
-  S.state.providerForm = { mode, entry: entry || null };
-  providerReturnFocus = document.activeElement;
-  providerFormTitle.textContent = t(
-    mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title",
-  );
-  providerFormHost.textContent = "";
-  providerFormHost.appendChild(providerForm());
-  providerOverlay.classList.add("open");
+/** Open the nested dialog with a built content node. `onClose` runs after. */
+export function openSubDialog(title, node, onClose) {
+  if (!subOverlay || !subHost) return;
+  subReturnFocus = document.activeElement;
+  subOnClose = onClose || null;
+  subTitle.textContent = title;
+  subHost.textContent = "";
+  subHost.appendChild(node);
+  subOverlay.classList.add("open");
   setTimeout(() => {
-    const first = providerFormHost.querySelector("input, select");
+    const first = subHost.querySelector("input, select, textarea");
     if (first) first.focus();
   }, 0);
 }
 
-function hideProviderOverlay() {
-  if (!providerOverlay) return;
-  providerOverlay.classList.remove("open");
-  if (providerReturnFocus && providerReturnFocus.focus) providerReturnFocus.focus();
-  providerReturnFocus = null;
+export function closeSubDialog() {
+  if (!isSubDialogOpen()) return;
+  subOverlay.classList.remove("open");
+  const after = subOnClose;
+  subOnClose = null;
+  if (subReturnFocus && subReturnFocus.focus) subReturnFocus.focus();
+  subReturnFocus = null;
+  if (after) after();
+}
+
+if (subOverlay) {
+  if (closeSubBtn) closeSubBtn.addEventListener("click", closeSubDialog);
+  subOverlay.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (e.target === subOverlay) closeSubDialog();
+  });
+  subOverlay.addEventListener("keydown", (e) => trapTab(subOverlay, e));
+}
+
+function openProviderForm(mode, entry) {
+  S.state.providerForm = { mode, entry: entry || null };
+  openSubDialog(
+    t(mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title"),
+    providerForm(),
+    () => renderModelPanel(),
+  );
 }
 
 function closeProviderForm() {
-  if (!isProviderOpen()) return;
   S.state.providerForm = null;
-  hideProviderOverlay();
-  renderModelPanel();
-}
-
-if (providerOverlay) {
-  if (closeProviderBtn) closeProviderBtn.addEventListener("click", closeProviderForm);
-  providerOverlay.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (e.target === providerOverlay) closeProviderForm();
-  });
-  // Keep Tab inside the nested dialog while it is open.
-  providerOverlay.addEventListener("keydown", (e) => trapTab(providerOverlay, e));
+  closeSubDialog();
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (isProviderOpen()) closeProviderForm();
+  if (isSubDialogOpen()) closeSubDialog();
   else if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
   else if (overlay.classList.contains("open")) closeSettings();
 });

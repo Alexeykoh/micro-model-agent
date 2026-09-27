@@ -450,6 +450,11 @@ export class Repl implements ReplContext, Host {
         { name: "verbose", description: t("verbose.sub_verbose") },
       ]),
     );
+    this.completer.registerProvider(
+      new SubcommandProvider("security", [
+        { name: "status", description: t("cli.security.status") },
+      ]),
+    );
     this.completer.registerProvider(new ConfigKeyProvider());
     this.completer.registerProvider(new ConfigValueProvider());
     this.completer.registerProvider(new FlagProvider());

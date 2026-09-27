@@ -4,6 +4,27 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Config registry expansion** (`src/config/registry.ts`, `src/config/registry-extra.ts`): ~110 keys now editable via `/config`, `mma config set` and web Settings; new value types `json` (objects, 20K limit, `JSON.parse`) and `list` (string arrays, comma-separated in REPL). `registry.ts` stays frozen (grandfathered over 300 lines) — new defs live in `registry-extra.ts`, merged into `DEFINITIONS` by concat.
+- **`mma config set` validation + `--force`** (`src/cli/commands.ts`): writes go through `setConfigValue` by default (bad value → `cli.config_invalid`, nothing persisted); `--force` is a raw dotted-path escape hatch without validation.
+- **`/security status` (REPL + web)** (`src/cli/repl-commands.ts`, `src/modules/webui/commands-settings.ts`): read-only summary (`security · on/off`, `↳` lines per STYLE.md) plus `/security <key> [value]` registry writes; handler maps per rule #17, automatic in web `/api/commands` HELP.
+- **Provider form fields** (`src/modules/webui/providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool flags), `retry{maxRetries,baseDelay,maxDelay}`; mirrored to legacy when active, validation failure keeps the existing `400 invalid-provider`.
+- **Web MCP CRUD** (`src/modules/webui/settings-api.ts`, `server.ts` route table): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` required), `restartRequired: true`.
+- **Web LSP read/edit** (`src/modules/webui/settings-api.ts`): `GET /api/lsp` table + `PUT /api/lsp/:lang` (`enabled/timeout/command/args` only; add/remove stays JSON-only), `restartRequired: true`.
+- **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type.
+- **Settings information architecture** (`src/modules/webui/assets/js/settings-controls.js`, `index.html`, `settings.js`): `PANEL_SECTIONS` is the single source of truth mapping each panel to *named* sections, so a section title always describes the keys under it and no key sits in an "Advanced" bucket. Sidebar grew to 14 intent-named sections (network/browser/sessions split out; `advanced` keeps only diagnostics/retry/service), each panel renders titled cards with a one-line explanation, and the per-group count badges are gone.
+- **Settings search** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): a search box over the same `PANEL_SECTIONS` table plus i18n labels; results show label + owning panel + dotted key, selection switches the panel and flashes the row (`Esc` clears).
+- **Structured editors for list/JSON keys** (`src/config/registry.ts` `ConfigKeyDef.editor`, `src/config/registry-extra.ts`, `src/modules/webui/assets/js/settings-controls.js`): registry metadata now tells the GUI how to render a value. `tags` = removable chips with an inline adder (bash/path/network rule lists, `tools.defaultTags`, `contentScan.dangerousPatterns`), `checkboxes` = multiselect over a fixed set (`auditNotifier.eventTypes`), `table` = typed record rows (`pricing.overrides`, `experts`, `modelCapabilities`). Tables validate the record client-side and never post a half-filled row; editors post JSON, and `parseConfigValue` accepts a JSON array for `list` keys so values containing commas (regexes like `a{1,3}`) survive.
+- **Memory add dialog** (`src/modules/webui/assets/js/settings.js`): adding a memory entry uses the shared nested dialog (category + multi-line note) instead of the cramped inline row.
+
+### Changed
+
+- **Provider upsert semantics** (`src/modules/webui/providers-api.ts`): a create-POST naming the only entry of a virgin legacy config updates it in place instead of `409 name-conflict`; genuine collisions in multi-entry configs still return `name-conflict`.
+- **One nested settings dialog** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): provider, MCP-server and LSP-server edits all open in the shared `#subOverlay` (`openSubDialog`/`closeSubDialog`) above the settings modal, with focus trap, focus return and Esc/backdrop close; the inline MCP/LSP forms and the provider-only overlay are gone.
+
 ## [2.9.0] - 2026-09-26
 
 ### Added

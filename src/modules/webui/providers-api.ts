@@ -10,7 +10,8 @@
  * assume the request already passed both checks.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { AppConfig, ProviderEntry } from "../../config/types";
+import type { AppConfig, CacheCapability, ProviderEntry } from "../../config/types";
+import { DEFAULTS } from "../../config/defaults";
 import { providerEntryName, providerNameTaken } from "../providers/naming";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
@@ -36,16 +37,95 @@ interface ProviderInput {
   priority?: number;
   rpm?: number;
   parallel?: number;
+  maxCompletionTokens?: number;
+  cache?: Partial<CacheCapability>;
+  retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
   /** Current name of the entry being edited; absent when creating a new one. */
   originalName?: string;
 }
 
 function optionalInt(rec: Record<string, unknown>, key: string, min: number): number | null | undefined {
+  return optionalIntRange(rec, key, min, Number.MAX_SAFE_INTEGER);
+}
+
+function optionalIntRange(
+  rec: Record<string, unknown>,
+  key: string,
+  min: number,
+  max: number,
+): number | null | undefined {
   const v = rec[key];
   if (v === undefined || v === null || v === "") return undefined;
   const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < min) return null;
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < min || n > max) return null;
   return n;
+}
+
+const CACHE_MECHANISMS = ["auto", "explicit", "local", "none"];
+const CACHE_REPORTS = ["openai", "deepseek", "anthropic", "ollama", "none"];
+const CACHE_FLAGS = [
+  "sessionHeader",
+  "requestCachePrompt",
+  "requestPromptCacheKey",
+  "requestSessionId",
+  "requestCacheControl",
+  "requestStreamUsage",
+] as const;
+
+function coerceFlag(v: unknown): boolean | null {
+  if (typeof v === "boolean") return v;
+  if (v === 0 || v === 1) return v === 1;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true" || s === "1") return true;
+    if (s === "false" || s === "0") return false;
+  }
+  return null;
+}
+
+/** Parse the per-entry `cache` override object. `null` = malformed (400). */
+function parseCache(v: unknown): Partial<CacheCapability> | null | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "object" || Array.isArray(v)) return null;
+  const rec = v as Record<string, unknown>;
+  const out: Partial<CacheCapability> = {};
+  if (rec.mechanism !== undefined) {
+    if (typeof rec.mechanism !== "string" || !CACHE_MECHANISMS.includes(rec.mechanism)) return null;
+    out.mechanism = rec.mechanism as CacheCapability["mechanism"];
+  }
+  if (rec.report !== undefined) {
+    if (typeof rec.report !== "string" || !CACHE_REPORTS.includes(rec.report)) return null;
+    out.report = rec.report as CacheCapability["report"];
+  }
+  for (const flag of CACHE_FLAGS) {
+    const fv = rec[flag];
+    if (fv === undefined) continue;
+    const b = coerceFlag(fv);
+    if (b === null) return null;
+    out[flag] = b;
+  }
+  return out;
+}
+
+/** Parse the per-entry `retry` override object. `null` = malformed (400). */
+function parseRetry(
+  v: unknown,
+): { maxRetries?: number; baseDelay?: number; maxDelay?: number } | null | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "object" || Array.isArray(v)) return null;
+  const rec = v as Record<string, unknown>;
+  const specs = [
+    ["maxRetries", 0, 10],
+    ["baseDelay", 0, 60000],
+    ["maxDelay", 0, 300000],
+  ] as const;
+  const out: { maxRetries?: number; baseDelay?: number; maxDelay?: number } = {};
+  for (const [key, min, max] of specs) {
+    const n = optionalIntRange(rec, key, min, max);
+    if (n === null) return null;
+    if (n !== undefined) out[key] = n;
+  }
+  return out;
 }
 
 /** Parse + validate the POST body. `null` means "reject with 400". */
@@ -65,6 +145,13 @@ function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null 
   const parallel = optionalInt(rec, "parallel", 1);
   if (contextWindow === null || priority === null || rpm === null || parallel === null) return null;
 
+  const maxCompletionTokens = optionalIntRange(rec, "maxCompletionTokens", 512, 128000);
+  if (maxCompletionTokens === null) return null;
+  const cache = parseCache(rec.cache);
+  if (cache === null) return null;
+  const retry = parseRetry(rec.retry);
+  if (retry === null) return null;
+
   const input: ProviderInput = { type, baseUrl };
   if (typeof rec.label === "string" && rec.label.trim()) input.label = rec.label.trim();
   if (typeof rec.originalName === "string" && rec.originalName.trim()) {
@@ -75,6 +162,9 @@ function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null 
   if (priority !== undefined) input.priority = priority;
   if (rpm !== undefined) input.rpm = rpm;
   if (parallel !== undefined) input.parallel = parallel;
+  if (maxCompletionTokens !== undefined) input.maxCompletionTokens = maxCompletionTokens;
+  if (cache !== undefined) input.cache = cache;
+  if (retry !== undefined) input.retry = retry;
   return input;
 }
 
@@ -83,6 +173,9 @@ function mirrorLegacy(config: AppConfig, entry: ProviderEntry): void {
   config.provider.type = entry.type;
   config.provider.baseUrl = entry.baseUrl;
   if (entry.apiKey !== undefined) config.provider.apiKey = entry.apiKey;
+  if (entry.maxCompletionTokens !== undefined) {
+    config.provider.maxCompletionTokens = entry.maxCompletionTokens;
+  }
 }
 
 /**
@@ -115,16 +208,26 @@ export type UpsertProviderResult =
  */
 export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertProviderResult {
   const provider = config.provider;
+  const fromLegacySeed = !Array.isArray(provider.entries) || provider.entries.length === 0;
   const entries = seededEntries(config);
   const name = input.label || input.type;
   if (providerNameTaken(entries, name, input.originalName)) {
-    return { ok: false, error: "name-conflict" };
+    // Degenerate case: a virgin legacy config (no `entries`) seeds exactly one
+    // entry, and a create-POST naming that very entry is an in-place upsert of
+    // the migrated config — not a collision with another provider.
+    const loneSeeded = fromLegacySeed && entries.length === 1 && providerEntryName(entries[0]) === name;
+    if (!loneSeeded || input.originalName) {
+      return { ok: false, error: "name-conflict" };
+    }
   }
-  const idx = input.originalName
+  let idx = input.originalName
     ? entries.findIndex(
         (e) => providerEntryName(e) === input.originalName || e.type === input.originalName,
       )
     : -1;
+  if (idx < 0 && fromLegacySeed && entries.length === 1 && providerEntryName(entries[0]) === name) {
+    idx = 0;
+  }
 
   const entry: ProviderEntry = idx >= 0 ? { ...entries[idx] } : { type: input.type, baseUrl: input.baseUrl };
   entry.type = input.type;
@@ -133,6 +236,16 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
   if (input.apiKey !== undefined) entry.apiKey = input.apiKey;
   if (input.contextWindow !== undefined) entry.contextWindow = input.contextWindow;
   if (input.priority !== undefined) entry.priority = input.priority;
+  if (input.maxCompletionTokens !== undefined) entry.maxCompletionTokens = input.maxCompletionTokens;
+  if (input.cache !== undefined) entry.cache = { ...(entry.cache ?? {}), ...input.cache };
+  if (input.retry !== undefined) {
+    const prev: { maxRetries?: number; baseDelay?: number; maxDelay?: number } = entry.retry ?? {};
+    entry.retry = {
+      maxRetries: input.retry.maxRetries ?? prev.maxRetries ?? DEFAULTS.retry.maxRetries,
+      baseDelay: input.retry.baseDelay ?? prev.baseDelay ?? DEFAULTS.retry.baseDelay,
+      maxDelay: input.retry.maxDelay ?? prev.maxDelay ?? DEFAULTS.retry.maxDelay,
+    };
+  }
   if (input.rpm !== undefined || input.parallel !== undefined) {
     const prev = entry.rateLimits ?? { maxRequestsPerMinute: 60, maxParallelTasks: 1 };
     entry.rateLimits = {

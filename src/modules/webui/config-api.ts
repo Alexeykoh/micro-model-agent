@@ -14,7 +14,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../i18n";
 import { redactConfigSecrets } from "../../config/redact";
-import { configDefs, setConfigValue } from "../../config/registry";
+import { configDefs, setConfigValue, type ConfigKeyDef } from "../../config/registry";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
 import { persistAndReconfigure } from "./persist";
@@ -37,6 +37,8 @@ export interface ConfigRegistryEntry {
   step?: number;
   /** `version` and similar keys render as a non-editable value in the UI. */
   readOnly?: boolean;
+  /** GUI rendering hint for `list`/`json` values (chips, checkboxes, table). */
+  editor?: ConfigKeyDef["editor"];
 }
 
 /** Serialize the registry in registry order (canonical keys only). */
@@ -53,6 +55,7 @@ export function buildConfigRegistry(): ConfigRegistryEntry[] {
     if (def.max !== undefined) entry.max = def.max;
     if (def.step !== undefined) entry.step = def.step;
     if (def.readOnly) entry.readOnly = true;
+    if (def.editor) entry.editor = def.editor;
     return entry;
   });
 }

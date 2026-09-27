@@ -69,6 +69,10 @@ refresh: [
 ],
 "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
 "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
+search: [
+  ["circle", { cx: 11, cy: 11, r: 8 }],
+  ["path", { d: "m21 21-4.3-4.3" }],
+],
 "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
 panel: [
   ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],

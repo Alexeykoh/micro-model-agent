@@ -24,6 +24,8 @@ export interface LspServerConfig {
   env?: Record<string, string>;
   timeout?: number;
   autoInstall?: boolean;
+  /** Per-server kill switch (default true); AND-ed with the global `lsp.enabled`. */
+  enabled?: boolean;
   /** Project-root markers for this language (e.g. ["package.json","tsconfig.json"]). */
   workspaceMarkers?: string[];
 }

@@ -15,6 +15,8 @@ describe("config key/value completion", () => {
     expect(items.map((i) => i.value)).toEqual([
       "contextBudget.systemPrompt",
       "contextBudget.responseReserve",
+      "contextBudget.compactionThreshold",
+      "contextBudget.compactionMinLoad",
     ]);
   });
 

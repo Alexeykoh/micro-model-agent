@@ -5,7 +5,7 @@
  * config → view projections; no HTTP, no persistence. Secrets are never
  * echoed: the read shape exposes `hasApiKey` instead of the key itself.
  */
-import type { AppConfig, ProviderEntry } from "../../config/types";
+import type { AppConfig, CacheCapability, ProviderEntry } from "../../config/types";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 
 /** Redacted provider entry rendered by the settings UI. */
@@ -17,6 +17,9 @@ export interface ProviderView {
   priority?: number;
   rpm?: number;
   parallel?: number;
+  maxCompletionTokens?: number;
+  cache?: Partial<CacheCapability>;
+  retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
   hasApiKey: boolean;
 }
 
@@ -77,6 +80,9 @@ export function buildProviderViews(config: AppConfig): {
     };
     if (e.contextWindow !== undefined) view.contextWindow = e.contextWindow;
     if (e.priority !== undefined) view.priority = e.priority;
+    if (e.maxCompletionTokens !== undefined) view.maxCompletionTokens = e.maxCompletionTokens;
+    if (e.cache !== undefined) view.cache = { ...e.cache };
+    if (e.retry !== undefined) view.retry = { ...e.retry };
     if (e.rateLimits) {
       view.rpm = e.rateLimits.maxRequestsPerMinute;
       view.parallel = e.rateLimits.maxParallelTasks;

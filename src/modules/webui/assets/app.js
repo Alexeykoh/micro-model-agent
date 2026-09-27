@@ -210,6 +210,11 @@ function applyStaticI18n() {
     const p = mi.dataset.p;
     if (p) mi.textContent = t("web.settings." + p);
   });
+  const settingsSearch = document.getElementById("setSearch");
+  if (settingsSearch) {
+    settingsSearch.placeholder = t("web.settings.search_placeholder");
+    settingsSearch.setAttribute("aria-label", t("web.settings.search_placeholder"));
+  }
   document.querySelectorAll(".content-col .panel").forEach((panel) => {
     const h3 = panel.querySelector("h3");
     const name = panel.id.replace(/^p-/, "");

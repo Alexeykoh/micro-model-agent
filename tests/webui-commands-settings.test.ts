@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { t } from "../src/i18n";
 import type { SessionMessage } from "../src/modules/session/types";
 import { fakeSessions, makeHarness, meta } from "./helpers/webui-commands";
 
@@ -105,5 +106,24 @@ describe("webui settings slash commands", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("web /security status prints toggles", async () => {
+    const h = makeHarness();
+    await h.run("/security status");
+    expect(h.lines).toHaveLength(3);
+    expect(h.lines[0]).toMatch(/security/);
+    expect(h.lines[1]).toMatch(/bash/);
+    expect(h.lines[1]).toMatch(/network/);
+    expect(h.lines[2]).toMatch(/contentScan/);
+  });
+
+  it("web /security bogusarg reports a localized unknown-subcommand hint", async () => {
+    const h = makeHarness();
+    await h.run("/security bogusarg");
+    expect(h.lines).toHaveLength(2);
+    expect(h.lines[0]).toBe(`↳ ${t("web.security.unknown_sub", { sub: "bogusarg" })}`);
+    expect(h.lines[1]).toContain("usage:");
+    expect(h.lines[1]).toContain("/security");
   });
 });
