@@ -2,6 +2,7 @@ import type { AppConfig, ReasoningMode } from "./types";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
+import { EXTRA_DEFS } from "./registry-extra";
 
 /**
  * Central registry of user-facing config keys for `/config` and the sugar
@@ -326,6 +327,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
   securityToggle("paths", "security.paths.enabled"),
   securityToggle("contentScan", "security.contentScan.enabled"),
   securityToggle("sessionEncryption", "security.sessionEncryption.enabled"),
+  ...EXTRA_DEFS,
 ];
 
 const BY_NAME = new Map<string, ConfigKeyDef>();

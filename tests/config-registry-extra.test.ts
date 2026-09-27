@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseConfigValue, formatConfigValue, type ConfigKeyDef } from "../src/config/registry";
+import {
+  parseConfigValue,
+  formatConfigValue,
+  resolveConfigKey,
+  setConfigValue,
+  type ConfigKeyDef,
+} from "../src/config/registry";
+import { DEFAULTS } from "../src/config/defaults";
 const listDef = { valueType: "list" } as ConfigKeyDef;
 const jsonDef = { valueType: "json" } as ConfigKeyDef;
 describe("registry list/json types", () => {
@@ -16,5 +23,20 @@ describe("registry list/json types", () => {
     expect(formatConfigValue(["a", "b"])).toBe("a, b");
     expect(formatConfigValue({ a: 1 })).toBe('{"a":1}');
     expect(formatConfigValue(true)).toBe("on");
+  });
+  it("resolves new scalar keys", () => {
+    expect(resolveConfigKey("autoPlan")).not.toBeNull();
+    expect(resolveConfigKey("contextLog.enabled")).not.toBeNull();
+    expect(resolveConfigKey("reasoning.min")).not.toBeNull();
+    expect(resolveConfigKey("browser.headless")).not.toBeNull();
+    expect(resolveConfigKey("security.rateLimits.maxRequestsPerMinute")).not.toBeNull();
+  });
+  it("round-trips autoPlan + rejects bad reasoning enum", () => {
+    const cfg = structuredClone(DEFAULTS);
+    const r = setConfigValue(cfg, "autoPlan", "off");
+    expect(r.ok).toBe(true);
+    expect(cfg.autoPlan).toBe(false);
+    const bad = setConfigValue(cfg, "reasoning.min", "banana");
+    expect(bad.ok).toBe(false);
   });
 });
