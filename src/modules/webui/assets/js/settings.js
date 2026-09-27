@@ -11,7 +11,7 @@ import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
-import { controlFor, EXTRA_SECTIONS, ADVANCED_GROUPS } from "./settings-controls.js";
+import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings-controls.js";
 
 function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
@@ -211,35 +211,9 @@ export function setConnStatus(disconnected) {
   connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
 }
 
-const SECTION_KEYS = {
-  general: ["locale", "ui.verbosity", "maxToolIterations", "stuckThreshold"],
-  context: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"],
-  reasoning: ["showReasoning", "reasoning.mode"],
-  security: [
-    "security.enabled",
-    "security.bash.enabled",
-    "security.bash.blockDangerousFlags",
-    "security.paths.enabled",
-    "security.contentScan.enabled",
-    "security.sessionEncryption.enabled",
-    "security.network.enabled",
-  ],
-  advanced: ["logLevel", "version"],
-  agent: [
-    "moe.enabled",
-    "moe.maxReplanCycles",
-    "critic.enabled",
-    "critic.maxCalls",
-    "critic.maxRepairCycles",
-    "critic.timeoutMs",
-  ],
-};
-
-// New registry keys (generic controls + extra sections) live in
-// `settings-controls.js`; merge additively so existing order is preserved.
-for (const [name, keys] of Object.entries(EXTRA_SECTIONS)) {
-  SECTION_KEYS[name] = [...(SECTION_KEYS[name] || []), ...keys];
-}
+// Panel → named sections lives in `settings-controls.js` (PANEL_SECTIONS).
+// Custom panels (model/ui/browser…) render a bespoke body first and then their
+// sections; purely generic panels (general/context/…) render sections only.
 
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
@@ -294,68 +268,41 @@ function configControl(def, key) {
   });
 }
 
-function renderGenericPanel(name, keys) {
-  const container = document.querySelector('[data-panel="' + name + '"]');
-  if (!container) return;
-  container.textContent = "";
-  keys.forEach((key) => {
-    const def = defFor(key);
-    if (!def) return;
-    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
-  });
-}
-
-// Advanced panel: flat base rows + one collapsible <details> per deep group
-// (progressive disclosure). Native <details> gives keyboard (Enter/Space) and
-// AT semantics for free; open groups persist in localStorage.
-const ADV_OPEN_KEY = "mma-adv-open";
-
-function advOpenIds() {
-  try {
-    const raw = localStorage.getItem(ADV_OPEN_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
-  } catch {
-    return new Set();
+// One titled section card: uppercase title + optional one-line explanation,
+// then its setting rows. Titles come from PANEL_SECTIONS so a section name can
+// never drift from the keys under it.
+function sectionCard(section) {
+  const card = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t(section.titleKey)));
+  card.appendChild(head);
+  if (section.descKey) {
+    const d = t(section.descKey);
+    if (d !== section.descKey) card.appendChild(el("div", "sec-desc", d));
   }
-}
-
-function renderAdvancedPanel() {
-  const container = document.querySelector('[data-panel="advanced"]');
-  if (!container) return;
-  container.textContent = "";
-  (SECTION_KEYS.advanced || []).forEach((key) => {
+  const body = el("div", "sec-body");
+  section.keys.forEach((key) => {
     const def = defFor(key);
     if (!def) return;
-    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+    body.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
   });
-  const open = advOpenIds();
-  ADVANCED_GROUPS.forEach((group) => {
-    const defs = group.keys.map(defFor).filter(Boolean);
-    if (!defs.length) return;
-    const det = el("details", "adv-group");
-    det.dataset.group = group.id;
-    if (open.has(group.id)) det.open = true;
-    const sum = el("summary", "adv-sum");
-    sum.appendChild(icon("chevron-down", "adv-chev"));
-    sum.appendChild(el("span", "", t(group.titleKey)));
-    sum.appendChild(el("span", "val dim", String(defs.length)));
-    det.appendChild(sum);
-    defs.forEach((def) => {
-      det.appendChild(row(configLabel(def), configControl(def, def.key), descFor(def.key)));
-    });
-    det.addEventListener("toggle", () => {
-      try {
-        const ids = advOpenIds();
-        if (det.open) ids.add(group.id);
-        else ids.delete(group.id);
-        localStorage.setItem(ADV_OPEN_KEY, JSON.stringify([...ids]));
-      } catch {
-        /* private mode — groups just don't persist */
-      }
-    });
-    container.appendChild(det);
-  });
+  card.appendChild(body);
+  return card;
+}
+
+// Render the PANEL_SECTIONS table for a panel. Panels with custom bodies call
+// this after their own content so bespoke widgets stay on top.
+function renderSections(panel, sections) {
+  const container = document.querySelector('[data-panel="' + panel + '"]');
+  if (!container) return;
+  sections.forEach((section) => container.appendChild(sectionCard(section)));
+}
+
+function renderPanel(panel) {
+  const container = document.querySelector('[data-panel="' + panel + '"]');
+  if (!container) return;
+  container.textContent = "";
+  renderSections(panel, PANEL_SECTIONS[panel] || []);
 }
 
 function providerEntries() {
@@ -638,9 +585,8 @@ async function submitProviderForm(f, mode, editing) {
   const r = await api("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
-    S.state.providerForm = null;
     setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
-    hideProviderOverlay();
+    closeSubDialog();
     await loadProviders();
     await loadConfig();
   } else {
@@ -781,6 +727,7 @@ function renderModelPanel() {
   if (!entries.length) provList.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
   provSec.body.appendChild(provList);
   container.appendChild(provSec.el);
+  renderSections("model", PANEL_SECTIONS.model || []);
 }
 
 function renderUiPanel() {
@@ -804,24 +751,28 @@ function renderUiPanel() {
     seg.appendChild(b);
   });
   container.appendChild(row(t("web.settings.theme"), seg));
+  renderSections("ui", PANEL_SECTIONS.ui || []);
 }
 
 function renderSecurityPanel() {
   const container = document.querySelector('[data-panel="security"]');
   if (!container) return;
   container.textContent = "";
-  SECTION_KEYS.security.forEach((key) => {
-    const def = defFor(key);
-    if (!def) return;
-    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
-  });
-  container.appendChild(
+  renderSections("security", PANEL_SECTIONS.security || []);
+  const access = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t("web.settings.sec.security.access")));
+  access.appendChild(head);
+  const body = el("div", "sec-body");
+  body.appendChild(
     row(t("web.settings.web_token"), el("span", "val dim", S.state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
   );
   const note = el("div", "placeholder");
   note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
   note.appendChild(document.createTextNode(" " + t("web.settings.security_note")));
-  container.appendChild(note);
+  body.appendChild(note);
+  access.appendChild(body);
+  container.appendChild(access);
 }
 
 function placeholderFor(data, empty) {
@@ -1016,10 +967,7 @@ function renderPluginsPanel() {
   mcpAdd.type = "button";
   mcpAdd.appendChild(icon("plus"));
   mcpAdd.appendChild(el("span", "", t("web.settings.mcp_add")));
-  mcpAdd.addEventListener("click", () => {
-    S.state.mcpForm = { mode: "add", entry: null };
-    renderPluginsPanel();
-  });
+  mcpAdd.addEventListener("click", () => openMcpForm("add", null));
   list.appendChild(mcpAdd);
   if (!(data.mcp || []).length) {
     const empty = el("div", "placeholder");
@@ -1049,10 +997,7 @@ function renderPluginsPanel() {
     nameEl.title = m.name;
     line.appendChild(nameEl);
     line.appendChild(el("span", "st", m.status || "—"));
-    line.appendChild(chip(t("web.settings.edit"), "", () => {
-      S.state.mcpForm = { mode: "edit", entry: m };
-      renderPluginsPanel();
-    }));
+    line.appendChild(chip(t("web.settings.edit"), "", () => openMcpForm("edit", m)));
     line.appendChild(chip(t("web.settings.delete"), "danger", async () => {
       const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), { method: "DELETE" });
       if (r.ok && r.data && r.data.ok) {
@@ -1090,7 +1035,6 @@ function mcpForm() {
   const mode = (S.state.mcpForm && S.state.mcpForm.mode) || "add";
   const editing = (S.state.mcpForm && S.state.mcpForm.entry) || {};
   const box = el("div", "pform");
-  box.appendChild(el("div", "pform-title", t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add")));
   const grid = el("div", "pform-grid");
   const fName = providerInput(editing.name || "", "text", "my-server");
   const fTransport = providerSelect(["stdio", "sse", "http"], editing.transport || "stdio");
@@ -1121,12 +1065,23 @@ function mcpForm() {
   const f = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
   const actions = el("div", "pform-actions");
   actions.appendChild(link(t("web.settings.save"), "", () => submitMcpForm(f, mode, editing)));
-  actions.appendChild(link(t("web.settings.cancel"), "dim", () => {
-    S.state.mcpForm = null;
-    renderPluginsPanel();
-  }));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
   box.appendChild(actions);
   return box;
+}
+
+/** Open the MCP add/edit nested dialog. */
+function openMcpForm(mode, entry) {
+  S.state.mcpForm = { mode, entry: entry || null };
+  openSubDialog(
+    t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add"),
+    mcpForm(),
+    () => {
+      S.state.mcpForm = null;
+      renderPluginsPanel();
+      void loadPlugins();
+    },
+  );
 }
 
 function parseJsonMap(raw) {
@@ -1190,9 +1145,8 @@ async function submitMcpForm(f, mode, editing) {
   const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
   const r = await api(target, { method: mode === "edit" ? "PUT" : "POST", body });
   if (r.ok && r.data && r.data.ok) {
-    S.state.mcpForm = null;
     setIndicator(t("web.settings.mcp_saved"), false);
-    await loadPlugins();
+    closeSubDialog();
   } else {
     setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
   }
@@ -1219,13 +1173,9 @@ function renderLspSection(list) {
     const meta = [entry.command, entry.timeout != null ? entry.timeout + " ms" : null].filter(Boolean).join(" · ");
     if (meta) line.appendChild(el("span", "src", meta));
     line.appendChild(el("span", "st", entry.enabled ? t("web.settings.enabled") : t("web.settings.disabled")));
-    line.appendChild(chip(t("web.settings.edit"), "", () => {
-      S.state.lspForm = { lang: entry.lang, entry };
-      renderPluginsPanel();
-    }));
+    line.appendChild(chip(t("web.settings.edit"), "", () => openLspForm(entry)));
     list.appendChild(line);
   });
-  if (S.state.lspForm) list.appendChild(lspForm());
   if (servers.length) {
     const note = el("div", "settings-note");
     note.textContent = t("web.settings.lsp_note");
@@ -1233,12 +1183,21 @@ function renderLspSection(list) {
   }
 }
 
-// Small inline LSP edit form (enabled toggle, timeout, command, args JSON).
+/** Open the LSP server edit nested dialog. */
+function openLspForm(entry) {
+  S.state.lspForm = { lang: entry.lang, entry };
+  openSubDialog(entry.lang, lspForm(), () => {
+    S.state.lspForm = null;
+    renderPluginsPanel();
+    void loadLsp();
+  });
+}
+
+// LSP server edit form (enabled toggle, timeout, command, args JSON).
 function lspForm() {
   const editing = (S.state.lspForm && S.state.lspForm.entry) || {};
   const lang = (S.state.lspForm && S.state.lspForm.lang) || editing.lang || "";
   const box = el("div", "pform");
-  box.appendChild(el("div", "pform-title", lang));
   const grid = el("div", "pform-grid");
   const fCommand = providerInput(editing.command || "", "text", "npx");
   const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
@@ -1282,17 +1241,13 @@ function lspForm() {
     body.enabled = fEnabled.checked;
     const r = await api("/api/lsp/" + encodeURIComponent(lang), { method: "PUT", body });
     if (r.ok && r.data && r.data.ok) {
-      S.state.lspForm = null;
       setIndicator(t("web.settings.mcp_saved"), false);
-      await loadLsp();
+      closeSubDialog();
     } else {
       setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
     }
   }));
-  actions.appendChild(link(t("web.settings.cancel"), "dim", () => {
-    S.state.lspForm = null;
-    renderPluginsPanel();
-  }));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
   box.appendChild(actions);
   return box;
 }
@@ -1325,17 +1280,18 @@ export async function loadPlugins() {
 }
 
 export function renderSettings() {
-  renderGenericPanel("general", SECTION_KEYS.general);
+  // Generic panels render straight from PANEL_SECTIONS; custom panels
+  // (model/ui/memory/skills/plugins/security) append their sections themselves
+  // or render bespoke widgets alongside.
+  for (const panel of ["general", "context", "reasoning", "agent", "network", "browser", "sessions", "advanced"]) {
+    renderPanel(panel);
+  }
   renderModelPanel();
-  renderGenericPanel("context", SECTION_KEYS.context);
-  renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
-  renderGenericPanel("agent", SECTION_KEYS.agent);
   renderUiPanel();
   renderMemoryPanel();
   renderSkillsPanel();
   renderPluginsPanel();
   renderSecurityPanel();
-  renderAdvancedPanel();
 }
 
 const overlay = document.getElementById("overlay");
@@ -1383,6 +1339,135 @@ document.querySelectorAll(".content-col .panel").forEach((panel) => {
   panel.setAttribute("aria-labelledby", "tab-" + panel.id.replace(/^p-/, ""));
 });
 
+// ---- settings search -------------------------------------------------------
+// With 100+ keys, scanning a sidebar is slower than typing. The index is the
+// same PANEL_SECTIONS table that renders the panels (plus each key's i18n
+// label/description), so search can never disagree with the layout.
+const setMenuEl = document.getElementById("setMenu");
+const setSearch = document.getElementById("setSearch");
+const setSearchClear = document.getElementById("setSearchClear");
+const setSearchIcon = document.getElementById("setSearchIcon");
+const setResults = document.getElementById("setResults");
+if (setSearchIcon) setSearchIcon.appendChild(icon("search", "set-search-svg"));
+
+function searchIndex() {
+  const owner = keyToPanel();
+  return (S.state.registry || [])
+    .filter((def) => def && typeof def.key === "string")
+    .map((def) => {
+      const label = configLabel(def);
+      return {
+        def,
+        panel: owner.get(def.key) || null,
+        label,
+        desc: descFor(def.key),
+        haystack: `${label} ${def.key} ${descFor(def.key)}`.toLowerCase(),
+      };
+    })
+    .filter((e) => e.panel);
+}
+
+let searchRows = [];
+let searchCursor = -1;
+
+function closeSearch() {
+  if (setSearch) setSearch.value = "";
+  if (setResults) {
+    setResults.hidden = true;
+    setResults.textContent = "";
+  }
+  if (setMenuEl) setMenuEl.hidden = false;
+  if (setSearchClear) setSearchClear.hidden = true;
+  searchRows = [];
+  searchCursor = -1;
+}
+
+function flashRow(panel, key) {
+  const panelEl = document.getElementById("p-" + panel);
+  if (!panelEl) return;
+  const rows = Array.from(panelEl.querySelectorAll(".row"));
+  const def = defFor(key);
+  if (!def) return;
+  const label = configLabel(def);
+  const target = rows.find((r) => {
+    const nameEl = r.querySelector(".row-name");
+    return nameEl && nameEl.textContent === label;
+  });
+  if (!target) return;
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("row-flash");
+  setTimeout(() => target.classList.remove("row-flash"), 1200);
+}
+
+function pickResult(entry) {
+  if (!entry || !entry.panel) return;
+  closeSearch();
+  selectSettingsPanel(entry.panel);
+  flashRow(entry.panel, entry.def.key);
+}
+
+function renderResults(query) {
+  if (!setResults) return;
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    closeSearch();
+    return;
+  }
+  const matches = searchIndex().filter((e) => e.haystack.includes(q));
+  setResults.textContent = "";
+  if (!matches.length) {
+    const empty = el("div", "set-results-empty", t("web.settings.search_empty"));
+    setResults.appendChild(empty);
+  }
+  searchRows = matches.slice(0, 40);
+  searchCursor = searchRows.length ? 0 : -1;
+  searchRows.forEach((entry, i) => {
+    const item = el("div", "set-result" + (i === searchCursor ? " on" : ""));
+    item.setAttribute("role", "option");
+    item.tabIndex = -1;
+    item.appendChild(el("span", "sr-label", entry.label));
+    const panelName = t("web.settings." + entry.panel);
+    item.appendChild(el("span", "sr-panel", panelName === "web.settings." + entry.panel ? entry.panel : panelName));
+    const keyEl = el("span", "sr-key", entry.def.key);
+    keyEl.title = entry.def.key;
+    item.appendChild(keyEl);
+    item.addEventListener("click", () => pickResult(entry));
+    setResults.appendChild(item);
+  });
+  setResults.hidden = false;
+  setMenuEl.hidden = true;
+  setSearchClear.hidden = false;
+}
+
+function moveSearchCursor(delta) {
+  if (!searchRows.length) return;
+  searchCursor = (searchCursor + delta + searchRows.length) % searchRows.length;
+  Array.from(setResults.children).forEach((node, i) => node.classList.toggle("on", i === searchCursor));
+  const active = setResults.children[searchCursor];
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+if (setSearch) {
+  setSearch.addEventListener("input", () => renderResults(setSearch.value));
+  setSearch.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSearchCursor(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSearchCursor(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      pickResult(searchRows[searchCursor]);
+    } else if (e.key === "Escape" && setSearch.value) {
+      // First Esc clears the query; a second one is handled globally (close).
+      e.stopPropagation();
+      closeSearch();
+    }
+  });
+}
+if (setSearchClear) setSearchClear.addEventListener("click", closeSearch);
+
 function openSettings() {
   settingsReturnFocus = document.activeElement;
   overlay.classList.add("open");
@@ -1395,7 +1480,7 @@ function openSettings() {
   if (active) setTimeout(() => active.focus(), 0);
 }
 function closeSettings() {
-  hideProviderOverlay();
+  closeSubDialog();
   S.state.providerForm = null;
   S.state.mcpForm = null;
   S.state.lspForm = null;
@@ -1411,60 +1496,71 @@ overlay.addEventListener("click", (e) => {
 });
 // Trap Tab inside the dialog while it is open.
 overlay.addEventListener("keydown", (e) => trapTab(overlay, e));
+// One nested dialog for every "edit a single thing" flow (provider, MCP
+// server, LSP server). Keeps the settings modal visible behind it, traps Tab
+// and returns focus to the control that opened it.
+const subOverlay = document.getElementById("subOverlay");
+const subHost = document.getElementById("subHost");
+const subTitle = document.getElementById("subTitle");
+const closeSubBtn = document.getElementById("closeSub");
+let subReturnFocus = null;
+let subOnClose = null;
 
-const providerOverlay = document.getElementById("providerOverlay");
-const providerFormHost = document.getElementById("providerFormHost");
-const providerFormTitle = document.getElementById("providerFormTitle");
-const closeProviderBtn = document.getElementById("closeProvider");
-let providerReturnFocus = null;
-
-function isProviderOpen() {
-  return !!providerOverlay && providerOverlay.classList.contains("open");
+export function isSubDialogOpen() {
+  return !!subOverlay && subOverlay.classList.contains("open");
 }
 
-function openProviderForm(mode, entry) {
-  if (!providerOverlay || !providerFormHost) return;
-  S.state.providerForm = { mode, entry: entry || null };
-  providerReturnFocus = document.activeElement;
-  providerFormTitle.textContent = t(
-    mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title",
-  );
-  providerFormHost.textContent = "";
-  providerFormHost.appendChild(providerForm());
-  providerOverlay.classList.add("open");
+/** Open the nested dialog with a built content node. `onClose` runs after. */
+export function openSubDialog(title, node, onClose) {
+  if (!subOverlay || !subHost) return;
+  subReturnFocus = document.activeElement;
+  subOnClose = onClose || null;
+  subTitle.textContent = title;
+  subHost.textContent = "";
+  subHost.appendChild(node);
+  subOverlay.classList.add("open");
   setTimeout(() => {
-    const first = providerFormHost.querySelector("input, select");
+    const first = subHost.querySelector("input, select, textarea");
     if (first) first.focus();
   }, 0);
 }
 
-function hideProviderOverlay() {
-  if (!providerOverlay) return;
-  providerOverlay.classList.remove("open");
-  if (providerReturnFocus && providerReturnFocus.focus) providerReturnFocus.focus();
-  providerReturnFocus = null;
+export function closeSubDialog() {
+  if (!isSubDialogOpen()) return;
+  subOverlay.classList.remove("open");
+  const after = subOnClose;
+  subOnClose = null;
+  if (subReturnFocus && subReturnFocus.focus) subReturnFocus.focus();
+  subReturnFocus = null;
+  if (after) after();
+}
+
+if (subOverlay) {
+  if (closeSubBtn) closeSubBtn.addEventListener("click", closeSubDialog);
+  subOverlay.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (e.target === subOverlay) closeSubDialog();
+  });
+  subOverlay.addEventListener("keydown", (e) => trapTab(subOverlay, e));
+}
+
+function openProviderForm(mode, entry) {
+  S.state.providerForm = { mode, entry: entry || null };
+  openSubDialog(
+    t(mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title"),
+    providerForm(),
+    () => renderModelPanel(),
+  );
 }
 
 function closeProviderForm() {
-  if (!isProviderOpen()) return;
   S.state.providerForm = null;
-  hideProviderOverlay();
-  renderModelPanel();
-}
-
-if (providerOverlay) {
-  if (closeProviderBtn) closeProviderBtn.addEventListener("click", closeProviderForm);
-  providerOverlay.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (e.target === providerOverlay) closeProviderForm();
-  });
-  // Keep Tab inside the nested dialog while it is open.
-  providerOverlay.addEventListener("keydown", (e) => trapTab(providerOverlay, e));
+  closeSubDialog();
 }
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (isProviderOpen()) closeProviderForm();
+  if (isSubDialogOpen()) closeSubDialog();
   else if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
   else if (overlay.classList.contains("open")) closeSettings();
 });

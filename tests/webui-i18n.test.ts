@@ -110,18 +110,20 @@ describe("webui i18n", () => {
     }
   });
 
-  it("titles every Advanced nested group in both locales", async () => {
-    // settings-controls.js is DOM-coupled (via dom.js) — parse the group
+  it("titles and explains every settings section in both locales", async () => {
+    // settings-controls.js is DOM-coupled (via dom.js) — parse the section
     // table out of the source instead of importing it.
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
       new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
       "utf-8",
     );
-    const titles = [...src.matchAll(/titleKey:\s*"(web\.settings\.advg\.[a-z-]+)"/g)].map((m) => m[1]);
-    expect(titles.length).toBeGreaterThan(5);
+    const titles = [...src.matchAll(/titleKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]);
+    const descs = [...src.matchAll(/descKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]);
+    expect(titles.length).toBeGreaterThan(20);
+    expect(descs.length).toBeGreaterThan(15);
     const dicts = getFlatDicts();
-    for (const key of new Set(titles)) {
+    for (const key of new Set([...titles, ...descs])) {
       expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
       expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
     }

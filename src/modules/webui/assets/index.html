@@ -88,18 +88,29 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-top"><span class="modal-top-icon" id="settingsIcon" aria-hidden="true"></span> <span id="settingsTitle">settings</span> <span class="saved" id="saveIndicator" role="status" aria-live="polite"></span> <button class="x linkbtn" id="closeSettings" type="button">✕ close</button></div>
     <div class="modal-body">
-      <div class="menu-col" id="setMenu" role="tablist" aria-label="settings sections">
-        <div class="mi on" data-p="general">General</div>
-        <div class="mi" data-p="model">Model &amp; Provider</div>
-        <div class="mi" data-p="context">Context</div>
-        <div class="mi" data-p="reasoning">Reasoning</div>
-        <div class="mi" data-p="agent">Agent</div>
-        <div class="mi" data-p="ui">UI &amp; Theme</div>
-        <div class="mi" data-p="memory">Memory</div>
-        <div class="mi" data-p="skills">Skills</div>
-        <div class="mi" data-p="plugins">Plugins · MCP</div>
-        <div class="mi" data-p="security">Security</div>
-        <div class="mi" data-p="advanced">Advanced</div>
+      <div class="menu-col">
+        <div class="set-search">
+          <span class="set-search-icon" id="setSearchIcon" aria-hidden="true"></span>
+          <input id="setSearch" type="search" autocomplete="off" spellcheck="false" placeholder="search settings" aria-label="search settings">
+          <button class="set-search-clear linkbtn" id="setSearchClear" type="button" hidden>✕</button>
+        </div>
+        <div id="setMenu" role="tablist" aria-label="settings sections">
+          <div class="mi on" data-p="general">General</div>
+          <div class="mi" data-p="model">Model &amp; Provider</div>
+          <div class="mi" data-p="context">Context</div>
+          <div class="mi" data-p="reasoning">Reasoning</div>
+          <div class="mi" data-p="agent">Agent</div>
+          <div class="mi" data-p="network">Network</div>
+          <div class="mi" data-p="browser">Browser</div>
+          <div class="mi" data-p="sessions">Sessions</div>
+          <div class="mi" data-p="ui">UI &amp; Theme</div>
+          <div class="mi" data-p="memory">Memory</div>
+          <div class="mi" data-p="skills">Skills</div>
+          <div class="mi" data-p="plugins">Plugins · MCP</div>
+          <div class="mi" data-p="security">Security</div>
+          <div class="mi" data-p="advanced">Advanced</div>
+        </div>
+        <div class="set-results" id="setResults" role="listbox" aria-label="search results" hidden></div>
       </div>
       <div class="content-col">
         <div class="panel on" id="p-general"><h3>General</h3><div class="rows" data-panel="general"></div></div>
@@ -107,6 +118,9 @@
         <div class="panel" id="p-context"><h3>Context</h3><div class="rows" data-panel="context"></div></div>
         <div class="panel" id="p-reasoning"><h3>Reasoning</h3><div class="rows" data-panel="reasoning"></div></div>
         <div class="panel" id="p-agent"><h3>Agent</h3><div class="rows" data-panel="agent"></div></div>
+        <div class="panel" id="p-network"><h3>Network</h3><div class="rows" data-panel="network"></div></div>
+        <div class="panel" id="p-browser"><h3>Browser</h3><div class="rows" data-panel="browser"></div></div>
+        <div class="panel" id="p-sessions"><h3>Sessions</h3><div class="rows" data-panel="sessions"></div></div>
         <div class="panel" id="p-ui"><h3>UI &amp; Theme</h3><div class="rows" data-panel="ui"></div></div>
         <div class="panel" id="p-memory"><h3>Memory</h3><div class="rows" data-panel="memory"></div></div>
         <div class="panel" id="p-skills"><h3>Skills</h3><div class="rows" data-panel="skills"></div></div>
@@ -131,10 +145,10 @@
   </div>
 </div>
 
-<div class="overlay overlay-nested" id="providerOverlay">
-  <div class="modal modal-provider" role="dialog" aria-modal="true" aria-labelledby="providerFormTitle">
-    <div class="modal-top"><span id="providerFormTitle">provider</span><button class="x linkbtn" id="closeProvider" type="button">✕ close</button></div>
-    <div class="modal-body provider-body" id="providerFormHost"></div>
+<div class="overlay overlay-nested" id="subOverlay">
+  <div class="modal modal-sub" role="dialog" aria-modal="true" aria-labelledby="subTitle">
+    <div class="modal-top"><span id="subTitle"></span><button class="x linkbtn" id="closeSub" type="button">✕ close</button></div>
+    <div class="modal-body provider-body" id="subHost"></div>
   </div>
 </div>
 

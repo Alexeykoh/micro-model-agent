@@ -1,12 +1,11 @@
 /**
- * Playwright e2e: full-config-surfaces web additions (branch
+ * Playwright e2e: settings information architecture (branch
  * `feat/full-config-surfaces`).
  *
- * - new Settings panels render (network/browser/persistence/retry/lists/advanced-json)
- * - security panel keeps the bash/network toggles
+ * - every panel renders a non-empty body with named sections (no raw i18n keys)
  * - generic controls write + revert (bool/int/list/json) and reject bad JSON
- * - provider form exposes cache fields; create + delete round-trip
- * - MCP add + delete round-trip; LSP edit + revert
+ * - provider / MCP / LSP edits open in the shared nested dialog
+ * - settings search finds a deep key and navigates to its panel
  * - web slash `/security` (+ `/config` write path it shares)
  *
  * Isolated `MMA_CONFIG_DIR` per scenario; mutating checks revert.
@@ -20,27 +19,38 @@ import {
   waitCmdOut,
   waitForLiveTab,
   apiGet,
-  apiPost,
   artifactsDirFor,
   writeArtifacts,
   type Launched,
 } from "./web-helpers";
 
-const ADV_GROUPS = ["model", "context", "reasoning", "agent", "network", "browser", "sessions", "service", "retry", "lists", "security", "json"];
+const PANELS = [
+  "general",
+  "model",
+  "context",
+  "reasoning",
+  "agent",
+  "network",
+  "browser",
+  "sessions",
+  "ui",
+  "memory",
+  "skills",
+  "plugins",
+  "security",
+  "advanced",
+];
 
 async function openSettings(page: Launched["page"]): Promise<void> {
   await page.click("#openSettings");
   await page.waitForSelector("#overlay.open", { timeout: 10_000 });
 }
 
-// Deep settings live in collapsed <details> inside Advanced — expand first.
-async function openAdvGroup(page: Launched["page"], group: string): Promise<void> {
-  await page.click('#setMenu [data-p="advanced"]');
-  const det = page.locator(`[data-panel="advanced"] details[data-group="${group}"]`);
-  if ((await det.getAttribute("open")) === null) {
-    await det.locator("summary").click();
-  }
-  await det.locator(".row").first().waitFor({ state: "visible", timeout: 10_000 });
+async function openPanel(page: Launched["page"], panel: string): Promise<void> {
+  await page.click(`#setMenu [data-p="${panel}"]`);
+  const body = page.locator(`[data-panel="${panel}"]`);
+  await expect.poll(() => body.isVisible(), { timeout: 10_000 }).toBe(true);
+  await expect.poll(() => body.innerText(), { timeout: 10_000 }).not.toHaveLength(0);
 }
 
 async function configValue(baseUrl: string, dotted: string): Promise<unknown> {
@@ -69,36 +79,25 @@ function panelRow(page: Launched["page"], panel: string, label: string | RegExp)
 
 describe("web e2e: config surfaces", () => {
   e2e(
-    "advanced nests deep settings; security keeps bash/network toggles",
+    "every panel renders named sections and no raw keys leak",
     async () => {
       const dir = artifactsDirFor("cfg-panels");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
         await openSettings(page);
-        await page.click('#setMenu [data-p="advanced"]');
-        for (const group of ADV_GROUPS) {
-          const det = page.locator(`[data-panel="advanced"] details[data-group="${group}"]`);
-          await expect.poll(() => det.count(), { timeout: 10_000 }).toBe(1);
-          await expect
-            .poll(() => det.locator("summary").innerText(), { timeout: 10_000 })
-            .not.toHaveLength(0);
+        for (const panel of PANELS) {
+          await openPanel(page, panel);
+          const body = page.locator(`[data-panel="${panel}"]`);
+          await expect.poll(() => body.innerText(), { timeout: 10_000 }).not.toHaveLength(0);
+          await expect.poll(() => body.innerText(), { timeout: 10_000 }).not.toMatch(/web\.settings\./);
         }
-        // The bash/network master toggles must stay visible (registry + UI).
-        await page.click('#setMenu [data-p="security"]');
-        const sec = page.locator('[data-panel="security"]');
-        await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/bash/i);
-        await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/network/i);
-        // Visual reference: advanced with one group expanded.
-        await openAdvGroup(page, "retry");
-        await page.screenshot({ path: `${dir}/advanced-groups.png` });
-        // No raw i18n keys may leak into the menu (all panels localized).
+        // No raw i18n keys anywhere in the nav either.
         await expect
           .poll(() => page.locator("#setMenu").innerText(), { timeout: 10_000 })
           .not.toMatch(/web\.settings\./);
-        await page.keyboard.press("Escape");
-        writeArtifacts(dir, "cfg-panels", {
-          html: await page.content(),
-          consoleErrors: errors,
-        });
+        // Visual reference: Advanced (section cards, no hidden disclosure).
+        await openPanel(page, "advanced");
+        await page.screenshot({ path: `${dir}/advanced-sections.png` });
+        writeArtifacts(dir, "cfg-panels", { html: await page.content(), consoleErrors: errors });
         expect(errors).toEqual([]);
       });
     },
@@ -114,7 +113,7 @@ describe("web e2e: config surfaces", () => {
         await openSettings(page);
 
         // bool toggle + revert (general → auto-plan).
-        await page.click('#setMenu [data-p="general"]');
+        await openPanel(page, "general");
         const boolToggle = panelRow(page, "general", "auto-plan").locator(".toggle");
         const wasOn = await boolToggle.evaluate((el) => el.classList.contains("on"));
         await boolToggle.click();
@@ -122,8 +121,8 @@ describe("web e2e: config surfaces", () => {
         await boolToggle.click();
         await expect.poll(() => configValue(baseUrl, "autoPlan"), { timeout: 10_000 }).toBe(wasOn);
 
-        // int input + revert (advanced → retry group → max retries).
-        await openAdvGroup(page, "retry");
+        // int input + revert (advanced → retry section → max retries).
+        await openPanel(page, "advanced");
         const origRetries = Number(await configValue(baseUrl, "retry.maxRetries"));
         const intInput = page.locator('[data-panel="advanced"] input[aria-label="max retries"]');
         await intInput.fill(String(origRetries + 1));
@@ -137,9 +136,9 @@ describe("web e2e: config surfaces", () => {
           .poll(() => configValue(baseUrl, "retry.maxRetries"), { timeout: 10_000 })
           .toBe(origRetries);
 
-        // list input + revert (advanced → lists group → default tool tags).
-        await openAdvGroup(page, "lists");
-        const listInput = panelRow(page, "advanced", "default tool tags").locator("input");
+        // list input + revert (agent → tools section → default tool tags).
+        await openPanel(page, "agent");
+        const listInput = panelRow(page, "agent", "default tool tags").locator("input");
         await listInput.fill("file, code, e2eprobe");
         await listInput.press("Tab");
         await expect
@@ -152,7 +151,7 @@ describe("web e2e: config surfaces", () => {
           .toEqual(["file", "code"]);
 
         // json textarea: valid writes, invalid shows inline error and keeps old value.
-        await openAdvGroup(page, "json");
+        await openPanel(page, "advanced");
         const jsonRow = panelRow(page, "advanced", "pricing overrides");
         const area = jsonRow.locator("textarea");
         await area.fill('{"e2e-probe":{"input":1,"output":2}}');
@@ -192,9 +191,9 @@ describe("web e2e: config surfaces", () => {
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         const { baseUrl } = srv;
         await openSettings(page);
-        await page.click('#setMenu [data-p="model"]');
+        await openPanel(page, "model");
         await page.locator('[data-panel="model"] .sec-add').click();
-        const form = page.locator("#providerFormHost .pform");
+        const form = page.locator("#subHost .pform");
         await form.waitFor({ timeout: 10_000 });
 
         // New fields from this branch exist.
@@ -236,7 +235,6 @@ describe("web e2e: config surfaces", () => {
           })
           .toBe(false);
         await page.keyboard.press("Escape");
-
         writeArtifacts(dir, "cfg-provider", {
           html: await page.content(),
           consoleErrors: errors,
@@ -254,11 +252,11 @@ describe("web e2e: config surfaces", () => {
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         const { baseUrl } = srv;
         await openSettings(page);
-        await page.click('#setMenu [data-p="plugins"]');
+        await openPanel(page, "plugins");
 
-        // MCP create through the inline form (stdio needs a command only).
+        // MCP create through the nested dialog (stdio needs a command only).
         await page.locator('[data-panel="plugins"] button', { hasText: "add MCP server" }).click();
-        const mcpForm = page.locator('[data-panel="plugins"] .pform');
+        const mcpForm = page.locator("#subHost .pform");
         await mcpForm.waitFor({ timeout: 10_000 });
         await mcpForm.locator('input[placeholder="my-server"]').fill("e2e-mcp-probe");
         await mcpForm.locator('input[placeholder="npx"]').fill("node");
@@ -286,7 +284,7 @@ describe("web e2e: config surfaces", () => {
         await lspRow.waitFor({ timeout: 10_000 });
         const origTimeout = await lspTimeout("typescript");
         await lspRow.locator("button", { hasText: "edit" }).click();
-        const lspForm = page.locator('[data-panel="plugins"] .pform');
+        const lspForm = page.locator("#subHost .pform");
         await lspForm.waitFor({ timeout: 10_000 });
         const probeTimeout = (origTimeout ?? 30000) === 31000 ? 32000 : 31000;
         await lspForm.locator('input[placeholder="30000"]').fill(String(probeTimeout));
@@ -320,5 +318,41 @@ describe("web e2e: config surfaces", () => {
       });
     },
     300_000,
+  );
+
+  e2e(
+    "settings search finds a deep key and navigates to its panel",
+    async () => {
+      const dir = artifactsDirFor("cfg-search");
+      await withE2E(dir, async (_srv, { page, errors }: Launched) => {
+        await openSettings(page);
+        const search = page.locator("#setSearch");
+        await search.fill("compaction");
+        const results = page.locator("#setResults .set-result");
+        await expect.poll(() => results.count(), { timeout: 10_000 }).toBeGreaterThan(0);
+        // Result rows carry the human label, the owning panel and the raw key.
+        await expect.poll(() => results.first().innerText(), { timeout: 10_000 }).toMatch(/compaction/i);
+        // Picking a result switches to the owning panel and highlights the row.
+        await results.first().click();
+        await expect
+          .poll(() => page.locator('[data-panel="context"] .row-flash').count(), { timeout: 10_000 })
+          .toBeGreaterThan(0);
+        await expect
+          .poll(() => page.locator('[data-panel="context"]').isVisible(), { timeout: 5_000 })
+          .toBe(true);
+        // No-match state is explicit, not a blank list.
+        await search.fill("zzz-no-such-setting");
+        await expect
+          .poll(() => page.locator("#setResults .set-results-empty").isVisible(), { timeout: 10_000 })
+          .toBe(true);
+        await search.fill("");
+        await expect.poll(() => page.locator("#setMenu").isVisible(), { timeout: 10_000 }).toBe(true);
+        await page.keyboard.press("Escape");
+
+        writeArtifacts(dir, "cfg-search", { html: await page.content(), consoleErrors: errors });
+        expect(errors).toEqual([]);
+      });
+    },
+    180_000,
   );
 });

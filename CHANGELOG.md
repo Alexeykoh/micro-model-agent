@@ -14,11 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Provider form fields** (`src/modules/webui/providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool flags), `retry{maxRetries,baseDelay,maxDelay}`; mirrored to legacy when active, validation failure keeps the existing `400 invalid-provider`.
 - **Web MCP CRUD** (`src/modules/webui/settings-api.ts`, `server.ts` route table): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` required), `restartRequired: true`.
 - **Web LSP read/edit** (`src/modules/webui/settings-api.ts`): `GET /api/lsp` table + `PUT /api/lsp/:lang` (`enabled/timeout/command/args` only; add/remove stays JSON-only), `restartRequired: true`.
-- **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type; new sections `network`, `browser`, `persistence`, `retry`, `lists`, `advanced-json`.
+- **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type.
+- **Settings information architecture** (`src/modules/webui/assets/js/settings-controls.js`, `index.html`, `settings.js`): `PANEL_SECTIONS` is the single source of truth mapping each panel to *named* sections, so a section title always describes the keys under it and no key sits in an "Advanced" bucket. Sidebar grew to 14 intent-named sections (network/browser/sessions split out; `advanced` keeps only diagnostics/retry/service), each panel renders titled cards with a one-line explanation, and the per-group count badges are gone.
+- **Settings search** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): a search box over the same `PANEL_SECTIONS` table plus i18n labels; results show label + owning panel + dotted key, selection switches the panel and flashes the row (`Esc` clears).
 
 ### Changed
 
 - **Provider upsert semantics** (`src/modules/webui/providers-api.ts`): a create-POST naming the only entry of a virgin legacy config updates it in place instead of `409 name-conflict`; genuine collisions in multi-entry configs still return `name-conflict`.
+- **One nested settings dialog** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): provider, MCP-server and LSP-server edits all open in the shared `#subOverlay` (`openSubDialog`/`closeSubDialog`) above the settings modal, with focus trap, focus return and Esc/backdrop close; the inline MCP/LSP forms and the provider-only overlay are gone.
 
 ## [2.9.0] - 2026-09-26
 

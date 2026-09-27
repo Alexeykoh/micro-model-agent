@@ -101,26 +101,84 @@ export function controlFor(def, value, ctx) {
   return input;
 }
 
-// Additive keys for the top-level panels (merged into `SECTION_KEYS` in
-// `settings.js`). Everything else deep lives in `ADVANCED_GROUPS` below.
-export const EXTRA_SECTIONS = {
-  general: ["provider.fallback", "autoPlan"],
+// Single source of truth for the settings information architecture.
+//
+// Every panel is a list of *named sections* — the title must describe exactly
+// what is inside (research: settings fail when category names do not match the
+// controls under them, and when an "Advanced" bucket collects unrelated keys).
+// `search` (settings.js) indexes the same table, so a key can never be
+// reachable but unfindable.
+//
+// Panel ids match `data-p` / `data-panel` in index.html. Panels with custom
+// bodies (model, ui, memory, skills, plugins) render their own content first
+// and then these sections.
+export const PANEL_SECTIONS = {
+  general: [
+    { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan"] },
+    { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
+  ],
+  model: [
+    { id: "model.tuning", titleKey: "web.settings.sec.model.tuning", descKey: "web.settings.sec.model.tuning.desc", keys: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.evalBatchSize", "modelLoad.offloadKvCacheToGpu"] },
+    { id: "model.capabilities", titleKey: "web.settings.sec.model.capabilities", descKey: "web.settings.sec.model.capabilities.desc", keys: ["modelCapabilities"] },
+  ],
+  context: [
+    { id: "context.window", titleKey: "web.settings.sec.context.window", descKey: "web.settings.sec.context.window.desc", keys: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"] },
+    { id: "context.compaction", titleKey: "web.settings.sec.context.compaction", descKey: "web.settings.sec.context.compaction.desc", keys: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad"] },
+    { id: "context.instructions", titleKey: "web.settings.sec.context.instructions", descKey: "web.settings.sec.context.instructions.desc", keys: ["instructions.summarize"] },
+    { id: "context.log", titleKey: "web.settings.sec.context.log", descKey: "web.settings.sec.context.log.desc", keys: ["contextLog.enabled", "contextLog.redact"] },
+  ],
+  reasoning: [
+    { id: "reasoning.display", titleKey: "web.settings.sec.reasoning.display", keys: ["showReasoning"] },
+    { id: "reasoning.effort", titleKey: "web.settings.sec.reasoning.effort", descKey: "web.settings.sec.reasoning.effort.desc", keys: ["reasoning.mode", "reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
+  ],
+  agent: [
+    { id: "agent.moe", titleKey: "web.settings.sec.agent.moe", descKey: "web.settings.sec.agent.moe.desc", keys: ["moe.enabled", "moe.maxReplanCycles", "experts"] },
+    { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "skills.budget"] },
+    { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"] },
+    { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
+  ],
+  network: [
+    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
+    { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
+  ],
+  browser: [
+    { id: "browser.main", titleKey: "web.settings.sec.browser.main", keys: ["browser.enabled", "browser.headless"] },
+    { id: "browser.limits", titleKey: "web.settings.sec.browser.limits", descKey: "web.settings.sec.browser.limits.desc", keys: ["browser.maxElements", "browser.maxContentChars", "browser.maxConsoleEntries", "browser.maxConsoleLineChars"] },
+    { id: "browser.viewport", titleKey: "web.settings.sec.browser.viewport", keys: ["browser.viewportWidth", "browser.viewportHeight", "browser.navigationTimeout"] },
+  ],
+  sessions: [
+    { id: "sessions.main", titleKey: "web.settings.sec.sessions.main", descKey: "web.settings.sec.sessions.main.desc", keys: ["session.autoSave", "session.autoName", "session.maxSessions", "session.isolateMemory"] },
+    { id: "sessions.isolation", titleKey: "web.settings.sec.sessions.isolation", descKey: "web.settings.sec.sessions.isolation.desc", keys: ["sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
+  ],
+  ui: [
+    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
+  ],
+  security: [
+    { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.enabled", "security.bash.enabled", "security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.network.enabled", "security.sessionEncryption.enabled"] },
+    { id: "security.limits", titleKey: "web.settings.sec.security.limits", descKey: "web.settings.sec.security.limits.desc", keys: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize"] },
+    { id: "security.bash", titleKey: "web.settings.sec.security.bash", descKey: "web.settings.sec.security.bash.desc", keys: ["security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators"] },
+    { id: "security.paths", titleKey: "web.settings.sec.security.paths", descKey: "web.settings.sec.security.paths.desc", keys: ["security.paths.denied", "security.paths.allowed"] },
+    { id: "security.network", titleKey: "web.settings.sec.security.network", descKey: "web.settings.sec.security.network.desc", keys: ["security.network.deniedDomains", "security.network.allowedDomains"] },
+    { id: "security.scan", titleKey: "web.settings.sec.security.scan", descKey: "web.settings.sec.security.scan.desc", keys: ["security.contentScan.dangerousPatterns"] },
+    { id: "security.audit", titleKey: "web.settings.sec.security.audit", descKey: "web.settings.sec.security.audit.desc", keys: ["security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.auditNotifier.eventTypes"] },
+    { id: "security.encryption", titleKey: "web.settings.sec.security.encryption", descKey: "web.settings.sec.security.encryption.desc", keys: ["security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog", "security.sessionEncryption.keyPath"] },
+  ],
+  advanced: [
+    { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
+    { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
+    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
+  ],
 };
 
-// Nested groups inside the Advanced panel ("Дополнительно"): progressive
-// disclosure for in-depth settings. Order is the render order; `titleKey` is
-// `web.settings.advg.<id>`. Consumed by `renderAdvancedPanel` (settings.js).
-export const ADVANCED_GROUPS = [
-  { id: "model", titleKey: "web.settings.advg.model", keys: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.offloadKvCacheToGpu", "modelLoad.evalBatchSize"] },
-  { id: "context", titleKey: "web.settings.advg.context", keys: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad", "instructions.summarize", "contextLog.enabled", "contextLog.redact"] },
-  { id: "reasoning", titleKey: "web.settings.advg.reasoning", keys: ["reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
-  { id: "agent", titleKey: "web.settings.advg.agent", keys: ["tools.enableOnDemand", "skills.budget", "hallucination.judge.enabled", "subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"] },
-  { id: "network", titleKey: "web.settings.advg.network", keys: ["webSearch.enabled", "errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
-  { id: "browser", titleKey: "web.settings.advg.browser", keys: ["browser.enabled", "browser.headless", "browser.maxElements", "browser.maxContentChars", "browser.maxConsoleEntries", "browser.maxConsoleLineChars", "browser.viewportWidth", "browser.viewportHeight", "browser.navigationTimeout"] },
-  { id: "sessions", titleKey: "web.settings.advg.sessions", keys: ["session.autoSave", "session.maxSessions", "session.isolateMemory", "session.autoName", "sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
-  { id: "service", titleKey: "web.settings.advg.service", keys: ["pricing.enabled", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
-  { id: "retry", titleKey: "web.settings.advg.retry", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
-  { id: "lists", titleKey: "web.settings.advg.lists", keys: ["tools.defaultTags", "security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators", "security.paths.denied", "security.paths.allowed", "security.network.deniedDomains", "security.network.allowedDomains", "security.contentScan.dangerousPatterns", "security.auditNotifier.eventTypes"] },
-  { id: "security", titleKey: "web.settings.advg.security", keys: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize", "security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.sessionEncryption.keyPath", "security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog"] },
-  { id: "json", titleKey: "web.settings.advg.json", keys: ["pricing.overrides", "modelCapabilities", "experts"] },
-];
+/** Flat `key -> panelId` index (search + "where does this setting live"). */
+export function keyToPanel() {
+  const map = new Map();
+  for (const [panel, sections] of Object.entries(PANEL_SECTIONS)) {
+    for (const section of sections) {
+      for (const key of section.keys) map.set(key, panel);
+    }
+  }
+  return map;
+}

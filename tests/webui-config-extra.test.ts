@@ -50,10 +50,10 @@ describe("web config registry extras", () => {
     ]) {
       expect(js).toContain(`"${k}"`);
     }
-    for (const p of ["network", "browser", "persistence", "retry", "lists", "advanced-json"]) {
+    for (const p of ["persistence", "retry", "lists", "advanced-json"]) {
       expect(a.html).not.toContain(`data-panel="${p}"`);
     }
-    // Deep settings live in nested Advanced groups, not top-level panels.
+    // Deep settings live in named sections inside their owning panel.
     const { readFileSync } = await import("node:fs");
     const controls = readFileSync(
       new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
@@ -72,6 +72,34 @@ describe("web config registry extras", () => {
     ]) {
       expect(controls).toContain(`"${k}"`);
     }
-    expect(a.html).toContain('data-panel="advanced"');
+    for (const p of ["general", "model", "context", "reasoning", "agent", "network", "browser", "sessions", "security", "advanced"]) {
+      expect(a.html).toContain(`data-panel="${p}"`);
+    }
+  });
+
+  it("places every registry key in exactly one settings panel", async () => {
+    // A key with no home is config a user can only reach by editing JSON; the
+    // reverse (a key in two panels) makes "where does X live" ambiguous.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(
+      new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
+      "utf-8",
+    );
+    const blocks = [...src.matchAll(/keys:\s*\[([^\]]*)\]/g)].map((m) => m[1]);
+    const seen = new Map<string, number>();
+    for (const block of blocks) {
+      for (const m of block.matchAll(/"([a-zA-Z][a-zA-Z0-9_.]*)"/g)) {
+        const key = m[1];
+        seen.set(key, (seen.get(key) || 0) + 1);
+      }
+    }
+    const duplicated = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+    expect(duplicated).toEqual([]);
+    // `model` / `provider.active` are rendered by the bespoke Model panel.
+    const bespoke = new Set(["model", "provider.active"]);
+    const unplaced = buildConfigRegistry()
+      .map((e) => e.key)
+      .filter((k) => !seen.has(k) && !bespoke.has(k));
+    expect(unplaced).toEqual([]);
   });
 });
