@@ -956,6 +956,15 @@ function renderPluginsPanel() {
   list.appendChild(pnote);
 
   list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
+  const mcpAdd = el("button", "sec-add");
+  mcpAdd.type = "button";
+  mcpAdd.appendChild(icon("plus"));
+  mcpAdd.appendChild(el("span", "", t("web.settings.mcp_add")));
+  mcpAdd.addEventListener("click", () => {
+    S.state.mcpForm = { mode: "add", entry: null };
+    renderPluginsPanel();
+  });
+  list.appendChild(mcpAdd);
   if (!(data.mcp || []).length) {
     const empty = el("div", "placeholder");
     empty.textContent = t("web.settings.no_mcp");
@@ -984,14 +993,258 @@ function renderPluginsPanel() {
     nameEl.title = m.name;
     line.appendChild(nameEl);
     line.appendChild(el("span", "st", m.status || "—"));
+    line.appendChild(chip(t("web.settings.edit"), "", () => {
+      S.state.mcpForm = { mode: "edit", entry: m };
+      renderPluginsPanel();
+    }));
+    line.appendChild(chip(t("web.settings.delete"), "danger", async () => {
+      const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), { method: "DELETE" });
+      if (r.ok && r.data && r.data.ok) {
+        setIndicator(t("web.settings.mcp_saved"), false);
+        await loadPlugins();
+      } else {
+        setIndicator((r.data && r.data.error) || t("web.settings.delete_failed"), true);
+      }
+    }));
     list.appendChild(line);
   });
+  if (S.state.mcpForm) list.appendChild(mcpForm());
   if ((data.mcp || []).length) {
     const mnote = el("div", "settings-note");
     mnote.textContent = t("web.settings.mcp_note");
     list.appendChild(mnote);
   }
+  renderLspSection(list);
   container.appendChild(list);
+}
+
+// Inline MCP add/edit form. Secrets are never echoed by the API, so env/headers
+// start blank — leaving them blank on edit keeps the stored values (patch
+// semantics: absent keys are not touched).
+function mcpLiteralField(label, input) {
+  const f = el("div", "pform-field");
+  const lab = el("label", "", label);
+  f.appendChild(lab);
+  input.setAttribute("aria-label", label);
+  f.appendChild(input);
+  return f;
+}
+
+function mcpForm() {
+  const mode = (S.state.mcpForm && S.state.mcpForm.mode) || "add";
+  const editing = (S.state.mcpForm && S.state.mcpForm.entry) || {};
+  const box = el("div", "pform");
+  box.appendChild(el("div", "pform-title", t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add")));
+  const grid = el("div", "pform-grid");
+  const fName = providerInput(editing.name || "", "text", "my-server");
+  const fTransport = providerSelect(["stdio", "sse", "http"], editing.transport || "stdio");
+  const fCommand = providerInput(editing.command || "", "text", "npx");
+  const fUrl = providerInput(editing.url || "", "text", "https://…");
+  grid.appendChild(mcpLiteralField("name", fName));
+  grid.appendChild(mcpLiteralField("transport", fTransport));
+  grid.appendChild(mcpLiteralField("command", fCommand));
+  grid.appendChild(mcpLiteralField("url", fUrl));
+  box.appendChild(grid);
+  const adv = el("details", "pform-adv");
+  adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
+  const fArgs = providerInput(editing.args ? JSON.stringify(editing.args) : "", "text", '["--stdio"]');
+  const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
+  const fEnabled = providerCheck(editing.enabled !== false);
+  adv.appendChild(mcpLiteralField("args (JSON)", fArgs));
+  adv.appendChild(mcpLiteralField("timeout (ms)", fTimeout));
+  const envKeys = Array.isArray(editing.envKeys) ? editing.envKeys : [];
+  const headerKeys = Array.isArray(editing.headerKeys) ? editing.headerKeys : [];
+  const fEnv = el("textarea");
+  fEnv.placeholder = envKeys.length ? "stored: " + envKeys.join(", ") + " — blank keeps" : '{"TOKEN": "…"}';
+  const fHeaders = el("textarea");
+  fHeaders.placeholder = headerKeys.length ? "stored: " + headerKeys.join(", ") + " — blank keeps" : '{"Authorization": "…"}';
+  adv.appendChild(mcpLiteralField("env (JSON)", fEnv));
+  adv.appendChild(mcpLiteralField("headers (JSON)", fHeaders));
+  adv.appendChild(mcpLiteralField("enabled", fEnabled));
+  box.appendChild(adv);
+  const f = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
+  const actions = el("div", "pform-actions");
+  actions.appendChild(link(t("web.settings.save"), "", () => submitMcpForm(f, mode, editing)));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => {
+    S.state.mcpForm = null;
+    renderPluginsPanel();
+  }));
+  box.appendChild(actions);
+  return box;
+}
+
+function parseJsonMap(raw) {
+  const text = raw.trim();
+  if (!text) return { present: false, value: null };
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { present: true, value: null };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { present: true, value: null };
+  if (!Object.values(parsed).every((v) => typeof v === "string")) return { present: true, value: null };
+  return { present: true, value: parsed };
+}
+
+async function submitMcpForm(f, mode, editing) {
+  const name = f.name.value.trim();
+  const transport = f.transport.value || "stdio";
+  const command = f.command.value.trim();
+  const url = f.url.value.trim();
+  if (!name || (transport === "stdio" ? !command : !url)) {
+    setIndicator(t("web.settings.mcp_required"), true);
+    return;
+  }
+  const body = { name, transport };
+  if (command) body.command = command;
+  if (url) body.url = url;
+  const argsRaw = f.args.value.trim();
+  if (argsRaw) {
+    let args = null;
+    try {
+      args = JSON.parse(argsRaw);
+    } catch {
+      args = null;
+    }
+    if (!Array.isArray(args) || !args.every((x) => typeof x === "string")) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    body.args = args;
+  }
+  for (const key of ["env", "headers"]) {
+    const parsed = parseJsonMap(f[key].value);
+    if (parsed.present && !parsed.value) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    if (parsed.present) body[key] = parsed.value;
+  }
+  const timeoutRaw = f.timeout.value.trim();
+  if (timeoutRaw) {
+    const n = Number(timeoutRaw);
+    if (!Number.isInteger(n) || n < 1000 || n > 300000) {
+      setIndicator(t("web.settings.mcp_invalid"), true);
+      return;
+    }
+    body.timeout = n;
+  }
+  body.enabled = f.enabled.checked;
+  const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
+  const r = await api(target, { method: mode === "edit" ? "PUT" : "POST", body });
+  if (r.ok && r.data && r.data.ok) {
+    S.state.mcpForm = null;
+    setIndicator(t("web.settings.mcp_saved"), false);
+    await loadPlugins();
+  } else {
+    setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+  }
+}
+
+function renderLspSection(list) {
+  const servers = S.state.lsp;
+  list.appendChild(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null));
+  if (servers === undefined || servers === null) {
+    list.appendChild(placeholderFor(servers, t("web.settings.lsp_unavailable")));
+    return;
+  }
+  if (!servers.length) {
+    const empty = el("div", "placeholder");
+    empty.textContent = t("web.settings.no_lsp");
+    list.appendChild(empty);
+  }
+  servers.forEach((entry) => {
+    const line = el("div", "list-line");
+    line.appendChild(el("span", entry.enabled ? "g" : "dim", entry.enabled ? "✓" : "○"));
+    const nameEl = el("span", "name", entry.lang);
+    nameEl.title = entry.lang;
+    line.appendChild(nameEl);
+    const meta = [entry.command, entry.timeout != null ? entry.timeout + " ms" : null].filter(Boolean).join(" · ");
+    if (meta) line.appendChild(el("span", "src", meta));
+    line.appendChild(el("span", "st", entry.enabled ? t("web.settings.enabled") : t("web.settings.disabled")));
+    line.appendChild(chip(t("web.settings.edit"), "", () => {
+      S.state.lspForm = { lang: entry.lang, entry };
+      renderPluginsPanel();
+    }));
+    list.appendChild(line);
+  });
+  if (S.state.lspForm) list.appendChild(lspForm());
+  if (servers.length) {
+    const note = el("div", "settings-note");
+    note.textContent = t("web.settings.lsp_note");
+    list.appendChild(note);
+  }
+}
+
+// Small inline LSP edit form (enabled toggle, timeout, command, args JSON).
+function lspForm() {
+  const editing = (S.state.lspForm && S.state.lspForm.entry) || {};
+  const lang = (S.state.lspForm && S.state.lspForm.lang) || editing.lang || "";
+  const box = el("div", "pform");
+  box.appendChild(el("div", "pform-title", lang));
+  const grid = el("div", "pform-grid");
+  const fCommand = providerInput(editing.command || "", "text", "npx");
+  const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
+  const fEnabled = providerCheck(editing.enabled !== false);
+  grid.appendChild(mcpLiteralField("command", fCommand));
+  grid.appendChild(mcpLiteralField("timeout (ms)", fTimeout));
+  grid.appendChild(mcpLiteralField("enabled", fEnabled));
+  box.appendChild(grid);
+  const fArgs = el("textarea");
+  fArgs.value = editing.args ? JSON.stringify(editing.args) : "";
+  fArgs.placeholder = '["--stdio"]';
+  box.appendChild(mcpLiteralField("args (JSON)", fArgs));
+  const actions = el("div", "pform-actions");
+  actions.appendChild(link(t("web.settings.save"), "", async () => {
+    const body = {};
+    const command = fCommand.value.trim();
+    if (command) body.command = command;
+    const timeoutRaw = fTimeout.value.trim();
+    if (timeoutRaw) {
+      const n = Number(timeoutRaw);
+      if (!Number.isInteger(n) || n < 1000 || n > 300000) {
+        setIndicator(t("web.settings.provider_invalid"), true);
+        return;
+      }
+      body.timeout = n;
+    }
+    const argsRaw = fArgs.value.trim();
+    if (argsRaw) {
+      let args = null;
+      try {
+        args = JSON.parse(argsRaw);
+      } catch {
+        args = null;
+      }
+      if (!Array.isArray(args) || !args.every((x) => typeof x === "string")) {
+        setIndicator(t("web.settings.provider_invalid"), true);
+        return;
+      }
+      body.args = args;
+    }
+    body.enabled = fEnabled.checked;
+    const r = await api("/api/lsp/" + encodeURIComponent(lang), { method: "PUT", body });
+    if (r.ok && r.data && r.data.ok) {
+      S.state.lspForm = null;
+      setIndicator(t("web.settings.mcp_saved"), false);
+      await loadLsp();
+    } else {
+      setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
+    }
+  }));
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => {
+    S.state.lspForm = null;
+    renderPluginsPanel();
+  }));
+  box.appendChild(actions);
+  return box;
+}
+
+export async function loadLsp() {
+  const r = await api("/api/lsp");
+  S.state.lsp = r.ok && r.data && Array.isArray(r.data.servers) ? r.data.servers : null;
+  renderPluginsPanel();
 }
 
 export async function loadMemory() {
@@ -1087,12 +1340,15 @@ function openSettings() {
   void loadMemory();
   void loadSkills();
   void loadPlugins();
+  void loadLsp();
   const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
   if (active) setTimeout(() => active.focus(), 0);
 }
 function closeSettings() {
   hideProviderOverlay();
   S.state.providerForm = null;
+  S.state.mcpForm = null;
+  S.state.lspForm = null;
   overlay.classList.remove("open");
   settingsBtn.setAttribute("aria-expanded", "false");
   if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
