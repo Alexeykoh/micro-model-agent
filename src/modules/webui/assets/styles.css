@@ -882,6 +882,17 @@ body.light .toggle { background: var(--toggle-off); }
 .pform-adv { margin-top: 18px; }
 .pform-adv summary { cursor: pointer; font-size: 11.5px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
 .pform-adv .pform-grid { margin-top: 12px; }
+
+/* Advanced panel nested groups: native <details>, custom chevron. */
+.adv-group { margin-top: 14px; }
+.adv-sum { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0; color: var(--fg); list-style: none; }
+.adv-sum::-webkit-details-marker { display: none; }
+.adv-sum::marker { content: ""; }
+.adv-sum:hover { color: var(--accent); }
+.adv-sum .adv-chev { display: inline-flex; color: var(--dim-a); transition: transform 180ms ease; }
+.adv-sum .adv-chev.svg-icon { width: 13px; height: 13px; }
+.adv-group[open] .adv-sum .adv-chev { transform: rotate(180deg); }
+.adv-group .row { padding-left: 22px; }
 .pform-actions { display: flex; gap: 14px; align-items: center; padding-top: 22px; }
 .pform-actions .linkbtn.dim { color: var(--dim-a); }
 .settings-note { color: var(--dim-b); font-size: 11.5px; line-height: 1.7; padding: 8px 0 4px; }

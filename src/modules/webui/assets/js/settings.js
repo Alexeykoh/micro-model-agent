@@ -11,7 +11,7 @@ import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
-import { controlFor, EXTRA_SECTIONS } from "./settings-controls.js";
+import { controlFor, EXTRA_SECTIONS, ADVANCED_GROUPS } from "./settings-controls.js";
 
 function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
@@ -302,6 +302,59 @@ function renderGenericPanel(name, keys) {
     const def = defFor(key);
     if (!def) return;
     container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+  });
+}
+
+// Advanced panel: flat base rows + one collapsible <details> per deep group
+// (progressive disclosure). Native <details> gives keyboard (Enter/Space) and
+// AT semantics for free; open groups persist in localStorage.
+const ADV_OPEN_KEY = "mma-adv-open";
+
+function advOpenIds() {
+  try {
+    const raw = localStorage.getItem(ADV_OPEN_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function renderAdvancedPanel() {
+  const container = document.querySelector('[data-panel="advanced"]');
+  if (!container) return;
+  container.textContent = "";
+  (SECTION_KEYS.advanced || []).forEach((key) => {
+    const def = defFor(key);
+    if (!def) return;
+    container.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+  });
+  const open = advOpenIds();
+  ADVANCED_GROUPS.forEach((group) => {
+    const defs = group.keys.map(defFor).filter(Boolean);
+    if (!defs.length) return;
+    const det = el("details", "adv-group");
+    det.dataset.group = group.id;
+    if (open.has(group.id)) det.open = true;
+    const sum = el("summary", "adv-sum");
+    sum.appendChild(icon("chevron-down", "adv-chev"));
+    sum.appendChild(el("span", "", t(group.titleKey)));
+    sum.appendChild(el("span", "val dim", String(defs.length)));
+    det.appendChild(sum);
+    defs.forEach((def) => {
+      det.appendChild(row(configLabel(def), configControl(def, def.key), descFor(def.key)));
+    });
+    det.addEventListener("toggle", () => {
+      try {
+        const ids = advOpenIds();
+        if (det.open) ids.add(group.id);
+        else ids.delete(group.id);
+        localStorage.setItem(ADV_OPEN_KEY, JSON.stringify([...ids]));
+      } catch {
+        /* private mode — groups just don't persist */
+      }
+    });
+    container.appendChild(det);
   });
 }
 
@@ -1277,18 +1330,12 @@ export function renderSettings() {
   renderGenericPanel("context", SECTION_KEYS.context);
   renderGenericPanel("reasoning", SECTION_KEYS.reasoning);
   renderGenericPanel("agent", SECTION_KEYS.agent);
-  renderGenericPanel("network", SECTION_KEYS.network);
-  renderGenericPanel("browser", SECTION_KEYS.browser);
-  renderGenericPanel("persistence", SECTION_KEYS.persistence);
-  renderGenericPanel("retry", SECTION_KEYS.retry);
-  renderGenericPanel("lists", SECTION_KEYS.lists);
-  renderGenericPanel("advanced-json", SECTION_KEYS["advanced-json"]);
   renderUiPanel();
   renderMemoryPanel();
   renderSkillsPanel();
   renderPluginsPanel();
   renderSecurityPanel();
-  renderGenericPanel("advanced", SECTION_KEYS.advanced);
+  renderAdvancedPanel();
 }
 
 const overlay = document.getElementById("overlay");

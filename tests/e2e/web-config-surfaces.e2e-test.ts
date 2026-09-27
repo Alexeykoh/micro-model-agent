@@ -26,11 +26,21 @@ import {
   type Launched,
 } from "./web-helpers";
 
-const NEW_PANELS = ["network", "browser", "persistence", "retry", "lists", "advanced-json"];
+const ADV_GROUPS = ["model", "context", "reasoning", "agent", "network", "browser", "sessions", "service", "retry", "lists", "security", "json"];
 
 async function openSettings(page: Launched["page"]): Promise<void> {
   await page.click("#openSettings");
   await page.waitForSelector("#overlay.open", { timeout: 10_000 });
+}
+
+// Deep settings live in collapsed <details> inside Advanced — expand first.
+async function openAdvGroup(page: Launched["page"], group: string): Promise<void> {
+  await page.click('#setMenu [data-p="advanced"]');
+  const det = page.locator(`[data-panel="advanced"] details[data-group="${group}"]`);
+  if ((await det.getAttribute("open")) === null) {
+    await det.locator("summary").click();
+  }
+  await det.locator(".row").first().waitFor({ state: "visible", timeout: 10_000 });
 }
 
 async function configValue(baseUrl: string, dotted: string): Promise<unknown> {
@@ -59,21 +69,27 @@ function panelRow(page: Launched["page"], panel: string, label: string | RegExp)
 
 describe("web e2e: config surfaces", () => {
   e2e(
-    "new panels render; security keeps bash/network toggles",
+    "advanced nests deep settings; security keeps bash/network toggles",
     async () => {
       const dir = artifactsDirFor("cfg-panels");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
         await openSettings(page);
-        for (const name of NEW_PANELS) {
-          await page.click(`#setMenu [data-p="${name}"]`);
-          const panel = page.locator(`[data-panel="${name}"]`);
-          await expect.poll(() => panel.innerText(), { timeout: 10_000 }).not.toHaveLength(0);
+        await page.click('#setMenu [data-p="advanced"]');
+        for (const group of ADV_GROUPS) {
+          const det = page.locator(`[data-panel="advanced"] details[data-group="${group}"]`);
+          await expect.poll(() => det.count(), { timeout: 10_000 }).toBe(1);
+          await expect
+            .poll(() => det.locator("summary").innerText(), { timeout: 10_000 })
+            .not.toHaveLength(0);
         }
         // The bash/network master toggles must stay visible (registry + UI).
         await page.click('#setMenu [data-p="security"]');
         const sec = page.locator('[data-panel="security"]');
         await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/bash/i);
         await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/network/i);
+        // Visual reference: advanced with one group expanded.
+        await openAdvGroup(page, "retry");
+        await page.screenshot({ path: `${dir}/advanced-groups.png` });
         // No raw i18n keys may leak into the menu (all panels localized).
         await expect
           .poll(() => page.locator("#setMenu").innerText(), { timeout: 10_000 })
@@ -106,10 +122,10 @@ describe("web e2e: config surfaces", () => {
         await boolToggle.click();
         await expect.poll(() => configValue(baseUrl, "autoPlan"), { timeout: 10_000 }).toBe(wasOn);
 
-        // int input + revert (retry → max retries).
-        await page.click('#setMenu [data-p="retry"]');
+        // int input + revert (advanced → retry group → max retries).
+        await openAdvGroup(page, "retry");
         const origRetries = Number(await configValue(baseUrl, "retry.maxRetries"));
-        const intInput = page.locator('[data-panel="retry"] input[aria-label="max retries"]');
+        const intInput = page.locator('[data-panel="advanced"] input[aria-label="max retries"]');
         await intInput.fill(String(origRetries + 1));
         await intInput.press("Tab");
         await expect
@@ -121,9 +137,9 @@ describe("web e2e: config surfaces", () => {
           .poll(() => configValue(baseUrl, "retry.maxRetries"), { timeout: 10_000 })
           .toBe(origRetries);
 
-        // list input + revert (lists → default tool tags).
-        await page.click('#setMenu [data-p="lists"]');
-        const listInput = panelRow(page, "lists", "default tool tags").locator("input");
+        // list input + revert (advanced → lists group → default tool tags).
+        await openAdvGroup(page, "lists");
+        const listInput = panelRow(page, "advanced", "default tool tags").locator("input");
         await listInput.fill("file, code, e2eprobe");
         await listInput.press("Tab");
         await expect
@@ -136,8 +152,8 @@ describe("web e2e: config surfaces", () => {
           .toEqual(["file", "code"]);
 
         // json textarea: valid writes, invalid shows inline error and keeps old value.
-        await page.click('#setMenu [data-p="advanced-json"]');
-        const jsonRow = panelRow(page, "advanced-json", "pricing overrides");
+        await openAdvGroup(page, "json");
+        const jsonRow = panelRow(page, "advanced", "pricing overrides");
         const area = jsonRow.locator("textarea");
         await area.fill('{"e2e-probe":{"input":1,"output":2}}');
         await area.press("Tab");

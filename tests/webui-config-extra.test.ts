@@ -25,7 +25,7 @@ describe("web config registry extras", () => {
     expect(ctx.min).toBe(1024);
   });
 
-  it("covers new keys in web settings sections", () => {
+  it("covers new keys in web settings sections", async () => {
     const a = loadAssets();
     const js = [a.js, ...Object.values(a.jsModules ?? {})].join("\n");
     for (const k of [
@@ -51,7 +51,27 @@ describe("web config registry extras", () => {
       expect(js).toContain(`"${k}"`);
     }
     for (const p of ["network", "browser", "persistence", "retry", "lists", "advanced-json"]) {
-      expect(a.html).toContain(`data-panel="${p}"`);
+      expect(a.html).not.toContain(`data-panel="${p}"`);
     }
+    // Deep settings live in nested Advanced groups, not top-level panels.
+    const { readFileSync } = await import("node:fs");
+    const controls = readFileSync(
+      new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
+      "utf-8",
+    );
+    for (const k of [
+      "retry.maxRetries",
+      "browser.headless",
+      "session.autoName",
+      "webSearch.enabled",
+      "tools.defaultTags",
+      "security.bash.blacklist",
+      "pricing.overrides",
+      "modelCapabilities",
+      "experts",
+    ]) {
+      expect(controls).toContain(`"${k}"`);
+    }
+    expect(a.html).toContain('data-panel="advanced"');
   });
 });

@@ -101,20 +101,26 @@ export function controlFor(def, value, ctx) {
   return input;
 }
 
-// Additive section keys merged into `SECTION_KEYS` (`settings.js`). Existing
-// sections are extended; `network`/`browser`/`persistence`/`retry`/`lists`/
-// `advanced-json` are new panels (`index.html` renders them generically).
+// Additive keys for the top-level panels (merged into `SECTION_KEYS` in
+// `settings.js`). Everything else deep lives in `ADVANCED_GROUPS` below.
 export const EXTRA_SECTIONS = {
   general: ["provider.fallback", "autoPlan"],
-  context: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad", "instructions.summarize", "contextLog.enabled", "contextLog.redact"],
-  reasoning: ["reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"],
-  security: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize", "security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.sessionEncryption.keyPath", "security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog"],
-  advanced: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.offloadKvCacheToGpu", "modelLoad.evalBatchSize"],
-  agent: ["tools.enableOnDemand", "skills.budget", "hallucination.judge.enabled", "subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"],
-  network: ["webSearch.enabled", "errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"],
-  browser: ["browser.enabled", "browser.headless", "browser.maxElements", "browser.maxContentChars", "browser.maxConsoleEntries", "browser.maxConsoleLineChars", "browser.viewportWidth", "browser.viewportHeight", "browser.navigationTimeout"],
-  persistence: ["session.autoSave", "session.maxSessions", "session.isolateMemory", "session.autoName", "sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles", "pricing.enabled", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"],
-  retry: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"],
-  lists: ["tools.defaultTags", "security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators", "security.paths.denied", "security.paths.allowed", "security.network.deniedDomains", "security.network.allowedDomains", "security.contentScan.dangerousPatterns", "security.auditNotifier.eventTypes"],
-  "advanced-json": ["pricing.overrides", "modelCapabilities", "experts"],
 };
+
+// Nested groups inside the Advanced panel ("Дополнительно"): progressive
+// disclosure for in-depth settings. Order is the render order; `titleKey` is
+// `web.settings.advg.<id>`. Consumed by `renderAdvancedPanel` (settings.js).
+export const ADVANCED_GROUPS = [
+  { id: "model", titleKey: "web.settings.advg.model", keys: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.offloadKvCacheToGpu", "modelLoad.evalBatchSize"] },
+  { id: "context", titleKey: "web.settings.advg.context", keys: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad", "instructions.summarize", "contextLog.enabled", "contextLog.redact"] },
+  { id: "reasoning", titleKey: "web.settings.advg.reasoning", keys: ["reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
+  { id: "agent", titleKey: "web.settings.advg.agent", keys: ["tools.enableOnDemand", "skills.budget", "hallucination.judge.enabled", "subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"] },
+  { id: "network", titleKey: "web.settings.advg.network", keys: ["webSearch.enabled", "errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
+  { id: "browser", titleKey: "web.settings.advg.browser", keys: ["browser.enabled", "browser.headless", "browser.maxElements", "browser.maxContentChars", "browser.maxConsoleEntries", "browser.maxConsoleLineChars", "browser.viewportWidth", "browser.viewportHeight", "browser.navigationTimeout"] },
+  { id: "sessions", titleKey: "web.settings.advg.sessions", keys: ["session.autoSave", "session.maxSessions", "session.isolateMemory", "session.autoName", "sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
+  { id: "service", titleKey: "web.settings.advg.service", keys: ["pricing.enabled", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
+  { id: "retry", titleKey: "web.settings.advg.retry", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
+  { id: "lists", titleKey: "web.settings.advg.lists", keys: ["tools.defaultTags", "security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators", "security.paths.denied", "security.paths.allowed", "security.network.deniedDomains", "security.network.allowedDomains", "security.contentScan.dangerousPatterns", "security.auditNotifier.eventTypes"] },
+  { id: "security", titleKey: "web.settings.advg.security", keys: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize", "security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.sessionEncryption.keyPath", "security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog"] },
+  { id: "json", titleKey: "web.settings.advg.json", keys: ["pricing.overrides", "modelCapabilities", "experts"] },
+];

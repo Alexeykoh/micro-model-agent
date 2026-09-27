@@ -110,6 +110,23 @@ describe("webui i18n", () => {
     }
   });
 
+  it("titles every Advanced nested group in both locales", async () => {
+    // settings-controls.js is DOM-coupled (via dom.js) — parse the group
+    // table out of the source instead of importing it.
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(
+      new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
+      "utf-8",
+    );
+    const titles = [...src.matchAll(/titleKey:\s*"(web\.settings\.advg\.[a-z-]+)"/g)].map((m) => m[1]);
+    expect(titles.length).toBeGreaterThan(5);
+    const dicts = getFlatDicts();
+    for (const key of new Set(titles)) {
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
+    }
+  });
+
   it("returns 503-free empty locale when config is not wired", async () => {
     const s = createWebUiState();
     await withServer(s, async (base) => {
