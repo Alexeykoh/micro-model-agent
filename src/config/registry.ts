@@ -2,6 +2,7 @@ import type { AppConfig, ReasoningMode } from "./types";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
+import { readMmaVersion } from "../core/version";
 import { EXTRA_DEFS } from "./registry-extra";
 
 /**
@@ -347,7 +348,10 @@ const DEFINITIONS: ConfigKeyDef[] = [
     valueType: "string",
     reconfigure: false,
     readOnly: true,
-    get: (c) => c.version,
+    // The *installed package* version, not `config.version` (that field is the
+    // config schema version used by migration detection and never matches a
+    // release). Read at call time so it follows updates without a restart.
+    get: () => readMmaVersion(),
   },
   securityToggle("enabled", "security.enabled"),
   securityToggle("bash", "security.bash.enabled"),

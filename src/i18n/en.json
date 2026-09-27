@@ -1111,7 +1111,7 @@
   "config.desc.critic.timeoutMs": "Verifier call timeout (fail-open).",
   "config.desc.logLevel": "Diagnostic log verbosity.",
   "config.desc.locale": "Language of the interface and agent messages.",
-  "config.desc.version": "Installed MMA version (read-only).",
+  "config.desc.version": "Installed MMA version.",
   "config.desc.security.enabled": "Master switch for the security module (path checks, content scans, limits).",
   "config.desc.security.paths.enabled": "Restrict file operations to the workspace and block paths outside it.",
   "config.desc.security.contentScan.enabled": "Scan file contents for dangerous patterns before writing.",

@@ -4,7 +4,7 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.10.0] - 2026-09-27
 
 ### Added
 
@@ -24,6 +24,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **Provider upsert semantics** (`src/modules/webui/providers-api.ts`): a create-POST naming the only entry of a virgin legacy config updates it in place instead of `409 name-conflict`; genuine collisions in multi-entry configs still return `name-conflict`.
 - **One nested settings dialog** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): provider, MCP-server and LSP-server edits all open in the shared `#subOverlay` (`openSubDialog`/`closeSubDialog`) above the settings modal, with focus trap, focus return and Esc/backdrop close; the inline MCP/LSP forms and the provider-only overlay are gone.
+
+### Fixed
+
+- **Audit event checkboxes** (`src/modules/webui/assets/styles.css`, `src/i18n/*.json`): `.row input` (a right-aligned 120px field) was inherited by checkboxes, so the label drifted away from the box; checkboxes now reset width/alignment and lay out in an even grid, and every option has a human label (`security block`, `bash command`, …) instead of a raw id.
+- **Settings reported a stale MMA version** (`src/config/registry.ts`): the `version` key returned `config.version` — the config-schema version written at first launch (`2.0.0`), which never matched a release. It now reports the installed package version (`readMmaVersion()`, read at call time), so the web Settings panel and `/config version` show the real release; the description no longer claims "(read-only)".
 
 ## [2.9.0] - 2026-09-26
 

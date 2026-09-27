@@ -260,7 +260,14 @@ function descFor(key) {
 // Generic per-type control (`settings-controls.js`): bool toggle, enum
 // select, int/share/list/json inputs. `post` funnels through `postConfig`.
 function configControl(def, key) {
-  const value = S.state.config ? getPath(S.state.config, key) : undefined;
+  // Read-only keys carry their resolved value in the registry entry: the getter
+  // is authoritative and may differ from the raw config field (`version`).
+  const value =
+    def.readOnly && def.value !== undefined
+      ? def.value
+      : S.state.config
+        ? getPath(S.state.config, key)
+        : undefined;
   return controlFor(def, value, {
     label: configLabel(def),
     enumLabel,

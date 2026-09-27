@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createWebUiState, type WebSessionManager } from "../src/modules/webui/state";
 import { DEFAULTS } from "../src/config/defaults";
+import { readMmaVersion } from "../src/core/version";
 import type { AppConfig } from "../src/config/types";
 import type { SessionMeta } from "../src/modules/session/types";
 import { withServer, postJson, doFetch, } from "./helpers/webui-server";
@@ -261,6 +262,9 @@ describe("webui config/session/model REST", () => {
       expect(byKey.get("security.contentScan.enabled")?.valueType).toBe("bool");
       expect(byKey.get("security.sessionEncryption.enabled")?.valueType).toBe("bool");
       expect(byKey.get("version")?.readOnly).toBe(true);
+      // Read-only entries carry their resolved value so the UI does not fall
+      // back to the stored config field (which held a stale schema version).
+      expect(byKey.get("version")?.value).toBe(readMmaVersion());
     });
   });
 

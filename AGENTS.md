@@ -394,7 +394,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
-### Full Config Surfaces (unreleased)
+### Full Config Surfaces (2.10.0)
 
 Дизайн: [docs/plans/2026-09-27-full-config-surfaces.md](./docs/plans/2026-09-27-full-config-surfaces.md).
 
@@ -508,7 +508,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
   и ограниченный read-only tool-loop (`critic.tools`).
 
-### Current Version: 2.8.0
+### Current Version: 2.10.0
 
 ### Changelog
 

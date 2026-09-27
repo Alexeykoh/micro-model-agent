@@ -15,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../i18n";
 import { redactConfigSecrets } from "../../config/redact";
 import { configDefs, setConfigValue, type ConfigKeyDef } from "../../config/registry";
+import type { AppConfig } from "../../config/types";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
 import { persistAndReconfigure } from "./persist";
@@ -37,12 +38,18 @@ export interface ConfigRegistryEntry {
   step?: number;
   /** `version` and similar keys render as a non-editable value in the UI. */
   readOnly?: boolean;
+  /**
+   * Resolved value for read-only keys. Their registry getter is authoritative
+   * and may differ from the raw config field (e.g. `version` reports the
+   * installed package version, not the stored config-schema version).
+   */
+  value?: unknown;
   /** GUI rendering hint for `list`/`json` values (chips, checkboxes, table). */
   editor?: ConfigKeyDef["editor"];
 }
 
 /** Serialize the registry in registry order (canonical keys only). */
-export function buildConfigRegistry(): ConfigRegistryEntry[] {
+export function buildConfigRegistry(config?: AppConfig): ConfigRegistryEntry[] {
   return configDefs().map((def) => {
     const entry: ConfigRegistryEntry = {
       key: def.key,
@@ -54,7 +61,10 @@ export function buildConfigRegistry(): ConfigRegistryEntry[] {
     if (def.min !== undefined) entry.min = def.min;
     if (def.max !== undefined) entry.max = def.max;
     if (def.step !== undefined) entry.step = def.step;
-    if (def.readOnly) entry.readOnly = true;
+    if (def.readOnly) {
+      entry.readOnly = true;
+      if (config) entry.value = def.get(config);
+    }
     if (def.editor) entry.editor = def.editor;
     return entry;
   });
@@ -74,7 +84,7 @@ export function handleConfigGet(res: ServerResponse, s: WebUiState): void {
   }
   sendJson(res, 200, {
     config: redactConfigSecrets(s.config),
-    registry: buildConfigRegistry(),
+    registry: buildConfigRegistry(s.config),
     webToken: maskToken(s.token),
   });
 }

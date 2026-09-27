@@ -9,6 +9,7 @@ import {
   type ConfigKeyDef,
 } from "../src/config/registry";
 import { DEFAULTS } from "../src/config/defaults";
+import { readMmaVersion } from "../src/core/version";
 import { getFlatDicts } from "../src/i18n";
 
 const listDef = { valueType: "list" } as ConfigKeyDef;
@@ -96,7 +97,6 @@ describe("registry keys", () => {
     expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "critical").ok).toBe(true);
     expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "banana").ok).toBe(false);
   });
-
   it("falls back to 8192 for maxCompletionTokens, min stays 512", () => {
     const cfg = freshCfg();
     delete (cfg.provider as Record<string, unknown>).maxCompletionTokens;
@@ -105,6 +105,20 @@ describe("registry keys", () => {
     if (got.ok) expect(got.value).toBe(8192);
     expect(setConfigValue(cfg, "provider.maxCompletionTokens", "100").ok).toBe(false);
     expect(setConfigValue(cfg, "provider.maxCompletionTokens", "8192").ok).toBe(true);
+  });
+
+  it("reports the installed package version for `version`", () => {
+    // Must be the release from package.json, never the schema value stored in
+    // config.json (which the UI used to show as a stale "2.0.0").
+    const got = getConfigValue(freshCfg(), "version");
+    expect(got.ok).toBe(true);
+    if (got.ok) {
+      expect(got.value).toBe(readMmaVersion());
+      expect(String(got.value)).toMatch(/^\d+\.\d+\.\d+/);
+    }
+    const desc = getFlatDicts().en["config.desc.version"] ?? "";
+    expect(desc).not.toMatch(/read-only/i);
+    expect(desc.length).toBeGreaterThan(0);
   });
 });
 
