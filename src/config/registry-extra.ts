@@ -1,5 +1,5 @@
-import type { AppConfig } from "./types";
-import type { ConfigKeyDef } from "./registry";
+import type { AppConfig, AuditEventType } from "./types";
+import type { ConfigKeyDef, ConfigRangeReason } from "./registry";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 
@@ -50,6 +50,83 @@ function enumOf(
 ): ConfigKeyDef {
   return { key, aliases: [], domain, valueType: "enum", enumValues: values, reconfigure, get, set };
 }
+
+function list(
+  key: string,
+  domain: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+): ConfigKeyDef {
+  return { key, aliases: [], domain, valueType: "list", reconfigure: false, get, set };
+}
+
+function str(
+  key: string,
+  domain: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+): ConfigKeyDef {
+  return { key, aliases: [], domain, valueType: "string", reconfigure: false, get, set };
+}
+
+/** Optional string: get returns "" when unset, set clears to undefined on empty. */
+function strOpt(
+  key: string,
+  domain: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+): ConfigKeyDef {
+  return str(key, domain, get, set);
+}
+
+function json(
+  key: string,
+  domain: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+  extraValidate?: ConfigKeyDef["extraValidate"],
+): ConfigKeyDef {
+  return { key, aliases: [], domain, valueType: "json", reconfigure: false, get, set, extraValidate };
+}
+
+/** JSON def with a shape predicate; anything failing the check is "invalid". */
+function jsonShape(
+  key: string,
+  domain: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+  check: (v: unknown) => boolean,
+): ConfigKeyDef {
+  const extraValidate = (_c: AppConfig, v: unknown): ConfigRangeReason | "invalid" | null =>
+    check(v) ? null : "invalid";
+  return json(key, domain, get, set, extraValidate);
+}
+
+/** Lazy-init the optional security nest and return it. */
+function sec(c: AppConfig) {
+  c.security ??= structuredClone(DEFAULT_SECURITY_CONFIG);
+  return c.security;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function isNonNegNum(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0;
+}
+
+const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
+  "security_block",
+  "bash_command",
+  "file_operation",
+  "network_request",
+  "tool_call",
+  "authentication",
+  "configuration_change",
+  "session_start",
+  "session_end",
+];
 
 export const EXTRA_DEFS: ConfigKeyDef[] = [
   bool("provider.fallback", "provider", false,
@@ -365,4 +442,125 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.security ??= structuredClone(DEFAULT_SECURITY_CONFIG);
       c.security.rateLimits.maxParallelTasks = v as number;
     }),
+
+  list("tools.defaultTags", "tools",
+    (c) => c.tools.defaultTags,
+    (c, v) => { c.tools.defaultTags = v as string[]; }),
+
+  list("security.bash.blacklist", "security",
+    (c) => c.security?.bash.blacklist ?? DEFAULT_SECURITY_CONFIG.bash.blacklist,
+    (c, v) => { sec(c).bash.blacklist = v as string[]; }),
+  list("security.bash.whitelist", "security",
+    (c) => c.security?.bash.whitelist ?? DEFAULT_SECURITY_CONFIG.bash.whitelist,
+    (c, v) => { sec(c).bash.whitelist = v as string[]; }),
+  list("security.bash.dangerousFlags", "security",
+    (c) => c.security?.bash.dangerousFlags ?? DEFAULT_SECURITY_CONFIG.bash.dangerousFlags,
+    (c, v) => { sec(c).bash.dangerousFlags = v as string[]; }),
+  list("security.bash.dangerousOperators", "security",
+    (c) => c.security?.bash.dangerousOperators ?? DEFAULT_SECURITY_CONFIG.bash.dangerousOperators,
+    (c, v) => { sec(c).bash.dangerousOperators = v as string[]; }),
+  list("security.paths.denied", "security",
+    (c) => c.security?.paths.denied ?? DEFAULT_SECURITY_CONFIG.paths.denied,
+    (c, v) => { sec(c).paths.denied = v as string[]; }),
+  list("security.paths.allowed", "security",
+    (c) => c.security?.paths.allowed ?? DEFAULT_SECURITY_CONFIG.paths.allowed,
+    (c, v) => { sec(c).paths.allowed = v as string[]; }),
+  list("security.network.deniedDomains", "security",
+    (c) => c.security?.network.deniedDomains ?? DEFAULT_SECURITY_CONFIG.network.deniedDomains,
+    (c, v) => { sec(c).network.deniedDomains = v as string[]; }),
+  list("security.network.allowedDomains", "security",
+    (c) => c.security?.network.allowedDomains ?? DEFAULT_SECURITY_CONFIG.network.allowedDomains,
+    (c, v) => { sec(c).network.allowedDomains = v as string[]; }),
+
+  int("security.network.requestTimeout", "security", 1000, 120000, 1000, false,
+    (c) => c.security?.network.requestTimeout ?? DEFAULT_SECURITY_CONFIG.network.requestTimeout,
+    (c, v) => { sec(c).network.requestTimeout = v as number; }),
+  int("security.network.maxResponseSize", "security", 1024, 1000000, 1024, false,
+    (c) => c.security?.network.maxResponseSize ?? DEFAULT_SECURITY_CONFIG.network.maxResponseSize,
+    (c, v) => { sec(c).network.maxResponseSize = v as number; }),
+
+  jsonShape("security.contentScan.dangerousPatterns", "security",
+    (c) => (c.security?.contentScan.dangerousPatterns ?? DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns)
+      .map((r) => r.source),
+    (c, v) => { sec(c).contentScan.dangerousPatterns = (v as string[]).map((s) => new RegExp(s)); },
+    (v) => Array.isArray(v) && v.every((s) => {
+      if (typeof s !== "string") return false;
+      try { new RegExp(s); return true; } catch { return false; }
+    })),
+
+  bool("security.auditNotifier.enabled", "security", false,
+    (c) => c.security?.auditNotifier.enabled ?? DEFAULT_SECURITY_CONFIG.auditNotifier.enabled,
+    (c, v) => { sec(c).auditNotifier.enabled = v as boolean; }),
+  strOpt("security.auditNotifier.filePath", "security",
+    (c) => c.security?.auditNotifier.filePath ?? "",
+    (c, v) => {
+      const s = String(v).trim();
+      sec(c).auditNotifier.filePath = s.length === 0 ? undefined : s;
+    }),
+  strOpt("security.auditNotifier.webhookUrl", "security",
+    (c) => c.security?.auditNotifier.webhookUrl ?? "",
+    (c, v) => {
+      const s = String(v).trim();
+      sec(c).auditNotifier.webhookUrl = s.length === 0 ? undefined : s;
+    }),
+  int("security.auditNotifier.webhookTimeout", "security", 1000, 60000, 1000, false,
+    (c) => c.security?.auditNotifier.webhookTimeout ?? DEFAULT_SECURITY_CONFIG.auditNotifier.webhookTimeout,
+    (c, v) => { sec(c).auditNotifier.webhookTimeout = v as number; }),
+  enumOf("security.auditNotifier.minSeverity", "security",
+    ["low", "medium", "high", "critical"] as const, false,
+    (c) => c.security?.auditNotifier.minSeverity ?? DEFAULT_SECURITY_CONFIG.auditNotifier.minSeverity,
+    (c, v) => { sec(c).auditNotifier.minSeverity = v as "low" | "medium" | "high" | "critical"; }),
+  jsonShape("security.auditNotifier.eventTypes", "security",
+    (c) => c.security?.auditNotifier.eventTypes ?? DEFAULT_SECURITY_CONFIG.auditNotifier.eventTypes,
+    (c, v) => { sec(c).auditNotifier.eventTypes = v as AuditEventType[]; },
+    (v) => Array.isArray(v) && v.every((e) =>
+      typeof e === "string" && (AUDIT_EVENT_TYPES as readonly string[]).includes(e))),
+  int("security.auditNotifier.maxRetries", "security", 0, 10, 1, false,
+    (c) => c.security?.auditNotifier.maxRetries ?? DEFAULT_SECURITY_CONFIG.auditNotifier.maxRetries,
+    (c, v) => { sec(c).auditNotifier.maxRetries = v as number; }),
+
+  strOpt("security.sessionEncryption.keyPath", "security",
+    (c) => c.security?.sessionEncryption.keyPath ?? "",
+    (c, v) => {
+      const s = String(v).trim();
+      sec(c).sessionEncryption.keyPath = s.length === 0 ? undefined : s;
+    }),
+  bool("security.sessionEncryption.encryptHistory", "security", false,
+    (c) => c.security?.sessionEncryption.encryptHistory ?? DEFAULT_SECURITY_CONFIG.sessionEncryption.encryptHistory,
+    (c, v) => { sec(c).sessionEncryption.encryptHistory = v as boolean; }),
+  bool("security.sessionEncryption.encryptSessionLog", "security", false,
+    (c) => c.security?.sessionEncryption.encryptSessionLog ?? DEFAULT_SECURITY_CONFIG.sessionEncryption.encryptSessionLog,
+    (c, v) => { sec(c).sessionEncryption.encryptSessionLog = v as boolean; }),
+
+  jsonShape("pricing.overrides", "pricing",
+    (c) => c.pricing?.overrides ?? {},
+    (c, v) => {
+      c.pricing ??= structuredClone(DEFAULTS.pricing!);
+      c.pricing.overrides = v as Record<string, { input: number; output: number }>;
+    },
+    (v) => isRecord(v) && Object.values(v).every((e) =>
+      isRecord(e) &&
+      isNonNegNum(e.input) &&
+      isNonNegNum(e.output) &&
+      (e.cachedInput === undefined || isNonNegNum(e.cachedInput)) &&
+      (e.cacheWrite === undefined || isNonNegNum(e.cacheWrite)))),
+
+  jsonShape("modelCapabilities", "provider",
+    (c) => c.modelCapabilities ?? {},
+    (c, v) => { c.modelCapabilities = v as AppConfig["modelCapabilities"]; },
+    (v) => isRecord(v) && Object.values(v).every((e) =>
+      isRecord(e) &&
+      (e.vision === undefined || typeof e.vision === "boolean") &&
+      (e.tools === undefined || typeof e.tools === "boolean"))),
+
+  jsonShape("experts", "agent",
+    (c) => c.experts,
+    (c, v) => { c.experts = v as AppConfig["experts"]; },
+    (v) => isRecord(v) && Object.values(v).every((e) =>
+      isRecord(e) &&
+      typeof e.model === "string" &&
+      Array.isArray(e.tool_tags) &&
+      e.tool_tags.every((t) => typeof t === "string") &&
+      (e.max_attempts === undefined || (typeof e.max_attempts === "number" && Number.isFinite(e.max_attempts))) &&
+      (e.description === undefined || typeof e.description === "string"))),
 ];

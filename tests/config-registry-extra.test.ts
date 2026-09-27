@@ -3,6 +3,7 @@ import {
   parseConfigValue,
   formatConfigValue,
   resolveConfigKey,
+  getConfigValue,
   setConfigValue,
   type ConfigKeyDef,
 } from "../src/config/registry";
@@ -38,5 +39,34 @@ describe("registry list/json types", () => {
     expect(cfg.autoPlan).toBe(false);
     const bad = setConfigValue(cfg, "reasoning.min", "banana");
     expect(bad.ok).toBe(false);
+  });
+  it("round-trips security.bash.blacklist as a list", () => {
+    const cfg = structuredClone(DEFAULTS);
+    const r = setConfigValue(cfg, "security.bash.blacklist", "rm, dd");
+    expect(r.ok).toBe(true);
+    expect(cfg.security?.bash.blacklist).toEqual(["rm", "dd"]);
+    const got = getConfigValue(cfg, "security.bash.blacklist");
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.display).toBe("rm, dd");
+  });
+  it("validates security.contentScan.dangerousPatterns regexes", () => {
+    const cfg = structuredClone(DEFAULTS);
+    const ok = setConfigValue(cfg, "security.contentScan.dangerousPatterns", '["eval\\\\("]');
+    expect(ok.ok).toBe(true);
+    const got = getConfigValue(cfg, "security.contentScan.dangerousPatterns");
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value).toEqual(["eval\\("]);
+    const bad = setConfigValue(cfg, "security.contentScan.dangerousPatterns", '["(["]');
+    expect(bad.ok).toBe(false);
+  });
+  it("validates pricing.overrides shape", () => {
+    const cfg = structuredClone(DEFAULTS);
+    expect(setConfigValue(cfg, "pricing.overrides", '{"m":{"input":1,"output":2}}').ok).toBe(true);
+    expect(setConfigValue(cfg, "pricing.overrides", '{"m":{"input":"x"}}').ok).toBe(false);
+  });
+  it("validates security.auditNotifier.minSeverity enum", () => {
+    const cfg = structuredClone(DEFAULTS);
+    expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "critical").ok).toBe(true);
+    expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "banana").ok).toBe(false);
   });
 });
