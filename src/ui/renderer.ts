@@ -566,7 +566,7 @@ export class Renderer {
     this.spinner.stop();
     this.fmt.flushPartialNow();
     if (!this.card) return;
-    const { label, summary, mark: leadMark, deferred, firstBody } = this.card;
+    const { label, summary, deferred } = this.card;
     const mark = error ? failureMark() : successMark();
     let tail = `${mark} ${pc.dim(formatDuration(duration))}`;
     if (ctxDelta !== undefined && ctxDelta !== 0) {

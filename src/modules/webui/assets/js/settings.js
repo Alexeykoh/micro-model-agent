@@ -509,11 +509,16 @@ function providerAdvancedFields(editing) {
     retryBase: providerInput(retry.baseDelay, "number", "1000"),
     retryMaxD: providerInput(retry.maxDelay, "number", "30000"),
   };
+  // Flags keep the raw config key in `title` so it stays searchable, but the
+  // visible label is localized like every other field of the form.
   f.cacheFlags = CACHE_FLAG_KEYS.map((key) => {
     const box = providerCheck(cache[key]);
+    const label = t("web.settings.provider_flag." + key);
+    box.setAttribute("aria-label", label);
     const wrap = el("label", "pform-check");
+    wrap.title = key;
     wrap.appendChild(box);
-    wrap.appendChild(el("span", "", key));
+    wrap.appendChild(el("span", "", label));
     return { key, box, node: wrap };
   });
   advGrid.appendChild(pfield("web.settings.provider_context", f.ctx));
@@ -524,19 +529,23 @@ function providerAdvancedFields(editing) {
   advGrid.appendChild(pfield("web.settings.provider_cache_mechanism", f.cacheMech));
   advGrid.appendChild(pfield("web.settings.provider_cache_report", f.cacheReport));
   adv.appendChild(advGrid);
+
+  // Retry numbers reuse the field grid (label above input) — a bare label+input
+  // pair collapses into an unreadable inline blob without the grid styles.
   const retryGroup = el("div", "pform-checks");
   retryGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_retry")));
-  [["maxRetries", f.retryMax], ["baseDelay", f.retryBase], ["maxDelay", f.retryMaxD]].forEach(([key, input]) => {
-    const wrap = el("label", "pform-check");
-    wrap.appendChild(el("span", "", key));
-    input.setAttribute("aria-label", key);
-    wrap.appendChild(input);
-    retryGroup.appendChild(wrap);
-  });
+  const retryGrid = el("div", "pform-grid");
+  retryGrid.appendChild(pfield("web.settings.provider_retry_max", f.retryMax));
+  retryGrid.appendChild(pfield("web.settings.provider_retry_base", f.retryBase));
+  retryGrid.appendChild(pfield("web.settings.provider_retry_maxdelay", f.retryMaxD));
+  retryGroup.appendChild(retryGrid);
   adv.appendChild(retryGroup);
+
   const flagGroup = el("div", "pform-checks");
   flagGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_cache_flags")));
-  f.cacheFlags.forEach(({ node }) => flagGroup.appendChild(node));
+  const flagGrid = el("div", "pform-checks-grid");
+  f.cacheFlags.forEach(({ node }) => flagGrid.appendChild(node));
+  flagGroup.appendChild(flagGrid);
   adv.appendChild(flagGroup);
   return { node: adv, ...f };
 }
