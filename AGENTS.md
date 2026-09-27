@@ -46,6 +46,9 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - `src/core/agent.ts` — `executeSingleAgentLoop` (~625 строк) держит состояние `Agent`.
 - `src/cli/repl.ts`, `src/ui/line-editor.ts` (DSR-протокол), `src/modules/execution/stuck-detector.ts`,
   `src/modules/execution/module.ts`.
+- `src/config/registry-extra.ts` (~570 строк), `src/modules/webui/settings-api.ts` (~650 строк) —
+  плоские таблицы `ConfigKeyDef`/REST-хендлеров без shared mutable state; нарезка дала бы
+  искусственные швы по доменам без выигрыша (решение 2026-09-27, full-config-surfaces).
 
 ## Git & Branching
 
