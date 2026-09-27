@@ -136,39 +136,46 @@ describe("web e2e: config surfaces", () => {
           .poll(() => configValue(baseUrl, "retry.maxRetries"), { timeout: 10_000 })
           .toBe(origRetries);
 
-        // list input + revert (agent → tools section → default tool tags).
+        // list key → tag editor: chips + inline adder (not a comma field).
         await openPanel(page, "agent");
-        const listInput = panelRow(page, "agent", "default tool tags").locator("input");
-        await listInput.fill("file, code, e2eprobe");
-        await listInput.press("Tab");
+        const tags = panelRow(page, "agent", "default tool tags");
+        const adder = tags.locator(".tags-add input");
+        await adder.fill("e2eprobe");
+        await adder.press("Enter");
         await expect
           .poll(() => configValue(baseUrl, "tools.defaultTags"), { timeout: 10_000 })
           .toEqual(["file", "code", "e2eprobe"]);
-        await listInput.fill("file, code");
-        await listInput.press("Tab");
+        await tags.locator(".tag-chip", { hasText: "e2eprobe" }).locator(".tag-rm").click();
         await expect
           .poll(() => configValue(baseUrl, "tools.defaultTags"), { timeout: 10_000 })
           .toEqual(["file", "code"]);
 
-        // json textarea: valid writes, invalid shows inline error and keeps old value.
+        // json key with a table editor → add a row, fill it, then remove it.
         await openPanel(page, "advanced");
-        const jsonRow = panelRow(page, "advanced", "pricing overrides");
-        const area = jsonRow.locator("textarea");
-        await area.fill('{"e2e-probe":{"input":1,"output":2}}');
-        await area.press("Tab");
+        const table = panelRow(page, "advanced", "pricing overrides");
+        await table.locator(".table-add input").fill("e2e-probe");
+        await table.locator(".table-add .table-plus").click();
+        const row = table.locator('.table-row[data-key="e2e-probe"]');
+        await row.locator("input").nth(1).fill("1");
+        await row.locator("input").nth(2).fill("2");
+        await row.locator("input").nth(2).press("Tab");
         await expect
           .poll(() => configValue(baseUrl, "pricing.overrides"), { timeout: 10_000 })
           .toEqual({ "e2e-probe": { input: 1, output: 2 } });
-        await area.fill("{oops");
-        await area.press("Tab");
+        // An incomplete row is rejected client-side, never posted.
+        await table.locator(".table-add input").fill("incomplete");
+        await table.locator(".table-add .table-plus").click();
+        const badRow = table.locator('.table-row[data-key="incomplete"]');
+        await badRow.locator("input").nth(1).fill("5");
+        await badRow.locator("input").nth(1).press("Tab");
         await expect
-          .poll(() => jsonRow.locator(".json-err").isVisible(), { timeout: 10_000 })
+          .poll(() => table.locator(".json-err").isVisible(), { timeout: 10_000 })
           .toBe(true);
         expect(await configValue(baseUrl, "pricing.overrides")).toEqual({
           "e2e-probe": { input: 1, output: 2 },
         });
-        await area.fill("{}");
-        await area.press("Tab");
+        await badRow.locator(".table-rm").click();
+        await row.locator(".table-rm").click();
         await expect
           .poll(() => configValue(baseUrl, "pricing.overrides"), { timeout: 10_000 })
           .toEqual({});
@@ -318,6 +325,48 @@ describe("web e2e: config surfaces", () => {
       });
     },
     300_000,
+  );
+
+  e2e(
+    "memory add opens the shared nested dialog",
+    async () => {
+      const dir = artifactsDirFor("cfg-memory-dialog");
+      await withE2E(dir, async (srv, { page, errors }: Launched) => {
+        const { baseUrl } = srv;
+        await openSettings(page);
+        await openPanel(page, "memory");
+        await page.locator('[data-panel="memory"] .sec-add').click();
+        const form = page.locator("#subHost .pform");
+        await form.waitFor({ timeout: 10_000 });
+        await form.locator("select").selectOption("facts");
+        await form.locator("textarea").fill("e2e nested memory probe");
+        await form.locator(".pform-actions button").first().click();
+        await expect
+          .poll(
+            async () => {
+              const body = (await apiGet(baseUrl, "/api/memory")).json as {
+                categories?: Array<{ name: string; entries: Array<{ text: string }> }>;
+              };
+              const facts = (body.categories ?? []).find((c) => c.name === "facts");
+              return (facts?.entries ?? []).some((e) => e.text.includes("e2e nested memory probe"));
+            },
+            { timeout: 15_000 },
+          )
+          .toBe(true);
+        // Clean up: forget the entry via the row control.
+        const entry = page.locator(".mem-entry", { hasText: "e2e nested memory probe" });
+        await entry.locator(".mem-del").click();
+        await expect
+          .poll(() => page.locator(".mem-entry", { hasText: "e2e nested memory probe" }).count(), {
+            timeout: 15_000,
+          })
+          .toBe(0);
+        await page.keyboard.press("Escape");
+        writeArtifacts(dir, "cfg-memory-dialog", { html: await page.content(), consoleErrors: errors });
+        expect(errors).toEqual([]);
+      });
+    },
+    180_000,
   );
 
   e2e(

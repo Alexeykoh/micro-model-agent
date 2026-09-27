@@ -56,8 +56,9 @@ function list(
   domain: string,
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
+  editor?: ConfigKeyDef["editor"],
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "list", reconfigure: false, get, set };
+  return { key, aliases: [], domain, valueType: "list", reconfigure: false, editor, get, set };
 }
 
 function str(
@@ -85,8 +86,19 @@ function json(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
   extraValidate?: ConfigKeyDef["extraValidate"],
+  editor?: ConfigKeyDef["editor"],
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "json", reconfigure: false, get, set, extraValidate };
+  return {
+    key,
+    aliases: [],
+    domain,
+    valueType: "json",
+    reconfigure: false,
+    editor,
+    get,
+    set,
+    extraValidate,
+  };
 }
 
 /** JSON def with a shape predicate; anything failing the check is "invalid". */
@@ -96,10 +108,11 @@ function jsonShape(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
   check: (v: unknown) => boolean,
+  editor?: ConfigKeyDef["editor"],
 ): ConfigKeyDef {
   const extraValidate = (_c: AppConfig, v: unknown): ConfigRangeReason | "invalid" | null =>
     check(v) ? null : "invalid";
-  return json(key, domain, get, set, extraValidate);
+  return json(key, domain, get, set, extraValidate, editor);
 }
 
 /** Lazy-init the optional security nest and return it. */
@@ -445,32 +458,41 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
 
   list("tools.defaultTags", "tools",
     (c) => c.tools.defaultTags,
-    (c, v) => { c.tools.defaultTags = v as string[]; }),
+    (c, v) => { c.tools.defaultTags = v as string[]; },
+    { kind: "tags", placeholder: "file" }),
 
   list("security.bash.blacklist", "security",
     (c) => c.security?.bash.blacklist ?? DEFAULT_SECURITY_CONFIG.bash.blacklist,
-    (c, v) => { sec(c).bash.blacklist = v as string[]; }),
+    (c, v) => { sec(c).bash.blacklist = v as string[]; },
+    { kind: "tags", placeholder: "rm" }),
   list("security.bash.whitelist", "security",
     (c) => c.security?.bash.whitelist ?? DEFAULT_SECURITY_CONFIG.bash.whitelist,
-    (c, v) => { sec(c).bash.whitelist = v as string[]; }),
+    (c, v) => { sec(c).bash.whitelist = v as string[]; },
+    { kind: "tags", placeholder: "bun" }),
   list("security.bash.dangerousFlags", "security",
     (c) => c.security?.bash.dangerousFlags ?? DEFAULT_SECURITY_CONFIG.bash.dangerousFlags,
-    (c, v) => { sec(c).bash.dangerousFlags = v as string[]; }),
+    (c, v) => { sec(c).bash.dangerousFlags = v as string[]; },
+    { kind: "tags", placeholder: "--force" }),
   list("security.bash.dangerousOperators", "security",
     (c) => c.security?.bash.dangerousOperators ?? DEFAULT_SECURITY_CONFIG.bash.dangerousOperators,
-    (c, v) => { sec(c).bash.dangerousOperators = v as string[]; }),
+    (c, v) => { sec(c).bash.dangerousOperators = v as string[]; },
+    { kind: "tags", placeholder: "&&" }),
   list("security.paths.denied", "security",
     (c) => c.security?.paths.denied ?? DEFAULT_SECURITY_CONFIG.paths.denied,
-    (c, v) => { sec(c).paths.denied = v as string[]; }),
+    (c, v) => { sec(c).paths.denied = v as string[]; },
+    { kind: "tags", placeholder: ".git/" }),
   list("security.paths.allowed", "security",
     (c) => c.security?.paths.allowed ?? DEFAULT_SECURITY_CONFIG.paths.allowed,
-    (c, v) => { sec(c).paths.allowed = v as string[]; }),
+    (c, v) => { sec(c).paths.allowed = v as string[]; },
+    { kind: "tags", placeholder: "src/**" }),
   list("security.network.deniedDomains", "security",
     (c) => c.security?.network.deniedDomains ?? DEFAULT_SECURITY_CONFIG.network.deniedDomains,
-    (c, v) => { sec(c).network.deniedDomains = v as string[]; }),
+    (c, v) => { sec(c).network.deniedDomains = v as string[]; },
+    { kind: "tags", placeholder: "localhost" }),
   list("security.network.allowedDomains", "security",
     (c) => c.security?.network.allowedDomains ?? DEFAULT_SECURITY_CONFIG.network.allowedDomains,
-    (c, v) => { sec(c).network.allowedDomains = v as string[]; }),
+    (c, v) => { sec(c).network.allowedDomains = v as string[]; },
+    { kind: "tags", placeholder: "api.example.com" }),
 
   int("security.network.requestTimeout", "security", 1000, 120000, 1000, false,
     (c) => c.security?.network.requestTimeout ?? DEFAULT_SECURITY_CONFIG.network.requestTimeout,
@@ -486,7 +508,8 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (v) => Array.isArray(v) && v.every((s) => {
       if (typeof s !== "string") return false;
       try { new RegExp(s); return true; } catch { return false; }
-    })),
+    }),
+    { kind: "tags", placeholder: "eval\\(" }),
 
   bool("security.auditNotifier.enabled", "security", false,
     (c) => c.security?.auditNotifier.enabled ?? DEFAULT_SECURITY_CONFIG.auditNotifier.enabled,
@@ -514,7 +537,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c) => c.security?.auditNotifier.eventTypes ?? DEFAULT_SECURITY_CONFIG.auditNotifier.eventTypes,
     (c, v) => { sec(c).auditNotifier.eventTypes = v as AuditEventType[]; },
     (v) => Array.isArray(v) && v.every((e) =>
-      typeof e === "string" && (AUDIT_EVENT_TYPES as readonly string[]).includes(e))),
+      typeof e === "string" && (AUDIT_EVENT_TYPES as readonly string[]).includes(e)),
+    // Empty array = every event type (see the key's description).
+    { kind: "checkboxes", options: AUDIT_EVENT_TYPES }),
   int("security.auditNotifier.maxRetries", "security", 0, 10, 1, false,
     (c) => c.security?.auditNotifier.maxRetries ?? DEFAULT_SECURITY_CONFIG.auditNotifier.maxRetries,
     (c, v) => { sec(c).auditNotifier.maxRetries = v as number; }),
@@ -543,7 +568,17 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       isNonNegNum(e.input) &&
       isNonNegNum(e.output) &&
       (e.cachedInput === undefined || isNonNegNum(e.cachedInput)) &&
-      (e.cacheWrite === undefined || isNonNegNum(e.cacheWrite)))),
+      (e.cacheWrite === undefined || isNonNegNum(e.cacheWrite))),
+    {
+      kind: "table",
+      columns: [
+        { key: "name" },
+        { key: "input", type: "number" },
+        { key: "output", type: "number" },
+        { key: "cachedInput", type: "number", optional: true },
+        { key: "cacheWrite", type: "number", optional: true },
+      ],
+    }),
 
   jsonShape("modelCapabilities", "provider",
     (c) => c.modelCapabilities ?? {},
@@ -551,7 +586,15 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (v) => isRecord(v) && Object.values(v).every((e) =>
       isRecord(e) &&
       (e.vision === undefined || typeof e.vision === "boolean") &&
-      (e.tools === undefined || typeof e.tools === "boolean"))),
+      (e.tools === undefined || typeof e.tools === "boolean")),
+    {
+      kind: "table",
+      columns: [
+        { key: "name" },
+        { key: "vision", type: "bool", optional: true },
+        { key: "tools", type: "bool", optional: true },
+      ],
+    }),
 
   jsonShape("experts", "agent",
     (c) => c.experts,
@@ -562,5 +605,15 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       Array.isArray(e.tool_tags) &&
       e.tool_tags.every((t) => typeof t === "string") &&
       (e.max_attempts === undefined || (typeof e.max_attempts === "number" && Number.isFinite(e.max_attempts))) &&
-      (e.description === undefined || typeof e.description === "string"))),
+      (e.description === undefined || typeof e.description === "string")),
+    {
+      kind: "table",
+      columns: [
+        { key: "name" },
+        { key: "model" },
+        { key: "tool_tags", array: true },
+        { key: "max_attempts", type: "number", optional: true },
+        { key: "description", optional: true },
+      ],
+    }),
 ];

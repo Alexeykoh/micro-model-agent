@@ -264,6 +264,12 @@ function configControl(def, key) {
   return controlFor(def, value, {
     label: configLabel(def),
     enumLabel,
+    emptyLabel: t("config.enum.none"),
+    fieldLabel: (k) => {
+      const kk = "config.field." + k;
+      const tr = t(kk);
+      return tr === kk ? k : tr;
+    },
     post: (v) => postConfig(key, v, false),
   });
 }
@@ -750,7 +756,18 @@ function renderUiPanel() {
     });
     seg.appendChild(b);
   });
-  container.appendChild(row(t("web.settings.theme"), seg));
+  // Theme is a browser-local preference (localStorage), not a config key, so it
+  // gets its own card before the generated sections.
+  const card = el("div", "settings-section");
+  const head = el("div", "sec-head");
+  head.appendChild(el("span", "sec-title", t("web.settings.sec.ui.theme")));
+  card.appendChild(head);
+  const desc = t("web.settings.sec.ui.theme.desc");
+  if (desc !== "web.settings.sec.ui.theme.desc") card.appendChild(el("div", "sec-desc", desc));
+  const body = el("div", "sec-body");
+  body.appendChild(row(t("web.settings.theme"), seg));
+  card.appendChild(body);
+  container.appendChild(card);
   renderSections("ui", PANEL_SECTIONS.ui || []);
 }
 
@@ -791,6 +808,43 @@ function groupHeader(label, count) {
 
 const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"];
 
+/** Nested dialog: pick a memory category and write the note. */
+function openMemoryForm() {
+  const box = el("div", "pform");
+  const grid = el("div", "pform-grid");
+  const catSel = el("select");
+  catSel.setAttribute("aria-label", t("web.settings.memory_category"));
+  MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
+  catSel.value = "facts";
+  grid.appendChild(mcpLiteralField(t("web.settings.memory_category"), catSel));
+  box.appendChild(grid);
+  const area = el("textarea");
+  area.rows = 5;
+  area.placeholder = t("web.settings.new_memory");
+  area.value = "";
+  box.appendChild(mcpLiteralField(t("web.settings.new_memory"), area));
+  const actions = el("div", "pform-actions");
+  actions.appendChild(
+    link(t("web.settings.save"), "", async () => {
+      const text = area.value.trim();
+      if (!text) {
+        area.focus();
+        return;
+      }
+      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
+      if (r.ok && r.data && r.data.ok) {
+        closeSubDialog();
+        await loadMemory();
+      } else {
+        setIndicator(t("web.settings.add_failed"), true);
+      }
+    }),
+  );
+  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
+  box.appendChild(actions);
+  openSubDialog(t("web.settings.memory_add_title"), box, () => renderMemoryPanel());
+}
+
 function renderMemoryPanel() {
   const container = document.querySelector('[data-panel="memory"]');
   if (!container) return;
@@ -801,30 +855,19 @@ function renderMemoryPanel() {
   }
   const data = S.state.memory;
 
-  const addRow = el("div", "mem-add");
-  const catSel = el("select");
-  catSel.setAttribute("aria-label", t("web.settings.memory_category"));
-  MEMORY_CATEGORIES.forEach((c) => catSel.appendChild(el("option", "", c)));
-  catSel.value = "facts";
-  addRow.appendChild(catSel);
-  const textIn = el("input");
-  textIn.placeholder = t("web.settings.new_memory");
-  textIn.setAttribute("aria-label", t("web.settings.new_memory"));
-  addRow.appendChild(textIn);
-  addRow.appendChild(
-    link(t("web.settings.add"), "", async () => {
-      const text = textIn.value.trim();
-      if (!text) return;
-      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
-      if (r.ok && r.data && r.data.ok) {
-        textIn.value = "";
-        await loadMemory();
-      } else {
-        setIndicator(t("web.settings.add_failed"), true);
-      }
-    }),
-  );
-  container.appendChild(addRow);
+  // Adding an entry opens the shared nested dialog: a category + a multi-line
+  // note with room to write, instead of a cramped inline field.
+  const addBtn = el("button", "sec-add");
+  addBtn.type = "button";
+  addBtn.appendChild(icon("plus"));
+  addBtn.appendChild(el("span", "", t("web.settings.add")));
+  addBtn.addEventListener("click", () => openMemoryForm());
+  const addHead = el("div", "sec-head");
+  addHead.appendChild(el("span", "sec-title", t("web.settings.sec.memory.add")));
+  addHead.appendChild(addBtn);
+  const addSec = el("div", "settings-section");
+  addSec.appendChild(addHead);
+  container.appendChild(addSec);
 
   const search = el("input", "searchbox");
   search.placeholder = t("web.settings.search_memory");

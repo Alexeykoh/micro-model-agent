@@ -34,6 +34,30 @@ export const LOCALES = ["en", "ru"] as const;
 export type ConfigErrorReason = "unknown-key" | "read-only" | "invalid-value";
 export type ConfigRangeReason = "range" | "combined";
 
+/**
+ * How a `list`/`json` key should be edited in a GUI. The registry stays the
+ * single source of truth for *what* a key holds; this only says how to show it
+ * (a comma string is fine for `tools.defaultTags` but wrong for regexes that
+ * contain commas). Omitted → a plain input (list) or JSON textarea (json).
+ */
+export interface ConfigEditorSpec {
+  /** `tags` = string chips; `checkboxes` = multiselect; `table` = record rows. */
+  kind: "tags" | "checkboxes" | "table";
+  /** Allowed values for `checkboxes`. */
+  options?: readonly string[];
+  /** Column definitions for `table`. The first column is the record key. */
+  columns?: ReadonlyArray<{
+    key: string;
+    /** `number` renders a number input, `bool` a checkbox. Default: text. */
+    type?: "string" | "number" | "bool";
+    optional?: boolean;
+    /** Text column whose schema value is a list (edited comma-separated). */
+    array?: boolean;
+  }>;
+  /** Free-text hint shown in the row adder (e.g. a regex example). */
+  placeholder?: string;
+}
+
 export interface ConfigKeyDef {
   /** Canonical key — literal config.json path. */
   key: string;
@@ -47,6 +71,8 @@ export interface ConfigKeyDef {
   step?: number;
   reconfigure: boolean;
   readOnly?: boolean;
+  /** GUI rendering hint for `list`/`json` values (see {@link ConfigEditorSpec}). */
+  editor?: ConfigEditorSpec;
   get(config: AppConfig): unknown;
   set?(config: AppConfig, value: unknown): void;
   /** Extra validation beyond type/range (e.g. provider entry existence). */
@@ -430,6 +456,18 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
     }
     case "list": {
       if (trimmed.length === 0) return { ok: true, value: [] };
+      // Structured editors post a JSON array (values may contain commas, e.g.
+      // regexes like `a{1,3}`); the REPL keeps the comma syntax.
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+            return { ok: true, value: parsed };
+          }
+        } catch {
+          /* fall through to comma splitting */
+        }
+      }
       const items = trimmed.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
       return { ok: true, value: items };
     }

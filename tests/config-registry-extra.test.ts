@@ -89,4 +89,50 @@ describe("registry list/json types", () => {
     const g = getConfigValue(cfg, "security.bash.enabled");
     expect(g.ok && (g as { display: string }).display).toBe("off");
   });
+
+  it("declares a GUI editor for structured keys", async () => {
+    const { resolveConfigKey } = await import("../src/config/registry");
+    const expect2 = (key: string, kind: string) => {
+      const def = resolveConfigKey(key);
+      expect(def, key).not.toBeNull();
+      expect(def?.editor?.kind, key).toBe(kind);
+    };
+    for (const k of [
+      "security.bash.blacklist",
+      "security.bash.dangerousOperators",
+      "security.paths.denied",
+      "security.network.allowedDomains",
+      "tools.defaultTags",
+      "security.contentScan.dangerousPatterns",
+    ]) {
+      expect2(k, "tags");
+    }
+    expect2("security.auditNotifier.eventTypes", "checkboxes");
+    const types = resolveConfigKey("security.auditNotifier.eventTypes")?.editor?.options ?? [];
+    expect(types.length).toBeGreaterThan(3);
+    expect(types).toContain("security_block");
+    for (const k of ["pricing.overrides", "experts", "modelCapabilities"]) expect2(k, "table");
+    const cols = resolveConfigKey("experts")?.editor?.columns ?? [];
+    expect(cols.map((c) => c.key)).toEqual([
+      "name",
+      "model",
+      "tool_tags",
+      "max_attempts",
+      "description",
+    ]);
+    expect(cols.find((c) => c.key === "tool_tags")?.array).toBe(true);
+  });
+
+  it("accepts a JSON array for list keys (values may contain commas)", async () => {
+    const { parseConfigValue, resolveConfigKey } = await import("../src/config/registry");
+    const def = resolveConfigKey("security.bash.blacklist");
+    expect(def).not.toBeNull();
+    if (!def) return;
+    // Comma syntax still works…
+    expect(parseConfigValue(def, "a, b").ok).toBe(true);
+    // …and a JSON array survives a value containing a comma.
+    const r = parseConfigValue(def, '["a{1,3}","b"]');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual(["a{1,3}", "b"]);
+  });
 });

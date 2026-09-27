@@ -169,15 +169,19 @@ describe("web e2e: settings", () => {
   );
 
   e2e(
-    "memory UI add and forget",
+    "memory UI add (nested dialog) and forget",
     async () => {
       const dir = artifactsDirFor("settings-memory");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
         await openSettings(page);
         await page.click('#setMenu [data-p="memory"]');
-        await page.locator('[data-panel="memory"] .mem-add select').selectOption("facts");
-        await page.locator('[data-panel="memory"] .mem-add input').fill("e2e ui memory probe");
-        await page.locator('[data-panel="memory"] .mem-add button').click();
+        // Adding opens the shared nested dialog (category + note).
+        await page.locator('[data-panel="memory"] .sec-add').click();
+        const form = page.locator("#subHost .pform");
+        await form.waitFor({ timeout: 10_000 });
+        await form.locator("select").selectOption("facts");
+        await form.locator("textarea").fill("e2e ui memory probe");
+        await form.locator(".pform-actions button").first().click();
         await page.waitForSelector(".mem-entry", { timeout: 10_000 });
         expect(await page.locator(".mem-entry").allInnerTexts()).toEqual(
           expect.arrayContaining([expect.stringContaining("e2e ui memory probe")]),
