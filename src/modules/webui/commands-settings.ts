@@ -28,6 +28,7 @@ import { globalExportsDir } from "../../config/paths";
 
 const REASONING_USAGE = "/reasoning [show|hide|on|off|level <auto|default|none|low|medium|high|max>]";
 const CONTEXT_USAGE = "/context [<tokens> | system <share> | reserve <share>]";
+const SECURITY_USAGE = "/security [status|<key> [value]]";
 
 /** Handlers merged into the core dispatcher; keyed by lowercased command name. */
 export function makeSettingsHandlers(state: WebUiState): Record<string, Handler> {
@@ -35,6 +36,7 @@ export function makeSettingsHandlers(state: WebUiState): Record<string, Handler>
     reasoning: (args, o) => withConfig(state, o, (cfg) => reasoningCmd(cfg, args, o, state)),
     verbose: (args, o) => withConfig(state, o, (cfg) => verboseCmd(cfg, args, o, state)),
     context: (args, o) => withConfig(state, o, (cfg) => contextCmd(cfg, args, o, state)),
+    security: (args, o) => withConfig(state, o, (cfg) => securityCmd(cfg, args, o, state)),
     session: (args, o) => sessionCmd(state, args, o),
     export: (args, o) => exportCmd(state, args, o),
   };
@@ -112,6 +114,30 @@ function contextCmd(
     return;
   }
   return applyConfigWrite(cfg, "contextWindow", args[0], out, state);
+}
+
+function securityCmd(
+  cfg: AppConfig,
+  args: string[],
+  out: Out,
+  state: WebUiState,
+): void | Promise<void> {
+  const sub = args[0]?.trim().toLowerCase();
+  if (!sub || sub === "status") {
+    const flag = (v?: boolean) => (v ? "on" : "off");
+    const s = cfg.security;
+    out(`security · ${flag(s?.enabled)}`);
+    out(`↳ bash ${flag(s?.bash.enabled)} · paths ${flag(s?.paths.enabled)} · network ${flag(s?.network.enabled)}`);
+    out(
+      `↳ contentScan ${flag(s?.contentScan.enabled)} · encryption ${flag(s?.sessionEncryption.enabled)}`,
+    );
+    return;
+  }
+  if (args.length >= 2) {
+    return applyConfigWrite(cfg, args[0], args.slice(1).join(" "), out, state);
+  }
+  out(`↳ unknown subcommand: security ${args[0]}`);
+  out(`usage: ${SECURITY_USAGE}`);
 }
 
 function sessionCmd(state: WebUiState, args: string[], out: Out): void {

@@ -1259,6 +1259,7 @@
   "web.command.reasoning": "reasoning display and level",
   "web.command.verbose": "set UI verbosity",
   "web.command.context": "show or set the context window",
+  "web.command.security": "show security toggles or write a security key",
   "web.command.session": "list or activate a session",
   "web.command.export": "export the active session to a file",
   "web.command.memory": "inspect or edit global memory",

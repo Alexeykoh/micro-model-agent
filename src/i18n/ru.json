@@ -1235,6 +1235,7 @@
   "web.command.reasoning": "показ рассуждений и уровень",
   "web.command.verbose": "уровень детализации UI",
   "web.command.context": "показать или задать окно контекста",
+  "web.command.security": "показать флаги безопасности или записать ключ",
   "web.command.session": "показать сессии или активировать сессию",
   "web.command.export": "экспорт активной сессии в файл",
   "web.command.memory": "просмотр и правка глобальной памяти",
