@@ -42,4 +42,16 @@ describe("i18n", () => {
     const result = t("session.started", { id: "abc" });
     expect(result).toBeTruthy();
   });
+
+  it("every registry key has key+desc labels in en and ru", async () => {
+    const { configDefs } = await import("../src/config/registry");
+    const { getFlatDicts } = await import("../src/i18n/index");
+    const dicts = getFlatDicts();
+    for (const def of configDefs()) {
+      for (const k of [`config.key.${def.key}`, `config.desc.${def.key}`]) {
+        expect(typeof dicts.en[k], `${k} (en)`).toBe("string");
+        expect(typeof dicts.ru[k], `${k} (ru)`).toBe("string");
+      }
+    }
+  });
 });
