@@ -37,6 +37,23 @@
     <div class="visually-hidden" id="live" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="input-area">
+      <div class="rail-wrap l-line" id="railWrap" role="status" aria-live="polite" hidden>
+        <div class="rail-l1">
+          <span class="lab" id="railPhase">✦ thinking</span>
+          <span class="s" aria-hidden="true">·</span><span class="time" id="railTime" aria-hidden="true">0.0s</span>
+          <span class="s" aria-hidden="true">·</span><span class="st" id="railSteps" aria-hidden="true">no plan</span>
+          <span class="right" id="railEsc" aria-hidden="true">Esc — stop</span>
+        </div>
+        <div class="rl-track" id="railTrack" data-mode="scan">
+          <div class="rl-fill" id="railFill"></div>
+          <div class="rl-scan"></div>
+        </div>
+        <div class="rail-l2" aria-hidden="true">
+          <span class="tools" id="railTools">0 tools</span>
+          <span class="s">·</span><span class="events" id="railEvents">0 events</span>
+          <span class="s">·</span><span class="last" id="railLast">—</span>
+        </div>
+      </div>
       <div class="selectors">
         <div class="sel" data-sel="provider">
           <button id="selProviderBtn">provider: <b>—</b> ▾</button>

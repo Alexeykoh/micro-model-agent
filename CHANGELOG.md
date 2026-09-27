@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Activity rail above the composer** (`src/modules/webui/assets/js/rail.js`, `index.html`, `styles.css`, `app.js`, `tabs.js`, `settings.js`): an indicator that lives for the whole turn — indeterminate scanner with phase/elapsed/tool & event counters when no plan exists, honest `done/total` progress with step ticks when an MoE plan is active, and a short flash on every real SSE event (`tool_start`/`tool_end`/`text`/`plan`). Layouts `off|line|meta|full` via the new config key `ui.activityRail` (default `line`), editable in `/config` and web Settings → Chat output and applied live; en/ru localized, `prefers-reduced-motion` respected, phase announced politely (`role="status"`, timer/counters `aria-hidden`). Spec: `docs/specs/2026-09-27-activity-rail-design.md`.
+
 ### Changed
 
 - **Internal loop diagnostics are verbose-only** (`src/logger/app-logger.ts`, `src/output/channel.ts`, `src/cli/main.ts`, `src/cli/repl-commands.ts`): new `Logger.diagnostic(level, msg, meta)` marks loop internals (hallucination retries, audit/compaction notes, repeated-tool nudges, MoE/critic internals, `LLM warning`) with `data.diagnostic` on the output bus. `OutputChannel.setShowDiagnostics()` drops them unless `ui.verbosity === "verbose"`, so chat shows user-facing notices only; file logging (`.log`, `app.jsonl`) is unchanged and diagnostics stay diagnosable. `/config ui.verbosity` now also hides `info` logs outside verbose, matching the startup rule.

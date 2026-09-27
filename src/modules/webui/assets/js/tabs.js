@@ -15,6 +15,7 @@ clearEmpty, showBusy, clearFeed, finishMd, resetTurnText,
 finishThink, feedHasContent, loadHistory, syncUrl,
 } from "./feed.js";
 import { openConfirm, setIndicator } from "./dialog.js";
+import { setBusy } from "./rail.js";
 
 let sessionsErrTimer = null;
 
@@ -662,6 +663,7 @@ export function reflectBusy() {
   }
   const escHint = document.getElementById("hintEsc");
   if (escHint) escHint.hidden = !S.state.busy;
+  setBusy(S.state.busy);
 }
 
 export async function loadSessions() {

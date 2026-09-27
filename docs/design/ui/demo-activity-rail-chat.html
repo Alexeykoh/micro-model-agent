@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MMA Web — Activity rail в чате (demo)</title>
+<!-- настоящий stylesheet веб-UI: разметка и токены те же, что в приложении -->
+<link rel="stylesheet" href="../../../src/modules/webui/assets/styles.css">
+<style>
+  /* ===== demo chrome (не часть приложения) ===== */
+  .demo-bar {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding: 6px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    color: var(--dim-a); font-size: 12px;
+  }
+  .demo-bar b { color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .demo-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .demo-seg button {
+    background: transparent; color: var(--muted); border: 0;
+    padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .demo-seg button + button { border-left: 1px solid var(--border); }
+  .demo-seg button.on { background: var(--accent-bg); color: var(--accent); }
+  .demo-note { color: var(--dim-b); font-size: 11.5px; margin-left: auto; }
+
+  /* ===== №12 Activity rail (кандидат в styles.css) ===== */
+  .rail-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  /* компактные раскладки: rail фиксированной ширины + мета на одной строке */
+  .rail-wrap.l-line, .rail-wrap.l-meta {
+    flex-direction: row; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+  .rail-wrap.l-line .rl-track { order: -1; flex: 0 0 180px; }
+  .rail-wrap.l-meta .rl-track { order: -1; flex: 0 0 110px; }
+  .rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: 0 1 auto; min-width: 0; }
+  .rail-wrap.l-line .rail-l1 .right { display: none; }   /* Esc уже есть в .inp-meta */
+  .rail-wrap.l-line .rail-l2::before { content: '·'; color: var(--dim-a); margin-right: -2px; }
+  .rail-wrap.l-meta { margin-bottom: 0; }
+  .rail-wrap.l-meta .rail-l1 { font-size: 11.5px; }
+  .rail-wrap.l-meta .rail-l2 { display: none; }          /* в строке подсказок только самое важное */
+  .rail-wrap.l-meta .rail-l1 .right { display: none; }
+  .rail-l1 {
+    display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+    font-size: 13px; color: var(--think);
+  }
+  .rail-l1 .s, .rail-l1 .right { color: var(--dim-a); }
+  .rail-l1 .right { margin-left: auto; font-size: 11.5px; }
+  .rail-l2 { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; color: var(--dim-a); flex-wrap: wrap; }
+  .rail-l2 .last { color: var(--args); }
+
+  .rl-track {
+    position: relative; height: 12px; border-radius: 6px;
+    background: var(--border); overflow: hidden;
+  }
+  .rl-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--prog, 0) * 1%);
+    background: linear-gradient(90deg, var(--think), var(--accent));
+    transition: width .2s linear;
+  }
+  .rl-fill::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+    transform: translateX(-100%); animation: rlSweep 1.5s linear infinite;
+  }
+  @keyframes rlSweep { to { transform: translateX(100%); } }
+  /* засечки шагов плана — только в режиме плана */
+  .rl-track[data-mode="plan"]::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg,
+      transparent 0, transparent calc(33.333% - 1.5px),
+      var(--bg) calc(33.333% - 1.5px), var(--bg) 33.333%);
+  }
+  /* indeterminate: нет плана → сканер по всей длине */
+  .rl-track[data-mode="scan"] .rl-fill { display: none; }
+  .rl-scan {
+    display: none; position: absolute; top: 0; bottom: 0; width: 30%; left: -30%;
+    background: linear-gradient(90deg, transparent, var(--think) 40%, var(--accent) 72%, transparent);
+  }
+  .rl-track[data-mode="scan"] .rl-scan {
+    display: block; animation: rlScan 1.7s cubic-bezier(.4, .1, .6, .9) infinite;
+  }
+  @keyframes rlScan { to { left: 100%; } }
+  body.rl-tool .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1s; }
+  body.rl-compose .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1.3s; }
+  /* вспышка на реальное событие (tool_start / text / plan) */
+  .rl-track.flash {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(88,166,255,.45);
+    animation: rlFlash .45s ease-out;
+  }
+  @keyframes rlFlash { 0% { filter: brightness(1.9); } 100% { filter: brightness(1); } }
+
+  .demo-bar button:focus-visible, .send-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+</style>
+</head>
+<body>
+
+<div class="bar-top">
+  <button class="icon-btn primary" type="button" title="new chat" aria-label="new chat">+</button>
+  <div class="dd">
+    <button class="icon-btn" type="button" title="all sessions" aria-label="all sessions">☰</button>
+  </div>
+  <div class="tabstrip">
+    <div class="stab on"><span class="name">Падающий тест</span><button class="stab-x" type="button" aria-label="close">✕</button></div>
+    <div class="stab"><span class="name">Погода на неделе</span><button class="stab-x" type="button" aria-label="close">✕</button></div>
+  </div>
+  <button class="icon-btn" type="button" title="sidebar" aria-label="sidebar">▤</button>
+  <button class="icon-btn" type="button" title="settings" aria-label="settings">⚙</button>
+</div>
+
+<!-- демо-панель (не часть приложения) -->
+<div class="demo-bar" id="demoBar">
+  <b>demo</b>
+  <button class="demo-btn" type="button" data-act="replay">▶ replay</button>
+  <span class="demo-seg" data-group="layout">
+    <button type="button" data-v="full">во всю ширину</button>
+    <button type="button" data-v="line" class="on">одна строка</button>
+    <button type="button" data-v="meta">в строке подсказок</button>
+  </span>
+  <span class="demo-seg" data-group="busy">
+    <button type="button" data-v="busy" class="on">busy</button>
+    <button type="button" data-v="idle">idle</button>
+  </span>
+  <span class="demo-seg" data-group="plan">
+    <button type="button" data-v="none" class="on">без плана</button>
+    <button type="button" data-v="plan">план (MoE)</button>
+  </span>
+  <span class="demo-seg" data-group="loc">
+    <button type="button" data-v="ru" class="on">RU</button>
+    <button type="button" data-v="en">EN</button>
+  </span>
+  <span class="demo-seg" data-group="theme">
+    <button type="button" data-v="dark" class="on">dark</button>
+    <button type="button" data-v="light">light</button>
+  </span>
+  <span class="demo-note">rail над композером · события = реальные SSE (tool_start/text/plan)</span>
+</div>
+
+<div class="layout">
+  <div class="chat">
+    <div class="msgs" id="msgs" role="log" aria-label="conversation">
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <div class="input-area" id="inputArea">
+      <!-- №12 Activity rail: первым ребёнком input-area, над селекторами и строкой ввода -->
+      <div class="rail-wrap l-line" id="railWrap" hidden>
+        <div class="rail-l1">
+          <span class="lab" id="railPhase">✦ размышляю</span>
+          <span class="s">·</span><span id="railTime">0.0s</span>
+          <span class="s">·</span><span id="railSteps">без плана</span>
+          <span class="right" id="railEsc">Esc — стоп</span>
+        </div>
+        <div class="rl-track" id="railTrack" data-mode="scan">
+          <div class="rl-fill" id="railFill"></div>
+          <div class="rl-scan"></div>
+        </div>
+        <div class="rail-l2">
+          <span id="railTools">0 тулов</span>
+          <span class="s">·</span><span id="railEvents">0 событий</span>
+          <span class="s">·</span><span>последнее: <span class="last" id="railLast">—</span></span>
+        </div>
+      </div>
+
+      <div class="selectors">
+        <div class="sel"><button type="button">provider: <b>lmstudio</b> ▾</button></div>
+        <div class="sel"><button type="button">model: <b>qwen3.5-9b</b> ▾</button></div>
+        <div class="sel"><button type="button">context: <b>32768</b> ▾</button></div>
+      </div>
+
+      <div class="composer">
+        <div class="composer-main">
+          <button class="attach-btn" type="button" title="attach image" aria-label="attach image">◧</button>
+          <textarea class="inp" id="inp" rows="1" placeholder="message… (/ for commands)"></textarea>
+          <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
+        </div>
+        <div class="inp-meta">
+          <span id="hintEnter">Enter — send</span>
+          <span>Shift+Enter — newline</span>
+          <span id="hintEsc" hidden>Esc — stop</span>
+          <span>Ctrl+V — attach</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sb">
+    <div class="sec plan-sec">
+      <button class="sec-h" type="button" aria-expanded="true"><span class="arrow">▾</span> <span>plan</span> <span class="n" id="planCount"></span></button>
+      <div class="sec-body" id="planBody">
+        <div class="empty" style="margin-top:24px;font-size:12px">нет плана</div>
+      </div>
+    </div>
+    <div class="sec usage-sec">
+      <button class="sec-h" type="button" aria-expanded="true"><span class="arrow">▾</span> <span>session · usage</span></button>
+      <div class="sec-body">
+        <div class="kv"><span>model</span><b>qwen3.5-9b</b></div>
+        <div class="kv"><span>context</span><b>12.4K / 32K</b></div>
+        <div class="bar"><i style="width:38%"></i></div>
+        <div class="kv"><span>tools</span><b id="sbTools">0</b></div>
+      </div>
+    </div>
+    <div class="sec env-sec">
+      <button class="sec-h" type="button" aria-expanded="true"><span class="arrow">▾</span> <span>environment</span></button>
+      <div class="sec-body">
+        <div class="kv"><span>dir</span><b>E:\projects\micro-models-agent</b></div>
+        <div class="kv"><span>AGENTS.md</span><b>./AGENTS.md</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  var feed = $("#feed"), msgs = $("#msgs"), railWrap = $("#railWrap"), track = $("#railTrack");
+  var busy = true, hasPlan = false, loc = "ru", runId = 0;
+  var evCount = 0, toolCount = 0, lastEvent = "—", t0 = Date.now(), phase = "thinking";
+  var busyLine = null, planCard = null, planStep = 0;
+
+  var L = {
+    ru: {
+      thinking: "размышляю", working: "выполняю", composing: "пишу",
+      noPlan: "без плана", step: "шаг", of: "/",
+      tools: function (n) { return n + " " + pl(n, "тул", "тула", "тулов"); },
+      events: function (n) { return n + " " + pl(n, "событие", "события", "событий"); },
+      last: "последнее:", esc: "Esc — стоп", none: "—",
+      act: { recon: "Чтение файла", exe: "Запуск команды", mut: "Запись файла", meta: "Project map" },
+      planHead: function (n) { return "◇ План · " + n + " шаг(ов)"; },
+      empty: "нет плана", busy: "размышляю"
+    },
+    en: {
+      thinking: "thinking", working: "working", composing: "composing",
+      noPlan: "no plan", step: "step", of: "/",
+      tools: function (n) { return n + (n === 1 ? " tool" : " tools"); },
+      events: function (n) { return n + (n === 1 ? " event" : " events"); },
+      last: "last:", esc: "Esc — stop", none: "—",
+      act: { recon: "Reading file", exe: "Running command", mut: "Writing file", meta: "Project map" },
+      planHead: function (n) { return "◇ Plan · " + n + " steps"; },
+      empty: "no plan", busy: "thinking"
+    }
+  };
+  function pl(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+  function t() { return L[loc]; }
+
+  /* ---------- feed helpers ---------- */
+  function el(cls, text) {
+    var d = document.createElement("div");
+    d.className = cls;
+    if (text != null) d.textContent = text;
+    return d;
+  }
+  function scroll() { msgs.scrollTop = msgs.scrollHeight; }
+
+  function resetFeed() {
+    feed.textContent = "";
+    var b = el("startbanner");
+    b.innerHTML = 'Started with <b>qwen3.5-9b</b> · lmstudio · context: 32768 · session 8f2c1a';
+    feed.appendChild(b);
+    feed.appendChild(el("u", "почини падающий тест и объясни причину"));
+    scroll();
+  }
+
+  function fire(name) {           /* одно реальное SSE-событие */
+    evCount++;
+    lastEvent = name;
+    track.classList.remove("flash");
+    void track.offsetWidth;
+    track.classList.add("flash");
+    setTimeout(function () { track.classList.remove("flash"); }, 460);
+    renderRail();
+  }
+
+  function renderRail() {
+    if (!busy) return;
+    var ph = phase === "thinking" ? t().thinking : (phase === "composing" ? t().composing : t().working);
+    $("#railPhase").textContent = "✦ " + ph;
+    $("#railSteps").textContent = hasPlan
+      ? t().step + " " + Math.min(planStep + 1, 3) + t().of + "3"
+      : t().noPlan;
+    $("#railTools").textContent = t().tools(toolCount);
+    $("#railEvents").textContent = t().events(evCount);
+    $("#railLast").textContent = lastEvent;
+    $("#railEsc").textContent = t().esc;
+    track.dataset.mode = hasPlan ? "plan" : "scan";
+    if (hasPlan) track.style.setProperty("--prog", String((planStep / 3) * 100));
+    document.body.classList.toggle("rl-tool", phase === "tool");
+    document.body.classList.toggle("rl-compose", phase === "composing");
+  }
+
+  setInterval(function () {
+    if (!busy) return;
+    $("#railTime").textContent = ((Date.now() - t0) / 1000).toFixed(1) + "s";
+    if (busyLine) {
+      var tm = busyLine.querySelector(".busytime");
+      if (tm) tm.textContent = "· " + Math.floor((Date.now() - t0) / 1000) + "s";
+    }
+  }, 100);
+
+  /* ---------- busy state ---------- */
+  function setBusy(on) {
+    busy = on;
+    railWrap.hidden = !on;
+    $("#inputArea").classList.toggle("busy", on);
+    $("#sendBtn").classList.toggle("busy", on);
+    $("#sendBtn").textContent = on ? "■" : "↑";
+    $("#hintEsc").hidden = !on;
+    $("#inp").disabled = on;
+    $("#inp").placeholder = on ? "агент работает… (Esc — стоп)" : "message… (/ for commands)";
+    if (on) {
+      t0 = Date.now(); evCount = 0; toolCount = 0; lastEvent = "—";
+      $("#sbTools").textContent = "0";
+      busyLine = el("busy");
+      busyLine.innerHTML = '<span class="spin">✦</span><span class="lab"></span>' +
+        '<span class="busytime">· 0s</span><span>· Esc — stop</span>';
+      feed.appendChild(busyLine);
+      renderRail(); scroll();
+    } else {
+      if (busyLine && busyLine.parentNode) busyLine.remove();
+      busyLine = null;
+      if (planCard && planCard.parentNode) planCard.remove();
+      planCard = null;
+    }
+  }
+
+  function dropBusyLine() {       /* реальное поведение: text событие снимает .busy */
+    if (busyLine && busyLine.parentNode) busyLine.remove();
+    busyLine = null;
+  }
+
+  /* ---------- plan ---------- */
+  function showPlan() {
+    if (!hasPlan || planCard) return;
+    planCard = el("planblock");
+    var h = el("ph2"); h.textContent = t().planHead(3); planCard.appendChild(h);
+    ["прочитать README и тесты", "найти причину падения", "исправить и проверить"].forEach(function (s, i) {
+      var st = el("st" + (i === 0 ? " cur" : ""), (i === 0 ? "▸ " : "○ ") + s);
+      planCard.appendChild(st);
+    });
+    feed.appendChild(planCard);
+    planStep = 0;
+    renderSidebarPlan();
+    fire("plan");
+    scroll();
+  }
+  function advancePlan(i) {
+    if (!planCard) return;
+    planStep = i;
+    var sts = planCard.querySelectorAll(".st");
+    sts.forEach(function (s, k) {
+      s.className = "st" + (k < i ? " done" : k === i ? " cur" : "");
+      s.textContent = (k < i ? "✓ " : k === i ? "▸ " : "○ ") + ["прочитать README и тесты", "найти причину падения", "исправить и проверить"][k];
+    });
+    renderSidebarPlan();
+    fire("plan");
+  }
+  function renderSidebarPlan() {
+    var b = $("#planBody");
+    b.textContent = "";
+    if (!hasPlan) { b.appendChild(el("empty", t().empty)); $("#planCount").textContent = ""; return; }
+    var bar = el("plan-bar");
+    bar.innerHTML = '<span class="pbar"><i style="width:' + (planStep / 3) * 100 + '%"></i></span><span>' +
+      Math.round((planStep / 3) * 100) + "%</span>";
+    b.appendChild(bar);
+    ["прочитать README и тесты", "найти причину падения", "исправить и проверить"].forEach(function (s, k) {
+      b.appendChild(el("plan-step" + (k < planStep ? " done" : k === planStep ? " cur" : ""),
+        (k < planStep ? "✓ " : k === planStep ? "▸ " : "○ ") + s));
+    });
+    $("#planCount").textContent = planStep + " / 3";
+  }
+
+  /* ---------- tools ---------- */
+  function tool(cat, labelKey, args, ms) {
+    var line = el("act " + cat);
+    line.innerHTML = '<span class="g">◇</span><span class="lab"></span>' +
+      '<span class="sep">·</span><span class="args"></span><span class="ok"></span>';
+    line.querySelector(".lab").textContent = t().act[labelKey];
+    line.querySelector(".args").textContent = args;
+    feed.appendChild(line);
+    phase = "tool"; renderRail();
+    fire(t().act[labelKey]);
+    scroll();
+    return sleep(ms).then(function () {
+      line.querySelector(".ok").textContent = " ✓ " + ms + "ms";
+      toolCount++;
+      $("#sbTools").textContent = String(toolCount);
+      fire(t().act[labelKey]);
+      scroll();
+    });
+  }
+
+  /* ---------- stream ---------- */
+  function stream(text) {
+    dropBusyLine();
+    phase = "composing"; renderRail();
+    var md = el("md");
+    feed.appendChild(md);
+    var words = text.split(" ");
+    var i = 0;
+    return new Promise(function (resolve) {
+      (function step() {
+        if (i >= words.length) { renderRail(); scroll(); return resolve(); }
+        md.textContent += (i ? " " : "") + words[i];
+        i++;
+        if (i % 4 === 0) fire("text");
+        scroll();
+        setTimeout(step, 55);
+      })();
+    });
+  }
+
+  /* ---------- scenario ---------- */
+  var SCENARIO = [
+    function () { phase = "thinking"; renderRail(); return sleep(700); },
+    function () { return tool("recon", "recon", "README.md", 640); },
+    function () { return tool("recon", "recon", "tests/agent.test.ts", 720); },
+    function () { showPlan(); return sleep(500); },
+    function () { return tool("exe", "exe", "bun test tests/agent.test.ts", 1500); },
+    function () { advancePlan(1); return tool("mut", "mut", "src/core/agent.ts", 860); },
+    function () { advancePlan(2); return sleep(400); },
+    function () { return stream("Тест падал из-за гонки: `stuck-detector` сбрасывал счётчик до того, как поток успевал записать результат. Тригер — повторный вызов `session_info` внутри одного хода."); },
+    function () { advancePlan(3); return sleep(300); }
+  ];
+
+  function finishTurn() {
+    advancePlan(3);
+    feed.appendChild(el("metric", "⟡ " + toolCount + " tools · " + ((Date.now() - t0) / 1000).toFixed(1) + "s"));
+    var acts = el("msg-actions");
+    acts.innerHTML = '<button class="act-btn" type="button">Copy</button>' +
+      '<button class="act-btn" type="button">Copy as markdown</button>';
+    feed.appendChild(acts);
+    setBusy(false);
+    scroll();
+  }
+
+  function run() {
+    var id = ++runId;
+    resetFeed();
+    setBusy(true);
+    var i = 0;
+    (function next() {
+      if (id !== runId || !busy) return;
+      if (i >= SCENARIO.length) { finishTurn(); return; }
+      var fn = SCENARIO[i++];
+      fn().then(next);
+    })();
+  }
+
+  /* ---------- demo controls ---------- */
+  $("#demoBar").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.act === "replay") { run(); return; }
+    var group = b.closest(".demo-seg");
+    if (!group) return;
+    group.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+    var v = b.dataset.v;
+    if (group.dataset.group === "busy") {
+      if (v === "idle") { runId++; setBusy(false); }
+      else { run(); }
+    } else if (group.dataset.group === "layout") {
+      railWrap.className = "rail-wrap l-" + v;
+      var area = $("#inputArea"), meta = document.querySelector(".inp-meta");
+      if (v === "meta") { if (railWrap.parentNode !== meta) meta.insertBefore(railWrap, meta.firstChild); }
+      else if (railWrap.parentNode !== area) area.insertBefore(railWrap, area.firstChild);
+    } else if (group.dataset.group === "plan") {
+      hasPlan = v === "plan";
+      if (busy) {
+        if (hasPlan) { if (!planCard) showPlan(); }
+        else if (planCard) { planCard.remove(); planCard = null; planStep = 0; }
+        renderSidebarPlan();
+        renderRail();
+      } else {
+        renderSidebarPlan();
+      }
+    } else if (group.dataset.group === "loc") {
+      loc = v;
+      if (busy) renderRail();
+      if (planCard) { planCard.remove(); planCard = null; if (busy && hasPlan) showPlan(); }
+      if (!planCard) renderSidebarPlan();
+      document.querySelectorAll(".act .lab").forEach(function (n, idx) {
+        var keys = ["recon", "recon", "exe", "mut"];
+        if (keys[idx]) n.textContent = t().act[keys[idx]];
+      });
+    } else if (group.dataset.group === "theme") {
+      document.body.classList.toggle("light", v === "light");
+    }
+  });
+
+  /* boot */
+  resetFeed();
+  run();
+})();
+</script>
+</body>
+</html>

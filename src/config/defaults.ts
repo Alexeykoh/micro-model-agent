@@ -133,6 +133,7 @@ export const DEFAULTS: AppConfig = {
   },
   ui: {
     spinner: true,
+    activityRail: "line",
     showContextStats: false,
     showCompaction: true,
     verbose: false,

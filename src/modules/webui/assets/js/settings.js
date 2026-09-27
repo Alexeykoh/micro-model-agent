@@ -12,6 +12,7 @@ import { contextLabel } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
 import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings-controls.js";
+import { setLayout } from "./rail.js";
 
 function setSelButton(btn, label, value) {
   btn.textContent = label + ":";
@@ -158,6 +159,7 @@ async function postConfig(key, value, refreshSettings) {
     const persisted = r.data.persisted !== false;
     setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
     if (S.state.config && r.data.value !== undefined) setPath(S.state.config, key, r.data.value);
+    if (key === "ui.activityRail") setLayout(String(r.data.value));
     if (key === "locale") {
       await loadI18n();
       if (hooks.applyStaticI18n) hooks.applyStaticI18n();

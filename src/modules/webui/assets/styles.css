@@ -571,6 +571,75 @@ body.light .sel > button { border: 1px solid var(--border); }
 .input-area.dragover .composer { border-color: var(--accent); box-shadow: 0 0 0 2px var(--input-shadow); }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ---- activity rail — indicator above the composer while a turn runs ----
+   Reproduces docs/design/ui/demo-activity-rail-chat.html (variant №12).
+   `l-line` (default) = compact one-liner, `l-meta` = inside the hint row,
+   `l-full` = full width; `off` hides the node entirely. */
+.rail-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.rail-wrap[hidden] { display: none; }
+.rail-wrap.l-line, .rail-wrap.l-meta {
+  flex-direction: row; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.rail-wrap.l-line .rl-track { order: -1; flex: 0 0 180px; }
+.rail-wrap.l-meta .rl-track { order: -1; flex: 0 0 110px; }
+.rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: 0 1 auto; min-width: 0; }
+.rail-wrap.l-line .rail-l1 .right { display: none; }   /* Esc уже есть в .inp-meta */
+.rail-wrap.l-line .rail-l2::before { content: '·'; color: var(--dim-a); margin-right: -2px; }
+.rail-wrap.l-meta { margin-bottom: 0; }
+.rail-wrap.l-meta .rail-l1 { font-size: 11.5px; }
+.rail-wrap.l-meta .rail-l1 .st, .rail-wrap.l-meta .rail-l1 .s, .rail-wrap.l-meta .rail-l1 .right { display: none; }
+.rail-wrap.l-meta .rail-l2 { display: none; }          /* в строке подсказок только самое важное */
+.rail-wrap.l-full .rl-track { flex: 1 1 auto; }
+.rail-l1 {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  font-size: 13px; color: var(--think);
+}
+.rail-l1 .s, .rail-l1 .right { color: var(--dim-a); }
+.rail-l1 .right { margin-left: auto; font-size: 11.5px; }
+.rail-l2 { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; color: var(--dim-a); flex-wrap: wrap; }
+.rail-l2 .last { color: var(--args); }
+
+.rl-track {
+  position: relative; height: 12px; border-radius: 6px;
+  background: var(--border); overflow: hidden;
+}
+.rl-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--prog, 0) * 1%);
+  background: linear-gradient(90deg, var(--think), var(--accent));
+  transition: width .2s linear;
+}
+.rl-fill::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+  transform: translateX(-100%); animation: rlSweep 1.5s linear infinite;
+}
+@keyframes rlSweep { to { transform: translateX(100%); } }
+/* Засечки шагов плана — только в режиме plan */
+.rl-track[data-mode="plan"]::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg,
+    transparent 0, transparent calc(33.333% - 1.5px),
+    var(--bg) calc(33.333% - 1.5px), var(--bg) 33.333%);
+}
+/* indeterminate: бегущий сканер по всей длине */
+.rl-track[data-mode="scan"] .rl-fill { display: none; }
+.rl-scan {
+  display: none; position: absolute; top: 0; bottom: 0; width: 30%; left: -30%;
+  background: linear-gradient(90deg, transparent, var(--think) 40%, var(--accent) 72%, transparent);
+}
+.rl-track[data-mode="scan"] .rl-scan {
+  display: block; animation: rlScan 1.7s cubic-bezier(.4, .1, .6, .9) infinite;
+}
+@keyframes rlScan { to { left: 100%; } }
+.rail-wrap.phase-tool .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1s; }
+.rail-wrap.phase-compose .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1.3s; }
+/* Вспышка на реальное событие (tool_start / tool_end / text / plan) */
+.rl-track.flash {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(88,166,255,.45);
+  animation: rlFlash .45s ease-out;
+}
+@keyframes rlFlash { 0% { filter: brightness(1.9); } 100% { filter: brightness(1); } }
+
 /* ---- sidebar — plan / usage / environment sections ---- */
 .sb {
   width: 280px; min-width: 280px; display: flex; flex-direction: column;

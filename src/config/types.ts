@@ -241,6 +241,12 @@ export interface BrowserToolConfig {
 
 export interface UiConfig {
   spinner: boolean;
+  /**
+   * Activity rail above the input line while a turn runs: `line` = compact
+   * one-liner (default), `meta` = inside the hint row, `full` = full width,
+   * `off` = hidden.
+   */
+  activityRail?: "off" | "line" | "meta" | "full";
   /** Show context usage bar after each tool cycle (ctx: N/M, compactions, quality). */
   showContextStats: boolean;
   /** Show a one-line indicator when context compaction happens. */

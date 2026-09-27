@@ -16,6 +16,9 @@ import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
 loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, setConnStatus,
 } from "./js/settings.js";
+import {
+initRail, setPlan as railPlan, railEvent, applyRailI18n,
+} from "./js/rail.js";
 
 document.querySelectorAll("[data-collapse]").forEach((head) => {
   const initArrow = head.querySelector(".arrow");
@@ -64,6 +67,7 @@ function renderState(snapshot, busy) {
   if (sessionId) updateTabName(sessionId, S.state.host.sessionName);
   if (!S.tabs.length) showEmptyFeed();
   renderPlan(S.state.host.plan);
+  railPlan(busy && snapshot ? snapshot.plan : null);
   renderUsage(S.state.host);
   // Late provider auto-detect may change the effective window after boot —
   // the snapshot carries it so the topbar follows without a config re-fetch.
@@ -134,6 +138,15 @@ for (const [event, fn] of handlers) {
   es.addEventListener(event, (e) => {
     const d = parse(e);
     if (d) fn(d);
+  });
+}
+// Activity rail: its own listeners — feed handlers stay untouched.
+for (const ev of ["tool_start", "tool_end", "text", "plan"]) {
+  es.addEventListener(ev, (e) => {
+    const d = parse(e);
+    if (!d) return;
+    if (ev === "plan") railPlan(d);
+    else railEvent(ev, d.name);
   });
 }
 es.addEventListener("command", (e) => {
@@ -222,6 +235,7 @@ function applyStaticI18n() {
 
   renderSelectors();
   renderSessionsDropdown();
+  applyRailI18n();
   if (msgs.querySelector(".empty")) showEmptyFeed();
   if (connStatus && !connStatus.hidden) setConnStatus(true);
 }
@@ -246,6 +260,7 @@ async function boot() {
   renderSelectors();
   renderSettings();
   await loadConfig();
+  initRail(S.state.config && S.state.config.ui ? S.state.config.ui.activityRail : undefined);
   await loadModels();
   await loadProviders();
   await loadSessions();
