@@ -109,6 +109,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   sysprompt: "agent",
   map: "agent",
   lsp: "agent",
+  security: "agent",
   sessions: "session",
   new: "session",
   resume: "session",
@@ -968,6 +969,36 @@ function registerProviderCommands(ctx: ReplContext): void {
 }
 
 function registerAgentCommands(ctx: ReplContext): void {
+  const securityStatus = (): void => {
+    const s = ctx.config.security;
+    const flag = (v?: boolean) => (v ? t("reasoning.on") : t("reasoning.off"));
+    const sep = pc.dim(" · ");
+    ctx.output.writeLine(`security${sep}${flag(s?.enabled)}`);
+    ctx.output.writeLine(
+      `↳ bash ${flag(s?.bash.enabled)}${sep}paths ${flag(s?.paths.enabled)}${sep}network ${flag(s?.network.enabled)}`,
+    );
+    ctx.output.writeLine(
+      `↳ contentScan ${flag(s?.contentScan.enabled)}${sep}encryption ${flag(s?.sessionEncryption.enabled)}`,
+    );
+  };
+
+  const securityHandlers: Record<string, () => void> = {
+    status: securityStatus,
+  };
+
+  ctx.registerCommand({
+    name: "security",
+    description: t("repl.security"),
+    action: (args: string[]) => {
+      const sub = args[0]?.trim().toLowerCase();
+      const handler = sub ? securityHandlers[sub] : securityHandlers.status;
+      if (!handler) {
+        ctx.output.writeLine(pc.yellow(t("repl.unknown_sub", { cmd: "security", sub })));
+        return;
+      }
+      handler();
+    },
+  });
   ctx.registerCommand({
     name: "reload",
     description: t("repl.reload"),

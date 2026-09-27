@@ -32,6 +32,7 @@ import {
   extractChangelogRange,
 } from "../modules/updater/changelog-reader";
 import { getDefaultChannel, writeMachineJson } from "../output";
+import { setConfigValue } from "../config/registry";
 import { redactConfigSecrets } from "../config/redact";
 import { MMA_DIR_NAME, globalConfigFile, globalExportsDir } from "../config/paths";
 
@@ -99,23 +100,37 @@ function buildConfigCommands(program: Command): void {
     .argument("<key>", t("cli.config_key"))
     .argument("<value>", "Config value")
     .description(t("cli.set_value"))
-    .action(async (key: string, value: string) => {
+    .option("--force", "Bypass validation and write the raw value as-is")
+    .action(async (key: string, value: string, opts: { force?: boolean }) => {
       const configPath = globalConfigFile();
       const { config } = await bootstrap();
-      const keys = key.split(".");
-      let obj: any = config;
-      for (let i = 0; i < keys.length - 1; i++) {
-        if (!(keys[i] in obj)) obj[keys[i]] = {};
-        obj = obj[keys[i]];
+      if (opts.force) {
+        const keys = key.split(".");
+        let obj: any = config;
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!(keys[i] in obj)) obj[keys[i]] = {};
+          obj = obj[keys[i]];
+        }
+        const lastKey = keys[keys.length - 1];
+        if (value === "true") obj[lastKey] = true;
+        else if (value === "false") obj[lastKey] = false;
+        else if (/^\d+$/.test(value)) obj[lastKey] = parseInt(value, 10);
+        else if (/^\d+\.\d+$/.test(value)) obj[lastKey] = parseFloat(value);
+        else obj[lastKey] = value;
+        saveConfig(config, configPath, dirname(configPath));
+        getDefaultChannel().writeLine(t("cli.set_done", { key, value }));
+        return;
       }
-      const lastKey = keys[keys.length - 1];
-      if (value === "true") obj[lastKey] = true;
-      else if (value === "false") obj[lastKey] = false;
-      else if (/^\d+$/.test(value)) obj[lastKey] = parseInt(value, 10);
-      else if (/^\d+\.\d+$/.test(value)) obj[lastKey] = parseFloat(value);
-      else obj[lastKey] = value;
+      const r = setConfigValue(config, key, value);
+      if (!r.ok) {
+        getDefaultChannel().writeLine(
+          pc.yellow(t("cli.config_invalid", { key: r.input, reason: r.reason })),
+          "stderr",
+        );
+        return;
+      }
       saveConfig(config, configPath, dirname(configPath));
-      getDefaultChannel().writeLine(t("cli.set_done", { key, value }));
+      getDefaultChannel().writeLine(t("cli.set_done", { key: r.key, value: r.display }));
     });
   configCmd
     .command("show")
