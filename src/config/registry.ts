@@ -12,7 +12,7 @@ import { setBudgetShare, type BudgetShareKey } from "./budget";
  * the caller's job (`repl-commands.mutateConfig`), keeping one write path.
  */
 
-export type ConfigValueType = "string" | "int" | "share" | "bool" | "enum";
+export type ConfigValueType = "string" | "int" | "share" | "bool" | "enum" | "json" | "list";
 
 export const REASONING_LEVELS = [
   "auto",
@@ -368,6 +368,8 @@ export function allConfigNames(): Array<{ name: string; def: ConfigKeyDef; alias
 
 export function formatConfigValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "on" : "off";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object" && value !== null) return JSON.stringify(value);
   return String(value);
 }
 
@@ -409,6 +411,19 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
       if (isPct) n = n / 100;
       if (!Number.isFinite(n) || n < MIN_SHARE || n > MAX_SHARE) return { ok: false, reason: "invalid" };
       return { ok: true, value: n };
+    }
+    case "list": {
+      if (trimmed.length === 0) return { ok: true, value: [] };
+      const items = trimmed.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      return { ok: true, value: items };
+    }
+    case "json": {
+      if (trimmed.length > 20000) return { ok: false, reason: "invalid" };
+      try {
+        return { ok: true, value: JSON.parse(trimmed) };
+      } catch {
+        return { ok: false, reason: "invalid" };
+      }
     }
   }
 }
