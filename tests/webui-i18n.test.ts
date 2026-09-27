@@ -79,8 +79,7 @@ describe("webui i18n", () => {
     expect([...enKeys].sort()).toEqual([...ruKeys].sort());
   });
 
-  it("translates every registry key and enum value in both locales", () => {
-    const dicts = getFlatDicts();
+  it("translates every registry key and enum value in both locales", () => {    const dicts = getFlatDicts();
     for (const def of configDefs()) {
       const key = `config.key.${def.key}`;
       expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
@@ -90,6 +89,24 @@ describe("webui i18n", () => {
         expect(typeof dicts.en[ek], `${ek} (en)`).toBe("string");
         expect(typeof dicts.ru[ek], `${ek} (ru)`).toBe("string");
       }
+    }
+  });
+
+  it("names every settings panel in both locales", async () => {
+    // Menu items + panel headers render via t("web.settings." + data-p); a
+    // missing key leaks the raw key into the UI (seen with network/… panels).
+    const { readFileSync } = await import("node:fs");
+    const html = readFileSync(
+      new URL("../src/modules/webui/assets/index.html", import.meta.url),
+      "utf-8",
+    );
+    const panels = [...html.matchAll(/data-p="([a-z0-9-]+)"/g)].map((m) => m[1]);
+    expect(panels.length).toBeGreaterThan(10);
+    const dicts = getFlatDicts();
+    for (const p of new Set(panels)) {
+      const key = `web.settings.${p}`;
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
     }
   });
 

@@ -74,6 +74,10 @@ describe("web e2e: config surfaces", () => {
         const sec = page.locator('[data-panel="security"]');
         await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/bash/i);
         await expect.poll(() => sec.innerText(), { timeout: 10_000 }).toMatch(/network/i);
+        // No raw i18n keys may leak into the menu (all panels localized).
+        await expect
+          .poll(() => page.locator("#setMenu").innerText(), { timeout: 10_000 })
+          .not.toMatch(/web\.settings\./);
         await page.keyboard.press("Escape");
         writeArtifacts(dir, "cfg-panels", {
           html: await page.content(),
