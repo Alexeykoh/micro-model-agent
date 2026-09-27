@@ -101,7 +101,7 @@ describe("config registry", () => {
 
   it("groups keys by canonical prefix", () => {
     const keys = keysForGroup("contextBudget").map((d) => d.key);
-    expect(keys).toEqual(["contextBudget.systemPrompt", "contextBudget.responseReserve"]);
+    expect(keys).toEqual(["contextBudget.systemPrompt", "contextBudget.responseReserve", "contextBudget.compactionThreshold", "contextBudget.compactionMinLoad"]);
   });
 
   it("captures a boot snapshot", () => {
