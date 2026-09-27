@@ -391,6 +391,17 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`question`** (`src/tools/user-input.ts`) приведён к STYLE.md (`?` glyph, отступы, `[N] Свой ответ`, `>` prompt) — глобально для всех тулов, не только `meet`.
 - **Observability:** `onboarding_*` события в `session.jsonl` (`SessionLogger.logOnboarding`).
 
+### Full Config Surfaces (unreleased)
+
+Дизайн: [docs/plans/2026-09-27-full-config-surfaces.md](./docs/plans/2026-09-27-full-config-surfaces.md).
+
+- **`/config` — все ключи** (`src/config/registry.ts` + `registry-extra.ts`): ~110 ключей, типы `string/int/share/bool/enum` + новые `json` (объекты, лимит 20K, `JSON.parse`) и `list` (массивы строк, в REPL — через запятую). `registry.ts` grandfathered (>300 строк) — новые дефы только в `registry-extra.ts`, мердж конкатом в `DEFINITIONS`; `allConfigNames()`/`configDefs()` подхватывают их автоматически (комплитер без правок).
+- **`mma config set <key> <value> [--force]`** (`src/cli/commands.ts`): по умолчанию валидация через `setConfigValue` (bad value → `cli.config_invalid`, запись не пишется); `--force` — сырая запись по dotted-пути без валидации (escape hatch для битых конфигов).
+- **`/security status` + `/security <key> [value]`** (REPL `repl-commands.ts`, web `commands-settings.ts`, handler-maps по правилу #17): read-only сводка (`security · on/off`, `↳`-строки по STYLE.md, без боксов) + запись отдельных ключей через тот же `setConfigValue`. Web HELP/`/api/commands` подхватывает автоматически.
+- **Web settings — generic controls** (`assets/js/settings-controls.js` → `controlFor`: bool→toggle, enum→select, int→number, share→%, list→tag-input, json→textarea с inline-ошибкой): новые секции `network` (webSearch/errorWebSearch), `browser` (все `browser.*`), `persistence` (session/sessionIsolation/pricing/updater), `retry` (`retry.*`), `lists` (tools/security-списки), `advanced-json` (pricing.overrides/modelCapabilities/experts). `settings.js` делегирует рендер, порядок старых секций не тронут.
+- **Provider form** (`providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool-флагов), `retry{maxRetries,baseDelay,maxDelay}`; зеркалится в legacy при active. Ошибка валидации — существующий `400 invalid-provider`.
+- **MCP CRUD + LSP read/edit** (web, `settings-api.ts`, таблица `API_ROUTES`): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` обязательны), `GET /api/lsp` + `PUT /api/lsp/:lang` (только `enabled/timeout/command/args`; add/remove серверов — JSON вручную, бинарники host-specific). Всё с `restartRequired: true` (эффект со следующего запуска), персист через общий `persistAndReconfigure`.
+
 ### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.4.0)
 
 Дизайн: [docs/specs/2026-09-23-mma-web/design.md](./docs/specs/2026-09-23-mma-web/design.md).

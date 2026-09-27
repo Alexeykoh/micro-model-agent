@@ -4,6 +4,18 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Config registry expansion** (`src/config/registry.ts`, `src/config/registry-extra.ts`): ~110 keys now editable via `/config`, `mma config set` and web Settings; new value types `json` (objects, 20K limit, `JSON.parse`) and `list` (string arrays, comma-separated in REPL). `registry.ts` stays frozen (grandfathered over 300 lines) — new defs live in `registry-extra.ts`, merged into `DEFINITIONS` by concat.
+- **`mma config set` validation + `--force`** (`src/cli/commands.ts`): writes go through `setConfigValue` by default (bad value → `cli.config_invalid`, nothing persisted); `--force` is a raw dotted-path escape hatch without validation.
+- **`/security status` (REPL + web)** (`src/cli/repl-commands.ts`, `src/modules/webui/commands-settings.ts`): read-only summary (`security · on/off`, `↳` lines per STYLE.md) plus `/security <key> [value]` registry writes; handler maps per rule #17, automatic in web `/api/commands` HELP.
+- **Provider form fields** (`src/modules/webui/providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool flags), `retry{maxRetries,baseDelay,maxDelay}`; mirrored to legacy when active, validation failure keeps the existing `400 invalid-provider`.
+- **Web MCP CRUD** (`src/modules/webui/settings-api.ts`, `server.ts` route table): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` required), `restartRequired: true`.
+- **Web LSP read/edit** (`src/modules/webui/settings-api.ts`): `GET /api/lsp` table + `PUT /api/lsp/:lang` (`enabled/timeout/command/args` only; add/remove stays JSON-only), `restartRequired: true`.
+- **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type; new sections `network`, `browser`, `persistence`, `retry`, `lists`, `advanced-json`.
+
 ## [2.9.0] - 2026-09-26
 
 ### Added
