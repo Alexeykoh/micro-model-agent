@@ -232,8 +232,20 @@ describe("webui providers REST", () => {
     });
   });
 
-  it("requires a token when one is configured", async () => {
-    const s = createWebUiState();
+  it("upserts provider cache + completion caps", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { DEFAULTS } = await import("../src/config/defaults");
+    const cfg = structuredClone(DEFAULTS);
+    const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://x/v1", maxCompletionTokens: 16384, cache: { mechanism: "local" } } as never);
+    expect(r.ok).toBe(true);
+    const entries = cfg.provider.entries ?? [];
+    expect(entries.length).toBeGreaterThan(0);
+    const last = entries[entries.length - 1];
+    expect(last.maxCompletionTokens).toBe(16384);
+    expect(last.cache?.mechanism).toBe("local");
+  });
+
+  it("requires a token when one is configured", async () => {    const s = createWebUiState();
     s.config = testConfig();
     s.token = "s3cret";
     await withServer(s, async (base) => {

@@ -356,6 +356,37 @@ function providerInput(value, type, placeholder) {
   return input;
 }
 
+function providerSelect(options, value) {
+  const sel = el("select");
+  const none = el("option", "", "—");
+  none.value = "";
+  sel.appendChild(none);
+  options.forEach((v) => {
+    const o = el("option", "", v);
+    o.value = v;
+    if (v === value) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (value == null) sel.value = "";
+  return sel;
+}
+
+function providerCheck(value) {
+  const input = el("input");
+  input.type = "checkbox";
+  input.checked = value === true;
+  return input;
+}
+
+const CACHE_FLAG_KEYS = [
+  "sessionHeader",
+  "requestCachePrompt",
+  "requestPromptCacheKey",
+  "requestSessionId",
+  "requestCacheControl",
+  "requestStreamUsage",
+];
+
 // A titled group inside a settings panel (models / providers).
 function settingsSection(titleKey) {
   const sec = el("div", "settings-section");
@@ -448,17 +479,49 @@ function providerAdvancedFields(editing) {
   const adv = el("details", "pform-adv");
   adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
   const advGrid = el("div", "pform-grid");
+  const cache = editing.cache || {};
+  const retry = editing.retry || {};
   const f = {
     ctx: providerInput(editing.contextWindow, "number", "32768"),
     prio: providerInput(editing.priority, "number", "0"),
     rpm: providerInput(editing.rpm, "number", "60"),
     par: providerInput(editing.parallel, "number", "1"),
+    maxTokens: providerInput(editing.maxCompletionTokens, "number", "8192"),
+    cacheMech: providerSelect(["auto", "explicit", "local", "none"], cache.mechanism),
+    cacheReport: providerSelect(["openai", "deepseek", "anthropic", "ollama", "none"], cache.report),
+    retryMax: providerInput(retry.maxRetries, "number", "3"),
+    retryBase: providerInput(retry.baseDelay, "number", "1000"),
+    retryMaxD: providerInput(retry.maxDelay, "number", "30000"),
   };
+  f.cacheFlags = CACHE_FLAG_KEYS.map((key) => {
+    const box = providerCheck(cache[key]);
+    const wrap = el("label", "pform-check");
+    wrap.appendChild(box);
+    wrap.appendChild(el("span", "", key));
+    return { key, box, node: wrap };
+  });
   advGrid.appendChild(pfield("web.settings.provider_context", f.ctx));
   advGrid.appendChild(pfield("web.settings.provider_priority", f.prio));
   advGrid.appendChild(pfield("web.settings.provider_rpm", f.rpm));
   advGrid.appendChild(pfield("web.settings.provider_parallel", f.par));
+  advGrid.appendChild(pfield("web.settings.provider_max_tokens", f.maxTokens));
+  advGrid.appendChild(pfield("web.settings.provider_cache_mechanism", f.cacheMech));
+  advGrid.appendChild(pfield("web.settings.provider_cache_report", f.cacheReport));
   adv.appendChild(advGrid);
+  const retryGroup = el("div", "pform-checks");
+  retryGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_retry")));
+  [["maxRetries", f.retryMax], ["baseDelay", f.retryBase], ["maxDelay", f.retryMaxD]].forEach(([key, input]) => {
+    const wrap = el("label", "pform-check");
+    wrap.appendChild(el("span", "", key));
+    input.setAttribute("aria-label", key);
+    wrap.appendChild(input);
+    retryGroup.appendChild(wrap);
+  });
+  adv.appendChild(retryGroup);
+  const flagGroup = el("div", "pform-checks");
+  flagGroup.appendChild(el("span", "pform-checks-title", t("web.settings.provider_cache_flags")));
+  f.cacheFlags.forEach(({ node }) => flagGroup.appendChild(node));
+  adv.appendChild(flagGroup);
   return { node: adv, ...f };
 }
 
@@ -486,17 +549,36 @@ async function submitProviderForm(f, mode, editing) {
     ["priority", f.prio, 0],
     ["rpm", f.rpm, 1],
     ["parallel", f.par, 1],
+    ["maxCompletionTokens", f.maxTokens, 512, 128000],
+    ["maxRetries", f.retryMax, 0, 10],
+    ["baseDelay", f.retryBase, 0, 60000],
+    ["maxDelay", f.retryMaxD, 0, 300000],
   ];
+  const retry = {};
   for (const entry of nums) {
     const raw = entry[1].value.trim();
     if (!raw) continue;
     const n = Number(raw);
-    if (!Number.isInteger(n) || n < entry[2]) {
+    const max = entry[3] === undefined ? Number.MAX_SAFE_INTEGER : entry[3];
+    if (!Number.isInteger(n) || n < entry[2] || n > max) {
       setIndicator(t("web.settings.provider_invalid"), true);
       return;
     }
-    body[entry[0]] = n;
+    if (entry[0] === "maxRetries" || entry[0] === "baseDelay" || entry[0] === "maxDelay") {
+      retry[entry[0]] = n;
+    } else {
+      body[entry[0]] = n;
+    }
   }
+  if (Object.keys(retry).length) body.retry = retry;
+  const cache = {};
+  if (f.cacheMech.value) cache.mechanism = f.cacheMech.value;
+  if (f.cacheReport.value) cache.report = f.cacheReport.value;
+  const prevCache = (editing && editing.cache) || {};
+  f.cacheFlags.forEach(({ key, box }) => {
+    if (box.checked !== (prevCache[key] === true)) cache[key] = box.checked;
+  });
+  if (Object.keys(cache).length) body.cache = cache;
   const r = await api("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
