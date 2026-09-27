@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Web LSP read/edit** (`src/modules/webui/settings-api.ts`): `GET /api/lsp` table + `PUT /api/lsp/:lang` (`enabled/timeout/command/args` only; add/remove stays JSON-only), `restartRequired: true`.
 - **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type; new sections `network`, `browser`, `persistence`, `retry`, `lists`, `advanced-json`.
 
+### Changed
+
+- **Provider upsert semantics** (`src/modules/webui/providers-api.ts`): a create-POST naming the only entry of a virgin legacy config updates it in place instead of `409 name-conflict`; genuine collisions in multi-entry configs still return `name-conflict`.
+
 ## [2.9.0] - 2026-09-26
 
 ### Added

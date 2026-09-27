@@ -245,6 +245,24 @@ describe("webui providers REST", () => {
     expect(last.cache?.mechanism).toBe("local");
   });
 
+  it("lone legacy-seeded entry + colliding create-POST updates in place (no duplicate, no 409)", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { DEFAULTS } = await import("../src/config/defaults");
+    const cfg = structuredClone(DEFAULTS);
+    const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://new/v1" });
+    expect(r).toEqual({ ok: true, name: "openai-compat" });
+    expect(cfg.provider.entries).toHaveLength(1);
+    expect(cfg.provider.entries?.[0].baseUrl).toBe("http://new/v1");
+  });
+
+  it("multi-entry colliding name without originalName is a name-conflict", async () => {
+    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const cfg = testConfig();
+    const r = upsertProvider(cfg, { type: "openai-compat", label: "or", baseUrl: "http://x/v1" });
+    expect(r).toEqual({ ok: false, error: "name-conflict" });
+    expect(cfg.provider.entries).toHaveLength(2);
+  });
+
   it("requires a token when one is configured", async () => {    const s = createWebUiState();
     s.config = testConfig();
     s.token = "s3cret";

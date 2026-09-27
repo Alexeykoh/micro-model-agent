@@ -69,4 +69,13 @@ describe("registry list/json types", () => {
     expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "critical").ok).toBe(true);
     expect(setConfigValue(cfg, "security.auditNotifier.minSeverity", "banana").ok).toBe(false);
   });
+  it("provider.maxCompletionTokens falls back to 8192, min stays 512", () => {
+    const cfg = structuredClone(DEFAULTS);
+    delete (cfg.provider as Record<string, unknown>).maxCompletionTokens;
+    const got = getConfigValue(cfg, "provider.maxCompletionTokens");
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value).toBe(8192);
+    expect(setConfigValue(cfg, "provider.maxCompletionTokens", "100").ok).toBe(false);
+    expect(setConfigValue(cfg, "provider.maxCompletionTokens", "8192").ok).toBe(true);
+  });
 });

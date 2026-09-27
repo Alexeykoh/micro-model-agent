@@ -13,6 +13,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getConfigValue } from "../../config/registry";
+import { t } from "../../i18n";
 import type { AppConfig } from "../../config/types";
 import {
   extensionFor,
@@ -124,7 +125,7 @@ function securityCmd(
 ): void | Promise<void> {
   const sub = args[0]?.trim().toLowerCase();
   if (!sub || sub === "status") {
-    const flag = (v?: boolean) => (v ? "on" : "off");
+    const flag = (v?: boolean) => (v ? t("reasoning.on") : t("reasoning.off"));
     const s = cfg.security;
     out(`security · ${flag(s?.enabled)}`);
     out(`↳ bash ${flag(s?.bash.enabled)} · paths ${flag(s?.paths.enabled)} · network ${flag(s?.network.enabled)}`);
@@ -136,7 +137,7 @@ function securityCmd(
   if (args.length >= 2) {
     return applyConfigWrite(cfg, args[0], args.slice(1).join(" "), out, state);
   }
-  out(`↳ unknown subcommand: security ${args[0]}`);
+  out(`↳ ${t("web.security.unknown_sub", { sub: args[0] })}`);
   out(`usage: ${SECURITY_USAGE}`);
 }
 

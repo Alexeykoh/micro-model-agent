@@ -100,7 +100,7 @@ function buildConfigCommands(program: Command): void {
     .argument("<key>", t("cli.config_key"))
     .argument("<value>", "Config value")
     .description(t("cli.set_value"))
-    .option("--force", "Bypass validation and write the raw value as-is")
+    .option("--force", t("cli.config_force"))
     .action(async (key: string, value: string, opts: { force?: boolean }) => {
       const configPath = globalConfigFile();
       const { config } = await bootstrap();
