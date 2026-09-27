@@ -909,9 +909,11 @@ body.light .toggle { background: var(--toggle-off); }
 }
 .tags-plus, .table-plus { color: var(--accent); font-size: 14px; }
 
-.checksctl { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
-.check-line { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
-.check-line input { accent-color: var(--accent); }
+/* `.row input` is a right-aligned 120px field — checkboxes must not inherit it. */
+.checksctl { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; }
+.check-line { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; min-width: 0; }
+.check-line input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; text-align: left; accent-color: var(--accent); }
+.check-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tablectl { gap: 4px; overflow-x: auto; }
 .table-head, .table-row {
