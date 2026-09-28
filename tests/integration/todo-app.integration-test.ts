@@ -256,7 +256,7 @@ describe.skipIf(shouldSkip)("Todo App Build (integration — real LLM)", () => {
     ]);
 
     const result = await agent.run(
-      'Create a plan for a todo app: call plan with action=create, title="Todo App", 4 steps. Then call todo with action=add and 5 items. After BOTH tools complete, reply with ONLY one short sentence confirming the plan is ready. Do NOT call any more tools after todo.',
+      'Create a plan for a todo app: call plan with action=create, title="Todo App", 4 steps, and checks 1:1 with steps (file-exists:<path>, command:<cmd>, manual:<text>). Then call todo with action=add and 5 items. After BOTH tools complete, reply with ONLY one short sentence confirming the plan is ready. Do NOT call any more tools after todo.',
     );
 
     expect(result.success).toBe(true);
@@ -393,7 +393,7 @@ describe.skipIf(shouldSkip)("Todo App Build (integration — real LLM)", () => {
 
     const result = await agent.run(
       "Build a minimal Vite + TypeScript + Tailwind todo app. EXACT steps — do each ONCE then STOP:\n" +
-        '1. call plan with action=create, title="Todo App", 4 steps\n' +
+        '1. call plan with action=create, title="Todo App", 4 steps, checks 1:1 with steps (file-exists:<path>, command:<cmd>, manual:<text>)\n' +
         "2. call todo with action=add and 5 items\n" +
         "3. call write_file 3 times: index.html, src/main.ts, src/style.css\n" +
         '4. call bash with command="npm install"\n' +

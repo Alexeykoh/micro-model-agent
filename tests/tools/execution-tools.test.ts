@@ -43,6 +43,7 @@ describe("ExecutionModule tools", () => {
           "This is step two with detail",
           "This is step three with detail",
         ],
+        checks: ["manual:verify This is step one with detail", "manual:verify This is step two with detail", "manual:verify This is step three with detail"],
       });
 
       expect(result.success).toBe(true);
@@ -60,6 +61,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["First step with enough chars here", "Second step with enough chars"],
+        checks: ["manual:verify First step with enough chars here", "manual:verify Second step with enough chars"],
       });
 
       const result = await planTool.handler(ctx, {
@@ -82,6 +84,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["This is a step with enough chars to pass"],
+        checks: ["manual:verify This is a step with enough chars to pass"],
       });
 
       expect(execModule.getTracker()).not.toBeNull();
@@ -122,6 +125,7 @@ describe("ExecutionModule tools", () => {
           "Second step with enough chars here",
           "Third step with enough chars here",
         ],
+        checks: ["manual:verify First step with enough chars here", "manual:verify Second step with enough chars here", "manual:verify Third step with enough chars here"],
       });
 
       const result = await planTool.handler(ctx, {
@@ -143,6 +147,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "T",
         steps: ["First step with enough chars here", "Second step with enough chars here"],
+        checks: ["manual:verify First step with enough chars here", "manual:verify Second step with enough chars here"],
       });
       await planTool.handler(ctx, { action: "update", step: 1, status: "done" });
       const second = await planTool.handler(ctx, {
@@ -164,6 +169,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Old Plan",
         steps: ["First step with enough chars here"],
+        checks: ["manual:verify First step with enough chars here"],
       });
       const oldPlan = execModule.getTracker()!.getPlan();
       const oldId = oldPlan.id;
@@ -173,6 +179,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "New Plan",
         steps: ["Another step with enough chars here"],
+        checks: ["manual:verify Another step with enough chars here"],
       });
 
       const result = await planTool.handler(ctx, {
@@ -222,6 +229,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["This step has enough chars now"],
+        checks: ["manual:verify This step has enough chars now"],
       });
 
       const result = await todoTool.handler(ctx, {
@@ -248,6 +256,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["This step has enough chars now"],
+        checks: ["manual:verify This step has enough chars now"],
       });
       await todoTool.handler(ctx, {
         action: "add",
@@ -277,6 +286,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["This step has enough chars now"],
+        checks: ["manual:verify This step has enough chars now"],
       });
 
       const result = await todoTool.handler(ctx, {
@@ -298,6 +308,7 @@ describe("ExecutionModule tools", () => {
         action: "create",
         title: "Test",
         steps: ["This step has enough chars now"],
+        checks: ["manual:verify This step has enough chars now"],
       });
       await todoTool.handler(ctx, {
         action: "add",

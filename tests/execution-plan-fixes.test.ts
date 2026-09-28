@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestPlan, createTestModule, cleanupTestModule, writeTestFile } from "./plan-test-utils";
 import { PlanCreator } from "../src/modules/execution/planner";
 import { resolveTestCommand } from "../src/modules/execution/audit-runners";
 
@@ -23,21 +23,20 @@ describe("plan abort with id", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-abortid-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-abortid-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("aborts the plan given by id, not the active one", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
     // Plan A becomes a draft when plan B is created over it (no progress).
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "A", ["Create src/a.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
-    await tool.handler(ctx, { action: "create", title: "B", steps: ["Create src/b.ts"] });
+    await createTestPlan(execModule, "B", ["Create src/b.ts"]);
     const bId = execModule.getTracker()!.getPlan().id;
     expect(execModule.getStore().find(aId)!.status).toBe("draft");
 
@@ -60,7 +59,7 @@ describe("plan abort with id", () => {
   it("fails on abort of an archived plan", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "Archived", ["Create src/archived.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
     await tool.handler(ctx, { action: "abort" });
     const res = await tool.handler(ctx, { action: "abort", id: aId });
@@ -84,18 +83,17 @@ describe("plan switch to already-active plan", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-switch-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-switch-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("is a no-op and does not duplicate the active plan", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "A", ["Create src/a.ts"]);
     const id = execModule.getTracker()!.getPlan().id;
 
     const res = await tool.handler(ctx, { action: "switch", id });
@@ -114,18 +112,13 @@ describe("plan switch to already-active plan", () => {
   it("points 'current: step' at the first pending step after switching", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "A",
-      steps: ["Create src/a.ts", "Create src/b.ts"],
-    });
+    await createTestPlan(execModule, "A", ["Create src/a.ts", "Create src/b.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     await tool.handler(ctx, { action: "abort" });
 
-    await tool.handler(ctx, { action: "create", title: "B", steps: ["Create src/c.ts"] });
+    await createTestPlan(execModule, "B", ["Create src/c.ts"]);
     const res = await tool.handler(ctx, { action: "switch", id: aId });
     expect(res.success).toBe(true);
     expect(String(res.display)).toContain("current: step 2");
@@ -138,18 +131,17 @@ describe("plan delete / purge", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-delete-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-delete-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("permanently deletes an archived plan by id", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "Doomed", ["Create src/doomed.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
     await tool.handler(ctx, { action: "abort" });
 
@@ -162,7 +154,7 @@ describe("plan delete / purge", () => {
   it("deleting the active plan clears the tracker", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "Active", ["Create src/active.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
 
     const res = await tool.handler(ctx, { action: "delete", id: aId });
@@ -181,14 +173,14 @@ describe("plan delete / purge", () => {
     const tool = planTool(execModule);
     const ctx: any = {};
     // active A → aborted to archive
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "A", ["Create src/a.ts"]);
     const aId = execModule.getTracker()!.getPlan().id;
     await tool.handler(ctx, { action: "abort" });
     // active B; A archived
-    await tool.handler(ctx, { action: "create", title: "B", steps: ["Create src/b.ts"] });
+    await createTestPlan(execModule, "B", ["Create src/b.ts"]);
     await tool.handler(ctx, { action: "abort" });
     // active C; B archived
-    await tool.handler(ctx, { action: "create", title: "C", steps: ["Create src/c.ts"] });
+    await createTestPlan(execModule, "C", ["Create src/c.ts"]);
 
     expect(execModule.getStore().listAll().length).toBeGreaterThanOrEqual(3);
     const res = await tool.handler(ctx, { action: "purge" });
@@ -204,24 +196,18 @@ describe("final audit still runs for a completed plan", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-completed-audit-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-completed-audit-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("audits the completed plan after plan update auto-archives it", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content", "Create src/b.ts with content"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    await createTestPlan(execModule, "T", ["Create src/a.ts with content", "Create src/b.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     writeFileSync(join(tmpDir, "src", "b.ts"), "export const b = 1;\n");
 
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
@@ -239,16 +225,11 @@ describe("final audit still runs for a completed plan", () => {
   it("fails the completed-plan audit when a named file is missing", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
+    await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
     // File never created — update is blocked by the deliverable gate, so mark
     // the step via the plugin's auto-advance? No — drive completion through
     // update with the file present, then delete the file before the audit.
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     rmSync(join(tmpDir, "src", "a.ts"));
 
@@ -259,15 +240,8 @@ describe("final audit still runs for a completed plan", () => {
   });
 
   it("auto-closes pending steps whose named files all exist (evidence-based)", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content", "Create src/b.ts with content"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+await createTestPlan(execModule, "T", ["Create src/a.ts with content", "Create src/b.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     writeFileSync(join(tmpDir, "src", "b.ts"), "export const b = 2;\n");
 
     // The model never called plan update — the audit itself must recognize
@@ -284,15 +258,8 @@ describe("final audit still runs for a completed plan", () => {
   });
 
   it("does not auto-close a create step whose file exists but is empty", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "   \n");
+await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "   \n");
 
     const audit = await execModule.runFinalAudit();
     expect(audit).not.toBeNull();
@@ -307,10 +274,10 @@ describe("final audit still runs for a completed plan", () => {
       action: "create",
       title: "T",
       steps: ["Delete src/a.ts"],
+      checks: ["file-exists:src/a.ts"],
       kinds: ["delete"],
     });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
 
     const audit = await execModule.runFinalAudit();
     expect(audit!.done).toBe(0);
@@ -324,6 +291,7 @@ describe("final audit still runs for a completed plan", () => {
       action: "create",
       title: "T",
       steps: ["Delete src/a.ts"],
+      checks: ["file-exists:src/a.ts"],
       kinds: ["delete"],
     });
     mkdirSync(join(tmpDir, "src"), { recursive: true });
@@ -338,13 +306,7 @@ describe("final audit still runs for a completed plan", () => {
   });
 
   it("keeps pending steps with no evidence (file missing or no file token)", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/missing.ts with content", "Review the overall approach"],
-    });
+await createTestPlan(execModule, "T", ["Create src/missing.ts with content", "Review the overall approach"]);
     mkdirSync(join(tmpDir, "src"), { recursive: true });
 
     const audit = await execModule.runFinalAudit();
@@ -357,15 +319,8 @@ describe("final audit still runs for a completed plan", () => {
   });
 
   it("records the completed plan on the auto-advance path too", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
 
     // A successful write on the step file auto-completes the last step → the
     // plan auto-archives and clears the tracker.
@@ -384,11 +339,7 @@ describe("final audit still runs for a completed plan", () => {
   it("does not audit after abort (nothing completed)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
+    await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
     await tool.handler(ctx, { action: "abort" });
     expect(await execModule.runFinalAudit()).toBeNull();
   });
@@ -399,12 +350,11 @@ describe("evidence-based plan nudge (no bare iteration counters)", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-nudge-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-nudge-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("nudges for a plan only after file-mutating calls without one", async () => {
@@ -430,9 +380,7 @@ describe("evidence-based plan nudge (no bare iteration counters)", () => {
   });
 
   it("resets the mutation counter once a plan exists", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "T", steps: ["Create src/a.ts"] });
+await createTestPlan(execModule, "T", ["Create src/a.ts"]);
     const plugin = execModule.getPlugin();
     const thinkCtx = mockCtx();
     plugin.onToolCall!({ toolName: "write_file", args: { path: "src/a.ts" } });
@@ -446,22 +394,17 @@ describe("plan update notes for command-only steps", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-nodef-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-nodef-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("succeeds but notes that a file-less step cannot be auto-verified", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Run bun build and verify no errors"],
-    });
+    await createTestPlan(execModule, "T", ["Run bun build and verify no errors"]);
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(res.success).toBe(true);
     expect(res.output).toContain("names no files");
@@ -470,13 +413,8 @@ describe("plan update notes for command-only steps", () => {
   it("does not add the note when the step names real files", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(res.success).toBe(true);
     expect(res.output).not.toContain("names no files");
@@ -488,22 +426,15 @@ describe("plan alignment ignores tool payload content", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-align-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-align-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("does not flag an on-track write whose content mentions other files", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content"],
-    });
+await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
     const plugin = execModule.getPlugin();
     const onTrack = {
       name: "write_file",
@@ -526,22 +457,15 @@ describe("deps-step gate uses package-manager verbs, not bare keywords", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-deps-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-deps-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("injects the lockfile hint for a real install command without a lockfile", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["npm install express and start the server"],
-    });
+await createTestPlan(execModule, "T", ["npm install express and start the server"]);
     const plugin = execModule.getPlugin();
     const ctx2 = mockCtx();
     plugin.onAfterTool!(ctx2, { name: "write_file", arguments: { path: "src/server.js" } } as any, {
@@ -553,13 +477,7 @@ describe("deps-step gate uses package-manager verbs, not bare keywords", () => {
   });
 
   it("does NOT treat a bare 'init'/'setup' step as a dependency install", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/index.ts with content"],
-    });
+await createTestPlan(execModule, "T", ["Create src/index.ts with content"]);
     const plugin = execModule.getPlugin();
     const ctx2 = mockCtx();
     plugin.onAfterTool!(ctx2, { name: "write_file", arguments: { path: "src/index.ts" } } as any, {
@@ -576,22 +494,15 @@ describe("auto-advance resolves nested step files (findExistingFile)", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-nested-adv-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-nested-adv-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("auto-advances when the step file lives in a nested project dir", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts with content", "Create src/b.ts with content"],
-    });
+await createTestPlan(execModule, "T", ["Create src/a.ts with content", "Create src/b.ts with content"]);
     // Real file at baseDir/bicycle-shop/src/a.ts (nested project).
     mkdirSync(join(tmpDir, "bicycle-shop", "src"), { recursive: true });
     writeFileSync(join(tmpDir, "bicycle-shop", "src", "a.ts"), "export const a = 1;\n");
@@ -628,11 +539,11 @@ describe("resolveTestCommand picks the project's runner", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-test-cmd-"));
+    tmpDir = createTestModule("mma-test-cmd-").tmpDir;
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("falls back to bun test without a manifest", () => {
@@ -668,18 +579,17 @@ describe("plan update status validation", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-status-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-status-"));
   });
 
   afterEach(() => {
-    if (rmSync) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("rejects an unknown status and leaves the step untouched", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts"] });
+    await createTestPlan(execModule, "A", ["Create src/a.ts"]);
 
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "completed" });
     expect(res.success).toBe(false);
@@ -691,9 +601,8 @@ describe("plan update status validation", () => {
   it("rejects re-opening a done step with status=pending", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "A", steps: ["Create src/a.ts", "Create src/b.ts"] });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    await createTestPlan(execModule, "A", ["Create src/a.ts", "Create src/b.ts"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
 

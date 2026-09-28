@@ -281,7 +281,7 @@ describe.skipIf(shouldSkip)("03-plan-execution", () => {
   it("todo tool tracks progress within a plan", async () => {
     const dir = sandbox("03-todo");
     const result = await runMma(
-      "You have a plan tool and a todo tool. Create a plan to build a small module. Use todo to track one subtask. The module should have a single file src/calc.ts with add and subtract functions. Create the file with all necessary code.",
+      "You have a plan tool and a todo tool. Create a plan to build a small module (each step needs a checks entry: file-exists:<path>, command:<cmd>, or manual:<text>). Use todo to track one subtask. The module should have a single file src/calc.ts with add and subtract functions. Create the file with all necessary code. Mark steps done with plan_step step=N status=done.",
       dir,
     );
     expect(exitOk(result)).toBe(true);

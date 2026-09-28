@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { rmSync } from "fs";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestModule, cleanupTestModule } from "./plan-test-utils";
 
 /**
  * ses_mt4fn58c plan-subsystem fixes:
@@ -20,7 +19,7 @@ describe("plan subsystem: progress counting + update guards", () => {
   let mod: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-fix-"));
+    tmpDir = createTestModule("mma-plan-fix-").tmpDir;
     mod = new ExecutionModule(tmpDir);
   });
 
@@ -43,6 +42,7 @@ describe("plan subsystem: progress counting + update guards", () => {
       action: "create",
       title: "T",
       steps: ["Research options", "Configure tooling", "Write final summary"],
+      checks: ["manual:verify Research options", "manual:verify Configure tooling", "manual:verify Write final summary"],
     });
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     await tool.handler(ctx, { action: "update", step: 2, status: "skipped" });
@@ -73,6 +73,7 @@ describe("plan subsystem: progress counting + update guards", () => {
       action: "update",
       title: "T",
       steps: ["✅ Research options", "✅ Configure tooling", "Write final summary"],
+      checks: ["manual:verify ✅ Research options", "manual:verify ✅ Configure tooling", "manual:verify Write final summary"],
     });
     expect(res.success).toBe(false);
     expect(res.output).toContain("re-plan");

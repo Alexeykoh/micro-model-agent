@@ -18,7 +18,7 @@ execute: [
   "subagent", "mcp_call",
 ],
 meta: [
-  "plan", "todo", "verify", "lsp_check", "enable_tools", "set_thinking",
+  "plan", "plan_step", "todo", "verify", "lsp_check", "enable_tools", "set_thinking",
   "load_skill", "remember",
 ],
 };

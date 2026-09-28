@@ -97,6 +97,7 @@ const CATEGORY_TOOLS: Record<ToolCategory, ReadonlySet<string>> = {
   ]),
   meta: new Set([
     "plan",
+    "plan_step",
     "todo",
     "verify",
     "lsp_check",

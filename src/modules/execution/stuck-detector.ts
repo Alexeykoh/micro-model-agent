@@ -77,6 +77,7 @@ const READ_ONLY_TOOLS = new Set([
   "process_list",
   "process_log",
   "plan",
+  "plan_step",
   "todo",
   "verify",
   "load_skill",

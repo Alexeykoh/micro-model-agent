@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
+import { writeFileSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestPlan, createTestModule, cleanupTestModule, writeTestFile, setupSingleFilePlan, setupCompletedStep } from "./plan-test-utils";
 
 function planTool(execModule: ExecutionModule) {
   return execModule.getToolDefinitions().find((t) => t.name === "plan")!;
@@ -13,25 +13,19 @@ describe("plan auto-archive on completion", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-plan-archive-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-plan-archive-"));
   });
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("archives the plan and clears tracker when the last step is marked done", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts", "Create src/b.ts"],
-    });
+    await createTestPlan(execModule, "T", ["Create src/a.ts", "Create src/b.ts"]);
     const planId = execModule.getTracker()!.getPlan().id;
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
     writeFileSync(join(tmpDir, "src", "b.ts"), "export const b = 1;\n");
 
     const step1 = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
@@ -51,14 +45,9 @@ describe("plan auto-archive on completion", () => {
   it("auto-archives when re-marking a done step on an already-complete plan (loop anchor)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts"],
-    });
+    await createTestPlan(execModule, "T", ["Create src/a.ts"]);
     const planId = execModule.getTracker()!.getPlan().id;
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
 
     // Mark step done → plan complete → auto-archived.
     const done = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
@@ -73,15 +62,10 @@ describe("plan auto-archive on completion", () => {
   });
 
   it("allows creating a new plan after the previous one auto-archived", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "T", steps: ["Create src/a.ts"] });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
-    await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    await setupCompletedStep(execModule, tmpDir);
     expect(execModule.getTracker()).toBeNull();
 
-    const res = await tool.handler(ctx, { action: "create", title: "T2", steps: ["Create src/b.ts"] });
+    const res = await createTestPlan(execModule, "T2", ["Create src/b.ts"]);
     expect(res.success).toBe(true);
     expect(execModule.getTracker()).not.toBeNull();
     expect(execModule.getTracker()!.getPlan().title).toContain("T2");
@@ -90,13 +74,8 @@ describe("plan auto-archive on completion", () => {
   it("skipped-last-step plan is also auto-archived", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/a.ts", "Download images"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
+    await createTestPlan(execModule, "T", ["Create src/a.ts", "Download images"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
 
     await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     const skip = await tool.handler(ctx, { action: "update", step: 2, status: "skipped" });
@@ -105,23 +84,10 @@ describe("plan auto-archive on completion", () => {
     expect(execModule.getTracker()).toBeNull();
   });
 
-  it("getSystemPromptBlock returns null after auto-archive", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "T", steps: ["Create src/a.ts"] });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
-    await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+  it("null projections after auto-archive", async () => {
+    await setupCompletedStep(execModule, tmpDir);
+    expect(execModule.getTracker()).toBeNull();
     expect(execModule.getSystemPromptBlock()).toBeNull();
-  });
-
-  it("getPlanSummary returns null after auto-archive", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "T", steps: ["Create src/a.ts"] });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
-    await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(execModule.getPlanSummary()).toBeNull();
   });
 });
@@ -131,21 +97,15 @@ describe("restorePlan archives complete plans", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-restore-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-restore-"));
   });
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("does not restore a completed plan as active", async () => {
-    const tool = planTool(execModule);
-    const ctx: any = {};
-    await tool.handler(ctx, { action: "create", title: "T", steps: ["Create src/a.ts"] });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "a.ts"), "export const a = 1;\n");
-    await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    await setupCompletedStep(execModule, tmpDir);
     // Plan was auto-archived, active.json cleared. Restoring from disk finds
     // nothing — but even if a stale active.json somehow existed with a complete
     // plan, restorePlan should archive it rather than resurrect it.

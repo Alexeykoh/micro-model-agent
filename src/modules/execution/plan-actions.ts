@@ -1,8 +1,10 @@
 import type { ToolResult, ToolContext } from "../../tools/types";
 import { t } from "../../i18n/index";
-import { PlanCreator, getPlanProgress } from "./planner";
+import { PlanCreator, getPlanProgress, type PlanStep } from "./planner";
+import type { PlanTracker } from "./tracker";
+import { parseCheck } from "./plan-checks";
 import { stepTypecheckGate } from "./execution-plugin";
-import { switchStepToDelete } from "./plan-steps";
+import { switchStepToCreate, switchStepToDelete } from "./plan-steps";
 import { checkPlanCoverage } from "./plan-coverage";
 import type { PlanToolDeps } from "./plan-tool";
 
@@ -100,10 +102,15 @@ function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string
   }
   const tracker = deps.trackerRef.current;
   const oldPlan = tracker.getPlan();
+  const checked = deps.parseChecks(args, newSteps);
+  if (checked.error) {
+    return { success: false, output: checked.error };
+  }
   const replanned = PlanCreator.replan(
     oldPlan,
     newSteps,
     args.title ? String(args.title) : undefined,
+    checked.checks ?? [],
   );
   const keptCount = replanned.steps.length - newSteps.length;
   deps.setPlan(replanned);
@@ -127,6 +134,29 @@ function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   const parsed = deps.parseKinds(args, steps);
   if (parsed.error) {
     return { success: false, output: parsed.error };
+  }
+  const checked = deps.parseChecks(args, steps);
+  if (checked.error) {
+    return { success: false, output: checked.error };
+  }
+
+  // Coverage is validated BEFORE any state mutation: a blocked create must
+  // not leak a half-created active plan (the next create would then trip
+  // over active_in_progress on a plan the model never saw succeed).
+  const taskText = deps.getTaskText(ctx);
+  if (taskText) {
+    const { missing } = checkPlanCoverage(taskText, steps);
+    if (missing.length > 0) {
+      // Hard block (not a warning): a 9B model reads "success:true + ⚠️" as
+      // success and works on garbage for 5+ iterations before the
+      // deliverable gate stops it. Stop at creation with the file list.
+      return {
+        success: false,
+        output: t("plan.coverage_blocked", {
+          missing: missing.join(", "),
+        }),
+      };
+    }
   }
 
   // Never silently discard an in-progress plan (observed:
@@ -157,7 +187,7 @@ function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   }
 
   deps.preserveActive();
-  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? []);
+  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? [], checked.checks ?? []);
   deps.setPlan(plan);
   const display = PlanCreator.toPromptBlock(plan, 0);
   let output = t("plan.created", {
@@ -174,22 +204,10 @@ function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   if (existing) {
     output += `\n${t("plan.existing_fresh")}`;
   }
-  let displayOut = display;
-  const taskText = deps.getTaskText(ctx);
-  if (taskText) {
-    const { missing } = checkPlanCoverage(taskText, steps);
-    if (missing.length > 0) {
-      const warn = t("plan.coverage_warning", {
-        missing: missing.join(", "),
-      });
-      output += `\n⚠️ ${warn}`;
-      displayOut = `${display}\n⚠️ ${warn}`;
-    }
-  }
   return {
     success: true,
     output,
-    display: displayOut,
+    display,
   };
 }
 
@@ -228,7 +246,7 @@ function actionShow(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string, 
 function actionUpdate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): ToolResult | Promise<ToolResult> {
   // Обновление конкретного шага.
   if (args.step && deps.trackerRef.current) {
-    return updateStep(deps, ctx, args);
+    return updatePlanStep(deps, ctx, args);
   }
   // Массовая пересборка плана через update запрещена: она молча меняет
   // состав/название плана (churn) и теряет статусы. Модель должна осознанно
@@ -240,93 +258,21 @@ function actionUpdate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   return noActiveOrUnknown(deps, args, "update");
 }
 
-function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): ToolResult {
-  const tracker = deps.trackerRef.current!;
-  const stepId = Number(args.step);
-  const target = tracker.getStep(stepId);
-  if (!target) {
-    return { success: false, output: t("plan.step_not_found") };
-  }
-  const status = String(args.status || "done");
-  if (!(STEP_UPDATE_STATUSES as readonly string[]).includes(status)) {
-    return {
-      success: false,
-      output: t("plan.bad_status", {
-        status,
-        allowed: STEP_UPDATE_STATUSES.join(", "),
-      }),
-    };
-  }
-
-  // Completed plan: re-marking a done step of a finished plan is the
-  // loop anchor (observed: 3× "plan update step=4 done" on a 4/4 plan
-  // while a NEW task waited). Archive + clear so the model can create a
-  // fresh plan for the new task instead of spinning.
-  if (tracker.isComplete()) {
-    const plan = tracker.getPlan();
-    deps.store.archivePlan(plan);
-    deps.recordCompleted(plan); // final audit still verifies it
-    deps.trackerRef.current = null;
-    const p = getPlanProgress(plan);
-    return {
-      success: true,
-      output: t("plan.completed_archived", {
-        id: plan.id,
-        done: String(p.settled),
-        total: String(plan.steps.length),
-      }),
-    };
-  }
-
-  // Idempotency: re-marking a done step as done usually means the
-  // plan was already auto-advanced (all step files exist) and the
-  // model is confirming its own work. Return SUCCESS so the loop
-  // isn't confused — a small model misreads success:false as a
-  // failed action and retries/spins. Genuine spinning (repeated
-  // identical calls without new work) is still caught by the
-  // stuck-detector's consecutive-identical-call check.
-  if (status === "done" && target.status === "done") {
-    const progress = tracker.getProgressString();
-    const display = tracker.toPromptBlock();
-    return {
-      success: true,
-      output: `${t("plan.step_already_done", {
-        step: String(stepId),
-      })}\n${progress}`,
-      display,
-    };
-  }
-
-  // Order enforcement: only the CURRENT step may be marked done.
-  // Prevents jumping ahead (step 5 marked done before steps 1-4,
-  // observed in the post-mortem session) and the follow-on audit
-  // failures ("5/5 steps done, 5 files missing").
-  if (status === "done") {
-    const blockers = tracker
-      .getPlan()
-      .steps.filter((s) => s.id < stepId && s.status !== "done" && s.status !== "skipped");
-    if (blockers.length > 0) {
-      return {
-        success: false,
-        output: t("plan.order_blocked", {
-          step: String(stepId),
-          first: String(blockers[0].id),
-          desc: blockers[0].description,
-        }),
-      };
-    }
-  }
-
-  // Deliverable gate: marking a step done must match its declared
-  // intent. "create" (default) → named files must exist; "delete"
-  // → named files must be GONE. Intent is model-declared (kind),
-  // never keyword-inferred (rule #10).
-  //
-  // Auto-switch: when kind is "create" but ALL named files are gone,
-  // check if the agent actually deleted them (via delete_file/bash rm).
-  // Only then switch to "delete" — files that were never created
-  // (create-kind steps) remain blocked so the agent must create them.
-  if (status === "done" && target.kind !== "delete") {
+/**
+ * Resolve a step's create/delete kind from what the agent DID (not declared).
+ * Forward: create-kind step whose files are all gone AND tracked as deleted
+ * → flip to delete. Reverse: delete-kind step whose files neither exist nor
+ * were ever deleted → flip to create and block (a vacuous pass would certify
+ * nothing; user-deleted-outside files are the known tradeoff — skip the step).
+ * Returns a blocking ToolResult for the reverse case, null otherwise.
+ */
+function autoResolveStepKind(
+  deps: PlanToolDeps,
+  tracker: PlanTracker,
+  target: PlanStep,
+  stepId: number,
+): ToolResult | null {
+  if (target.kind !== "delete") {
     const missing = deps.missingStepDeliverables(target);
     if (missing.length > 0) {
       const existing = deps.stillExistingDeliverables(target);
@@ -342,52 +288,278 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
         }
       }
     }
+    return null;
   }
-
-  if (status === "done") {
-    if (target.kind === "delete") {
-      const leftovers = deps.stillExistingDeliverables(target);
-      if (leftovers.length > 0) {
-        return {
-          success: false,
-          output: t("plan.deliverables_remain", {
-            step: String(stepId),
-            files: leftovers.join(", "),
-          }),
-        };
-      }
-    } else {
-      const missing = deps.missingStepDeliverables(target);
-      if (missing.length > 0) {
-        return {
-          success: false,
-          output: t("plan.deliverables_missing", {
-            step: String(stepId),
-            files: missing.join(", "),
-          }),
-        };
-      }
-    }
-  }
-
-  // Typecheck gate: "done" while the last edit still fails to compile
-  // is a self-certification the harness must refuse (observed: steps
-  // marked done with the project typecheck failing on every write —
-  // a "fix it later" cascade that never got fixed). The model must
-  // either fix the errors (a clean re-edit clears the map) or mark
-  // the step skipped.
-  if (status === "done") {
-    const blocked = stepTypecheckGate(deps.typecheckFailures, target.description);
-    if (blocked) {
+  const leftovers = deps.stillExistingDeliverables(target);
+  if (leftovers.length === 0 && deps.wasFileDeleted) {
+    const tokens = deps.missingStepDeliverables(target);
+    if (tokens.length > 0 && tokens.every((f) => !deps.wasFileDeleted!(f))) {
+      switchStepToCreate(tracker.getPlan(), target, (p) => deps.store.saveActive(p));
       return {
         success: false,
-        output: t("plan.typecheck_failed", {
+        output: t("plan.deliverables_missing", {
           step: String(stepId),
-          error: blocked,
+          files: tokens.join(", "),
         }),
       };
     }
   }
+  return null;
+}
+
+/**
+ * Verify a step's check contract on done. "file-exists:" is hard-verified
+ * here (delete-kind inverts it: the file must be GONE); "command:"/"manual:"
+ * are self-certified and contribute a confirmation note. Steps without any
+ * check come only from pre-checks plans (back-compat) and yield no note.
+ */
+async function verifyCheckContract(
+  deps: PlanToolDeps,
+  target: PlanStep,
+  stepId: number,
+): Promise<{ note: string; blocked: ToolResult | null }> {
+  if (!target.check) return { note: "", blocked: null };
+  const parsed = parseCheck(target.check);
+  if (parsed?.kind === "file") {
+    const res = await deps.verifier.checkFileExists(parsed.target);
+    const ok = target.kind === "delete" ? !res.passed : res.passed;
+    if (!ok) {
+      return {
+        note: "",
+        blocked: {
+          success: false,
+          output: t("plan.check_failed", {
+            step: String(stepId),
+            check: target.check,
+          }),
+        },
+      };
+    }
+    return { note: "", blocked: null };
+  }
+  if (parsed) {
+    return { note: `\n${t("plan.check_self_certified", { check: target.check })}`, blocked: null };
+  }
+  return { note: "", blocked: null };
+}
+
+/**
+ * Settle a re-mark on an already-complete plan: archive + clear so the model
+ * can create a fresh plan instead of spinning on the finished one (observed:
+ * 3× "plan update step=4 done" on a 4/4 plan while a NEW task waited).
+ * Returns the completion result, or null when the plan is still in progress.
+ */
+function settleCompletedPlan(deps: PlanToolDeps, tracker: PlanTracker): ToolResult | null {
+  if (!tracker.isComplete()) return null;
+  const plan = tracker.getPlan();
+  deps.store.archivePlan(plan);
+  deps.recordCompleted(plan); // final audit still verifies it
+  deps.trackerRef.current = null;
+  const p = getPlanProgress(plan);
+  return {
+    success: true,
+    output: t("plan.completed_archived", {
+      id: plan.id,
+      done: String(p.settled),
+      total: String(plan.steps.length),
+    }),
+  };
+}
+
+/**
+ * Idempotent re-mark: confirming an already-done step is SUCCESS (a small
+ * model misreads success:false as a failed action and retries/spins).
+ * Genuine spinning is still caught by the stuck-detector.
+ */
+function checkIdempotentDone(
+  tracker: PlanTracker,
+  target: PlanStep,
+  stepId: number,
+  status: string,
+): ToolResult | null {
+  if (status !== "done" || target.status !== "done") return null;
+  const progress = tracker.getProgressString();
+  const display = tracker.toPromptBlock();
+  return {
+    success: true,
+    output: `${t("plan.step_already_done", {
+      step: String(stepId),
+    })}\n${progress}`,
+    display,
+  };
+}
+
+/**
+ * Order enforcement: only the CURRENT step may be marked done (prevents
+ * jumping ahead — observed: step 5 done before steps 1-4, then audit
+ * failures "5/5 steps done, 5 files missing").
+ */
+function enforceStepOrder(
+  tracker: PlanTracker,
+  stepId: number,
+): ToolResult | null {
+  const blockers = tracker
+    .getPlan()
+    .steps.filter((s) => s.id < stepId && s.status !== "done" && s.status !== "skipped");
+  if (blockers.length === 0) return null;
+  return {
+    success: false,
+    output: t("plan.order_blocked", {
+      step: String(stepId),
+      first: String(blockers[0].id),
+      desc: blockers[0].description,
+    }),
+  };
+}
+
+/**
+ * Deliverable gate: done must match the (already kind-resolved) intent —
+ * "create" needs named files present, "delete" needs them GONE.
+ */
+function checkDeliverables(
+  deps: PlanToolDeps,
+  target: PlanStep,
+  stepId: number,
+): ToolResult | null {
+  if (target.kind === "delete") {
+    const leftovers = deps.stillExistingDeliverables(target);
+    if (leftovers.length > 0) {
+      return {
+        success: false,
+        output: t("plan.deliverables_remain", {
+          step: String(stepId),
+          files: leftovers.join(", "),
+        }),
+      };
+    }
+    return null;
+  }
+  const missing = deps.missingStepDeliverables(target);
+  if (missing.length > 0) {
+    return {
+      success: false,
+      output: t("plan.deliverables_missing", {
+        step: String(stepId),
+        files: missing.join(", "),
+      }),
+    };
+  }
+  return null;
+}
+
+/**
+ * Typecheck gate: "done" while the last write still fails to compile is a
+ * self-certification the harness must refuse (observed: steps marked done
+ * with the project typecheck failing on every write). Fix or skip.
+ */
+function checkTypecheckGate(
+  deps: PlanToolDeps,
+  target: PlanStep,
+  stepId: number,
+): ToolResult | null {
+  const blocked = stepTypecheckGate(deps.typecheckFailures, target.description);
+  if (!blocked) return null;
+  return {
+    success: false,
+    output: t("plan.typecheck_failed", {
+      step: String(stepId),
+      error: blocked,
+    }),
+  };
+}
+
+/** Shared context threaded through the done-guards below. */
+interface StepGuardCtx {
+  deps: PlanToolDeps;
+  tracker: PlanTracker;
+  target: PlanStep;
+  stepId: number;
+  status: string;
+  /** Self-certification note accumulated by the check guard. */
+  checkNote: string;
+}
+
+type StepGuard = (c: StepGuardCtx) => ToolResult | Promise<ToolResult | null> | null;
+
+function guardKnownStatus(c: StepGuardCtx): ToolResult | null {
+  if ((STEP_UPDATE_STATUSES as readonly string[]).includes(c.status)) return null;
+  return {
+    success: false,
+    output: t("plan.bad_status", {
+      status: c.status,
+      allowed: STEP_UPDATE_STATUSES.join(", "),
+    }),
+  };
+}
+
+function guardSettledPlan(c: StepGuardCtx): ToolResult | null {
+  return settleCompletedPlan(c.deps, c.tracker);
+}
+
+function guardIdempotent(c: StepGuardCtx): ToolResult | null {
+  return checkIdempotentDone(c.tracker, c.target, c.stepId, c.status);
+}
+
+function guardOrder(c: StepGuardCtx): ToolResult | null {
+  if (c.status !== "done") return null;
+  return enforceStepOrder(c.tracker, c.stepId);
+}
+
+async function guardKindAndCheck(c: StepGuardCtx): Promise<ToolResult | null> {
+  if (c.status !== "done") return null;
+  // Kind is resolved from behavior first (both directions), then the check
+  // contract is verified against the resolved kind — a step the agent
+  // flipped to delete-kind evaluates its file check as delete.
+  const resolved = autoResolveStepKind(c.deps, c.tracker, c.target, c.stepId);
+  if (resolved) return resolved;
+  const check = await verifyCheckContract(c.deps, c.target, c.stepId);
+  if (check.blocked) return check.blocked;
+  c.checkNote = check.note;
+  return null;
+}
+
+function guardDeliverables(c: StepGuardCtx): ToolResult | null {
+  if (c.status !== "done") return null;
+  return checkDeliverables(c.deps, c.target, c.stepId);
+}
+
+function guardTypecheck(c: StepGuardCtx): ToolResult | null {
+  if (c.status !== "done") return null;
+  return checkTypecheckGate(c.deps, c.target, c.stepId);
+}
+
+/** Done-guards in evaluation order — same sequence as the old inline chain. */
+const STEP_GUARDS: StepGuard[] = [
+  guardKnownStatus,
+  guardSettledPlan,
+  guardIdempotent,
+  guardOrder,
+  guardKindAndCheck,
+  guardDeliverables,
+  guardTypecheck,
+];
+
+export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const tracker = deps.trackerRef.current!;
+  const stepId = Number(args.step);
+  const target = tracker.getStep(stepId);
+  if (!target) {
+    return { success: false, output: t("plan.step_not_found") };
+  }
+  const gctx: StepGuardCtx = {
+    deps,
+    tracker,
+    target,
+    stepId,
+    status: String(args.status || "done"),
+    checkNote: "",
+  };
+  for (const guard of STEP_GUARDS) {
+    const blocked = await guard(gctx);
+    if (blocked) return blocked;
+  }
+  const status = gctx.status;
+  const checkNote = gctx.checkNote;
 
   tracker.updateStepStatus(stepId, status as StepUpdateStatus);
   if (args.note) tracker.addNote(Number(args.step), String(args.note));
@@ -419,7 +591,7 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
           done: String(p.settled),
           total: String(plan.steps.length),
         },
-      )}${vacuousNote}`,
+      )}${vacuousNote}${checkNote}`,
     };
   }
 
@@ -431,7 +603,7 @@ function updateStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, u
   );
   return {
     success: true,
-    output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}${vacuousNote}`,
+    output: `${t("plan.step_status", { step: String(args.step), status: String(args.status || "done") })}\n${progress}${vacuousNote}${checkNote}`,
     display,
   };
 }

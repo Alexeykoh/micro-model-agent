@@ -56,15 +56,16 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
 }
 
 /**
- * Resolve the plan snapshot to broadcast after a tool ends. Only `plan`/`todo`
- * tools mutate the active plan, so any other tool yields `null` (no event).
- * Pure so the hook is testable without booting the agent/server.
+ * Resolve the plan snapshot to broadcast after a tool ends. Only
+ * `plan`/`plan_step`/`todo` tools mutate the active plan, so any other tool
+ * yields `null` (no event). Pure so the hook is testable without booting
+ * the agent/server.
  */
 export function planEventFor(
   toolName: string,
   execModule?: Pick<ExecutionModule, "getActivePlan">,
 ): HostStateSnapshot["plan"] | null {
-  if (toolName !== "plan" && toolName !== "todo") return null;
+  if (toolName !== "plan" && toolName !== "plan_step" && toolName !== "todo") return null;
   return planSnapshotFromModule(adaptActivePlan(execModule?.getActivePlan()));
 }
 

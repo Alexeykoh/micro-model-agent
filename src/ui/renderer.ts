@@ -173,6 +173,16 @@ export function humanArgs(tool: string, args: Record<string, unknown>): string {
     if (action === "create" && typeof args.title === "string") return args.title;
     if (action) return action;
   }
+  if (tool === "plan_step") {
+    const step = args.step;
+    const status = args.status;
+    if (step !== undefined || status !== undefined) {
+      return t("ui.plan_update", {
+        step: String(step ?? "?"),
+        status: String(status ?? "?"),
+      });
+    }
+  }
   if (tool === "todo") {
     const action = typeof args.action === "string" ? args.action : "";
     const items = Array.isArray(args.items) ? args.items.length : undefined;

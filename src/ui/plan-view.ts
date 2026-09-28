@@ -65,7 +65,7 @@ export function formatPlanChecklist(plan: Plan): string[] {
     const desc = active ? pc.yellow(step.description) : pc.dim(step.description);
     lines.push(`  ${stepMark(step)} ${step.id}. ${desc}`);
     for (const sub of step.subtasks ?? []) {
-      lines.push(`      ${sub.done ? pc.green(glyph.success) : pc.dim("○")} ${sub.text}`);
+      lines.push(`      ${sub.done ? pc.green(glyph.success) : pc.dim("○")} [${sub.id}] ${sub.text}`);
     }
   }
   return lines;
@@ -73,6 +73,7 @@ export function formatPlanChecklist(plan: Plan): string[] {
 
 const STRUCTURAL_TOOLS = new Set([
   "plan",
+  "plan_step",
   "todo",
   "verify",
   "project_map",

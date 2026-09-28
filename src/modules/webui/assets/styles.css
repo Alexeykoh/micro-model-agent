@@ -444,15 +444,16 @@ body.light .imgcard .ph { background: var(--ph-light); }
 
 /* ---- composer: selectors, attachments, input, autocomplete ---- */
 .input-area { margin: 14px 22px 16px; position: relative; }
-.selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.sel { position: relative; }
+.selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; min-width: 0; }
+.sel { position: relative; min-width: 0; max-width: 100%; }
 .sel > button {
   font: inherit; font-size: 12.5px; cursor: pointer;
   background: var(--surface); color: var(--muted); border: none; border-radius: 4px;
   padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px;
+  min-width: 0; max-width: 100%;
 }
 body.light .sel > button { border: 1px solid var(--border); }
-.sel > button b { font-weight: 400; color: var(--purple); }
+.sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
 .menu {
   display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
@@ -578,11 +579,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 .rail-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .rail-wrap[hidden] { display: none; }
 .rail-wrap.l-line, .rail-wrap.l-meta {
-  flex-direction: row; align-items: center; gap: 10px; margin-bottom: 8px;
+  flex-direction: row; align-items: center; gap: 6px 10px; margin-bottom: 8px;
+  flex-wrap: wrap;
 }
-.rail-wrap.l-line .rl-track { order: -1; flex: 0 0 180px; }
-.rail-wrap.l-meta .rl-track { order: -1; flex: 0 0 110px; }
-.rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: 0 1 auto; min-width: 0; }
+.rail-wrap.l-line .rl-track { order: -1; flex: 1 1 120px; min-width: 80px; max-width: 180px; }
+.rail-wrap.l-meta .rl-track { order: -1; flex: 1 1 90px; min-width: 64px; max-width: 110px; }
+.rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: 1 1 auto; min-width: 0; }
 .rail-wrap.l-line .rail-l1 .right { display: none; }   /* Esc уже есть в .inp-meta */
 .rail-wrap.l-line .rail-l2::before { content: '·'; color: var(--dim-a); margin-right: -2px; }
 .rail-wrap.l-meta { margin-bottom: 0; }
@@ -596,8 +598,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 }
 .rail-l1 .s, .rail-l1 .right { color: var(--dim-a); }
 .rail-l1 .right { margin-left: auto; font-size: 11.5px; }
-.rail-l2 { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; color: var(--dim-a); flex-wrap: wrap; }
-.rail-l2 .last { color: var(--args); }
+.rail-l2 { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; color: var(--dim-a); flex-wrap: wrap; min-width: 0; }
+.rail-l2 .last { color: var(--args); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
 .rl-track {
   position: relative; height: 12px; border-radius: 6px;
@@ -1201,6 +1203,29 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   .row { font-size: 12.5px; }
   .input-area { margin: 8px 10px 10px; }
   .msgs { padding: 12px 10px; }
+  /* narrow phones: rail stacks vertically, track takes the full row */
+  .rail-wrap.l-line, .rail-wrap.l-meta {
+    flex-direction: column; align-items: stretch; gap: 6px;
+  }
+  .rail-wrap.l-line .rl-track, .rail-wrap.l-meta .rl-track {
+    order: -1; flex: none; width: 100%; max-width: none;
+  }
+  .rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: none; }
+  .rail-wrap.l-meta { width: 100%; flex-basis: 100%; }
+  .selectors { gap: 6px; }
+  .composer-main { gap: 4px; }
+  /* phones have no Enter/Shift+Enter/Esc/Ctrl+V — hints only take up space.
+     Spans only (not the whole row): the `meta` rail layout lives inside
+     .inp-meta and must stay visible. */
+  .inp-meta > span { display: none; }
+  .inp-meta { gap: 0; margin-top: 0; padding: 0 2px; }
+  .inp-meta:empty { display: none; }
+}
+
+/* touch devices at any width: keyboard hints don't apply */
+@media (pointer: coarse) {
+  .inp-meta > span { display: none; }
+  .inp-meta { gap: 0; }
 }
 
 /* --- First-run setup gate ---------------------------------------------------

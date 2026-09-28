@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from "fs";
+import { writeFileSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
 import { StepVerifier } from "../src/modules/execution/verifier";
 import { StuckDetector } from "../src/modules/execution/stuck-detector";
 import type { ExecutionModule } from "../src/modules/execution/module";
+import { createTestModule, cleanupTestModule } from "./plan-test-utils";
 
 // ── verifyStep delete semantics ──────────────────────────────────────
 describe("StepVerifier — delete semantics", () => {
@@ -12,12 +12,12 @@ describe("StepVerifier — delete semantics", () => {
   let verifier: StepVerifier;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-verify-delete-"));
+    tmpDir = createTestModule("mma-verify-delete-").tmpDir;
     verifier = new StepVerifier(tmpDir);
   });
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("create step: file missing → fail", async () => {
@@ -119,14 +119,14 @@ describe("auto-detect delete kind from delete_file call", () => {
   let plugin: any;
 
   beforeEach(async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-delete-auto-"));
+    tmpDir = createTestModule("mma-delete-auto-").tmpDir;
     const { ExecutionModule: EM } = await import("../src/modules/execution/module");
     execModule = new EM(tmpDir, 8);
     plugin = execModule.getPlugin();
   });
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   it("sets kind=delete on matching step when delete_file succeeds", async () => {
@@ -137,6 +137,7 @@ describe("auto-detect delete kind from delete_file call", () => {
         action: "create",
         title: "T",
         steps: ["Delete old.ts", "Create new.ts"],
+        checks: ["file-exists:old.ts", "file-exists:new.ts"],
       },
     );
 
@@ -160,6 +161,7 @@ describe("auto-detect delete kind from delete_file call", () => {
         action: "create",
         title: "T",
         steps: ["Delete old.ts"],
+        checks: ["file-exists:old.ts"],
       },
     );
 
@@ -181,6 +183,7 @@ describe("auto-detect delete kind from delete_file call", () => {
         action: "create",
         title: "T",
         steps: ["Update readme.md", "Delete old.ts"],
+        checks: ["file-exists:readme.md", "file-exists:old.ts"],
       },
     );
 
@@ -195,16 +198,18 @@ describe("auto-detect delete kind from delete_file call", () => {
     expect(plan.steps[1].kind).toBe("delete");
   });
 
-  it("does not override an existing kind", async () => {
+  it("auto-detect overrides the default kind on delete_file (behavior over declaration)", async () => {
     const planTool = execModule.getToolDefinitions().find((t) => t.name === "plan")!;
     await planTool.handler(
       {},
       {
         action: "create",
         title: "T",
-        steps: [{ description: "Delete old.ts", kind: "create" }],
+        steps: ["Delete old.ts", "Create new.ts"],
+        checks: ["file-exists:old.ts", "file-exists:new.ts"],
       },
     );
+    expect(execModule.getTracker()!.getStep(1)!.kind).not.toBe("delete");
 
     plugin.onAfterTool(
       {},
@@ -213,8 +218,9 @@ describe("auto-detect delete kind from delete_file call", () => {
     );
 
     const plan = execModule.getTracker()!.getPlan();
-    // kind was explicitly set to "create" — auto-detect should NOT override
-    expect(plan.steps[0].kind).toBe("create");
+    // kinds are no longer model-declared (removed from the plan schema) —
+    // what the agent DID (delete_file) wins over the default.
+    expect(plan.steps[0].kind).toBe("delete");
   });
 
   it("ignores done steps (only processes pending/in_progress)", async () => {
@@ -225,6 +231,7 @@ describe("auto-detect delete kind from delete_file call", () => {
       action: "create",
       title: "T",
       steps: ["Delete old.ts", "Create new.ts"],
+      checks: ["file-exists:old.ts", "file-exists:new.ts"],
       kinds: ["delete", "create"],
     });
     // Mark step 1 done — file doesn't exist, but kind="delete" inverts the gate
@@ -253,6 +260,7 @@ describe("auto-detect delete kind from delete_file call", () => {
         action: "create",
         title: "T",
         steps: ["Delete old.ts"],
+        checks: ["file-exists:old.ts"],
       },
     );
 
@@ -274,6 +282,7 @@ describe("auto-detect delete kind from delete_file call", () => {
         action: "create",
         title: "T",
         steps: ["Delete src/utils/old.ts"],
+        checks: ["file-exists:src/utils/old.ts"],
       },
     );
 
