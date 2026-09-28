@@ -4,8 +4,8 @@ import type { Message } from "../../llm/provider";
 import type { LLMProvider } from "../../llm/provider";
 import type { HallucinationCheckResult } from "./detector";
 import type { ConsistencyCheck } from "./consistency";
+import { HALLUCINATION_JUDGE_TIMEOUT_MS as JUDGE_TIMEOUT_MS } from "../../config/timeouts";
 
-const JUDGE_TIMEOUT_MS = 15000;
 const MAX_DECISIONS_SHOWN = 6;
 const MAX_RESPONSE_CHARS = 2000;
 

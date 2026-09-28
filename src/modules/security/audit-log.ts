@@ -1,8 +1,7 @@
 // Аудит-лог: запись действий агента в audit.jsonl (глобально или в каталог сессии).
 import { existsSync, mkdirSync, appendFileSync } from "fs";
-import { join } from "path";
 import { globalAuditNotifier } from "./audit-notifier";
-import { globalLogsDir } from "../../config/paths";
+import { auditLogFile, globalLogsDir } from "../../config/paths";
 
 /** Запись аудита: кто/что/когда, успех, причина блокировки. */
 export interface AuditLogEntry {
@@ -67,12 +66,12 @@ export function logAudit(entry: AuditLogEntry): void {
 
   try {
     const logEntry = JSON.stringify(entry);
-    appendFileSync(join(dir, "audit.jsonl"), `${logEntry}\n`, "utf8");
+    appendFileSync(auditLogFile(dir), `${logEntry}\n`, "utf8");
   } catch {
     // молча: невозможность записи не должна ломать агента
   }
 
-  // Notify audit notifier if enabled
+  // Уведомить нотификатор аудита, если включён
   try {
     globalAuditNotifier.notify(entry);
   } catch {

@@ -1,4 +1,5 @@
-// `GET /api/file?path=<p>` — read-only просмотр файлов для карточек чата («Open» — в новой вкладке).
+// `GET /api/file?path=<p>` — read-only просмотр файлов для карточек чата («Open» — в новой вкладке,
+// `&download=1` — тот же файл как attachment для кнопки скачивания).
 //
 // Безопасность (auth + same-origin — выше в server.ts):
 // - путь резолвится от воркспейса агента и ОБЯЗАН остаться внутри (абсолютные
@@ -7,8 +8,8 @@
 //   воркспейса не дотянулась до файла снаружи;
 // - защищённые пути (`.git/`, `.env*`, ключи, credentials — см.
 //   `matchProtectedPath`) отвергаются;
-// - отдаются только обычные текстовые файлы до {@link MAX_FILE_VIEW_BYTES},
-//   чтобы случайная бинарка или мультигиговый лог не потекли в браузер.
+// - отдаются только обычные файлы до {@link MAX_FILE_VIEW_BYTES}, чтобы
+//   мультигиговый лог не потёк в браузер.
 //
 // Ответы — как успехи, так и ошибки — `text/plain`: точка открывается прямо
 // вкладкой браузера (JSON-тело рендерилось бы сырьём). Текст декодируется по
@@ -16,7 +17,7 @@
 // Одно ограничение: auth- и same-origin-отказы случаются выше в `server.ts`
 // и остаются JSON — они достижимы лишь с missing/forged кукой, не из вьюера.
 import { readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { matchProtectedPath } from "../security/protected-paths";
 import { t } from "../../i18n/index";
@@ -60,6 +61,49 @@ export function decodeText(buf: Buffer): { text: string; binary: boolean } {
   return { text: body.toString("utf8"), binary: false };
 }
 
+/** MIME для предпросмотра («Open»): безопасные растровые картинки, PDF и медиа
+ * отдаются родным типом, чтобы вкладка их рисовала, а не показывала байты.
+ * `.svg`/`.html` намеренно остаются `text/plain`: их исполнение в нашем
+ * origin — XSS через модельно-записанный файл. */
+export function mimeForView(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".webp":
+      return "image/webp";
+    case ".bmp":
+      return "image/bmp";
+    case ".ico":
+      return "image/x-icon";
+    case ".pdf":
+      return "application/pdf";
+    case ".mp4":
+      return "video/mp4";
+    case ".webm":
+      return "video/webm";
+    case ".mp3":
+      return "audio/mpeg";
+    case ".wav":
+      return "audio/wav";
+    case ".ogg":
+    case ".oga":
+      return "audio/ogg";
+    default:
+      return "text/plain; charset=utf-8";
+  }
+}
+
+/** Имя для `Content-Disposition`: без кавычек и переводов строк. */
+export function safeFileName(absReal: string): string {
+  const base = basename(absReal).replace(/["\r\n]/g, "_") || "file";
+  return base;
+}
+
 /** True, когда `target` вне `base` (лексически). */
 function escapes(base: string, target: string): boolean {
   const rel = relative(base, target);
@@ -96,12 +140,18 @@ export function handleFileApi(
     sendTextError(res, 403, "web.file.error.outside_workspace");
     return true;
   }
-  void serveFile(res, base, abs);
+  const download = reqUrl.searchParams.get("download") === "1";
+  void serveFile(res, base, abs, download);
   return true;
 }
 
-/** Резолвит реальные пути, держит гард воркспейса, стримит текстовый файл. */
-async function serveFile(res: ServerResponse, base: string, abs: string): Promise<void> {
+/** Резолвит реальные пути, держит гард воркспейса, отдаёт файл на просмотр или скачивание. */
+async function serveFile(
+  res: ServerResponse,
+  base: string,
+  abs: string,
+  download: boolean,
+): Promise<void> {
   let baseReal: string;
   let absReal: string;
   try {
@@ -136,18 +186,45 @@ async function serveFile(res: ServerResponse, base: string, abs: string): Promis
       return;
     }
     const buf = await readFile(absReal);
-    const { text, binary } = decodeText(buf);
-    if (binary) {
-      sendTextError(res, 415, "web.file.error.binary_file");
+    if (download) {
+      serveDownload(res, absReal, buf);
       return;
     }
-    res.writeHead(200, {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-    });
-    res.end(text);
+    servePreview(res, absReal, buf);
   } catch {
     // Каталог или нечитаемый файл — с точки зрения вьюера "не найдено".
     sendTextError(res, 404, "web.file.error.not_found");
   }
+}
+
+/** Скачивание универсально для любого формата: сырые байты + attachment, браузер сохраняет файл вместо рендера. */
+function serveDownload(res: ServerResponse, absReal: string, buf: Buffer): void {
+  const name = safeFileName(absReal);
+  res.writeHead(200, {
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    "Cache-Control": "no-store",
+  });
+  res.end(buf);
+}
+
+/** Предпросмотр во вкладке: картинки/PDF/медиа — родным типом, остальное — декодированным текстом. */
+function servePreview(res: ServerResponse, absReal: string, buf: Buffer): void {
+  const mime = mimeForView(absReal);
+  if (mime !== "text/plain; charset=utf-8") {
+    // Родной рендер картинки/PDF/медиа во вкладке; декодировать нечего.
+    res.writeHead(200, { "Content-Type": mime, "Cache-Control": "no-store" });
+    res.end(buf);
+    return;
+  }
+  const { text, binary } = decodeText(buf);
+  if (binary) {
+    sendTextError(res, 415, "web.file.error.binary_file");
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(text);
 }

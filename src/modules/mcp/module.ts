@@ -6,6 +6,7 @@ import type { AppConfig } from "../../config/types";
 import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
 import { Logger } from "../../logger/app-logger";
+import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
 
 const logger = new Logger("warn", "mcp");
 
@@ -36,9 +37,6 @@ function convertInputSchema(schema: Record<string, unknown>): Record<string, unk
   }
   return { type: "object", properties: {} };
 }
-
-/** Таймаут первичного discovery тулов (не вешать старт). */
-const DISCOVERY_TIMEOUT_MS = 5_000;
 
 /** Модуль MCP: конфиги при init, коннект лениво, тул-дефиниции из найденного. */
 export class MCPModule implements AgentModule {

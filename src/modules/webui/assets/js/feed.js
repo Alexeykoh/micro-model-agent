@@ -347,14 +347,39 @@ function cardFor(name, args, sid) {
     card.appendChild(top);
     const bottom = el("div", "fc-bottom");
     bottom.appendChild(el("span", "lab", labelOf(name)));
+    const actions = el("span", "fc-actions");
+    const baseName = String(path.split(/[\\/]/).pop() || path);
     if (OPENABLE_TOOLS.indexOf(name) !== -1) {
       const openLink = el("a", "fc-open", t("web.card.open"));
       openLink.href = "/api/file?path=" + encodeURIComponent(path);
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
-      bottom.appendChild(openLink);
+      openLink.title = t("web.card.open_title");
+      actions.appendChild(openLink);
+      const dlLink = el("a", "fc-open", t("web.card.download"));
+      dlLink.href = "/api/file?path=" + encodeURIComponent(path) + "&download=1";
+      dlLink.title = t("web.card.download_title");
+      dlLink.setAttribute("download", baseName);
+      actions.appendChild(dlLink);
     }
+    const copyBtn = el("button", "fc-open", t("web.card.copy_path"));
+    copyBtn.type = "button";
+    copyBtn.title = t("web.card.copy_title");
+    copyBtn.addEventListener("click", () => {
+      copyText(path).then((ok) => {
+        copyBtn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
+        window.setTimeout(() => {
+          copyBtn.textContent = t("web.card.copy_path");
+        }, 1400);
+      });
+    });
+    actions.appendChild(copyBtn);
+    bottom.appendChild(actions);
     card.appendChild(bottom);
+    if (/\.drawio(\.xml)?$/i.test(path)) {
+      const hint = el("div", "fc-hint", t("web.card.drawio_hint"));
+      card.appendChild(hint);
+    }
     appendTo(feed, card);
     return card;
   }

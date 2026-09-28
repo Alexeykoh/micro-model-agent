@@ -64,6 +64,7 @@ import {
 import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
 import { MMA_DIR_NAME, projectMmaDir } from "../config/paths";
+import { MMA_ENV, readEnv } from "../config/env";
 
 /** Рендерит бар использования контекста с компакциями и качеством. */
 function formatContextBar(
@@ -1293,10 +1294,10 @@ export class Repl implements ReplContext, Host {
     this.promptPresented = true;
 
     try {
-      if (process.env.MMA_START_MEET === "1" || process.env.MMA_START_INIT === "1") {
-        const mode = process.env.MMA_START_MEET === "1" ? "meet" : "init";
-        delete process.env.MMA_START_MEET;
-        delete process.env.MMA_START_INIT;
+      if (readEnv("START_MEET") === "1" || readEnv("START_INIT") === "1") {
+        const mode = readEnv("START_MEET") === "1" ? "meet" : "init";
+        delete process.env[MMA_ENV.START_MEET];
+        delete process.env[MMA_ENV.START_INIT];
         this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
         if (mode === "meet") {
           const { runMeet } = await import("../modules/onboarding/meet");
@@ -1306,7 +1307,7 @@ export class Repl implements ReplContext, Host {
           await runInit(this);
           this.slog.logOnboarding("init_done", { model: this.config.model });
         }
-      } else if (process.env.MMA_POST_SETUP === "1" && process.stdout.isTTY === true) {
+      } else if (readEnv("POST_SETUP") === "1" && process.stdout.isTTY === true) {
         const { preflightFromConfig } = await import("../modules/providers/preflight");
         const pre = await preflightFromConfig(this);
         if (pre.ok) {

@@ -9,6 +9,10 @@ import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
 import { parseCacheUsage } from "./cache-usage";
+import {
+  LLM_REQUEST_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
+  LLM_MAX_RATE_WAIT_MS as MAX_RATE_WAIT_MS,
+} from "../config/timeouts";
 
 /** Конфиг ретраев: попытки, задержки, ретраи оборванного стрима, тишина. */
 export interface RetryConfig {
@@ -21,9 +25,6 @@ export interface RetryConfig {
   noDataTimeoutMs?: number;
 }
 
-const REQUEST_TIMEOUT_MS = 120000;
-/** Макс. ожидание (мс) собственного rate-limit слота перед сдачей. */
-const MAX_RATE_WAIT_MS = 30_000;
 /** Cap completion-токенов в max_tokens, если конфиг не задал. */
 const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 

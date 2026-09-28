@@ -7,8 +7,8 @@ import { resolve, extname, join } from "path";
 import { platform } from "os";
 import { findProjectRoot, resolveTscCommand } from "../../lsp/project-root";
 import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
-
-const TYPE_CHECK_DEBOUNCE_MS = 2000;
+import { LINT_TYPE_CHECK_DEBOUNCE_MS as TYPE_CHECK_DEBOUNCE_MS } from "../../../config/timeouts";
+import { settleChildClose } from "../../../utils/child-run";
 
 // Проекты, чей lint-скрипт ссылается на неустановленный бинарник
 // (ключ baseDir::script). Сам прогон дорог, а маркер провала — чистый шум,
@@ -422,15 +422,11 @@ function runAsync(
       signal?.removeEventListener("abort", onAbort);
       const stdout = decodeOutput(utf8Chunks);
       const stderr = decodeOutput(oemChunks);
-      if (signal?.aborted || code === 0) {
+      if (signal?.aborted) {
         resolve({ stdout, stderr });
-      } else {
-        const err: any = new Error(`Command failed with exit code ${code}`);
-        err.stdout = stdout;
-        err.stderr = stderr;
-        err.status = code;
-        reject(err);
+        return;
       }
+      settleChildClose(code, stdout, stderr, `Command failed with exit code ${code}`, resolve, reject);
     });
   });
 }

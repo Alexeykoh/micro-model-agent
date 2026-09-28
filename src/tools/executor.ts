@@ -3,11 +3,11 @@ import type { ToolContext, ToolCall, ToolResult, PluginManager } from "./types";
 import type { ToolRegistry } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
 import { t } from "../i18n/index";
+import {
+  TOOL_EXECUTION_TIMEOUT_MS,
+  TOOL_MEMO_TTL_MS as MEMO_TTL_MS,
+} from "../config/timeouts";
 
-const TOOL_EXECUTION_TIMEOUT_MS = 60000;
-
-/** Время жизни мемо-записи — ограничивает протухание от внешних правок. */
-const MEMO_TTL_MS = 120000;
 const MEMO_MAX_ENTRIES = 100;
 
 /** Стабильная сериализация: сортировка ключей, порядок аргументов на ключ не влияет. */

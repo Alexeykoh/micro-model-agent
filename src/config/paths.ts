@@ -10,6 +10,7 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { MMA_ENV } from "./env";
 
 /** Имя каталога данных агента (глобальный `~/.mma`, проектный `<ws>/.mma`). */
 export const MMA_DIR_NAME = ".mma";
@@ -22,7 +23,7 @@ export const MMA_CONFIG_FILE_NAME = "config.json";
  * `loadConfig` и bootstrap), иначе `~/.mma`.
  */
 export function globalMmaDir(env: NodeJS.ProcessEnv = process.env): string {
-  return env.MMA_CONFIG_DIR || join(homedir(), MMA_DIR_NAME);
+  return env[MMA_ENV.CONFIG_DIR] || join(homedir(), MMA_DIR_NAME);
 }
 
 /** Проектный каталог данных (`<baseDir>/.mma`). */
@@ -58,4 +59,9 @@ export function globalExportsDir(env: NodeJS.ProcessEnv = process.env): string {
 /** Глобальный каталог плагинов (`<global>/.mma/plugins`). */
 export function globalPluginsDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "plugins");
+}
+
+/** Файл аудит-лога в каталоге данных (`<dir>/audit.jsonl`). */
+export function auditLogFile(dir: string): string {
+  return join(dir, "audit.jsonl");
 }

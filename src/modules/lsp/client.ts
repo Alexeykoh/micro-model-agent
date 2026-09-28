@@ -8,6 +8,7 @@ import { killTree } from "../processes/registry";
 import { toForwardSlash } from "../../tools/path-utils";
 import type { Logger } from "../../logger/app-logger";
 import { errMsg } from "../../utils";
+import { LSP_DEFAULT_TIMEOUT_MS as DEFAULT_TIMEOUT } from "../../config/timeouts";
 
 /**
  * Логгер-адаптер: LSP-диагностику только в app.jsonl, никогда в консоль/терминал.
@@ -42,8 +43,6 @@ export interface LspClientLogger {
   warn(msg: string, meta?: Record<string, unknown>): void;
   error(msg: string, meta?: Record<string, unknown>): void;
 }
-
-const DEFAULT_TIMEOUT = 15000;
 
 /** LSP-клиент: checkFile/probe поверх spawn + initialize + shutdown. */
 export class LspClient {

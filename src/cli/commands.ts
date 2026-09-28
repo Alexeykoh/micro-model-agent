@@ -99,7 +99,7 @@ function buildConfigCommands(program: Command): void {
   configCmd
     .command("set")
     .argument("<key>", t("cli.config_key"))
-    .argument("<value>", "Config value")
+    .argument("<value>", t("cli.config_value"))
     .description(t("cli.set_value"))
     .option("--force", t("cli.config_force"))
     .action(async (key: string, value: string, opts: { force?: boolean }) => {
@@ -136,7 +136,7 @@ function buildConfigCommands(program: Command): void {
   configCmd
     .command("show")
     .description(t("cli.show_config"))
-    .option("--show-secrets", "Print secrets (API keys, tokens) unredacted")
+    .option("--show-secrets", t("cli.show_secrets"))
     .action(async (opts: { showSecrets?: boolean }) => {
       const { config } = await bootstrap();
       writeMachineJson(configForDisplay(config, opts.showSecrets));
@@ -231,7 +231,7 @@ function buildModelCommands(program: Command): void {
     });
   model
     .command("use")
-    .argument("<name>", "Model name")
+    .argument("<name>", t("cli.model_name"))
     .description(t("cli.set_model"))
     .action(async (name: string) => {
       const configPath = globalConfigFile();
@@ -242,7 +242,7 @@ function buildModelCommands(program: Command): void {
     });
   model
     .command("certify")
-    .argument("<name>", "Model name")
+    .argument("<name>", t("cli.model_name"))
     .option("--provider-url <url>", t("cli.cert_provider_url"))
     .option("--provider-key <key>", t("cli.cert_provider_key"))
     .option("--context-window <n>", t("cli.cert_context_window"))
@@ -278,7 +278,7 @@ function buildModelCommands(program: Command): void {
     });
   model
     .command("cert-status")
-    .argument("<name>", "Model name")
+    .argument("<name>", t("cli.model_name"))
     .description(t("cli.cert_status"))
     .action(async (name: string) => {
       const { config } = await bootstrap();
@@ -294,7 +294,7 @@ function buildModelCommands(program: Command): void {
     });
   model
     .command("uncertify")
-    .argument("<name>", "Model name")
+    .argument("<name>", t("cli.model_name"))
     .description(t("cli.cert_uncertify"))
     .action(async (name: string) => {
       const { config } = await bootstrap();
@@ -307,7 +307,7 @@ function buildContextCommand(program: Command): void {
   program
     .command("context")
     .description(t("cli.manage_context"))
-    .argument("[size]", "Context window size in tokens (omit to show the budget breakdown)")
+    .argument("[size]", t("cli.context_size_arg"))
     .option("--system <fraction>", t("cli.context_system_fraction"))
     .option("--reserve <fraction>", t("cli.context_reserve_fraction"))
     .action(async (size: string | undefined, opts: { system?: string; reserve?: string }) => {
@@ -425,7 +425,7 @@ function buildProviderCommands(program: Command): void {
   provider
     .command("check")
     .description(t("cli.provider_check"))
-    .option("--timeout <ms>", "Per-provider probe timeout in ms")
+    .option("--timeout <ms>", t("cli.probe_timeout"))
     .action(async (opts: { timeout?: string }) => {
       const { config, agent } = await bootstrap();
       const providers = agent.listProviders();
@@ -476,7 +476,7 @@ function buildProviderCommands(program: Command): void {
     });
   provider
     .command("use")
-    .argument("<name>", "Provider name")
+    .argument("<name>", t("cli.provider_name"))
     .description(t("cli.set_provider"))
     .action(async (name: string) => {
       const configPath = globalConfigFile();
@@ -506,13 +506,13 @@ function buildProviderCommands(program: Command): void {
     });
   provider
     .command("add")
-    .argument("<name>", "Provider type or label")
-    .option("--url <url>", "Base URL")
-    .option("--key <key>", "API key")
-    .option("--priority <n>", "Fallback priority (lower = tried first)")
-    .option("--context-window <n>", "Context window override for this entry")
-    .option("--rpm <n>", "Max requests per minute for this entry")
-    .option("--parallel <n>", "Max parallel tasks for this entry")
+    .argument("<name>", t("cli.provider_type_label"))
+    .option("--url <url>", t("cli.provider_base_url"))
+    .option("--key <key>", t("cli.provider_api_key"))
+    .option("--priority <n>", t("cli.provider_priority"))
+    .option("--context-window <n>", t("cli.provider_context_window"))
+    .option("--rpm <n>", t("cli.provider_rpm"))
+    .option("--parallel <n>", t("cli.provider_parallel"))
     .description(t("cli.add_provider"))
     .action(
       async (
@@ -597,7 +597,7 @@ function buildSessionCommands(program: Command): void {
     });
   session
     .command("show")
-    .argument("<id>", "Session id")
+    .argument("<id>", t("cli.session_id"))
     .description(t("cli.show_details"))
     .action(async (id: string) => {
       const { sessionManager } = await bootstrap();
@@ -606,19 +606,19 @@ function buildSessionCommands(program: Command): void {
         getDefaultChannel().writeLine(t("session.not_found", { id }));
         return;
       }
-      getDefaultChannel().writeLine(`ID:           ${meta.id}`);
-      getDefaultChannel().writeLine(`Name:         ${meta.name}`);
-      getDefaultChannel().writeLine(`Created:      ${meta.createdAt}`);
-      getDefaultChannel().writeLine(`Updated:      ${meta.updatedAt}`);
-      getDefaultChannel().writeLine(`Messages:     ${meta.messageCount}`);
-      getDefaultChannel().writeLine(`Model:        ${meta.model}`);
-      getDefaultChannel().writeLine(`Context:      ${meta.contextWindow}`);
-      getDefaultChannel().writeLine(`Project:      ${meta.projectDir}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_id")}           ${meta.id}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_name")}         ${meta.name}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_created")}      ${meta.createdAt}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_updated")}      ${meta.updatedAt}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_messages")}     ${meta.messageCount}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_model")}        ${meta.model}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_context")}      ${meta.contextWindow}`);
+      getDefaultChannel().writeLine(`${t("cli.session_field_project")}      ${meta.projectDir}`);
 
       const moeEvents = sessionManager.loadSessionLog(id).filter((e) => e.type.startsWith("moe_"));
       if (moeEvents.length > 0) {
         getDefaultChannel().writeLine("");
-        getDefaultChannel().writeLine(pc.cyan("MoE events:"));
+        getDefaultChannel().writeLine(pc.cyan(t("cli.session_moe_events")));
         for (const e of moeEvents) {
           const ts = e.ts.slice(11, 19);
           if (e.type === "moe_subtask") {
@@ -687,7 +687,7 @@ function buildSessionCommands(program: Command): void {
     });
   session
     .command("export")
-    .argument("<id>", "Session id (or name prefix)")
+    .argument("<id>", t("cli.session_id_or_prefix"))
     .description(t("cli.export_session"))
     .option("--format <format>", t("cli.export_format"), "md")
     .option("--out <path>", t("cli.export_out"))
@@ -741,7 +741,7 @@ function buildSessionCommands(program: Command): void {
     });
   session
     .command("delete")
-    .argument("<id>", "Session id")
+    .argument("<id>", t("cli.session_id"))
     .description(t("cli.delete_session"))
     .action(async (id: string) => {
       const { sessionManager } = await bootstrap();
@@ -841,8 +841,8 @@ export function createProgram(): Command {
   buildChangelogCommand(program);
 
   program
-    .argument("[prompt...]", "Prompt to execute")
-    .description("Run a single prompt")
+    .argument("[prompt...]", t("cli.prompt_arg"))
+    .description(t("cli.run_prompt"))
     .action((_prompt: string[]) => {
       /* Обрабатывает main.ts после program.parse(). */
     });

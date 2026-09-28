@@ -2,9 +2,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
 import { defaultOutputBus } from "../../output";
-
-/** Дефолтный таймаут MCP HTTP-запросов (коннект + вызовы тулов). */
-const HTTP_TIMEOUT_MS = 10_000;
+import { MCP_HTTP_TIMEOUT_MS as HTTP_TIMEOUT_MS } from "../../config/timeouts";
 
 /**
  * Accept-заголовок для MCP Streamable HTTP: сервер отвечает 406, если клиент

@@ -24,6 +24,7 @@ import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
 import type { AgentResult } from "../core/types";
 import { globalMmaDir } from "../config/paths";
+import { MMA_ENV, readEnv } from "../config/env";
 
 /**
  * Взведён только для one-shot `--json`-прогонов (позиционный промпт есть). На уровне
@@ -40,7 +41,7 @@ let jsonMode = false;
  * Дешёвое защитное чтение файла, не полный лоад конфига.
  */
 function resolveEarlyLocale(): string | undefined {
-  const env = process.env.MMA_LOCALE;
+  const env = readEnv("LOCALE");
   if (env) return env;
   const dir = globalMmaDir();
   for (const p of [join(dir, "config", "core.json"), join(dir, "config.json")]) {
@@ -331,8 +332,8 @@ async function main(): Promise<void> {
     await updater?.waitForIdle();
     process.exit(exitCode);
   } else {
-    if (onboardingStart === "meet") process.env.MMA_START_MEET = "1";
-    if (onboardingStart === "init") process.env.MMA_START_INIT = "1";
+    if (onboardingStart === "meet") process.env[MMA_ENV.START_MEET] = "1";
+    if (onboardingStart === "init") process.env[MMA_ENV.START_INIT] = "1";
     const mmaDir = globalMmaDir();
     const legacyConfigPath = join(mmaDir, "config.json");
     let hasAnyConfig = existsSync(legacyConfigPath);
@@ -355,7 +356,7 @@ async function main(): Promise<void> {
     // состоянием промпта/кадра. Перезапущенный процесс видит сохранённый конфиг,
     // скипает визард и создаёт редактор первым делом. `MMA_POST_SETUP=1` сторожит
     // от петли перезапуска.
-    if (!hasAnyConfig && !exitOnComplete && process.env.MMA_POST_SETUP !== "1") {
+    if (!hasAnyConfig && !exitOnComplete && readEnv("POST_SETUP") !== "1") {
       getDefaultChannel().writeLine(`\n  ${t("cli.first_run")}\n`);
       const answers = await runSetup();
       const { config } = loadConfig({ configDir: mmaDir, projectConfigPath });

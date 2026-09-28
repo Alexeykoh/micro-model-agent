@@ -12,6 +12,7 @@ import { pc } from "../ui/colors";
 import { startWebUi } from "../modules/webui/module";
 import { tryOpenBrowser } from "../modules/webui/server";
 import { globalMmaDir } from "../config/paths";
+import { MMA_ENV } from "../config/env";
 
 /** Опции `mma web`: порт, хост, токен, suppress автооткрытия, проект. */
 export interface WebCommandOptions {
@@ -32,7 +33,7 @@ export function parsePort(raw: string | undefined): number | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
-    throw new Error(`invalid --port "${raw}": expected an integer between 1 and 65535`);
+    throw new Error(t("cli.web_invalid_port", { port: raw }));
   }
   return n;
 }
@@ -52,10 +53,10 @@ export function webBootstrapArgs(
 export async function runWeb(opts: WebCommandOptions): Promise<void> {
   // Транспорт читает их на старте (server/state): у порта нет поля конфига,
   // так что CLI-флаг маппится на env, которую сервер уже уважает.
-  if (opts.port !== undefined) process.env.MMA_WEBUI_PORT = String(opts.port);
-  if (opts.host) process.env.MMA_WEBUI_HOST = opts.host;
-  if (opts.token) process.env.MMA_WEBUI_TOKEN = opts.token;
-  if (opts.noOpen) process.env.MMA_WEBUI_OPEN = "0";
+  if (opts.port !== undefined) process.env[MMA_ENV.WEBUI_PORT] = String(opts.port);
+  if (opts.host) process.env[MMA_ENV.WEBUI_HOST] = opts.host;
+  if (opts.token) process.env[MMA_ENV.WEBUI_TOKEN] = opts.token;
+  if (opts.noOpen) process.env[MMA_ENV.WEBUI_OPEN] = "0";
 
   const mmaDir = globalMmaDir();
   const { hasDomainFiles } = await import("../config/domains");

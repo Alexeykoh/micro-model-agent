@@ -8,6 +8,7 @@ import type { AppConfig } from "../../config/types";
 import { killTree } from "../processes/kill-tree";
 import { toForwardSlash } from "../../tools/path-utils";
 import { projectMmaDir } from "../../config/paths";
+import { MMA_ENV } from "../../config/env";
 
 /** Итог одного запуска MMA в песочнице: код выхода, вывод, был ли таймаут. */
 export interface SpawnResult {
@@ -82,11 +83,11 @@ export async function runScenario(
       ];
       const env: NodeJS.ProcessEnv = {
         ...process.env,
-        MMA_MODEL: opts.model,
-        MMA_PROVIDER_BASEURL: opts.providerUrl,
-        MMA_CONTEXT_WINDOW: String(opts.contextWindow ?? 32000),
+        [MMA_ENV.MODEL]: opts.model,
+        [MMA_ENV.PROVIDER_BASEURL]: opts.providerUrl,
+        [MMA_ENV.CONTEXT_WINDOW]: String(opts.contextWindow ?? 32000),
       };
-      if (opts.providerKey) env.MMA_PROVIDER_APIKEY = opts.providerKey;
+      if (opts.providerKey) env[MMA_ENV.PROVIDER_APIKEY] = opts.providerKey;
 
       // Пишем cert-конфиг, если сценарий объявил оверрайды
       if (scenario.config && opts.baseConfig) {
@@ -94,7 +95,7 @@ export async function runScenario(
         const certConfigDir = projectMmaDir(sandbox);
         mkdirSync(certConfigDir, { recursive: true });
         writeFileSync(join(certConfigDir, "config.json"), JSON.stringify(merged, null, 2), "utf-8");
-        env.MMA_CONFIG_DIR = certConfigDir;
+        env[MMA_ENV.CONFIG_DIR] = certConfigDir;
       }
 
       const res = await runner(env, opts.mmaRoot, args, timeoutMs);

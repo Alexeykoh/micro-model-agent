@@ -2,6 +2,7 @@
 import * as readline from "readline";
 import stringWidth from "string-width";
 import { pc } from "./colors";
+import { readEnv } from "../config/env";
 import {
   buildLayout,
   layoutIndexFor,
@@ -1018,8 +1019,8 @@ export class LineEditor implements LineInput {
    * `MMA_DSR=1` форсит вкл, `MMA_DSR=0` — выкл; иначе по умолчанию вкл.
    */
   private dsrEnabled(): boolean {
-    if (process.env.MMA_DSR === "1") return true;
-    if (process.env.MMA_DSR === "0") return false;
+    if (readEnv("DSR") === "1") return true;
+    if (readEnv("DSR") === "0") return false;
     return process.platform !== "win32";
   }
 

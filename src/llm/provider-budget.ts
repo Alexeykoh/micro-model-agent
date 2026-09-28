@@ -4,6 +4,7 @@
  * единственный, кто отдаёт эти данные по API-ключу. Zen/Go баланс не
  * возвращают (только веб-дашборд), поэтому для них честно `unsupported`.
  */
+import { PROVIDER_BUDGET_TIMEOUT_MS as DEFAULT_TIMEOUT_MS } from "../config/timeouts";
 
 /** Бюджет провайдера: расход ключа, лимиты, баланс аккаунта. */
 export interface ProviderBudget {
@@ -45,8 +46,6 @@ export interface BudgetOptions {
   /** Диагностический лог; обязателен, чтобы подавляемые ошибки не терялись. */
   log: (level: "warn" | "debug", message: string) => void;
 }
-
-const DEFAULT_TIMEOUT_MS = 5000;
 
 /** Приводит значение к конечному числу; иначе undefined. */
 function num(value: unknown): number | undefined {

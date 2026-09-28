@@ -27,6 +27,7 @@ import {
   STUCK_WARN_REPEAT_EVERY,
   type ExecutionPluginState,
 } from "./execution-plugin";
+import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
 
 /**
  * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
@@ -45,8 +46,7 @@ export type WebSearchRunner = (
  * STUCK_RECOVERY_COOLDOWN-итераций, но в onAfterTool нет счётчика итераций
  * (контекст экзекутора) — та же анти-спам защита, но по времени. Инжектится
  * через конструктор для тестов (0 отключает).
- */
-const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
+  */
 
 /**
  * Тулы, которым можно при активном шаге плана БЕЗ проверки step-alignment.

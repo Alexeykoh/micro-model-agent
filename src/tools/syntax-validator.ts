@@ -3,6 +3,7 @@ import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { extname, dirname } from "path";
 import { spawn } from "child_process";
 import { Logger } from "../logger/app-logger";
+import { settleChildClose } from "../utils/child-run";
 
 const SYNTAX_CACHE = new Map<string, { hash: string; error: string | null }>();
 const logger = new Logger("warn", "syntax-validator");
@@ -50,15 +51,7 @@ function runCommand(
       clearTimeout(timer);
       const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
       const stderr = Buffer.concat(stderrChunks).toString("utf-8");
-      if (code === 0) {
-        resolve({ stdout, stderr });
-      } else {
-        const err: any = new Error(`Syntax check failed with exit code ${code}`);
-        err.stdout = stdout;
-        err.stderr = stderr;
-        err.status = code;
-        reject(err);
-      }
+      settleChildClose(code, stdout, stderr, `Syntax check failed with exit code ${code}`, resolve, reject);
     });
   });
 }

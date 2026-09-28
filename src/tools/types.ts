@@ -15,7 +15,8 @@ export interface ToolDefinition {
   /** Интерактивный тул: ждёт ввода пользователя, без таймаута выполнения. */
   interactive?: boolean;
   /**
-   * Таймаут тула в мс. Дефолт — TOOL_EXECUTION_TIMEOUT_MS (60с) исполнителя.
+   * Таймаут тула в мс. Дефолт — TOOL_EXECUTION_TIMEOUT_MS (60с) исполнителя
+   * (см. `src/config/timeouts.ts`).
    * Для тулов с несколькими LLM-вызовами (напр. chunk_query) на медленных провайдерах.
    */
   timeoutMs?: number;
