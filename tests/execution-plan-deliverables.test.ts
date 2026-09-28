@@ -88,6 +88,38 @@ describe("plan update deliverable gate", () => {
     expect(res.success).toBe(true);
   });
 
+  it("stays silent on file-less steps in a pure non-code plan (ses_mukulpsv_is271g)", async () => {
+    // A bicycle-recommendation plan has no file steps at all — the
+    // vacuous-gate note must not fire on any of them (previously every
+    // done step got "names no files … run build/tests", pushing the
+    // model to materialize profile/recommendation .md files).
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await createTestPlan(execModule, "T", [
+      "Ask the user about budget and size",
+      "Compare three bicycle models on the web",
+    ]);
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(res.success).toBe(true);
+    expect(res.output).not.toContain("no files");
+    expect(res.output).not.toContain("не называет файлов");
+  });
+
+  it("neutral note on file-less steps in a mixed plan never asks for files", async () => {
+    // When the plan DOES contain file steps, the note still fires on the
+    // file-less step — but must not suggest adding file paths or running
+    // build/tests unconditionally.
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await createTestPlan(execModule, "T", ["Create src/a.ts", "Summarize the change for the user"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(res.success).toBe(true);
+    const res2 = await tool.handler(ctx, { action: "update", step: 2, status: "done" });
+    expect(res2.success).toBe(true);
+    expect(res2.output).toContain("do NOT create files");
+  });
+
   it("does not treat URL hostnames as missing deliverables", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
