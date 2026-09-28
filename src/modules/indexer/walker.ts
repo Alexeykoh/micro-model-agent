@@ -130,23 +130,82 @@ export interface IndexResult {
 export class Indexer {
   private baseDir: string;
   private MAX_FILES = 1000;
-  private watcher: FSWatcher | null = null;
+  private watcher: FSWatcher | FSWatcher[] | null = null;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
   }
 
   watch(callback: (event: string, filename: string | null) => void): void {
-    this.watcher = watch(this.baseDir, { recursive: true }, (event, filename) => {
+    const handler = (event: string, filename: string | null): void => {
       if (filename && !isIgnoredPath(filename)) {
         callback(event, filename);
       }
-    });
+    };
+    try {
+      // Recursive watch works on macOS/Windows; on Linux the option is
+      // ignored or throws depending on the Node build — fall back below.
+      this.watcher = watch(this.baseDir, { recursive: true }, handler);
+    } catch {
+      this.watcher = this.watchNonRecursive(handler);
+    }
+  }
+
+  /**
+   * Linux fallback: `fs.watch(recursive)` is macOS/Windows-only, so watch
+   * every non-ignored subdirectory individually (non-recursive). Best-effort:
+   * new subdirectories created after `watch()` require a manual refresh.
+   */
+  private watchNonRecursive(
+    callback: (event: string, filename: string | null) => void,
+  ): FSWatcher[] {
+    const watchers: FSWatcher[] = [];
+    const collectDirs = (dir: string, out: string[]): void => {
+      let entries: string[];
+      try {
+        entries = readdirSync(dir);
+      } catch {
+        return;
+      }
+      out.push(dir);
+      for (const entry of entries) {
+        const fullPath = join(dir, entry);
+        try {
+          const lst = lstatSync(fullPath, { throwIfNoEntry: false });
+          if (!lst || lst.isSymbolicLink()) continue;
+          if (statSync(fullPath).isDirectory() && !isIgnoredDirName(entry)) {
+            collectDirs(fullPath, out);
+          }
+        } catch {
+          // Unreadable entry — skip it, keep walking the rest.
+        }
+      }
+    };
+    const dirs: string[] = [];
+    collectDirs(this.baseDir, dirs);
+    for (const dir of dirs) {
+      try {
+        watchers.push(watch(dir, callback));
+      } catch (e) {
+        logger.warn(`watch failed for ${dir}: ${(e as Error).message}`);
+      }
+    }
+    if (watchers.length === 0) {
+      logger.warn("file watcher unavailable: no directories could be watched");
+    }
+    return watchers;
   }
 
   unwatch(): void {
     if (this.watcher) {
-      this.watcher.close();
+      const all = Array.isArray(this.watcher) ? this.watcher : [this.watcher];
+      for (const w of all) {
+        try {
+          w.close();
+        } catch {
+          // Already closed — nothing to do.
+        }
+      }
       this.watcher = null;
     }
   }

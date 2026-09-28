@@ -22,7 +22,7 @@
 - [x] ~~**P5 — авто-сужение набора тулов**~~ ✅ закрыто (ветка `feat/auto-tool-narrowing`): `enableOnDemand: true` по умолчанию + детерминированный пред-посев тегов по первому сообщению (`src/tools/auto-tags.ts`, только добавление, до первого LLM-вызова) + `question`/`approve`/`load_skill` → `alwaysOn`. Причина отката mitigation: hidden-tools блок, bash hidden-hint + redirect, пред-посев убирает нужду в `enable_tools`-roundtrip на веб-задачах.
 - [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
 - [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0, исправлены), ~24 sev 3, ~25 sev 2. **Исправлено большинство** (ветка `fix/audit-waves-bcde`): sev 4 + stuck-детектор, plan-correctness, SSRF/секреты/symlink/injection, MCP reliability, read/process/pipeline-харды, skills CRLF, command-validator wrappers. Остаток — в P2 (см. «Остатки аудита»).
-- **Linux watcher**: `walker.ts:140` (`Indexer.watch()`, `watch(baseDir, { recursive: true })` без fallback — сверено 2026-09-28) — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
+- **Linux watcher**: `walker.ts` `Indexer.watch()` — ✅ fallback добавлен (ветка `chore/small-tails`): `recursive: true` в try, при throw — per-dir non-recursive watch с игнорами (`watchNonRecursive`); `unwatch()` закрывает массив. Новые подкаталоги после `watch()` требуют ручного refresh — задокументировано в JSDoc.
 
 ### P2 — техдолг и поддерживаемость
 - [x] ~~**Остатки аудита волн B/C/D/E**~~ ✅ (2026-09-25) — sev 4/3/2 закрыты: `B-11` (trailing-newline total), `D-3` (локаль до `createProgram`), `D-7` (`rotateOldSessions` подключён), `D-8` (carry-over non-TTY), `E-15` (async `killTree`), i18n `B-12`/`C-14`/`D-9` (verifier/tools/CLI через `t()`, en+ru). Осознанно оставлено:
@@ -39,8 +39,8 @@
 - [x] ~~CI quality gate + pre-commit hook~~ ✅: `.fallowrc.json` (+baseline `.fallow-baseline.json`, `src/modules/webui/assets/**` в ignore), npm-скрипты `quality`/`fallow`/`fallow:baseline`/`fallow:security`, workflow `.gitea/workflows/quality.yml` (typecheck + `bun test` + `fallow dead-code --baseline … --fail-on-issues`), git pre-commit hook (`fallow hooks install --target git`).
 - [x] ~~`fallow security`~~ ✅ прогнан, триаж `docs/analysis/2026-09-25-fallow-security.md`: actionable-находок нет.
 - [x] ~~**Lint (Biome)**~~ ✅ `@biomejs/biome` + `biome.json` (линтер, formatter/assist off — Prettier остаётся), `bun run lint`, включён в `quality` и CI. Правила-полировка: `noConsole` error (allowlist cli/output/ui), `noUnusedVariables/Imports/Unreachable` error; `noExplicitAny` — **warn** (186, ratchet до error отдельной задачей); осознанно off: `noNonNullAssertion`, `noAssignInExpressions`, control-char-regex, `useNodejsImportProtocol`, `noStaticOnlyClass`. Авто-фиксы применены по всему репо; заодно исправлен flaky тест encryption.
-- [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0; `docs/mma-features-overview.md` зафиксирован на 2.6.0 (сверка 2026-09-28: текущая версия уже 2.10.0 — overview устарел, AGENTS.md-«канон» свеж, вплоть до Full Config Surfaces 2.10.0); `docs/agents/*` актуальны (AGENTS.md — канон).
-- [ ] Русские комментарии/JSDoc (81 файл с кириллицей в `src/` — сверка 2026-09-28, было ~76).
+- [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0; `docs/mma-features-overview.md` поднят до 2.10.0 (секция «Что нового в 2.7.0–2.10.0», ветка `chore/small-tails`); `docs/agents/*` актуальны (AGENTS.md — канон).
+- [ ] Русские комментарии/JSDoc (81 файл с кириллицей в `src/` — сверка 2026-09-28, было ~76). Осознанно не в `chore/small-tails`: объём ~110 файлов отдельным проходом по слоям (см. Этап 5 ниже), не мелкий хвост.
 
 ### P4 — бэклог
 - [x] ~~Автоназвание сессии по контексту~~ ✅ СДЕЛАНО (релиз 2.6.0): `deriveSessionName` + fire-and-forget `generateSessionTitle` в хуке `Agent.run()`, `session.autoName` (default true), `nameSource` (`auto` не затирает `manual`). Строка «только ручной `rename`» устарела (сверка 2026-09-28).
@@ -101,7 +101,7 @@
 
 **Открытые хвосты по индексации:**
 - [x] ~~Валидация кэша индекса (mtime/hash)~~ ✅ `IndexCache.load()` сверяет `version`/`root`/`signature`; устаревший или легаси-кэш → полный пересбор.
-- [ ] Watcher на Linux не рекурсивный (`fs.watch recursive`, `walker.ts:140` — сверка 2026-09-28) — автообновление только ручное
+- [ ] Watcher на Linux не рекурсивный — ✅ закрыто в `chore/small-tails` (per-dir fallback, см. P1 выше); остаётся ограничение: новые подкаталоги после `watch()` — только ручной refresh
 
 ### Аудит логики агента — `docs/analysis/2026-08-29-agent-logic-audit.md`
 
@@ -302,11 +302,11 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 ## Остаток на 2026-09-26 (web UI / провайдеры) — сверка 2026-09-28
 
 - [x] ~~**Вложенный поп-ап добавления и настройки провайдера**~~ ✅ ЗАКРЫТО иначе: `#providerOverlay`/`openProviderForm`/`hideProviderOverlay` в коде больше нет (0 совпадений в `src/`) — заменено общим вложенным диалогом `#subOverlay`/`openSubDialog` (`index.html:169`, `settings.js:1692`; провайдер/MCP/LSP/память через него). Проверено e2e-харнессом (`tests/e2e/web-provider-dialog.e2e-test.ts`: селекторы `#subOverlay.open`, open/Esc/backdrop/save; `bun run test:e2e`). Отдельный Playwright-прогон «вручную в headed» и коммит старого поп-апа больше не требуются.
-- [ ] **Состояние реального конфига** (`~/.mma`): `provider` сейчас — легаси `openai-compat` / `http://localhost:1234/v1`,
+- [ ] **Состояние реального конфига** (`~/.mma`, действие пользователя, не ветка): `provider` сейчас — легаси `openai-compat` / `http://localhost:1234/v1`,
   модель `qwen/qwen3.5-9b`, `contextWindow 32768`. Ранее просили **64000** — вернуть при необходимости
   (`/config contextWindow 64000`).
 - [ ] **Playwright MCP в opencode** прописан (`~/.config/opencode/opencode.jsonc`), но инструменты появляются
-  только после **рестарта opencode**.
+  только после **рестарта opencode** (действие пользователя).
 - [x] Фикс: список моделей следует за активным провайдером (refresh on reconfigure).
 - [x] Фикс: добавление провайдера не затирает легаси-конфиг (seed `entries[0]`).
 
