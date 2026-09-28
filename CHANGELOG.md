@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.12.0] - 2026-09-29
+
+### Added
+
+- **Session-bound plans** (`src/modules/execution/plan-store.ts`, `module.ts`, `src/core/bootstrap/modules-phase.ts`, `src/cli/repl-commands.ts`, `src/modules/webui/sessions-api.ts`, `state.ts`, `module.ts`, `assets/js/tabs.js`): the active plan is now stored per session (`.mma/plans/sessions/<sessionId>/active.json`) instead of a single project-global `active.json`. Switching sessions (`/resume`, `/new`, `POST /api/sessions/activate` / `POST /api/sessions`) moves the `ExecutionModule` tracker to that session's plan (new sessions start plan-less, `/resume` prints a `◇ <plan>` status line); deleting a session drops its plan slot. Plan tools writing past `setPlan` (`abort`/`switch`/`delete`/`purge`) and internal saves mirror the slot, so an aborted plan never resurrects on return. Drafts/archive stay a shared library; the legacy global plan is adopted by the active session on first start after upgrade. Web sidebar refreshes immediately after tab switch instead of waiting for the 2s poll. Spec: `docs/specs/2026-09-29-session-plan-binding-design.md`.
+
+### Fixed
+
+- **Provider identity sync on swap** (`src/modules/providers/manager.ts`, `src/config/registry.ts`, `src/core/agent.ts`): switching `provider.active` now mirrors the legacy flat fields (`baseUrl`/`apiKey`/`type`) from the active entry, closing the desync where banner and probes used a stale flat endpoint (e.g. `localhost:1234` while `opencode-go` was active); `reasoning_effort` is normalized and the reasoning strategy refreshed on provider swap; assistant `tool_calls` are kept paired with their tool results.
+
 ## [2.11.0] - 2026-09-28
 
 ### Added

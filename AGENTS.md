@@ -165,7 +165,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Test seams:** `orchestratorOverride/executorOverride/verifierOverride` (MoEDeps),
   `AgentDeps.runWithMoEOverride`, `ToolContext.agentFactory` — vi.mock в Bun глобален на процесс, не использовать.
 
-### Session ↔ Plan Binding (unreleased, ветка `fix/session-plan-binding`)
+### Session ↔ Plan Binding (2.12.0)
 
 Спека: [docs/specs/2026-09-29-session-plan-binding-design.md](./docs/specs/2026-09-29-session-plan-binding-design.md).
 
@@ -569,7 +569,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   пропуск. Резолвер ограничен baseDir (jail), 10 путями, 500KB; `.drawio` добавлен в
   `FILE_EXTENSIONS` токенайзера. i18n: `hall.claim_artifact`, `hall.claim_output_unverified` (en+ru).
 
-### Current Version: 2.11.0
+### Current Version: 2.12.0
 
 ### Changelog
 
