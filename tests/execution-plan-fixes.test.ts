@@ -401,13 +401,18 @@ describe("plan update notes for command-only steps", () => {
     cleanupTestModule(tmpDir);
   });
 
-  it("succeeds but notes that a file-less step cannot be auto-verified", async () => {
+  it("stays silent on file-less steps in a pure non-code plan", async () => {
+    // Changed behavior (fix/no-unsolicited-artifacts): a plan with no file
+    // steps at all is a non-code task (research/advice) — the vacuous-gate
+    // note must not fire and push the model to materialize files or run
+    // build/tests. Mixed plans still get the neutral note (see
+    // execution-plan-deliverables.test.ts).
     const tool = planTool(execModule);
     const ctx: any = {};
     await createTestPlan(execModule, "T", ["Run bun build and verify no errors"]);
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
     expect(res.success).toBe(true);
-    expect(res.output).toContain("names no files");
+    expect(res.output).not.toContain("names no files");
   });
 
   it("does not add the note when the step names real files", async () => {
