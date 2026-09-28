@@ -1,7 +1,7 @@
 // Менеджер провайдеров: активный провайдер + модель в рантайме, hot-swap, кеш сборки.
 // src/modules/providers/manager.ts
 import type { LLMProvider } from "../../llm/provider";
-import type { ProviderConfig, ProviderEntry } from "../../config/types";
+import type { ProviderConfig, ProviderEntry, ReasoningStrategy } from "../../config/types";
 import type { ProviderRegistry } from "./registry";
 import type { ProviderCapabilities } from "./types";
 import { createProvider, defaultRegistry } from "./create";
@@ -236,4 +236,16 @@ export function activeProviderEndpoint(
     return { baseUrl: active.baseUrl, apiKey: active.apiKey, type: active.type };
   }
   return { baseUrl: config?.baseUrl ?? "", apiKey: config?.apiKey, type: config?.type ?? "openai-compat" };
+}
+
+/**
+ * Стратегия reasoning АКТИВНОЙ записи провайдера (из её пресета). Легаси-плоское
+ * `type` протухает после hot-swap `/provider use` и давало чужую стратегию
+ * (напр. `prompt-tag` при активном `opencode-go`); неизвестный тип → "none".
+ */
+export function reasoningStrategyForProvider(
+  config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,
+): ReasoningStrategy {
+  const type = activeProviderEndpoint(config).type;
+  return BUILTIN_PROVIDERS.find((p) => p.type === type)?.capabilities.reasoningStrategy ?? "none";
 }

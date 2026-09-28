@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { activeProviderEndpoint } from "../../src/modules/providers/manager";
+import { activeProviderEndpoint, reasoningStrategyForProvider } from "../../src/modules/providers/manager";
 import type { ProviderConfig } from "../../src/config/types";
 
 const FLAT = {
@@ -47,5 +47,24 @@ describe("activeProviderEndpoint", () => {
       apiKey: "not-needed",
       type: "openai-compat",
     });
+  });
+});
+
+describe("reasoningStrategyForProvider", () => {
+  it("reads the strategy of the active entry, not the stale flat type", () => {
+    // Flat type is openai-compat ("prompt-tag"); active entry is opencode-go.
+    expect(reasoningStrategyForProvider(multiEntry("opencode-go"))).toBe("openai-effort");
+  });
+
+  it("reads the strategy of the active entry when it is the local preset", () => {
+    expect(reasoningStrategyForProvider(multiEntry("openai-compat"))).toBe("prompt-tag");
+  });
+
+  it("uses legacy flat fields for single-provider configs", () => {
+    expect(reasoningStrategyForProvider({ ...FLAT })).toBe("prompt-tag");
+  });
+
+  it("returns 'none' for an unknown provider type", () => {
+    expect(reasoningStrategyForProvider({ type: "mystery", baseUrl: "", apiKey: "k" })).toBe("none");
   });
 });

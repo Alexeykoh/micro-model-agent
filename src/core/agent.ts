@@ -1,6 +1,6 @@
 /** Агент: одиночный цикл (INIT→…→OUTPUT) и MoE-путь, бюджеты, гейты. */
 import type { LLMProvider, ContentPart } from "../llm/provider";
-import { ProviderManager, activeProviderEndpoint } from "../modules/providers/manager";
+import { ProviderManager, activeProviderEndpoint, reasoningStrategyForProvider } from "../modules/providers/manager";
 import { buildActiveProvider } from "../modules/providers/factory";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
@@ -1559,6 +1559,20 @@ export class Agent {
     this.deps.config = config;
     if (this.deps.configRef) this.deps.configRef.current = config;
     this.costTracker.setModel(config.model);
+    this.applyReasoningStrategy(config.provider);
+  }
+
+  /**
+   * Пересчитывает стратегию reasoning из АКТИВНОЙ записи провайдера. Без этого
+   * `/provider use` и смена модели оставляли старую стратегию (prompt-tag против
+   * openai-effort) на весь сеанс. При "none" гасит probe-флаг, чтобы auto-режим
+   * не полагался на устаревшую пробу.
+   * @param provider конфиг провайдера (entries/active).
+   */
+  private applyReasoningStrategy(provider: AppConfig["provider"]): void {
+    const strategy = reasoningStrategyForProvider(provider);
+    this.deps.reasoningStrategy = strategy;
+    if (strategy === "none") this.probePassed = false;
   }
 
   /**
@@ -1572,6 +1586,7 @@ export class Agent {
     manager.switch(name, model);
     const providerCfg = manager.toConfig();
     this.deps.config.provider = providerCfg;
+    this.applyReasoningStrategy(providerCfg);
     this.deps.llmProvider = provider;
     this.deps.getProviderName = () => manager.activeName;
     this.deps.toolExecutor.updateProvider(provider);
