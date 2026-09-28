@@ -490,14 +490,75 @@ function providerSelect(options, value) {
   const none = el("option", "", "—");
   none.value = "";
   sel.appendChild(none);
+  const seen = new Set([""]);
   options.forEach((v) => {
+    seen.add(v);
     const o = el("option", "", v);
     o.value = v;
     if (v === value) o.selected = true;
     sel.appendChild(o);
   });
+  // Keep a stored-but-unknown value selectable (e.g. a legacy provider type
+  // from hand-edited config) instead of silently resetting it to "—".
+  if (value != null && value !== "" && !seen.has(value)) {
+    const o = el("option", "", value);
+    o.value = value;
+    o.selected = true;
+    sel.appendChild(o);
+  }
   if (value == null) sel.value = "";
   return sel;
+}
+
+// Base-URL field: a dropdown of well-known URLs plus a "custom URL" option
+// revealing a free-text input, so corporate proxies stay enterable.
+// Exposes a `.value` get/set compatible with plain inputs, plus the raw
+// `sel`/`custom` nodes for event wiring.
+function providerBaseField(value) {
+  const node = el("div", "pform-base");
+  const sel = el("select");
+  PROVIDER_BASE_URLS.forEach(([label, url]) => {
+    const o = el("option", "", label + " — " + url);
+    o.value = url;
+    sel.appendChild(o);
+  });
+  const customOpt = el("option", "", t("web.settings.provider_baseurl_custom"));
+  customOpt.value = BASE_URL_CUSTOM;
+  sel.appendChild(customOpt);
+  const custom = providerInput("", "text", "https://…");
+  const known = new Set(PROVIDER_BASE_URLS.map(([, url]) => url));
+  const sync = () => {
+    custom.style.display = sel.value === BASE_URL_CUSTOM ? "" : "none";
+  };
+  const field = {
+    node,
+    sel,
+    custom,
+    get value() {
+      return sel.value === BASE_URL_CUSTOM ? custom.value : sel.value;
+    },
+    set value(v) {
+      if (v && known.has(v)) {
+        sel.value = v;
+      } else {
+        sel.value = BASE_URL_CUSTOM;
+        custom.value = v || "";
+      }
+      sync();
+    },
+    addEventListener(ev, fn) {
+      sel.addEventListener(ev, fn);
+      custom.addEventListener(ev, fn);
+    },
+    setAttribute(k, v) {
+      sel.setAttribute(k, v);
+    },
+  };
+  field.value = value || "";
+  sel.addEventListener("change", sync);
+  node.appendChild(sel);
+  node.appendChild(custom);
+  return field;
 }
 
 function providerCheck(value) {
@@ -535,34 +596,29 @@ function chip(label, cls, onClick) {
   return b;
 }
 
-// Suggestions for the provider form: known provider types and common base URLs.
-function providerHints() {
-  const frag = document.createDocumentFragment();
-  const types = el("datalist");
-  types.id = "providerTypes";
-  ["openai-compat", "lmstudio", "openrouter", "openai", "anthropic", "opencode-zen", "opencode-go"].forEach((v) => {
-    const o = el("option");
-    o.value = v;
-    types.appendChild(o);
-  });
-  const urls = el("datalist");
-  urls.id = "providerBaseUrls";
-  [
-    ["LM Studio", "http://localhost:1234/v1"],
-    ["Ollama", "http://localhost:11434/v1"],
-    ["OpenRouter", "https://openrouter.ai/api/v1"],
-    ["OpenAI", "https://api.openai.com/v1"],
-    ["Anthropic", "https://api.anthropic.com"],
-  ].forEach(([label, value]) => {
-    const o = el("option");
-    o.value = value;
-    o.label = label;
-    urls.appendChild(o);
-  });
-  frag.appendChild(types);
-  frag.appendChild(urls);
-  return frag;
-}
+// Known provider types (mirrors BUILTIN_PROVIDERS in src/modules/providers/presets.ts)
+// and well-known local base URLs. Both render as real `<select>` dropdowns —
+// `datalist` hints were replaced because they don't read as a list and behave
+// inconsistently across browsers.
+const PROVIDER_TYPES = [
+  "openai-compat",
+  "lmstudio",
+  "openrouter",
+  "openai",
+  "anthropic",
+  "opencode-zen",
+  "opencode-go",
+];
+
+const PROVIDER_BASE_URLS = [
+  ["LM Studio", "http://localhost:1234/v1"],
+  ["Ollama", "http://localhost:11434/v1"],
+  ["OpenRouter", "https://openrouter.ai/api/v1"],
+  ["OpenAI", "https://api.openai.com/v1"],
+  ["Anthropic", "https://api.anthropic.com"],
+];
+
+const BASE_URL_CUSTOM = "__custom__";
 
 // One-click preset row: selecting a builtin fills type/label/base URL, so
 // hosted providers need no URL knowledge. `custom` leaves the fields free.
@@ -598,6 +654,11 @@ function wirePresetSync(presets, presetSel, mode, f) {
     f.base.value = p.baseUrl || "";
   });
   f.type.addEventListener("input", () => {
+    const sel = presets.find((x) => x.id === presetSel.value);
+    if (!sel || f.type.value.trim() !== sel.type) presetSel.value = "";
+  });
+  // The type control is a `<select>`: some browsers fire only `change`.
+  f.type.addEventListener("change", () => {
     const sel = presets.find((x) => x.id === presetSel.value);
     if (!sel || f.type.value.trim() !== sel.type) presetSel.value = "";
   });
@@ -742,15 +803,13 @@ function providerForm() {
   if (presetNode) box.appendChild(presetNode);
 
   const grid = el("div", "pform-grid");
-  const fType = providerInput(editing.type, "text", "openai-compat");
-  fType.setAttribute("list", "providerTypes");
+  const fType = providerSelect(PROVIDER_TYPES, editing.type);
   const fLabel = providerInput(editing.label, "text", "my-provider");
-  const fBase = providerInput(editing.baseUrl, "text", "http://localhost:1234/v1");
-  fBase.setAttribute("list", "providerBaseUrls");
+  const fBase = providerBaseField(editing.baseUrl);
   const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
   grid.appendChild(pfield("web.settings.provider_type", fType));
   grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
-  grid.appendChild(pfield("web.settings.provider_baseurl", fBase));
+  grid.appendChild(pfield("web.settings.provider_baseurl", fBase.node));
   grid.appendChild(pfield("web.settings.provider_apikey", fKey));
   box.appendChild(grid);
   wirePresetSync(presets, presetSel, mode, { type: fType, label: fLabel, base: fBase });
@@ -758,8 +817,6 @@ function providerForm() {
   const { node: advNode, ...advF } = providerAdvancedFields(editing);
   box.appendChild(advNode);
   const f = { type: fType, label: fLabel, base: fBase, key: fKey, ...advF };
-
-  box.appendChild(providerHints());
 
   const actions = el("div", "pform-actions");
   actions.appendChild(link(t("web.settings.save"), "", () => submitProviderForm(f, mode, editing)));

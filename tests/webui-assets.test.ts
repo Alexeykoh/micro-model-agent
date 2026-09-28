@@ -169,6 +169,18 @@ describe("webui assets", () => {
     expect(a.css).toContain(".pform-field select");
   });
 
+  it("renders provider type and base URL as real dropdowns, not datalist hints", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("PROVIDER_TYPES");
+    expect(src).toContain("providerBaseField(");
+    expect(src).toContain("provider_baseurl_custom");
+    expect(src).not.toContain("providerTypes");
+    expect(src).not.toContain("providerBaseUrls");
+    expect(src).not.toContain('el("datalist"');
+    expect(a.css).toContain(".pform-base");
+  });
+
   it("wires the activity rail above the composer", () => {
     const a = loadAssets();
     expect(a.html).toContain('id="railWrap"');

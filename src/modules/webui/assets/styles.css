@@ -962,6 +962,8 @@ body.light .toggle { background: var(--toggle-off); }
   background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
   color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
 }
+/* base-URL field: the free-text input sits under the dropdown when "custom" */
+.pform-base { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 /* preset row sits above the field grid — keep it off the fields */
 .provider-body .pform > .pform-field { margin-bottom: 16px; }
 .pform-adv { margin-top: 18px; }
