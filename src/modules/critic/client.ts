@@ -53,13 +53,19 @@ export class CriticClient {
 }
 
 function renderPack(pack: EvidencePack): string {
+  const cmdLines = pack.commands.map((c) => {
+    const base = `${c.command} (exit ${c.exitCode ?? "?"})`;
+    return c.output ? `${base}\n  output: ${c.output}` : base;
+  });
+  const files = (pack.fileExcerpts ?? []).map((f) => `--- ${f.path} ---\n${f.excerpt}`);
   return [
     `TASK: ${pack.task}`,
     pack.planSummary ? `PLAN: ${pack.planSummary}` : "",
     `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
-    `COMMANDS: ${pack.commands.map((c) => `${c.command} (exit ${c.exitCode ?? "?"})`).join("; ") || "(none)"}`,
+    `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,
     "TOOL TRAIL:",
     pack.toolDigest || "(empty)",
+    files.length > 0 ? `FILE CONTENTS:\n${files.join("\n")}` : "",
   ]
     .filter(Boolean)
     .join("\n");

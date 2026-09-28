@@ -7,6 +7,9 @@ import type { LoopState } from "./loop-state";
 
 const MUTATIONS_BEFORE_CHECK = 3;
 
+/** Tail of a tool output attached to an evidence event (bounded — the critic call has its own budget). */
+const MAX_EVENT_OUTPUT_CHARS = 600;
+
 export interface CriticGateDeps {
   state: LoopState;
   iteration: number;
@@ -15,7 +18,7 @@ export interface CriticGateDeps {
   slog: SessionLogger;
   task: string;
   planSummary?: string;
-  toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }>;
+  toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }>;
   /** True when evaluated right before the loop would accept the final answer. */
   beforeFinish: boolean;
 }
@@ -144,12 +147,24 @@ export class CriticGate {
 }
 
 export function gatherTurnToolEvents(contextManager: {
-  getActiveHistory: () => Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
-}): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }> {
-  const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean }> = [];
+  getActiveHistory: () => Array<{
+    role: string;
+    name?: string;
+    content?: unknown;
+    success?: boolean;
+    arguments?: Record<string, unknown>;
+  }>;
+}): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
+  const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
   for (const m of contextManager.getActiveHistory()) {
     if (m.role !== "tool" || !m.name) continue;
-    events.push({ tool: m.name, ok: m.success });
+    // role:"tool" messages already carry the call arguments (tool-batch)
+    // and the (budget-truncated) output — pass both through so the critic
+    // sees WHAT was touched and WHAT came back, not just bare tool names.
+    // Without args the evidence pack is blind (changedFiles/commands always
+    // empty) and the critic must return "ok" for lack of evidence.
+    const output = typeof m.content === "string" ? m.content.slice(-MAX_EVENT_OUTPUT_CHARS) : undefined;
+    events.push({ tool: m.name, args: m.arguments, ok: m.success, output });
   }
   return events;
 }
