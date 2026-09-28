@@ -229,16 +229,17 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 ### Этап 3. Антипаттерны и дублирование
 - [x] ~~Извлечь общий test-harness~~ ✅ `tests/helpers/webui-server.ts` + `webui-commands.ts` (см. P2 выше).
-- [~] Рефакторинг hotspot-функций: `createPlanToolDefinitions` (695), `bootstrap()` (438), `createProgram` (467)
-      — частично: createProgram разбит (`c5b4274`), plan-definitions разбиты (`788aea2`); **открыт только `bootstrap()`** — отдельной задачей при необходимости.
+- [x] ~~Рефакторинг hotspot-функций~~ ✅ закрыт полностью (ветка `chore/etap4-tails`):
+  `bootstrap()` разбит на `src/core/bootstrap/*.ts` (7 фаз-модулей, оркестратор 169 строк).
 - [x] ~~`console.*` в `repl-commands.ts` (126 вхождений)~~ ✅ сейчас 0 вхождений (OutputChannel).
 
-### Этап 4. Хардкод → абстракция
-Аудит по категориям:
-- [ ] Магические числа/таймауты вне конфига (`BASH_GRACE_MS`, лимиты строк и т.п.)
-- [ ] Хардкод путей/имён файлов (`.mma/plans`, `audit.jsonl`)
-- [ ] Строки пользователя мимо `t()` (правило #8) — особенно CLI-команды
-- [ ] Env-переменные: единый реестр `MMA_*`
+### Этап 4. Хардкод → абстракция — ✅ ЗАКРЫТ (ветка `chore/etap4-tails`, 2026-09-28)
+- [x] ~~Магические числа/таймауты~~ ✅ `src/config/timeouts.ts` — 27 канонических `*_MS`, модули импортируют (публичные имена сохранены алиасами, поведение 1:1).
+- [x] ~~Хардкод путей~~ ✅ `auditLogFile(dir)` в `src/config/paths.ts` (остальные пути уже централизованы).
+- [x] ~~Строки мимо `t()`~~ ✅ CLI-литералы переведены (26 новых `cli.*` ключей en+ru, en-тексты 1:1).
+- [x] ~~Env-переменные: единый реестр `MMA_*`~~ ✅ `src/config/env.ts` (`MMA_ENV` + `readEnv`, чтение в момент вызова, без кеширования).
+- Попутно: общий `settleChildClose` (`src/utils/child-run.ts`) убрал fallow-клон в verifier/syntax-validator/lint-on-write; `setupModulesPhase` нарезан на хелперы (гейт `fallow audit` зелёный).
+- Проверки: `tsc` 0, `biome` 0 errors, `bun test` 2818 pass / 0 fail.
 
 ### Этап 5. Русские комментарии (финал) — ✅ ЗАКРЫТ (ветка `chore/ru-jsdoc`, 2026-09-28)
 
@@ -336,6 +337,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 ### P2 — зрелость
 - [ ] **9. Compliance (EU AI Act)** — логи без подписи, нет артефактов high-risk (risk file, lineage, oversight-панель, adversarial-лог Art.15). Append-only + подпись, retention ≥6 мес.
-- [ ] **10. Внутренние хвосты** — overview поднят до 2.10.0 ✅, Linux watcher fallback ✅, русские комменты ✅ (всё — 2026-09-28).
-  Осталось: 5 файлов >>300 строк (осознанные исключения, только чистые швы); `noExplicitAny` warn-ratchet;
-  `bootstrap()` (438 строк, остаток Этапа 3); coverage-threshold в CI.
+- [ ] **10. Внутренние хвосты** — overview поднят до 2.10.0 ✅, Linux watcher fallback ✅, русские комменты ✅,
+  Этап 3 (bootstrap) ✅, Этап 4 ✅ (всё — 2026-09-28).
+  Осталось: 5 файлов >>300 строк (осознанные исключения, только чистые швы);
+  `noExplicitAny` warn-ratchet; coverage-threshold в CI.
