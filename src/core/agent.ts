@@ -39,6 +39,7 @@ import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
 import type { ContextLogger } from "./agent/context-log";
 import { recordArtifactWrite, testChurnFile } from "./agent/artifact-progress";
 import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
+import { repairToolCallPairing } from "./agent/tool-pairing";
 import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
@@ -915,7 +916,11 @@ export class Agent {
       compactionService.compactIfNeeded(state);
 
       this.refreshSystemPrompt();
-      const history = contextManager.getActiveHistory();
+      // Позиционная нормализация истории перед отправкой: вклинившийся user
+      // (step-gate/auto-advance плана) или осиротевший tool ломает контракт
+      // OpenAI и даёт 400 у строгих провайдеров. Новые прогоны порядок не
+      // портят (pendingMessages), проход лечит уже испорченные resume-истории.
+      const history = repairToolCallPairing(contextManager.getActiveHistory());
 
       // Монитор стабильности префикса: считаем до запроса, пишем в llm_usage
       // после. Char-оценка (chars/4) достаточна — важна динамика ratio и

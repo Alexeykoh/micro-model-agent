@@ -525,7 +525,7 @@ export class ExecutionModule implements AgentModule {
       state: this.state,
       store: this.store,
       checkPlanAlignment: (call) => this.checkPlanAlignment(call),
-      advancePlanIfStepComplete: (cm, sl) => this.advancePlanIfStepComplete(cm, sl),
+      advancePlanIfStepComplete: (sl) => this.advancePlanIfStepComplete(sl),
       maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
     });
   }
@@ -617,12 +617,9 @@ export class ExecutionModule implements AgentModule {
     return out;
   }
 
-  private advancePlanIfStepComplete(
-    contextManager?: any,
-    sessionLog?: {
-      plan(event: string, detail: string, iteration?: number): void;
-    },
-  ): void {
+  private advancePlanIfStepComplete(sessionLog?: {
+    plan(event: string, detail: string, iteration?: number): void;
+  }): void {
     const step = this.tracker?.getCurrentStep();
     if (!step) return;
     const stepText = step.description.toLowerCase();
@@ -656,21 +653,19 @@ export class ExecutionModule implements AgentModule {
       ];
       const hasLockFile = lockFiles.some((f) => existsSync(resolve(this.baseDir, f)));
       if (!hasLockFile) {
-        if (contextManager) {
-          const hints = this.state.depsGateHints.get(step.id) || 0;
-          this.state.depsGateHints.set(step.id, hints + 1);
-          const force = hints >= 1;
-          const content = force
-            ? t("exec.step_gate_deps_force", { step: String(step.id) })
-            : t("exec.step_gate_deps", {
-                step: String(step.id),
-                description: step.description,
-              });
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>${content}</system-summary>`,
-          });
-        }
+        const hints = this.state.depsGateHints.get(step.id) || 0;
+        this.state.depsGateHints.set(step.id, hints + 1);
+        const force = hints >= 1;
+        const content = force
+          ? t("exec.step_gate_deps_force", { step: String(step.id) })
+          : t("exec.step_gate_deps", {
+              step: String(step.id),
+              description: step.description,
+            });
+        this.pendingMessages.push({
+          role: "user",
+          content: `<system-summary>${content}</system-summary>`,
+        });
         return;
       }
     }
@@ -703,8 +698,8 @@ export class ExecutionModule implements AgentModule {
         }
       }
 
-      if (emptyFiles.length > 0 && contextManager) {
-        contextManager.addMessage({
+      if (emptyFiles.length > 0) {
+        this.pendingMessages.push({
           role: "user",
           content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
         });
@@ -723,20 +718,18 @@ export class ExecutionModule implements AgentModule {
       );
     }
 
-    if (contextManager) {
-      const nextStep = hadNext ? this.tracker?.getCurrentStep() : null;
-      const nextMsg = nextStep
-        ? t("exec.step_gate_ok", {
-            step: String(step.id),
-            nextStep: String(nextStep.id),
-            nextDesc: nextStep.description,
-          })
-        : t("exec.step_gate_last", { step: String(step.id) });
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${nextMsg}</system-summary>`,
-      });
-    }
+    const nextStep = hadNext ? this.tracker?.getCurrentStep() : null;
+    const nextMsg = nextStep
+      ? t("exec.step_gate_ok", {
+          step: String(step.id),
+          nextStep: String(nextStep.id),
+          nextDesc: nextStep.description,
+        })
+      : t("exec.step_gate_last", { step: String(step.id) });
+    this.pendingMessages.push({
+      role: "user",
+      content: `<system-summary>${nextMsg}</system-summary>`,
+    });
 
     // Авто-архив только что завершённого плана (все шаги done/skipped).
     // Готовый план не висит активным вечно, якоря агента на готовую задачу

@@ -85,12 +85,9 @@ export interface ExecutionPluginDeps {
   state: ExecutionPluginState;
   store: PlanStore;
   checkPlanAlignment(call: any): string | null;
-  advancePlanIfStepComplete(
-    contextManager?: any,
-    sessionLog?: {
-      plan(event: string, detail: string, iteration?: number): void;
-    },
-  ): void;
+  advancePlanIfStepComplete(sessionLog?: {
+    plan(event: string, detail: string, iteration?: number): void;
+  }): void;
   maybeSearchError: (ctx: any, call: any) => void;
 }
 
@@ -552,7 +549,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       // закрыл бы шаг "Update X", чей файл существует с раннего шага, — без
       // единой правки. advancePlanIfStepComplete — no-op, если токены не резолвятся.
       if (result.success && FS_MUTATING_TOOLS.has(call.name)) {
-        deps.advancePlanIfStepComplete(ctx.contextManager, ctx.sessionLog);
+        deps.advancePlanIfStepComplete(ctx.sessionLog);
       }
 
       // Автопоиск в вебе повторяющейся ошибки (fire-and-forget, результаты

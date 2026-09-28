@@ -477,6 +477,9 @@ await createTestPlan(execModule, "T", ["npm install express and start the server
       success: true,
       output: "ok",
     });
+    // Step-gate сообщения деферятся до следующего THINK (не вклиниваются между
+    // assistant(tool_calls) и tool-результатами) — flush на onBeforeThink.
+    plugin.onBeforeThink!(ctx2);
     const calls = ctx2.contextManager.addMessage.mock.calls.map((c: any[]) => String(c[0].content));
     expect(calls.some((c: string) => c.includes("dependencies are not installed"))).toBe(true);
   });
@@ -489,6 +492,7 @@ await createTestPlan(execModule, "T", ["Create src/index.ts with content"]);
       success: true,
       output: "ok",
     });
+    plugin.onBeforeThink!(ctx2);
     const calls = ctx2.contextManager.addMessage.mock.calls.map((c: any[]) => String(c[0].content));
     expect(calls.some((c: string) => c.includes("dependencies are not installed"))).toBe(false);
   });
