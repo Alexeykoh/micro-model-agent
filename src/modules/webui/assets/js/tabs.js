@@ -12,10 +12,10 @@ import { relTime, contextLabel } from "./format.js";
 import {
 makeFeed, showEmptyFeed, activeFeed, liveFeed, appendTo,
 clearEmpty, showBusy, clearFeed, finishMd, resetTurnText,
-finishThink, feedHasContent, loadHistory, syncUrl,
+finishThink, feedHasContent, loadHistory, syncUrl, renderPlan,
 } from "./feed.js";
 import { openConfirm, setIndicator } from "./dialog.js";
-import { setBusy } from "./rail.js";
+import { setBusy, setPlan as railSetPlan } from "./rail.js";
 
 let sessionsErrTimer = null;
 
@@ -132,7 +132,18 @@ export function openTab(id, name, kind, server) {
     // it is opened from the server afterward we must actually fetch the
     // transcript, or a reload of the active session shows an empty feed.
     if (!feedHasContent(tab.feed)) tab.historyLoaded = false;
-    api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => loadSessions());
+    // План следует за сессией: сервер уже переключил трекер на activate,
+    // сразу тянем свежий план в сайдбар (не ждём 2с-полла `/api/state`).
+    api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => {
+      loadSessions();
+      api("/api/state").then((r) => {
+        if (!r.ok || !r.data) return;
+        S.state.host = r.data.state || {};
+        S.state.busy = !!r.data.busy;
+        renderPlan(S.state.host.plan);
+        railSetPlan(S.state.busy && r.data.state ? r.data.state.plan : null);
+      });
+    });
     loadHistory(tab);
   }
   syncUrl();
@@ -165,6 +176,14 @@ async function newChatTab() {
     const meta = r.data.session;
     openTab(meta.id, meta.name || String(meta.id), "session", false);
     await loadSessions();
+    // Новая сессия — без плана: сервер уже сбросил трекер, сразу чистим сайдбар.
+    const st = await api("/api/state");
+    if (st.ok && st.data) {
+      S.state.host = st.data.state || {};
+      S.state.busy = !!st.data.busy;
+      renderPlan(S.state.host.plan);
+      railSetPlan(S.state.busy && st.data.state ? st.data.state.plan : null);
+    }
     return;
   }
   // Server-side creation failed (no manager / offline): keep a local-only tab

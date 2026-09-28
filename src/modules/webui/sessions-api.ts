@@ -54,6 +54,12 @@ export function handleSessionCreate(
       }
       try {
         const meta = create(name);
+        // План следует за сессией: новая — без плана, трекер сбрасывается.
+        try {
+          s.execModule?.switchSession(meta.id);
+        } catch {
+          // fail-open: сессия создана, план остался как был
+        }
         sendJson(res, 201, {
           ok: true,
           session: {
@@ -102,6 +108,13 @@ export function handleSessionActivate(
         sendJson(res, 404, { error: "not_found" });
         return;
       }
+      // План следует за сессией: трекер переключается на план этой сессии
+      // (или пустеет). Сайдбар следующего `/api/state` уже покажет его.
+      try {
+        s.execModule?.switchSession(id);
+      } catch {
+        // fail-open: сессия переключена, план остался как был
+      }
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
@@ -134,6 +147,12 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiSta
   } catch {
     sendJson(res, 404, { error: "not_found" });
     return;
+  }
+  // План следует за сессией: слот удалённой сессии не оставляем мусором.
+  try {
+    s.execModule?.forgetSession(id);
+  } catch {
+    /* best-effort */
   }
   sendJson(res, 200, { ok: true });
 }

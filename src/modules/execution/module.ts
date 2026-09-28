@@ -109,6 +109,10 @@ function planPathToken(p: string): string {
 export class ExecutionModule implements AgentModule {
   name = "execution";
   private tracker: PlanTracker | null = null;
+  /** Сессия-владелец текущего трекера. План следует за сессией: смена
+   *  сессии через switchSession() персистит трекер в слот старой сессии
+   *  и загружает план новой (см. docs/specs/2026-09-29-session-plan-binding-design.md). */
+  private sessionId: string | null = null;
   private verifier: StepVerifier;
   private stuckDetector: StuckDetector;
   private auditor: Auditor;
@@ -167,6 +171,11 @@ export class ExecutionModule implements AgentModule {
    * Abort тула `plan` чистит его (current = null) — сеттер держит this.tracker
    * в синхроне. Геттеры литерала биндят `this` на литерал, поэтому инстанс
    * захвачен замыканием.
+   *
+   * Сеттер зеркалит per-session слот (план следует за сессией): план-тулы
+   * (`abort/switch/delete/purge/...`) пишут через trackerRef напрямую, минуя
+   * setPlan — без хука слот протух бы и воскрешал отменённый план возвратом
+   * в сессию. IO fail-open: слот не должен ронять тулы.
    */
   private trackerRef: {
     get current(): PlanTracker | null;
@@ -179,9 +188,22 @@ export class ExecutionModule implements AgentModule {
       },
       set current(v: PlanTracker | null) {
         self.tracker = v;
+        self.flushSessionPlan();
       },
     };
   })();
+
+  /** Зеркалит текущий трекер в слот активной сессии (null → clear).
+   *  Вызывать после прямых присвоений this.tracker вне setPlan/switchSession. */
+  private flushSessionPlan(): void {
+    if (!this.sessionId) return;
+    try {
+      if (this.tracker) this.store.saveSessionActive(this.sessionId, this.tracker.getPlan());
+      else this.store.clearSessionActive(this.sessionId);
+    } catch {
+      // fail-open: per-session слот не должен ронять тулы/гейты
+    }
+  }
 
   constructor(
     baseDir: string,
@@ -207,8 +229,88 @@ export class ExecutionModule implements AgentModule {
     // реальностью, а не вечно указывают на шаг 1.
     this.tracker.syncCurrentStep();
     this.store.saveActive(plan);
+    if (this.sessionId) {
+      try {
+        this.store.saveSessionActive(this.sessionId, plan);
+      } catch {
+        // fail-open: per-session слот не должен ронять создание плана
+      }
+    }
     this.completedPlan = null; // новый план вытесняет завершённый
     this._auditSkipsRemaining = 0; // план явно создан — взводим audit-gate
+  }
+
+  /** Переключает трекер на план другой сессии. Персистит текущий трекер
+   *  в слот старой сессии (пустота тоже запоминается через clear, чтобы
+   *  возврат не воскрешал чужой план), загружает план новой сессии.
+   *  Завершённый на диске план — в архив, как в restorePlan. */
+  switchSession(id: string | null): void {
+    const prev = this.sessionId;
+    if (prev === id) return;
+    // Персист уходящей стороны. Стартовый трекер без sessionId (restorePlan
+    // до известной сессии) усыновляется новой сессией, а не теряется.
+    if (this.tracker) {
+      try {
+        this.store.saveSessionActive(prev ?? id ?? "", this.tracker.getPlan());
+      } catch {
+        // fail-open: битый id слота / ФС — трекер в памяти остаётся
+      }
+    } else if (prev) {
+      try {
+        this.store.clearSessionActive(prev);
+      } catch {
+        /* best-effort */
+      }
+    }
+    this.sessionId = id;
+    this.completedPlan = null;
+    if (!id) {
+      this.tracker = null;
+      this._auditSkipsRemaining = 0;
+      return;
+    }
+    let plan: Plan | null = null;
+    try {
+      plan = this.store.loadSessionActive(id);
+    } catch {
+      plan = null;
+    }
+    if (!plan) {
+      this.tracker = null;
+      this._auditSkipsRemaining = 0;
+      return;
+    }
+    const restored = new PlanTracker(plan);
+    if (restored.isComplete()) {
+      this.store.archivePlan(plan);
+      try {
+        this.store.clearSessionActive(id);
+      } catch {
+        /* best-effort */
+      }
+      this.tracker = null;
+      return;
+    }
+    this.tracker = restored;
+    this.tracker.syncCurrentStep();
+    this._auditSkipsRemaining = 1; // как восстановленный план
+  }
+
+  /** Забывает сессию: чистит её слот плана. Удаляемая сессия не может быть
+   *  текущей (web гардит 409), но REPL /delete — может: тогда сбрасываем
+   *  и трекер, чтобы не висел план-призрак. */
+  forgetSession(id: string): void {
+    try {
+      this.store.clearSessionActive(id);
+    } catch {
+      /* best-effort */
+    }
+    if (this.sessionId === id) {
+      this.sessionId = null;
+      this.tracker = null;
+      this.completedPlan = null;
+      this._auditSkipsRemaining = 0;
+    }
   }
 
   /** Вяжет детектор галлюцинаций: тул plan проверяет удалённость файлов (auto-switch kind gate). */
@@ -412,6 +514,7 @@ export class ExecutionModule implements AgentModule {
       const done = plan.steps.filter((s) => s.status === "done").length;
       if (autoClosed > 0) {
         this.store.saveActive(plan);
+        this.flushSessionPlan();
       }
       return {
         passed: audit.passed && pendingSteps.length === 0,
@@ -430,6 +533,7 @@ export class ExecutionModule implements AgentModule {
     const autoClosed = this.autoCloseEvidenceSteps(plan);
     if (autoClosed > 0) {
       this.store.saveActive(plan);
+      this.flushSessionPlan();
     }
     const audit = await this.auditor.audit(plan);
     const pendingSteps = plan.steps.flatMap((s) =>
@@ -712,6 +816,7 @@ export class ExecutionModule implements AgentModule {
     const hadNext = this.tracker?.advance() ?? false;
     if (this.tracker) {
       this.store.saveActive(this.tracker.getPlan());
+      this.flushSessionPlan();
       sessionLog?.plan(
         "auto-advance",
         `Step ${step.id} auto-completed | ${this.tracker.getProgressString()} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
@@ -740,6 +845,7 @@ export class ExecutionModule implements AgentModule {
       this.store.archivePlan(completed);
       this.recordCompleted(completed); // final audit still verifies it
       this.tracker = null;
+      this.flushSessionPlan(); // завершённый план не висит в слоте сессии
       sessionLog?.plan("auto-archive", `Plan ${completed.id} complete — archived`);
     }
   }

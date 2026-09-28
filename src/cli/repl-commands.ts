@@ -1139,6 +1139,16 @@ function registerSessionCommands(ctx: ReplContext): void {
       const name = args.join(" ") || undefined;
       const meta = ctx.sessionManager!.create(name);
       ctx.agent.clearContext();
+      // План следует за сессией: новая — без плана, трекер сбрасывается.
+      const exec = ctx.agent.getModule<{
+        switchSession(id: string | null): void;
+        getPlanSummary(): string | null;
+      }>("execution");
+      try {
+        exec?.switchSession(meta.id);
+      } catch {
+        // fail-open: сессия создана, план остался как был
+      }
       ctx.output.clearScreen();
       ctx.output.writeLine(
         `${t("session.created", { name: meta.name })} (${pc.dim(meta.id.slice(0, 12))})`,
@@ -1179,6 +1189,19 @@ function registerSessionCommands(ctx: ReplContext): void {
       ctx.sessionManager!.setActive(match.id);
       const history = ctx.sessionManager!.loadHistory();
       ctx.agent.setContext(history);
+      // План следует за сессией: трекер переключается на план этой сессии
+      // (или пустеет, если у неё плана нет).
+      const exec = ctx.agent.getModule<{
+        switchSession(id: string | null): void;
+        getPlanSummary(): string | null;
+      }>("execution");
+      let planLine: string | null = null;
+      try {
+        exec?.switchSession(match.id);
+        planLine = exec?.getPlanSummary() ?? null;
+      } catch {
+        // fail-open: история загружена, план остался как был
+      }
       ctx.output.clearScreen();
       ctx.output.writeLine(
         pc.bold(pc.green(t("session.resumed", { name: match.name }))) +
@@ -1209,6 +1232,7 @@ function registerSessionCommands(ctx: ReplContext): void {
       }
       ctx.output.writeLine(pc.dim("─".repeat(50)));
       ctx.output.writeLine(pc.dim(`  ${t("session.chat_loaded")}`));
+      ctx.output.writeLine(pc.dim(`  ◇ ${planLine ?? t("plan.no_active")}`));
     },
   });
 
@@ -1250,6 +1274,14 @@ function registerSessionCommands(ctx: ReplContext): void {
         return;
       }
       ctx.sessionManager!.delete(match.id);
+      // План следует за сессией: слот удалённой сессии не оставляем мусором.
+      try {
+        ctx.agent
+          .getModule<{ forgetSession(id: string): void }>("execution")
+          ?.forgetSession(match.id);
+      } catch {
+        /* best-effort */
+      }
       ctx.output.writeLine(`${t("session.deleted", { id: match.id })}: ${match.name}`);
     },
   });

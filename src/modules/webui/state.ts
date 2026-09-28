@@ -7,8 +7,7 @@ import type { AppConfig } from "../../config/types";
 import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
 import type { MemoryStore } from "../memory/store";
-import type { SetupDisplay } from "../setup/answers";
-import { MAX_BODY_BYTES } from "./limits";
+import type { SetupDisplay } from "../setup/answers";import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
 
 /**
@@ -150,6 +149,15 @@ export interface WebUiState {
    */
   config?: AppConfig;
   sessionManager?: WebSessionManager;
+  /**
+   * Execution-модуль для привязки плана к сессии: смена/создание сессии
+   * переключает трекер (`switchSession`), удаление — чистит слот
+   * (`forgetSession`). Узкий Pick, чтобы тесты стабились без модуля.
+   */
+  execModule?: {
+    switchSession(id: string | null): void;
+    forgetSession(id: string): void;
+  };
   saveConfig?: (config: AppConfig) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
