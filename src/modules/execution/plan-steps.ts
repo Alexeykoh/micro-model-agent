@@ -1,4 +1,4 @@
-import type { Plan, PlanStep } from "./planner";
+import type { Plan, PlanStep, StepKind } from "./planner";
 
 /**
  * Авто-переключение шага плана на kind="delete".
@@ -16,13 +16,30 @@ import type { Plan, PlanStep } from "./planner";
  * @returns true, если шаг был переключён (и план сохранён); false, если
  * kind уже был "delete" — ничего не менялось.
  */
+export function switchStepKind(
+  plan: Plan,
+  step: PlanStep,
+  kind: StepKind,
+  save: (plan: Plan) => void,
+): boolean {
+  if (step.kind === kind) return false;
+  step.kind = kind;
+  save(plan);
+  return true;
+}
+
 export function switchStepToDelete(
   plan: Plan,
   step: PlanStep,
   save: (plan: Plan) => void,
 ): boolean {
-  if (step.kind === "delete") return false;
-  step.kind = "delete";
-  save(plan);
-  return true;
+  return switchStepKind(plan, step, "delete", save);
+}
+
+export function switchStepToCreate(
+  plan: Plan,
+  step: PlanStep,
+  save: (plan: Plan) => void,
+): boolean {
+  return switchStepKind(plan, step, "create", save);
 }

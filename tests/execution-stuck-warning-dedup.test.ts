@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { rmSync } from "fs";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestModule, cleanupTestModule } from "./plan-test-utils";
 
 /**
  * ses_mt4fn58c post-mortem: after bash failed 3 times early in the session,
@@ -15,7 +14,7 @@ describe("stuck warning anti-spam", () => {
   let mod: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-stuckwarn-"));
+    tmpDir = createTestModule("mma-stuckwarn-").tmpDir;
     mod = new ExecutionModule(tmpDir, 8);
   });
 
@@ -38,7 +37,8 @@ describe("stuck warning anti-spam", () => {
 
   async function createPlan() {
     const planToolDef = mod.getToolDefinitions().find((t) => t.name === "plan")!;
-    await planToolDef.handler({}, { action: "create", title: "T", steps: ["Create src/a.ts"] });
+    await planToolDef.handler({}, { action: "create", title: "T", steps: ["Create src/a.ts"],
+    checks: ["file-exists:src/a.ts"] });
   }
 
   function stuckWarningCount(ctx: ReturnType<typeof makeCtx>): number {

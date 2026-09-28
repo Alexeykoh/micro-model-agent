@@ -213,6 +213,11 @@ export function mutationTargetKey(
   if ((name === "plan" || name === "todo") && typeof a.action === "string") {
     return `book:${name}:${a.action.toLowerCase()}`;
   }
+  // plan_step has no action — key on status so repeated identical updates
+  // hit the same consecutive-duplicate guard.
+  if (name === "plan_step" && typeof a.status === "string") {
+    return `book:${name}:${a.status.toLowerCase()}`;
+  }
   return null;
 }
 

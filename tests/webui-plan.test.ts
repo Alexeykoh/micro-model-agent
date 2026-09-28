@@ -31,6 +31,7 @@ describe("webui plan event", () => {
       currentIndex: 1,
     });
     expect(planEventFor("todo", fakeExec(plan))).not.toBeNull();
+    expect(planEventFor("plan_step", fakeExec(plan))).not.toBeNull();
   });
 
   it("does not emit for unrelated tools or a missing plan", () => {

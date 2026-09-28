@@ -56,6 +56,21 @@ function renderTabstrip() {
     });
     tabstripEl.appendChild(tab);
   });
+  scrollActiveTabIntoView();
+}
+
+// Keep the active tab inside the visible area of the horizontal strip:
+// new tabs are appended at the end (out of view on phones), and switching
+// via dropdown/click can also leave the active tab off-screen.
+function scrollActiveTabIntoView() {
+  const active = tabstripEl.querySelector(".stab.on");
+  if (!active) return;
+  const left = active.offsetLeft;
+  const right = left + active.offsetWidth;
+  if (left < tabstripEl.scrollLeft) tabstripEl.scrollLeft = left;
+  else if (right > tabstripEl.scrollLeft + tabstripEl.clientWidth) {
+    tabstripEl.scrollLeft = right - tabstripEl.clientWidth;
+  }
 }
 
 tabstripEl.addEventListener(

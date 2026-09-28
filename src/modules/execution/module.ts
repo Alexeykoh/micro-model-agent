@@ -19,6 +19,7 @@ import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
 import { createPlanToolDefinitions } from "./plan-tool";
+import { isValidCheck } from "./plan-checks";
 import {
   createExecutionPlugin,
   STUCK_RECOVERY_COOLDOWN,
@@ -63,6 +64,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
   // structural / execution control
   "plan",
+  "plan_step",
   "todo",
   "verify",
   "enable_tools",
@@ -499,6 +501,7 @@ export class ExecutionModule implements AgentModule {
       missingStepDeliverables: (s) => this.missingStepDeliverables(s),
       stillExistingDeliverables: (s) => this.stillExistingDeliverables(s),
       parseKinds: (a, st) => this.parseKinds(a, st),
+      parseChecks: (a, st) => this.parseChecks(a, st),
       getTaskText: (c) => this.getTaskText(c),
       typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
@@ -805,6 +808,39 @@ export class ExecutionModule implements AgentModule {
       };
     }
     return { kinds: kindsRaw as StepKind[], error: null };
+  }
+
+  /**
+   * Validate the per-step `checks` argument for plan create / re-plan.
+   * Checks are REQUIRED (a step without a verification contract cannot
+   * prove its done): absent or length-mismatched or badly-prefixed checks
+   * return an i18n error string. Valid prefixes: file-exists: / command: /
+   * manual: (see plan-checks.ts).
+   */
+  private parseChecks(
+    args: Record<string, unknown>,
+    steps: string[],
+  ): { checks: string[] | null; error: string | null } {
+    if (args.checks === undefined) {
+      return { checks: null, error: t("plan.checks_required") };
+    }
+    if (!Array.isArray(args.checks)) {
+      return { checks: null, error: t("plan.checks_not_array") };
+    }
+    const raw = args.checks.map(String);
+    if (raw.length !== steps.length) {
+      return { checks: null, error: t("plan.checks_mismatch") };
+    }
+    const bad = raw.filter((c) => !isValidCheck(c));
+    if (bad.length > 0) {
+      return {
+        checks: null,
+        error: t("plan.checks_invalid", {
+          kinds: bad.slice(0, 3).join("; "),
+        }),
+      };
+    }
+    return { checks: raw.map((c) => c.trim()), error: null };
   }
 
   /**

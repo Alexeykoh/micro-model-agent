@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { rmSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
 import { checkPlanCoverage, extractFilePaths } from "../src/modules/execution/plan-coverage";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestModule } from "./plan-test-utils";
 
 function planTool(execModule: ExecutionModule) {
   return execModule.getToolDefinitions().find((t) => t.name === "plan")!;
@@ -79,7 +79,7 @@ describe("checkPlanCoverage", () => {
 
 describe("plan create coverage against history", () => {
   it("does not treat the compacted <system-summary> as the plan task", async () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), "mma-coverage-"));
+    const tmpDir = createTestModule("mma-coverage-").tmpDir;
     const execModule = new ExecutionModule(tmpDir, 8);
     try {
       const tool = planTool(execModule);
@@ -98,6 +98,7 @@ describe("plan create coverage against history", () => {
         action: "create",
         title: "T",
         steps: ["Удалить дубликаты .js из src/"],
+        checks: ["manual:verify Удалить дубликаты .js из src/"],
       });
       expect(res.success).toBe(true);
       expect(res.output).not.toContain("Plan may be missing required files");

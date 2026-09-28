@@ -15,6 +15,11 @@ export interface PlanStep {
   /** Model-declared intent. "delete" inverts the deliverable gate: named
    *  files must be GONE, not present. Default "create". */
   kind?: StepKind;
+  /** Machine-checkable verification contract for this step, declared at
+   *  create/re-plan time: "file-exists:<path>" (hard-verified on done),
+   *  "command:<cmd>" or "manual:<what to check by eye>" (self-certified).
+   *  Absent only on plans created before checks existed (back-compat). */
+  check?: string;
   note?: string;
   subtasks?: Subtask[];
 }
@@ -63,6 +68,7 @@ export class PlanCreator {
     stepDescriptions: string[],
     baseDir: string,
     kinds?: StepKind[],
+    checks?: (string | undefined)[],
   ): Plan {
     const stepCount = stepDescriptions.length;
     return {
@@ -73,22 +79,24 @@ export class PlanCreator {
         description: desc,
         status: "pending" as StepStatus,
         kind: kinds?.[i] ?? "create",
+        ...(checks?.[i] ? { check: checks[i] } : {}),
       })),
       createdAt: new Date().toISOString(),
       baseDir,
     };
   }
 
-  static replan(plan: Plan, newSteps: string[], title?: string): Plan {
+  static replan(plan: Plan, newSteps: string[], title?: string, newChecks?: (string | undefined)[]): Plan {
     const kept = plan.steps.filter((s) => s.status === "done" || s.status === "skipped");
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
     const totalSteps = kept.length + newSteps.length;
-    const added: PlanStep[] = newSteps.map((desc) => ({
+    const added: PlanStep[] = newSteps.map((desc, i) => ({
       id: -1, // renumbered below
       description: desc,
       status: "pending" as StepStatus,
       kind: "create",
+      ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
     }));
     // Renumber every step (kept + added) sequentially. Kept steps keep their
     // status and kind but may collide with the added ids when the original
@@ -131,8 +139,11 @@ export class PlanCreator {
                 : "[ ]";
       const note = step.note ? ` — ${step.note}` : "";
       lines.push(`${icon} ${step.id}. ${step.description}${note}`);
+      if (step.check) {
+        lines.push(`    ↳ check: ${step.check}`);
+      }
       for (const sub of step.subtasks ?? []) {
-        lines.push(`    ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);
+        lines.push(`    [${sub.id}] ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);
       }
     }
     return lines.join("\n");

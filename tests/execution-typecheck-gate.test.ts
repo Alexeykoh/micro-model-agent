@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { createTestPlan, createTestModule, cleanupTestModule, writeTestFile } from "./plan-test-utils";
 import {
   parseBrokenFile,
   extractBrokenFiles,
@@ -121,12 +120,11 @@ describe("plan update typecheck gate (integration)", () => {
   let execModule: ExecutionModule;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), "mma-tc-gate-"));
-    execModule = new ExecutionModule(tmpDir, 8);
+    ({ tmpDir, execModule } = createTestModule("mma-tc-gate-"));
   });
 
   afterEach(() => {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    cleanupTestModule(tmpDir);
   });
 
   function failures(): Map<string, string> {
@@ -136,13 +134,8 @@ describe("plan update typecheck gate (integration)", () => {
   it("blocks marking done while the step's file is still broken", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/app.tsx with a component"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "app.tsx"), "export const App = () => null;\n");
+    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/app.tsx", "src/app.tsx(1,1): error TS1005: Expected ';'");
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
@@ -154,13 +147,8 @@ describe("plan update typecheck gate (integration)", () => {
   it("allows done once the failure is cleared (clean write)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/app.tsx with a component"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "app.tsx"), "export const App = () => null;\n");
+    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/app.tsx", "src/app.tsx(1,1): error TS1005");
     failures().clear();
@@ -173,13 +161,8 @@ describe("plan update typecheck gate (integration)", () => {
   it("allows done when the failure is in an unrelated file", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await tool.handler(ctx, {
-      action: "create",
-      title: "T",
-      steps: ["Create src/app.tsx with a component"],
-    });
-    mkdirSync(join(tmpDir, "src"), { recursive: true });
-    writeFileSync(join(tmpDir, "src", "app.tsx"), "export const App = () => null;\n");
+    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/other.ts", "src/other.ts(1,1): error TS1: x");
     const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });

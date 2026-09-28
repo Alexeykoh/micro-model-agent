@@ -266,7 +266,7 @@ describe("bootstrap", () => {
     );
     expect(info).toContain("reproduce");
     expect(info).toContain("runtime behavior");
-    expect(info).toContain("plan update");
+    expect(info).toContain("plan_step");
   });
 
   it("states explicit DONE conditions so the model knows when to stop", () => {

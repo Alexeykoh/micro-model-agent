@@ -299,7 +299,7 @@ const SCENARIO_DEFS: ScenarioDef[] = [
     tags: ["core"],
     mode: "run",
     prompt:
-      "Create a plan with 2 steps: step 1 is to create file step1.ts, step 2 is to create file step2.ts. Then mark step 1 as done. Show the plan.",
+      "Create a plan with 2 steps: step 1 is to create file step1.ts (check file-exists:step1.ts), step 2 is to create file step2.ts (check file-exists:step2.ts). Then mark step 1 as done with plan_step step=1 status=done. Show the plan.",
     checks: [
       { type: "fileExists", path: "step1.ts" },
       { type: "outputContains", text: "step" },
@@ -322,7 +322,7 @@ const SCENARIO_DEFS: ScenarioDef[] = [
     tags: ["core"],
     mode: "run",
     prompt:
-      'Create a plan with 2 steps using the plan tool: step 1 "Create file a.txt", step 2 "Create file b.txt". Then execute both steps: create a.txt with content "alpha" and b.txt with content "beta". Mark each step done when complete.',
+      'Create a plan with 2 steps using the plan tool: step 1 "Create file a.txt" with check "file-exists:a.txt", step 2 "Create file b.txt" with check "file-exists:b.txt". Then execute both steps: create a.txt with content "alpha" and b.txt with content "beta". Mark each step done with plan_step step=N status=done when complete.',
     checks: [
       { type: "fileExists", path: "a.txt" },
       { type: "fileExists", path: "b.txt" },

@@ -840,7 +840,7 @@ export class Repl implements ReplContext, Host {
             );
           } else {
             renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
-            if (ev.tool === "plan" || ev.tool === "todo") {
+            if (ev.tool === "plan" || ev.tool === "todo" || ev.tool === "plan_step") {
               this.renderPlan(renderer);
             }
           }
