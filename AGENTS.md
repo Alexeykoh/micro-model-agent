@@ -524,6 +524,30 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   выполнение через общий `ToolExecutor` с read-only allowlist) и выносит финальный вердикт по их выводам.
   Лимит — общий таймаут verify, fail-open к вердикту первого прохода.
 
+### Honest-Stop & Artifact-Claim Verification (unreleased, ветка `fix/honest-verify-stop-retry`)
+
+Живой прогон qwen3.5-9b через `mma web` (сессия `ses_mul5pepu_9mdq90`) показал два просачивающихся
+паттерна: выдуманный успех (показанный вывод без запуска, «валидный» XML с mismatched-тегом) и
+retry-петля после блоков (перебор python/python3/bun/pip). Контрмеры детерминированные, не LLM:
+
+- **Honest-stop стрика** (`tool-batch.ts`, `loop-state.ts`, `constants.ts`):
+  `consecutiveFailedBatches` — только полностью провальные пакеты (tool-level блоки входят,
+  `result.blocked` плагинов нейтрален по контракту, успехи/смешанные пакеты сбрасывают).
+  На 4-м (`MAX_CONSECUTIVE_FAILED_BATCHES`) — директива `exec.honest_stop` («остановись, ответь
+  честно, вывод не выдумывай»); на 6-м (`HARD_STOP_FAILED_BATCHES`) — жёсткий стоп с
+  `retryLoopStopped` (success:false, `error.retry_loop_stopped`). Тесты:
+  `tests/core/tool-batch-honest-stop.test.ts`.
+- **Проверка заявлений** (`src/modules/hallucination/artifact-claim.ts`,
+  `src/core/agent/artifact-resolve.ts`, wiring в `hallucination-gate.ts`/`agent.ts`):
+  `checkXmlWellFormed` (без зависимостей) заведён в `preValidateSyntax`
+  (.xml/.drawio/.svg/.xaml/.plist/.iml); `checkArtifactClaims` (файл заявлен как создан/валиден,
+  но отсутствует/не парсится) и `checkUnverifiedOutput` (вывод подан как результат запуска без
+  успешных exec-тулов `bash/process_wait/pipeline_run`) делят bounded retry-бюджет
+  `MAX_CLAIM_CHECK_RETRIES` — отдельный счётчик на класс (`claim/artifact/output`),
+  иначе один съеденный бюджет экранирует другую ложь в том же ответе (fail-open). Честное хеджирование («ожидаемый», «для справки») —
+  пропуск. Резолвер ограничен baseDir (jail), 10 путями, 500KB; `.drawio` добавлен в
+  `FILE_EXTENSIONS` токенайзера. i18n: `hall.claim_artifact`, `hall.claim_output_unverified` (en+ru).
+
 ### Current Version: 2.10.0
 
 ### Changelog

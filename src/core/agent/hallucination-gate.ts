@@ -2,6 +2,11 @@ import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { HallucinationDetector, HallucinationCheckResult } from "../../modules/hallucination/detector";
 import { checkSuccessClaim } from "../../modules/hallucination/success-claim";
+import {
+  checkArtifactClaims,
+  checkUnverifiedOutput,
+  type ArtifactState,
+} from "../../modules/hallucination/artifact-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants";
@@ -32,6 +37,11 @@ export interface HallucinationGateDeps {
   onChunk?: (chunk: string) => void;
   /** Chat verbosity — the uncertainty warn line prints only in verbose mode. */
   verbose: boolean;
+  /**
+   * Disk state of artifacts mentioned in the answer (resolved by the caller,
+   * which owns baseDir). Absent/empty skips the artifact-claim check.
+   */
+  artifacts?: ArtifactState[];
 }
 
 /**
@@ -165,32 +175,84 @@ export class HallucinationGate {
   }
 
   /**
-   * Deterministic claim-vs-evidence check (no LLM). Returns a retry verdict
-   * on the first contradiction, null afterwards (fail open) or when clean.
+   * Deterministic claim-vs-evidence checks (no LLM). The original
+   * success-claim check plus artifact grounding (file missing/unparseable on
+   * disk) and output provenance (framed-as-executed output with no execution
+   * tool behind it). Each check class has its own bounded re-check (fail
+   * open) — one consumed budget must not shield a different lie in the same
+   * answer (observed: success-claim retry ate the single budget, then
+   * "output written to fizzbuzz_output.txt" passed with the file missing).
    */
   private checkSuccessClaim(
     deps: HallucinationGateDeps,
     textContent: string | undefined,
   ): HallucinationVerdict | null {
-    const { state, logger } = deps;
-    const contradiction = checkSuccessClaim(textContent ?? "", lastToolEvidence(deps));
-    if (!contradiction || state.claimCheckRetries >= MAX_CLAIM_CHECK_RETRIES) {
-      return null;
+    const { state } = deps;
+    const text = textContent ?? "";
+    const evidence = lastToolEvidence(deps);
+    if (state.claimCheckRetries < MAX_CLAIM_CHECK_RETRIES) {
+      const contradiction = checkSuccessClaim(text, evidence);
+      if (contradiction) {
+        state.claimCheckRetries++;
+        return this.retryClaim(
+          deps,
+          textContent,
+          t("hall.claim_contradiction", {
+            tool: contradiction.tool,
+            snippet: contradiction.snippet,
+          }),
+          `Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`,
+        );
+      }
     }
-    state.claimCheckRetries++;
+    if (
+      state.artifactClaimRetries < MAX_CLAIM_CHECK_RETRIES &&
+      deps.artifacts &&
+      deps.artifacts.length > 0
+    ) {
+      const artifact = checkArtifactClaims(text, deps.artifacts);
+      if (artifact) {
+        state.artifactClaimRetries++;
+        return this.retryClaim(
+          deps,
+          textContent,
+          t("hall.claim_artifact", { path: artifact.path, detail: artifact.snippet }),
+          `Artifact-claim contradiction: ${artifact.snippet}`,
+        );
+      }
+    }
+    if (state.outputClaimRetries < MAX_CLAIM_CHECK_RETRIES) {
+      const unverified = checkUnverifiedOutput(text, evidence);
+      if (unverified) {
+        state.outputClaimRetries++;
+        return this.retryClaim(
+          deps,
+          textContent,
+          t("hall.claim_output_unverified", { detail: unverified.snippet }),
+          `Unverified output: ${unverified.snippet}`,
+        );
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Shared claim-retry injection: record the rejected answer, append the
+   * reason as `<system-summary>`, and ask the loop for another turn.
+   */
+  private retryClaim(
+    deps: HallucinationGateDeps,
+    textContent: string | undefined,
+    reason: string,
+    logLine: string,
+  ): HallucinationVerdict {
+    const { state, logger } = deps;
     state.iterHallucinationRetry = true;
     // The re-answer restates a completed task and is naturally repetitive —
     // do not burn the hallucination budget on its shape (same rationale as
-    // the audit-triggered downgrade above).
+    // the audit-triggered downgrade in applyRetry).
     state.suppressRepetitionRetry = true;
-    const reason = t("hall.claim_contradiction", {
-      tool: contradiction.tool,
-      snippet: contradiction.snippet,
-    });
-    logger.diagnostic(
-      "warn",
-      `Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`,
-    );
+    logger.diagnostic("warn", logLine);
     if (textContent) {
       deps.contextManager.addMessage({ role: "assistant", content: textContent });
     }

@@ -48,6 +48,8 @@
 | Забывает `plan update` для безфайловых шагов | шаги «run X» висят pending | auto-advance по артефактам; test-runner инъекции |
 | Теряет план после компакции | пересоздаёт план / повторяет работу | `[Plan:]` в compaction summary; create-guard от перезаписи |
 | Повторяет упавшую команду с небольшими вариациями | flailing | bash-flailing window detector (StuckDetector) |
+| Заявляет успех без проверки (выдуманный вывод, «валиден») | success-claim без tool-подтверждения | artifact-claim + output-provenance чеки в hallucination-gate |
+| Не останавливает retry-петлю после блоков | перебор вариантов заблокированной команды | honest-stop директива + hard-stop по стрику провальных батчей |
 
 ---
 
@@ -141,3 +143,41 @@
      recoverable LLM error) только через harness, не через текстовый анализ (rule #10).
   3. **set_thinking tool** — агент может принудительно изменить уровень для сложных подзадач.
 - **Статус:** implemented.
+
+---
+
+## 2026-09-28 — Выдуманный успех и неостанавливаемая retry-петля (mma web, qwen3.5-9b)
+
+- **Симптом:** (а) модель показывает вывод программы, который не получал ни один тул
+  (FizzBuzz: запуск упёрся в blacklist `python`, «показанный вывод» содержал неверные значения);
+  (б) заявляет «валидный XML» про файл с mismatched-тегом (schema.drawio: самозакрытый
+  `<diagram/>` + лишний `</diagram>`); (в) после двух `[SECURITY BLOCKED]` перебирает
+  варианты той же команды (python → python3 → bun → pip → npx → which, 10 тулов, 159с)
+  вместо остановки. Существующие механизмы не сработали: success-claim чек видит только
+  error-сигналы в tool-выводах, consecutive-failures (5) не набрался из-за перемежающихся
+  read-успехов, критик при этом галлюцинировал встречные проблемы («snake.html incomplete» —
+  игра на деле работает).
+- **Где проявилось:** живой прогон 5 задач через `mma web`, сессия `ses_mul5pepu_9mdq90`
+  (песочница `%TEMP%\mma-web-qwen\sandbox`), задачи 3 (FizzBuzz) и 5 (drawio).
+- **Реакция harness (ветка `fix/honest-verify-stop-retry`):**
+  1. Honest-stop стрика: `consecutiveFailedBatches` (только полностью провальные пакеты;
+     успехи/смешанные пакеты сбрасывают, plugin-блоки нейтральны) → директива
+     `exec.honest_stop` на 4-м («остановись и ответь честно, вывод не выдумывай») →
+     жёсткий стоп `retryLoopStopped` (success:false) на 6-м.
+  2. Проверка заявлений: `checkXmlWellFormed` (без зависимостей) заведён в
+     `preValidateSyntax` (.xml/.drawio/.svg/.xaml/.plist/.iml); `artifact-claim.ts`
+     (файл заявлен как создан/валиден, но отсутствует или не парсится) и
+  output-provenance (`checkUnverifiedOutput`: вывод подан как результат запуска,
+  но успешных exec-тулов нет) заведены в hallucination-gate с раздельным bounded
+  retry-бюджетом на класс (fail-open; общий бюджет давал просачивание: success-retry
+  съедал проверку несуществующего `fizzbuzz_output.txt`).
+- **Статус:** fixed (тесты: `tool-batch-honest-stop`, `hallucination-artifact-claim`,
+  `agent-artifact-resolve`, `agent-claim-check`, `syntax-validator` XML-блок; полный
+  сьют 2812 pass).
+- **Живая проверка фикса (2026-09-28, сессия `ses_mul8f0t6_zybvp3`, тот же стенд):**
+  honest-stop сработала (`Consecutive failed tool batches: 4`), модель перестала
+  перебирать варианты и сделала рабочую JS-альтернативу с РЕАЛЬНЫМ запуском
+  (`bun fizzbuzz.js` ✓); drawio переписан валидным с первого раза (4 сущности, 3 связи,
+  `checkXmlWellFormed` null). Ход завершился честным `turn failed` через аудит
+  (план-путаница delete-step vs пересозданный файл — отдельный сабсистемный вопрос),
+  а не ложным «ok».

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { preValidateSyntax } from "../../src/tools/syntax-validator";
+import { preValidateSyntax, checkXmlWellFormed } from "../../src/tools/syntax-validator";
 
 describe("preValidateSyntax JSON / JSONC", () => {
   it("accepts a commented tsconfig.json (JSONC)", async () => {
@@ -25,5 +25,38 @@ describe("preValidateSyntax JSON / JSONC", () => {
   it("rejects genuinely broken JSON", async () => {
     const result = await preValidateSyntax("broken.json", "{ nope", process.cwd());
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("checkXmlWellFormed", () => {
+  it("accepts a well-formed document with PI, comments, CDATA and quoted >", () => {
+    const content = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- a comment -->
+<mxfile host="a>b"><diagram name="d"><mxGraphModel><root><mxCell id="0"/><mxCell id="1"><![CDATA[<not-a-tag>]]></mxCell></root></mxGraphModel></diagram></mxfile>`;
+    expect(checkXmlWellFormed(content)).toBeNull();
+  });
+
+  it("rejects the drawio failure mode: self-closed <diagram/> plus stray </diagram>", () => {
+    const content = `<mxfile><diagram name="d"/><mxGraphModel><root><mxCell id="0"/></root></mxGraphModel></diagram></mxfile>`;
+    const error = checkXmlWellFormed(content);
+    expect(error).toContain("Mismatched tag");
+  });
+
+  it("rejects mismatched and unclosed tags", () => {
+    expect(checkXmlWellFormed("<a><b></a></b>")).toContain("Mismatched tag");
+    expect(checkXmlWellFormed("<a><b></b>")).toContain("Unclosed tag");
+    expect(checkXmlWellFormed("</a>")).toContain("Stray closing tag");
+  });
+
+  it("preValidateSyntax routes .drawio through the XML check", async () => {
+    const good = await preValidateSyntax("schema.drawio", "<mxfile><diagram></diagram></mxfile>", process.cwd());
+    expect(good.valid).toBe(true);
+    const bad = await preValidateSyntax(
+      "schema.drawio",
+      `<mxfile><diagram name="d"/><mxGraphModel></mxGraphModel></diagram></mxfile>`,
+      process.cwd(),
+    );
+    expect(bad.valid).toBe(false);
+    expect(bad.error).toContain("Mismatched tag");
   });
 });

@@ -39,11 +39,23 @@ export interface LoopState {
   hallucinationRetries: number;
   /** Счётчик перепроверок заявления об успехе (success-claim check). */
   claimCheckRetries: number;
+  /** Счётчик перепроверок заявлений об артефактах (artifact-claim check). */
+  artifactClaimRetries: number;
+  /** Счётчик перепроверок неподтверждённого вывода (output-provenance check). */
+  outputClaimRetries: number;
 
   /** Подпись последнего пакета тулов (имя + JSON аргументов) для детекции повторов. */
   lastToolSignature: string;
   /** Подряд идущие итерации, где хотя бы один тул вернул неудачу. */
   consecutiveToolFailures: number;
+  /**
+   * Подряд идущие ПОЛНОСТЬЮ провальные пакеты тулов (каждый вызов — неудача
+   * или tool-level блок; смешанные пакеты и успехи сбрасывают). Питает
+   * honest-stop: директиву «остановись и ответь честно» и жёсткий стоп петли.
+   */
+  consecutiveFailedBatches: number;
+  /** Honest-stop директива уже отправлена для текущего стрика (1 раз на стрик). */
+  honestStopNudged: boolean;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
@@ -115,6 +127,11 @@ export interface LoopState {
   emptyResponseRetries: number;
   /** Пустые ответы исчерпаны — итоговый результат success:false. */
   emptyResponseExhausted: boolean;
+  /**
+   * Retry-петля остановлена жёстко после игнорирования honest-stop директивы —
+   * итоговый результат success:false с честной ошибкой.
+   */
+  retryLoopStopped: boolean;
   /** Аудит провален после исчерпания повторов — итоговый результат success:false. */
   auditFailed: boolean;
   /**
@@ -153,8 +170,12 @@ export function createLoopState(): LoopState {
     lastForcedCompactionIteration: -FORCED_COMPACTION_COOLDOWN,
     hallucinationRetries: 0,
     claimCheckRetries: 0,
+    artifactClaimRetries: 0,
+    outputClaimRetries: 0,
     lastToolSignature: "",
     consecutiveToolFailures: 0,
+    consecutiveFailedBatches: 0,
+    honestStopNudged: false,
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
@@ -181,6 +202,7 @@ export function createLoopState(): LoopState {
     seenCriticIssues: new Set(),
     emptyResponseRetries: 0,
     emptyResponseExhausted: false,
+    retryLoopStopped: false,
     auditFailed: false,
     finalAnswerAccepted: false,
     suppressRepetitionRetry: false,
