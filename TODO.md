@@ -101,7 +101,7 @@
 
 **Открытые хвосты по индексации:**
 - [x] ~~Валидация кэша индекса (mtime/hash)~~ ✅ `IndexCache.load()` сверяет `version`/`root`/`signature`; устаревший или легаси-кэш → полный пересбор.
-- [ ] Watcher на Linux не рекурсивный — ✅ закрыто в `chore/small-tails` (per-dir fallback, см. P1 выше); остаётся ограничение: новые подкаталоги после `watch()` — только ручной refresh
+- [x] ~~Watcher на Linux не рекурсивный~~ ✅ закрыто в `chore/small-tails` (per-dir fallback, см. P1 выше); ограничение: новые подкаталоги после `watch()` — только ручной refresh
 
 ### Аудит логики агента — `docs/analysis/2026-08-29-agent-logic-audit.md`
 
@@ -202,10 +202,10 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [x] ~~Прогнать `bun test` + `tsc --noEmit`~~ ✅ зелёное зафиксировано (2537 pass / 0 fail).
 
 ### Этап 1. Мёртвый код (быстрая победа)
-- [ ] Удалить `verify-tools.ts` в корне (не входит ни в одну сборку).
-- [ ] `examples/plugins/*` — НЕ удалять (загружаются динамически), добавить suppress-конфиг в `.fallowrc.json`.
-- [ ] Убрать `tsconfig-paths` из devDependencies (проверить bunfig).
-- [ ] Разорвать 2 цикла в `src/modules/browser/` (общие типы → отдельный модуль).
+- [x] ~~Удалить `verify-tools.ts` в корне~~ ✅ удалён (сверка 2026-09-28: файла нет).
+- [x] ~~`examples/plugins/*` suppress~~ ✅ `examples/plugins/**` в `ignorePatterns` `.fallowrc.json`.
+- [x] ~~Убрать `tsconfig-paths` из devDependencies~~ ✅ в `package.json` отсутствует (остался только транзитивным в `package-lock.json`).
+- [x] ~~Разорвать 2 цикла в `src/modules/browser/`~~ ✅ общие типы вынесены (`console-buffer.ts`, `driver-types.ts`).
 
 ### Этап 2. Дробление больших файлов (правило #1: ≤300 строк)
 
@@ -224,13 +224,13 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [x] Порядок: сначала `agent.ts` (главный hotspot, fan-in 14), затем execution-модуль, потом CLI.
       Выполнено: `d137280` (agent loop → модули), `788aea2` (plan handler → per-action),
       `8d1adb7` (registerMmaCommands → per-domain), `c5b4274` (createProgram + moe-executor dedup),
-      `603db6c` (bash handler 236→~100). Остались: repl.ts, line-editor.ts, stuck-detector.ts, module.ts
-- [ ] Часть исключений задокументирована в AGENTS.md — не трогать без явного решения.
+      `603db6c` (bash handler 236→~100). Остаток — осознанные исключения (см. AGENTS.md), не трогать.
+- [x] ~~Исключения задокументированы в AGENTS.md~~ ✅ repl.ts, line-editor.ts, stuck-detector.ts, module.ts (+ registry-extra.ts, settings-api.ts) — не трогать без явного решения.
 
 ### Этап 3. Антипаттерны и дублирование
-- [ ] Извлечь общий test-harness из интеграционных тестов (~1000 строк экономии, 26 копий scaffolding).
+- [x] ~~Извлечь общий test-harness~~ ✅ `tests/helpers/webui-server.ts` + `webui-commands.ts` (см. P2 выше).
 - [~] Рефакторинг hotspot-функций: `createPlanToolDefinitions` (695), `bootstrap()` (438), `createProgram` (467)
-      — частично: createProgram разбит (`c5b4274`), plan-definitions разбиты (`788aea2`); bootstrap() не тронут.
+      — частично: createProgram разбит (`c5b4274`), plan-definitions разбиты (`788aea2`); **открыт только `bootstrap()`** — отдельной задачей при необходимости.
 - [x] ~~`console.*` в `repl-commands.ts` (126 вхождений)~~ ✅ сейчас 0 вхождений (OutputChannel).
 
 ### Этап 4. Хардкод → абстракция
@@ -240,25 +240,21 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [ ] Строки пользователя мимо `t()` (правило #8) — особенно CLI-команды
 - [ ] Env-переменные: единый реестр `MMA_*`
 
-### Этап 5. Русские комментарии (финал)
+### Этап 5. Русские комментарии (финал) — ✅ ЗАКРЫТ (ветка `chore/ru-jsdoc`, 2026-09-28)
 
-Политика:
+Политика (выполнена):
 - JSDoc на русском для каждой экспортируемой функции/класса + файловый заголовок «что модуль делает»
 - Внутренние комменты — только где логика неочевидна (инварианты, workaround'ы, «почему», а не «что»)
 - Не комментировать тривиальное (`// геттер` — мусор)
 - Перевести существующие английские комменты там, где они содержательные
 
-Объём: ~110 файлов. Идти по слоям: core → llm → tools → modules → cli/ui.
+Итог: 347 файлов `src/` (6 слоёв параллельными агентами + добор вручную), код не тронут;
+`tsc` 0, `biome` 0 errors, `bun test` 2813 pass / 0 fail. Подробнее — P3 выше.
 
-### Дополнительно перед релизом
-- [ ] CI quality gate: `fallow --ci --fail-on-regression` + baseline
-- [ ] Линт: Biome/ESLint (strict, no-explicit-any, no-console кроме cli/)
-- [ ] Аудит `any`/type-assertions (`rg "as any" src`)
-- [ ] Обработка ошибок: найти глухие `catch {}`
-- [ ] README + docs/ актуализация под текущую архитектуру
-- [ ] CHANGELOG.md — вынести историю из AGENTS.md в стандартный формат
-- [ ] Pre-commit hook: `fallow init --hooks` + typecheck на staged-файлы
-- [ ] Безопасность: `fallow security` (command-injection, path-traversal — актуально для bash/path tools)
+### Дополнительно перед релизом — ✅ всё закрыто (сверка 2026-09-28, см. P3 выше)
+- [x] ~~CI quality gate~~ ✅ `.gitea/workflows/quality.yml` + baseline; ~~Линт~~ ✅ Biome; ~~`as any`~~ ✅ 0 в коде `src/`;
+  ~~глухие `catch {}`~~ ✅ триаж (намеренный control-flow); ~~README + docs/~~ ✅; ~~CHANGELOG~~ ✅;
+  ~~pre-commit hook~~ ✅; ~~`fallow security`~~ ✅ триаж без actionable-находок.
 
 ---
 
@@ -295,7 +291,8 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 - [x] добавить поиск в интернете ошибки если более 5-ти раз не удается решить одну и ту же задачу
 - [x] ~~**Автоназвание сессии по контексту**~~ ✅ см. P4 выше (релиз 2.6.0) — пункт бэклога закрыт.
-- [ ] добавить контр-агента который будет проверять выполнение работы. Нужно предоставить литературу
+- [x] ~~контр-агент для проверки работы~~ ✅ сделан (in-loop `CriticGate`, v1 + Phase 2 — см. P4 выше).
+  **Открыта только вторая половина пункта — подобрать литературу** по верификации/критикам.
 - [x] выполнить план исправлений код-ревью: `docs/superpowers/plans/2026-08-20-code-review-fixes.md` (22 задачи, 7 фаз: P0-баги, безопасность, изоляция тестов, производительность, мёртвый код/i18n, документация, релиз 0.47.0 — релиз 0.47.0 выпущен 2026-08-19)
 
 
@@ -339,4 +336,6 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 ### P2 — зрелость
 - [ ] **9. Compliance (EU AI Act)** — логи без подписи, нет артефактов high-risk (risk file, lineage, oversight-панель, adversarial-лог Art.15). Append-only + подпись, retention ≥6 мес.
-- [ ] **10. Внутренние хвосты** — overview зафиксирован на 2.6.0 (релиз 2.10.0); 5 файлов >>300 строк (только чистые швы); Linux watcher не рекурсивен (`walker.ts:140`); `noExplicitAny` warn; русские комменты (81 файл); coverage-threshold в CI.
+- [ ] **10. Внутренние хвосты** — overview поднят до 2.10.0 ✅, Linux watcher fallback ✅, русские комменты ✅ (всё — 2026-09-28).
+  Осталось: 5 файлов >>300 строк (осознанные исключения, только чистые швы); `noExplicitAny` warn-ratchet;
+  `bootstrap()` (438 строк, остаток Этапа 3); coverage-threshold в CI.
