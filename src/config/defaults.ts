@@ -138,6 +138,7 @@ export const DEFAULTS: AppConfig = {
     showCompaction: true,
     verbose: false,
     verbosity: "quiet",
+    fontSize: "comfortable",
   },
   mcpServers: {
     context7: {

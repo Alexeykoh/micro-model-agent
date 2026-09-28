@@ -142,8 +142,12 @@ html, body { height: 100%; }
 body {
   background: var(--bg); color: var(--fg);
   font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
-  font-size: 13px; display: flex; flex-direction: column; overflow: hidden;
+  font-size: 15px; display: flex; flex-direction: column; overflow: hidden;
 }
+/* Chat font size (`ui.fontSize`): the base above is `comfortable` (default).
+   `compact` restores the old 13px, `large` steps up to 17px. */
+body[data-font="compact"] { font-size: 13px; }
+body[data-font="large"] { font-size: 17px; }
 
 /* ---- topbar: new chat, sessions dropdown, tabstrip, settings ---- */
 .bar-top {

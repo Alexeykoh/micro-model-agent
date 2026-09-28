@@ -264,6 +264,11 @@ export interface UiConfig {
    * See `docs/design/ui/STYLE.md`.
    */
   verbosity?: "quiet" | "normal" | "verbose";
+  /**
+   * Web chat font size (`mma web` only, the terminal is unaffected).
+   * `compact` = 13px, `comfortable` = 15px (default), `large` = 17px.
+   */
+  fontSize?: "compact" | "comfortable" | "large";
 }
 
 export interface BashSecurityConfig {

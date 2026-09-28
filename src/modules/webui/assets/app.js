@@ -14,7 +14,7 @@ loadCommands,
 } from "./js/tabs.js";
 import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, setConnStatus,
+loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus,
 } from "./js/settings.js";
 import {
 initRail, setPlan as railPlan, railEvent, applyRailI18n,
@@ -255,6 +255,7 @@ async function boot() {
   await loadI18n();
   await loadCommands();
   applyTheme(currentTheme());
+  applyFontSize();
   applyStaticI18n();
   showEmptyFeed();
   renderSelectors();

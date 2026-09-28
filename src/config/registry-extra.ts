@@ -263,6 +263,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   bool("ui.showCompaction", "ui", false,
     (c) => c.ui.showCompaction,
     (c, v) => { c.ui.showCompaction = v as boolean; }),
+  enumOf("ui.fontSize", "ui", ["compact", "comfortable", "large"] as const, false,
+    (c) => c.ui.fontSize ?? "comfortable",
+    (c, v) => { c.ui.fontSize = v as "compact" | "comfortable" | "large"; }),
 
   int("retry.maxRetries", "agent", 0, 10, 1, false,
     (c) => c.retry.maxRetries,
