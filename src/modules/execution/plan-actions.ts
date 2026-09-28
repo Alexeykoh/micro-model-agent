@@ -565,10 +565,14 @@ export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args:
   if (args.note) tracker.addNote(Number(args.step), String(args.note));
   tracker.syncCurrentStep();
   deps.store.saveActive(tracker.getPlan());
-  // A "done" step that names no file tokens has a vacuous gate — its
-  // completion cannot be auto-verified. Inform the model so it can
-  // run an explicit check or add file paths to the step description.
-  const vacuousGate = status === "done" && !deps.hasStepDeliverables(target);
+  // Steps without file tokens are normal in non-code tasks (research,
+  // advice, comparison) — never push the model to materialize files just
+  // to have deliverables. The note fires only inside plans that contain
+  // at least one file-bearing step, and asks only for a
+  // task-appropriate check.
+  const planSteps = tracker.getPlan().steps ?? [];
+  const planHasFiles = planSteps.some((s) => deps.hasStepDeliverables(s));
+  const vacuousGate = status === "done" && planHasFiles && !deps.hasStepDeliverables(target);
   const vacuousNote = vacuousGate
     ? `\n${t("plan.no_deliverables", { step: String(stepId) })}`
     : "";

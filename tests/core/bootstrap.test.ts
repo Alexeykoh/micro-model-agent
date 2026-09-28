@@ -283,6 +283,23 @@ describe("bootstrap", () => {
     expect(info.toLowerCase()).toContain("could not find");
   });
 
+  it("creates files only on explicit file request (ses_mukulpsv_is271g)", () => {
+    // A non-code task ("recommend a bicycle, ask questions, search the
+    // web") produced profile_user.md + recommendation.md unprompted:
+    // ARTIFACTS must not fire on bare "recommendation/report/summary".
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    expect(info).toContain("ONLY when the user explicitly asks for a file");
+    expect(info).toContain("ANSWER IN CHAT");
+  });
+
+  it("forbids copying stored personal facts into workspace files", () => {
+    // DOB/height from memory leaked into workspace .md files without
+    // being asked — personalization stays in chat unless saving was
+    // explicitly requested.
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    expect(info).toContain("MEMORY PRIVACY");
+  });
+
   it("lists security restrictions only when security is enabled", () => {
     const sec = {
       enabled: true,
