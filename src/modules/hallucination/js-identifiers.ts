@@ -146,6 +146,7 @@ const FILE_EXTENSIONS = new Set([
   "conf",
   "env",
   "xml",
+  "drawio",
   "html",
   "htm",
   "md",

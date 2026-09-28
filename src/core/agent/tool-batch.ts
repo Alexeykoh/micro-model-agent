@@ -22,7 +22,7 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES } from "./constants";
 
 export interface ToolBatchDeps {
   config: AppConfig;
@@ -121,6 +121,7 @@ export class ToolBatchExecutor {
 
     const summaries: string[] = [];
     let anyToolFailed = false;
+    let batchHasSuccess = false;
     // Информационные read-only тулы, чей "фейл" — ожидаемое поведение
     // (file_info "Not found" после delete_file) — исключены из учёта неудач.
     const infoTools = new Set(["file_info"]);
@@ -171,6 +172,7 @@ export class ToolBatchExecutor {
       if (this.deps.isShutdownRequested()) break;
       const duration = Date.now() - startTime;
       if (!result.success && !result.blocked && !infoTools.has(call.name)) anyToolFailed = true;
+      if (result.success) batchHasSuccess = true;
 
       if (result.success && call.name === "plan") {
         const action = String(call.arguments.action ?? "");
@@ -356,6 +358,42 @@ export class ToolBatchExecutor {
           "Check dependencies, verify file paths, try write_file directly instead of shell commands",
         );
       }
+    }
+
+    // Honest-stop полностью провальных пакетов: каждый вызов пакета — неудача
+    // или tool-level блок (в отличие от consecutiveToolFailures выше, блоки
+    // ВХОДЯТ в учёт — перебор вариантов заблокированной команды это та же
+    // петля). Смешанные пакеты и успехи сбрасывают стрик: связка
+    // «упал → поправил → упал» (дебаг) под него не попадает.
+    // Plugin-level блоки (result.blocked, guard-rails) нейтральны по контракту
+    // ToolResult.blocked — не успех и не неудача.
+    if (anyToolFailed && !batchHasSuccess) {
+      state.consecutiveFailedBatches++;
+    } else if (batchHasSuccess) {
+      state.consecutiveFailedBatches = 0;
+      state.honestStopNudged = false;
+    }
+    if (
+      state.consecutiveFailedBatches >= MAX_CONSECUTIVE_FAILED_BATCHES &&
+      !state.honestStopNudged
+    ) {
+      state.honestStopNudged = true;
+      logger.diagnostic(
+        "warn",
+        `Consecutive failed tool batches: ${state.consecutiveFailedBatches} — honest-stop directive`,
+      );
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("exec.honest_stop", { count: state.consecutiveFailedBatches })}</system-summary>`,
+      });
+    }
+    if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
+      state.retryLoopStopped = true;
+      logger.diagnostic(
+        "warn",
+        `Retry loop hard-stopped after ${state.consecutiveFailedBatches} consecutive failed batches`,
+      );
+      return { interrupted: true };
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический

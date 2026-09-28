@@ -41,6 +41,7 @@ import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
 import { ContextRenderer } from "./agent/context-renderer";
 import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
+import { resolveArtifactStates } from "./agent/artifact-resolve";
 import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
 import { seedToolTags } from "../tools/auto-tags";
@@ -1311,6 +1312,9 @@ export class Agent {
         onChunk,
         // The uncertainty warn line is diagnostic: verbose mode only.
         verbose: resolveVerbosity(this.deps.config.ui) === "verbose",
+        // Disk grounding for artifact claims (missing/unparseable files
+        // presented as created/valid). Resolved here — the gate owns no fs.
+        artifacts: resolveArtifactStates(this.deps.baseDir, textContent),
       });
       if (verdict.action === "block") {
         return {
@@ -1434,13 +1438,15 @@ export class Agent {
     }
 
     return {
-      success: !(state.emptyResponseExhausted || state.auditFailed ),
+      success: !(state.emptyResponseExhausted || state.auditFailed || state.retryLoopStopped),
       text: state.lastText,
       error: state.emptyResponseExhausted
         ? t("error.empty_response")
         : state.auditFailed
           ? t("error.audit_failed", { summary: state.lastAuditSummary })
-          : undefined,
+          : state.retryLoopStopped
+            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
+            : undefined,
       iterationCount: state.iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,
