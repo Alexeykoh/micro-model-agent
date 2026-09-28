@@ -284,7 +284,8 @@ in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the
 
 - **Modules:** `src/modules/critic/types.ts` (`CriticVerdict`/`CriticIssue`/`EvidencePack`),
   `evidence.ts` (`buildEvidencePack`, `isWorkMutation`), `client.ts` (`CriticClient`, `parseVerdict`,
-  `CRITIC_SYSTEM_PROMPT`); the gate lives in `src/core/agent/critic-gate.ts` (`CriticGate`,
+  `CRITIC_SYSTEM_PROMPT`), `provider.ts` (`buildCriticProvider`), `tools.ts` (bounded read-only
+  verification loop); the gate lives in `src/core/agent/critic-gate.ts` (`CriticGate`,
   `gatherTurnToolEvents`).
 - **Trigger:** `enabled` + `criticCalls < maxCalls` + (before-finish OR `mutationsSinceCritic >= 3`)
   + at least one tool event in the turn. Work mutations are counted per tool call (`write_file`,
@@ -295,13 +296,19 @@ in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the
 - **Fail-open:** the client catches provider errors/timeouts and returns `null` on unparseable JSON
   (repaired with `jsonrepair` first); the gate catches any verify throw. A broken critic can never
   block the agent.
-- **Config:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (`src/config/defaults.ts`).
+- **Config:** `critic.{enabled,model,provider,tools,maxCalls,maxRepairCycles,timeoutMs}`
+  (`src/config/defaults.ts`).
 - **Observability:** `critic_check` / `critic_verdict` / `critic_escalation` entries in
   `session.jsonl` via `SessionLogger.logCritic`, plus a `Logger.diagnostic("info", …)` line that
   is visible on the terminal/web only at `ui.verbosity === "verbose"`. No chat surface renders
   the verdict: `Renderer.criticVerdict`, the SSE `critic` event and the UI callback were removed.
-- **Phase 2 (deferred):** dedicated critic provider and a bounded read-only tool-loop. v1 uses the
-  active provider and the deterministic evidence pack only.
+- **Phase 2:** dedicated critic provider (`critic.provider`/`critic.model` via `ProviderManager`,
+  `src/modules/critic/provider.ts`; managed path only when `model` is set, broken overrides warn
+  and fall back to the active provider) and a bounded read-only tool-loop (`critic.tools`, default
+  true): after a concern/critical verdict the critic may request up to 3 checks
+  (`read_file`/`grep`/`glob`/`file_info`/`list_dir`, `src/modules/critic/tools.ts`), executed through
+  the shared `ToolExecutor` with a read-only allowlist, and the final verdict is grounded in their
+  outputs. The sequence shares one verify timeout and fails open to the first-pass verdict.
 
 ## LLM Provider Contract (llama.cpp / OpenAI-compat)
 

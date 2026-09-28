@@ -456,6 +456,21 @@ export interface ReasoningConfig {
 
 export interface CriticConfig {
   enabled: boolean;
+  /**
+   * Dedicated critic provider (Phase 2). Full provider config — entries[] or
+   * legacy {type,baseUrl,apiKey} — resolved through ProviderManager like the
+   * MoE orchestrator. Only used when `model` is set; otherwise the critic
+   * shares the active provider (v1 behavior).
+   */
+  provider?: ProviderConfig;
+  /** Dedicated critic model. Unset → active model. */
+  model?: string;
+  /**
+   * Read-only verification loop (Phase 2): after a concern/critical verdict
+   * the critic may request up to MAX_CRITIC_CHECKS read-only tool checks
+   * (read_file/grep/glob/file_info/list_dir) before the final verdict.
+   */
+  tools: boolean;
   /** Hard cap on critic LLM calls per run. */
   maxCalls: number;
   /** Bounded number of critical-triggered repair cycles per run. */

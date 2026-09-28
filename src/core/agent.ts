@@ -45,6 +45,8 @@ import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
 import { seedToolTags } from "../tools/auto-tags";
 import { CriticClient } from "../modules/critic/client";
+import { buildCriticProvider } from "../modules/critic/provider";
+import { CRITIC_READONLY_TOOLS } from "../modules/critic/tools";
 import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
 import {
   deriveSessionName,
@@ -810,19 +812,40 @@ export class Agent {
     // `critic` domain — treat it as disabled rather than crashing the loop.
     const criticConfig = {
       enabled: config.critic?.enabled ?? false,
+      tools: config.critic?.tools ?? true,
       maxCalls: config.critic?.maxCalls ?? 4,
       maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
       timeoutMs: config.critic?.timeoutMs ?? 15000,
     };
+    // Phase 2: dedicated provider/model when configured, else the active
+    // provider (v1). A broken override warns and falls back — never silent.
+    const criticProvider = buildCriticProvider(config.critic, config, this.deps.llmProvider, {
+      logger,
+      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
+    });
     const criticClient = new CriticClient({
-      provider: this.deps.llmProvider,
+      provider: criticProvider,
       timeoutMs: criticConfig.timeoutMs,
     });
     const criticGate = new CriticGate({
       enabled: criticConfig.enabled,
       maxCalls: criticConfig.maxCalls,
       maxRepairCycles: criticConfig.maxRepairCycles,
-      verify: this.deps.criticOverride?.verify ?? ((pack, signal) => criticClient.verify(pack, signal)),
+      verify: this.deps.criticOverride?.verify ?? ((pack, signal) =>
+        criticClient.verify(pack, signal, {
+          // Phase 2 read-only loop: checks run sequentially here (the gate
+          // is awaited between tool batches), through the shared executor
+          // with a read-only allowlist — writes/shell stay unreachable.
+          runCheck: criticConfig.tools && this.deps.toolCtx
+            ? async (tool, args) => {
+                const res = await toolExecutor.executeByName(tool, args, {
+                  ...this.deps.toolCtx!,
+                  toolAllowlist: [...CRITIC_READONLY_TOOLS],
+                });
+                return { ok: res.success, output: res.output ?? "" };
+              }
+            : undefined,
+        })),
       buildPack: (d) =>
         buildEvidencePack({
           task: d.task,

@@ -45,8 +45,8 @@
 ### P4 — бэклог
 - [x] ~~Автоназвание сессии по контексту~~ ✅ СДЕЛАНО (релиз 2.6.0): `deriveSessionName` + fire-and-forget `generateSessionTitle` в хуке `Agent.run()`, `session.autoName` (default true), `nameSource` (`auto` не затирает `manual`). Строка «только ручной `rename`» устарела (сверка 2026-09-28).
 - [x] ~~Контр-агент для проверки работы (+ подобрать литературу)~~ ✅ v1 (ветка `feat/critic-agent`): in-loop `CriticGate` + `src/modules/critic/` (evidence pack + LLM-клиент, JSON-вердикт, fail-open), конфиг `critic.*`, события `critic_*` в `session.jsonl`; MoE не тронут. Дизайн: `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4, план `docs/superpowers/plans/2026-09-25-critic-agent.md`.
-  - **Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`).
-  - **Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`) вместо только детерминированного evidence pack.
+  - [x] ~~**Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`)~~ ✅ (ветка `feat/critic-phase2`): `src/modules/critic/provider.ts` (managed-путь только при заданном `model`, битый оверрайд — warn + fallback на активный).
+  - [x] ~~**Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`)~~ ✅ (ветка `feat/critic-phase2`): `src/modules/critic/tools.ts` (до 3 проверок `read_file`/`grep`/`glob`/`file_info`/`list_dir` через общий executor с allowlist), second-pass в `CriticClient.verify`, fail-open к первому вердикту.
 
 ## Актуальное
 
