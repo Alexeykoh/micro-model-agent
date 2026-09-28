@@ -22,28 +22,28 @@
 - **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
 - [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
 - [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0, исправлены), ~24 sev 3, ~25 sev 2. **Исправлено большинство** (ветка `fix/audit-waves-bcde`): sev 4 + stuck-детектор, plan-correctness, SSRF/секреты/symlink/injection, MCP reliability, read/process/pipeline-харды, skills CRLF, command-validator wrappers. Остаток — в P2 (см. «Остатки аудита»).
-- **Linux watcher**: `walker.ts:97` `{ recursive: true }` без fallback — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
+- **Linux watcher**: `walker.ts:140` (`Indexer.watch()`, `watch(baseDir, { recursive: true })` без fallback — сверено 2026-09-28) — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
 
 ### P2 — техдолг и поддерживаемость
 - [x] ~~**Остатки аудита волн B/C/D/E**~~ ✅ (2026-09-25) — sev 4/3/2 закрыты: `B-11` (trailing-newline total), `D-3` (локаль до `createProgram`), `D-7` (`rotateOldSessions` подключён), `D-8` (carry-over non-TTY), `E-15` (async `killTree`), i18n `B-12`/`C-14`/`D-9` (verifier/tools/CLI через `t()`, en+ru). Осознанно оставлено:
   - `B-13` прочие `catch {}` в `auto-fixer.ts`/`bash.ts`/`search-history.ts`/`scope-request.ts` — это намеренный control-flow с комментарием (парсинг с фолбэком / пропуск битой строки), не сокрытие ошибки; `syntax-validator` cleanup логируется.
   - `C-18` часть публичных методов `StuckDetector` (`classifyError`, `getHints`, `getToolAlternative`, …) и actionable-hints остаются англоязычными model-facing диагностиками (как system prompt) — сохранены как API/тесты.
-- [x] ~~Дробление (правило ≤300)~~ ✅ сделано там, где есть чистый шов: `bootstrap.ts` (870→784, `system-prompt.ts`) и `repl-commands.ts` (1425→~1170, `/lsp`+`/skill`). **Принятые исключения** (решение 2026-09-25 — не трогать): `agent.ts` (`executeSingleAgentLoop` ~625 строк, плотно связан с приватным состоянием `Agent`), `repl.ts`, `line-editor.ts` (DSR), `stuck-detector.ts`, `execution/module.ts`. Дробить их — отдельный риск-рефактор с побайтовой проверкой поведения, не входит в P2.
+- [x] ~~Дробление (правило ≤300)~~ ✅ сделано там, где есть чистый шов: `bootstrap.ts` (`system-prompt.ts` вынесен) и `repl-commands.ts` (`/lsp`+`/skill` вынесены в `repl-commands-lsp/skills.ts`). **Принятые исключения** (решение 2026-09-25 — не трогать): `agent.ts`, `repl.ts`, `line-editor.ts`, `stuck-detector.ts`, `execution/module.ts`. Сверка 2026-09-28: все пять по-прежнему >>300 (agent 1582, repl 1450, line-editor 1162, stuck-detector 927, module 866; bootstrap снова 950, repl-commands 1368 — цифры 870→784 / 1425→~1170 устарели, суть «шовное дробление сделано» верна.
 - [x] ~~Разорвать 2 цикла `browser/`~~ ✅ `ConsoleBuffer` → `console-buffer.ts`, `BrowserDriver`/`LaunchConfig`/`BrowserLaunchOverrides` → `driver-types.ts`; `driver`/`bridge-client` больше не импортируют `session`. fallow-baseline теперь пустой.
-- [x] ~~Извлечь общий test-harness~~ ✅ `tests/helpers/webui-server.ts` (`webuiAssets`/`doFetch`/`withServer`/`postJson`); 11 webui-тестов переведены на него (−~190 строк дублей). `tests/helpers/webui-commands.ts` уже был.
+- [x] ~~Извлечь общий test-harness~~ ✅ `tests/helpers/webui-server.ts` (`webuiAssets`/`doFetch`/`withServer`/`postJson`); 15 webui-тестов на нём (сверка 2026-09-28; было 11). `tests/helpers/webui-commands.ts` уже был.
 - [x] ~~Хардкод путей `.mma`~~ ✅ `src/config/paths.ts` (`MMA_DIR_NAME`, `globalMmaDir`, `globalConfigFile/Memory/Sessions/Logs/Exports/Plugins`, `projectMmaDir`); ~30 литералов заменены. Осталось (не критично): магические числа/таймауты вне конфига, единый реестр `MMA_*`.
-- [x] ~~Аудит `as any` (53)~~ ✅ все `as any` в `src/` устранены (типизация: `Record<string, unknown>`/`unknown`-касты, интерфейсы для LM Studio/Bun.Image/`BrowserContext.addCookies`, статик-поле `Repl.sigintHandler`, typed input в `line-editor`). Глухие `catch {}` — снабжены обоснованием (best-effort); `noExplicitAny` остаётся **warn** (132 — это в основном `: any` в сигнатурах, отдельный ratchet).
+- [x] ~~Аудит `as any` (53)~~ ✅ `as any` в коде `src/` — 0 (сверка 2026-09-28: 2 совпадения, оба — упоминания в комментариях, не код). `noExplicitAny` остаётся **warn** (в основном `: any` в сигнатурах, отдельный ratchet).
 
 ### P3 — гигиена и релиз
 - [x] ~~Удалить `verify-tools.ts`; убрать `tsconfig-paths`; добавить `.fallowrc.json`~~ ✅ (ветка `chore/p3-hygiene`).
 - [x] ~~CI quality gate + pre-commit hook~~ ✅: `.fallowrc.json` (+baseline `.fallow-baseline.json`, `src/modules/webui/assets/**` в ignore), npm-скрипты `quality`/`fallow`/`fallow:baseline`/`fallow:security`, workflow `.gitea/workflows/quality.yml` (typecheck + `bun test` + `fallow dead-code --baseline … --fail-on-issues`), git pre-commit hook (`fallow hooks install --target git`).
 - [x] ~~`fallow security`~~ ✅ прогнан, триаж `docs/analysis/2026-09-25-fallow-security.md`: actionable-находок нет.
 - [x] ~~**Lint (Biome)**~~ ✅ `@biomejs/biome` + `biome.json` (линтер, formatter/assist off — Prettier остаётся), `bun run lint`, включён в `quality` и CI. Правила-полировка: `noConsole` error (allowlist cli/output/ui), `noUnusedVariables/Imports/Unreachable` error; `noExplicitAny` — **warn** (186, ratchet до error отдельной задачей); осознанно off: `noNonNullAssertion`, `noAssignInExpressions`, control-char-regex, `useNodejsImportProtocol`, `noStaticOnlyClass`. Авто-фиксы применены по всему репо; заодно исправлен flaky тест encryption.
-- [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0 (универсальное позиционирование, веб-режим, онбординг, кешинг, context-log, `/config`, актуальные счётчики/команды/тулы/конфиг/архитектура); `docs/mma-features-overview.md` — версия 2.6.0 + раздел «Что нового с 0.63.0»; `docs/agents/*` актуальны (AGENTS.md — канон).
-- [ ] Русские комментарии/JSDoc (~76 файлов с кириллицей).
+- [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0; `docs/mma-features-overview.md` зафиксирован на 2.6.0 (сверка 2026-09-28: текущая версия уже 2.10.0 — overview устарел, AGENTS.md-«канон» свеж, вплоть до Full Config Surfaces 2.10.0); `docs/agents/*` актуальны (AGENTS.md — канон).
+- [ ] Русские комментарии/JSDoc (81 файл с кириллицей в `src/` — сверка 2026-09-28, было ~76).
 
 ### P4 — бэклог
-- Автоназвание сессии по контексту (сейчас только ручной `rename`).
+- [x] ~~Автоназвание сессии по контексту~~ ✅ СДЕЛАНО (релиз 2.6.0): `deriveSessionName` + fire-and-forget `generateSessionTitle` в хуке `Agent.run()`, `session.autoName` (default true), `nameSource` (`auto` не затирает `manual`). Строка «только ручной `rename`» устарела (сверка 2026-09-28).
 - [x] ~~Контр-агент для проверки работы (+ подобрать литературу)~~ ✅ v1 (ветка `feat/critic-agent`): in-loop `CriticGate` + `src/modules/critic/` (evidence pack + LLM-клиент, JSON-вердикт, fail-open), конфиг `critic.*`, события `critic_*` в `session.jsonl`; MoE не тронут. Дизайн: `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4, план `docs/superpowers/plans/2026-09-25-critic-agent.md`.
   - **Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`).
   - **Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`) вместо только детерминированного evidence pack.
@@ -56,7 +56,7 @@
 
 **Почему (три источника в контексте):**
 1. `ARTIFACTS` (`src/core/system-prompt.ts`): 9B переприменяет «создай файл, когда просят документ» на слова «итоговая рекомендация» — явного запроса файла не было, `SCOPE DISCIPLINE` («делай только то, что просили») проиграл.
-2. Давление плана: `PLAN QUALITY` требует «шаг = конкретные deliverables (точные пути)», а гейт деливераблов после каждого шага инжектит «шаг N не называет файлов — его выполнение нельзя проверить автоматически» (`src/modules/execution/module.ts`) → модель материализует файлы, чтобы шаги стали «проверяемыми».
+2. Давление плана: `PLAN QUALITY` требует «шаг = конкретные deliverables (точные пути)», а гейт деливераблов (`plan-actions.ts:568-574`, `t("plan.no_deliverables")`, не `module.ts`) после каждого `done`-шага без файлов инжектит «шаг N не называет файлов — его выполнение нельзя проверить автоматически» + совет «добавить пути / запустить сборку/тесты» → модель материализует файлы, чтобы шаги стали «проверяемыми» (сверка 2026-09-28).
 3. Нота гейта кодоцентрична («запусти сборку/тесты») — мусор в некодовой задаче.
 
 **Что починить (вне скоупа ветки `feat/ask-interactive-tool`):**
@@ -101,7 +101,7 @@
 
 **Открытые хвосты по индексации:**
 - [x] ~~Валидация кэша индекса (mtime/hash)~~ ✅ `IndexCache.load()` сверяет `version`/`root`/`signature`; устаревший или легаси-кэш → полный пересбор.
-- [ ] Watcher на Linux не рекурсивный (`fs.watch recursive`) — автообновление только ручное
+- [ ] Watcher на Linux не рекурсивный (`fs.watch recursive`, `walker.ts:140` — сверка 2026-09-28) — автообновление только ручное
 
 ### Аудит логики агента — `docs/analysis/2026-08-29-agent-logic-audit.md`
 
@@ -209,6 +209,8 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 ### Этап 2. Дробление больших файлов (правило #1: ≤300 строк)
 
+> Замеры 2026-09-28 (фактические, `Get-Content .Count`): agent.ts 1582, repl-commands.ts 1368, repl.ts 1450, line-editor.ts 1162, stuck-detector.ts 927, module.ts 866, plan-tool.ts ужался до 300. Таблица ниже — историческая (на момент плана), актуальные размеры выше; исключения — в AGENTS.md «Large files — accepted exceptions».
+
 | Файл | Строк | Крупнейшая функция |
 |---|---|---|
 | `src/core/agent.ts` | 1230 | `executeSingleAgentLoop` — 779 строк! |
@@ -278,9 +280,9 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 1. ~~**Разобраться с 53 падениями**~~ ✅ ЗАКРЫТО 2026-08-31 (см. выше)
 
-2. **Git push**: нужен remote `master`, пока только `providers` ветка
+2. ~~**Git push**~~ ✅ ЗАКРЫТО: remote `origin` есть, ветка `master` (сверка 2026-09-28).
 
-3. **npm publish** — 0.46.0/0.47.0/0.56.0/0.57.0/0.57.1/0.57.2 выпущены. За 2026-09-15 выпущены: **0.60.0** (session self-inspection + project map/indexing), **0.60.1** (уведомления о суммаризации промпта + i18n startup-логов), **0.61.0** (управление долями бюджета `mma context --system/--reserve` + честный overflow-совет).
+3. **npm publish** — актуальная версия **2.10.0** (сверка 2026-09-28; перечисленные 0.46.0–0.61.0 давно выпущены, CHANGELOG покрывает 0.62.0→2.10.0).
 
 4. **Качество агентных прогонов — P5/P6 из аудита 2026-08-31** (`_testing/agent-quality-review-2026-08-31.md`; P0–P4 из того же аудита закрыты коммитами `7ff98dc`, `98dc7a2`):
    - [ ] **P5 — авто-сужение набора тулов**: тривиальный вопрос тянет все 23 схемы тулов (~3.1K токенов, ~9% окна 32K); tool narrowing (`enable_tools`) есть, но не применяется автоматически — сужать по типу задачи до первого LLM-вызова
@@ -292,20 +294,14 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 ## Бэклог
 
 - [x] добавить поиск в интернете ошибки если более 5-ти раз не удается решить одну и ту же задачу
-- [ ] **Автоназвание сессии по контексту** — сессия сама даёт себе осмысленное имя на основе содержания (первый запрос / накопленный контекст), вместо дефолтного/технического id; имя видно в `session list`/`session show`, вкладках `mma web` и `/export`.
+- [x] ~~**Автоназвание сессии по контексту**~~ ✅ см. P4 выше (релиз 2.6.0) — пункт бэклога закрыт.
 - [ ] добавить контр-агента который будет проверять выполнение работы. Нужно предоставить литературу
 - [x] выполнить план исправлений код-ревью: `docs/superpowers/plans/2026-08-20-code-review-fixes.md` (22 задачи, 7 фаз: P0-баги, безопасность, изоляция тестов, производительность, мёртвый код/i18n, документация, релиз 0.47.0 — релиз 0.47.0 выпущен 2026-08-19)
 
 
-## Остаток на 2026-09-26 (web UI / провайдеры)
+## Остаток на 2026-09-26 (web UI / провайдеры) — сверка 2026-09-28
 
-- [ ] **Вложенный поп-ап добавления и настройки провайдера** — код готов, но НЕ проверен и НЕ закоммичен:
-  - `index.html` — overlay `#providerOverlay` (`modal-provider`), `styles.css` — `.overlay-nested` / `.provider-body`,
-    `app.js` — `openProviderForm` / `closeProviderForm` / `hideProviderOverlay`, Esc/backdrop/✕ и focus-trap.
-  - [ ] Проверить через **Playwright (headed)** на ИЗОЛИРОВАННОМ `MMA_CONFIG_DIR` (не на реальном `~/.mma`):
-    настройки → «Провайдеры» → «+ добавить» → форма в отдельном окне поверх модалки настроек;
-    save / Esc / клик по фону закрывают; после сохранения список и активный провайдер обновляются.
-  - [ ] Закоммитить после проверки.
+- [x] ~~**Вложенный поп-ап добавления и настройки провайдера**~~ ✅ ЗАКРЫТО иначе: `#providerOverlay`/`openProviderForm`/`hideProviderOverlay` в коде больше нет (0 совпадений в `src/`) — заменено общим вложенным диалогом `#subOverlay`/`openSubDialog` (`index.html:169`, `settings.js:1692`; провайдер/MCP/LSP/память через него). Проверено e2e-харнессом (`tests/e2e/web-provider-dialog.e2e-test.ts`: селекторы `#subOverlay.open`, open/Esc/backdrop/save; `bun run test:e2e`). Отдельный Playwright-прогон «вручную в headed» и коммит старого поп-апа больше не требуются.
 - [ ] **Состояние реального конфига** (`~/.mma`): `provider` сейчас — легаси `openai-compat` / `http://localhost:1234/v1`,
   модель `qwen/qwen3.5-9b`, `contextWindow 32768`. Ранее просили **64000** — вернуть при необходимости
   (`/config contextWindow 64000`).
