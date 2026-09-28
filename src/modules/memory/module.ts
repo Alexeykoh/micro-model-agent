@@ -1,4 +1,5 @@
 
+// Модуль памяти агента: преференсы и хвост .md-файлов в системный промпт, тулы remember/recall.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition } from "../../tools/types";
@@ -10,6 +11,7 @@ import { globalMemoryDir } from "../../config/paths";
 
 const MEMORY_MD_FILES = ["errors", "conventions", "decisions", "facts"];
 
+/** Модуль долговременной памяти: системный блок + тулы `remember`/`recall`. */
 export class MemoryModule implements AgentModule {
   name = "memory";
   private store: MemoryStore;
@@ -23,6 +25,7 @@ export class MemoryModule implements AgentModule {
     }
   }
 
+  /** Системный блок: преференсы пользователя + хвост уроков прошлых сессий. */
   getSystemPromptBlock(): PromptBlock | null {
     const parts: string[] = [];
 
@@ -49,9 +52,9 @@ export class MemoryModule implements AgentModule {
   }
 
   /**
-   * Bounded tail of the append-only .md memory files (errors, conventions,
-   * decisions, facts). This is what makes past-session lessons visible in the
-   * system prompt — without it the loop's error rules are write-only.
+   * Ограниченный хвост append-only .md-файлов памяти (errors, conventions,
+   * decisions, facts). Именно он делает уроки прошлых сессий видимыми в
+   * системном промпте — без него правила ошибок цикла только пишутся.
    */
   private getMemoryTail(): string | null {
     const sections: string[] = [];
@@ -71,15 +74,17 @@ export class MemoryModule implements AgentModule {
 
     if (sections.length === 0) return null;
     let joined = sections.join("\n\n");
-    // Hard cap so a huge errors.md can never blow the system prompt budget.
+    // Жёсткий кап, чтобы огромный errors.md не раздул бюджет системного промпта.
     if (joined.length > 1200) joined = `${joined.slice(0, 1200)}\n…`;
     return joined;
   }
 
+  /** Тулы модуля: `remember` (запись) и `recall` (чтение/поиск). */
   getToolDefinitions(): ToolDefinition[] {
     return [rememberTool, recallTool];
   }
 
+  /** Плагин: тот же блок памяти через хук построения промпта. */
   getPlugin(): AgentPlugin {
     return {
       name: "memory",
@@ -100,6 +105,7 @@ export class MemoryModule implements AgentModule {
     };
   }
 
+  /** Доступ к underlying-хранилищу (для команд `/memory`, тестов). */
   getStore(): MemoryStore {
     return this.store;
   }

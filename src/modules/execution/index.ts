@@ -1,3 +1,4 @@
+// Модуль исполнения: реэкспорт планов, трекера, верификатора, stuck-детектора, аудитора.
 export { ExecutionModule } from "./module";
 export { PlanCreator } from "./planner";
 export { PlanTracker } from "./tracker";

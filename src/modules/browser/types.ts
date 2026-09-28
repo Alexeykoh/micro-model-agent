@@ -1,3 +1,5 @@
+// Типы браузера: действия, элементы, консоль, снапшот, конфиг, дефолты.
+/** Действия, доступные модели в браузере. */
 export type BrowserAction =
   | "open"
   | "click"
@@ -10,6 +12,7 @@ export type BrowserAction =
   | "close"
   | "wait";
 
+/** Интерактивный элемент страницы из снапшота. */
 export interface ElementEntry {
   index: number;
   tag: string;
@@ -20,19 +23,23 @@ export interface ElementEntry {
   visible: boolean;
 }
 
+/** Тип записи консоли браузера. */
 export type ConsoleType = "log" | "info" | "warning" | "error" | "debug" | "pageerror" | "network";
 
+/** Запись консоли браузера. */
 export interface ConsoleEntry {
   type: ConsoleType;
   text: string;
 }
 
+/** Сетевая ошибка страницы (упавший запрос). */
 export interface NetworkErrorEntry {
   method: string;
   url: string;
   error: string;
 }
 
+/** Полный снапшот страницы для модели. */
 export interface PageSnapshot {
   url: string;
   title: string;
@@ -43,6 +50,7 @@ export interface PageSnapshot {
   truncated: boolean;
 }
 
+/** Состояние сессии браузера. */
 export interface BrowserState {
   isOpen: boolean;
   url: string | null;
@@ -50,6 +58,7 @@ export interface BrowserState {
   elementCount: number;
 }
 
+/** Конфиг браузера: headless, лимиты, вьюпорт, куки, таймауты. */
 export interface BrowserConfig {
   headless: boolean;
   maxElements: number;
@@ -63,12 +72,14 @@ export interface BrowserConfig {
   navigationTimeout: number;
 }
 
+/** Результат действия: успех, текстовый вывод, опциональный скриншот. */
 export interface ActionResult {
   success: boolean;
   output: string;
   screenshot?: Buffer;
 }
 
+/** Дефолтный конфиг браузера. */
 export const DEFAULT_BROWSER_CONFIG: BrowserConfig = {
   headless: true,
   maxElements: 30,

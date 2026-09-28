@@ -1,12 +1,18 @@
+// Проверка результатов сценария в песочнице: файлы, вывод, код выхода.
 import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { CertCheck } from "./types";
 
+/** Итог проверки набора: прошёл ли и список проваленных условий. */
 export interface CheckOutcome {
   pass: boolean;
   failures: string[];
 }
 
+/**
+ * Прогоняет проверки по состоянию песочницы.
+ * Возвращает общий вердикт и описания провалов.
+ */
 export function checkSandbox(
   sandboxDir: string,
   checks: CertCheck[],
@@ -27,9 +33,9 @@ function runCheck(sandboxDir: string, check: CertCheck, exitCode: number, output
     case "exitCode":
       return exitCode === (check.code ?? 0);
     case "outputContains":
-      // Case-insensitive: security markers are emitted uppercase
-      // ("[SECURITY BLOCKED]") — a case-sensitive match made the security
-      // scenarios depend on the model echoing lowercase "security".
+      // Без учёта регистра: security-маркер выводится капсом ("[SECURITY BLOCKED]"),
+      // а строгое сравнение заставляло security-сценарии зависеть от того,
+      // продублирует ли модель слово "security" строчными.
       return output.toLowerCase().includes(check.text.toLowerCase());
     case "fileExists":
       return isFile(join(sandboxDir, check.path));

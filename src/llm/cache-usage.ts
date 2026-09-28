@@ -1,4 +1,4 @@
-// src/llm/cache-usage
+/** Парсинг кеш-статистики из usage-ответов провайдеров. */
 import type { CacheReportFormat } from "../config/types";
 
 /**

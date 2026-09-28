@@ -1,3 +1,4 @@
+// Загрузка сценариев сертификации: встроенные плюс пользовательские YAML из каталога.
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { parse as parseYaml } from "yaml";
@@ -16,11 +17,13 @@ const CHECK_TYPES = [
   "outputContains",
 ];
 
+/** Результат загрузки: валидные сценарии и ошибки битых описаний. */
 export interface LoadResult {
   scenarios: CertScenario[];
   errors: string[];
 }
 
+/** Проверяет сценарий, возвращает список ошибок (пусто — валиден). */
 export function validateScenario(s: CertScenario): string[] {
   const errors: string[] = [];
   const isSkip = s.mode === "skip";
@@ -65,6 +68,10 @@ export function validateScenario(s: CertScenario): string[] {
   return errors;
 }
 
+/**
+ * Загружает встроенные сценарии и пользовательские YAML из `userDir`.
+ * Битые описания отбрасываются с записью ошибки в `errors`.
+ */
 export function loadScenarios(userDir?: string): LoadResult {
   const errors: string[] = [];
   const scenarios: CertScenario[] = [];
@@ -112,6 +119,7 @@ function normalizeScenario(data: unknown, file: string): CertScenario {
   };
 }
 
+/** Фильтрует сценарии по тегам; без тегов оставляет только `core`. */
 export function filterByTags(scenarios: CertScenario[], tags: CertTag[]): CertScenario[] {
   if (!tags || tags.length === 0) {
     return scenarios.filter((s) => s.tags.includes("core"));
@@ -119,13 +127,13 @@ export function filterByTags(scenarios: CertScenario[], tags: CertTag[]): CertSc
   return scenarios.filter((s) => s.tags.some((t) => tags.includes(t)));
 }
 
-/** Keep only scenarios whose id is in the list (exact, case-insensitive match). */
+/** Оставляет сценарии с id из списка (точное совпадение без учёта регистра). */
 export function filterByScenarios(scenarios: CertScenario[], ids: string[]): CertScenario[] {
   const wanted = new Set(ids.map((id) => id.toLowerCase()));
   return scenarios.filter((s) => wanted.has(s.id.toLowerCase()));
 }
 
-/** Return ids from the request that do not exist among loaded scenarios. */
+/** Возвращает запрошенные id, которых нет среди загруженных сценариев. */
 export function unknownScenarioIds(scenarios: CertScenario[], ids: string[]): string[] {
   const known = new Set(scenarios.map((s) => s.id.toLowerCase()));
   return ids.filter((id) => !known.has(id.toLowerCase()));

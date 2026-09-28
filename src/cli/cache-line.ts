@@ -1,3 +1,4 @@
+// Строка кеша в футере: хитрейт, экономия, стабильность префикса.
 import { t } from "../i18n/index";
 import { formatCost } from "../modules/pricing/prices";
 

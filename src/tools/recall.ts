@@ -1,11 +1,14 @@
 
+/** Тул чтения межсессионной памяти (поиск, категории, всё целиком). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { MemoryStore } from "../modules/memory/store";
 import { globalMemoryDir } from "../config/paths";
 
+/** Категории памяти. */
 const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"];
 
+/** Читает/ищет по памяти. Параметры: query (full-text), category (опционально). */
 export const recallTool: ToolDefinition = {
   name: "recall",
   icon: "💾",
@@ -34,17 +37,17 @@ export const recallTool: ToolDefinition = {
     const store = new MemoryStore(memoryDir);
 
     try {
-      // No query, no category → show everything
+      // Без запроса и категории — показать всё.
       if (!query && !category) {
         return { success: true, output: formatAll(store) };
       }
 
-      // Category only → show that category
+      // Только категория — показать её.
       if (!query && category) {
         return { success: true, output: formatCategory(store, category) };
       }
 
-      // Query with optional category → search
+      // Запрос с опциональной категорией — поиск.
       if (category) {
         const results = searchCategory(store, category, query);
         if (results.length === 0) {
@@ -56,7 +59,7 @@ export const recallTool: ToolDefinition = {
         };
       }
 
-      // Query across all
+      // Запрос по всем категориям.
       const results = store.search(query);
       if (results.length === 0) {
         return { success: true, output: t("tool.recall.empty", { query }) };
@@ -67,12 +70,13 @@ export const recallTool: ToolDefinition = {
         output: t("tool.recall.search_results", { category: "all", results: formatted }),
       };
     } catch (err) {
-      // Reading a missing/invalid category is an error, not an empty success.
+      // Чтение отсутствующей/битой категории — ошибка, а не пустой успех.
       return { success: false, output: t("tool.memory_error", { error: String(err) }) };
     }
   },
 };
 
+/** Форматирует всю память (преференсы + последние 5 записей категорий). */
 function formatAll(store: MemoryStore): string {
   const parts: string[] = [];
 
@@ -98,6 +102,7 @@ function formatAll(store: MemoryStore): string {
   return parts.length > 0 ? parts.join("\n") : t("tool.recall.no_memory");
 }
 
+/** Форматирует одну категорию. */
 function formatCategory(store: MemoryStore, category: string): string {
   if (category === "preferences") {
     const prefs = store.getPreferences();
@@ -115,6 +120,7 @@ function formatCategory(store: MemoryStore, category: string): string {
   return `${category.charAt(0).toUpperCase() + category.slice(1)} (${entries.length} entries):\n${entries.join("\n")}`;
 }
 
+/** Ищет запрос внутри категории (регистронезависимо). */
 function searchCategory(store: MemoryStore, category: string, query: string): string[] {
   if (category === "preferences") {
     const prefs = store.getPreferences();

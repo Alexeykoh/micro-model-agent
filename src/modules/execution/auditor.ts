@@ -1,3 +1,4 @@
+// Финальный аудитор: файлы done-шагов, тесты, typecheck, сводка честности.
 import { existsSync, readdirSync } from "fs";
 import type { Dirent } from "fs";
 import { resolve, join, basename } from "path";
@@ -18,23 +19,22 @@ export { parseTypecheckErrors } from "./audit-runners";
 
 const MASS_EDIT_THRESHOLD = 10;
 
-/** Subtree walk depth cap for file resolution. */
+/** Кап глубины обхода поддерева для резолва файлов. */
 const RESOLVE_MAX_DEPTH = 8;
 
 /**
- * Resolve a plan-step file token to an existing file.
+ * Резолвит файловый токен шага плана в существующий файл.
  *
- * A step description frequently names a file by its bare basename
- * ("App.tsx") or a partially-prefixed path ("src/App.tsx") while the real
- * file lives in a nested project directory relative to the agent baseDir
- * (e.g. `bicycle-shop/src/App.tsx`). Naively resolving against baseDir
- * reports the file as missing — observed in session ses_mssl5izw where the
- * final audit gate rejected a fully-completed task with "1 files missing"
- * forever, sending the model into a read/retry loop.
+ * Описание шага часто называет файл голым basename ("App.tsx") или частично
+ * префиксным путём ("src/App.tsx"), а реальный файл лежит во вложенной папке
+ * проекта относительно baseDir агента (напр. `bicycle-shop/src/App.tsx`).
+ * Наивный резолв от baseDir репортит файл пропавшим — было в ses_mssl5izw:
+ * финальный audit-gate вечно реджектил полностью готовую задачу с "1 files
+ * missing", загоняя модель в read/retry-петлю.
  *
- * Strategy: exact resolve first, then a bounded subtree walk matching either
- * the exact basename or a path suffix (so both "App.tsx" and
- * "src/App.tsx" find "bicycle-shop/src/App.tsx").
+ * Стратегия: сначала точный резолв, затем ограниченный обход поддерева с
+ * матчем точного basename или суффикса пути ("App.tsx" и "src/App.tsx"
+ * находят "bicycle-shop/src/App.tsx").
  */
 export function findExistingFile(baseDir: string, filePath: string): string | null {
   const direct = resolve(baseDir, filePath);
@@ -74,20 +74,22 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
   return found;
 }
 
+/** Результат аудита: фейлы файлов, тесты, typecheck, сводка, варнинги. */
 export interface AuditResult {
   passed: boolean;
   missingFiles: string[];
-  /** Delete-kind steps (done) whose named files still exist. */
+  /** Done-шаги kind=delete, чьи именованные файлы всё ещё существуют. */
   leftoverFiles: string[];
   createdFiles: string[];
   modifiedFiles: string[];
   summary: string;
   massEditWarning: string | null;
   testRun: TestRunCheck | null;
-  /** First `error TS…` line from a real `tsc --noEmit` run, or null. */
+  /** Первая строка `error TS…` из реального `tsc --noEmit`, или null. */
   typecheckError: string | null;
 }
 
+/** Аудитор: проверяет done-шаги плана — файлы, тесты, typecheck. */
 export class Auditor {
   private baseDir: string;
 
@@ -95,20 +97,20 @@ export class Auditor {
     this.baseDir = baseDir;
   }
 
+  /** Аудитит план: файлы done-шагов, реальный прогон тестов, typecheck, сводка. */
   async audit(plan: Plan): Promise<AuditResult> {
-    // Only steps the model claims completed may require their named files to
-    // exist. Skipped/pending steps must never contribute "missing files"
-    // (observed: a skipped step's prose mention of "type.ts" kept the audit
-    // gate rejecting a finished task with "1 files missing" forever).
+    // Существования требуем только с файлов шагов, которые модель заявила
+    // готовыми. Скипнутые/пендинг шаги в "missing files" вклада не дают
+    // (было: проза скипнутого шага с "type.ts" вечно реджектила готовую
+    // задачу гейтом с "1 files missing").
     const doneCreate = plan.steps.filter((s) => s.status === "done" && s.kind !== "delete");
     const doneDelete = plan.steps.filter((s) => s.status === "done" && s.kind === "delete");
     const createText = doneCreate.map((s) => s.description.replace(/\([^)]*\)/g, " ")).join(" ");
     const deleteText = doneDelete.map((s) => s.description.replace(/\([^)]*\)/g, " ")).join(" ");
-    // File tokens are extracted with the SAME shared filter as the
-    // hallucination factual check (js-identifiers.ts). URLs are stripped
-    // first so a hostname / https://host/repo.git in a step description
-    // can never be reported as a missing file (observed: a git-remote
-    // plan flagged `whom-pointing-jewel-maine.trycloudflare.com`).
+    // Токены файлов извлекаем ТЕМ ЖЕ общим фильтром, что фактическая проверка
+    // галлюцинаций (js-identifiers.ts). URL вырезаем заранее, чтобы hostname /
+    // https://host/repo.git в описании шага не репортился пропавшим файлом
+    // (было: git-remote план флаговал `whom-pointing-jewel-maine.trycloudflare.com`).
     const createFiles = extractFileLikeTokens(stripUrls(createText));
     const deleteFiles = extractFileLikeTokens(stripUrls(deleteText));
 
@@ -119,45 +121,44 @@ export class Auditor {
     for (const filePath of createFiles) {
       const resolved = findExistingFile(this.baseDir, filePath);
       if (resolved) {
-        // Keep the resolved absolute path: findTypecheckRoot walks up
-        // from it to the nearest tsconfig, and a relative token would
-        // resolve against the process cwd instead of baseDir.
+        // Храним резолвленный абсолютный путь: findTypecheckRoot идёт от него
+        // вверх к ближайшему tsconfig, а относительный токен резолвился бы
+        // от cwd процесса вместо baseDir.
         existingFiles.push(resolved);
       } else {
         missingFiles.push(filePath);
       }
     }
-    // A done delete-kind step requires its named files to be GONE.
+    // Done-шаг kind=delete требует ОТСУТСТВИЯ именованных файлов.
     for (const filePath of deleteFiles) {
       if (findExistingFile(this.baseDir, filePath)) {
         leftoverFiles.push(filePath);
       }
     }
 
-    // Real test run: do not trust the model's word (or exit codes) — actually
-    // execute the tests and check the runner summary. This catches the "all 7
-    // passing ✅" final answers that hide 3 failing tests.
+    // Реальный прогон тестов: слову модели (и exit-кодам) не верим — реально
+    // исполняем тесты и смотрим сводку раннера. Ловит финальные "all 7
+    // passing ✅", прячущие 3 упавших.
     //
-    // Decision is EVIDENCE-based (a test file exists on disk), not a keyword
-    // classification of the step prose: rule #10 forbids deciding requirements
-    // from wording like "test"/"тест" (a plan with tests but no such word used
-    // to skip the audit; an unrelated "testing" mention used to force a 90s run).
+    // Решение EVIDENCE-based (тестовый файл есть на диске), не классификация
+    // прозы шагов по ключевым словам: правило #10 запрещает выводить требования
+    // из слов "test"/"тест" (план с тестами, но без такого слова, скипал аудит;
+    // постороннее "testing" форсило 90s-прогон).
     let testRun: TestRunCheck | null = null;
     if (findTestFile(this.baseDir)) {
       try {
         testRun = await runTests(this.baseDir);
       } catch {
-        testRun = null; // infra failure — don't block on it
+        testRun = null; // сбой инфры — на нём не блокируемся
       }
     }
 
-    // Real typecheck: the audit must catch "the build is broken" even when
-    // every file exists (observed: deleting .js files left the .tsx sources
-    // with 11 tsc errors and the agent still declared success). Runs only
-    // when a tsconfig.json is reachable from baseDir or the resolved step
-    // files AND the file checks already passed — an audit that is doomed by
-    // missing/leftover files must not pay a 90s tsc spawn. Inconclusive
-    // results never block.
+    // Реальный typecheck: аудит ловит "сборка сломана", даже если все файлы на
+    // месте (было: удаление .js оставило .tsx-исходники с 11 tsc-ошибками, а
+    // агент заявил успех). Гоняется, только если tsconfig.json достижим от
+    // baseDir или резолвленных файлов шагов И файловые проверки уже прошли —
+    // обречённому на missing/leftover аудиту 90s tsc-спавн не платим.
+    // Inconclusive-результаты не блокируют.
     let typecheckError: string | null = null;
     if (missingFiles.length === 0 && leftoverFiles.length === 0) {
       const root = findTypecheckRoot(this.baseDir, existingFiles);
@@ -171,11 +172,11 @@ export class Auditor {
     }
 
     const doneSteps = plan.steps.filter((s) => s.status === "done").length;
-    // done + skipped are both deliberate terminal states: `done` claims the
-    // work, `skipped` documents a decision that the step is not needed (the
-    // deliverable gate's documented escape hatch). Neither is a lie the
-    // audit must catch — a plan with a legitimately skipped step must be
-    // able to pass (observed: skipped step 1 kept the task rejected forever).
+    // done + skipped — оба осознанные терминальные состояния: `done` заявляет
+    // работу, `skipped` документирует решение, что шаг не нужен (задокументированная
+    // лазейка deliverable-gate). Ни то, ни другое — не ложь для аудита: план с
+    // легитимно скипнутым шагом обязан проходить (было: скипнутый шаг 1 вечно
+    // держал задачу реджектнутой).
     const terminalSteps = plan.steps.filter(
       (s) => s.status === "done" || s.status === "skipped",
     ).length;
@@ -193,10 +194,10 @@ export class Auditor {
     const typecheckFailing = typecheckError !== null;
     const passed =
       missingFiles.length === 0 && leftoverFiles.length === 0 && !testsFailing && !typecheckFailing;
-    // A "Task complete ✓" summary for an unfinished plan is a lie the model
-    // reads as a green light (observed: audit gate injected "[✓] Task
-    // complete: 1/3 steps done" while the plan had 2 pending steps). The
-    // summary must only claim completion when every step is actually done.
+    // Сводка "Task complete ✓" для незаконченного плана — ложь, которую модель
+    // читает как зелёный свет (было: audit-gate инжектил "[✓] Task complete:
+    // 1/3 steps done" при 2 пендинг шагах). Сводка заявляет завершение, только
+    // если реально done каждый шаг.
     const stepsPending = terminalSteps < totalSteps;
 
     let summary: string;

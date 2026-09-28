@@ -1,3 +1,4 @@
+// Генерация/улучшение AGENTS.md: один прогон агента со строгим allowlist без bash.
 import { join } from "path";
 import type { ReplContext } from "../../cli/repl-commands";
 import type { PromptBlock } from "../../core/types";
@@ -8,15 +9,16 @@ import { INIT_SYSTEM_PROMPT, INIT_TOOLS } from "./prompts";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 
+/** Опции генерации AGENTS.md. */
 export interface RunInitOptions {
-  /** Test seam. */
+  /** Шов для тестов: подмена проверки провайдера. */
   preflight?: () => Promise<PreflightResult>;
 }
 
 /**
- * Generate or improve AGENTS.md for the workspace. Single agent run with a
- * strict allowlist (no bash). Returns false when the provider is unavailable
- * or another onboarding mode is active.
+ * Генерирует или улучшает AGENTS.md воркспейса. Один прогон агента со
+ * строгим allowlist (без bash). Возвращает false, когда провайдер недоступен
+ * или уже активен другой онбординг-режим.
  */
 export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Promise<boolean> {
   if (ctx.toolCtx.onboarding) {

@@ -1,10 +1,11 @@
+/** Общие хелперы process_*-тулов: хинт без id, валидация + lookup. */
 import { processRegistry, type ManagedProcess } from "../modules/processes";
 import { t } from "../i18n/index";
 
 /**
- * Shared "no id given" answer for the process_* tools: usage hint plus the
- * currently known ids (or an explicit empty-registry note). One copy —
- * process-kill/process-log/process-wait must not drift apart.
+ * Общий ответ "id не дан" для process_*-тулов: хинт использования плюс
+ * известные сейчас id (или пометка пустого реестра). Одна копия, чтобы
+ * process-kill/log/wait не расходились.
  */
 export function missingProcessIdHint(): string {
   const ids = processRegistry.list().map((p) => p.id);
@@ -14,14 +15,15 @@ export function missingProcessIdHint(): string {
   return `${t("proc.missing_id")}${listPart}`;
 }
 
+/** Итог lookup процесса: запись или готовый вывод для возврата. */
 export type ProcessLookup =
   | { ok: true; id: string; entry: ManagedProcess }
   | { ok: false; output: string };
 
 /**
- * Shared id validation + registry lookup for the process_* tools. Returns
- * the entry, or `{ ok: false, output }` to return directly as the tool
- * result (missing id → usage hint, unknown id → not-found).
+ * Общая валидация id + lookup в реестре для process_*-тулов. Возвращает запись
+ * либо `{ ok: false, output }` для прямого возврата (нет id — хинт,
+ * неизвестный id — not-found).
  */
 export function lookupProcess(args: Record<string, unknown>): ProcessLookup {
   if (args.id === undefined || String(args.id).trim() === "") {

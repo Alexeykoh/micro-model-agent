@@ -1,4 +1,4 @@
-
+// Онбординг-команды REPL: /memory, /meet, /init (чистый диспатч + регистрация).
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { MemoryStore } from "../modules/memory/store";
@@ -9,7 +9,7 @@ import { globalMemoryDir } from "../config/paths";
 
 const CATEGORIES = ["conventions", "decisions", "errors", "facts"] as const;
 
-/** Pure `/memory` dispatch — returns lines for the caller to render. */
+/** Чистый диспатч `/memory`: возвращает строки, рендерит вызывающий. */
 export function applyMemoryCommand(store: MemoryStore, args: string[]): string[] {
   const [sub, ...rest] = args;
   if (!sub) return renderOverview(store);
@@ -73,10 +73,10 @@ function renderOverview(store: MemoryStore): string[] {
 }
 
 /**
- * Register `/memory`, `/meet`, `/init`. `/setup` is intentionally NOT
- * re-registered: `/wizard` (registered in repl-commands) already owns the
- * setup wizard and exposes `setup` as an alias, so a second registration would
- * duplicate/override it. `/setup` therefore reuses that handler.
+ * Регистрирует `/memory`, `/meet`, `/init`. `/setup` осознанно НЕ
+ * перерегистрируется: визардом настройки уже владеет `/wizard`
+ * (см. repl-commands) с алиасом `setup` — вторая регистрация продублировала/
+ * перекрыла бы его. `/setup` тем самым переиспользует тот хендлер.
  */
 export function registerOnboardingCommands(ctx: ReplContext): void {
   const store = (): MemoryStore => new MemoryStore(globalMemoryDir());

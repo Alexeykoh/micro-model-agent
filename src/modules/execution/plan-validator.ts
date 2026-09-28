@@ -1,7 +1,9 @@
+// Валидация MoE-плана: эксперты, циклы, пересечения файлов, input_from.
 import type { MoEPlan, MoESubtask } from "./types";
 import type { AppConfig } from "../../config/types";
 import { normalizeInputFrom } from "./input-from";
 
+/** Результат валидации плана: валидность, ошибки, варнинги, автофиксы. */
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -9,6 +11,7 @@ export interface ValidationResult {
   autoFixes: Array<{ subtaskId: string; fix: string }>;
 }
 
+/** Валидирует план: подзадачи, теги экспертов, циклы, пересечения, input_from. */
 export function validatePlan(plan: MoEPlan, config: AppConfig): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -46,9 +49,10 @@ export function validatePlan(plan: MoEPlan, config: AppConfig): ValidationResult
 }
 
 /**
- * Every input_from reference must point at an existing subtask and be backed
- * by a depends_on edge — otherwise the reader may run before its producer.
+ * Каждая ссылка input_from обязана указывать на существующую подзадачу и
+ * подкрепляться ребром depends_on — иначе читатель стартует раньше продьюсера.
  */
+/** Валидирует ссылки input_from: неизвестные — ошибки, недостающие depends_on — автофиксы. */
 export function validateInputFromRefs(subtasks: MoESubtask[]): {
   errors: string[];
   autoFixes: Array<{ subtaskId: string; fix: string }>;
@@ -72,6 +76,7 @@ export function validateInputFromRefs(subtasks: MoESubtask[]): {
   return { errors, autoFixes };
 }
 
+/** Проверяет, что все expert_tag подзадач известны из конфига. Возвращает ошибки. */
 export function expertTagsExist(subtasks: MoESubtask[], config: AppConfig): string[] {
   const errors: string[] = [];
   const knownExperts = new Set(Object.keys(config.experts || {}));
@@ -87,6 +92,7 @@ export function expertTagsExist(subtasks: MoESubtask[], config: AppConfig): stri
   return errors;
 }
 
+/** Ищет циклы в графе depends_on (DFS). Возвращает ошибки. */
 export function hasCycle(subtasks: MoESubtask[]): string[] {
   const edges = new Map<string, string[]>();
   for (const s of subtasks) {
@@ -122,6 +128,7 @@ export function hasCycle(subtasks: MoESubtask[]): string[] {
   return errors;
 }
 
+/** Ищет write-write пересечения allowed_files без цепочки зависимостей. Возвращает ошибки. */
 export function hasAllowedFilesOverlap(subtasks: MoESubtask[]): string[] {
   const errors: string[] = [];
   const writeFiles = new Map<string, string[]>();
@@ -152,6 +159,7 @@ export function hasAllowedFilesOverlap(subtasks: MoESubtask[]): string[] {
   return errors;
 }
 
+/** Результат read-after-write проверки одной пары писатель/читатель. */
 export interface ReadOverlapResult {
   subtaskId: string;
   dependsOn: string;
@@ -159,7 +167,7 @@ export interface ReadOverlapResult {
   error?: string;
 }
 
-/** Two path specs overlap when equal or one is a directory ancestor of the other. */
+/** Два спека путей пересекаются, если равны или один — каталог-предок другого. */
 function pathsOverlap(a: string, b: string): boolean {
   const na = a.replace(/\\/g, "/").replace(/\/+$/, "");
   const nb = b.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -167,6 +175,7 @@ function pathsOverlap(a: string, b: string): boolean {
   return na.startsWith(`${nb}/`) || nb.startsWith(`${na}/`);
 }
 
+/** Ищет read-after-write пересечения (писатель vs read_only читателя). Пустые depends_on — автофикс. */
 export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {
   const results: ReadOverlapResult[] = [];
 
@@ -182,8 +191,9 @@ export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {
       const readFiles = new Set(reader.read_only_files);
       const writeFiles = writer.allowed_files;
 
-      // Exact path or a real directory ancestor — NOT a string prefix, which
-      // flagged siblings like `src/main.ts` (writer) vs `src/main.tsx` (reader).
+      // Точное совпадение или настоящий каталог-предок, НЕ строковый префикс:
+      // иначе сиблинги `src/main.ts` (писатель) vs `src/main.tsx` (читатель)
+      // ложно флаговались.
       const overlapping = writeFiles.filter((f) =>
         [...readFiles].some((rf) => pathsOverlap(f, rf)),
       );
@@ -211,12 +221,13 @@ export function deleteReadOverlap(subtasks: MoESubtask[]): ReadOverlapResult[] {
   return results;
 }
 
+/** Применяет автофиксы (добавление depends_on) к копии плана, оригинал не мутирует. */
 export function applyAutoFixes(
   plan: MoEPlan,
   autoFixes: Array<{ subtaskId: string; fix: string }>,
 ): MoEPlan {
-  // Deep-ish clone: copy each `depends_on` array so the pushes below never
-  // mutate the caller's plan (shallow `{...s}` shared the array).
+  // Глубокое-ish клонирование: копируем каждый массив `depends_on`, чтобы пуши
+  // ниже не мутировали план вызывающего (поверхностный `{...s}` делил массив).
   const fixed = {
     ...plan,
     subtasks: plan.subtasks.map((s) => ({

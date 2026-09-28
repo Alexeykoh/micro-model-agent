@@ -1,3 +1,4 @@
+// Файловый логер legacy v1: тегированные строки, ротация, чистка старых логов.
 import {
   appendFileSync,
   mkdirSync,
@@ -14,24 +15,26 @@ const MAX_LOG_FILES = 30;
 const DEFAULT_MAX_DAYS = 30;
 const TOOL_OUTPUT_LIMIT = 2000;
 
+/** Уровень записи файлового лога. */
 export type FileLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 /**
- * Tagged file logger (legacy MMA v1 behavior).
+ * Тегированный файловый логер (поведение legacy MMA v1).
  *
- * Writes human-readable log lines to `~/.mma/logs/`:
- * - `<sessionId>.log` while a session is active
- * - `YYYY-MM-DD.log` for everything outside a session
+ * Пишет читаемые строки в `~/.mma/logs/`:
+ * - `<sessionId>.log`, пока сессия активна;
+ * - `YYYY-MM-DD.log` для всего вне сессии.
  *
- * Features restored from v1:
- * - size-based rotation (5 MB → file.log.1, file.log.2, ...)
- * - cleanup of old logs (age + max file count)
- * - tagged helpers: LLM request/response, tool calls, REPL
+ * Фичи из v1:
+ * - ротация по размеру (5 МБ → file.log.1, file.log.2, …);
+ * - чистка старых логов (возраст + лимит файлов);
+ * - тегированные хелперы: запрос/ответ LLM, вызовы тулов, REPL.
  */
 export class FileLogWriter {
   private logDir: string | null = null;
   private sessionLogPath: string | null = null;
 
+  /** Задаёт каталог логов (создаёт при отсутствии). */
   setLogDir(dir: string): void {
     this.logDir = dir;
     if (!existsSync(dir)) {
@@ -39,7 +42,7 @@ export class FileLogWriter {
     }
   }
 
-  /** Open a per-session log file. Triggers cleanup of old logs. */
+  /** Открывает посессионный лог-файл. Триггерит чистку старых логов. */
   initSessionLog(sessionId: string): void {
     if (!this.logDir) return;
     if (!existsSync(this.logDir)) {
@@ -49,11 +52,12 @@ export class FileLogWriter {
     this.cleanupOldLogs();
   }
 
-  /** Fall back to daily log files when no session is active. */
+  /** Возврат к дневным лог-файлам, когда нет активной сессии. */
   closeSessionLog(): void {
     this.sessionLogPath = null;
   }
 
+  /** Путь к текущему лог-файлу (сессионный или дневной). */
   getLogPath(): string {
     if (this.sessionLogPath) return this.sessionLogPath;
     if (!this.logDir) return "";
@@ -61,7 +65,7 @@ export class FileLogWriter {
     return join(this.logDir, `${date}.log`);
   }
 
-  /** Rotate the file if it exceeds the size limit. */
+  /** Ротирует файл при превышении лимита размера. */
   private rotateIfNeeded(filePath: string): void {
     if (!existsSync(filePath)) return;
     const size = statSync(filePath).size;
@@ -72,6 +76,7 @@ export class FileLogWriter {
     renameSync(filePath, `${filePath}.${idx}`);
   }
 
+  /** Пишет одну строку. Файловый лог — best-effort, ошибки глотаются. */
   log(level: FileLogLevel, tag: string, message: string): void {
     const fp = this.getLogPath();
     if (!fp) return;
@@ -88,6 +93,7 @@ export class FileLogWriter {
     }
   }
 
+  /** Пишет запрос к LLM (модель, число сообщений, превью промпта). */
   logLLMRequest(
     model: string,
     messagesCount: number,
@@ -102,6 +108,7 @@ export class FileLogWriter {
     );
   }
 
+  /** Пишет ответ LLM (длина, время) или ошибку. */
   logLLMResponse(
     model: string,
     responseLength: number,
@@ -121,6 +128,7 @@ export class FileLogWriter {
     }
   }
 
+  /** Пишет вызов тула с обрезанными превью аргументов и результата. */
   logToolCall(tool: string, preview: string, result?: string): void {
     const previewTrimmed = preview.length > 200 ? `${preview.slice(0, 200)}...` : preview;
     if (result !== undefined) {
@@ -131,6 +139,7 @@ export class FileLogWriter {
     }
   }
 
+  /** Пишет вывод тула с кодом выхода (тело режется лимитом). */
   logToolOutput(tool: string, output: string, exitCode: number): void {
     const trimmed =
       output.length > TOOL_OUTPUT_LIMIT
@@ -140,15 +149,16 @@ export class FileLogWriter {
     this.log("DEBUG", "TOOL_OUTPUT", `${tool} exit:${exitCode}\n${trimmed}`);
   }
 
+  /** Пишет реплику REPL (тело режется до 400 символов). */
   logREPL(tag: "user" | "assistant" | "system", content: string): void {
     const trimmed = content.length > 400 ? `${content.slice(0, 400)}...` : content;
     this.log("INFO", `REPL/${tag}`, trimmed);
   }
 
   /**
-   * Clean up old log files.
-   * - Deletes files older than maxDays
-   * - Keeps at most maxFiles most recent .log files
+   * Чистит старые лог-файлы.
+   * - удаляет старше maxDays;
+   * - оставляет не более maxFiles самых свежих .log-файлов.
    */
   cleanupOldLogs(maxDays = DEFAULT_MAX_DAYS, maxFiles = MAX_LOG_FILES): void {
     if (!this.logDir || !existsSync(this.logDir)) return;
@@ -164,7 +174,7 @@ export class FileLogWriter {
         }))
         .sort((a, b) => b.mtime - a.mtime);
 
-    // 1. Delete by age.
+    // 1. Удаление по возрасту.
     for (const f of list()) {
       if (now - f.mtime > maxDays * 24 * 60 * 60 * 1000) {
         try {
@@ -175,7 +185,7 @@ export class FileLogWriter {
       }
     }
 
-    // 2. Delete excess (fresh but more than maxFiles).
+    // 2. Удаление излишков (свежие, но сверх maxFiles).
     const remaining = list();
     for (let i = maxFiles; i < remaining.length; i++) {
       try {

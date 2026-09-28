@@ -1,3 +1,4 @@
+// Публичная поверхность самообновления: проверка, установка, модуль, dev-детект.
 export { Updater } from "./checker";
 export type { UpdateCheckResult, InstallResult } from "./checker";
 export { UpdaterModule } from "./module";

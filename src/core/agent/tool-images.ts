@@ -1,3 +1,4 @@
+/** Доставка изображений из тулов в контекст (pending-очередь к user-сообщению). */
 import type { ContentPart, ImageUrlPart } from "../../llm/provider";
 
 /**

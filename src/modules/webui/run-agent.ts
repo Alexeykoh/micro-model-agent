@@ -1,12 +1,5 @@
-/**
- * Single-turn agent runner for `mma web`.
- *
- * Split out of `module.ts` (rule #1: ≤300 lines/file). Owns the per-turn
- * bookkeeping the SSE forwarder needs: tool-call id matching (`ToolEvent`
- * carries no id, so one is synthesized per `start` and matched LIFO on `end`),
- * the interrupt flag (`AgentResult` has no `interrupted` field) and the usage
- * capture feeding the sidebar.
- */
+// Одноходовой раннер агента для `mma web`: матчинг id тул-событий, флаг прерывания, usage.
+// Вынесен из `module.ts` (правило #1: ≤300 строк/файл).
 import type { Agent } from "../../core/agent";
 import type { ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
@@ -17,29 +10,32 @@ import { captureUsage, planEventFor } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
 import type { Forwarder } from "./forward";
 
+/** Входы раннера: агент, состояние, форвардер, сессия/план для сайдбара. */
 export interface RunAgentDeps {
   agent: Agent;
   state: WebUiState;
   forwarder: Forwarder;
   sessionManager?: Pick<SessionManager, "getActiveMeta">;
   execModule?: Pick<ExecutionModule, "getActivePlan">;
-  /** Sidebar usage fallback when the turn reports no limit. */
+  /** Фолбэк лимита для usage сайдбара, когда ход лимит не сообщил. */
   contextWindow?: number;
 }
 
+/** Раннер одного хода: запуск и прерывание. */
 export interface RunAgent {
-  /** Run one turn; owns every SSE event of it for the starting session. */
+  /** Гоняет один ход; владеет всеми его SSE-событиями для стартовой сессии. */
   run: (text: string) => Promise<unknown>;
-  /** Mark interrupted, unblock pending questions, shut the agent down. */
+  /** Помечает прерванным, разблокирует висящие вопросы, стопает агента. */
   interrupt: () => void;
 }
 
+/** Строит раннер: матчинг id тул-событий, флаг прерывания, захват usage. */
 export function makeRunAgent(deps: RunAgentDeps): RunAgent {
   const { agent, state, forwarder } = deps;
 
-  // `ToolEvent` is renderer-oriented and carries no id. Synthesize one per
-  // `start` and match it on `end` (LIFO per tool name) so the browser can pair
-  // tool_start/tool_end cards (correction #1).
+  // `ToolEvent` ориентирован на рендерер и id не несёт. Синтезируем по одному
+  // на `start` и матчим на `end` (LIFO по имени тула), чтобы браузер спарил
+  // карточки tool_start/tool_end.
   const pendingIds = new Map<string, string[]>();
   let toolSeq = 0;
   const startId = (tool: string): string => {
@@ -60,9 +56,9 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     output: ev.output ?? "",
   });
 
-  // `AgentResult` has no `interrupted` field and `agent.shutdown()` may still
-  // return `success: true`, so track the interrupt locally. The REPL interrupts
-  // via `agent.shutdown()` (repl.ts `interruptRun`); we match it.
+  // У `AgentResult` нет поля `interrupted`, а `agent.shutdown()` может вернуть
+  // `success: true` — трекаем прерывание локально. REPL рвёт через
+  // `agent.shutdown()` (repl.ts `interruptRun`); повторяем.
   let interrupted = false;
   let toolCalls = 0;
 
@@ -70,8 +66,8 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     interrupted = false;
     toolCalls = 0;
     state.agentRunning = true;
-    // Own every event of this turn for the session that started it, so SSE
-    // output routes to the right browser tab even if the user switches tabs.
+    // Все события хода — за стартовавшей сессией, чтобы SSE лёг в правильную
+    // вкладку, даже если пользователь переключил табы.
     state.activeSessionId = deps.sessionManager?.getActiveMeta()?.id;
     try {
       const result = await agent.run(
@@ -84,8 +80,8 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
           } else {
             toolCalls++;
             forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
-            // A finished `plan`/`todo` tool refreshes the feed's plan card; the
-            // sidebar keeps its own `/api/state` projection.
+            // Закончивший `plan`/`todo`-тул освежает план-карточку ленты; сайдбар
+            // живёт своей проекцией `/api/state`.
             const plan = planEventFor(ev.tool, deps.execModule);
             if (plan) forwarder.onPlan(plan);
           }
@@ -93,9 +89,9 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         (phase) => forwarder.onPhase(phase),
         (reasoning) => forwarder.onReasoning(reasoning),
       );
-      // Capture usage before `onTurnEnd` so a `state` broadcast right after the
-      // turn already carries the fresh sidebar metrics (the client also polls
-      // `/api/state`, so this is an optimization, not the only path).
+      // Usage забираем ДО `onTurnEnd`, чтобы бродкаст `state` сразу после хода
+      // уже нёс свежие метрики сайдбара (клиент и так поллит `/api/state`,
+      // так что это оптимизация, а не единственный путь).
       state.usage = captureUsage(result, deps.contextWindow);
       forwarder.onTurnEnd({
         success: result.success,
@@ -113,7 +109,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
 
   const interrupt = (): void => {
     interrupted = true;
-    // Unblock any tool waiting on a browser answer before the turn unwinds.
+    // Разблокируем тулы, ждущие ответа браузера, до размотки хода.
     cancelPendingQuestions(state);
     agent.shutdown();
   };

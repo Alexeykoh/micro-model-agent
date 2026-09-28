@@ -1,18 +1,20 @@
+/** Тул ожидания завершения фонового процесса (вместо поллинга/сна). */
 import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
 import { lookupProcess } from "./process-ids";
 
 /**
- * Default wait: long enough to absorb a typical test/build run, short enough
- * to stay under the executor timeout. The tool-level `timeoutMs` below gives
- * headroom for an explicit longer wait (clamped by MAX_WAIT_MS).
+ * Дефолтное ожидание: хватает на типичный тест/билд, но в пределах таймаута
+ * исполнителя. `timeoutMs` тула даёт запас под явное долгое ожидание
+ * (кламп MAX_WAIT_MS).
  */
 const DEFAULT_WAIT_MS = 30000;
 const MAX_WAIT_MS = 110000;
 const DEFAULT_TAIL = 20;
 const MAX_TAIL = 100;
 
+/** Ждёт выхода процесса до timeoutMs; отчитывается кодом и хвостом вывода. */
 export const processWaitTool: ToolDefinition = {
   name: "process_wait",
   icon: "⏳",

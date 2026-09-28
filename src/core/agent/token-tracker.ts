@@ -1,3 +1,4 @@
+/** Учёт токенов и стоимости за запуск цикла (API-цифры + fallback-оценка). */
 import type { CostTracker } from "../../modules/pricing/index";
 import type { SessionLogger } from "../session-logger";
 import { estimateTokens } from "../../llm/token-counter";

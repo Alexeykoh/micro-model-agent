@@ -1,3 +1,4 @@
+// Публичный фасад модуля провайдеров: реестр, менеджер, кеш, health, пресеты.
 // src/modules/providers/index.ts
 export type {
   ProviderCapabilities,

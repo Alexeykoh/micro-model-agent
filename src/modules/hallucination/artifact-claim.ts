@@ -1,34 +1,34 @@
 /**
- * Artifact-claim checks (ses_mul5pepu_9mdq90): qwen3.5-9b wrote fizzbuzz.py,
- * failed to run it (python blacklisted), then pasted an "expected" program
- * output with wrong values as if it ran; it also wrote schema.drawio with a
- * malformed `<diagram/>` + stray `</diagram>` and claimed "valid XML".
- * The success-claim check only fires on error signals in tool outputs, so
- * both passed silently.
+ * Проверки заявлений об артефактах (ses_mul5pepu_9mdq90): qwen3.5-9b записала fizzbuzz.py,
+ * не смогла запустить (python в чёрном списке), затем вставила "ожидаемый" вывод
+ * программы с неверными значениями как якобы реальный; также записала schema.drawio
+ * с битым `<diagram/>` + висячим `</diagram>` и заявила "валидный XML".
+ * Проверка success-claim срабатывает только на сигналы ошибок в выводах тулов,
+ * поэтому оба случая прошли молча.
  *
- * Two deterministic checks (regex + disk state resolved by the caller, no
- * LLM):
- * - `checkArtifactClaims`: the answer presents a file as created/valid, but
- *   on disk it is missing or fails parsing.
- * - `checkUnverifiedOutput`: the answer frames a code block as actual program
- *   output, but no tool in the evidence window successfully executed anything.
+ * Две детерминированные проверки (regex + состояние диска от вызывающего, без LLM):
+ * - `checkArtifactClaims`: ответ подаёт файл как созданный/валидный, а на диске
+ *   его нет или он не парсится.
+ * - `checkUnverifiedOutput`: ответ подаёт кодовый блок как реальный вывод
+ *   программы, но ни один тул в окне доказательств ничего успешно не исполнял.
  *
- * Pure functions — the disk state (`ArtifactState[]`) is resolved by the
- * caller (agent loop, which owns baseDir), keeping this module testable.
- * Precision is recall-leaning like success-claim.ts: a false positive costs
- * one bounded re-check iteration, a false negative is the status quo.
+ * Чистые функции — состояние диска (`ArtifactState[]`) резолвит вызывающий
+ * (цикл агента, владелец baseDir), модуль остаётся тестируемым.
+ * Точность смещена в сторону recall, как в success-claim.ts: ложное срабатывание
+ * стоит одну ограниченную re-check итерацию, пропуск — статус-кво.
  */
 
 import type { ClaimContradiction, ClaimToolEvidence } from "./success-claim";
 
+/** Состояние артефакта на диске: путь, наличие, ошибка парсера, формулировка заявления. */
 export interface ArtifactState {
-  /** Workspace-relative path as mentioned in the answer. */
+  /** Путь относительно проекта, как упомянут в ответе. */
   path: string;
-  /** The file exists on disk under baseDir. */
+  /** Файл существует на диске под baseDir. */
   exists: boolean;
-  /** Parser error for a machine-checkable format (JSON/XML family), if any. */
+  /** Ошибка парсера машиночитаемого формата (JSON/XML-семейство), если есть. */
   parseError?: string;
-  /** What the answer claims about it (for the retry message), if detected. */
+  /** Что ответ утверждает о файле (для retry-сообщения), если детектировано. */
   claim?: string;
 }
 
@@ -36,28 +36,28 @@ const WORD = "A-Za-zА-Яа-яЁё0-9_";
 const wb = (body: string): RegExp =>
   new RegExp(`(?<![${WORD}])(?:${body})(?![${WORD}])`, "i");
 
-/** Success language about a file (any locale the agent speaks). */
+/** Язык успеха про файл (любая локаль, на которой говорит агент). */
 const ARTIFACT_SUCCESS_RE = wb(
   "создан[а-яё]*|записан[а-яё]*|сохран[её]н[а-яё]*|готов[а-яё]*|валид[а-яё]*|проверен[а-яё]*|существует|valid(?:ated)?|verified|checked|written|saved|created|exists?|ready",
 );
 
 /**
- * Which success word (if any) the answer uses near the file mention.
- * Returns the matched word for a precise retry message.
+ * Каким словом успеха (если есть) ответ описывает упоминание файла.
+ * Возвращает найденное слово для точного retry-сообщения.
  */
 function claimedAs(response: string, path: string): string | null {
   const idx = response.toLowerCase().indexOf(path.toLowerCase());
   if (idx === -1) return null;
-  // Look at a window around the mention — the claim usually sits in the
-  // same sentence ("Файл schema.drawio создан и валиден").
+  // Смотрим окно вокруг упоминания — заявление обычно в том же
+  // предложении ("Файл schema.drawio создан и валиден").
   const window = response.slice(Math.max(0, idx - 160), idx + path.length + 160);
   const m = window.match(ARTIFACT_SUCCESS_RE);
   return m ? m[0] : null;
 }
 
 /**
- * Returns a contradiction when the answer presents a resolved artifact as
- * created/valid while it is missing or unparseable on disk.
+ * Возвращает противоречие, если ответ подаёт резолвленный артефакт как
+ * созданный/валидный, а на диске его нет или он не парсится.
  */
 export function checkArtifactClaims(
   response: string,
@@ -85,24 +85,24 @@ export function checkArtifactClaims(
   return null;
 }
 
-/** Phrases framing a code block as ACTUAL execution output (not an example). */
+/** Фразы, подающие кодовый блок как РЕАЛЬНЫЙ вывод исполнения (не пример). */
 const OUTPUT_AS_RESULT_RE = wb(
   "вывод программы|вывод команды|результат запуска|результат выполнения|program output|command output|execution result|запустил[а-яё]*.*вывод|покажу вывод|actual output",
 );
 
-/** Hedging that downgrades the block to an expectation/example — honest. */
+/** Хеджирование, понижающее блок до ожидания/примера — честно, пропускаем. */
 const OUTPUT_HEDGE_RE = wb(
   "ожидаем[а-яё]*|expected|пример[а-яё]*|example|для справки|sample|например|предполагаем[а-яё]*|должен быть|should be",
 );
 
 const FENCE_RE = /```/;
 
-/** Tool names whose success means "something actually executed". */
+/** Тулы, чей успех означает "что-то реально исполнилось". */
 const EXEC_TOOLS = new Set(["bash", "process_wait", "pipeline_run"]);
 
 /**
- * Returns a contradiction when the answer shows output as if produced by a
- * run, but no execution tool succeeded in the evidence window.
+ * Возвращает противоречие, если ответ показывает вывод как результат запуска,
+ * но ни один exec-тул в окне доказательств успешно не отработал.
  */
 export function checkUnverifiedOutput(
   response: string,

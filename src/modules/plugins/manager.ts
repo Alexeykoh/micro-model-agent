@@ -1,3 +1,4 @@
+// Менеджер плагинов: регистрация с дедупом по версии и диспатч хуков с изоляцией ошибок.
 import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
@@ -7,16 +8,16 @@ import { Logger } from "../../logger/app-logger";
 const logger = new Logger("warn", "plugins");
 
 /**
- * Run a (possibly async) plugin hook with error isolation. Sync throws and
- * async rejections are both logged and swallowed — one broken plugin must
- * never crash the agent or other plugins.
+ * Гоняет (возможно асинхронный) хук плагина с изоляцией ошибок. Синхронные
+ * броски и асинхронные реджекты логгируются и глотаются — один битый плагин
+ * не должен ронять агента и остальные плагины.
  */
 function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): unknown {
   try {
     const out = fn();
     if (out instanceof Promise) {
-      // The promise rejects AFTER this try/catch has exited — attach a catch
-      // now, otherwise isolation is broken by an unhandledRejection.
+      // Промис реджектится УЖЕ ПОСЛЕ выхода из этого try/catch — вешаем catch
+      // сразу, иначе изоляцию ломает необработанный unhandledRejection.
       out.catch((e: unknown) => {
         logger.warn(`plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
       });
@@ -29,29 +30,32 @@ function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): u
   }
 }
 
+/** Итог регистрации: `registered` (встал/заменил), `skipped_older`, `duplicate`. */
 export type RegisterResult =
   | { status: "registered" }
   | { status: "skipped_older"; existing: AgentPlugin }
   | { status: "duplicate" };
 
+/** Плагин с источником загрузки (для показа в REPL/CLI). */
 export interface PluginInfo {
   plugin: AgentPlugin;
   source?: "builtin" | "global" | "project";
 }
 
+/** Менеджер плагинов: реестр, сортировка по приоритету, диспатч хуков. */
 export class PluginManager {
   private plugins: AgentPlugin[] = [];
   private hostBridge: HostBridge | null = null;
 
   /**
-   * Register the host bridge (set once by the REPL). It is merged into every
-   * hook context as `ctx.hostBridge` unless the caller already provided one.
+   * Регистрирует host-мост (ставит REPL один раз). Подмешивается в каждый
+   * хук-контекст как `ctx.hostBridge`, если вызывающий не дал свой.
    */
   setHostBridge(bridge: HostBridge): void {
     this.hostBridge = bridge;
   }
 
-  /** Merge the host bridge into a hook context (caller-provided value wins). */
+  /** Подмешивает host-мост в хук-контекст (значение вызывающего побеждает). */
   private withHost<T>(ctx: T): T {
     if (!ctx || typeof ctx !== "object") return ctx;
     if (!this.hostBridge || (ctx as Record<string, unknown>).hostBridge !== undefined) {
@@ -61,9 +65,9 @@ export class PluginManager {
   }
 
   /**
-   * Register a plugin. Plugins with the same `name` are deduplicated — the
-   * higher `version` wins (unversioned plugins count as "0.0.0"). The loser is
-   * discarded; `skipped_older` lets the caller warn about the dropped copy.
+   * Регистрирует плагин. Одноимённые дедупятся — побеждает старшая `version`
+   * (безверсейные считаются "0.0.0"). Проигравший отбрасывается; `skipped_older`
+   * даёт вызывающему предупредить о выкинутой копии.
    */
   register(plugin: AgentPlugin, source?: "builtin" | "global" | "project"): RegisterResult {
     if (source) plugin.source = source;
@@ -86,35 +90,41 @@ export class PluginManager {
     this.plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0));
   }
 
+  /** Все зарегистрированные плагины (копия, по приоритету). */
   getAllPlugins(): AgentPlugin[] {
     return [...this.plugins];
   }
 
-  /** Detailed plugin list (name, version, source) for REPL / CLI display. */
+  /** Детальный список (имя, версия, источник) для показа в REPL/CLI. */
   getPluginInfos(): PluginInfo[] {
     return [...this.plugins].map((plugin) => ({ plugin, source: plugin.source }));
   }
 
-  /** Find a registered plugin by name, or null. */
+  /** Ищет зарегистрированный плагин по имени; null, если нет. */
   getPlugin(name: string): AgentPlugin | null {
     return this.plugins.find((p) => p.name === name) ?? null;
   }
 
+  /** Гоняет хук сборки промпта по всем плагинам; собирает вклады. */
   runOnBuildPrompt(): (string | null)[] {
     return this.plugins.map(
       (p) => (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
     );
   }
 
+  /**
+   * Хук перед тулом. False (любой плагин против) — не выполнять.
+   * Возвращает false при блокировке, true при разрешении.
+   */
   async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
       if (plugin.onBeforeTool) {
         try {
           const result = await plugin.onBeforeTool(ctx, call);
-          // The plugin contract allows `false` OR a reason string to block (the
-          // tool executor handles both). Ignoring the string here would silently
-          // fail to block if this path is ever wired up.
+          // Контракт плагина разрешает блокировать `false` ИЛИ строкой-причиной
+          // (экзекутор тулов понимает оба). Проигнорировать строку здесь —
+          // молча не заблокировать, если путь когда-нибудь задействуют.
           if (result === false || typeof result === "string") return false;
         } catch (e) {
           logger.warn(`plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
@@ -124,6 +134,7 @@ export class PluginManager {
     return true;
   }
 
+  /** Хук после тула: отдаёт вызов и результат всем плагинам. */
   async runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -137,6 +148,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук ошибки агента: рассылает ошибку всем плагинам. */
   async runOnError(rawCtx: any, error: Error): Promise<void> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -150,6 +162,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук старта сессии. */
   runOnSessionStart(rawCtx: any): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -159,6 +172,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук перед обдумыванием (THINK). */
   runOnBeforeThink(rawCtx: any): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -168,6 +182,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук после ответа LLM. */
   runOnAfterThink(rawCtx: any, response: LLMResponse | null): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -177,6 +192,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук конца сессии. */
   runOnSessionEnd(rawCtx: any): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -186,6 +202,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук вызова тула (факт вызова, без результата). */
   runOnToolCall(rawCtx: any): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -195,6 +212,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук смены фазы агента. */
   runOnPhase(rawCtx: any, phase: AgentPhase): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -204,6 +222,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук старта тул-вызова. */
   runOnToolStart(rawCtx: any, call: ToolCall): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -213,6 +232,7 @@ export class PluginManager {
     }
   }
 
+  /** Хук конца тул-вызова (вызов, результат, длительность). */
   runOnToolEnd(rawCtx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -222,7 +242,7 @@ export class PluginManager {
     }
   }
 
-  /** Pipe a text chunk through plugin transforms; returns the (possibly replaced) chunk. */
+  /** Прогоняет текстовый чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnText(rawCtx: any, chunk: string): string {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -234,7 +254,7 @@ export class PluginManager {
     return chunk;
   }
 
-  /** Pipe a meta chunk through plugin transforms; returns the (possibly replaced) chunk. */
+  /** Прогоняет мета-чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnMeta(rawCtx: any, chunk: string): string {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {
@@ -246,7 +266,7 @@ export class PluginManager {
     return chunk;
   }
 
-  /** Dispatch a completed-run summary to all plugins (once per Agent.run()). */
+  /** Рассылает сводку завершённого прогона всем плагинам (раз за Agent.run()). */
   runOnTurnEnd(rawCtx: any, summary: TurnSummary): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.plugins) {

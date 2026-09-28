@@ -1,19 +1,16 @@
-/**
- * `GET /api/sessions/:id/history` — a normalized, renderable transcript.
- *
- * The session manager's `session.jsonl` log is the source of truth (it already
- * carries user/assistant/reasoning text and tool lifecycle events in order).
- * Logs written by older builds may lack it, so we fall back to the message
- * history (`history.jsonl` / rotated `.jsonl.gz`) for user/assistant/tool text.
- *
- * The browser gets a flat `HistoryEntry[]` in chronological order, capped to the
- * last `state.historyTail` entries so a long session cannot blow up the payload.
- * Secrets are redacted with the same point-redactor the SSE path uses; the log
- * itself is already sanitized on write, but args/text are scrubbed again here so
- * the invariant holds regardless of the producer.
- *
- * Auth + same-origin are enforced upstream in `server.ts`.
- */
+// `GET /api/sessions/:id/history` — нормализованный рендеримый транскрипт.
+//
+// Источник правды — `session.jsonl` менеджера (уже несёт по порядку текст
+// user/assistant/reasoning и события жизни тулов). Логам старых сборок его
+// может не хватать — фолбэк на историю сообщений (`history.jsonl` / ротированные
+// `.jsonl.gz`) для текста user/assistant/tool.
+//
+// Браузер получает плоский `HistoryEntry[]` хронологически, капнутый хвостом
+// `state.historyTail`, чтобы длинная сессия не раздула пейлоад. Секреты — тем же
+// точечным редактором, что в SSE-пути; сам лог уже санитизирован на записи, но
+// args/текст скрабим повторно, чтобы инвариант держался от любого продюсера.
+//
+// Auth и same-origin — выше в `server.ts`.
 import type { ServerResponse } from "node:http";
 import type { SessionLogEntry } from "../../modules/session/store";
 import type { SessionMessage } from "../../modules/session/types";
@@ -24,6 +21,7 @@ import { scrubToolArgs } from "./forward";
 import { sendJson } from "./util";
 import type { WebUiState } from "./state";
 
+/** Вид записи истории. */
 export type HistoryKind =
   | "user"
   | "assistant"
@@ -35,7 +33,7 @@ export type HistoryKind =
   | "context"
   | "error";
 
-/** Normalized entry the browser renders; `kind` selects the visual form. */
+/** Нормализованная запись для браузера; `kind` выбирает визуальную форму. */
 export interface HistoryEntry {
   ts: string;
   kind: HistoryKind;
@@ -52,7 +50,7 @@ function scrub(text: string | undefined): string | undefined {
   return text ? stripAnsi(redactContextSecrets(text)) : undefined;
 }
 
-/** Map one raw log entry to the wire shape, or `null` for internal-only types. */
+/** Маппит одну сырую запись лога в wire-форму; `null` — внутренним типам. */
 function mapLogEntry(e: SessionLogEntry): HistoryEntry | null {
   switch (e.type) {
     case "user":
@@ -89,12 +87,12 @@ function mapLogEntry(e: SessionLogEntry): HistoryEntry | null {
     default:
       // tool_defs / llm_usage / session_start / baseline_typecheck /
       // reasoning_control / context_probe / output / compaction / audit / moe_*
-      // are not useful in a chat transcript.
+      // в чат-транскрипте бесполезны.
       return null;
   }
 }
 
-/** Best-effort transcript from `history.jsonl` when `session.jsonl` is absent. */
+/** Best-effort транскрипт из `history.jsonl`, когда `session.jsonl` отсутствует. */
 function fromMessages(messages: SessionMessage[]): HistoryEntry[] {
   const out: HistoryEntry[] = [];
   for (const m of messages) {
@@ -118,7 +116,7 @@ function fromMessages(messages: SessionMessage[]): HistoryEntry[] {
   return out;
 }
 
-/** Normalize a raw log (or history fallback) and cap to the last `tail` entries. */
+/** Нормализует сырой лог (или фолбэк истории) и режет до хвоста `tail`. */
 export function normalizeHistory(
   entries: SessionLogEntry[],
   tail: number,
@@ -133,7 +131,7 @@ export function normalizeHistory(
   return tail > 0 ? source.slice(-tail) : source;
 }
 
-/** `GET /api/sessions/:id/history` — 200 transcript, 404 unknown, 503 unwired. */
+/** `GET /api/sessions/:id/history` — 200 транскрипт, 404 чужой, 503 неввязанный. */
 export function handleSessionHistory(res: ServerResponse, id: string, s: WebUiState): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
@@ -150,8 +148,7 @@ export function handleSessionHistory(res: ServerResponse, id: string, s: WebUiSt
     log = manager.loadSessionLog?.(id) ?? [];
     if (log.length === 0) messages = manager.getHistory?.(id) ?? [];
   } catch {
-    // Unreadable/encrypted-mismatch session: answer an empty transcript rather
-    // than failing the whole page load.
+    // Нечитаемая сессия (в т.ч. мисматч шифрования): пустой транскрипт вместо провала всей страницы.
     log = [];
     messages = [];
   }

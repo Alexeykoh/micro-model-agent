@@ -1,13 +1,13 @@
+// Discovery провайдеров для first-run визарда: скан локальных портов, модели, chat-проба.
 /**
- * Provider discovery helpers for the first-run wizard.
- *
- * Moved verbatim (minus terminal UI) from `src/cli/setup.ts` so the browser
- * wizard can reuse the exact same probing logic. Pure network helpers: no
- * terminal, no output channel.
+ * Хелперы discovery провайдеров для first-run визарда.
+ * Вынесены как есть (минус терминальный UI) из `src/cli/setup.ts`, чтобы
+ * браузерный визард переиспользовал ту же логику проб. Чисто сетевые хелперы:
+ * ни терминала, ни output-канала.
  */
 import { probeChat } from "../providers/preflight";
 
-/** Local servers the scan probes. */
+/** Локальные серверы для скана. */
 const KNOWN_PORTS = [
   { port: 1234, label: "LM Studio" },
   { port: 11434, label: "Ollama" },
@@ -19,7 +19,7 @@ const SCAN_TIMEOUT_MS = 2000;
 const MODELS_TIMEOUT_MS = 5000;
 const CHAT_TIMEOUT_MS = 10000;
 
-/** Probe well-known local ports for an OpenAI-compatible `/v1/models`. */
+/** Проба известных локальных портов на OpenAI-совместимый `/v1/models`. */
 export async function scanLocalServers(): Promise<{ label: string; url: string }[]> {
   const found: { label: string; url: string }[] = [];
   for (const { port, label } of KNOWN_PORTS) {
@@ -34,13 +34,13 @@ export async function scanLocalServers(): Promise<{ label: string; url: string }
         found.push({ label, url: `http://localhost:${port}/v1` });
       }
     } catch {
-      /* port not available */
+      /* порт недоступен */
     }
   }
   return found;
 }
 
-/** List model ids from an OpenAI-compatible `/models`; `[]` on any failure. */
+/** Id моделей из OpenAI-совместимого `/models`; любая неудача — []. */
 export async function fetchProviderModels(apiBase: string, apiKey: string): Promise<string[]> {
   try {
     const url = `${apiBase.replace(/\/+$/, "")}/models`;
@@ -67,7 +67,7 @@ export async function fetchProviderModels(apiBase: string, apiKey: string): Prom
   }
 }
 
-/** Cheap chat probe: `true` when the selected model answers. Never throws. */
+/** Дешёвая chat-проба: `true`, если модель отвечает. Не бросает. */
 export async function testProviderChat(
   apiBase: string,
   apiKey: string,

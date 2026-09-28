@@ -1,3 +1,4 @@
+/** Превалидация синтаксиса перед записью (TS/JS/JSON/XML), без шелла. */
 import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { extname, dirname } from "path";
 import { spawn } from "child_process";
@@ -6,6 +7,7 @@ import { Logger } from "../logger/app-logger";
 const SYNTAX_CACHE = new Map<string, { hash: string; error: string | null }>();
 const logger = new Logger("warn", "syntax-validator");
 
+/** Хэш контента для кэша проверок. */
 function contentHash(content: string): string {
   let h = 5381;
   for (let i = 0; i < content.length; i++) {
@@ -15,9 +17,9 @@ function contentHash(content: string): string {
 }
 
 /**
- * Run a compiler with timeout. Returns stdout/stderr on success, throws on
- * failure. Spawns WITHOUT a shell: the file path is model-supplied and shell
- * interpolation would execute `$()`/backticks/`%VAR%` in the filename.
+ * Прогон компилятора с таймаутом. Успех — stdout/stderr, провал — throw.
+ * Спавн БЕЗ шелла: путь файла от модели, интерполяция шелла выполнила бы
+ * `$()`/бэктики/`%VAR%` в имени.
  */
 function runCommand(
   file: string,
@@ -61,27 +63,24 @@ function runCommand(
   });
 }
 
-/**
- * Supported file extensions for syntax validation.
- */
+/** Расширения с валидацией синтаксиса. */
 const TS_EXTENSIONS = new Set([".ts", ".tsx", ".cts", ".mts"]);
 const JS_EXTENSIONS = new Set([".js", ".jsx", ".cjs", ".mjs"]);
 const JSON_EXTENSIONS = new Set([".json", ".jsonc"]);
-/** XML-family extensions: checked for well-formedness (no external deps). */
+/** XML-семейство: только well-formedness, без внешних зависимостей. */
 const XML_EXTENSIONS = new Set([".xml", ".drawio", ".svg", ".xaml", ".plist", ".iml"]);
 
 /**
- * Minimal XML well-formedness check (no dependencies): a tag-stack scanner
- * that skips `<?...?>`, `<!--...-->`, `<![CDATA[...]]>` and `<!...>`
- * declarations, tracks quoted attribute spans (a `>` inside quotes never
- * closes a tag), and reports mismatched, unclosed, or stray closing tags.
- * Returns the first error, or null when the document is well-formed.
- * Observed gap: qwen3.5-9b wrote schema.drawio with a self-closed
- * `<diagram/>` followed by a stray `</diagram>` and claimed "valid".
+ * Минимальная проверка XML well-formedness (без зависимостей): сканер со
+ * стеком тегов, пропускает `<?...?>`, `<!--...-->`, `<![CDATA[...]]>` и
+ * `<!...>`-декларации, учитывает кавычки в атрибутах (`>` внутри кавычек тег
+ * не закрывает), репортит несогласованные/незакрытые/висячие теги.
+ * Первая ошибка или null. Закрытый кейс: самозакрытый `<diagram/>` с висячим
+ * `</diagram>` и заявлением "валидно".
  *
- * Split into small scanners so each unit stays under the complexity gate
- * (fallow pre-commit): comment/CDATA/PI spans, quote-aware `>` search,
- * open/close matching, and one markup step per `<`.
+ * Разбит на мелкие сканеры, чтобы каждый юнит проходил complexity-гейт
+ * (fallow pre-commit): спан comment/CDATA/PI, кавычко-чувствительный поиск
+ * `>`, мэтчинг open/close, один markup-шаг на `<`.
  */
 interface XmlSpan {
   end: number;
@@ -94,7 +93,7 @@ const XML_SPANS: Array<{ open: string; close: string; kind: XmlSpan["kind"] }> =
   { open: "<?", close: "?>", kind: "pi" },
 ];
 
-/** End index (past the closer) of a comment/CDATA/PI span, or -1 if open. */
+/** Спан коммента/CDATA/PI: конец (за закрывателем) или -1, если открыт. */
 function skipXmlSpan(content: string, i: number): { end: number; kind: XmlSpan["kind"] } | null {
   for (const s of XML_SPANS) {
     if (!content.startsWith(s.open, i)) continue;
@@ -105,9 +104,8 @@ function skipXmlSpan(content: string, i: number): { end: number; kind: XmlSpan["
 }
 
 /**
- * Index past the first `>` outside quotes, or -1. With trackBrackets (for
- * `<!...>` declarations with `[...]` sections) a `>` inside brackets is
- * skipped too.
+ * Индекс за первым `>` вне кавычек, или -1. С trackBrackets (для `<!...>`
+ * с `[...]`-секциями) `>` внутри скобок тоже пропускается.
  */
 function findClosingGt(content: string, from: number, trackBrackets: boolean): number {
   let j = from;
@@ -128,23 +126,25 @@ function findClosingGt(content: string, from: number, trackBrackets: boolean): n
   return -1;
 }
 
-/** Quote tracking for one scanned char: enter, exit, or keep the span. */
+/** Кавычко-состояние на один символ: вход, выход или удержание спана. */
 function nextQuoteState(quote: string | null, d: string): string | null {
   if (quote) return d === quote ? null : quote;
   return d === '"' || d === "'" ? d : null;
 }
 
-/** Raw inner text of a regular `<...>` tag plus the end index, or null. */
+/** Сырой текст обычного `<...>`-тега плюс конечный индекс, или null. */
 function readXmlTag(content: string, i: number): { raw: string; end: number } | null {
   const end = findClosingGt(content, i + 1, false);
   if (end === -1) return null;
   return { raw: content.slice(i + 1, end - 1).trim(), end };
 }
 
+/** Число переводов строк. */
 function countLines(s: string): number {
   return s.split("\n").length - 1;
 }
 
+/** Состояние XML-скана: контент, позиция, строка, стек. */
 interface XmlScanState {
   content: string;
   i: number;
@@ -152,7 +152,7 @@ interface XmlScanState {
   stack: Array<{ name: string; line: number }>;
 }
 
-/** Advances past one `<...>` markup item. Returns an error (no line suffix) or null. */
+/** Шаг через один `<...>`-элемент. Ошибка (без суффикса строки) или null. */
 function scanXmlMarkup(st: XmlScanState): string | null {
   const { content } = st;
   const span = skipXmlSpan(content, st.i);
@@ -176,7 +176,7 @@ function scanXmlMarkup(st: XmlScanState): string | null {
   return matchXmlTag(st.stack, tag.raw, st.line);
 }
 
-/** Matches a closing tag against the stack. Returns an error or null. */
+/** Сверка закрывающего тега со стеком. Ошибка или null. */
 function matchXmlCloseTag(stack: Array<{ name: string; line: number }>, raw: string): string | null {
   const name = raw.slice(1).split(/[\s/>]/, 1)[0];
   if (!name) return "Empty closing tag";
@@ -188,7 +188,7 @@ function matchXmlCloseTag(stack: Array<{ name: string; line: number }>, raw: str
   return null;
 }
 
-/** Matches an opening/self-closing tag against the stack. Returns an error or null. */
+/** Сверка открывающего/самозакрытого тега со стеком. Ошибка или null. */
 function matchXmlOpenTag(
   stack: Array<{ name: string; line: number }>,
   raw: string,
@@ -204,9 +204,8 @@ function matchXmlOpenTag(
 }
 
 /**
- * Matches one opening/self-closing/closing tag against the stack. Mutates
- * the stack, marks nothing else. Returns an error message (without line
- * suffix) or null.
+ * Сверка одного тега (open/self-close/close) со стеком. Стек мутирует, больше
+ * ничего. Ошибка (без суффикса строки) или null.
  */
 function matchXmlTag(
   stack: Array<{ name: string; line: number }>,
@@ -218,6 +217,7 @@ function matchXmlTag(
   return matchXmlOpenTag(stack, raw, tagLine);
 }
 
+/** Проверяет XML well-formedness. Первая ошибка с номером строки или null. */
 export function checkXmlWellFormed(content: string): string | null {
   const st: XmlScanState = { content, i: 0, line: 1, stack: [] };
   const err = (msg: string) => `${msg} (line ${st.line})`;
@@ -242,9 +242,10 @@ export function checkXmlWellFormed(content: string): string | null {
 }
 
 /**
- * Best-effort JSONC normalizer: strip `//` and `/* *\/` comments and trailing
- * commas so a valid commented `tsconfig.json` is not rejected as a syntax
- * error by the pre-write gate (which made small models strip needed comments).
+ * Best-effort JSONC-нормалайзер: сносит `//` и `/* ... *\/`-комменты и висячие
+ * запятые, чтобы валидный комментированный `tsconfig.json` не отклонялся
+ * pre-write гейтом как syntax error (гейт заставлял малые модели сносить
+ * нужные комменты).
  */
 function stripJsonComments(input: string): string {
   let out = "";
@@ -298,18 +299,19 @@ function stripJsonComments(input: string): string {
   return out.replace(/,\s*([}\]])/g, "$1");
 }
 
+/** Итог валидации: valid + текст первой ошибки. */
 export interface SyntaxValidationResult {
   valid: boolean;
   error?: string;
 }
 
 /**
- * Pre-validate file syntax BEFORE writing to disk.
- * Returns { valid: true } if syntax is OK or language is not supported.
- * Returns { valid: false, error: "..." } if syntax is invalid.
+ * Превалидация синтаксиса ДО записи на диск.
+ * `{ valid: true }` — синтаксис ок или язык не поддерживается;
+ * `{ valid: false, error }` — синтаксис бит.
  *
- * For TypeScript/JavaScript: writes to a temp file and runs the compiler.
- * For JSON: parses the content directly.
+ * TypeScript/JavaScript: временный файл + прогон компилятора.
+ * JSON: прямой парсинг.
  */
 export async function preValidateSyntax(
   filePath: string,
@@ -318,13 +320,13 @@ export async function preValidateSyntax(
 ): Promise<SyntaxValidationResult> {
   const ext = extname(filePath).toLowerCase();
 
-  // JSON / JSONC — parse directly, tolerating comments and trailing commas.
+  // JSON / JSONC — прямой парсинг, комменты и висячие запятые терпим.
   if (JSON_EXTENSIONS.has(ext)) return validateJsonContent(content);
 
-  // XML family — pure well-formedness check (no compiler to spawn).
+  // XML-семейство — чистая well-formedness (компилятор не спавним).
   if (XML_EXTENSIONS.has(ext)) return validateXmlContent(content);
 
-  // TypeScript — syntax check via bun build
+  // TypeScript — синтаксис через bun build.
   if (TS_EXTENSIONS.has(ext)) {
     return validateWithCompiler(
       filePath,
@@ -337,7 +339,7 @@ export async function preValidateSyntax(
     );
   }
 
-  // JavaScript — syntax check via node --check
+  // JavaScript — синтаксис через node --check.
   if (JS_EXTENSIONS.has(ext)) {
     return validateWithCompiler(
       filePath,
@@ -350,14 +352,14 @@ export async function preValidateSyntax(
     );
   }
 
-  // Unsupported extension — skip validation
+  // Неподдерживаемое расширение — без валидации.
   return { valid: true };
 }
 
 /**
- * Runs a compiler syntax check via a temp file (no shell — the file path is
- * model-supplied). Shared by the TypeScript (`bun build`) and JavaScript
- * (`node --check`) branches; results are cached by content hash.
+ * Проверка компилятором через временный файл (без шелла — путь от модели).
+ * Общая для TypeScript (`bun build`) и JavaScript (`node --check`); результаты
+ * кэшируются по хэшу контента.
  */
 async function validateWithCompiler(
   filePath: string,
@@ -391,8 +393,8 @@ async function validateWithCompiler(
   }
 }
 
-/** Best-effort temp-file cleanup: the check already returned, so failures
- * are only logged for diagnosability instead of silently ignored. */
+/** Best-effort чистка временного файла: проверка уже вернулась, падения только
+ * логируются ради диагностики, а не глотаются молча. */
 function removeTempFile(tmpFile: string): void {
   try {
     if (existsSync(tmpFile)) unlinkSync(tmpFile);
@@ -403,7 +405,7 @@ function removeTempFile(tmpFile: string): void {
   }
 }
 
-/** JSON / JSONC — parse directly, tolerating comments and trailing commas. */
+/** JSON / JSONC — прямой парсинг, комменты и висячие запятые терпим. */
 function validateJsonContent(content: string): SyntaxValidationResult {
   try {
     JSON.parse(content);
@@ -418,20 +420,19 @@ function validateJsonContent(content: string): SyntaxValidationResult {
   }
 }
 
-/** XML family — pure well-formedness check (no compiler to spawn). */
+/** XML-семейство — чистая well-formedness (компилятор не спавним). */
 function validateXmlContent(content: string): SyntaxValidationResult {
   const error = checkXmlWellFormed(content);
   return error ? { valid: false, error } : { valid: true };
 }
 
 /**
- * Detect import/export conflicts in TypeScript/JavaScript code.
- * Returns array of conflicting names.
+ * Детект конфликтов import/export в TS/JS. Возвращает конфликтующие имена.
  */
 export function detectImportConflicts(content: string): string[] {
   const conflicts: string[] = [];
 
-  // Extract all named imports: import { foo, bar as baz } from '...'
+  // Все именованные импорты: import { foo, bar as baz } from '...'.
   const importRegex = /import\s+(?:type\s+)?\{([^}]+)\}\s+from/g;
   const exportRegex = /export\s+(?:function|class|const|let|var|type|interface|async\s+function)\s+(\w+)/g;
 
@@ -444,7 +445,7 @@ export function detectImportConflicts(content: string): string[] {
       .split(",")
       .map((s) => s.trim())
       .map((s) => {
-        // Handle "foo as bar" — take the local name (foo)
+        // "foo as bar" — берём локальное имя (foo).
         const asMatch = s.match(/^(\w+)\s+as\s+\w+$/);
         return asMatch ? asMatch[1] : s;
       })
@@ -456,7 +457,7 @@ export function detectImportConflicts(content: string): string[] {
     exports.add(match[1]);
   }
 
-  // Check for conflicts
+  // Сверка конфликтов.
   for (const name of imports) {
     if (exports.has(name)) {
       conflicts.push(name);

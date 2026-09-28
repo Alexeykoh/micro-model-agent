@@ -1,10 +1,9 @@
+// HTTP + SSE + REST транспорт `mma web` (app-слой отделён от listen ради тестов).
 /**
- * HTTP + SSE + REST transport for `mma web`.
- *
- * `handleRequest` is the pure app layer taking an explicit `WebUiState` so tests
- * drive it hermetically (rule #13: app creation separated from `listen()`).
- * `startServer`/`stopServer` default to a lazy process-global state for the CLI.
- * Transport helpers live in `./util`.
+ * `handleRequest` — чистый app-слой на явном `WebUiState`, чтобы тесты гоняли
+ * его герметично (правило #13: создание app отдельно от `listen()`).
+ * `startServer`/`stopServer` по умолчанию — ленивое процесс-глобальное состояние
+ * для CLI. Транспортные хелперы — в `./util`.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState } from "./state";
@@ -30,9 +29,10 @@ import { handleFileApi } from "./file-api";
 import { handleSetupApi } from "./setup-api";
 import type { WebUiState, WebUiAssets } from "./state";
 
+/** Реэкспорт открытия браузера для CLI. */
 export { tryOpenBrowser } from "./util";
 
-/** Static routes served verbatim (never template-processed). */
+/** Статические роуты, отдаваемые как есть (без шаблонной обработки). */
 const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
   "/index.html": { type: "text/html; charset=utf-8", key: "html" },
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
@@ -44,11 +44,11 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
 };
 
 /**
- * SSE handler: `/events` stream with client cap + heartbeat.
+ * SSE-хендлер: поток `/events` с капом клиентов и heartbeat.
  *
- * Backpressure: `res.write()` returning false means the socket buffer is full
- * (slow/stalled reader). We drop the client immediately instead of buffering
- * events unboundedly — a live view is not worth an OOM.
+ * Backpressure: `res.write() === false` — буфер сокета полон (медленный/виснущий
+ * читатель). Дропаем клиента сразу, а не копим события безгранично — живой вид
+ * не стоит OOM.
  */
 function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.clients.size >= s.maxClients) {
@@ -83,17 +83,17 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
   res.on("close", close);
 }
 
-/** Remove a slow/broken SSE client and end its response. */
+/** Убирает медленного/битого SSE-клиента и закрывает его ответ. */
 function dropClient(res: ServerResponse, s: WebUiState): void {
   s.clients.delete(res);
   try {
     res.end();
   } catch {
-    /* already gone */
+    /* уже ушёл */
   }
 }
 
-/** Exact `METHOD path` routes (rule #17: handler map, no `if` chain). */
+/** Точные роуты `METHOD путь` (правило #17: карта хендлеров, без `if`). */
 const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
   "GET /api/state": (_req, res, s) => {
     sendJson(res, 200, { busy: s.busy, state: s.bridge?.getState?.() ?? null });
@@ -114,9 +114,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
 };
 
 /**
- * Prefix-group dispatchers (sessions/settings/providers/file/setup own their
- * sub-paths). Tried after the exact table; each reports whether it handled
- * the request.
+ * Префикс-группы диспатча (sessions/settings/providers/file/setup владеют
+ * своими под-путями). После точной таблицы; каждая сообщает, обработала ли.
  */
 const API_GROUPS: Array<(
   req: IncomingMessage,
@@ -125,7 +124,7 @@ const API_GROUPS: Array<(
   s: WebUiState,
 ) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi];
 
-/** REST handler for `/api/*`; assumes auth + same-origin already checked. */
+/** REST-хендлер `/api/*`; auth + same-origin уже проверены. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
   const route = API_ROUTES[`${req.method} ${reqUrl.pathname}`];
   if (route) {
@@ -138,7 +137,7 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   sendJson(res, 404, { error: "not found" });
 }
 
-/** `POST /api/command` — fire-and-forget dispatch, output streams over SSE. */
+/** `POST /api/command` — fire-and-forget диспатч, вывод стримится по SSE. */
 function handleCommandPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.setupRequired) {
     sendJson(res, 409, { error: "setup_required" });
@@ -148,12 +147,12 @@ function handleCommandPost(req: IncomingMessage, res: ServerResponse, s: WebUiSt
   readBody(req, s.maxBodyBytes)
     .then((raw) => {
       let line = "";
-      // Malformed body: the dispatcher ignores a non-slash line, so this is
-      // a harmless no-op rather than a 400.
+      // Битое тело: диспатчер игнорирует не-слеш строку, так что это безвредный
+      // no-op, а не 400.
       const rec = parseJsonBody(raw) ?? {};
       if (typeof rec.line === "string") line = rec.line;
-      // A host error must never become a 5xx: the POST only acknowledges
-      // acceptance, output streams over SSE as `command` events.
+      // Ошибка хоста не должна стать 5xx: POST лишь подтверждает приём,
+      // вывод стримится по SSE событиями `command`.
       Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
       sendJson(res, 202, { ok: true });
     })
@@ -162,21 +161,24 @@ function handleCommandPost(req: IncomingMessage, res: ServerResponse, s: WebUiSt
     });
 }
 
-/** `POST /api/interrupt` — abort the running turn without unlocking early. */
+/** `POST /api/interrupt` — аборт бегущего хода без раннего разлока. */
 function handleInterruptPost(res: ServerResponse, s: WebUiState): void {
   if (!s.busy && !s.bridge?.isBusy()) {
     sendJson(res, 409, { error: "idle" });
     return;
   }
-  // Do NOT clear `busy` here: the forwarder's `onTurnEnd` owns the reset for
-  // any turn that actually started. Clearing now would unlock the UI while the
-  // aborted turn is still unwinding and let a second submit slip in. If the
-  // host is not actually running (reservation only), `interrupt()` is a no-op
-  // and the pending submit path releases the slot.
+  // `busy` здесь НЕ чистим: сбросом владеет форвардерный `onTurnEnd` для любого
+  // реально стартовавшего хода. Очистка сейчас разлочила бы UI, пока абортнутый
+  // ход ещё разматывается, и второй сабмит проскочил бы. Если хост реально не
+  // бежит (только резерв), `interrupt()` — no-op, и слот отпустит путь висящего сабмита.
   s.bridge?.interrupt();
   sendJson(res, 200, { ok: true });
 }
 
+/**
+ * Точка входа запросов: SSE, статика, `/js`-модули, `/api/*`, иначе 404.
+ * Auth обязателен и для SSE-потока, и для API; same-origin — для пишущих.
+ */
 export function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -187,15 +189,15 @@ export function handleRequest(
   try {
     reqUrl = new URL(req.url || "/", `http://${req.headers.host || s.host}`);
   } catch {
-    // Malformed / hostile `Host` (or absolute-form request URL): don't crash the
-    // listener — reject the request.
+    // Битый/враждебный `Host` (или URL абсолютной формы): не роняем листенер —
+    // отвергаем запрос.
     sendJson(res, 400, { error: "bad request" });
     return;
   }
 
   if (reqUrl.pathname === "/events") {
-    // Auth applies to the SSE stream too: a non-loopback bind with a token must
-    // not leak events. `?token=` is accepted because EventSource cannot set headers.
+    // Auth и на SSE-поток: не-loopback бинд с токеном не должен светить события.
+    // `?token=` принимаем, т.к. EventSource заголовки ставить не умеет.
     if (!checkAuth(req, reqUrl, s)) {
       sendJson(res, 401, { error: "unauthorized" });
       return;
@@ -207,17 +209,17 @@ export function handleRequest(
 
   const asset = STATIC_ASSETS[reqUrl.pathname === "/" ? "/index.html" : reqUrl.pathname];
   if (asset) {
-    // Re-read from disk when possible so editing the assets is picked up without
-    // a restart; `no-store` keeps the browser from caching a stale UI. The fixed
-    // snapshot passed to `startServer` is the fallback (tests, read failures).
+    // Перечитываем с диска, когда можно, чтобы правки ассетов цеплялись без
+    // рестарта; `no-store` не даёт браузеру кешировать протухший UI. Фиксированный
+    // снапшот из `startServer` — фолбэк (тесты, ошибки чтения).
     const src = s.assetSource ? s.assetSource() : assets;
     res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
     res.end(src[asset.key] ?? assets[asset.key] ?? "");
     return;
   }
 
-  // Split frontend modules (`/js/*.js`, relative ESM imports from `/app.js`).
-  // Same live-reload semantics as the static assets above.
+  // Разделённые фронтенд-модули (`/js/*.js`, относительные ESM-импорты из `/app.js`).
+  // Та же live-reload семантика, что у статики выше.
   if (reqUrl.pathname.startsWith("/js/") && reqUrl.pathname.endsWith(".js")) {
     const key = reqUrl.pathname.slice(1);
     const src = s.assetSource ? s.assetSource() : assets;
@@ -249,12 +251,16 @@ export function handleRequest(
 
 let defaultState: WebUiState | null = null;
 
-/** Lazily created process-global state used when callers pass no explicit one. */
+/** Ленивое процесс-глобальное состояние для вызовов без явного. */
 function getDefaultState(): WebUiState {
   if (!defaultState) defaultState = createWebUiState();
   return defaultState;
 }
 
+/**
+ * Стартует HTTP-сервер на хосте/порту состояния (порт — env `MMA_WEBUI_PORT`).
+ * Не-loopback без токена — отказ. Резолвится публичным URL.
+ */
 export function startServer(
   assets: WebUiAssets,
   s: WebUiState = getDefaultState(),
@@ -283,12 +289,13 @@ export function startServer(
   return s.starting;
 }
 
+/** Останавливает сервер: дроп клиентов, закрытие, сброс busy-флагов. */
 export function stopServer(s: WebUiState = getDefaultState()): void {
   for (const client of s.clients) {
     try {
       client.end();
     } catch {
-      /* best-effort cleanup */
+      /* best-effort чистка */
     }
   }
   s.clients.clear();
@@ -296,7 +303,7 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
     try {
       s.server.close();
     } catch {
-      /* best-effort cleanup */
+      /* best-effort чистка */
     }
     s.server = null;
   }

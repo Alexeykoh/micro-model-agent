@@ -1,58 +1,54 @@
+/** Контракты тулов: определения, контекст, результаты, хуки плагинов. */
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  /** Emoji icon shown in the tool header (e.g. 📝, 🔍, 💻). Falls back to
-   *  the hardcoded marker in `toolMarker()` when not set. */
+  /** Иконка в заголовке тула. Без неё — маркер из `toolMarker()`. */
   icon?: string;
   tags?: string[];
   /**
-   * Tools that survive any tag-based filtering (getAllForLLM/getByTags/
-   * filterToolsByTags). Structural tools (plan/todo/verify/project_map/
-   * lsp_check/enable_tools) are alwaysOn so plan enforcement and LSP checks
-   * keep working even when the LLM tool set is narrowed.
+   * Тулы вне tag-фильтрации (getAllForLLM/getByTags/filterToolsByTags).
+   * Структурные тулы (plan/todo/verify/project_map/lsp_check/enable_tools) —
+   * alwaysOn, чтобы сужение набора не ломало план и LSP-проверки.
    */
   alwaysOn?: boolean;
-  /** Interactive tools wait for user input and are exempt from the execution timeout. */
+  /** Интерактивный тул: ждёт ввода пользователя, без таймаута выполнения. */
   interactive?: boolean;
   /**
-   * Per-tool execution timeout override in ms. Defaults to the executor's
-   * TOOL_EXECUTION_TIMEOUT_MS (60s). Used by tools that make multiple LLM
-   * calls (e.g. chunk_query) and need a longer budget on slow providers.
+   * Таймаут тула в мс. Дефолт — TOOL_EXECUTION_TIMEOUT_MS (60с) исполнителя.
+   * Для тулов с несколькими LLM-вызовами (напр. chunk_query) на медленных провайдерах.
    */
   timeoutMs?: number;
   /**
-   * The tool bounds its own output size (line limits, entry caps, tail caps).
-   * Budget-based truncation in the agent loop must never apply to such tools —
-   * near-full context was cutting read_file results to ~2K chars, making the
-   * model believe files were truncated and re-read them forever.
+   * Тул сам ограничивает размер вывода (лимиты строк/записей/хвоста).
+   * Усечение по бюджету к таким тулам применять нельзя: почти полный контекст
+   * резал read_file до ~2K символов, и модель бесконечно перечитывала файл.
    */
   boundedOutput?: boolean;
   /**
-   * Deterministic read-only tool: the executor memoizes successful results
-   * (keyed by session + name + arguments, 120s TTL) and serves repeats
-   * without re-running the handler. Mark only tools that cannot mutate
-   * anything and whose output is stable while no mutating tool runs —
-   * any non-cacheable execution wipes the memo. Model-facing behavior is
-   * unchanged (the stored result goes through the same post-processing).
+   * Детерминированный read-only тул: исполнитель мемоизирует успешные результаты
+   * (ключ — сессия + имя + аргументы, TTL 120с) и отдаёт повторы без перезапуска.
+   * Помечать только немутирующие тулы со стабильным выводом; любое некешируемое
+   * выполнение сбрасывает мемо. Для модели поведение не меняется.
    */
   cacheable?: boolean;
   /**
-   * The tool manages its own memo entries via `ctx.toolExecutor`
-   * (`memoGet`/`memoSet`/`memoInvalidate`) because cacheability depends on
-   * the arguments (e.g. bash: `npm view` is memoizable, `npm publish` is
-   * not). The executor skips auto-invalidation for such tools — the tool
-   * itself must invalidate on anything that may mutate.
+   * Тул сам управляет мемо через `ctx.toolExecutor` (`memoGet`/`memoSet`/
+   * `memoInvalidate`), т.к. кешируемость зависит от аргументов (bash: `npm view`
+   * кешируем, `npm publish` — нет). Исполнитель автосброс для таких тулов
+   * пропускает — инвалидация на самом туле.
    */
   manualMemo?: boolean;
   handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
+/** Область видимости тула: разрешённые и read-only файлы. */
 export interface ToolScope {
   allowed_files: string[];
   read_only_files: string[];
 }
 
+/** Контекст выполнения тула: конфиг, провайдер, логгер, сессия, скоуп. */
 export interface ToolContext {
   config: import("../config/types").AppConfig;
   baseDir: string;
@@ -62,90 +58,78 @@ export interface ToolContext {
   toolExecutor?: import("./executor").ToolExecutor;
   contextManager?: import("../modules/context/manager").ContextManager;
   /**
-   * Resolved capabilities of the ACTIVE model (preset + live probe + config
-   * override). Tools that depend on model abilities (browser vision, image
-   * attachment) must read this instead of guessing from the model name.
+   * Возможности АКТИВНОЙ модели (пресет + живой пробник + override конфига).
+   * Тулы, зависящие от способностей модели (browser vision, аттачи картинок),
+   * читают это вместо угадывания по имени модели.
    */
   capabilities?: import("../config/types").ModelCapabilities;
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>;
   };
   /**
-   * Append a structured entry to the session execution log (session.jsonl).
-   * Used by execution/module to record plan progress for post-mortem analysis.
+   * Добавить структурую запись в лог выполнения сессии (session.jsonl).
+   * Для записи прогресса плана (post-mortem анализ).
    */
   sessionLog?: {
     plan(event: string, detail: string, iteration?: number): void;
   };
   /**
-   * One-shot headless mode: interactive tools (question/approve) fail fast
-   * instead of blocking on stdin, and the agent exits on the first final answer.
+   * Headless one-shot: интерактивные тулы (question/approve) падают сразу,
+   * не блокируясь на stdin; агент завершается на первом финальном ответе.
    */
   exitOnComplete?: boolean;
-  /**
-   * Current recursion depth for sub-agents
-   */
+  /** Текущая глубина рекурсии субагентов. */
   recursionDepth?: number;
-  /**
-   * Session ID for audit logging
-   */
+  /** ID сессии для аудит-лога. */
   sessionId?: string;
-  /**
-   * File operations counter for rate limiting
-   */
+  /** Счётчик файловых операций для rate limiting. */
   fileOperationsCount?: number;
-  /**
-   * Session context for isolation
-   */
+  /** Контекст сессии для изоляции. */
   sessionContext?: import("../modules/security/session-isolation").SessionContext;
   /**
-   * Id of the tool call currently being executed. Set by the executor so
-   * long-running tools (e.g. bash) can be killed when the execution timeout
-   * fires.
+   * ID выполняемого tool call. Ставит исполнитель, чтобы долгие тулы
+   * (напр. bash) можно было убить по таймауту.
    */
   activeCallId?: string;
   /**
-   * Shared mutable array of tool tags enabled on demand via the
-   * `enable_tools` tool. The agent loop re-reads it every iteration to
-   * recompute the LLM-visible tool set. When on-demand enable is disabled
-   * this stays empty and getAllForLLM returns every tool (legacy mode).
+   * Общий мутабельный массив тегов, включённых on-demand через `enable_tools`.
+   * Цикл агента перечитывает его каждую итерацию для пересчёта видимого LLM
+   * набора. Пустой при выключенном on-demand — getAllForLLM отдаёт всё (legacy).
    */
   activeToolTags?: string[];
   /**
-   * Strict tool allowlist for the current turn/session. When set, ONLY these
-   * tool names are exposed to the LLM and executable — `alwaysOn` and tags do
-   * NOT bypass it. Used by onboarding so the agent cannot touch the repo.
-   * Undefined = normal tag-based selection.
+   * Строгий allowlist тулов на ход/сессию. Когда задан, модели видны и
+   * исполнимы ТОЛЬКО эти имена — `alwaysOn` и теги его НЕ обходят.
+   * Для онбординга (запрет трогать репозиторий). Undefined — обычный tag-отбор.
    */
   toolAllowlist?: string[];
   /**
-   * When set, write_file/edit_file may only target these absolute paths
-   * (case-insensitive). Used by onboarding `init` to restrict writes to
-   * AGENTS.md. Undefined = no restriction.
+   * Когда задан, write_file/edit_file пишут только в эти абсолютные пути
+   * (без учёта регистра). Для онбординга `init` (только AGENTS.md).
+   * Undefined — без ограничений.
    */
   writePathAllowlist?: string[];
   /**
-   * Shared onboarding state. Set by the `meet_done` sentinel tool and read by
-   * the REPL to leave meet mode. Carries the active guide block so the REPL
-   * can remove it on exit. Undefined outside an onboarding session.
+   * Общее состояние онбординга. Ставит `meet_done`, читает REPL для выхода
+   * из meet-режима. Несёт активный guide-блок для снятия при выходе.
+   * Undefined вне онбординга.
    */
   onboarding?: { done: boolean; block?: import("../core/types").PromptBlock };
   /**
-   * Optional cleanup callback invoked by the executor when the tool times
-   * out or is aborted. Used by subagent to restore the parent's scope even
-   * when the agent's `finally` block never runs (abandoned promise).
+   * Опциональный cleanup при таймауте/аборте тула. Для subagent — восстановить
+   * скоуп родителя, даже если `finally` агента не отработал (брошенный промис).
    */
   cleanup?: () => void;
   /**
-   * Test seam — factory for the sub-agent instance (Bun module mocks are
-   * process-global, so vi.mock cannot be used for the Agent class).
+   * Тестовый шов — фабрика инстанса субагента (моки Bun-модулей глобальны
+   * на процесс, vi.mock для класса Agent не годится).
    */
   agentFactory?: (deps: unknown) => {
     run(task: string): Promise<import("../core/types").AgentResult>;
   };
   /**
-   * Session manager — exposes active session metadata to tools.
-   * Added for session_info tool; kept minimal to avoid circular deps.
+   * Менеджер сессий — метаданные активной сессии для тулов.
+   * Добавлен для session_info; минимален во избежание циклических зависимостей.
    */
   sessionManager?: {
     getActiveMeta(): {
@@ -159,13 +143,14 @@ export interface ToolContext {
     } | null;
   };
   /**
-   * Terminal-agnostic prompt surface for interactive tools. The REPL installs
-   * one that takes over the terminal for the duration of a question; headless
-   * runs leave it undefined so tools fall back to the legacy readline path.
+   * Терминал-независимая поверхность промпта для интерактивных тулов. REPL
+   * ставит свою на время вопроса; в headless undefined — тулы падают
+   * на legacy readline-путь.
    */
   promptIO?: import("./prompt-io").PromptIO;
 }
 
+/** Результат тула: успех, вывод, вложения, артефакты. */
 export interface ToolResult {
   success: boolean;
   output: string;
@@ -180,39 +165,40 @@ export interface ToolResult {
    */
   images?: import("../llm/provider").ImageUrlPart[];
   /**
-   * True when a plugin's `onBeforeTool` refused the call before the tool ran.
-   * Such a result is `success:false`, but it is NOT evidence the action is
-   * broken — the plugin may be guard-railing ordering, scope, or security.
-   * Callers must exclude blocked calls from failure/retry accounting
-   * (consecutive-failure recovery, "already tried & failed" compaction memory,
-   * repeated-tool-failure rules); otherwise a transient guard (or a guard bug)
-   * poisons the agent into never retrying a correct action.
+   * True, если `onBeforeTool` плагина отклонил вызов до запуска тула.
+   * Это `success:false`, но НЕ признак сломанного действия — плагин может
+   * ограждать порядок/скоуп/безопасность. Такие вызовы исключать из учёта
+   * failures/retry (иначе транзиентный гард навсегда отучит агента
+   * повторять корректное действие).
    */
   blocked?: boolean;
-  /** Absolute path of a persisted artifact (subagent result_mode:"file"). */
+  /** Абсолютный путь сохранённого артефакта (subagent result_mode:"file"). */
   artifactPath?: string;
-  /** Token usage of the sub-agent run (MoE cost attribution per expert_tag). */
+  /** Токены прогона субагента (атрибуция стоимости MoE по expert_tag). */
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
 }
 
+/** Вызов тула: id, имя, аргументы. */
 export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
 }
 
+/** Хук плагина: перехват до/после выполнения тула. */
 export interface PluginHook {
   name?: string;
   priority?: number;
   isBuiltin?: boolean;
   /**
-   * Return `false` to block the tool, a string to block with an explicit
-   * reason (shown to the model), or `true` to allow.
+   * Вернуть `false` — блокировать тул, строку — блокировать с причиной
+   * (видит модель), `true` — разрешить.
    */
   onBeforeTool?(ctx: ToolContext, call: ToolCall): boolean | string | Promise<boolean | string>;
   onAfterTool?(ctx: ToolContext, call: ToolCall, result: ToolResult): void | Promise<void>;
 }
 
+/** Менеджер плагинов: доступ к зарегистрированным хукам. */
 export interface PluginManager {
   getAllPlugins(): PluginHook[];
 }

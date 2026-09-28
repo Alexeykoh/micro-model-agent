@@ -1,22 +1,22 @@
+/** Утилиты путей: нормализация, jail-проверки, резолв от baseDir. */
 import { resolve, normalize, dirname, basename, sep, relative, isAbsolute } from "path";
 import { existsSync } from "fs";
 
 /**
- * Normalize backslashes to forward slashes for display and comparison.
- * On POSIX this is a no-op; on Windows it converts `src\foo\bar.ts` → `src/foo/bar.ts`.
+ * Бэкслэши → прямые слэши для показа и сравнения.
+ * На POSIX no-op; на Windows `src\foo\bar.ts` → `src/foo/bar.ts`.
  */
 export function toForwardSlash(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
 /**
- * True when targetPath equals dirPath or lies inside it.
+ * True, если targetPath равен dirPath или внутри него.
  *
- * Cross-platform notes:
- * - Uses path.relative() instead of raw startsWith, so a sibling directory
- *   sharing the string prefix ("src" vs "src-other") can never pass.
- * - On Windows the filesystem is case-insensitive: both sides are lowercased
- *   before comparison so "E:\Proj" and "e:\proj" resolve to the same dir.
+ * Кроссплатформенно:
+ * - через path.relative(), а не raw startsWith: сосед с общим префиксом
+ *   ("src" vs "src-other") не пройдёт;
+ * - на Windows ФС регистронезависима: обе стороны lowercased до сравнения.
  */
 export function isInsideDir(targetPath: string, dirPath: string): boolean {
   const norm = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
@@ -24,15 +24,14 @@ export function isInsideDir(targetPath: string, dirPath: string): boolean {
   const d = norm(resolve(dirPath));
   if (t === d) return true;
   const rel = relative(d, t);
-  // Reject only a real parent escape: `..` or `../…`. A file literally named
-  // `..foo` yields rel === "..foo" and is legitimately inside.
+  // Побег наверх — только реальный `..`/`../…`. Файл буквально `..foo`
+  // даёт rel === "..foo" и легально внутри.
   return rel.length > 0 && !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
 }
 
 /**
- * True when targetPath matches a scope entry: either the entry file itself or
- * anything inside the entry directory. Separator- and case-safe (see
- * isInsideDir).
+ * True, если targetPath — сам scope-entry или внутри него. Проверка
+ * сепараторов и регистра — как в isInsideDir.
  */
 export function matchesScopeEntry(targetResolved: string, entryResolved: string): boolean {
   if (targetResolved === entryResolved) return true;
@@ -40,18 +39,18 @@ export function matchesScopeEntry(targetResolved: string, entryResolved: string)
 }
 
 /**
- * Resolve a user-provided path against baseDir.
+ * Резолв пользовательского пути от baseDir.
  *
- * Handles common model mistakes:
- * 1. Leading slash: "/testing/cat3" → resolve relative to baseDir
- * 2. Missing separator: "E:\agent_test" when baseDir is "E:\agent\_test"
- *    → inserts the missing backslash
+ * Чинит типовые ошибки модели:
+ * 1. Ведущий слэш: "/testing/cat3" → относительно baseDir.
+ * 2. Пропущенный сепаратор: "E:\agent_test" при baseDir "E:\agent\_test"
+ *    → вставка недостающего бэкслэша.
  *
- * For new files the parent directory must exist; we check that instead of
- * the full path so write_file still works.
+ * Для новых файлов обязан существовать родитель — проверяется он, а не
+ * полный путь, иначе write_file не сработает.
  */
 export function safeResolvePath(baseDir: string, userPath: string): string {
-  // Absolute path that actually exists — honor it as-is
+  // Существующий абсолютный путь — как есть.
   const asIs = resolve(normalize(userPath));
   if (userPath.startsWith("/") || userPath.startsWith("\\")) {
     if (existsSync(asIs) || existsSync(dirname(asIs))) return asIs;
@@ -59,14 +58,13 @@ export function safeResolvePath(baseDir: string, userPath: string): string {
 
   const norm = normalize(userPath);
 
-  // Absolute paths are used verbatim — do NOT strip a leading slash and
-  // re-resolve against baseDir (that would turn /var/folders/... into
-  // baseDir/var/folders/... on POSIX). The leading-slash heuristic below
-  // only applies as a fallback when the absolute path does not resolve.
+  // Абсолютные пути — дословно, БЕЗ сдирания ведущего слэша и перерезолва
+  // от baseDir (иначе /var/folders/... станет baseDir/var/folders/... на POSIX).
+  // Эвристика ведущего слэша ниже — только fallback, когда путь не на диске.
   if (isAbsolute(norm)) {
     if (existsSync(norm) || existsSync(dirname(norm))) return norm;
-    // Absolute but not on disk yet (e.g. a new file whose dirs don't exist).
-    // Model mistake recovery: a leading slash may mean "relative to baseDir".
+    // Абсолютный, но ещё не на диске (новый файл без существующих dirs).
+    // Восстановление ошибки модели: ведущий слэш мог значить "от baseDir".
     const stripped = norm.replace(/^[/\\]/, "");
     const relativeCandidate = resolve(baseDir, stripped);
     if (existsSync(relativeCandidate) || existsSync(dirname(relativeCandidate))) {
@@ -78,12 +76,12 @@ export function safeResolvePath(baseDir: string, userPath: string): string {
   const stripped = norm.replace(/^[/\\]/, "");
   const resolved = resolve(baseDir, stripped);
 
-  // Fast path: if it exists (or parent does for new files), return it
+  // Быстрый путь: существует сам (или родитель для новых файлов).
   if (existsSync(resolved) || existsSync(dirname(resolved))) return resolved;
 
   const baseNorm = normalize(baseDir);
 
-  // Walk ancestors and look for missing separators
+  // Подъём по предкам в поиске пропущенных сепараторов.
   let cur = baseNorm;
   while (cur && cur !== dirname(cur)) {
     const name = basename(cur);
@@ -103,7 +101,7 @@ export function safeResolvePath(baseDir: string, userPath: string): string {
         if (existsSync(fixedResolved) || existsSync(dirname(fixedResolved))) {
           return fixedResolved;
         }
-        // Try from ancestor's parent
+        // Проба от родителя предка.
         const fromParent = resolve(dirname(cur), normalize(fixed));
         if (existsSync(fromParent) || existsSync(dirname(fromParent))) {
           return fromParent;

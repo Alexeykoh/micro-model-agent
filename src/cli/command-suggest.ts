@@ -1,4 +1,5 @@
-/** Levenshtein edit distance between two strings (case-insensitive). */
+// Подсказки при опечатках в командах: расстояние Левенштейна.
+/** Редакционное расстояние Левенштейна между строками (без учёта регистра). */
 export function levenshtein(a: string, b: string): number {
   const s = a.toLowerCase();
   const t = b.toLowerCase();
@@ -18,9 +19,9 @@ export function levenshtein(a: string, b: string): number {
 }
 
 /**
- * The known command whose name is within `maxDistance` of `input`, or
- * `undefined` when nothing is close enough. Used to catch subcommand typos
- * (`mma sesion list`) that would otherwise be silently sent to the LLM.
+ * Известная команда, чьё имя в пределах `maxDistance` от `input`, или
+ * `undefined`, если близких нет. Ловит опечатки в субкомандах
+ * (`mma sesion list`), которые иначе молча ушли бы в LLM.
  */
 export function closestCommand(
   input: string,

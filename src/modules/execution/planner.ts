@@ -1,29 +1,35 @@
+// План и шаги: типы, создание, re-plan, прогресс, промпт-блок.
+/** Статус шага плана. */
 export type StepStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 
+/** Подзадача шага плана (todo внутри шага). */
 export interface Subtask {
   id: number;
   text: string;
   done: boolean;
 }
 
+/** Вид шага: создание файлов или их удаление (инвертирует deliverable-gate). */
 export type StepKind = "create" | "delete";
 
+/** Шаг плана: описание, статус, kind, контракт проверки, заметка, подзадачи. */
 export interface PlanStep {
   id: number;
   description: string;
   status: StepStatus;
-  /** Model-declared intent. "delete" inverts the deliverable gate: named
-   *  files must be GONE, not present. Default "create". */
+  /** Декларированное моделью намерение. "delete" инвертирует deliverable-gate:
+   *  именованные файлы обязаны ОТСУТСТВОВАТЬ, а не присутствовать. По умолчанию "create". */
   kind?: StepKind;
-  /** Machine-checkable verification contract for this step, declared at
-   *  create/re-plan time: "file-exists:<path>" (hard-verified on done),
-   *  "command:<cmd>" or "manual:<what to check by eye>" (self-certified).
-   *  Absent only on plans created before checks existed (back-compat). */
+  /** Машиночитаемый контракт верификации шага, объявляется при
+   *  create/re-plan: "file-exists:<path>" (жёстко проверяется на done),
+   *  "command:<cmd>" или "manual:<что проверить глазами>" (self-certified).
+   *  Отсутствует только у планов, созданных до checks (back-compat). */
   check?: string;
   note?: string;
   subtasks?: Subtask[];
 }
 
+/** План: id, заголовок, шаги, даты, корень, опциональное имя. */
 export interface Plan {
   id: string;
   title: string;
@@ -43,10 +49,10 @@ function generatePlanId(): string {
 }
 
 /**
- * Single source of truth for plan progress counting (ses_mt4fn58c: `show`
- * said "6/7 done, complete" while `list` said "7/7" for the same plan —
- * one counted only "done", the other counted done+skipped). A skipped step
- * needs no further work, so it counts as settled everywhere.
+ * Единый источник правды подсчёта прогресса (ses_mt4fn58c: `show` говорил
+ * "6/7 done, complete", а `list` — "7/7" для того же плана: один считал только
+ * "done", другой done+skipped). Пропущенный шаг работы не требует, поэтому
+ * везде считается settled.
  */
 export function getPlanProgress(plan: Plan): {
   done: number;
@@ -62,7 +68,9 @@ export function getPlanProgress(plan: Plan): {
   return { done, skipped, total, settled, terminal: total > 0 && settled === total };
 }
 
+/** Создатель планов: create, re-plan, промпт-блок. */
 export class PlanCreator {
+  /** Создаёт новый план из заголовка и описаний шагов. */
   static createPlan(
     title: string,
     stepDescriptions: string[],
@@ -86,22 +94,23 @@ export class PlanCreator {
     };
   }
 
+  /** Re-plan: сохраняет done/skipped шаги, заменяет остальные новыми. */
   static replan(plan: Plan, newSteps: string[], title?: string, newChecks?: (string | undefined)[]): Plan {
     const kept = plan.steps.filter((s) => s.status === "done" || s.status === "skipped");
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
     const totalSteps = kept.length + newSteps.length;
     const added: PlanStep[] = newSteps.map((desc, i) => ({
-      id: -1, // renumbered below
+      id: -1, // перенумеруется ниже
       description: desc,
       status: "pending" as StepStatus,
       kind: "create",
       ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
     }));
-    // Renumber every step (kept + added) sequentially. Kept steps keep their
-    // status and kind but may collide with the added ids when the original
-    // plan skipped/pending steps in the middle (e.g. done 1, done 3 → kept
-    // [1,3], added [2…] collides with kept id 3).
+    // Перенумеровываем все шаги (сохранённые + новые) подряд. Сохранённые держат
+    // статус и kind, но их id могут коллизить с новыми, если исходный план
+    // пропускал/пендил шаги в середине (напр. done 1, done 3 → сохранённые
+    // [1,3], новые [2…] коллизят с сохранённым id 3).
     const steps = [...kept, ...added].map((s, i) => ({ ...s, id: i + 1 }));
     return {
       id: plan.id,
@@ -113,6 +122,7 @@ export class PlanCreator {
     };
   }
 
+  /** Рендерит план чеклистом для промпта (иконки статусов, checks, подзадачи). */
   static toPromptBlock(plan: Plan, currentStepIndex: number): string {
     const date = plan.createdAt.slice(0, 10);
     const p = getPlanProgress(plan);

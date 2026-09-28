@@ -1,6 +1,8 @@
+/** Тул метаданных текущей сессии (id, модель, бюджет контекста; alwaysOn). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
+/** Показывает сессию и загрузку контекстного бюджета. Без активной — пометка. */
 export const sessionInfoTool: ToolDefinition = {
   name: "session_info",
   icon: "ℹ️",

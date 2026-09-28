@@ -1,15 +1,17 @@
+// Менеджер контекста: история, бюджеты, компакция, качество, факты сессии.
 import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
 import { truncate } from "../../utils/truncate";
 
+/** Сообщение истории: роль, контент, tool-метаданные. */
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
   content: string | ContentPart[];
   name?: string;
   tool_call_id?: string;
   success?: boolean;
-  /** Plugin-blocked call — a guard refused it; not a real failure. */
+  /** Вызов, заблокированный плагином — решение гарда, не реальный фейл. */
   blocked?: boolean;
   arguments?: Record<string, unknown>;
   tool_calls?: Array<{
@@ -22,6 +24,7 @@ export interface Message {
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import type { TokenCounter } from "../../llm/token-counter";
 
+/** Бюджет контекста в токенах: системный промпт, резерв ответа, история. */
 export interface ContextBudget {
   systemPrompt: number;
   responseReserve: number;
@@ -31,10 +34,11 @@ export interface ContextBudget {
 const COMPACTION_INTERVAL = 15;
 const KEEP_LAST_N = 6;
 
+/** Результат компакции: счётчики ходов/токенов/качества + внутренняя сводка. */
 export interface CompactResult {
-  /** Turns removed by the compaction (oldTurns). */
+  /** Ходов удалено компакцией (oldTurns). */
   removedTurns: number;
-  /** Turns kept verbatim (recent, minus stale <system-summary>). */
+  /** Ходов оставлено дословно (свежие, минус протухшие <system-summary>). */
   keptTurns: number;
   tokensBefore: number;
   tokensAfter: number;
@@ -42,14 +46,15 @@ export interface CompactResult {
   qualityAfter: number;
   messagesBefore: number;
   messagesAfter: number;
-  /** The inner [Compressed: ...] block (without the <system-summary> wrapper). */
+  /** Внутренний блок [Compressed: ...] (без обёртки <system-summary>). */
   summary: string;
 }
 
+/** Снапшот состояния контекста для логов/наблюдаемости. */
 export interface ContextSnapshot {
   window: number;
   budget: ContextBudget;
-  /** Estimated tokens currently in history (messages + tool defs). */
+  /** Оценка токенов в истории (сообщения + определения тулов). */
   tokens: number;
   toolTokens: number;
   messageCount: number;
@@ -58,6 +63,7 @@ export interface ContextSnapshot {
   iterationsSinceCompaction: number;
 }
 
+/** Запись "пробовали и не вышло": тул, args, ошибка, счётчик повторов. */
 export interface TriedAndFailed {
   tool: string;
   args: string;
@@ -77,7 +83,7 @@ function summarizeArgs(args: unknown): string {
 }
 
 function looksLikeErrorPaste(text: string): boolean {
-  // Error markers.
+  // Маркеры ошибок.
   if (
     /(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(
       text,
@@ -85,23 +91,24 @@ function looksLikeErrorPaste(text: string): boolean {
   ) {
     return true;
   }
-  // Structural signals of pasted compiler/runtime output: source frames
-  // ("270|  }_s(...)"), path:line:col references, and stack-trace lines.
+  // Структурные сигналы вставленного вывода компилятора/рантайма: фреймы
+  // исходников ("270|  }_s(...)"), ссылки path:line:col и строки стектрейсов.
   if (/(?:^|\n)\s*\d+\s*\|/.test(text)) return true;
   if (/[\w./\\-]+\.[a-z]{1,6}:\d+:\d+/.test(text)) return true;
   if (/(?:^|\n)\s*at\s+\S+/.test(text)) return true;
   return false;
 }
 
+/** Извлекает повторы "пробовали и не вышло" (≥2 фейлов одного тула+args). */
 export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
   const failures: Map<string, TriedAndFailed> = new Map();
 
   for (const msg of messages) {
     if (msg.role === "tool" && msg.name && msg.success === false) {
-      // Plugin-blocked calls are guard decisions, not failed attempts: a
-      // transient guard (or a guard bug) must never be remembered as
-      // "tried & failed — do NOT repeat" (observed: a false plan-alignment
-      // block made the model refuse to rewrite its own step's file).
+      // Заблокированные плагином вызовы — решения гардов, не попытки: транзиентный
+      // гард (или его баг) нельзя запоминать как "пробовали и не вышло — НЕ повторять"
+      // (было: ложный plan-alignment блок заставил модель отказываться переписывать
+      // файл собственного шага).
       if (msg.blocked) continue;
       const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
       const existing = failures.get(key);
@@ -125,6 +132,7 @@ export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
   return Array.from(failures.values()).filter((f) => f.count >= 2);
 }
 
+/** Менеджер контекста: история, бюджеты, компакция, трекинг задачи/миссии сессии. */
 export class ContextManager {
   private contextWindow: number;
   private messages: Message[] = [];
@@ -135,32 +143,31 @@ export class ContextManager {
   private budget: ContextBudget;
   private compactionThreshold: number;
   /**
-   * Minimum history load (fraction of the history budget) required for the
-   * iteration interval to trigger a compaction. The interval is a cadence
-   * guard, not a trigger: a lightly-loaded context must not be compacted just
-   * because N iterations elapsed (observed: compaction at ~40% of budget wiped
-   * 33-44 useful turns and derailed the run).
+   * Минимальная загрузка истории (доля бюджета), нужная интервалу итераций для
+   * срабатывания компакции. Интервал — защита от частоты, не триггер: слабо
+   * загруженный контекст нельзя уплотнять лишь потому, что прошло N итераций
+   * (было: компакция на ~40% бюджета стирала 33-44 полезных хода посреди задачи).
    */
   private compactionMinLoad: number;
   private facts = new FactExtractor();
-  /** Latest real user instruction (skips <system-summary> blocks). */
+  /** Последняя реальная инструкция юзера (мимо <system-summary>). */
   private lastUserTask = "";
-  /** First real user instruction of the session — survives resetUserTurn(). */
+  /** Первая реальная инструкция сессии — переживает resetUserTurn(). */
   private sessionMission = "";
-  /** Latest user message that looks like a pasted error/log (never a task). */
+  /** Последнее сообщение юзера, похожее на вставленную ошибку/лог (не задача). */
   private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
-  /** Current reasoning level (set by agent loop, included in compaction summary). */
+  /** Текущий reasoning-уровень (ставит цикл агента, входит в сводку компакции). */
   thinkingLevel: string | null = null;
   onCompact: ((summary: Message) => void) | null = null;
   /**
-   * Optional short line appended to the compaction summary so the model knows
-   * an active plan exists with progress. Wired from bootstrap to the execution
-   * module — without it, a 9B model re-creates a plan from scratch right after
-   * compaction (observed: ses_msvuao0h — plan_e07pb2 (1/6) was discarded for a
-   * fresh plan_xzq9xe the same iteration the old plan was still visible).
+   * Опциональная короткая строка в сводку компакции, чтобы модель знала про
+   * активный план с прогрессом. Прокидывается из bootstrap в execution-модуль —
+   * без неё 9B-модель пересоздаёт план с нуля сразу после компакции (было:
+   * ses_msvuao0h — plan_e07pb2 (1/6) выброшен ради свежего plan_xzq9xe в ту же
+   * итерацию, когда старый план ещё был виден).
    */
   private planSummaryProvider: (() => string | null) | null = null;
 
@@ -177,8 +184,8 @@ export class ContextManager {
   }
 
   /**
-   * Provide a short "current plan" line for the compaction summary, or null
-   * when no plan is active. Injected once at bootstrap (not per-turn state).
+   * Задаёт короткую строку "текущий план" для сводки компакции, или null если
+   * плана нет. Инжектится один раз на bootstrap (не per-turn состояние).
    */
   setPlanSummaryProvider(fn: (() => string | null) | null): void {
     this.planSummaryProvider = fn;
@@ -191,7 +198,7 @@ export class ContextManager {
       const history = Math.max(0, window - systemPrompt - responseReserve);
       return { systemPrompt, responseReserve, history };
     }
-    // Fallback for backwards compatibility (tests, subagents without explicit budget)
+    // Фолбэк для обратной совместимости (тесты, сабагенты без явного бюджета)
     return {
       systemPrompt: Math.floor(window * 0.25),
       responseReserve: Math.floor(window * 0.12),
@@ -199,57 +206,61 @@ export class ContextManager {
     };
   }
 
+  /** Копия текущего бюджета. */
   getBudget(): ContextBudget {
     return { ...this.budget };
   }
 
+  /** Число выполненных компакций. */
   getCompactionCount(): number {
     return this.compactionCount;
   }
 
+  /** Итераций с последней компакции. */
   getIterationsSinceCompaction(): number {
     return this.iterationsSinceCompaction;
   }
 
-  /** Files known from compaction summaries — for seeding the hallucination
-   *  checker's known-files set so bare filenames survive context resets. */
+  /** Файлы, известные из сводок компакции — сидируют known-files проверки
+   *  галлюцинаций, чтобы голые имена переживали сбросы контекста. */
   getKnownFiles(): string[] {
     return this.facts.getKnownFiles();
   }
 
+  /** Отмечает прошедшую итерацию (счётчик для интервала компакции). */
   noteIteration(): void {
     this.iterationsSinceCompaction++;
   }
 
   /**
-   * Start a fresh user turn. The 15-iteration compaction interval must not
-   * leak across user messages — otherwise a turn that ends at iteration 14
-   * forces a compaction on the very first iteration of the next user message
-   * (observed: compaction fired on iteration 8 of a new turn, deleting the
-   * user's freshly-sent task alongside 40+ old turns). Facts are kept.
+   * Начинает свежий ход юзера. 15-итерационный интервал компакции не должен
+   * течь через сообщения юзера — иначе ход, кончившийся на итерации 14,
+   * форсит компакцию на первой же итерации следующего сообщения (было:
+   * компакция на итерации 8 нового хода снесла свежеприсланную задачу юзера
+   * вместе с 40+ старыми ходами). Факты сохраняются.
    */
   resetUserTurn(): void {
     this.iterationsSinceCompaction = 0;
-    // A new user message begins a new turn — drop the previous turn's task
-    // so the fresh instruction becomes the one preserved at compaction. The
-    // session mission survives: an error/log paste in the new turn must not
-    // erase the original goal.
+    // Новое сообщение юзера начинает новый ход — сбрасываем задачу прошлого хода,
+    // чтобы сводка сохранила свежую инструкцию. Миссия сессии выживает: вставка
+    // ошибки/лога в новом ходе не должна стирать исходную цель.
     this.lastUserTask = "";
     this.lastUserFeedback = "";
   }
 
+  /** Оценка качества контекста 0–100 (нагрузка, компакции, ошибки, свежесть). */
   getQuality(): number {
     const usedTokens = this.getEstimatedTokens();
     const tokenLoad = this.budget.history > 0
       ? Math.max(0, 1 - usedTokens / this.budget.history)
       : 0;
 
-    // Recoverable penalty: each compaction loses some information, but the
-    // penalty is CAPPED so cumulative compactions can never permanently pin
-    // quality below the forced-compaction trigger (40%). Before this cap, a
-    // session with ~7+ compactions clamped the term to 0 forever; combined
-    // with heavy token load + error density, quality stuck below 40 and a
-    // compaction fired on EVERY iteration (observed: 56 compactions in 28 min).
+    // Восстанавливаемый штраф: каждая компакция теряет часть информации, но штраф
+    // ОГРАНИЧЕН СВЕРХУ, чтобы кумулятивные компакции не прикалывали качество ниже
+    // триггера форсированной компакции (40%). До капа сессия с ~7+ компакциями
+    // клампила слагаемое в 0 навсегда; вместе с тяжёлой токенной нагрузкой и
+    // плотностью ошибок качество застревало ниже 40 и компакция срабатывала на
+    // КАЖДОЙ итерации (было: 56 компакций за 28 минут).
     const COMPACTION_PENALTY_FLOOR = 0.5;
     const compactionLoss = Math.max(COMPACTION_PENALTY_FLOOR, 1 - this.compactionCount * 0.15);
 
@@ -262,28 +273,28 @@ export class ContextManager {
     return Math.round(Math.min(100, Math.max(0, score * 100)));
   }
 
+  /** Добавляет сообщение в историю (трекает задачу, аттачит pending-картинки, пик токенов). */
   addMessage(msg: Message): void {
-    // Track the task the agent is working on so it survives compaction. The
-    // user's real instruction is the FIRST non-system-summary user message of
-    // the turn; everything after it (tool results, retry nudges) are injected
-    // `user` envelopes that must not overwrite it (observed: after compaction
-    // the model had forgotten "удали /bicycles, почини стили" and re-read
-    // files aimlessly for 40+ iterations).
+    // Трекаем задачу, над которой работает агент, чтобы пережила компакцию.
+    // Реальная инструкция юзера — ПЕРВОЕ не-system-summary user-сообщение хода;
+    // всё после (результаты тулов, retry-nudge'и) — инжектированные `user`-
+    // конверты, которые не должны её затирать (было: после компакции модель
+    // забывала "удали /bicycles, почини стили" и 40+ итераций бесцельно читала файлы).
     if (msg.role === "user") {
       const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
       if (text.trim() && !text.startsWith("<system-summary>") && !text.includes("[Compressed:")) {
         if (looksLikeErrorPaste(text) && (this.lastUserTask || this.sessionMission)) {
           this.lastUserFeedback = text.trim().slice(0, 400);
         } else if (!this.lastUserTask && !this.lastUserFeedback) {
-          // No new task inside a turn that already captured an error/log paste:
-          // the paste's follow-up messages are tool-result continuations, not a
-          // fresh instruction, so the session mission must win at compaction.
+          // Нет новой задачи внутри хода, где уже поймана вставка ошибки/лога:
+          // последующие сообщения — продолжения результатов тулов, не свежая
+          // инструкция, поэтому на компакции побеждает миссия сессии.
           this.lastUserTask = text.trim();
           if (!this.sessionMission) this.sessionMission = text.trim();
         }
       }
     }
-    // Auto-attach pending images to the next user message
+    // Авто-аттач pending-картинок к следующему user-сообщению
     if (msg.role === "user" && this.pendingImageParts.length > 0) {
       const textPart: TextPart = {
         type: "text",
@@ -301,40 +312,41 @@ export class ContextManager {
   }
 
   /**
-   * Queue an image part to be attached to the next user message.
+   * Кладёт картинку в очередь на аттач к следующему user-сообщению.
    */
   addPendingImage(part: ContentPart): void {
     this.pendingImageParts.push(part);
   }
 
   /**
-   * Check if there are pending images waiting to be attached.
+   * True, если есть картинки, ждущие аттача.
    */
   hasPendingImages(): boolean {
     return this.pendingImageParts.length > 0;
   }
 
   /**
-   * Get pending image parts without clearing them.
+   * Возвращает pending-картинки, не очищая очередь.
    */
   getPendingImages(): ContentPart[] {
     return [...this.pendingImageParts];
   }
 
   /**
-   * Clear pending images (e.g., if user sends a text-only message).
+   * Очищает pending-картинки (напр., юзер шлёт чисто текстовое сообщение).
    */
   clearPendingImages(): void {
     this.pendingImageParts = [];
   }
 
+  /** Число сообщений в истории. */
   getMessageCount(): number {
     return this.messages.length;
   }
 
-  // Per-message token cache: messages are treated as immutable once added
-  // (compaction/updateSystemPrompt create new objects), so a WeakMap is safe
-  // and turns repeated full-history estimation from O(n) encodes into O(1).
+  // Токенный кэш на сообщение: сообщения считаются иммутабельными после добавления
+  // (компакция/updateSystemPrompt создают новые объекты), поэтому WeakMap безопасен
+  // и превращает повторную оценку всей истории из O(n) кодирований в O(1).
   private tokenCache = new WeakMap<Message, number>();
 
   private estimateMessageTokensCached(m: Message): number {
@@ -350,14 +362,14 @@ export class ContextManager {
     const text = getMessageText(m.content);
     if (this.tokenCounter) {
       let t = this.tokenCounter.count(text);
-      // Image tokens: base64 ~130 tokens per 512x512 tile; rough estimate
+      // Токены картинок: base64 ~130 токенов на тайл 512x512; грубая оценка
       if (Array.isArray(m.content)) {
         for (const part of m.content) {
           if (part.type === "image_url" && part.image_url?.url) {
             const b64Len = part.image_url.url.includes(",")
               ? (part.image_url.url.split(",")[1]?.length ?? 0)
               : part.image_url.url.length;
-            // ~130 tokens per 512 bytes of base64
+            // ~130 токенов на 512 байт base64
             t += Math.ceil(b64Len / 512) * 130;
           }
         }
@@ -394,37 +406,38 @@ export class ContextManager {
     return t;
   }
 
+  /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
   needsCompaction(): boolean {
     const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
     if (totalTokens > this.budget.history * this.compactionThreshold) return true;
 
-    // The iteration interval only compacts once the history is meaningfully
-    // loaded. Compacting a low-load context loses useful working state for no
-    // budget reason (see `compactionMinLoad`).
+    // Интервал итераций уплотняет только значимо загруженную историю.
+    // Уплотнять слабозагруженный контекст — терять рабочее состояние без
+    // бюджетной причины (см. `compactionMinLoad`).
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
     const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
     return load >= this.compactionMinLoad;
   }
 
+  /** Уплотняет историю: старые ходы → сводка фактов, свежие — дословно. Null, если уплотнять нечего. */
   compact(): CompactResult | null {
-    // Capture the pre-compaction state BEFORE any counters reset or rise —
-    // qualityBefore must reflect the context the model actually saw.
+    // Снимаем состояние ДО компакции ПЕРЕД сбросом/ростом счётчиков —
+    // qualityBefore обязан отражать контекст, который реально видела модель.
     const tokensBefore = this.getEstimatedTokens();
     const qualityBefore = this.getQuality();
     const messagesBefore = this.messages.length;
 
-    // Reset the counter even when nothing to compact — otherwise
-    // needsCompaction() returns true forever after 15 iterations with few messages.
+    // Сбрасываем счётчик, даже если уплотнять нечего — иначе
+    // needsCompaction() вечно true после 15 итераций с малым числом сообщений.
     this.iterationsSinceCompaction = 0;
     if (this.messages.length <= KEEP_LAST_N * 2) return null;
 
     this.compactionCount++;
 
     let cutoff = this.messages.length - KEEP_LAST_N * 2;
-    // Never split an assistant(tool_calls) group across the cutoff: the kept
-    // history must not start with orphaned role:"tool" messages, and the
-    // assistant half must not stay in the compacted part (OpenAI-compatible
-    // backends reject such histories).
+    // Не режем группу assistant(tool_calls) по cutoff: сохранённая история не
+    // должна начинаться с сиротских role:"tool", а assistant-половина — остаться
+    // в уплотняемой части (OpenAI-совместимые бэкенды такие истории отвергают).
     while (
       cutoff > 0 &&
       (this.messages[cutoff]?.role === "tool" || this.messages[cutoff - 1]?.tool_calls?.length)
@@ -439,18 +452,18 @@ export class ContextManager {
     const parts: string[] = [];
     parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
 
-    // Carry the user's actual instruction forward — the model must never lose
-    // the task it is working on just because 40 turns got compacted away. The
-    // per-turn task falls back to the session mission (first real instruction)
-    // so a pasted error/log in the current turn cannot erase the goal.
+    // Проносим реальную инструкцию юзера — модель не должна терять задачу,
+    // над которой работает, лишь потому что уплотнилось 40 ходов. Задача хода
+    // фолбэчится на миссию сессии (первую реальную инструкцию), чтобы вставка
+    // ошибки/лога в текущем ходе не стирала цель.
     const task = (this.lastUserTask || this.sessionMission).slice(0, 400);
     if (task) parts.push(`[Task: ${task}]`);
     if (this.lastUserFeedback && !task.startsWith(this.lastUserFeedback)) {
       parts.push(`[User feedback: ${this.lastUserFeedback}]`);
     }
 
-    // Orient the model after compaction: an active plan must not be re-created
-    // from scratch (see planSummaryProvider doc).
+    // Ориентируем модель после компакции: активный план нельзя пересоздавать
+    // с нуля (см. доку planSummaryProvider).
     const planLine = this.planSummaryProvider?.();
     if (planLine) parts.push(`[Plan: ${planLine}]`);
 
@@ -482,7 +495,7 @@ export class ContextManager {
     };
 
     const firstSystem = this.messages.find((m) => m.role === "system");
-    // Filter out stale system-summary messages from recent turns to prevent nesting
+    // Чистим протухшие system-summary из свежих ходов против вложенности
     const freshRecent = recentTurns.filter((m) => {
       if (m.role !== "user") return true;
       const text = getMessageText(m.content);
@@ -509,8 +522,8 @@ export class ContextManager {
   }
 
   /**
-   * Snapshot of the current context state — used to log the initial context
-   * structure at session start and per-iteration context stats.
+   * Снапшот текущего состояния контекста — для лога начальной структуры
+   * контекста на старте сессии и per-iteration статистики.
    */
   getSnapshot(): ContextSnapshot {
     return {
@@ -526,8 +539,8 @@ export class ContextManager {
   }
 
   /**
-   * Replace the system prompt in place (keeps it first) or prepend a new one.
-   * Used to refresh dynamic prompt blocks (e.g. the plan checklist) mid-run.
+   * Заменяет системный промпт на месте (остаётся первым) или пренпендит новый.
+   * Обновляет динамические блоки промпта (напр. чеклист плана) посреди прогона.
    */
   updateSystemPrompt(content: string): void {
     const idx = this.messages.findIndex((m) => m.role === "system");
@@ -538,14 +551,15 @@ export class ContextManager {
     }
   }
 
+  /** Копия активной истории сообщений. */
   getActiveHistory(): Message[] {
     return [...this.messages];
   }
 
   /**
-   * Reset everything that belongs to the current conversation turn.
-   * Fact lists (FactExtractor) intentionally survive clear() — they are
-   * session-scoped compaction state, not per-turn.
+   * Сбрасывает всё, что принадлежит текущему ходу диалога.
+   * Списки фактов (FactExtractor) осознанно переживают clear() — это
+   * session-scoped состояние компакции, не per-turn.
    */
   clear(): void {
     this.messages = [];
@@ -558,16 +572,19 @@ export class ContextManager {
     this.sessionMission = "";
   }
 
+  /** Оценка токенов истории (сообщения + токены тулов). */
   getEstimatedTokens(): number {
     return (
       this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0) + this.toolTokens
     );
   }
 
+  /** Задаёт токены определений тулов (прибавляются к оценке). */
   setToolTokens(tokens: number): void {
     this.toolTokens = tokens;
   }
 
+  /** Пересчитывает бюджеты под новое окно контекста (и опционально счётчик). */
   resize(
     contextWindow: number,
     contextBudget?: ConfigContextBudget,

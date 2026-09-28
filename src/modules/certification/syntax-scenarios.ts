@@ -1,6 +1,4 @@
-// Test scenario for syntax validation features
-// This tests that pre-validation blocks invalid syntax and import conflict detection works
-
+// Сценарии проверки предвалидации синтаксиса: блок невалидных файлов и детект конфликтов импорта.
 import type { CertScenario } from "./types";
 
 const SYNTAX_VALIDATION_SCENARIOS: CertScenario[] = [
@@ -56,4 +54,5 @@ const SYNTAX_VALIDATION_SCENARIOS: CertScenario[] = [
   },
 ];
 
+/** Набор сценариев валидации синтаксиса (подмешивается к встроенным). */
 export { SYNTAX_VALIDATION_SCENARIOS };

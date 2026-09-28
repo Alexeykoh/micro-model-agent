@@ -1,3 +1,4 @@
+/** Глобальные обработчики падений: запись краша в ~/.mma/logs/crash.jsonl. */
 import { appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -7,8 +8,10 @@ import { t } from "../i18n/index";
 import { errMsg } from "../utils";
 import { globalLogsDir } from "../config/paths";
 
+/** Тип падения: непойманное исключение или необработанный reject. */
 export type CrashType = "uncaughtException" | "unhandledRejection";
 
+/** Запись о падении: время, тип, сообщение, стек, окружение. */
 export interface CrashEntry {
   ts: string;
   type: CrashType;
@@ -17,10 +20,15 @@ export interface CrashEntry {
   environment: EnvironmentReport;
 }
 
+/** Каталог краш-логов. */
 export const CRASH_LOG_DIR = globalLogsDir();
+/** Имя файла краш-лога. */
 export const CRASH_LOG_FILE = "crash.jsonl";
 
-/** Build a sanitized crash entry. Environment is captured at crash time (no tool scan). */
+/**
+ * Строит санитизированную запись о падении. Окружение снимается в момент
+ * краша (без сканирования тулов).
+ */
 export function formatCrashEntry(type: CrashType, err: unknown): CrashEntry {
   const message = errMsg(err);
   const stack = err instanceof Error && err.stack ? err.stack : message;
@@ -33,21 +41,24 @@ export function formatCrashEntry(type: CrashType, err: unknown): CrashEntry {
   };
 }
 
+/**
+ * Дописывает запись в краш-лог. Best-effort: отчёт о краше никогда не роняет процесс.
+ */
 export function writeCrashEntry(dir: string, entry: CrashEntry): void {
   try {
     mkdirSync(dir, { recursive: true });
     appendFileSync(join(dir, CRASH_LOG_FILE), `${JSON.stringify(entry)}\n`, "utf-8");
   } catch {
-    // Best effort — never crash while reporting a crash
+    // Best-effort — отчёт о краше не должен ронять процесс
   }
 }
 
 let installed = false;
 
 /**
- * Global crash handlers. uncaughtException is logged + re-raised (exit 1 so the
- * process never continues in a broken state); unhandledRejection is logged only
- * (the event loop keeps running). Entries land in ~/.mma/logs/crash.jsonl.
+ * Ставит глобальные обработчики. uncaughtException логируется и завершает
+ * процесс (exit 1 — продолжение в битом состоянии недопустимо);
+ * unhandledRejection только логируется (цикл продолжает работу).
  */
 export function installCrashHandlers(): void {
   if (installed) return;

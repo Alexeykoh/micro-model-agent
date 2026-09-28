@@ -1,14 +1,14 @@
 /**
- * Disk-state resolver for artifact-claim checks (Fix B2).
+ * Резолвер состояния файлов для проверки заявлений (Fix B2).
  *
- * Extracts file-like tokens from the final answer, stats them under baseDir
- * and parses machine-checkable formats — pure JSON via `JSON.parse`, the XML
- * family via `checkXmlWellFormed`. Compiler-backed formats (TS/JS) are
- * existence-only: spawning a build inside the acceptance gate would be slow
- * and flaky, and the plan verifier already covers them for planned work.
+ * Извлекает файлоподобные токены из финального ответа, смотрит их под baseDir
+ * и парсит машинопроверяемые форматы: JSON через `JSON.parse`, семейство XML
+ * через `checkXmlWellFormed`. Форматы с компилятором (TS/JS) — только existence:
+ * сборка внутри гейта была бы медленной и флаки, а плановые работы и так
+ * покрывает верификатор плана.
  *
- * Bounded (max paths, max bytes) and jail-checked: tokens resolving outside
- * baseDir are skipped, never read.
+ * Ограничен (макс. путей, макс. байт) и в jail: токены вне baseDir
+ * пропускаются, не читаются.
  */
 
 import { readFileSync, statSync } from "node:fs";
@@ -38,6 +38,11 @@ function parseIfSupported(ext: string, content: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Резолвит состояния артефактов, упомянутых в ответе (в пределах baseDir).
+ * @param baseDir корень workspace (jail); @param response финальный ответ модели.
+ * @returns состояния найденных артефактов (существует/ошибка парсинга).
+ */
 export function resolveArtifactStates(baseDir: string, response: string): ArtifactState[] {
   if (!response) return [];
   const out: ArtifactState[] = [];
@@ -51,7 +56,7 @@ export function resolveArtifactStates(baseDir: string, response: string): Artifa
   return out;
 }
 
-/** Stats (and parses, when supported) a single in-jail path. Null when unreadable. */
+/** Смотрит один путь внутри jail (и парсит, если формат поддерживается). Null, если нечитаем. */
 function resolveOneArtifact(token: string, abs: string): ArtifactState | null {
   let size: number;
   try {
@@ -66,7 +71,7 @@ function resolveOneArtifact(token: string, abs: string): ArtifactState | null {
   try {
     content = readFileSync(abs, "utf-8");
   } catch {
-    // Unreadable between stat and read — exists, unverified.
+    // Нечитаем между stat и read — существует, но не проверен.
     return { path: token, exists: true };
   }
   return { path: token, exists: true, parseError: parseIfSupported(extname(token).toLowerCase(), content) };

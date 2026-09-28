@@ -1,3 +1,4 @@
+/** Тул точечной правки: exact-match замена, скан, валидация, diff. */
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
@@ -12,6 +13,7 @@ import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 
+/** Заменяет точный фрагмент в существующем файле (не regex). */
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
   icon: "✏️",
@@ -45,12 +47,12 @@ export const editFileTool: ToolDefinition = {
       }
     }
 
-    // Get session-specific security config
+    // Сессионный security-конфиг.
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Check file operations limit
+    // Лимит файловых операций.
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
@@ -66,7 +68,7 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    // Check path permissions
+    // Проверка прав на путь.
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(ctx.sessionId, "file_write", scopeCheck.reason || "Path not allowed", path);
@@ -78,7 +80,7 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
+    // Защищённые пути (.git/, .env, ключи) — всегда спросить юзера.
     const protectedBlock = protectedPathBlock(ctx, resolved, path);
     if (protectedBlock) return protectedBlock;
 
@@ -112,11 +114,11 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    // Replacement via function — otherwise newStr is treated as a template
-    // and `$&`, `$1` etc. would silently corrupt the file content.
+    // Замена через функцию — иначе newStr трактуется как шаблон и `$&`, `$1`
+    // молча испортят содержимое файла.
     const updated = content.replace(oldStr, () => newStr);
 
-    // Check new content for dangerous patterns — only when security is enabled
+    // Скан нового контента — только при включённой безопасности.
     if (securityConfig?.enabled && securityConfig?.contentScan?.enabled) {
       const scanResult = scanContent(updated, path, securityConfig.contentScan);
       if (!scanResult.allowed) {
@@ -133,7 +135,7 @@ export const editFileTool: ToolDefinition = {
       }
     }
 
-    // Pre-validate syntax BEFORE writing — prevents "file written" + syntax error loop
+    // Превалидация синтаксиса ДО записи — иначе петля "файл записан" + syntax error.
     const validation = await preValidateSyntax(resolved, updated, ctx.baseDir);
     if (!validation.valid) {
       return {
@@ -142,19 +144,16 @@ export const editFileTool: ToolDefinition = {
       };
     }
 
-    // Detect import/export conflicts — warning only (code may be valid)
+    // Конфликты import/export — только warning.
     const conflicts = detectImportConflicts(updated);
 
     writeFileSync(resolved, updated, "utf-8");
     const diff = generateDiff(content, updated);
 
-    // Increment file operations counter
     ctx.fileOperationsCount = currentCount + 1;
 
-    // Log successful file edit
     logFileWrite(ctx.sessionId, path, true, "File edited");
 
-    // Add conflict warning to output if any
     let output = t("file.replaced_in", { path });
     if (conflicts.length > 0) {
       output += `\n[WARNING] Import/export conflicts: ${conflicts.join(", ")}`;

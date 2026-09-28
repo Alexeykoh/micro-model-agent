@@ -1,3 +1,4 @@
+// Вид плана в чате: чтение active.json, чеклист с прогресс-баром, контекст шага.
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { pc } from "./colors";
@@ -7,6 +8,7 @@ import { extractFileLikeTokens, stripUrls } from "../modules/hallucination/js-id
 import { t } from "../i18n/index";
 import { projectMmaDir } from "../config/paths";
 
+/** Читает активный план из .mma/plans/active.json. Нет/бит — null. */
 export function readActivePlan(baseDir: string): Plan | null {
   const p = join(projectMmaDir(baseDir), "plans", "active.json");
   if (!existsSync(p)) return null;
@@ -28,6 +30,7 @@ export function readActivePlan(baseDir: string): Plan | null {
   }
 }
 
+/** Индекс текущего шага (первый не done/skipped). */
 export function currentStepIndex(plan: Plan): number {
   return plan.steps.findIndex((s) => s.status !== "done" && s.status !== "skipped");
 }
@@ -47,6 +50,7 @@ function stepMark(step: PlanStep): string {
   }
 }
 
+/** Рендерит чеклист плана с прогресс-баром ▰▱ построчно. */
 export function formatPlanChecklist(plan: Plan): string[] {
   const done = plan.steps.filter((s) => s.status === "done" || s.status === "skipped").length;
   const total = plan.steps.length;
@@ -85,6 +89,10 @@ function truncate(s: string, max = 48): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+/**
+ * Подбирает шаг плана под вызов тула по файловым токенам аргументов.
+ * Структурные тулы и вызовы без путей — null.
+ */
 export function stepContextForTool(
   plan: Plan | null,
   tool: string,

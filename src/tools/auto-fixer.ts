@@ -1,9 +1,8 @@
 
+/** Автофиксы LSP-ошибок tsc (конфликты импортов, неиспользуемые). */
 import { extname } from "path";
 
-/**
- * LSP error codes that can be auto-fixed.
- */
+/** Коды LSP-ошибок, поддающиеся автофиксу. */
 const AUTO_FIXABLE_CODES = new Set([
   2307, // Cannot find module (import missing)
   2440, // Import declaration conflicts with local declaration
@@ -11,9 +10,7 @@ const AUTO_FIXABLE_CODES = new Set([
   2769, // No overload matches this call (simple type mismatches)
 ]);
 
-/**
- * Represents a fixable LSP error.
- */
+/** Исправимая LSP-ошибка. */
 export interface LspError {
   file: string;
   line: number;
@@ -24,9 +21,7 @@ export interface LspError {
   severity: "error" | "warning";
 }
 
-/**
- * Result of an auto-fix attempt.
- */
+/** Итог попытки автофикса: что применено, что осталось. */
 export interface AutoFixResult {
   fixed: boolean;
   newContent: string;
@@ -35,8 +30,8 @@ export interface AutoFixResult {
 }
 
 /**
- * Extract LSP errors from tsc output.
- * Format: file(line,col): error TSxxxx: message
+ * Извлекает LSP-ошибки из вывода tsc.
+ * Формат: file(line,col): error TSxxxx: message. Возврат: список ошибок.
  */
 export function parseTscOutput(output: string): LspError[] {
   const errors: LspError[] = [];
@@ -59,10 +54,9 @@ export function parseTscOutput(output: string): LspError[] {
 }
 
 /**
- * Try to auto-fix LSP errors in TypeScript/JavaScript code.
- * Only fixes common, safe patterns:
- * - TS2440: Import conflict → rename import with `as`
- * - TS6133: Unused import → remove from import list
+ * Пробует автофиксить LSP-ошибки в TS/JS. Только частые безопасные паттерны:
+ * - TS2440: конфликт импорта → переименование через `as`;
+ * - TS6133: неиспользуемый импорт → удаление из списка.
  */
 export function autoFixErrors(
   filePath: string,
@@ -108,9 +102,7 @@ export function autoFixErrors(
   };
 }
 
-/**
- * Try to fix a single LSP error.
- */
+/** Пробует починить одну LSP-ошибку. */
 function fixError(
   content: string,
   error: LspError,
@@ -137,15 +129,8 @@ function fixError(
 }
 
 /**
- * Fix TS2440: Import declaration conflicts with local declaration.
- * Strategy: Add `as LocalName` to the import.
- *
- * Example:
- *   import { foo } from './module';
- *   export function foo() { ... }
- * Becomes:
- *   import { foo as fooImport } from './module';
- *   export function foo() { ... }
+ * Фикс TS2440: конфликт импорта с локальной декларацией.
+ * Стратегия: добавить `as LocalName` к импорту (`foo` → `foo as fooImport`).
  */
 function fixImportConflict(
   lines: string[],
@@ -154,14 +139,14 @@ function fixImportConflict(
 ): { fixed: boolean; newContent: string } {
   const _line = lines[lineIndex];
 
-  // Find the conflicting name in the error message
+  // Конфликтное имя — из текста ошибки.
   const nameMatch = error.message.match(/Import declaration conflicts with local declaration of '(\w+)'/);
   if (!nameMatch) {
     return { fixed: false, newContent: lines.join("\n") };
   }
   const conflictingName = nameMatch[1];
 
-  // Find the import line (might be above the current line)
+  // Строка импорта (может быть выше текущей) — для TS2440-фикса.
   let importLineIndex = lineIndex;
   while (importLineIndex >= 0 && !lines[importLineIndex].includes("import")) {
     importLineIndex--;
@@ -173,7 +158,7 @@ function fixImportConflict(
 
   const importLine = lines[importLineIndex];
 
-  // Check if this is a named import: import { ... } from '...'
+  // Только именованный импорт вида import { ... } from '...'.
   const namedImportMatch = importLine.match(/import\s+(?:type\s+)?\{([^}]+)\}\s+from/);
   if (!namedImportMatch) {
     return { fixed: false, newContent: lines.join("\n") };
@@ -182,7 +167,7 @@ function fixImportConflict(
   const imports = namedImportMatch[1];
   const importParts = imports.split(",").map((s) => s.trim());
 
-  // Check if the conflicting name is in the imports
+  // Конфликтное имя — в списке импортов?
   const nameIndex = importParts.findIndex((part) => {
     const baseName = part.split(/\s+as\s+/)[0].trim();
     return baseName === conflictingName;
@@ -192,13 +177,13 @@ function fixImportConflict(
     return { fixed: false, newContent: lines.join("\n") };
   }
 
-  // Check if already has an alias
+  // Алиас уже есть — не трогаем.
   const currentImport = importParts[nameIndex];
   if (currentImport.includes(" as ")) {
     return { fixed: false, newContent: lines.join("\n") };
   }
 
-  // Add alias
+  // Добавить алиас.
   importParts[nameIndex] = `${conflictingName} as ${conflictingName}Import`;
   lines[importLineIndex] = importLine.replace(
     namedImportMatch[1],
@@ -209,15 +194,8 @@ function fixImportConflict(
 }
 
 /**
- * Fix TS6133: Variable is declared but its value is never read.
- * Strategy: Remove the unused import from the import list.
- *
- * Example:
- *   import { foo, bar } from './module';
- *   console.log(bar);
- * Becomes:
- *   import { bar } from './module';
- *   console.log(bar);
+ * Фикс TS6133: объявлена, но не читается. Стратегия: выкинуть неиспользуемый
+ * импорт из списка (`{ foo, bar }` → `{ bar }`); пустой импорт — строкой целиком.
  */
 function fixUnusedImport(
   lines: string[],
@@ -226,14 +204,14 @@ function fixUnusedImport(
 ): { fixed: boolean; newContent: string } {
   const _line = lines[lineIndex];
 
-  // Find the unused name in the error message
+  // Неиспользуемое имя — из текста ошибки.
   const nameMatch = error.message.match(/'(\w+)' is declared but its value is never read/);
   if (!nameMatch) {
     return { fixed: false, newContent: lines.join("\n") };
   }
   const unusedName = nameMatch[1];
 
-  // Find the import line (might be above the current line)
+  // Строка импорта (может быть выше текущей) — для TS6133-фикса.
   let importLineIndex = lineIndex;
   while (importLineIndex >= 0 && !lines[importLineIndex].includes("import")) {
     importLineIndex--;
@@ -245,7 +223,7 @@ function fixUnusedImport(
 
   const importLine = lines[importLineIndex];
 
-  // Check if this is a named import: import { ... } from '...'
+  // Только именованный импорт вида import { ... } from '...' (TS6133).
   const namedImportMatch = importLine.match(/import\s+(?:type\s+)?\{([^}]+)\}\s+from/);
   if (!namedImportMatch) {
     return { fixed: false, newContent: lines.join("\n") };
@@ -254,7 +232,7 @@ function fixUnusedImport(
   const imports = namedImportMatch[1];
   const importParts = imports.split(",").map((s) => s.trim());
 
-  // Find and remove the unused import
+  // Найти и выкинуть неиспользуемый импорт.
   const nameIndex = importParts.findIndex((part) => {
     const baseName = part.split(/\s+as\s+/)[0].trim();
     return baseName === unusedName;
@@ -266,7 +244,7 @@ function fixUnusedImport(
 
   importParts.splice(nameIndex, 1);
 
-  // If no imports left, remove the entire import line
+  // Импортов не осталось — снести строку целиком.
   if (importParts.length === 0) {
     lines.splice(importLineIndex, 1);
   } else {

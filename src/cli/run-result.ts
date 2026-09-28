@@ -4,14 +4,13 @@ import { formatCost } from "../modules/pricing/prices";
 import { formatCacheLine, type CacheReport } from "./cache-line";
 import { getDefaultChannel, type OutputChannel } from "../output";
 
+// Печать результата one-shot прогона: стоимость/токены/кеш, код выхода.
 /**
- * Render a single-run AgentResult to the terminal (non-JSON mode) and return
- * the process exit code.
+ * Рендерит one-shot AgentResult в терминал (не-JSON режим) и возвращает код выхода.
  *
- * On failure only the error is printed. The model's `text` (which is the last
- * *accepted* message, i.e. possibly stale after an audit/hallucination error)
- * was already streamed live during the run — re-printing it here misleadingly
- * suggests the task succeeded.
+ * При провале печатается только ошибка. `text` модели (последнее *принятое*
+ * сообщение — возможно, протухшее после ошибки аудита/галлюцинаций) уже
+ * стримлено живьём во время прогона: допечатка здесь ложно намекнула бы на успех.
  */
 export function printRunResult(
   result: {

@@ -1,3 +1,4 @@
+/** Тул аттача картинки в контекст (файл/URL/буфер обмена). */
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
@@ -10,6 +11,7 @@ import {
 } from "../llm/image-utils";
 import { logSecurityBlock } from "../modules/security/audit-log";
 
+/** Кладёт картинку в pending-очередь контекста (PNG/JPEG/GIF/WebP). */
 export const attachImageTool: ToolDefinition = {
   name: "attach_image",
   icon: "🖼️",
@@ -47,7 +49,7 @@ export const attachImageTool: ToolDefinition = {
         const result = await bufferToDataUrl(clipBuf);
         dataUrl = result.dataUrl;
       } else if (source.startsWith("http://") || source.startsWith("https://")) {
-        // Security: validate URL against the network policy (SSRF).
+        // URL — по сетевой политике (SSRF).
         const { isUrlAllowed } = await import("../modules/security/network-validator");
         const { getSessionSecurityConfig } = await import(
           "../modules/security/session-isolation"
@@ -76,8 +78,7 @@ export const attachImageTool: ToolDefinition = {
           };
         }
 
-        // Security: check global path policy AND subagent scope (same
-        // combination as read_file).
+        // Пути: глобальная политика + скоуп субагента (та же связка, что у read_file).
         const { isPathInScope } = await import("../modules/security/path-validator");
         const { DEFAULT_SECURITY_CONFIG } = await import("../config/security");
         const validation = isPathInScope(
@@ -103,7 +104,7 @@ export const attachImageTool: ToolDefinition = {
         dataUrl = result.dataUrl;
       }
 
-      // Add the image as a pending content part on the context manager
+      // Картинка — pending content part на менеджере контекста.
       if (!ctx.contextManager) {
         return {
           success: false,

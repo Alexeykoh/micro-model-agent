@@ -1,3 +1,4 @@
+// Драйвер через node-мост (дочерний процесс bridge-server.mjs по JSON-RPC поверх stdio).
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
@@ -27,13 +28,13 @@ interface BridgeResponse {
 }
 
 function bridgeScriptPath(): string {
-  // Resolve the bridge script for BOTH layouts (rule #12 — read from disk):
+  // Резолв скрипта моста для ОБЕИХ раскладок (пути читаются с диска):
   //   src/modules/browser/bridge-server.mjs          (bun run src/…)
-  //   dist/modules/browser/bridge-server.mjs         (bundle at dist/main.js +
-  //                                                   assets copied by copy-assets.ts)
-  // The single-candidate version looked next to the bundle (dist/bridge-server.mjs),
-  // which copy-assets.ts never produces — so the browser tool died with ENOENT
-  // in the released npm package (observed: v0.37.0).
+  //   dist/modules/browser/bridge-server.mjs         (бандл dist/main.js +
+  //                                                   ассеты от copy-assets.ts)
+  // Версия с одним кандидатом искала рядом с бандлом (dist/bridge-server.mjs),
+  // чего copy-assets.ts не создаёт, — и тул браузера падал с ENOENT
+  // в опубликованном npm-пакете (наблюдалось: v0.37.0).
   const dir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     join(dir, "bridge-server.mjs"),
@@ -42,6 +43,7 @@ function bridgeScriptPath(): string {
   return pickExistingPath(candidates);
 }
 
+/** Драйвер поверх node-моста: команды шлются JSON-строками в stdin дочернего процесса. */
 export class BridgeDriver implements BrowserDriver {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private rl: ReadlineInterface | null = null;
@@ -139,13 +141,13 @@ export class BridgeDriver implements BrowserDriver {
       }
     });
     proc.on("error", (err) => {
-      if (this.proc !== proc) return; // stale child — a newer bridge is alive
+      if (this.proc !== proc) return; // протухший потомок — жив уже новый мост
       this.failPending(`Bridge process failed to start: ${err.message}`);
       this.proc = null;
       this.rl = null;
     });
     proc.on("exit", (code) => {
-      if (this.proc !== proc) return; // stale child — a newer bridge is alive
+      if (this.proc !== proc) return; // протухший потомок — жив уже новый мост
       const stderrTail = this.lastStderr.join("").trim();
       this.failPending(
         stderrTail
@@ -230,7 +232,7 @@ export class BridgeDriver implements BrowserDriver {
     try {
       if (this.proc) await this.send("close");
     } catch {
-      // ignore — we're shutting down
+      // игнорируем — идёт завершение работы
     }
     this.dispose();
   }

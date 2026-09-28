@@ -1,3 +1,4 @@
+/** Тул записи файла: скоуп, security-скан, валидация синтаксиса, diff. */
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { t } from "../i18n/index";
@@ -12,6 +13,7 @@ import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 
+/** Создаёт/перезаписывает файл; parent-dirs, проверки, diff в ответе. */
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
   icon: "📝",
@@ -45,7 +47,7 @@ export const writeFileTool: ToolDefinition = {
       }
     }
 
-    // Check path permissions using the resolved path
+    // Проверка прав по резолвленному пути.
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(ctx.sessionId, "file_write", scopeCheck.reason || "Path not allowed", path);
@@ -57,16 +59,16 @@ export const writeFileTool: ToolDefinition = {
       };
     }
 
-    // Always-on fallback (security disabled): protected paths ask the user.
+    // Always-on fallback (security выкл): защищённые пути — спросить юзера.
     const protectedBlock = protectedPathBlock(ctx, resolved, path);
     if (protectedBlock) return protectedBlock;
 
-    // Get session-specific security config
+    // Сессионный security-конфиг.
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Check file operations limit
+    // Лимит файловых операций.
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
@@ -82,9 +84,9 @@ export const writeFileTool: ToolDefinition = {
       };
     }
 
-    // Check content for dangerous patterns — only when security is enabled.
-    // contentScan has its own `enabled` flag, but it must NOT fire while the
-    // global security switch is off (false positives on ordinary CLI code).
+    // Скан контента на опасные паттерны — только при включённой безопасности.
+    // У contentScan свой флаг `enabled`, но при выключенном глобальном свитче
+    // он молчит (ложные срабатывания на обычном CLI-коде).
     const content = String(args.content);
     if (securityConfig?.enabled && securityConfig?.contentScan?.enabled) {
       const scanResult = scanContent(content, path, securityConfig.contentScan);
@@ -107,7 +109,7 @@ export const writeFileTool: ToolDefinition = {
       mkdirSync(dir, { recursive: true });
     }
 
-    // Pre-validate syntax BEFORE writing — prevents "file written" + syntax error loop
+    // Превалидация синтаксиса ДО записи — иначе петля "файл записан" + syntax error.
     const validation = await preValidateSyntax(resolved, content, ctx.baseDir);
     if (!validation.valid) {
       return {
@@ -116,7 +118,7 @@ export const writeFileTool: ToolDefinition = {
       };
     }
 
-    // Detect import/export conflicts — warning only (code may be valid)
+    // Конфликты import/export — только warning (код может быть валиден).
     const conflicts = detectImportConflicts(content);
 
     const fileExists = existsSync(resolved);
@@ -136,13 +138,13 @@ export const writeFileTool: ToolDefinition = {
     }
     const diff = fileExists ? generateDiff(oldContent, content) : generateNewFileDiff(content);
 
-    // Increment file operations counter
+    // Счётчик файловых операций.
     ctx.fileOperationsCount = currentCount + 1;
 
-    // Log successful file write
+    // Успешная запись в аудит-лог.
     logFileWrite(ctx.sessionId, path, true, `File ${fileExists ? "updated" : "created"}`);
 
-    // Add conflict warning to output if any
+    // Предупреждение о конфликтах — в вывод.
     let output = t("file.written", { path });
     if (conflicts.length > 0) {
       output += `\n[WARNING] Import/export conflicts: ${conflicts.join(", ")}`;

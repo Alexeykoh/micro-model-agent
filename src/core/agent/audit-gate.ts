@@ -1,3 +1,4 @@
+/** Финальный аудит ответа: принят, отклонён или повторы исчерпаны. */
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
@@ -5,6 +6,7 @@ import type { SessionLogger } from "../session-logger";
 import { MAX_AUDIT_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
 
+/** Результат финального аудита: покрытие плана и недостающие файлы. */
 export interface FinalAuditResult {
   passed: boolean;
   done: number;
@@ -14,6 +16,7 @@ export interface FinalAuditResult {
   summary: string;
 }
 
+/** Вердикт аудита: принять ответ, переспросить или завершить неуспехом. */
 export type AuditVerdict =
   /** Ответ принят — цикл завершается успехом. */
   | { action: "pass" }
@@ -22,6 +25,7 @@ export type AuditVerdict =
   /** Повторы аудита исчерпаны — цикл завершается неуспехом. */
   | { action: "exhausted"; summary: string };
 
+/** Зависимости вентиля аудита: состояние цикла, логгеры, контекст. */
 export interface AuditGateDeps {
   state: LoopState;
   iteration: number;
@@ -46,7 +50,10 @@ export class AuditGate {
     private readonly finalAudit: (() => Promise<FinalAuditResult | null>) | undefined,
   ) {}
 
-  /** Возвращает null, если аудит не настроен (ответ принимается безусловно). */
+  /**
+   * Оценивает ответ через финальный аудит.
+   * @param deps состояние цикла и окружение; @returns вердикт либо null (аудит не настроен).
+   */
   async evaluate(deps: AuditGateDeps): Promise<AuditVerdict | null> {
     if (!this.finalAudit) return null;
     const audit = await this.finalAudit();

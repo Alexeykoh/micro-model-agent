@@ -1,8 +1,10 @@
+// Модуль браузера: системный промпт, тул навигации, закрытие сессии на выходе.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition } from "../../tools/types";
 import { createBrowserTool, closeBrowserSession } from "../../tools/browser";
 
+/** Модуль headless-браузера: промпт workflow, тул, плагин закрытия сессии. */
 export class BrowserModule implements AgentModule {
   name = "browser";
 

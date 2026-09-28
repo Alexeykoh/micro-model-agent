@@ -1,4 +1,8 @@
+// Подстановка в шаблоны: `{param}` из params и `{{steps.<id>.output}}` из выходов шагов.
 export class TemplateEngine {
+  /**
+   * Рендерит шаблон. Неизвестный выход шага остаётся плейсхолдером как есть.
+   */
   static render(
     template: string,
     params: Record<string, string>,

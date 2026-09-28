@@ -1,3 +1,4 @@
+/** Тул перемещения/переименования файла или каталога. */
 import { renameSync, existsSync, mkdirSync } from "fs";
 import { resolve, normalize, dirname } from "path";
 import { t } from "../i18n/index";
@@ -9,6 +10,7 @@ import { generateMoveDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 
+/** Перемещает/переименовывает; обе стороны проверяются по скоупу. */
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
   icon: "📦",
@@ -29,12 +31,11 @@ export const moveFileTool: ToolDefinition = {
     const fromResolved = safeResolvePath(baseDir, normalize(fromPath));
     const toResolved = safeResolvePath(baseDir, normalize(toPath));
 
-    // Get session-specific security config
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Check file operations limit
+    // Лимит файловых операций.
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
@@ -50,8 +51,8 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Check source path permissions — against the RESOLVED path (the same
-    // one renameSync will act on), never the raw argument.
+    // Права источника — по РЕЗОЛВЛЕННОМУ пути (по нему же работает renameSync),
+    // никогда по сырому аргументу.
     const fromCheck = isPathWritable(ctx.baseDir, fromResolved, ctx.scope, ctx.config.security?.paths);
     if (!fromCheck.allowed) {
       logSecurityBlock(
@@ -68,7 +69,7 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Check destination path permissions — resolved, same as above.
+    // Права приёмника — тоже по резолвленному.
     const toCheck = isPathWritable(ctx.baseDir, toResolved, ctx.scope, ctx.config.security?.paths);
     if (!toCheck.allowed) {
       logSecurityBlock(
@@ -85,7 +86,7 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Protected paths on either side (.git/, .env, keys/secrets) — ask user.
+    // Защищённые пути с любой стороны (.git/, .env, ключи) — спросить юзера.
     const fromProtected = protectedPathBlock(ctx, fromResolved, fromPath);
     if (fromProtected) return fromProtected;
     const toProtected = protectedPathBlock(ctx, toResolved, toPath);
@@ -104,10 +105,8 @@ export const moveFileTool: ToolDefinition = {
     renameSync(fromResolved, toResolved);
     const diff = generateMoveDiff(fromPath, toPath);
 
-    // Increment file operations counter
     ctx.fileOperationsCount = currentCount + 1;
 
-    // Log file move
     logFileWrite(ctx.sessionId, `${fromPath} -> ${toPath}`, true, "File moved");
 
     return {

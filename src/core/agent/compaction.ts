@@ -1,3 +1,4 @@
+/** Компакция контекста: единая точка всех четырёх триггеров цикла. */
 import type { ContextManager } from "../../modules/context/manager";
 import type { HallucinationDetector } from "../../modules/hallucination/detector";
 import type { Logger } from "../../logger/app-logger";

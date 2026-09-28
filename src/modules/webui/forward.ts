@@ -1,14 +1,12 @@
+// Мост «петля агента → SSE» для `mma web`: буферизация чанков, капы вывода, скрытие секретов.
 /**
- * Agent-loop → SSE bridge for `mma web`.
+ * Петля агента стримит текст/мету/reasoning крошечными кусками; форвард каждого
+ * как есть затопил бы браузер и сокет. Текст, мета и reasoning буферизуются и
+ * флашатся вместе (`flushMs`, ~350мс), а дискретные события жизненного цикла
+ * (фаза, старт/конец тула, конец хода) сначала флашат буфер ради порядка.
  *
- * The agent loop streams text/meta/reasoning chunks in tiny pieces; forwarding
- * each one verbatim would flood the browser and the socket. Text, meta and
- * reasoning are therefore buffered and flushed together (`flushMs`, ~350ms),
- * while discrete lifecycle events (phase, tool start/end, turn end) flush the
- * buffer first so ordering is preserved.
- *
- * `onTurnEnd` MUST reset `state.busy = false`: the server sets `busy = true` on
- * `/api/message` and relies on this reset to accept the next submit.
+ * `onTurnEnd` ОБЯЗАН сбрасывать `state.busy = false`: сервер ставит `busy = true`
+ * на `/api/message` и полагается на этот сброс, чтобы принять следующий сабмит.
  */
 import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
@@ -20,16 +18,15 @@ import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
 
 /**
- * Non-null plan snapshot carried by the dedicated SSE `plan` event. Reuses the
- * host contract so the browser card and the sidebar render the same shape.
+ * Ненулевой снапшот плана в выделенном SSE-событии `plan`. Переиспользует
+ * host-контракт, чтобы карточка браузера и сайдбар рендерили одну форму.
  */
 export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
 
 /**
- * Redact credential-shaped strings anywhere inside a tool-argument object,
- * preserving its shape (the browser renders `args` as a structured object).
- * Reuses the same point-redaction as {@link scrubError} — generic scrubbing
- * would mangle ordinary arguments.
+ * Вычищает credential-подобные строки внутри объекта аргументов тула,
+ * сохраняя форму (браузер рендерит `args` структурно). Та же точечная
+ * редактура, что в {@link scrubError}, — общий скраб покалечил бы обычные аргументы.
  */
 function scrubValue(value: unknown): unknown {
   if (typeof value === "string") return redactContextSecrets(value);
@@ -42,6 +39,7 @@ function scrubValue(value: unknown): unknown {
   return value;
 }
 
+/** Вычищает секреты из аргументов тула, сохраняя форму объекта. */
 export function scrubToolArgs(args: Record<string, unknown>): Record<string, unknown> {
   const scrubbed = scrubValue(args);
   return scrubbed !== null && typeof scrubbed === "object"
@@ -50,9 +48,9 @@ export function scrubToolArgs(args: Record<string, unknown>): Record<string, unk
 }
 
 /**
- * Per-tool caps for the tool-result body sent to the browser. Long output
- * (bash logs, file reads, search hits) is clipped so a single event can never
- * blow up the socket or the feed; the marker keeps the truncation honest.
+ * Потуловые капы тела результата для браузера. Длинный вывод (логи bash,
+ * чтения файлов, хиты поиска) режется, чтобы одно событие не раздуло сокет
+ * и ленту; маркер честно фиксирует обрезку.
  */
 const TOOL_OUTPUT_CAPS: Record<string, number> = {
   browser: 8000,
@@ -68,6 +66,7 @@ const TOOL_OUTPUT_CAPS: Record<string, number> = {
 };
 const DEFAULT_OUTPUT_CAP = 6000;
 
+/** Обрезает вывод тула по капу; маркер показывает исходную длину. */
 export function clipToolOutput(toolName: string, output: string): string {
   const cap = TOOL_OUTPUT_CAPS[toolName] ?? DEFAULT_OUTPUT_CAP;
   if (output.length <= cap) return output;
@@ -75,13 +74,14 @@ export function clipToolOutput(toolName: string, output: string): string {
 }
 
 /**
- * SSE wire subset of {@link TurnSummary} — `textLength` is not sent to clients.
- * `success` is always required; the timing/count fields are optional so partial
- * summaries (e.g. interrupted runs) are valid.
+ * SSE-подмножество {@link TurnSummary} — `textLength` клиентам не шлётся.
+ * `success` обязателен всегда; поля времени/счётчиков опциональны, чтобы
+ * частичные сводки (напр. прерванных прогонов) были валидны.
  */
 export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
   Partial<Pick<TurnSummary, "durationMs" | "toolCalls">>;
 
+/** Форвардер чанков петли в SSE-синк с буферизацией и сбросом busy. */
 export interface Forwarder {
   onText(chunk: string): void;
   onMeta(chunk: string, kind?: MetaKind): void;
@@ -89,7 +89,7 @@ export interface Forwarder {
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
-  /** Dedicated plan snapshot event (emitted after a `plan`/`todo` tool ends). */
+  /** Выделенное событие снапшота плана (после конца `plan`/`todo`-тула). */
   onPlan(plan: PlanSnapshot): void;
   onTurnEnd(summary: TurnEndSummary): void;
   flushNow(): void;
@@ -97,6 +97,7 @@ export interface Forwarder {
 
 const DEFAULT_FLUSH_MS = 350;
 
+/** Строит форвардер на состояние и синк (дефолт — broadcast всем клиентам). */
 export function makeForwarder(
   s: WebUiState,
   sink: (ev: SseEvent) => void = (ev) => broadcast(ev, s),
@@ -109,10 +110,10 @@ export function makeForwarder(
   const flush = () => {
     if (timer) clearTimeout(timer);
     timer = null;
-    // Tool/status meta (and plugin `runOnMeta` output) may carry ANSI codes and
-    // plugins may colour text too — the browser has no terminal, so any escape
-    // sequences would otherwise show up as literal `\u001b[2m…` garbage. Strip
-    // them here, the single point every text/meta/reasoning chunk crosses.
+    // Мета тулов/статуса (и выход плагинного `runOnMeta`) может нести ANSI-коды,
+    // да и плагины красят текст — а терминала у браузера нет, и эскейпы встали бы
+    // буквальным мусором `\u001b[2m…`. Режем здесь, в единственной точке, через
+    // которую проходит каждый чанк текста/меты/reasoning.
     if (buf.reasoning) {
       sink({ type: "reasoning", ts: Date.now(), chunk: stripAnsi(buf.reasoning) });
       buf.reasoning = "";
@@ -142,11 +143,10 @@ export function makeForwarder(
       schedule();
     },
     onMeta(chunk, kind) {
-      // Tool bodies and status lines must not share one SSE event: the client
-      // quiet-gates `kind: "tool"` but always shows status. Flush first when
-      // the kind changes so every event carries a pure kind. Status events
-      // stay byte-identical to before (no `kind` field) — only tool bodies
-      // are tagged.
+      // Тела тулов и строки статуса не должны делить одно SSE-событие: клиент
+      // quiet-гейтит `kind: "tool"`, а статус показывает всегда. При смене kind
+      // сначала флашим, чтобы каждое событие несло чистый kind. События статуса
+      // остаются байт-в-байт как раньше (без поля `kind`) — тегируются только тела.
       const next = kind ?? "status";
       if (buf.meta && (buf.metaKind ?? "status") !== next) flush();
       buf.meta += chunk;
@@ -193,10 +193,9 @@ export function makeForwarder(
       });
     },
     onTurnEnd(summary) {
-      // Ownership: the forwarder is the single emitter of `turn_end` and the
-      // single busy-reset for any turn that actually started. It also clears
-      // the reservation token so a late `submit` failure callback cannot clear
-      // a newer turn's slot.
+      // Владение: форвардер — единственный эмиттер `turn_end` и единственный
+      // сброс busy для любого реально стартовавшего хода. Заодно чистит токен
+      // резервации, чтобы поздний колбэк провала `submit` не снёс слот нового хода.
       flush();
       s.busy = false;
       s.agentRunning = false;

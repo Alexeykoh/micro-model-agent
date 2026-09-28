@@ -1,15 +1,13 @@
+// Диспатч слеш-команд `mma web`: карта хендлеров на той же механике, что REPL.
 /**
- * Slash-command dispatcher for `mma web` (Phase 3 Task E).
+ * Путь `/` в браузере был документированным no-op. Модуль гоняет поддерживаемое
+ * подмножество через карту хендлеров (правило архитектуры #17 — без `if`-цепочки)
+ * и переиспользует ТУ ЖЕ механику, что REPL: реестр конфига
+ * (`getConfigValue`/`setConfigValue`), хуки `saveConfig`/`reconfigure` хоста,
+ * shared стор памяти. Вывод — построчно по SSE событием `command`, в ленте дим.
  *
- * The browser's `/` path used to be a documented no-op. This module runs a
- * supported subset through a handler map (architecture rule #17 — no `if`
- * chain) and reuses the SAME machinery as the REPL: the config registry
- * (`getConfigValue`/`setConfigValue`), the host's `saveConfig`/`reconfigure`
- * hooks and the shared memory store. Output is emitted line-by-line over SSE as
- * a `command` event and rendered dim in the feed.
- *
- * Terminal-only commands (`/meet`, interactive prompts, `/wizard`) are
- * deliberately out of scope — see `HELP` for the supported subset.
+ * Терминальные команды (`/meet`, интерактивные промпты, `/wizard`) сознательно
+ * вне скоупа — поддерживаемое подмножество см. в `HELP`.
  */
 import type { AppConfig } from "../../config/types";
 import { t } from "../../i18n";
@@ -22,9 +20,9 @@ import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from
 import { broadcast, type WebUiState } from "./state";
 
 /**
- * Supported subset, surfaced by `/help` (one line each). Descriptions are
- * i18n keys (`web.command.*`) resolved at emit time so `/help` and
- * `GET /api/commands` follow the server locale.
+ * Поддерживаемое подмножество для `/help` (по строке). Описания — ключи i18n
+ * (`web.command.*`), резолвятся в момент эмита, чтобы `/help` и
+ * `GET /api/commands` шли за серверной локалью.
  */
 const HELP: Array<{ usage: string; descKey: string }> = [
   { usage: "/help", descKey: "web.command.help" },
@@ -43,7 +41,7 @@ const HELP: Array<{ usage: string; descKey: string }> = [
   { usage: "/new", descKey: "web.command.new" },
 ];
 
-/** `GET /api/commands` payload: name + usage + desc per supported command. */
+/** Пейлоад `GET /api/commands`: имя + usage + описание на команду. */
 export function webCommandList(): Array<{ name: string; usage: string; desc: string }> {
   return HELP.map((h) => ({
     name: h.usage.slice(1).split(/[\s|]/)[0],
@@ -52,20 +50,21 @@ export function webCommandList(): Array<{ name: string; usage: string; desc: str
   }));
 }
 
+/** Входы диспатчера: состояние и sink захвата (для тестов). */
 export interface WebCommandDeps {
   state: WebUiState;
-  /** Capture sink for tests; defaults to an SSE `command` broadcast. */
+  /** Sink захвата для тестов; дефолт — SSE-бродкаст `command`. */
   emit?: (text: string) => void;
 }
 
-/** Build the `(line) => Promise<void>` dispatcher wired into `WebHost`. */
+/** Строит диспатчер `(line) => Promise<void>`, ввязанный в `WebHost`. */
 export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise<void> {
   const { state } = deps;
   const raw =
     deps.emit ??
     ((text: string) => broadcast({ type: "command", ts: Date.now(), text }, state));
-  // Every emitted line passes through point-redaction: config reads can echo a
-  // key the user just set, and the feed is user-visible.
+  // Каждая эмитимая строка — через точечную редактуру: чтения конфига могут
+  // эхом вернуть только что заданный ключ, а лента видна пользователю.
   const out: Out = (text) => raw(redactContextSecrets(text));
 
   const handlers: Record<string, Handler> = {
@@ -97,7 +96,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
   };
 }
 
-/** One-line status: model · provider · context · session · verbosity (+ environment). */
+/** Однострочный статус: модель · провайдер · контекст · сессия · verbosity (+ окружение). */
 function status(cfg: AppConfig, state: WebUiState, out: Out): void {
   const provider = cfg.provider.active ?? cfg.provider.type;
   const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
@@ -118,7 +117,7 @@ function status(cfg: AppConfig, state: WebUiState, out: Out): void {
   }
 }
 
-/** Persist + reconfigure after a successful registry write, then report. */
+/** `/config`: без аргументов — весь реестр, с ключом — чтение, с ключом+значением — запись. */
 async function configCmd(
   cfg: AppConfig,
   args: string[],

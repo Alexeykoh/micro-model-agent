@@ -1,3 +1,4 @@
+// Обход дерева проекта: индекс файлов с символами, вотчер, сигнатура дерева.
 import {
   readdirSync,
   readFileSync,
@@ -17,10 +18,10 @@ import { t } from "../../i18n/index";
 const logger = new Logger("warn", "indexer");
 
 /**
- * Directories that never hold project source but would flood the index:
- * VCS/build output, package caches and virtual environments across
- * ecosystems (Node, Python, Rust, Go/PHP/Ruby, JVM, .NET, Apple, IDE).
- * Stored lowercase — matching is case-insensitive (Windows/macOS).
+ * Каталоги, где исходников проекта не бывает, но индекс бы утонул:
+ * VCS/артефакты сборки, кэши пакетов и виртуалки всех экосистем
+ * (Node, Python, Rust, Go/PHP/Ruby, JVM, .NET, Apple, IDE).
+ * Хранятся в lowercase — сравнение регистронезависимо (Windows/macOS).
  */
 const IGNORE_DIRS = new Set([
   // VCS / MMA
@@ -28,13 +29,13 @@ const IGNORE_DIRS = new Set([
   ".hg",
   ".svn",
   ".mma",
-  // MMA dev / agent / tooling dirs — never project source (mirror .gitignore,
-  // so a dev checkout's map is not flooded by test sandboxes / agent scratch).
+  // Каталоги dev/agent/тулинга MMA — не исходники проекта (зеркало .gitignore:
+  // карта dev-чекаута не тонет в тестовых песочницах / агентском скратче).
   "_testing",
   ".superpowers",
   ".opencode",
   ".fallow",
-  // Node / JS bundlers
+  // Node / JS-бандлеры
   "node_modules",
   "dist",
   "build",
@@ -69,32 +70,32 @@ const IGNORE_DIRS = new Set([
   // Apple
   "pods",
   "deriveddata",
-  // IDE / editor
+  // IDE / редакторы
   ".idea",
   ".vscode",
 ]);
 
-/** True when a directory name is ignored (case-insensitive). */
+/** True, если имя каталога игнорируется (регистронезависимо). */
 export function isIgnoredDirName(name: string): boolean {
   return IGNORE_DIRS.has(name.toLowerCase());
 }
 
-/** Lockfiles — generated, never project source. */
+/** Локфайлы — генерированы, не исходники проекта. */
 const IGNORE_FILE_NAMES = new Set([
   "package-lock.json",
   "bun.lock",
   "bun.lockb",
   "yarn.lock",
   "pnpm-lock.yaml",
-  // Vendored third-party web bundles (minified; their symbols are noise).
+  // Вендоренные веб-бандлы (минифицированы; их символы — шум).
   "hljs.js",
   "smd.js",
 ]);
 
-/** Tooling config/baseline families that are not project source. */
+/** Семейства конфигов/бейзлайнов тулинга — не исходники проекта. */
 const IGNORE_FILE_PREFIXES = [".fallow"];
 
-/** True when a file name is ignored (case-insensitive prefix/exact match). */
+/** True, если имя файла игнорируется (регистронезависимый префикс/точное совпадение). */
 export function isIgnoredFileName(name: string): boolean {
   const lower = name.toLowerCase();
   return (
@@ -105,9 +106,9 @@ export function isIgnoredFileName(name: string): boolean {
 }
 
 /**
- * True when any path SEGMENT is an ignored directory. Segment-based (not a
- * substring) so short names like `env`/`out`/`obj` do not black out
- * `environment.ts` or `about/`.
+ * True, если ЛЮБОЙ СЕГМЕНТ пути — игнорируемый каталог. Посегментно (не
+ * подстрока): короткие имена `env`/`out`/`obj` не должны вычёркивать
+ * `environment.ts` или `about/`.
  */
 function isIgnoredPath(filename: string): boolean {
   const segments = filename.split(/[\\/]/);
@@ -115,6 +116,7 @@ function isIgnoredPath(filename: string): boolean {
   return segments.some((segment) => isIgnoredDirName(segment)) || isIgnoredFileName(base);
 }
 
+/** Один проиндексированный файл: путь, язык, экспорты, размер. */
 export interface IndexedFile {
   path: string;
   language: string;
@@ -122,41 +124,104 @@ export interface IndexedFile {
   size: number;
 }
 
+/** Результат обхода: файлы + суммарный размер. */
 export interface IndexResult {
   files: IndexedFile[];
   totalSize: number;
 }
 
+/** Индексер: обход исходников, вотчер, сигнатура дерева, сводка. */
 export class Indexer {
   private baseDir: string;
   private MAX_FILES = 1000;
-  private watcher: FSWatcher | null = null;
+  private watcher: FSWatcher | FSWatcher[] | null = null;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
   }
 
+  /** Подписка на изменения дерева (игнорируемые пути не пробрасываются). */
   watch(callback: (event: string, filename: string | null) => void): void {
-    this.watcher = watch(this.baseDir, { recursive: true }, (event, filename) => {
+    const handler = (event: string, filename: string | null): void => {
       if (filename && !isIgnoredPath(filename)) {
         callback(event, filename);
       }
-    });
+    };
+    try {
+      // Рекурсивный вотч работает на macOS/Windows; на Linux опция игнорируется
+      // или бросает в зависимости от сборки Node — ниже фолбэк.
+      this.watcher = watch(this.baseDir, { recursive: true }, handler);
+    } catch {
+      this.watcher = this.watchNonRecursive(handler);
+    }
   }
 
+  /**
+   * Linux-фолбэк: `fs.watch(recursive)` только для macOS/Windows, поэтому
+   * смотрим каждый неигнорируемый подкаталог отдельно (нерекурсивно).
+   * Best-effort: подкаталоги, созданные после `watch()`, требуют ручного refresh.
+   */
+  private watchNonRecursive(
+    callback: (event: string, filename: string | null) => void,
+  ): FSWatcher[] {
+    const watchers: FSWatcher[] = [];
+    const collectDirs = (dir: string, out: string[]): void => {
+      let entries: string[];
+      try {
+        entries = readdirSync(dir);
+      } catch {
+        return;
+      }
+      out.push(dir);
+      for (const entry of entries) {
+        const fullPath = join(dir, entry);
+        try {
+          const lst = lstatSync(fullPath, { throwIfNoEntry: false });
+          if (!lst || lst.isSymbolicLink()) continue;
+          if (statSync(fullPath).isDirectory() && !isIgnoredDirName(entry)) {
+            collectDirs(fullPath, out);
+          }
+        } catch {
+          // Нечитаемая запись — пропускаем, идём по остальным.
+        }
+      }
+    };
+    const dirs: string[] = [];
+    collectDirs(this.baseDir, dirs);
+    for (const dir of dirs) {
+      try {
+        watchers.push(watch(dir, callback));
+      } catch (e) {
+        logger.warn(`watch failed for ${dir}: ${(e as Error).message}`);
+      }
+    }
+    if (watchers.length === 0) {
+      logger.warn("file watcher unavailable: no directories could be watched");
+    }
+    return watchers;
+  }
+
+  /** Отписывается от вотчера. */
   unwatch(): void {
     if (this.watcher) {
-      this.watcher.close();
+      const all = Array.isArray(this.watcher) ? this.watcher : [this.watcher];
+      for (const w of all) {
+        try {
+          w.close();
+        } catch {
+          // Уже закрыт — нечего делать.
+        }
+      }
       this.watcher = null;
     }
   }
 
   /**
-   * Traverse every indexable source file under `baseDir` and invoke `visit`
-   * with its full path, project-relative path, language id and stat. Honors
-   * `MAX_FILES` and `IGNORE_DIRS`; file contents are NOT read here — `walk()`
-   * reads them for symbol extraction, while `scanSignature()` uses the stat
-   * only. Shared so both passes see exactly the same file set.
+   * Обходит каждый индексируемый исходник под `baseDir` и зовёт `visit` с
+   * полным путём, относительным путём, id языка и stat. Уважает `MAX_FILES` и
+   * `IGNORE_DIRS`; содержимое НЕ читает — `walk()` читает его для извлечения
+   * символов, а `scanSignature()` пользуется только stat. Общий, чтобы оба
+   * прохода видели ровно то же множество файлов.
    */
   private eachSourceFile(
     visit: (fullPath: string, relPath: string, language: string, stat: Stats) => void,
@@ -176,9 +241,9 @@ export class Indexer {
         if (count >= this.MAX_FILES) return;
         const fullPath = join(dir, entry);
         const relPath = relative(this.baseDir, fullPath);
-        // Per-entry isolation: a file deleted (or unreadable) between readdir
-        // and stat must not kill the whole walk. Symlinks are skipped — they
-        // can point outside the project or create directory cycles.
+        // Изоляция на запись: файл, удалённый (или нечитаемый) между readdir
+        // и stat, не должен убивать весь обход. Симлинки пропускаем — могут
+        // вести наружу или образовывать циклы каталогов.
         try {
           const lst = lstatSync(fullPath, { throwIfNoEntry: false });
           if (!lst || lst.isSymbolicLink()) continue;
@@ -197,7 +262,7 @@ export class Indexer {
             }
           }
         } catch (e) {
-          // Entry vanished or is unreadable — skip it, keep indexing the rest.
+          // Запись пропала или нечитаема — пропускаем, индексируем остальные.
           logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
         }
       }
@@ -206,6 +271,7 @@ export class Indexer {
     walkDir(this.baseDir);
   }
 
+  /** Полный обход: читает файлы, извлекает символы. Нечитаемые пропускает. */
   async walk(): Promise<IndexResult> {
     const files: IndexedFile[] = [];
     let totalSize = 0;
@@ -217,7 +283,7 @@ export class Indexer {
         files.push({ path: relPath, language, exports, size: stat.size });
         totalSize += stat.size;
       } catch (e) {
-        // Read failed after a successful stat — skip the file, keep the rest.
+        // Чтение упало после успешного stat — пропускаем файл, берём остальные.
         logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
       }
     });
@@ -226,11 +292,11 @@ export class Indexer {
   }
 
   /**
-   * Cheap, content-free fingerprint of the indexed tree: sorted
-   * `path\0size\0mtimeMs` hashed with SHA-1. `IndexCache` stores it and
-   * re-computes it on load to reject a stale `index-cache.json` (a file added,
-   * removed or edited since the walk changes the signature). Stat-only — no
-   * file reads, so it is far cheaper than a full walk.
+   * Дешёвый бесконтентный отпечаток индексируемого дерева: отсортированные
+   * `path\0size\0mtimeMs`, хешированные SHA-1. `IndexCache` хранит его и
+   * пересчитывает на load, отбраковывая протухший `index-cache.json` (файл
+   * добавлен/удалён/правлен после обхода — сигнатура меняется). Только stat,
+   * без чтения файлов — куда дешевле полного обхода.
    */
   scanSignature(): string {
     const parts: string[] = [];
@@ -241,6 +307,7 @@ export class Indexer {
     return createHash("sha1").update(parts.join("\n")).digest("hex");
   }
 
+  /** Однострочная сводка индекса (файлы, размер, языки). */
   summarize(result: IndexResult): string {
     const byLang: Record<string, number> = {};
     for (const f of result.files) {

@@ -1,8 +1,10 @@
+// Модуль сессии: стабильный системный блок (id/имя/модель/окно) + плагин-заглушка.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { SessionManager } from "./manager";
 import { t } from "../../i18n/index";
 
+/** Модуль сессии: системный блок со стабильными полями + пустой плагин. */
 export class SessionModule implements AgentModule {
   name = "session";
 
@@ -15,9 +17,9 @@ export class SessionModule implements AgentModule {
   getSystemPromptBlock(): PromptBlock | null {
     const meta = this.manager.getActiveMeta();
     if (!meta) return null;
-    // Stable per session: id/name/model/contextWindow do not change between
-    // turns, so the system prompt is not mutated (KV-cache, rule #10). Live
-    // values (message count) are exposed through the session_info tool.
+    // Стабильно на сессию: id/имя/модель/окно между ходами не меняются,
+    // так что системный промпт не мутирует (KV-кеш). Живое (счётчик сообщений)
+    // отдаётся через тул session_info.
     return {
       content: t("session.info_full", {
         name: meta.name,

@@ -1,4 +1,4 @@
-// src/core/prompt-overflow.ts
+/** Переполнение системного промпта: dry-run, суммаризация, подсказки. */
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -10,9 +10,10 @@ import type { AppConfig } from "../config/types";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
 
-/** How many tokens the model-facing hint block costs (upper bound for allocation). */
+/** Цена model-facing hint-блока в токенах (верхняя граница для аллокации). */
 export const HINT_BLOCK_TOKENS = 60;
 
+/** Предупреждение о переполнении: блок, токены до/после, режим. */
 export interface OverflowWarning {
   kind: PromptBlockKind;
   label: string;
@@ -21,22 +22,23 @@ export interface OverflowWarning {
   mode: "summary" | "truncate";
 }
 
+/** Итог резолвинга переполнения: замены, hint-блок, варнинги. */
 export interface OverflowResolution {
-  /** Replacement blocks (kind preserved) for the excluded originals. */
+  /** Блоки-замены (kind сохранён) вместо исключённых оригиналов. */
   replacements: PromptBlock[];
-  /** Small block telling the model the instructions were compressed and how
-   *  to read the full file. Null when nothing was resolved. */
+  /** Малый блок: инструкции сжаты, как читать полный файл. Null, если резолвить нечего. */
   hintBlock: PromptBlock | null;
   warnings: OverflowWarning[];
 }
 
+/** Итог dry-run: сколько влезло и какие kind-блоки не влезли. */
 export interface OverflowDryRun {
   includedTokens: number;
-  /** Excluded blocks that carry a kind (instructions / project-map). */
+  /** Исключённые блоки с kind (instructions / project-map). */
   overflow: PromptBlock[];
 }
 
-/** Rough chars-per-token factor used for hard truncation fallback. */
+/** Грубый фактор символов на токен для жёсткого усечения. */
 const CHARS_PER_TOKEN = 4;
 
 const KIND_ORDER: PromptBlockKind[] = ["instructions", "project-map"];
@@ -52,9 +54,8 @@ const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
 };
 
 /**
- * Static dry-run of the system-prompt budget: which kind-carrying blocks do
- * not fit. Used by bootstrap for the startup banner and by Agent before the
- * first LLM call (the real resolution).
+ * Статический dry-run бюджета системного промпта: какие kind-блоки не влезают.
+ * Нужен bootstrap для стартового баннера и Agent перед первым LLM-вызовом.
  */
 export function dryRunOverflow(allBlocks: PromptBlock[], systemBudget: number): OverflowDryRun {
   const builder = new PromptBuilder(systemBudget);
@@ -85,12 +86,12 @@ function readCache(cacheDir: string, key: string): { mode: OverflowWarning["mode
         return parsed;
       }
     } catch {
-      // Legacy plain-text entry — treat as a summary hit
+      // Легаси plain-text запись — считаем попаданием суммаризации
       return { mode: "summary", text: raw };
     }
     return null;
   } catch {
-    // Corrupted cache — fall through to re-summarize
+    // Битый кэш — идём на повторную суммаризацию
   }
   return null;
 }
@@ -100,21 +101,21 @@ function writeCache(cacheDir: string, key: string, entry: { mode: OverflowWarnin
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(join(cacheDir, `${key}.md`), JSON.stringify(entry), "utf-8");
   } catch {
-    // Best-effort — cache failure must not crash the agent
+    // Best-effort — падение кэша не должно ронять агента
   }
 }
 
-/** Collect a full text response from the streaming provider API. */
+/** Собирает полный текстовый ответ через стриминговый API провайдера. */
 async function collectText(
   provider: LLMProvider,
   prompt: string,
   maxTokens: number,
 ): Promise<string> {
   let text = "";
-  // Reasoning must be off: a thinking model would burn the completion cap on
-  // <think> before emitting any summary content (observed on qwen3.5-9b).
-  // 2x headroom over the target: token estimates are heuristics, and the
-  // clamp below enforces the real cap no matter what the model returns.
+  // Reasoning выкл: думающая модель сожгла бы cap на <think> до любого
+  // суммаризирующего контента (наблюдалось на qwen3.5-9b).
+  // 2x запас сверх цели: оценки токенов эвристичны, а clamp ниже держит
+  // реальный cap независимо от ответа модели.
   for await (const chunk of provider.chat([{ role: "user", content: prompt }], undefined, undefined, {
     maxTokens: maxTokens * 2,
     reasoningEffort: "none",
@@ -133,18 +134,17 @@ function truncateToTokens(content: string, maxTokens: number): string {
   return `${cut.trimEnd()}\n\n[...truncated — read the full file for details...]`;
 }
 
-/** One-line first-line label for warnings/logs. */
+/** Однострочная метка по первой строке (для варнингов/логов). */
 function blockLabel(content: string): string {
   const first = content.split("\n")[0].trim();
   return first.length > 60 ? `${first.slice(0, 57)}...` : first;
 }
 
 /**
- * Summarize (or, failing that, truncate) prompt blocks that exceeded the
- * system-prompt budget so the project instructions / project map still reach
- * the model. Summaries are cached on disk keyed by kind + content + budget.
- * Blocks are resolved in KIND_ORDER priority; the first gets the full
- * remaining budget, later blocks get whatever is left.
+ * Суммаризирует (или, не вышло, усекает) блоки сверх бюджета, чтобы инструкции
+ * проекта/карта всё равно дошли до модели. Суммаризации кэшируются на диске
+ * (ключ: kind + контент + бюджет). Порядок — KIND_ORDER; первый забирает весь
+ * остаток бюджета, остальным — что останется.
  */
 export async function resolvePromptOverflow(opts: {
   overflow: PromptBlock[];
@@ -165,9 +165,9 @@ export async function resolvePromptOverflow(opts: {
   let used = includedTokens;
   const unresolved: PromptBlockKind[] = [];
 
-  // The bootstrap dry-run only warns that blocks "will be summarized before the
-  // first run". Without a notice here the first prompt appears to hang while
-  // the model rewrites AGENTS.md / the project map — surface it.
+  // Dry-run bootstrap лишь предупреждает, что блоки «будут суммаризированы
+  // перед первым запуском». Без нотиса тут первый промпт выглядит зависшим,
+  // пока модель переписывает AGENTS.md / карту — показываем явно.
   if (sorted.length > 0) {
     logger?.warn(t("prompt.overflow.compressing", { count: String(sorted.length) }));
   }
@@ -201,8 +201,8 @@ export async function resolvePromptOverflow(opts: {
       try {
         const prompt = [
           `Summarize the following ${KIND_LABEL[kind]} document.`,
-          // 3 chars/token (not 4): non-Latin text (Cyrillic etc.) is ~2-3 chars
-          // per token, so a 4x target lands the summary over the clamp.
+          // 3 символа/токен (не 4): нелатиница (кириллица и т.п.) — ~2–3 символа
+          // на токен, поэтому цель x4 уводит суммаризацию за clamp.
           `Target length: at most ${targetChars} characters (~${maxTokens} tokens). Be strict about it.`,
           `Preserve concrete facts: file paths, commands, rules, naming conventions, workflow steps.`,
           `Keep the structure (headings / bullet lists). Output ONLY the summary text.`,
@@ -212,10 +212,9 @@ export async function resolvePromptOverflow(opts: {
           `--- DOCUMENT END ---`,
         ].join("\n");
         text = await collectText(provider, prompt, maxTokens);
-        // Small models routinely ignore length instructions (observed: the 9B
-        // model produced ~4700 chars against a 3170-char target). One
-        // self-compression retry on the overshoot — the shorter input makes
-        // compliance much likelier — before falling back to the hard clamp.
+        // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
+        // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
+        // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
         let retries = 0;
         while (text && estimateTokens(text) > maxTokens && retries < 1) {
           retries++;
@@ -246,7 +245,7 @@ export async function resolvePromptOverflow(opts: {
     }
 
     if (!text) {
-      // No provider or summarization failed — hard truncation fallback.
+      // Нет провайдера или суммаризация упала — фолбэк жёсткого усечения.
       mode = "truncate";
       logger?.warn(
         t("prompt.overflow.truncating", {
@@ -257,7 +256,7 @@ export async function resolvePromptOverflow(opts: {
       text = truncateToTokens(block.content, maxTokens);
     }
 
-    // LLMs overshoot: enforce the cap no matter what produced the text.
+    // LLM перелетают: держим cap независимо от источника текста.
     if (estimateTokens(text) > maxTokens) {
       if (mode === "summary") {
         mode = "truncate";
@@ -308,14 +307,18 @@ export async function resolvePromptOverflow(opts: {
   return { replacements, hintBlock, warnings };
 }
 
-/** Where the active context window is configured: global or provider entry. */
+/** Откуда настроено активное окно контекста: глобально или запись провайдера. */
 export interface ContextWindowSource {
   source: "global" | "entry";
-  /** For "entry": the label of the entry that sets contextWindow. */
+  /** Для "entry": метка записи, задающей contextWindow. */
   label?: string;
   value: number;
 }
 
+/**
+ * Резолвит источник активного окна контекста (запись провайдера или глобал).
+ * @param config конфиг приложения; @returns источник и значение окна.
+ */
 export function resolveContextWindowSource(config: AppConfig): ContextWindowSource {
   const entries = config.provider.entries ?? [];
   const activeLabel = config.provider.active;
@@ -329,9 +332,8 @@ export function resolveContextWindowSource(config: AppConfig): ContextWindowSour
 }
 
 /**
- * Human-facing hint on how to raise the context window, aware of whether the
- * active value comes from the global config (`mma context <N>`) or from a
- * provider entry override (must be edited in the provider domain file).
+ * Человеческая подсказка, как поднять окно контекста: глобал (`mma context <N>`)
+ * или override записи провайдера (править файл домена провайдера).
  */
 export function contextWindowHint(config: AppConfig, configDir: string, recommended: number): string {
   const src = resolveContextWindowSource(config);
@@ -342,8 +344,8 @@ export function contextWindowHint(config: AppConfig, configDir: string, recommen
 }
 
 /**
- * Recommend the next standard context size whose system budget (10%)
- * accommodates `neededSystemTokens`. Falls back to the largest known size.
+ * Ближайший стандартный размер контекста, чей системный бюджет (10%)
+ * вмещает `neededSystemTokens`. Фолбэк — крупнейший известный.
  */
 export function recommendContextSize(neededSystemTokens: number): number {
   const sizes = [8192, 16384, 32768, 65536, 131072, 262144];
@@ -352,23 +354,22 @@ export function recommendContextSize(neededSystemTokens: number): number {
   );
 }
 
-/** Context window needed so that `systemFraction` of it covers `neededTokens`. */
+/** Окно контекста, чтобы доля `systemFraction` покрыла `neededTokens`. */
 export function requiredContextWindow(neededTokens: number, systemFraction: number): number {
   const fraction = systemFraction > 0 ? systemFraction : 0.1;
   return Math.ceil(neededTokens / fraction);
 }
 
-/** System-prompt share of the CURRENT window needed to cover `neededTokens`. */
+/** Доля системного промпта ТЕКУЩЕГО окна, чтобы покрыть `neededTokens`. */
 export function requiredSystemFraction(neededTokens: number, contextWindow: number): number {
   if (contextWindow <= 0) return 1;
   return Math.min(1, Math.ceil((neededTokens / contextWindow) * 100) / 100);
 }
 
 /**
- * Localized, concrete fix for an oversized system prompt. Instead of only
- * snapping to a coarse standard size (which makes a 32K project jump straight
- * to 131072), it states the raw requirement and both levers: a bigger window
- * or a bigger share of the current window.
+ * Локализованный конкретный фикс переполненного системного промпта. Вместо
+ * грубого стандартного размера (проект 32K прыгал бы сразу на 131072) даёт
+ * сырое требование и оба рычага: больше окно или больше доля текущего окна.
  */
 export function overflowHint(
   config: AppConfig,

@@ -1,8 +1,7 @@
-// src/config/utils.ts
-// Shared deep-merge + RegExp-safe JSON helpers. Previously duplicated across
-// config.ts and domains.ts, where the two copies had drifted (config.ts
-// assigned RegExp by reference; domains.ts spread it into {} and destroyed it).
-
+// Общие хелперы конфига: deep-merge и RegExp-безопасный JSON.
+// Раньше дублировались в config.ts и domains.ts, причём копии разошлись
+// (config.ts присваивал RegExp по ссылке, domains.ts спредом ломал его в {}).
+/** Проверка на plain-объект (не массив/RegExp/Date). */
 export function isPlainObject(v: unknown): boolean {
   if (typeof v !== "object" || v === null) return false;
   const proto = Object.getPrototypeOf(v);
@@ -10,9 +9,8 @@ export function isPlainObject(v: unknown): boolean {
 }
 
 /**
- * Deep merge two objects. Arrays, scalars, and non-plain values (RegExp, Date)
- * in source replace target by reference — spreading a RegExp would silently
- * destroy it to {}.
+ * Глубокий мерж объектов. Массивы, скаляры и не-plain значения (RegExp, Date)
+ * из source заменяют target по ссылке: спред RegExp молча ломал бы его в {}.
  */
 export function deepMerge<T>(target: T, source: Partial<T>): T {
   const result: Record<string, unknown> = {
@@ -36,8 +34,8 @@ export function deepMerge<T>(target: T, source: Partial<T>): T {
 }
 
 /**
- * JSON replacer that serializes RegExp objects as {__regex, source, flags}
- * so they survive JSON.stringify/parse round-trips.
+ * JSON-replacer: сериализует RegExp как {__regex, source, flags}, чтобы они
+ * переживали round-trip JSON.stringify/parse.
  */
 export function regexReplacer(_key: string, value: unknown): unknown {
   if (value instanceof RegExp) {
@@ -46,9 +44,7 @@ export function regexReplacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-/**
- * JSON reviver that restores RegExp objects serialized by regexReplacer.
- */
+/** JSON-reviver: восстанавливает RegExp, сериализованные через regexReplacer. */
 export function regexReviver(_key: string, value: unknown): unknown {
   if (
     value &&

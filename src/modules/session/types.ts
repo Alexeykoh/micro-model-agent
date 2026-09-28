@@ -1,9 +1,11 @@
+// Типы сессий: мета, сообщения, security-оверрайды.
 import type { ContentPart } from "../../llm/provider";
 
+/** Мета сессии. */
 export interface SessionMeta {
   id: string;
   name: string;
-  /** Provenance of `name`: default date name, auto-generated, or user-set. */
+  /** Происхождение `name`: дефолтное по дате, авто или ручное. */
   nameSource?: "default" | "auto" | "manual";
   createdAt: string;
   updatedAt: string;
@@ -11,12 +13,9 @@ export interface SessionMeta {
   model: string;
   contextWindow: number;
   projectDir: string;
-  /** History archived to <id>.jsonl.gz by rotateOldSessions — no live messages. */
+  /** История заархивирована в <id>.jsonl.gz через rotateOldSessions — живых сообщений нет. */
   rotated?: boolean;
-  /**
-   * Session-specific security overrides
-   * If present, these override the global security settings for this session
-   */
+  /** Security-оверрайды сессии: перекрывают глобальные настройки. */
   securityOverrides?: {
     maxFileOperations?: number;
     maxRecursionDepth?: number;
@@ -27,6 +26,7 @@ export interface SessionMeta {
   };
 }
 
+/** Сообщение сессии (роль, контент, tool_calls, провенанс провайдера/модели). */
 export interface SessionMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string | ContentPart[];
@@ -38,8 +38,8 @@ export interface SessionMessage {
   }>;
   tool_call_id?: string;
   timestamp: string;
-  /** Provider that serviced this message (multi-provider mode). */
+  /** Провайдер, обслуживший сообщение (мультипровайдерный режим). */
   provider?: string;
-  /** Model that serviced this message. */
+  /** Модель, обслужившая сообщение. */
   model?: string;
 }

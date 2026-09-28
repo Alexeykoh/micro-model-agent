@@ -1,3 +1,4 @@
+// Модуль LSP: автопроверка после write/edit, тул lsp_check, отключение мёртвых серверов.
 import type { AgentModule } from "../types";
 import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
@@ -17,24 +18,23 @@ import { errMsg } from "../../utils";
 import { join } from "path";
 
 /**
- * Consecutive LSP failures before a server is disabled for the session. A dead
- * server (not installed, npx auto-install failed, path missing) otherwise
- * spams `[LSP check failed]` on EVERY write, teaching the model to ignore the
- * signal entirely (observed: ses_mst2r0r5 had LSP dead all session and the
- * model never reacted). After the threshold we say so once and stop the noise
- * for that server — a CSS timeout must not take TypeScript checks down too.
+ * Подряд идущих падений LSP до отключения сервера на сессию. Мёртвый сервер
+ * (не стоит, упала npx-автоустановка, нет пути) иначе спамит `[LSP check failed]`
+ * на КАЖДУЮ запись, приучая модель игнорировать сигнал целиком (наблюдалось:
+ * ses_mst2r0r5 — LSP мёртв всю сессию, модель не реагировала). После порога —
+ * одно громкое сообщение и тишина по этому серверу: таймаут CSS не должен
+ * ронять проверки TypeScript.
  */
 const MAX_CONSECUTIVE_LSP_FAILURES = 3;
 
 /**
- * Module-resolution diagnostics that are meaningless without a type
- * environment. In a bare directory (no tsconfig.json / node_modules) the
- * TypeScript server reports `Cannot find module 'fs'` and
- * `Cannot find name '__dirname'` for perfectly valid Node code — the model
- * then abandons a working approach because of phantom errors (observed
- * ses_mtho2oab: LSP "errors" pushed the model off a planned .ts file to .js
- * and into a plan-drift spiral). Suppressed with an explicit inconclusive
- * note when no type env exists near the project root.
+ * Диагностики резолва модулей, бессмысленные без type-окружения. В голом
+ * каталоге (без tsconfig.json / node_modules) TS-сервер рапортует
+ * `Cannot find module 'fs'` и `Cannot find name '__dirname'` на валидный
+ * Node-код — модель бросает рабочий подход из-за фантомных ошибок (наблюдалось
+ * ses_mtho2oab: LSP-"ошибки" столкнули модель с планового .ts на .js и в
+ * спираль plan-drift). Душатся с явной пометкой inconclusive, если рядом с
+ * корнем проекта нет type-окружения.
  */
 const TYPE_ENV_DIAG_PATTERN =
   /Cannot find module ['"][^'"]+['"] or its corresponding type declarations|Cannot find name '(__dirname|__filename|require|process|Buffer|console)'|Do you need to install type definitions/;
@@ -47,6 +47,7 @@ function hasTypeEnvironment(projectRoot: string): boolean {
   );
 }
 
+/** Модуль LSP: пост-проверки записи, тул lsp_check, учёт мёртвых серверов. */
 export class LspModule implements AgentModule {
   name = "lsp";
   private config: LspConfig;
@@ -62,39 +63,39 @@ export class LspModule implements AgentModule {
     this.client.setLogger(this.logger);
   }
 
-  /** Update the logger (e.g., after session switch). */
+  /** Обновить логгер (напр. после смены сессии). */
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
     this.client.setLogger(logger);
   }
 
-  /** Reset disabled servers (e.g., after /lsp restart). */
+  /** Сбросить отключённые серверы (напр. после /lsp restart). */
   resetDisabledServers(): void {
     this.failuresByServer.clear();
     this.disabledServers.clear();
   }
 
-  /** Get list of disabled server keys. */
+  /** Список отключённых ключей серверов. */
   getDisabledServers(): string[] {
     return Array.from(this.disabledServers);
   }
 
-  /** Get failure counts per server. */
+  /** Счётчики падений по серверам. */
   getFailureCounts(): Map<string, number> {
     return new Map(this.failuresByServer);
   }
 
-  /** Test hook: has the module disabled any LSP server for the session? */
+  /** Тест-хук: отключал ли модуль какой-то LSP-сервер на сессии. */
   isLspDisabled(): boolean {
     return this.disabledServers.size > 0;
   }
 
-  /** Test hook: is the given server (config-derived key) disabled? */
+  /** Тест-хук: отключён ли сервер (ключ из конфига). */
   isServerDisabled(key: string): boolean {
     return this.disabledServers.has(key);
   }
 
-  /** Stable server identity derived from the config. */
+  /** Стабильная идентичность сервера из конфига. */
   private serverKey(server: LspServerConfig): string {
     return `${server.command}:${(server.args ?? []).join(" ")}`;
   }
@@ -146,20 +147,20 @@ export class LspModule implements AgentModule {
             result.output += `\n\n[LSP warnings]:\n${items}`;
           }
         } catch (e) {
-          // Surface failures instead of silently returning [] — a dead LSP
-          // previously produced ZERO diagnostics across whole sessions and the
-          // model only found type errors reactively via `bun run build`.
+          // Падения — наружу, а не молчаливый []: мёртвый LSP раньше давал
+          // НОЛЬ диагностик целыми сессиями, и модель находила ошибки типов
+          // лишь реактивно через `bun run build`.
           const msg = errMsg(e);
           const failures = (this.failuresByServer.get(key) ?? 0) + 1;
           this.failuresByServer.set(key, failures);
           try {
             _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`);
           } catch {
-            // A throwing logger must not break the check path.
+            // Падающий логгер не должен ломать путь проверки.
           }
           if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-            // One loud, actionable message, then stop the per-write noise for
-            // the rest of the session. The model must not learn to ignore LSP.
+            // Одно громкое actionable-сообщение, дальше — без шума на каждую
+            // запись до конца сессии. Модель не должна учиться игнорить LSP.
             this.disabledServers.add(key);
             result.output += `\n\n[LSP disabled: ${t("lsp.unavailable")}]`;
           } else {
@@ -171,12 +172,12 @@ export class LspModule implements AgentModule {
   }
 
   /**
-   * On-demand diagnostics tool. LSP checks only ran after write/edit (the
-   * plugin above), so a read-only "check this project for errors" task got
-   * ZERO compiler feedback — the model scanned files with read_file and never
-   * learned whether the code compiled (observed: ses_msvuao0h — a "проверь на
-   * ошибки" task ran no build, no lsp, and declared success). `lsp_check`
-   * gives the model a way to ask for static diagnostics on demand.
+   * Тул диагностики по требованию. Проверки LSP шли только после write/edit
+   * (плагин выше), и read-only задача «проверь проект на ошибки» получала
+   * НОЛЬ фидбэка от компилятора — модель сканировала файлы через read_file и
+   * не узнавала, компилируется ли код (наблюдалось: ses_msvuao0h — задача
+   * "проверь на ошибки" без build, без lsp, с декларацией успеха). `lsp_check`
+   * даёт модели способ спросить статические диагностики по требованию.
    */
   getToolDefinitions(): ToolDefinition[] {
     return [
@@ -266,7 +267,7 @@ export class LspModule implements AgentModule {
         try {
           ctx.logger?.warn(`LSP check failed for ${file}: ${msg}`);
         } catch {
-          // A throwing logger must not break the check path.
+          // Падающий логгер не должен ломать путь проверки.
         }
         if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
           this.disabledServers.add(key);

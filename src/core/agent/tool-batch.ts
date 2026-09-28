@@ -1,3 +1,4 @@
+/** Исполнитель пакета тулов: жизненный цикл вызовов за итерацию. */
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { AppConfig } from "../../config/types";
@@ -24,6 +25,7 @@ import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES } from "./constants";
 
+/** Зависимости исполнителя пакетов: конфиг, тулы, контекст, логгеры, хуки. */
 export interface ToolBatchDeps {
   config: AppConfig;
   toolExecutor: ToolExecutor;
@@ -44,6 +46,7 @@ export interface ToolBatchDeps {
   setScope: () => void;
 }
 
+/** Итог пакета: прервана ли итерация по shutdown (цикл должен выйти). */
 export interface ToolBatchExecution {
   /** Истинно, если итерация прервана по shutdown — цикл должен выйти. */
   interrupted: boolean;
@@ -68,6 +71,13 @@ export interface ToolBatchExecution {
 export class ToolBatchExecutor {
   constructor(private readonly deps: ToolBatchDeps) {}
 
+  /**
+   * Выполняет пакет tool_calls одной итерации (контекст, UI, учёт неудач).
+   * @param state состояние цикла; @param toolCalls вызовы от модели;
+   * @param boundedToolNames тулы с собственным лимитом вывода;
+   * @param textContent/reasoningContent/input тексты хода;
+   * @returns флаг прерывания по shutdown.
+   */
   async execute(
     state: LoopState,
     toolCalls: ToolCall[],
@@ -210,10 +220,9 @@ export class ToolBatchExecutor {
         );
         onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
       } else {
-        // Failed tool: its `output` is model-facing (Hints, recovery
-        // directives, "Do NOT …"). The user only needs a calm gist — the first
-        // line — not the instructions written for the agent. Soft guards
-        // (security policy, protected paths) are warnings, not errors.
+        // Упавший тул: `output` — model-facing (хинты, recovery-директивы,
+        // «Do NOT …»). Пользователю нужна спокойная суть — первая строка,
+        // а не инструкции для агента. Мягкие гарды — варнинги, не ошибки.
         const failure = toolFailureSummary(result.output);
         const metaOut = failure.text
           ? pluginManager.runOnMeta({ iteration, logger, contextManager }, failure.text)
@@ -272,13 +281,13 @@ export class ToolBatchExecutor {
         `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
       );
 
-      // Security block seen? Remember it for the wrapper-script heuristic.
+      // Видели блок безопасности? Запоминаем для эвристики скрипта-обёртки.
       if (typeof result.output === "string" && result.output.includes("[SECURITY BLOCKED]")) {
         state.sawSecurityBlock = true;
       }
-      // Wrapper-script workaround: after a security block, writing a shell
-      // script (.bat/.cmd/.sh/.ps1) is almost always an attempt to bypass the
-      // blocked operator — nudge once, generically (no tool/language specifics).
+      // Скрипт-обход: после блока безопасности запись shell-скрипта
+      // (.bat/.cmd/.sh/.ps1) почти всегда — попытка обойти заблокированный
+      // оператор; nudge один раз, обобщённо (без привязки к тулу/языку).
       if (
         state.sawSecurityBlock &&
         !state.scriptWorkaroundNudged &&

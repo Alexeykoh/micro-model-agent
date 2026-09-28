@@ -1,3 +1,4 @@
+// Модуль самообновления: фоновая проверка при старте, опциональная автоустановка.
 import type { UpdaterConfig } from "../../config/types";
 import { Updater, type InstallRunner } from "./checker";
 import { extractLatestChangelog, readChangelog } from "./changelog-reader";
@@ -5,6 +6,7 @@ import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 import { defaultOutputBus } from "../../output";
 
+/** Логгер модуля (по умолчанию — шина вывода). */
 export interface UpdaterLogger {
   info(msg: string): void;
   warn(msg: string): void;
@@ -12,11 +14,10 @@ export interface UpdaterLogger {
 }
 
 /**
- * Self-update module. Fires an ASYNC (non-blocking) check at startup so the
- * agent never waits on the network. When `autoInstall` is enabled, a newer
- * version is installed globally via `npm install -g` in the background and
- * the user is notified; the running process keeps working on the old version
- * until the next launch.
+ * Модуль самообновления. При старте — АСИНХРОННАЯ (неблокирующая) проверка,
+ * чтобы агент никогда не ждал сеть. При включённом `autoInstall` свежая версия
+ * ставится глобально через `npm install -g` в фоне, пользователь уведомляется;
+ * запущенный процесс до следующего старта работает на старой версии.
  */
 export class UpdaterModule {
   readonly name = "updater";
@@ -25,9 +26,9 @@ export class UpdaterModule {
   private logger: UpdaterLogger;
   private started = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  /** Promise of the current run-loop pass (resolves when it settles). */
+  /** Промис текущего витка run-loop (резолвится по устаканиванию). */
   private idlePromise: Promise<void> | null = null;
-  /** Test hook: disable real npm installs. */
+  /** Тест-хук: отключает реальные npm-установки. */
   private installEnabled = true;
 
   constructor(
@@ -46,23 +47,25 @@ export class UpdaterModule {
     };
   }
 
-  /** Test hook: prevent the module from actually running npm install. */
+  /** Тест-хук: запрещает модулю реально гонять npm install. */
   setInstallEnabled(enabled: boolean): void {
     this.installEnabled = enabled;
   }
 
+  /** Доступ к underlying-апдейтеру (версия, пакет). */
   getUpdater(): Updater {
     return this.updater;
   }
 
+  /** True, если фоновая проверка запущена. */
   isStarted(): boolean {
     return this.started;
   }
 
   /**
-   * Start the background check. Returns immediately (fire-and-forget) so the
-   * caller never blocks on the registry. Use `intervalMs > 0` for a permanent
-   * re-check loop (the "auto-update daemon" behavior).
+   * Стартует фоновую проверку. Возвращается сразу (fire-and-forget), чтобы
+   * вызывающий не ждал реестр. `intervalMs > 0` — вечный цикл перепроверок
+   * (поведение "auto-update daemon").
    */
   start(): void {
     if (this.started || !this.config.enabled) return;
@@ -70,6 +73,7 @@ export class UpdaterModule {
     this.idlePromise = this.runLoop();
   }
 
+  /** Останавливает фоновый цикл и снимает таймер. */
   stop(): void {
     this.started = false;
     if (this.timer) {
@@ -79,9 +83,9 @@ export class UpdaterModule {
   }
 
   /**
-   * Wait for the current check/install cycle to settle, bounded by timeoutMs.
-   * Used by one-shot CLI runs so a background `npm install -g` isn't killed by
-   * process.exit() before it completes. No-op when the module never started.
+   * Ждёт устаканивания текущего цикла check/install, но не дольше timeoutMs.
+   * Нужно one-shot CLI-прогонам, чтобы фоновый `npm install -g` не убивался
+   * process.exit() до завершения. No-op, если модуль не стартовал.
    */
   async waitForIdle(timeoutMs = 130000): Promise<void> {
     const idle = this.idlePromise;
@@ -101,7 +105,7 @@ export class UpdaterModule {
     }
   }
 
-  /** Perform a single check; if an update is available, optionally install it. */
+  /** Одна проверка; при доступном апдейте — опциональная установка. */
   async runOnce(): Promise<void> {
     const result = await this.updater.check();
     if (result.error) {

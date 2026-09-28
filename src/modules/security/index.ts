@@ -1,3 +1,4 @@
+// Публичный фасад модуля безопасности: валидаторы, аудит, шифрование, политики.
 export * from "./command-validator";
 export * from "./path-validator";
 export * from "./network-validator";
@@ -11,5 +12,5 @@ export * from "./session-encryption";
 export * from "./audit-notifier";
 export * from "./security-policies";
 
-// Re-export sanitizeUrl from network-validator to avoid conflicts
+// Реэкспорт sanitizeUrl из network-validator — единый источник (без конфликтов)
 export { sanitizeUrl } from "./network-validator";

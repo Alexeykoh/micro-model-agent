@@ -1,4 +1,4 @@
-// src/core/agent/prefix-monitor
+/** Монитор стабильности префикса промпта (клиентская оценка кеша). */
 /**
  * Клиентский монитор стабильности префикса промпта.
  *
@@ -16,8 +16,10 @@ export interface PromptSnapshot {
   history: string;
 }
 
+/** Причина разрыва префикса: сегмент system/tools/history, волатильность, нет. */
 export type PrefixCause = "none" | "system" | "tools" | "history" | "volatile" | "unknown";
 
+/** Дельта префикса между итерациями: токены, стабильность, причина. */
 export interface PrefixDelta {
   prevTokens: number;
   currTokens: number;

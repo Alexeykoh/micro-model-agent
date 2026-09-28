@@ -1,3 +1,4 @@
+// Логер: шина вывода + файловые логи (.log, app.jsonl), чистка секретов.
 import { appendFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
@@ -5,8 +6,10 @@ import { FileLogWriter, type FileLogLevel } from "./file-log";
 import { defaultOutputBus, type OutputSink } from "../output";
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
+/** Уровень логирования (чем правее, тем строже фильтр). */
 export type LogLevel = keyof typeof LEVELS;
 
+/** Центральный логер: консоль через шину, файлы, JSONL, тегированные хелперы. */
 export class Logger {
   private level: LogLevel;
   private prefix: string;
@@ -45,26 +48,29 @@ export class Logger {
     this.sessionDir = null;
   }
 
-  /** Open a per-session `.log` file (legacy v1 behavior). */
+  /** Открывает посессионный `.log`-файл (поведение legacy v1). */
   initSessionLog(sessionId: string): void {
     this.fileLog.initSessionLog(sessionId);
   }
 
-  /** Fall back to daily log files when no session is active. */
+  /** Возврат к дневным лог-файлам, когда нет активной сессии. */
   closeSessionLog(): void {
     this.fileLog.closeSessionLog();
   }
 
+  /** Путь к текущему лог-файлу (сессионный или дневной). */
   getLogPath(): string {
     return this.fileLog.getLogPath();
   }
 
+  /** Удаляет старые логи по возрасту/количеству. */
   cleanupOldLogs(maxDays?: number, maxFiles?: number): void {
     this.fileLog.cleanupOldLogs(maxDays, maxFiles);
   }
 
-  // --- Tagged helpers (legacy v1 API) ---
+  // Тегированные хелперы (API legacy v1).
 
+  /** Пишет запрос к LLM в файловый лог. */
   logLLMRequest(
     model: string,
     messagesCount: number,
@@ -74,6 +80,7 @@ export class Logger {
     this.fileLog.logLLMRequest(model, messagesCount, sanitizeLogMessage(promptPreview), caller);
   }
 
+  /** Пишет ответ LLM (или ошибку) в файловый лог. */
   logLLMResponse(
     model: string,
     responseLength: number,
@@ -84,6 +91,7 @@ export class Logger {
     this.fileLog.logLLMResponse(model, responseLength, genTimeMs, error, caller);
   }
 
+  /** Пишет вызов тула и превью результата в файловый лог. */
   logToolCall(tool: string, preview: string, result?: string): void {
     this.fileLog.logToolCall(
       tool,
@@ -92,14 +100,20 @@ export class Logger {
     );
   }
 
+  /** Пишет вывод тула с кодом выхода в файловый лог. */
   logToolOutput(tool: string, output: string, exitCode: number): void {
     this.fileLog.logToolOutput(tool, sanitizeLogMessage(output), exitCode);
   }
 
+  /** Пишет реплику REPL (user/assistant/system) в файловый лог. */
   logREPL(tag: "user" | "assistant" | "system", content: string): void {
     this.fileLog.logREPL(tag, sanitizeLogMessage(content));
   }
 
+  /**
+   * Дочерний логер с расширенным префиксом; наследует уровень, sink и каталоги.
+   * @param prefix суффикс префикса. @returns новый Logger.
+   */
   child(prefix: string): Logger {
     const childLogger = new Logger(
       this.level,
@@ -128,10 +142,10 @@ export class Logger {
   }
 
   /**
-   * Internal loop diagnostic (hallucination retries, audit/compaction internals,
-   * critic verdicts, …). Same file/`app.jsonl` persistence as `warn`/`info`, but
-   * the bus event carries `data.diagnostic = true` so chat surfaces drop it
-   * unless `ui.verbosity === "verbose"`.
+   * Внутренняя диагностика петли (ретраи галлюцинаций, аудит/компакция,
+   * вердикты критика, …). Персистентность та же, что у warn/info, но событие
+   * шины несёт `data.diagnostic = true`, и чат дропает его, пока
+   * `ui.verbosity !== "verbose"`.
    */
   diagnostic(level: Exclude<LogLevel, "debug">, msg: string, meta?: Record<string, unknown>): void {
     this.log(level, msg, meta, true);
@@ -145,7 +159,7 @@ export class Logger {
   ): void {
     if (LEVELS[level] < LEVELS[this.level]) return;
 
-    // Sanitize log message to remove sensitive data
+    // Чистим сообщение — вырезаем секреты.
     const sanitizedMsg = sanitizeLogMessage(msg);
     const sanitizedMeta = meta ? this.sanitizeMeta(meta) : undefined;
 
@@ -165,7 +179,7 @@ export class Logger {
       /* terminal output is best-effort; file logging below must still run */
     }
 
-    // Legacy v1 behavior: also append to the tagged `.log` file (session or daily).
+    // Поведение legacy v1: дубль в тегированный `.log` (сессионный или дневной).
     this.fileLog.log(
       level.toUpperCase() as FileLogLevel,
       this.prefix || "MMA",
@@ -192,9 +206,7 @@ export class Logger {
     }
   }
 
-  /**
-   * Sanitize metadata object to remove sensitive data
-   */
+  /** Рекурсивно чистит секреты в объекте метаданных. */
   private sanitizeMeta(meta: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(meta)) {
@@ -210,9 +222,9 @@ export class Logger {
   }
 
   /**
-   * Write a structured record to app.jsonl only (no console / .log output).
-   * Used for machine-readable reports (environment, etc.) that would be too
-   * noisy on the terminal but are valuable for cross-device diagnosis.
+   * Структурная запись только в app.jsonl (без консоли и .log).
+   * Для машиночитаемых отчётов (окружение и т.п.), слишком шумных для терминала,
+   * но ценных для кросс-девайс диагностики.
    */
   logStructured(type: string, data: Record<string, unknown>): void {
     const logTarget = this.sessionDir ?? this.logDir;
@@ -234,9 +246,9 @@ export class Logger {
   }
 
   /**
-   * Write a log entry to app.jsonl only — no console output, no .log file.
-   * Use this for noisy subsystems (LSP, probes) whose warnings should be
-   * diagnosable from session files but not pollute the user's terminal.
+   * Запись только в app.jsonl — без консоли и .log. Для шумных подсистем
+   * (LSP, пробники): предупреждения диагностируются по файлам сессии,
+   * но не мусорят в терминале.
    */
   logSilent(level: LogLevel, msg: string, meta?: Record<string, unknown>): void {
     const logTarget = this.sessionDir ?? this.logDir;

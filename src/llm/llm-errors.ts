@@ -1,3 +1,4 @@
+/** Типизированные ошибки LLM-транспорта (terminal/recoverable/status). */
 /**
  * Типизированные ошибки LLM-транспорта.
  *
@@ -35,11 +36,19 @@ export class LlmError extends Error {
     this.llmStatus = options.llmStatus;
   }
 
+  /**
+   * Помечает ошибку терминальной (стрим не ретраится).
+   * @returns this для чейнинга.
+   */
   markTerminal(): this {
     this.terminal = true;
     return this;
   }
 
+  /**
+   * Помечает ошибку восстановимой (причину вернуть модели через цикл).
+   * @returns this для чейнинга.
+   */
   markRecoverable(): this {
     this.recoverable = true;
     return this;

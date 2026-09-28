@@ -1,14 +1,11 @@
+// Расширенные слеш-хендлеры `mma web`: reasoning/verbosity/context/security/session/export.
 /**
- * Extended slash-command handlers for `mma web` (Phase 4).
+ * Зеркалит REPL-семантику `src/cli/repl-commands.ts` для подмножества без
+ * терминала. Вне скоупа терминальное (`/meet`, `/wizard`, `/init`,
+ * интерактивные промпты, `/provider add`) — им нужны `PromptIO`/канал вывода REPL.
  *
- * Mirrors the REPL semantics of `src/cli/repl-commands.ts` for the subset that
- * is feasible WITHOUT a terminal: reasoning display/level, verbosity, context
- * window + budget shares, session list/activate and session export. Terminal-
- * only commands (`/meet`, `/wizard`, `/init`, interactive prompts, `/provider
- * add`) stay out of scope — they need `PromptIO` / the REPL output channel.
- *
- * Every handler emits plain, colour-free lines (the browser applies its own dim
- * styling) and never throws; errors become a dim `↳ ...` hint.
+ * Каждый хендлер эмитит plain-строки без цвета (дим — на браузере) и не бросает;
+ * ошибки становятся дим-подсказкой `↳ ...`.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -31,7 +28,7 @@ const REASONING_USAGE = "/reasoning [show|hide|on|off|level <auto|default|none|l
 const CONTEXT_USAGE = "/context [<tokens> | system <share> | reserve <share>]";
 const SECURITY_USAGE = "/security [status|<key> [value]]";
 
-/** Handlers merged into the core dispatcher; keyed by lowercased command name. */
+/** Хендлеры, вмёрженные в ядерный диспатч; ключи — имена команд в нижнем регистре. */
 export function makeSettingsHandlers(state: WebUiState): Record<string, Handler> {
   return {
     reasoning: (args, o) => withConfig(state, o, (cfg) => reasoningCmd(cfg, args, o, state)),

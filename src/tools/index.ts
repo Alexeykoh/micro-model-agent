@@ -1,3 +1,4 @@
+/** Точка сборки каталога тулов: импорты, реэкспорты, регистрация. */
 import { ToolRegistry } from "./registry";
 import { ToolExecutor } from "./executor";
 import type {
@@ -29,10 +30,9 @@ import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { webBrowseTool } from "./web-browse";
 import { downloadFileTool } from "./download-file";
-// questionTool and approveTool are main-set tools: question covers
-// single/multi-choice + free text (with a memory pre-check), approve covers
-// explicit Yes/No confirmation (reject returns success:false, so the loop
-// treats it as a failure signal instead of answer text).
+// question/approve — основной набор: question покрывает выбор + свободный
+// текст (с pre-check памяти), approve — явное Yes/No (reject даёт success:false,
+// и цикл трактует это как сигнал сбоя, а не текст ответа).
 import { questionTool } from "./question";
 import { approveTool } from "./approve";
 import { createLoadSkillTool } from "./load-skill";
@@ -88,6 +88,7 @@ export {
   approveTool,
 };
 
+/** Регистрирует все тулы; опционально — on-demand тул и скиллы. */
 export function registerAllTools(
   registry: ToolRegistry,
   skillsModule?: SkillsModule,
@@ -125,9 +126,8 @@ export function registerAllTools(
     approveTool,
   ];
 
-  // On-demand tool activation is the default. When explicitly disabled
-  // (enableOnDemand: false), the tool is not registered at all — combined
-  // with an empty defaultTags this restores the legacy all-tools behavior.
+  // On-demand активация — дефолт. При явном enableOnDemand:false тул не
+  // регистрируется вовсе — с пустым defaultTags это legacy-режим «все тулы».
   if (opts?.enableOnDemand !== false) {
     tools.push(enableToolsTool);
   }

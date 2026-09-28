@@ -1,10 +1,11 @@
-// src/llm/provider-budget
+/** Баланс провайдера: запрос расхода/остатка (только OpenRouter по API). */
 /**
  * Запрос баланса/расхода у провайдера. Поддерживается только OpenRouter —
  * единственный, кто отдаёт эти данные по API-ключу. Zen/Go баланс не
  * возвращают (только веб-дашборд), поэтому для них честно `unsupported`.
  */
 
+/** Бюджет провайдера: расход ключа, лимиты, баланс аккаунта. */
 export interface ProviderBudget {
   provider: string;
   source: "openrouter";
@@ -26,8 +27,10 @@ export interface ProviderBudget {
   balanceUsd?: number;
 }
 
+/** Причина итога: ok / unsupported / no-key / error. */
 export type BudgetReason = "ok" | "unsupported" | "no-key" | "error";
 
+/** Итог запроса бюджета: бюджет либо причина отсутствия. */
 export interface ProviderBudgetResult {
   budget: ProviderBudget | null;
   reason: BudgetReason;
@@ -35,6 +38,7 @@ export interface ProviderBudgetResult {
   error?: string;
 }
 
+/** Опции запроса: таймаут и диагностический лог. */
 export interface BudgetOptions {
   /** Таймаут одного запроса (мс). */
   timeoutMs?: number;

@@ -1,7 +1,8 @@
+/** Сентинел завершения meet-интервью: ставит флаг, REPL выходит из режима. */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
-/** Sentinel: the model calls this to signal the meet interview is finished. */
+/** Модель зовёт по финальному саммари; вне онбординга — no-op по флагу. */
 export const meetDoneTool: ToolDefinition = {
   name: "meet_done",
   description:

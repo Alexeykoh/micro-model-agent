@@ -1,21 +1,27 @@
-// src/tools/set-thinking.ts
+/** Тул ручной установки reasoning-уровня (транзиентный, с кулдауном). */
 import { t } from "../i18n/index";
 import type { ReasoningLevel, ReasoningConfig } from "../config/types";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 
+/** Допустимые уровни reasoning. */
 const VALID_LEVELS: ReasoningLevel[] = ["default", "none", "low", "medium", "high", "max"];
 
+/** Состояние reasoning: уровень, итерация оверрайда, ручной флаг. */
 export interface ReasoningState {
   level: ReasoningLevel;
   overrideIteration: number;
   /**
-   * Persistent manual override set by the user (`/reasoning <level>`), unlike
-   * the transient `set_thinking` override which expires after `overrideCooldown`.
-   * Cleared by `/reasoning auto`.
+   * Стойкий ручной оверрайд юзера (`/reasoning <level>`) — в отличие от
+   * транзиентного `set_thinking`, протухающего после `overrideCooldown`.
+   * Снимается через `/reasoning auto`.
    */
   manual?: boolean;
 }
 
+/**
+ * Фабрика тула set_thinking (уровень на следующий LLM-вызов; штатно рулит
+ * харнесс). Возврат: определение тула.
+ */
 export function createSetThinkingTool(
   state: ReasoningState,
   config: ReasoningConfig,
@@ -54,7 +60,7 @@ export function createSetThinkingTool(
         };
       }
 
-      // Cooldown check
+      // Проверка кулдауна.
       const currentIter = getCurrentIteration();
       const elapsed = currentIter - state.overrideIteration;
       if (elapsed > 0 && elapsed < config.overrideCooldown) {
@@ -67,7 +73,7 @@ export function createSetThinkingTool(
         };
       }
 
-      // Clamp to configured bounds
+      // Кламп в настроенные границы.
       let level = requested as ReasoningLevel;
       const levelOrder: ReasoningLevel[] = ["none", "low", "medium", "high", "max"];
       const minIdx = levelOrder.indexOf(config.min);
@@ -83,7 +89,6 @@ export function createSetThinkingTool(
         clamped = true;
       }
 
-      // Apply
       state.level = level;
       state.overrideIteration = currentIter;
 

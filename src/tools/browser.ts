@@ -1,3 +1,4 @@
+/** Тул headless-браузера: навигация, клики, ввод, скриншоты (JS-сайты). */
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 import type { ImageUrlPart } from "../llm/provider";
 import { BrowserSession } from "../modules/browser/session";
@@ -34,6 +35,7 @@ export function setBrowserSessionFactoryForTest(
  */
 let actionChain: Promise<unknown> = Promise.resolve();
 
+/** Сериализует действия: одновременно в браузере ровно одно. */
 function serialize<T>(fn: () => Promise<T>): Promise<T> {
   const run = actionChain.then(fn, fn);
   actionChain = run.then(
@@ -43,6 +45,7 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** Ленивая module-level сессия (cookie-dir в project .mma). */
 function getSession(ctx: ToolContext): BrowserSession {
   if (!session) {
     const cookieDir = join(projectMmaDir(ctx.baseDir), "browser");
@@ -65,6 +68,7 @@ function getSession(ctx: ToolContext): BrowserSession {
   return session;
 }
 
+/** Скриншот для текстовой модели: пометка + текстовый снапшот. */
 export function formatScreenshotForTextModel(snapshot: string): string {
   return `${t("tool.screenshot_unavailable")}\n\n${snapshot}`;
 }
@@ -79,6 +83,7 @@ export async function screenshotToImagePart(screenshot: Buffer): Promise<ImageUr
   return { type: "image_url", image_url: { url: dataUrl } };
 }
 
+/** Фабрика browser-тула (сессия ленивая, module-level). */
 export function createBrowserTool(): ToolDefinition {
   return {
     name: "browser",
@@ -163,6 +168,7 @@ export function createBrowserTool(): ToolDefinition {
   };
 }
 
+/** Закрывает сессию после текущего действия (не посреди навигации). */
 export function closeBrowserSession(): void {
   const s = session;
   session = null;

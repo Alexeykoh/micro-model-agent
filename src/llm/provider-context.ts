@@ -1,37 +1,37 @@
 /**
- * Universal provider context probe: what the backend ACTUALLY serves for
- * `model` right now — a loaded instance length (LM Studio/Ollama/llama.cpp),
- * not the model card maximum.
+ * Универсальная проба контекста провайдера: что бэкенд РЕАЛЬНО отдаёт для
+ * `model` прямо сейчас — длина загруженного инстанса (LM Studio/Ollama/
+ * llama.cpp), а не максимум карточки модели.
  *
- * Order: LM Studio native → Ollama native → llama.cpp `/props` →
- * OpenAI-compat `/models` metadata (`context_length`, vLLM `max_model_len`,
- * OpenRouter `top_provider.context_length`) → models.dev catalog (last
- * resort, only for OpenCode Zen/Go whose own `/models` returns bare ids —
- * verified live: `{id, object, created, owned_by}` with no context fields).
+ * Порядок: LM Studio native → Ollama native → llama.cpp `/props` →
+ * OpenAI-compat `/models`-метаданные (`context_length`, vLLM `max_model_len`,
+ * OpenRouter `top_provider.context_length`) → каталог models.dev (последний
+ * шанс, только для OpenCode Zen/Go, чей `/models` отдаёт голые id — проверено
+ * вживую: `{id, object, created, owned_by}` без context-полей).
  *
- * Returns null when nothing reports a window — the caller keeps the
- * configured `contextWindow` (fail-open).
+ * Null, если окно никто не сообщил — вызывающий хранит настроенный
+ * `contextWindow` (fail-open).
  */
 import type { ModelCapabilities } from "../config/types";
 import { lookupModelsDevContext } from "./models-dev";
 
-/** Result of the startup context probe: what the model is ACTUALLY loaded with. */
+/** Итог стартовой context-probe: с чем модель РЕАЛЬНО загружена. */
 export interface ContextProbeResult {
   model: string;
-  /** Context length of the loaded instance (tokens). */
+  /** Длина контекста загруженного инстанса (токены). */
   actual: number;
 }
 
-/** Result of the native model probe: context window + advertised capabilities. */
+/** Итог нативной пробы модели: окно контекста + заявленные capabilities. */
 export interface ModelProbeResult {
   model: string;
-  /** Context length of the loaded instance (tokens). */
+  /** Длина контекста загруженного инстанса (токены). */
   contextLength: number;
-  /** Advertised capabilities, when the backend reports them (LM Studio). */
+  /** Заявленные capabilities, если бэкенд их сообщает (LM Studio). */
   capabilities?: ModelCapabilities;
 }
 
-/** Minimal shape of an LM Studio `/api/v1/models` entry we consume. */
+/** Минимальная форма записи LM Studio `/api/v1/models`, что нам нужна. */
 interface LmStudioModel {
   key?: string;
   name?: string;
@@ -44,15 +44,15 @@ interface LmStudioModelsResponse {
 }
 
 /**
- * Ask the backend's native API (LM Studio `/api/v1/models`) for the loaded
- * model's context length AND advertised capabilities. Context length prefers
- * the running instance (`loaded_instances[].config.context_length`), falling
- * back to `max_context_length`. Capabilities are read from `capabilities`
- * (`vision`, `trained_for_tool_use`) when present — this is the single source
- * of truth that replaces name-based vision guessing.
+ * Спрашивает нативный API бэкенда (LM Studio `/api/v1/models`) о длине
+ * контекста загруженной модели И заявленных capabilities. Длина — из живого
+ * инстанса (`loaded_instances[].config.context_length`), фолбэк —
+ * `max_context_length`. Capabilities читаются из `capabilities` (`vision`,
+ * `trained_for_tool_use`), если есть — это единый источник правды вместо
+ * гадания по имени.
  *
- * Returns null when the endpoint is unavailable (not LM Studio), the model is
- * not found/loaded, or the request fails — the caller must degrade silently.
+ * Null, если эндпоинт недоступен (не LM Studio), модели нет/снята или запрос
+ * упал — вызывающий деградирует молча.
  */
 export async function probeModel(
   baseUrl: string,
@@ -91,8 +91,8 @@ export async function probeModel(
 }
 
 /**
- * Thin context-only projection of {@link probeModel}. Kept for callers that
- * only need the context window (banner, context-probe diagnostics).
+ * Тонкая context-only проекция {@link probeModel}. Для вызывающих, кому нужно
+ * только окно контекста (баннер, диагностика context-probe).
  */
 export async function getLoadedContextLength(
   baseUrl: string,
@@ -103,15 +103,16 @@ export async function getLoadedContextLength(
   return probe ? { model: probe.model, actual: probe.contextLength } : null;
 }
 
+/** Опции пробы контекста: ключ, таймаут, тип провайдера. */
 export interface ProviderContextOpts {
-  /** Bearer key for hosted OpenAI-compatible endpoints (OpenRouter, Zen/Go). */
+  /** Bearer-ключ для хостед OpenAI-совместимых эндпоинтов (OpenRouter, Zen/Go). */
   apiKey?: string;
   timeoutMs?: number;
-  /** Registry type (`openai-compat`, `opencode-zen`, …) — gates models.dev. */
+  /** Тип из реестра (`openai-compat`, `opencode-zen`, …) — гейтит models.dev. */
   providerType?: string;
 }
 
-/** Numeric context-ish fields an OpenAI-compatible `/models` entry may carry. */
+/** Числовые context-подобные поля, что может нести запись `/models`. */
 const CONTEXT_KEYS = [
   "context_length",
   "context_window",
@@ -131,9 +132,9 @@ function asPositiveInt(v: unknown): number | null {
 }
 
 /**
- * First positive int among known context keys of `obj`. OpenRouter nests the
- * per-endpoint value under `top_provider.context_length`, so one nesting
- * level is covered as well.
+ * Первое положительное среди известных context-полей объекта. OpenRouter
+ * кладёт per-endpoint значение в `top_provider.context_length`, поэтому один
+ * уровень вложенности тоже покрыт.
  */
 function pickContextField(obj: Record<string, unknown>): number | null {
   for (const k of CONTEXT_KEYS) {
@@ -170,7 +171,7 @@ async function fetchJson(url: string, timeoutMs: number, init?: RequestInit): Pr
   }
 }
 
-/** Ollama `/api/ps`: context fields of a running instance, if any. */
+/** Context-поля живого инстанса из Ollama `/api/ps`, если есть. */
 async function probeOllamaPs(
   origin: string,
   model: string,
@@ -196,7 +197,7 @@ function contextFromModelInfo(bag: Record<string, unknown>): number | null {
   return pickContextField(bag);
 }
 
-/** Ollama `/api/show`: model details, tried under the full and short name. */
+/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
 async function probeOllamaShow(
   origin: string,
   model: string,
@@ -219,17 +220,17 @@ async function probeOllamaShow(
   return null;
 }
 
-/** Ollama native API: running instances (`/api/ps`) + details (`/api/show`). */
+/** Нативный Ollama: живые инстансы (`/api/ps`) + детали (`/api/show`). */
 async function probeOllama(origin: string, model: string, timeoutMs: number): Promise<number | null> {
-  // `/api/show` reports the model's context (e.g. `llama.context_length`
-  // inside `model_info`) even when `/api/ps` carries no size fields.
+  // `/api/show` сообщает контекст модели (напр. `llama.context_length` в
+  // `model_info`), даже когда `/api/ps` размерных полей не несёт.
   return (
     (await probeOllamaPs(origin, model, timeoutMs)) ??
     (await probeOllamaShow(origin, model, timeoutMs))
   );
 }
 
-/** llama.cpp server: single-model `/props` carries the loaded `n_ctx`. */
+/** Сервер llama.cpp: одномодельный `/props` несёт загруженный `n_ctx`. */
 async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<number | null> {
   const props = await fetchJson(`${origin}/props`, timeoutMs);
   if (!props || typeof props !== "object") return null;
@@ -244,8 +245,8 @@ async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<number 
 }
 
 /**
- * OpenAI-compatible `/models` with extended metadata. Bare-id servers
- * (plain OpenAI, Zen/Go) carry no context fields → null.
+ * OpenAI-совместимый `/models` с расширенными метаданными. Серверы с голыми id
+ * (чистый OpenAI, Zen/Go) context-полей не несут → null.
  */
 async function probeOpenAICompatModels(
   baseUrl: string,
@@ -267,11 +268,10 @@ async function probeOpenAICompatModels(
 }
 
 /**
- * models.dev catalog lookup — last resort for OpenCode Zen/Go. Their own
- * `/models` returns bare ids, but models.dev (open-source DB opencode itself
- * uses) lists the `opencode` provider's models under identical ids with
- * `limit.context`. Gated on the Zen URL/type so local backends never touch
- * the network for this.
+ * Лукап каталога models.dev — последний шанс для OpenCode Zen/Go. Их `/models`
+ * отдаёт голые id, а models.dev (открытая БД, что использует сам opencode)
+ * держит модели провайдера `opencode` под теми же id с `limit.context`.
+ * Гейт на Zen-URL/тип: локальные бэкенды ради этого в сеть не ходят.
  */
 async function probeModelsDev(
   baseUrl: string,
@@ -286,6 +286,11 @@ async function probeModelsDev(
   return lookupModelsDevContext(model);
 }
 
+/**
+ * Пробует все источники по порядку, возвращает первый давший окно.
+ * @param baseUrl базовый URL провайдера; @param model имя модели;
+ * @param opts ключ/таймаут/тип; @returns окно контекста либо null (fail-open).
+ */
 export async function probeProviderContext(
   baseUrl: string,
   model: string,
@@ -305,7 +310,7 @@ export async function probeProviderContext(
     const catalog = await probeModelsDev(baseUrl, model, opts.providerType);
     if (catalog !== null) return { model, actual: catalog };
   } catch {
-    // Fail-open: any probe error keeps the configured contextWindow.
+    // Fail-open: любая ошибка пробы оставляет настроенный contextWindow.
   }
   return null;
 }

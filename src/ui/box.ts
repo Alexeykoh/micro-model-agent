@@ -1,14 +1,16 @@
+// Рамки только для мастера первого запуска (в чате запрещены, см. STYLE.md).
 import stringWidth from "string-width";
 import { pc } from "./colors";
 import { getTerminalWidth } from "./table";
 
+/** Опции рамки: заголовок, ширина, отступ. */
 export interface BoxOptions {
   title?: string;
   width?: number;
   padding?: number;
 }
 
-/** Wrap a string to `width` columns, keeping ANSI codes intact. */
+/** Переносит строку по колонкам, сохраняя ANSI-коды. */
 export function wrapText(text: string, width: number): string[] {
   if (width < 1) return text ? [text] : [];
   const lines: string[] = [];
@@ -52,7 +54,7 @@ function padTo(text: string, width: number): string {
   return text + " ".repeat(gap);
 }
 
-/** Render a box with an optional title embedded in the top border. */
+/** Рендерит рамку с опц. заголовком в верхней границе. */
 export function box(lines: string[], opts: BoxOptions = {}): string[] {
   const pad = opts.padding ?? 1;
   const width = Math.max(20, Math.min(opts.width ?? getTerminalWidth(), 120));
@@ -81,7 +83,7 @@ export function box(lines: string[], opts: BoxOptions = {}): string[] {
   return out;
 }
 
-/** A horizontal rule that respects the terminal width (max 60 cols). */
+/** Горизонтальная линейка по ширине терминала (макс. 60 кол.). */
 export function divider(width?: number): string {
   const w = Math.min(width ?? getTerminalWidth(), 60);
   return pc.dim("─".repeat(w));

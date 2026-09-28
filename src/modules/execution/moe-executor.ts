@@ -1,3 +1,4 @@
+// MoE-исполнитель: волны подзадач по топосорту, ретраи, scope-протокол, usage по тегам.
 import type { MoEPlan, MoESubtask, SubtaskResult, PlanResult, ScopeRequestBody } from "./types";
 import type { AppConfig, ExpertConfig } from "../../config/types";
 import { getExpertConfig } from "../../config/experts";
@@ -15,14 +16,15 @@ import { sleep } from "../../utils/sleep";
 import { backoffDelay } from "../../utils/retry";
 import { errMsg } from "../../utils";
 
+/** Макс. циклов расширения scope на подзадачу. */
 export const MAX_SCOPE_EXPANSION_CYCLES = 2;
 
-/** Router decision on a sub-agent's scope request (see OrchestratorClient.resolveScopeRequest). */
+/** Решение роутера по scope-запросу сабагента (см. OrchestratorClient.resolveScopeRequest). */
 export type ScopeDecision =
   | { action: "approve"; write: string[]; read: string[] }
   | { action: "reject" };
 
-/** Uniform interrupt error recognized by the agent loop (err.name === "AbortError"). */
+/** Униформная ошибка прерывания для цикла агента (err.name === "AbortError"). */
 export function newAbortError(): Error {
   const e = new Error(t("tool.aborted", { name: "MoE execution" }));
   e.name = "AbortError";
@@ -46,6 +48,7 @@ function buildErrorDetail(stuckDetector: StuckDetector, baseError: string, lastE
   return errorDetail;
 }
 
+/** Зависимости исполнителя: конфиг, реестры тулов, провайдер, scope-роутер, abort, события. */
 export interface MoEExecutorDeps {
   config: AppConfig;
   toolRegistry: ToolRegistry;
@@ -53,19 +56,19 @@ export interface MoEExecutorDeps {
   llmProvider: LLMProvider;
   logger: Logger;
   baseDir: string;
-  /** Router callback for scope decisions; absent = scope requests are plain failures. */
+  /** Роутер-колбэк для scope-решений; нет — scope-запросы идут обычными фейлами. */
   onScopeRequest?: (subtaskId: string, req: ScopeRequestBody) => Promise<ScopeDecision>;
-  /** Abort signal — queued subtasks are skipped, waves stop at the barrier. */
+  /** Abort-сигнал — queued подзадачи скипаются, волны встают на барьере. */
   signal?: AbortSignal;
-  /** Tool events (start/end) forwarded to the renderer around each subtask. */
+  /** События тулов (start/end), форвардимые рендереру вокруг каждой подзадачи. */
   onTool?: (ev: import("../../core/types").ToolEvent) => void;
-  /** Observability event sink (moe_subtask) — wired to session.jsonl by runWithMoE. */
+  /** Сток событий наблюдаемости (moe_subtask) — runWithMoE вяжет на session.jsonl. */
   onEvent?: (event: { type: "moe_subtask"; data: Record<string, unknown> }) => void;
-  /** Real session id for audit log / artifacts (was hardcoded "moe"). */
+  /** Реальный id сессии для audit-лога / артефактов (был хардкод "moe"). */
   sessionId?: string;
 }
 
-/** Aggregated token usage per expert_tag (cost attribution, Plan 4.2). */
+/** Агрегированный usage токенов по expert_tag (атрибуция стоимости, Plan 4.2). */
 export interface TagUsage {
   promptTokens: number;
   completionTokens: number;
@@ -73,6 +76,7 @@ export interface TagUsage {
   subtasks: number;
 }
 
+/** Топосорт подзадач в волны готовых (зависимости удовлетворены). Пусто при цикле. */
 export function topologicalSort(subtasks: MoESubtask[]): MoESubtask[][] {
   const sorted: MoESubtask[][] = [];
   const remaining = new Set(subtasks.map((s) => s.id));
@@ -153,10 +157,9 @@ async function executeSubtask(
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // Stable id across attempts: passing `attempt` made recordIteration reset
-    // the detector's state on every retry (new stepId → resetStepState), so
-    // tool errors never accumulated and the exhausted-retries diagnostic was
-    // always empty.
+    // Стабильный id между попытками: передача `attempt` ресетила состояние
+    // детектора на каждом ретрае (новый stepId → resetStepState), ошибки тулов
+    // не накапливались и exhausted-retries диагностика всегда пустовала.
     stuckDetector.recordIteration(1);
     try {
       const allowedFiles = subtask.allowed_files || [];
@@ -216,15 +219,15 @@ async function executeSubtask(
 
       if (result.success) {
         if (deps.config.subagent?.resultMode === "file") {
-          // Structured field from the subagent tool — locale-independent
-          // (parsing the localized output string broke under ru).
+          // Структурное поле из тула subagent — языконезависимо (парсинг
+          // локализованной строки вывода ломался под ru).
           const abs = result.artifactPath ?? "";
           if (abs) {
             const store = new ArtifactStore({
               baseDir: deps.baseDir,
               sessionId: deps.sessionId || "moe",
             });
-            const full = store.read(abs.split(/[\\/]/).pop() || ""); // file name only, scoped to root
+            const full = store.read(abs.split(/[\\/]/).pop() || ""); // только имя файла, в jail root
             deps.logger.debug(
               `MoE subtask "${subtask.id}" attached artifact ${abs} (${full?.length ?? 0} chars) to Router`,
             );
@@ -249,7 +252,7 @@ async function executeSubtask(
       lastError = result.output;
       stuckDetector.recordToolError("subagent", result.output);
 
-      // Inject actionable hints into the next retry's prompt
+      // Инжектим actionable-хинты в промпт следующего ретрая
       if (attempt < maxAttempts) {
         const hints = stuckDetector.getActionableHints();
         const recovery = stuckDetector.getRecoveryMessage();
@@ -270,7 +273,7 @@ async function executeSubtask(
         continue;
       }
 
-      // Non-transient failure — build detailed error with hints
+      // Нетранзиентный фейл — собираем детальную ошибку с хинтами
       const errorDetail = buildErrorDetail(stuckDetector, result.output, lastError);
 
       return {
@@ -286,8 +289,8 @@ async function executeSubtask(
       lastError = e.message;
       stuckDetector.recordToolError("subagent", e.message);
 
-      // User interrupt (Esc) is NEVER transient — propagate immediately so
-      // the wave barrier and the agent loop see the abort instead of retrying.
+      // Прерывание юзера (Esc) — НИКОГДА не транзиент: пробрасываем сразу, чтобы
+      // барьер волны и цикл агента увидели abort вместо ретрая.
       if (e?.name === "AbortError") {
         throw e;
       }
@@ -314,7 +317,7 @@ async function executeSubtask(
     }
   }
 
-  // Exhausted retries — build detailed failure
+  // Ретраи исчерпаны — собираем итоговый фейл
   const stuckReason = stuckDetector.getStuckReason();
   let finalError = lastError;
   if (stuckReason) {
@@ -331,6 +334,7 @@ async function executeSubtask(
   };
 }
 
+/** Исполнитель MoE-плана: волны, параллелизм, scope-ретраи, usage по тегам. */
 export class MoEExecutor {
   private deps: MoEExecutorDeps;
   private usageByTag = new Map<string, TagUsage>();
@@ -339,7 +343,7 @@ export class MoEExecutor {
     this.deps = deps;
   }
 
-  /** Aggregated token usage per expert_tag across all executed subtasks. */
+  /** Агрегированный usage токенов по expert_tag всех исполненных подзадач. */
   getUsageByTag(): Record<string, TagUsage> {
     return Object.fromEntries(this.usageByTag);
   }
@@ -361,12 +365,17 @@ export class MoEExecutor {
     this.usageByTag.set(expertTag, entry);
   }
 
+  /**
+   * Исполняет план волнами топосорта с капом параллелизма. Поддерживает
+   * селективный re-plan (skipIds + carriedResults). Abort (Esc) останавливает
+   * на барьере волны.
+   * @param opts.skipIds подзадачи, НЕ переисполняемые — их прошлые успешные
+   * результаты инжектятся как carriedResults, чтобы резолвились зависимости
+   * переисполняемых.
+   */
   async executePlan(
     plan: MoEPlan,
     opts?: {
-      /** Selective re-plan (Plan 5.1): subtasks whose ids are listed here are
-       * NOT re-executed — their previous successful results are injected as
-       * `carriedResults` so dependencies of re-executed subtasks resolve. */
       skipIds?: ReadonlySet<string>;
       carriedResults?: SubtaskResult[];
     },
@@ -380,9 +389,9 @@ export class MoEExecutor {
     const subtasks =
       skipIds && skipIds.size > 0 ? plan.subtasks.filter((s) => !skipIds.has(s.id)) : plan.subtasks;
 
-    // Selective re-plan where every subtask was already successful: nothing to
-    // execute. This used to fall through to topologicalSort([]) and be reported
-    // as a bogus "possible cycle" failure, burning the remaining re-plan cycles.
+    // Селективный re-plan, где все подзадачи уже успешны: исполнять нечего.
+    // Раньше проваливалось в topologicalSort([]) и репортилось bogus
+    // "possible cycle", сжигая оставшиеся re-plan циклы.
     if (subtasks.length === 0) {
       return { success: true, results, errors: [], warnings };
     }
@@ -398,7 +407,7 @@ export class MoEExecutor {
       };
     }
 
-    // Verify all subtasks are included — catch silent drops from unresolved dependencies
+    // Проверяем, что все подзадачи вошли — ловим молчаливые дропы от висячих зависимостей
     const sortedCount = waves.flat().length;
     if (sortedCount < subtasks.length) {
       const missing = subtasks
@@ -418,7 +427,7 @@ export class MoEExecutor {
       const wave = waves[waveIdx];
       const depResults = new Map(results.map((r) => [r.subtaskId, r]));
 
-      // Cap concurrent subtasks per wave (rateLimits.maxParallelTasks, default 5).
+      // Кап конкурентных подзадач на волну (rateLimits.maxParallelTasks, по умолчанию 5).
       const maxParallel =
         this.deps.config?.security?.rateLimits?.maxParallelTasks ?? 5;
       let active = 0;
@@ -436,8 +445,8 @@ export class MoEExecutor {
       const wavePromises = wave.map(async (subtask) => {
         await acquire();
         if (this.deps.signal?.aborted) {
-          // Checked after acquiring so subtasks queued behind an in-flight one
-          // never start once Esc was pressed mid-wave.
+          // Проверяем после acquire: подзадачи, queued за летящей, не стартуют,
+          // если Esc нажат посреди волны.
           release();
           throw newAbortError();
         }
@@ -485,8 +494,8 @@ export class MoEExecutor {
       });
 
       await Promise.all(wavePromises);
-      // Wave barrier: once interrupted, stop before the next wave instead of
-      // starting new sub-agents after Esc.
+      // Барьер волны: при прерывании встаём перед следующей волной, а не
+      // стартуем новых сабагентов после Esc.
       if (this.deps.signal?.aborted) throw newAbortError();
     }
 
@@ -505,10 +514,10 @@ export class MoEExecutor {
   }
 
   /**
-   * Scope expansion protocol (spec §Post-MVP): a failed sub-agent's
-   * <scope-request> goes to the Router; approve extends the subtask scope and
-   * re-executes ONLY this subtask, reject fails it (it can still be fixed by
-   * a full re-plan). Expansion is capped — never automatic.
+   * Scope-протокол (спек §Post-MVP): <scope-request> упавшего сабагента идёт
+   * роутеру; approve расширяет scope подзадачи и переисполняет ТОЛЬКО её,
+   * reject фейлит её (чинится полным re-plan). Расширение капировано, не
+   * автоматически.
    */
   private async resolveScopeAndRetry(
     subtask: MoESubtask,

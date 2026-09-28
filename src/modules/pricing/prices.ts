@@ -1,13 +1,14 @@
+// Цены моделей: встроенная таблица Zen/Go, нормализация id, расчёт стоимости с кешем.
 import type { ModelPrice, PricingConfig } from "../../config/types";
 
 /**
- * Built-in price table (USD per 1M tokens) for OpenCode Zen / Go models.
- * Values from https://opencode.ai/docs/zen/ and /docs/go/ (August 2026).
- * Model ids are stored WITHOUT the `opencode/` or `opencode-go/` prefix so a
- * single table serves both providers; lookup strips the prefix.
+ * Встроенная таблица цен (USD за 1M токенов) для моделей OpenCode Zen / Go.
+ * Значения из https://opencode.ai/docs/zen/ и /docs/go/ (август 2026).
+ * Id хранятся БЕЗ префиксов `opencode/` и `opencode-go/`, чтобы одна таблица
+ * обслуживала обоих провайдеров; лукап срезает префикс.
  */
 const ZEN_PRICES: Record<string, ModelPrice> = {
-  // Free models
+  // Бесплатные модели
   "big-pickle": { input: 0, output: 0 },
   "mimo-v2.5-free": { input: 0, output: 0 },
   "hy3-free": { input: 0, output: 0 },
@@ -34,7 +35,7 @@ const ZEN_PRICES: Record<string, ModelPrice> = {
   "qwen3.6-plus": { input: 0.5, output: 3.0 },
   "qwen3.5-plus": { input: 0.2, output: 1.2 },
   "qwen3.8-max": { input: 2.5, output: 7.5 },
-  // DeepSeek (off-peak)
+  // DeepSeek (внепиковые тарифы)
   "deepseek-v4-pro": { input: 0.66, output: 1.98 },
   "deepseek-v4-flash": { input: 0.22, output: 0.66 },
   // Claude
@@ -61,7 +62,7 @@ const ZEN_PRICES: Record<string, ModelPrice> = {
   "grok-build-0.1": { input: 1, output: 2 },
   // Muse Spark
   "muse-spark-1.2": { input: 1.25, output: 4.25 },
-  // GPT-5.x (Zen pricing; Go may differ)
+  // GPT-5.x (цены Zen; у Go могут отличаться)
   "gpt-5.6-sol": { input: 5, output: 30 },
   "gpt-5.6-terra": { input: 2, output: 12 },
   "gpt-5.6-luna": { input: 0.2, output: 1.2 },
@@ -84,10 +85,10 @@ const ZEN_PRICES: Record<string, ModelPrice> = {
   "gpt-5-nano": { input: 0.05, output: 0.4 },
 };
 
-/** Provider prefixes stripped before a price lookup. */
+/** Префиксы провайдеров, срезаемые перед поиском цены. */
 const PROVIDER_PREFIXES = ["opencode-go/", "opencode/", "openai/", "anthropic/"];
 
-/** Normalize a model id to its bare form for the price table lookup. */
+/** Нормализует id модели к голой форме для поиска в таблице цен. */
 export function normalizeModelId(model: string): string {
   let id = model.trim();
   for (const prefix of PROVIDER_PREFIXES) {
@@ -96,12 +97,12 @@ export function normalizeModelId(model: string): string {
       break;
     }
   }
-  // Strip a vendor path like qwen/qwen3.5-9b -> qwen3.5-9b (keeps bare ids).
+  // Срезаем вендорный путь вида qwen/qwen3.5-9b -> qwen3.5-9b (голые id не трогаем).
   const parts = id.split("/");
   return parts[parts.length - 1];
 }
 
-/** Resolve the price for a model id. Overrides win, then the builtin table. */
+/** Резолвит цену модели. Оверрайды побеждают, затем встроенная таблица. */
 export function resolvePrice(
   model: string,
   config?: PricingConfig,
@@ -120,6 +121,7 @@ export interface CacheCostInput {
   cacheWriteTokens?: number;
 }
 
+/** Результат расчёта: стоимость вызова и экономия на кеше. */
 export interface CostResult {
   /** Стоимость вызова в USD с учётом кеша. */
   cost: number;
@@ -170,7 +172,7 @@ export function calculateCost(
   return calculateCostDetailed(model, promptTokens, completionTokens, config, cache)?.cost;
 }
 
-/** Format a USD cost for display. Zero and very small amounts stay readable. */
+/** Форматирует USD-стоимость для показа. Ноль и копейки остаются читаемыми. */
 export function formatCost(cost: number): string {
   if (cost === 0) return "$0.00";
   if (cost >= 0.01) return `$${cost.toFixed(2)}`;

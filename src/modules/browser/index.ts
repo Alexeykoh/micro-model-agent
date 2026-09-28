@@ -1,3 +1,4 @@
+// Публичный фасад модуля браузера: сессия, драйверы, снапшоты, типы.
 export { BrowserModule } from "./module";
 export { BrowserSession, BrowserActionTracker } from "./session";
 export { ConsoleBuffer } from "./console-buffer";

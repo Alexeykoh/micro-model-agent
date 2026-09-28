@@ -1,10 +1,12 @@
+// Дефолты конфига: единственная точка правды для всех опций AppConfig.
 import type { AppConfig } from "./types";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
-/** Single source of truth for the default model (experts inherit it, C8). */
+/** Дефолтная модель (эксперты наследуют её). */
 const DEFAULT_MODEL = "qwen/qwen3.5-9b";
 
+/** Дефолтный конфиг. Глубоко мержится с пользовательским при загрузке. */
 export const DEFAULTS: AppConfig = {
   version: "2.0.0",
   model: DEFAULT_MODEL,
@@ -23,9 +25,9 @@ export const DEFAULTS: AppConfig = {
   },
   critic: {
     enabled: true,
-    // Phase 2: dedicated provider/model are opt-in — unset shares the active
-    // provider (v1 behavior). The read-only verification loop is on: it only
-    // runs after a concern/critical verdict and is bounded + fail-open.
+    // Phase 2: выделенные provider/model — opt-in; пока не заданы, делит активный
+    // провайдер (поведение v1). Read-only verify-цикл включён: запускается только
+    // после вердикта concern/critical, ограничен и fail-open.
     provider: undefined,
     model: undefined,
     tools: true,
@@ -34,13 +36,13 @@ export const DEFAULTS: AppConfig = {
     timeoutMs: 15000,
   },
   tools: {
-    // P5 auto-narrowing (2026-09-28): enableOnDemand:true exposes only
-    // defaultTags + alwaysOn structural/interactive tools; task-type tags are
-    // pre-seeded deterministically before the first LLM call
-    // (src/tools/auto-tags.ts) and the model expands via enable_tools.
-    // The 9B drift that caused the rollback (hidden tools called as shell
-    // commands) is mitigated by the hidden-tools prompt block, the bash
-    // hidden-tool hint + tool-call redirect, and alwaysOn question/approve.
+    // Автосужение P5 (2026-09-28): enableOnDemand:true показывает только
+    // defaultTags + alwaysOn структурные/интерактивные тулы; теги под тип задачи
+    // детерминированно досеиваются до первого вызова LLM (src/tools/auto-tags.ts),
+    // а модель расширяет набор через enable_tools. Дрейф 9B, вызвавший откат
+    // (скрытые тулы звались как shell-команды), гасится блоком промпта про скрытые
+    // тулы, хинтом bash про скрытые тулы + редиректом tool-call и alwaysOn
+    // question/approve.
     defaultTags: ["file", "code"],
     enableOnDemand: true,
   },
@@ -70,9 +72,9 @@ export const DEFAULTS: AppConfig = {
       description: "browser + file reading for visual tasks",
     },
   },
-  // Per-model capability overrides (keyed by model id). Empty by default —
-  // the live native probe (LM Studio) and the provider preset are the primary
-  // sources; this map is the manual escape hatch when both get a model wrong.
+  // Переопределения возможностей по моделям (ключ — id модели). Пусто по
+  // умолчанию: первичны живой native-probe (LM Studio) и пресет провайдера,
+  // эта карта — ручной escape hatch, когда оба ошиблись.
   modelCapabilities: {},
   contextWindow: 32768,
   contextBudget: {
@@ -192,8 +194,8 @@ export const DEFAULTS: AppConfig = {
     min: "low",
     max: "high",
     overrideCooldown: 5,
-    // Trivial Q&A turns should not pay for medium reasoning; the policy still
-    // raises to high on hallucinations / audit rejections / plan creation.
+    // Тривиальные Q&A-ходы не должны платить за medium reasoning; политика всё
+    // равно поднимает до high на галлюцинациях/отклонениях аудита/создании плана.
     baseline: "low",
   },
 };

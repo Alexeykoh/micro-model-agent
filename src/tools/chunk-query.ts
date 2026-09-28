@@ -1,3 +1,4 @@
+/** Тул ответа по большому тексту: чанкинг + параллельные запросы + синтез. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { t } from "../i18n/index";
@@ -6,13 +7,14 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { runChunkQuery } from "../modules/context/chunk-query";
 
+/** Отвечает на вопрос по тексту вне контекстного окна (чанк-параллелизм). */
 export const chunkQueryTool: ToolDefinition = {
   name: "chunk_query",
   icon: "🧩",
   description:
     "Answer a query over a large text (file or inline) by splitting it into chunks and querying the model per chunk in parallel, then optionally synthesizing a final answer. Use when the input is too large for the context window.",
   tags: ["research"],
-  /** Multiple LLM calls (parallel chunk queries + synthesis) need a longer budget. */
+  /** Несколько LLM-вызовов (чанк-запросы + синтез) — нужен больший бюджет. */
   timeoutMs: 300000,
   parameters: {
     type: "object",
@@ -69,8 +71,8 @@ export const chunkQueryTool: ToolDefinition = {
 
     let content = text || "";
     if (inputPath) {
-      // Same policy as read_file: global security paths (denied patterns
-      // like .env/keys) + subagent scope.
+      // Та же политика, что у read_file: глобальные security-пути (.env/ключи)
+      // + скоуп субагента.
       const resolvedInput = resolve(ctx.baseDir, inputPath);
       const check = isPathInScope(
         ctx.baseDir,

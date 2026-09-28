@@ -1,16 +1,12 @@
-/**
- * Rate limiter for LLM requests
- * Prevents DoS attacks by limiting the number of requests per time window
- */
-
+// Лимитер запросов к LLM: защита от DoS — окно запросов в минуту + параллельные задачи.
 interface RateLimitConfig {
   maxRequestsPerMinute: number;
   maxParallelTasks: number;
 }
 
 interface RateLimiterState {
-  requests: number[]; // Timestamps of recent requests
-  parallelTasks: number; // Current number of parallel tasks
+  requests: number[]; // метки недавних запросов
+  parallelTasks: number; // текущее число параллельных задач
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
@@ -18,9 +14,7 @@ const DEFAULT_CONFIG: RateLimitConfig = {
   maxParallelTasks: 5,
 };
 
-/**
- * Rate limiter class for tracking LLM requests
- */
+/** Лимитер запросов к LLM (окно + параллелизм). */
 export class RateLimiter {
   private config: RateLimitConfig;
   private state: RateLimiterState;
@@ -34,10 +28,7 @@ export class RateLimiter {
     };
   }
 
-  /**
-   * Check if a new request is allowed
-   * Returns true if the request is allowed, false if rate limited
-   */
+  /** Разрешён ли новый запрос (true) или сработал лимит (false). */
   canMakeRequest(): boolean {
     this.cleanupOldRequests();
 
@@ -48,17 +39,13 @@ export class RateLimiter {
     return true;
   }
 
-  /**
-   * Record a request
-   */
+  /** Записать запрос в окно. */
   recordRequest(): void {
     this.cleanupOldRequests();
     this.state.requests.push(Date.now());
   }
 
-  /**
-   * Check if a new parallel task is allowed
-   */
+  /** Можно ли стартовать параллельную задачу. */
   canStartParallelTask(): boolean {
     if (this.state.parallelTasks >= this.config.maxParallelTasks) {
       return false;
@@ -66,38 +53,30 @@ export class RateLimiter {
     return true;
   }
 
-  /**
-   * Start a parallel task
-   */
+  /** Старт параллельной задачи. */
   startParallelTask(): void {
     this.state.parallelTasks++;
   }
 
-  /**
-   * End a parallel task
-   */
+  /** Финиш параллельной задачи. */
   endParallelTask(): void {
     this.state.parallelTasks = Math.max(0, this.state.parallelTasks - 1);
   }
 
-  /**
-   * Get current parallel task count
-   */
+  /** Текущее число параллельных задач. */
   getParallelTaskCount(): number {
     return this.state.parallelTasks;
   }
 
-  /**
-   * Get remaining requests in current window
-   */
+  /** Остаток запросов в текущем окне. */
   getRemainingRequests(): number {
     this.cleanupOldRequests();
     return Math.max(0, this.config.maxRequestsPerMinute - this.state.requests.length);
   }
 
   /**
-   * Milliseconds until a request slot frees up (the oldest request ages out of
-   * the 1-minute window). Returns 0 when a request can be made immediately.
+   * Миллисекунд до освобождения слота (старейший запрос вывалится из минутного
+   * окна). 0 — запрос можно слать сразу.
    */
   msUntilRequest(): number {
     this.cleanupOldRequests();
@@ -106,14 +85,12 @@ export class RateLimiter {
     return Math.max(0, 60_000 - (Date.now() - oldest));
   }
 
-  /**
-   * Clean up old requests (older than 1 minute)
-   */
+  /** Выкинуть запросы старше минуты. */
   private cleanupOldRequests(): void {
     const now = Date.now();
     const oneMinuteAgo = now - 60_000;
 
-    // Only cleanup every 5 seconds to avoid performance overhead
+    // Чистка не чаще раза в 5 секунд — без оверхеда
     if (now - this.lastCleanup < 5000) {
       return;
     }
@@ -122,39 +99,30 @@ export class RateLimiter {
     this.lastCleanup = now;
   }
 
-  /**
-   * Reset the rate limiter
-   */
+  /** Сбросить лимитер. */
   reset(): void {
     this.state.requests = [];
     this.state.parallelTasks = 0;
     this.lastCleanup = 0;
   }
 
-  /**
-   * Get rate limit configuration
-   */
+  /** Текущий конфиг лимитов. */
   getConfig(): RateLimitConfig {
     return this.config;
   }
 
-  /**
-   * Update rate limit configuration
-   */
+  /** Обновить конфиг лимитов. */
   updateConfig(config: Partial<RateLimitConfig>): void {
     this.config = { ...this.config, ...config };
   }
 }
 
 /**
- * Global rate limiter instance
- * Can be used by LLM provider to enforce rate limits
+ * Глобальный лимитер для LLM-провайдера.
  */
 export const globalRateLimiter = new RateLimiter();
 
-/**
- * Create a rate limiter with custom configuration
- */
+/** Создать лимитер с кастомным конфигом. */
 export function createRateLimiter(config?: Partial<RateLimitConfig>): RateLimiter {
   return new RateLimiter(config);
 }

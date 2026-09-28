@@ -1,3 +1,4 @@
+// Execution-плагин: хуки цикла (stuck, план, typecheck, автопродвижение, веб-поиск ошибок).
 import type { AgentPlugin } from "../types";
 import type { ToolCall } from "../../tools/types";
 import { t } from "../../i18n/index";
@@ -12,26 +13,26 @@ import { platform } from "os";
 import { switchStepToDelete } from "./plan-steps";
 
 /**
- * Cooldown (in iterations) between stuck-recovery injections. Exported so the
- * ExecutionModule can seed its state's lastRecoveryIteration with the same
- * offset the plugin compares against.
+ * Кулдаун (в итерациях) между инжектами stuck-восстановления. Экспортируется,
+ * чтобы ExecutionModule сидировал state.lastRecoveryIteration тем же офсетом,
+ * с которым плагин сравнивает.
  */
 export const STUCK_RECOVERY_COOLDOWN = 5;
 const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
 const FORCE_SKIP_THRESHOLD = 10;
-/** Re-log the SAME stuck-warning key at most every N iterations (a new key
- *  always logs immediately). Prevents the identical warning from flooding
- *  every iteration (ses_mt4fn58c: "Tool bash failed N times" after ~30
- *  successful writes, "No write/exec" on every read). */
+/** Один и тот же stuck-варнинг перелоггируем не чаще каждых N итераций (новый
+ *  ключ — всегда сразу). Не даёт идентичному варнингу флудить каждую итерацию
+ *  (было в ses_mt4fn58c: "Tool bash failed N times" после ~30 успешных записей,
+ *  "No write/exec" на каждом чтении). */
 export const STUCK_WARN_REPEAT_EVERY = 5;
-/** How many file-mutating tool calls (write/edit/bash/download) without an
- *  active plan trigger the plan-creation nudge. Evidence-based (rule #10):
- *  the agent is clearly working on files, so a plan is warranted. */
+/** Сколько файл-мутирующих вызовов (write/edit/bash/download) без активного
+ *  плана триггерит nudge создания плана. Evidence-based (правило #10):
+ *  агент явно работает с файлами — план оправдан. */
 const PLAN_NUDGE_THRESHOLD = 2;
 
-/** Tools whose success can have changed the filesystem — the plan auto-advance
- *  re-checks the current step's deliverables after them. Read-only tools are
- *  deliberately excluded (see the onAfterTool advance call below). */
+/** Тулы, чей успех мог поменять ФС — после них перепроверяем deliverables
+ *  текущего шага для автопродвижения. Read-only осознанно исключены (см. вызов
+ *  advance в onAfterTool ниже). */
 const FS_MUTATING_TOOLS = new Set([
   "write_file",
   "edit_file",
@@ -47,34 +48,35 @@ const FS_MUTATING_TOOLS = new Set([
 ]);
 
 /**
- * Mutable state the plugin writes into. The module OWNS this object and passes
- * it by reference — every assignment here must be visible to the module.
+ * Мутабельное состояние, в которое пишет плагин. Модуль ВЛАДЕЕТ объектом и
+ * передаёт по ссылке — каждая запись здесь видна модулю.
  */
 export interface ExecutionPluginState {
   lastRecoveryIteration: number;
   consecutivePlanWarnings: number;
   lastStepId: number;
   stuckNotified: boolean;
-  /** Stable key of the last logged stuck-warning (getWarningKey) + iteration. */
+  /** Стабильный ключ последнего залогированного stuck-варнинга (getWarningKey) + итерация. */
   lastStuckWarnKey: string;
   lastStuckWarnIter: number;
-  /** Whether the model-facing escalation directive was already injected for
-   *  the current stuck episode (prevents repeating it every cooldown). */
+  /** Model-facing директива эскалации уже инжектилась в текущем stuck-эпизоде
+   *  (не повторяем каждый кулдаун). */
   escalationDirectiveSent: boolean;
   depsGateHints: Map<number, number>;
-  /** write/edit/bash/download calls made while NO plan is active. */
+  /** Вызовы write/edit/bash/download БЕЗ активного плана. */
   mutationsWithoutPlan: number;
-  /** Whether the plan-creation nudge has already been injected. */
+  /** Nudge создания плана уже инжектился. */
   planNudgeSent: boolean;
   /**
-   * Files the last write/edit reported as failing the project typecheck or a
-   * syntax check, mapped to the first error line. Cleared by a clean
-   * write/edit result (the debounced project tsc re-ran and passed). The plan
-   * done-gate refuses "done" while a step's files are still in here.
+   * Файлы, которые последний write/edit пометил как роняющие проектный
+   * typecheck или синтаксис-чек, → первая строка ошибки. Чистится чистым
+   * результатом write/edit (дебаунснутый проектный tsc перегнал и прошёл).
+   * Done-gate плана реджектит "done", пока файлы шага здесь.
    */
   typecheckFailures: Map<string, string>;
 }
 
+/** Зависимости плагина: детектор, трекер, стор, гейты (владеет всем модуль). */
 export interface ExecutionPluginDeps {
   stuckDetector: StuckDetector;
   trackerRef: { readonly current: PlanTracker | null };
@@ -92,7 +94,7 @@ export interface ExecutionPluginDeps {
   maybeSearchError: (ctx: any, call: any) => void;
 }
 
-/** A compile failure attributed to a file ("" = no file anchor). */
+/** Сломанный компиляцией файл ("" — без привязки к файлу). */
 export interface BrokenFile {
   file: string;
   error: string;
@@ -102,8 +104,8 @@ function normalizeBrokenPath(p: string): string {
   return toForwardSlash(p).replace(/^\.\//, "");
 }
 
-/** Parse a tsc / bun build / node --check error line into its file path.
- *  Returns null when the line carries no file anchor (e.g. `error: Could not
+/** Парсит строку ошибки tsc / bun build / node --check в путь файла.
+ *  Null, если в строке нет привязки к файлу (напр. `error: Could not
  *  resolve "..."`). */
 export function parseBrokenFile(line: string): string | null {
   const trimmed = line.trim();
@@ -116,9 +118,9 @@ export function parseBrokenFile(line: string): string | null {
   return null;
 }
 
-/** Extract per-file compile failures from a write/edit result output. Only
- *  the marker lines are inspected (`[Project typecheck failed]: <line>` /
- *  `[Syntax check failed]: <line>`) so a diff body can never false-positive. */
+/** Вытаскивает пофайловые compile-фейлы из вывода write/edit. Смотрит только
+ *  строки-маркеры (`[Project typecheck failed]: <line>` /
+ *  `[Syntax check failed]: <line>`), чтобы тело диффа не давало ложных. */
 export function extractBrokenFiles(output: string): BrokenFile[] {
   const out: BrokenFile[] = [];
   for (const line of output.split("\n")) {
@@ -149,12 +151,11 @@ function resetPlanState(state: ExecutionPluginState): void {
 }
 
 /**
- * Gate for `plan update status=done`: refuse while the last write/edit still
- * reports a compile error. A failure with no file anchor blocks the whole
- * project; otherwise a step's named file tokens are matched against the
- * broken files (path-suffix match, case-insensitive). A step naming no files
- * cannot be blamed — its done stays vacuous. Returns the first error to show
- * the model, or null to allow the done.
+ * Гейт для `plan update status=done`: реджектит, пока последний write/edit
+ * репортит compile-ошибку. Фейл без привязки к файлу блокирует весь проект;
+ * иначе именованные токены файлов шага матчатся против битых (суффикс пути,
+ * регистронезависимо). Шаг без файлов обвинить не в чем — его done остаётся
+ * vacuous. Возвращает первую ошибку для показа модели, или null чтобы пустить.
  */
 export function stepTypecheckGate(
   failures: ReadonlyMap<string, string>,
@@ -175,28 +176,27 @@ export function stepTypecheckGate(
 }
 
 /**
- * The execution plugin hooks, extracted verbatim from ExecutionModule.getPlugin().
- * All shared mutable state (pendingMessages, forbiddenBashFailures, state,
- * tracker) is owned by the module and mutated by reference through `deps`.
+ * Хуки execution-плагина, вынесенные дословно из ExecutionModule.getPlugin().
+ * Всё разделяемое мутабельное состояние (pendingMessages, forbiddenBashFailures,
+ * state, tracker) принадлежит модулю и мутируется по ссылке через `deps`.
  */
 export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
   return {
     name: "execution",
     onBeforeThink: (ctx: any) => {
-      // Flush deferred <system-summary> messages first so they are visible
-      // to the next model call but never interleave tool messages.
+      // Отложенные <system-summary> флашим первыми: видны следующему вызову
+      // модели, но не interleav'ят tool-сообщения.
       if (ctx.contextManager && deps.pendingMessages.length > 0) {
         for (const m of deps.pendingMessages.splice(0)) {
           ctx.contextManager.addMessage(m);
         }
       }
       if (deps.trackerRef.current?.isComplete()) {
-        // All steps done/skipped — stop counting "no progress" against
-        // the last step and silence step-stuck warnings for a finished
-        // plan, BUT keep the tool-call history so a read-without-write
-        // loop is still caught (observed: plan complete + false-positive
-        // audit → the model re-read files for 50+ iterations with zero
-        // writes and no recovery hint).
+        // Все шаги done/skipped — перестаём считать "no progress" против
+        // последнего шага и глушим step-stuck варнинги готового плана, НО
+        // историю вызовов храним, чтобы петля чтения-без-записи ловилась
+        // (было: план готов + ложноположительный аудит → модель 50+ итераций
+        // перечитывала файлы с нулем записей без recovery-хинта).
         deps.stuckDetector.resetStepProgress();
         resetPlanState(deps.state);
       } else {
@@ -211,16 +211,16 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.state.mutationsWithoutPlan = 0;
           deps.state.planNudgeSent = false;
         } else {
-          // Pre-plan: keep the loop history (recent tool calls, read-only
-          // streak) so repeated/read-only loops are detected even without a
-          // plan. `reset()` wiped it every iteration, disabling that detection.
+          // До-плана: историю цикла (свежие вызовы, read-only стрик) храним,
+          // чтобы петли повторов/read-only ловились и без плана. `reset()`
+          // тёр её каждую итерацию, отключая детекцию.
           deps.stuckDetector.resetStepProgress();
           resetStepFlags(deps.state, -1);
 
-          // Evidence-based plan nudge (rule #10 — no bare iteration counter,
-          // no keyword task classification): only after the agent actually
-          // made file-mutating tool calls (write/edit/bash/download) without
-          // a plan does the agent need a plan.
+          // Evidence-based nudge плана (правило #10 — без голого счётчика
+          // итераций, без keyword-классификации задач): только когда агент
+          // реально сделал файл-мутирующие вызовы (write/edit/bash/download)
+          // без плана, ему нужен план.
           const mutations = deps.state.mutationsWithoutPlan;
           if (
             mutations >= PLAN_NUDGE_THRESHOLD &&
@@ -239,10 +239,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       }
       const stuckReason = deps.stuckDetector.getStuckReason();
       if (stuckReason) {
-        // Log once per warning episode instead of spamming every iteration:
-        // a new warning key logs immediately; the SAME key re-logs only every
-        // STUCK_WARN_REPEAT_EVERY iterations. The step-stuck reason keeps its
-        // dedicated once-per-episode flag.
+        // Логируем раз на эпизод варнинга, а не спамим каждую итерацию: новый
+        // ключ — сразу; ТОТ ЖЕ ключ — только каждые STUCK_WARN_REPEAT_EVERY
+        // итераций. Step-stuck причина хранит свой once-per-episode флаг.
         const isStuck = deps.stuckDetector.isStuck();
         const warnKey = deps.stuckDetector.getWarningKey();
         const iter = typeof ctx.iteration === "number" ? ctx.iteration : 0;
@@ -275,7 +274,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         if (currentIter - deps.state.lastRecoveryIteration >= STUCK_RECOVERY_COOLDOWN) {
           const recovery = deps.stuckDetector.getRecoveryMessage();
           if (recovery && ctx.contextManager) {
-            // Include tsc error context so the model knows WHY it is stuck.
+            // Прикладываем контекст tsc-ошибки, чтобы модель знала, ПОЧЕМУ застряла.
             let tscContext = "";
             if (deps.state.typecheckFailures.size > 0) {
               const currentStep = deps.trackerRef.current?.getCurrentStep();
@@ -294,8 +293,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
               }
             }
 
-            // Prefix a stable, machine-readable classification so the model
-            // sees WHY it is stuck before the localized recovery guidance.
+            // Префикс стабильной машиночитаемой классификации: модель видит,
+            // ПОЧЕМУ застряла, до локализованного recovery-гайданса.
             const diagnostic = deps.stuckDetector.getStuckDiagnostic(currentIter);
             ctx.contextManager.addMessage({
               role: "user",
@@ -310,10 +309,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
               stepId: String(deps.trackerRef.current?.getCurrentStep()?.id ?? "?"),
               description: deps.trackerRef.current?.getCurrentStep()?.description ?? "",
             });
-            // Escalate to the MODEL, not just the UI banner: after several
-            // recovery attempts, give explicit generic options (change
-            // approach, search the error, ask the user, re-plan/skip) instead
-            // of repeating the same failing action. Injected once per episode.
+            // Эскалируем МОДЕЛИ, а не только UI-баннеру: после нескольких попыток
+            // восстановления даём явные общие опции (сменить подход, поискать
+            // ошибку, спросить юзера, re-plan/skip) вместо повтора того же
+            // фейлящегося действия. Инжектится раз на эпизод.
             if (!deps.state.escalationDirectiveSent && ctx.contextManager) {
               deps.state.escalationDirectiveSent = true;
               ctx.contextManager.addMessage({
@@ -324,7 +323,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             ctx.onMeta?.(escalation);
           }
 
-          // Force skip after too many iterations on the same step
+          // Форс-скип после слишком долгого сидения на одном шаге
           if (
             deps.stuckDetector.getIterationsOnCurrentStep() >= FORCE_SKIP_THRESHOLD &&
             ctx.contextManager
@@ -355,8 +354,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             role: "user",
             content: `<system-summary>${t("exec.plan_blocked", { step: String(deps.trackerRef.current?.getCurrentStep()?.id ?? "?"), max: MAX_PLAN_WARNINGS_BEFORE_BLOCK })}</system-summary>`,
           });
-          // Block with an explicit reason so the model sees WHY the call
-          // was blocked (executor shows it via tool.blocked_reason).
+          // Блок с явной причиной, чтобы модель видела, ПОЧЕМУ вызов
+          // заблокирован (executor показывает через tool.blocked_reason).
           return t("exec.plan_blocked", {
             step: String(deps.trackerRef.current?.getCurrentStep()?.id ?? "?"),
             max: MAX_PLAN_WARNINGS_BEFORE_BLOCK,
@@ -372,8 +371,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       const args = ctx?.args as Record<string, unknown>;
       if (toolName && args) {
         deps.stuckDetector.recordToolCall(toolName, args);
-        // Count file-mutating calls made with NO active plan — feeds the
-        // evidence-based plan-creation nudge in onBeforeThink.
+        // Считаем файл-мутирующие вызовы БЕЗ активного плана — питают
+        // evidence-based nudge создания плана в onBeforeThink.
         if (
           !deps.trackerRef.current &&
           (toolName === "write_file" ||
@@ -386,17 +385,17 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       }
     },
     onAfterTool: (ctx: any, call: any, result: any) => {
-      // Remember every bash invocation (successful or not) so stuck
-      // detection can reason about e.g. repeated runs with empty output.
+      // Запоминаем каждый вызов bash (успех или нет): детекция рассуждает,
+      // напр., о повторных прогонах с пустым выводом.
       if (call.name === "bash") {
         deps.stuckDetector.recordBashOutput(
           String(call.arguments?.command ?? ""),
           String(result.output ?? ""),
         );
       }
-      // Auto-detect delete intent from model actions: when delete_file is
-      // called, find the matching plan step and set kind="delete". This is
-      // language-agnostic — based on what the model DID, not what it said.
+      // Авто-детект delete-намерения из действий модели: при вызове delete_file
+      // находим совпадающий шаг плана и ставим kind="delete". Языконезависимо —
+      // по СДЕЛАННОМУ моделью, не по сказанному.
       if (call.name === "delete_file" && result.success && deps.trackerRef.current) {
         const deletedPath = String(call.arguments?.path ?? "");
         if (deletedPath) {
@@ -415,10 +414,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           }
         }
       }
-      // A write/edit/bash that reports success but still carries a
-      // type/syntax error in its output is NOT a success — the model must
-      // fix the actual error, not keep rewriting the file blindly. Feed it
-      // to the stuck detector so the rewrite-loop hint fires.
+      // write/edit/bash с успехом, но type/syntax-ошибкой в выводе — НЕ успех:
+      // модель чинит реальную ошибку, а не переписывает файл вслепую. Кормим
+      // stuck-детектор, чтобы сработал хинт rewrite-петли.
       const toolText = String(result.output ?? "");
       const hasTypeError = /error TS\d+|\[Project typecheck failed\]|\[Syntax check failed\]/.test(
         toolText,
@@ -426,21 +424,21 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       if (hasTypeError) {
         deps.stuckDetector.recordToolError(call.name, toolText.slice(0, 300));
       }
-      // Track compile failures per-file so the plan done-gate can refuse
-      // "done" while the last edit still doesn't compile (observed: the agent
-      // marked plan steps done while the project typecheck failed on every
-      // write — a "fix it later" cascade). A CLEAN result clears the map: the
-      // debounced project tsc re-ran and passed (or no tsconfig applies), so
-      // old failures must not block completion forever.
+      // Трекаем compile-фейлы пофайлово: done-gate плана реджектит "done", пока
+      // последняя правка не компилируется (было: агент маркил шаги done, а
+      // проектный typecheck фейлился на каждой записи — каскад "починю позже").
+      // ЧИСТЫЙ результат чистит карту: дебаунснутый проектный tsc перегнал и
+      // прошёл (или tsconfig неприменим) — старые фейлы завершение вечно не
+      // блокируют.
       if (call.name === "write_file" || call.name === "edit_file") {
         const broken = extractBrokenFiles(toolText);
         if (broken.length > 0) {
           for (const b of broken) deps.state.typecheckFailures.set(b.file, b.error);
         } else if (result.success) {
-          // Clear only entries for the file just written/edited (and the
-          // project-wide no-anchor entry this clean edit likely resolved).
-          // A blanket `.clear()` let an unrelated successful edit erase a
-          // recorded failure for another file, bypassing the done-gate.
+          // Чистим только записи только что писанного/правленного файла (и
+          // проектную безадресную запись, которую чистая правка вероятно
+          // закрыла). Сплошной `.clear()` стирал несвязанный успешной правкой
+          // чужой фейл, обходя done-gate.
           const edited = normalizeBrokenPath(String(call.arguments?.path ?? ""));
           for (const key of [...deps.state.typecheckFailures.keys()]) {
             if (
@@ -456,18 +454,17 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         }
       }
       if (!result.success) {
-        // Feed the bash attempt outcome into the flailing window BEFORE the
-        // per-command handling — rotation across different failing commands
-        // (wc → cat → Get-Content → …) must still trip the detector.
+        // Исход bash-попытки кормим во флейлинг-окно ДО пер-командной обработки —
+        // ротация разных фейлящихся команд (wc → cat → Get-Content → …) обязана
+        // триггерить детектор.
         if (call.name === "bash") {
           deps.stuckDetector.recordBashAttempt(false);
         }
-        // Hard stop for forbidden Windows commands: after the second
-        // failure of the same forbidden command (grep/sed/ls/find/…),
-        // inject a STOP message so the session stops burning bash calls
-        // on commands cmd.exe does not have. Mirrors the bash tool's own
-        // win32-gated hard-stop (src/tools/bash.ts) — on macOS/Linux
-        // these commands exist and fail for legit reasons.
+        // Hard stop для запрещённых Windows-команд: после второго фейла той же
+        // запрещённой команды (grep/sed/ls/find/…) инжектим STOP, чтобы сессия
+        // не жгла bash-вызовы на командах без cmd.exe. Зеркалит собственный
+        // win32-gated hard-stop тула bash (src/tools/bash.ts) — на macOS/Linux
+        // эти команды есть и фейлятся по легитимным причинам.
         if (call.name === "bash" && platform() === "win32") {
           const cmd = String(call.arguments?.command ?? "");
           const forbidden = forbiddenWindowsCommand(cmd);
@@ -482,27 +479,26 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             }
           }
         }
-        // A type/syntax error in an otherwise "successful" result was already
-        // recorded above. A failing call (result.success === false) would
-        // otherwise double-count the same error (typecheck branch + failure
-        // branch), inflating the error-signature count and triggering the
-        // web search at half the intended threshold.
+        // Type/syntax-ошибка в иначе "успешном" результате уже записана выше.
+        // Фейлящийся вызов (result.success === false) иначе посчитал бы ту же
+        // ошибку дважды (typecheck-ветка + failure-ветка), раздув счётчик
+        // error-сигнатур и триггернув веб-поиск на половине порога.
         if (!hasTypeError) {
           deps.stuckDetector.recordToolError(call.name, result.output);
         }
       } else {
-        // A "successful" write/edit can still carry a type/syntax error (the
-        // lint-on-write hook appends it while leaving success:true). Feeding
-        // recordToolSuccess() here cancelled the recordToolError above on the
-        // very same call, so the rewrite-loop signal never accumulated.
+        // "Успешная" запись/правка может нести type/syntax-ошибку (lint-on-write
+        // хук аппендит её, оставляя success:true). Скормленный здесь
+        // recordToolSuccess() отменял recordToolError выше на том же вызове —
+        // rewrite-loop сигнал не накапливался.
         if (!hasTypeError) deps.stuckDetector.recordToolSuccess();
         if (call.name === "bash") {
           deps.stuckDetector.recordBashAttempt(true);
         }
 
-        // When a bash command runs code successfully, suggest marking the
-        // step done — unless the output shows failing tests, which must
-        // never be reported as a clean success.
+        // Успешно отработавшая команда bash с кодом — предлагаем маркить шаг
+        // done, если только вывод не показывает упавшие тесты (их нельзя
+        // репортить чистым успехом).
         if (call.name === "bash" && result.success) {
           const cmd = String(call.arguments?.command ?? "");
           const testRun = detectTestResults(String(result.output ?? ""));
@@ -547,21 +543,20 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         }
       }
 
-      // Auto-advance fires after every successful FILESYSTEM-MUTATING tool —
-      // not just write_file/edit_file. Small models often create files through
-      // bash (`echo ... > f`, heredocs) or delete/move via shell instead of the
-      // dedicated tools, and the plan then never advances past the step even
-      // though its deliverables exist (certification 3.5/3.8: files on disk,
-      // plan stuck at 1/4 and 4/5). Read-only tools MUST stay excluded: a
-      // successful read/glob would otherwise complete an "Update X" step whose
-      // target file already exists from an earlier step — without any edit.
-      // advancePlanIfStepComplete is a no-op when tokens don't resolve.
+      // Автопродвижение срабатывает после каждого успешного ФС-МУТИРУЮЩЕГО
+      // тула, не только write_file/edit_file. Мелкие модели часто создают файлы
+      // через bash (`echo ... > f`, heredoc'и) или delete/move через shell
+      // вместо выделенных тулов — план тогда не двигается с шага, хотя
+      // deliverables на диске (сертификация 3.5/3.8: файлы на месте, план
+      // висит на 1/4 и 4/5). Read-only тулы исключены: успешный read/glob иначе
+      // закрыл бы шаг "Update X", чей файл существует с раннего шага, — без
+      // единой правки. advancePlanIfStepComplete — no-op, если токены не резолвятся.
       if (result.success && FS_MUTATING_TOOLS.has(call.name)) {
         deps.advancePlanIfStepComplete(ctx.contextManager, ctx.sessionLog);
       }
 
-      // Automatic web search for a repeatedly failing error (fire-and-forget,
-      // results land in pendingMessages on the next onBeforeThink flush).
+      // Автопоиск в вебе повторяющейся ошибки (fire-and-forget, результаты
+      // падают в pendingMessages на следующем флаше onBeforeThink).
       deps.maybeSearchError(ctx, call);
     },
   };

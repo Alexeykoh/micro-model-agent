@@ -1,15 +1,18 @@
+// Модуль скиллов: ленивая загрузка в бюджет токенов и блок системного промпта.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { SkillMeta } from "./loader";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
 
+/** Итог загрузки скилла по имени (успех, сообщение, сам скилл). */
 export interface LoadResult {
   success: boolean;
   message: string;
   skill?: SkillMeta;
 }
 
+/** Модуль скиллов: каталог доступных, загрузка в бюджет, промпт-блок. */
 export class SkillsModule implements AgentModule {
   name = "skills";
 
@@ -23,6 +26,7 @@ export class SkillsModule implements AgentModule {
     this.budget = budget;
   }
 
+  /** Загружает скилл по имени с проверкой бюджета токенов. */
   loadByName(name: string): LoadResult {
     if (this.loadedSkills.has(name)) {
       return { success: false, message: t("skill.already_loaded", { name }) };
@@ -36,6 +40,7 @@ export class SkillsModule implements AgentModule {
     return this.tryLoad(skill);
   }
 
+  /** Выгружает скилл и возвращает его токены в бюджет. */
   unload(name: string): boolean {
     const skill = this.loadedSkills.get(name);
     if (!skill) return false;
@@ -44,18 +49,22 @@ export class SkillsModule implements AgentModule {
     return true;
   }
 
+  /** Загруженные скиллы. */
   getLoaded(): SkillMeta[] {
     return Array.from(this.loadedSkills.values());
   }
 
+  /** Все доступные (загруженные и нет) скиллы. */
   getAvailable(): SkillMeta[] {
     return this.availableSkills;
   }
 
+  /** Ищет скилл по точному имени среди доступных. */
   findByName(name: string): SkillMeta | undefined {
     return this.availableSkills.find((s) => s.name === name);
   }
 
+  /** Подстрочный поиск по именам и описаниям (без учёта регистра). */
   search(query: string): SkillMeta[] {
     const q = query.toLowerCase();
     return this.availableSkills.filter(
@@ -63,6 +72,7 @@ export class SkillsModule implements AgentModule {
     );
   }
 
+  /** Бюджет токенов: занято, всего, остаток. */
   getBudget(): { used: number; total: number; remaining: number } {
     return {
       used: this.currentTokens,
@@ -71,11 +81,13 @@ export class SkillsModule implements AgentModule {
     };
   }
 
+  /** Тело загруженного скилла; null, если не загружен. */
   getSkillContent(name: string): string | null {
     const skill = this.loadedSkills.get(name);
     return skill ? skill.content : null;
   }
 
+  /** Системный блок: каталог доступных + тела загруженных скиллов. */
   getSystemPromptBlock(): PromptBlock | null {
     const lines: string[] = [];
 
@@ -111,6 +123,7 @@ export class SkillsModule implements AgentModule {
     };
   }
 
+  /** Плагин-заглушка: модуль работает через системный блок, хуки не нужны. */
   getPlugin(): AgentPlugin {
     return {
       name: "skills",

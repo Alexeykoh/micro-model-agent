@@ -1,11 +1,10 @@
+// Аудит-лог: запись действий агента в audit.jsonl (глобально или в каталог сессии).
 import { existsSync, mkdirSync, appendFileSync } from "fs";
 import { join } from "path";
 import { globalAuditNotifier } from "./audit-notifier";
 import { globalLogsDir } from "../../config/paths";
 
-/**
- * Audit log entry structure
- */
+/** Запись аудита: кто/что/когда, успех, причина блокировки. */
 export interface AuditLogEntry {
   timestamp: string;
   sessionId?: string;
@@ -23,7 +22,7 @@ export interface AuditLogEntry {
   url?: string;
   success: boolean;
   details?: string;
-  reason?: string; // For security blocks
+  reason?: string; // причина блокировки (для security_block)
 }
 
 let _globalAuditDir = globalLogsDir();
@@ -34,8 +33,7 @@ function getAuditDir(): string {
 }
 
 /**
- * Set the session directory for audit logs. When set, all audit entries
- * are written to the session-specific directory instead of the global one.
+ * Назначить каталог аудита для сессии: записи идут туда вместо глобального.
  */
 export function setAuditSessionDir(dir: string): void {
   _sessionAuditDir = dir;
@@ -44,16 +42,12 @@ export function setAuditSessionDir(dir: string): void {
   }
 }
 
-/**
- * Clear the session directory — fall back to global audit dir.
- */
+/** Сбросить каталог сессии — возврат к глобальному каталогу аудита. */
 export function clearAuditSessionDir(): void {
   _sessionAuditDir = null;
 }
 
-/**
- * Set the global audit log directory (used when no session dir is active).
- */
+/** Назначить глобальный каталог аудита (когда каталог сессии не активен). */
 export function setGlobalAuditDir(dir: string): void {
   _globalAuditDir = dir;
   if (!existsSync(dir)) {
@@ -62,7 +56,8 @@ export function setGlobalAuditDir(dir: string): void {
 }
 
 /**
- * Write an audit log entry
+ * Записать запись аудита в audit.jsonl и уведомить notifier.
+ * Ошибки записи/уведомления глушатся — аудит не должен ронять агента.
  */
 export function logAudit(entry: AuditLogEntry): void {
   const dir = getAuditDir();
@@ -74,21 +69,18 @@ export function logAudit(entry: AuditLogEntry): void {
     const logEntry = JSON.stringify(entry);
     appendFileSync(join(dir, "audit.jsonl"), `${logEntry}\n`, "utf8");
   } catch {
-    // Silently fail if we can't write to audit log
-    // This shouldn't break the agent
+    // молча: невозможность записи не должна ломать агента
   }
 
   // Notify audit notifier if enabled
   try {
     globalAuditNotifier.notify(entry);
   } catch {
-    // Silently fail if notification fails
+    // молча: падение нотификации не должно ломать агента
   }
 }
 
-/**
- * Log a tool call
- */
+/** Залогировать вызов тула. */
 export function logToolCall(
   sessionId: string | undefined,
   tool: string,
@@ -105,9 +97,7 @@ export function logToolCall(
   });
 }
 
-/**
- * Log a file write operation
- */
+/** Залогировать запись файла. */
 export function logFileWrite(
   sessionId: string | undefined,
   path: string,
@@ -124,9 +114,7 @@ export function logFileWrite(
   });
 }
 
-/**
- * Log a file delete operation
- */
+/** Залогировать удаление файла. */
 export function logFileDelete(
   sessionId: string | undefined,
   path: string,
@@ -143,9 +131,7 @@ export function logFileDelete(
   });
 }
 
-/**
- * Log a bash command execution
- */
+/** Залогировать выполнение bash-команды. */
 export function logBashCommand(
   sessionId: string | undefined,
   command: string,
@@ -162,9 +148,7 @@ export function logBashCommand(
   });
 }
 
-/**
- * Log a network request
- */
+/** Залогировать сетевой запрос. */
 export function logNetworkRequest(
   sessionId: string | undefined,
   url: string,
@@ -181,9 +165,7 @@ export function logNetworkRequest(
   });
 }
 
-/**
- * Log a security block event
- */
+/** Залогировать срабатывание security-блока. */
 export function logSecurityBlock(
   sessionId: string | undefined,
   _action:

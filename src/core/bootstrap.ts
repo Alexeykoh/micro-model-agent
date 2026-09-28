@@ -1,3 +1,4 @@
+/** Bootstrap агента: конфиг, провайдер, тулы, модули, Agent. */
 import { loadConfig } from "../config/config";
 import { Logger } from "../logger/app-logger";
 import type { LogLevel } from "../logger/app-logger";
@@ -82,15 +83,14 @@ function registerBuiltinPlugin(pm: PluginManager, plugin: AgentPlugin | undefine
 }
 
 /**
- * Late application of a resolved context probe. The probe lands in the
- * background, AFTER the ContextManager/provider were built with the startup
- * window — adopting the value into `config` alone leaves budgets stale, so a
- * reconfigure (resize + provider rebuild) is needed to make it effective.
+ * Позднее применение резолвнутой context-probe. Проба приземляется фоном ПОСЛЕ
+ * сборки ContextManager/провайдера под стартовое окно — одна запись значения в
+ * `config` оставит бюджеты протухшими, поэтому нужен reconfigure (ресайз +
+ * пересборка провайдера).
  *
- * Skips when there is nothing to apply (`config` no longer carries the
- * probed value — equal from the start or explicitly overridden) or when a
- * turn already ran with the old window (resizing mid-history corrupts
- * budgets). Never throws.
+ * Пропуск, когда применять нечего (`config` больше не несёт значение пробы —
+ * совпало сразу или переопределено вручную) или ход уже был (ресайз посреди
+ * истории ломает бюджеты). Не бросает никогда.
  */
 export async function applyProbedContext(
   agent: Pick<Agent, "currentIteration" | "reconfigure">,
@@ -119,15 +119,9 @@ export async function applyProbedContext(
 }
 
 /**
- * Загрузка AGENTS.md из базового каталога проекта и конфиг-каталога
- * (в порядке приоритета). Каждый найденный непустой файл — prompt-блок
- * высокого приоритета.
- */
-/**
- * Resolve the agent workspace dir. A `-d` path that does not exist (classic
- * causes: the shell splitting on spaces, or a trailing backslash escaping the
- * closing quote) must fail LOUDLY here — otherwise the agent silently works in
- * a wrong directory and insists everything is fine.
+ * Резолвит workspace агента. Несуществующий `-d` (классика: шелл режет по
+ * пробелам, висячий бэкслэш экранирует кавычку) должен упасть ГРОМКО здесь —
+ * иначе агент молча работает не в том каталоге и уверяет, что всё хорошо.
  */
 export function resolveBaseDir(projectDir?: string): string {
   if (!projectDir) return process.cwd();
@@ -147,11 +141,17 @@ export function resolveBaseDir(projectDir?: string): string {
   return abs;
 }
 
-/** Candidate AGENTS.md paths, in priority order: project, project `.mma`, global config. */
+/** Кандидаты AGENTS.md по приоритету: проект, проектный `.mma`, глобальный. */
 export function agentsMdPaths(baseDir: string, configDir: string): string[] {
   return [join(baseDir, "AGENTS.md"), join(projectMmaDir(baseDir), "AGENTS.md"), join(configDir, "AGENTS.md")];
 }
 
+/**
+ * Грузит AGENTS.md из каталога проекта и конфиг-каталога (по приоритету).
+ * Каждый найденный непустой файл — prompt-блок высокого приоритета.
+ * @param baseDir workspace; @param dir каталог конфига; @param skip пропустить загрузку.
+ * @returns блоки инструкций для системного промпта.
+ */
 function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): PromptBlock[] {
   if (skip) return [];
   const blocks: PromptBlock[] = [];
@@ -173,7 +173,7 @@ function loadAgentsMdBlocks(baseDir: string, dir: string, skip: boolean): Prompt
   return blocks;
 }
 
-/** Reject `promise` after `ms`; the winner's timer is cleared. */
+/** Отклоняет `promise` через `ms`; таймер победителя снимается. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
@@ -199,6 +199,7 @@ function normalizeLogLevel(value: string | undefined): LogLevel {
 
 export { buildSystemInfo } from "./system-prompt";
 
+/** Итог bootstrap: агент, конфиг, логгеры, модули, пробы. */
 export interface BootstrapResult {
   agent: Agent;
   config: AppConfig;
@@ -206,43 +207,54 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
-  /** Owner of plan state — UI consumers (REPL) read the active plan from
-   *  here instead of re-reading .mma/plans/active.json from disk. */
+  /** Владелец состояния плана — UI (REPL) читают активный план отсюда, а не перечитывают .mma/plans/active.json. */
   execModule: ExecutionModule;
-  /** Shared ToolContext; `sessionId`/`sessionContext` are live getters over
-   *  the session manager, so a session switch is always reflected. */
+  /** Общий ToolContext; `sessionId`/`sessionContext` — живые геттеры поверх
+   *  менеджера сессий, смена сессии отражается всегда. */
   toolCtx: ToolContext;
-  /** Live tool registry. Web mode registers interactive tools (question/approve)
-   *  into it after bootstrap without touching terminal behavior. */
+  /** Живой реестр тулов. Веб-режим дорегистрирует интерактивные тулы
+   *  (question/approve) после bootstrap, не трогая терминал. */
   toolRegistry: ToolRegistry;
   configDir: string;
   baseDir: string;
   noAgentsMd: boolean;
   envReport: ReturnType<typeof collectEnvironment>;
-  /** true when legacy config.json was used (no domain files found). */
+  /** true при легаси config.json (доменных файлов нет). */
   legacyDetected: boolean;
-  /** Background probe of the context length the model is ACTUALLY loaded
-   *  with (LM Studio native API). Resolves to null when not applicable. */
+  /** Фоновая проба длины контекста, с которой модель РЕАЛЬНО загружена
+   *  (LM Studio native API). Null, если неприменимо. */
   contextProbe: Promise<ContextProbeResult | null>;
-  /** Shared global memory store — the same instance the memory module and the
-   *  agent loop use, so UI consumers (`mma web` `/memory`) read/write live data. */
+  /** Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,
+   *  поэтому UI (`mma web` `/memory`) читают/пишут живые данные. */
   memoryStore: MemoryStore;
-  /** Project-map indexer — web mode surfaces its stats in the environment panel. */
+  /** Индексатор карты проекта — веб-режим показывает статистику в панели окружения. */
   indexerModule: IndexerModule;
 }
 
 /**
- * One-shot CLI subcommands (`session show`, `usage`, `config` …) paint a result
- * and exit. The background startup health check spawns a child (LSP server /
- * tsc) that `process.exit` does not reap — on Windows the orphan keeps the
- * stdout pipe open, so piping the command (`mma session show <id> | cat`)
- * hangs. Subcommands never run an agent, so the check is skipped there.
+ * One-shot CLI-подкоманды (`session show`, `usage`, `config` …) рисуют итог и
+ * выходят. Фоновый стартовый health-check спавнит дочерний процесс (LSP/tsc),
+ * который `process.exit` не пожинает — на Windows сирота держит stdout-пайп, и
+ * пайп команды (`mma session show <id> | cat`) виснет. Подкоманды агента не
+ * гоняют, поэтому чек там пропускается.
  */
 let oneShotMode = false;
+/**
+ * Включает one-shot режим (пропуск фонового health-check для подкоманд).
+ * @param value true — подкоманда без агента.
+ */
 export function setOneShotMode(value: boolean): void {
   oneShotMode = value;
 }
 
+/**
+ * Собирает всё для работы агента: конфиг, окружение, провайдер, пробы,
+ * тулы, модули, Agent. Тяжёлые старты (health-check, пробы) — фоном.
+ * @param configDir каталог конфига; @param projectDir workspace;
+ * @param noAgentsMd пропустить AGENTS.md; @param exitOnComplete стоп на первом ответе;
+ * @param reasoningLevel CLI-override reasoning; @param contextLog git-лог контекста.
+ * @returns агент и окружение.
+ */
 export async function bootstrap(
   configDir?: string,
   projectDir?: string,
@@ -257,10 +269,10 @@ export async function bootstrap(
   const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });
   setLocale(config.locale);
 
-  // CLI --reasoning overrides config mode (priority: CLI > config > default)
+  // CLI --reasoning перебивает режим конфига (приоритет: CLI > config > default)
   applyReasoningCliOverride(config, reasoningLevel);
 
-  // Update global audit notifier with config
+  // Глобальный audit-нотифаер — по конфигу
   let auditNotifyError: string | undefined;
   try {
     const { globalAuditNotifier } = await import("../modules/security/audit-notifier");
@@ -286,9 +298,9 @@ export async function bootstrap(
     model: config.model,
   });
 
-  // Sync the manifest bundled with this package version into
-  // ~/.mma/certifications.json (bundled entries overwrite their keys on
-  // update; user-local certifications are preserved). Best-effort, silent.
+  // Синхронизируем бандл-манифест версии пакета в ~/.mma/certifications.json
+  // (бандл-записи затирают свои ключи при апдейте; пользовательские сохраняются).
+  // Best-effort, молча.
   try {
     const { syncGlobalManifest } = await import("../modules/certification/manifest");
     const syncResult = syncGlobalManifest();
@@ -296,13 +308,13 @@ export async function bootstrap(
       logger.debug("Certification manifest synced from package");
     }
   } catch {
-    // Certification marks are cosmetic — never block startup.
+    // Метки сертификации косметические — старт не блокируем никогда.
   }
 
-  // Endpoint the probe/autoload talk to: the ACTIVE entry, not the legacy
-  // flat fields (they mirror whatever was active at the last write and go
-  // stale after `/provider use` — observed: flat localhost:1234 while the
-  // active entry was opencode-go, so Zen was never probed).
+  // Эндпоинт для пробы/автозагрузки: АКТИВНАЯ запись, не легаси-плоские поля
+  // (они зеркалят активное на момент последней записи и протухают после
+  // `/provider use` — наблюдалось: плоский localhost:1234 при активной записи
+  // opencode-go, и Zen вообще не опрашивался).
   const probeEndpoint = activeProviderEndpoint(config.provider);
 
   if (config.modelLoad.autoLoad) {
@@ -326,14 +338,12 @@ export async function bootstrap(
     }
   }
 
-  // Context probe (background): ask the ACTIVE provider for the context
-  // length it ACTUALLY serves for this model (loaded instance, not the model
-  // card maximum) and adopt it as the effective contextWindow — provider wins
-  // over config. Never blocks the banner; null = no provider reports a window
-  // (bare OpenAI-compat `/models`, offline backend, transient error), in which
-  // case the configured contextWindow is kept (fail-open). A manual
-  // `mma context <N>` / `/config contextWindow <N>` afterwards still applies
-  // for the rest of the session.
+  // Context-проба (фоном): спрашиваем АКТИВНЫЙ провайдер о длине контекста,
+  // что РЕАЛЬНО отдаётся модели (загруженный инстанс, не максимум карточки),
+  // и берём как эффективный contextWindow — провайдер бьёт конфиг. Баннер не
+  // блокирует никогда; null = окно никто не сообщил (голый OpenAI-compat
+  // `/models`, офлайн, транзиентка) — храним настроенный (fail-open). Ручной
+  // `mma context <N>` / `/config contextWindow <N>` после — действует до конца сессии.
   // Живой источник возможностей модели для тулов (browser vision и т.п.).
   // Пресет и конфиг-оверрайд известны сразу, native-probe уточняет их
   // асинхронно и записывает сюда, не блокируя старт. Геттер на toolCtx
@@ -341,9 +351,9 @@ export async function bootstrap(
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: { probe?: ModelCapabilities } = {};
 
-  // Value at startup. The probe resolves in the background — if the user
-  // managed to change contextWindow first (web UI before the probe lands),
-  // their explicit choice wins and the probe result is only logged.
+  // Значение на старте. Проба резолвится фоном — если пользователь успел
+  // сменить contextWindow раньше (веб-UI до приземления пробы), побеждает его
+  // явный выбор, а итог пробы только логируется.
   const probeConfiguredAtStart = config.contextWindow;
 
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
@@ -385,29 +395,29 @@ export async function bootstrap(
   profile.load() || profile.collect();
   profile.save();
 
-  // Multi-provider manager (Phase 2) + optional transparent failover wrapper
-  // (Phase 4.2). Built through the shared factory so a hot-swap via
-  // Agent.setProvider gets the SAME fallback behavior as startup instead of
-  // rebuilding a bare manager that silently drops failover (B4).
+  // Мультипровайдерный менеджер (Phase 2) + опциональная прозрачная failover-
+  // обёртка (Phase 4.2). Строится через общую фабрику, чтобы hot-swap через
+  // Agent.setProvider получал ТО ЖЕ fallback-поведение, что старт, а не голый
+  // менеджер, молча роняющий failover (B4).
   //
-  // Session id is resolved lazily: the session manager is created further down,
-  // and providers must read the CURRENT session at request time (hot-swap,
-  // session switch). OpenCode Go rejects requests without `x-opencode-session`.
+  // Session id резолвится лениво: менеджер сессий создаётся ниже, а провайдеры
+  // должны читать ТЕКУЩУЮ сессию в момент запроса (hot-swap, смена сессии).
+  // OpenCode Go режектит запросы без `x-opencode-session`.
   let activeSessionManager: SessionManager | undefined;
   const getSessionId = (): string | undefined => activeSessionManager?.getActiveMeta()?.id;
   const builtProvider = buildActiveProvider(config, logger, { getSessionId });
   const providerManager = builtProvider.manager;
   const llmProvider = builtProvider.provider;
 
-  // Resolve reasoning strategy from provider preset + probe
+  // Стратегия reasoning из пресета провайдера + пробы
   const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
   const reasoningStrategy = providerSpec?.capabilities.reasoningStrategy ?? "none";
 
-  // Reasoning probe runs in the BACKGROUND (B2). It used to block bootstrap
-  // with an extra LLM round-trip on every launch; the agent now consumes it
-  // lazily before the first LLM call (same pattern as the startup health
-  // check) and treats the mechanism as NOT passed until it resolves. The 24h
-  // TTL disk cache in probe.ts already avoids re-probing a stable backend.
+  // Reasoning-проба — ФОНОМ (B2). Раньше блокировала bootstrap лишним LLM
+  // round-trip на каждый запуск; теперь агент потребляет её лениво перед первым
+  // LLM-вызовом (тот же паттерн, что стартовый health-check), а до резолва
+  // механизм считается НЕ прошедшим. 24h TTL диск-кэша в probe.ts и так
+  // бережёт стабильный бэкенд от перепроверок.
   let reasoningProbePromise: Promise<boolean> = Promise.resolve(false);
   if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
     reasoningProbePromise = (async () => {
@@ -420,8 +430,8 @@ export async function bootstrap(
           cached !== undefined
             ? cached
             : await probeReasoningSupport(llmProvider, reasoningStrategy);
-        // Only cache a definitive result — a transient probe error (null) must
-        // NOT pin "reasoning not supported" for the 24h TTL.
+        // Кэшируем только определённый итог — транзиентная ошибка пробы (null)
+        // НЕ должна пинить «reasoning не поддерживается» на 24h TTL.
         if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
         logger.logSilent(
           "info",
@@ -430,7 +440,7 @@ export async function bootstrap(
             result: passed === true ? t("env.reasoning_respected") : t("env.reasoning_ignored"),
           }),
         );
-        // null (transient error) falls back to "not passed" for this session.
+        // null (транзиентка) — фолбэк «не пройдено» на эту сессию.
         return passed === true;
       } catch {
         return false;
@@ -440,8 +450,8 @@ export async function bootstrap(
 
   const baseDir = resolveBaseDir(projectDir);
 
-  // Cross-device diagnosis: log a full environment report (OS, runtime,
-  // engines, PATH tools, provider/retry, playwright) at every startup.
+  // Кросс-девайс диагностика: полный отчёт окружения (ОС, рантайм, engines,
+  // PATH-тулы, провайдер/ретраи, playwright) на каждый старт.
   const envReport = collectEnvironment({
     configDir: dir,
     baseDir,
@@ -459,9 +469,9 @@ export async function bootstrap(
     cacheDir: projectMapCacheDir,
   });
   try {
-    // Build (or load from cache) the project index. On a large workspace the
-    // first walk can pause startup with no other output — announce both ends
-    // so the silence is explained.
+    // Строим (или грузим из кэша) индекс проекта. На большом workspace первый
+    // обход подвисает старт без вывода — анонсируем оба конца, чтобы тишина
+    // была объяснена.
     logger.info(t("env.indexing"));
     const index = await indexerModule.buildIndex();
     if (index) {
@@ -500,9 +510,9 @@ export async function bootstrap(
   const sessionDir = join(dir, "sessions");
   const sessionStore = new SessionStore(sessionDir, config.security?.sessionEncryption);
   sessionStore.init();
-  // Archive >30-day sessions (gzip history + mark rotated). This was dead code
-  // — never invoked, so old sessions were never compressed. Deferred so the
-  // (synchronous) compression never delays startup; failures are non-fatal.
+  // Архивируем сессии старше 30 дней (gzip истории + метка rotated). Был мёртвый
+  // код — не вызывался, старые сессии не сжимались. Отложено, чтобы синхронное
+  // сжатие старт не тормозило; сбои не фатальны.
   setTimeout(() => {
     try {
       sessionStore.rotateOldSessions();
@@ -523,10 +533,10 @@ export async function bootstrap(
     sessionManager.create();
   }
 
-  // Persist the context probe to the session as soon as it resolves, in BOTH
-  // interactive and one-shot modes. Previously only the REPL wrote this entry,
-  // so one-shot runs lost the loaded-vs-configured context mismatch entirely
-  // (observed: LM Studio loaded 86016 while contextWindow was 32768 — silent).
+  // Context-пробу — в сессию сразу по резолву, в ОБОИХ режимах (интерактив и
+  // one-shot). Раньше писал только REPL, и one-shot терял расхождение
+  // загруженного vs настроенного контекста целиком (наблюдалось: LM Studio
+  // держит 86016 при contextWindow 32768 — молча).
   void contextProbePromise
     .then((probe) => {
       if (!probe) return;
@@ -542,9 +552,9 @@ export async function bootstrap(
     })
     .catch(() => {});
 
-  // Git-style context log (opt-in via --context-log / config / env). Written
-  // next to the session files so it travels with the session. Best-effort:
-  // logging must never break a run.
+  // Git-style лог контекста (opt-in через --context-log / конфиг / env). Рядом
+  // с файлами сессии, чтобы путешествовал с ней. Best-effort: лог не должен
+  // ломать прогон никогда.
   const contextLogEnabled = contextLog === true || config.contextLog?.enabled === true;
   let contextLogger: ContextLogger | undefined;
   if (contextLogEnabled) {
@@ -567,11 +577,10 @@ export async function bootstrap(
 
   const tokenCounter = new TokenCounter(config.model);
 
-  // Mutable set of active tool tags, shared between the agent loop and the
-  // `enable_tools` tool. The loop re-reads it every iteration to recompute the
-  // LLM-visible tool set; enable_tools pushes tags into it. When on-demand
-  // enabling is disabled the tag set stays empty, which restores the legacy
-  // all-tools behavior (getAllForLLM returns everything for empty tags).
+  // Мутабельный набор активных тегов тулов — общий у цикла агента и тула
+  // `enable_tools`. Цикл перечитывает его каждую итерацию для пересборки
+  // видимого модели набора; enable_tools дотолкивает теги внутрь. При выключенном
+  // on-demand набор пуст — легаси «все тулы» (getAllForLLM на пустых отдаёт всё).
   const enableOnDemand = config.tools?.enableOnDemand !== false;
   const activeToolTags: string[] = enableOnDemand
     ? config.tools?.defaultTags
@@ -585,11 +594,11 @@ export async function bootstrap(
     tokenCounter,
   );
 
-  // Shared box for the LIVE config. `Agent.reconfigure` replaces deps.config
-  // AND this box, so anything that captured the reference at bootstrap —
-  // toolCtx.config, security validators, tool rules — keeps seeing the CURRENT
-  // settings after /model use or the wizard. Pinning the value once meant
-  // tools enforced the pre-reconfigure security/maxTool settings all session.
+  // Общий бокс ЖИВОГО конфига. `Agent.reconfigure` меняет и deps.config, и
+  // этот бокс, чтобы захватившие ссылку при bootstrap — toolCtx.config,
+  // валидаторы, правила тулов — видели ТЕКУЩИЕ настройки после /model use или
+  // визарда. Фиксация значения раз означала: тулы весь сеанс enforced
+  // до-reconfigure security/maxTool.
   const configRef: { current: AppConfig } = { current: config };
 
   const toolCtx = {
@@ -625,21 +634,19 @@ export async function bootstrap(
     },
   } as ToolContext;
 
-  // `config` is exposed as a LIVE getter over the shared configRef so tools
-  // and security validators see the CURRENT settings after a reconfigure.
+  // `config` — ЖИВОЙ геттер поверх общего configRef: тулы и валидаторы видят
+  // ТЕКУЩИЕ настройки после reconfigure.
   Object.defineProperty(toolCtx, "config", {
     get: () => configRef.current,
     configurable: true,
   });
 
-  // `sessionId`/`sessionContext` are exposed as LIVE getters over the session
-  // manager instead of being captured once at bootstrap. Capturing the values
-  // pinned them to the session active at startup, so after a REPL /new or
-  // /resume the new session's audit.jsonl entries were tagged with the
-  // PREVIOUS session's id (observed: ses_msyghz8w audit entries carrying
-  // ses_msyg892p_78kqhc) while sessionHistory kept reading the live meta.
-  // Everything that consumes ctx.sessionId — audit log, process registry,
-  // file-ops counters — now always sees the session that is actually active.
+  // `sessionId`/`sessionContext` — ЖИВЫЕ геттеры поверх менеджера сессий, а не
+  // снимок при bootstrap. Снимок пинил сессию старта, и после REPL /new или
+  // /resume записи audit.jsonl новой сессии тегировались id ПРЕДЫДУЩЕЙ
+  // (наблюдалось: записи ses_msyghz8w с id ses_msyg892p_78kqhc), а sessionHistory
+  // читал живую мету. Теперь потребители ctx.sessionId — аудит, реестр
+  // процессов, счётчики файлов — всегда видят реально активную сессию.
   Object.defineProperty(toolCtx, "sessionId", {
     get: () => sessionManager.getActiveMeta()?.id,
     configurable: true,
@@ -684,10 +691,9 @@ export async function bootstrap(
     config.stuckThreshold,
     config.errorWebSearch?.threshold ?? 5,
   );
-  // A plan in .mma/plans/active.json is PROJECT state, not session state —
-  // restore it in every session so `plan show` works and the checklist is
-  // visible. Nothing is printed unprompted: the REPL renders the checklist
-  // only on plan/todo tool events.
+  // План в .mma/plans/active.json — состояние ПРОЕКТА, не сессии: восстанавливаем
+  // в каждой сессии, чтобы `plan show` работал и чеклист был виден. Без спроса
+  // не печатаем ничего: REPL рисует чеклист только на plan/todo-событиях.
   execModule.restorePlan();
   moduleRegistry.register(execModule);
   execModule.setHallucinationDetector(hallucinationDetector);
@@ -699,9 +705,9 @@ export async function bootstrap(
 
   const mcpModule = new MCPModule(config);
   try {
-    // Bound the MCP init so one slow/hung MCP server can't block boot forever
-    // (B5): on timeout, log-and-continue — MCP tools appear late or not at all
-    // instead of stalling startup.
+    // Ограничиваем init MCP, чтобы один медленный/висящий сервер не стопил boot
+    // навсегда (B5): на таймауте — лог-и-дальше, MCP-тулы появятся поздно или
+    // не появятся, вместо stall'а старта.
     await withTimeout(mcpModule.initialize(), 10_000);
   } catch (err) {
     logger.warn(
@@ -725,12 +731,11 @@ export async function bootstrap(
   moduleRegistry.register(lspModule);
   registerBuiltinPlugin(pluginManager, lspModule.getPlugin());
 
-  // Startup health check: scan project for existing errors so the model
-  // knows the baseline before it starts working. Skip for one-shot runs and
-  // test environments. Started in the background (never awaited) so the REPL
-  // banner is not blocked by `npx tsc` on the whole project; the Agent awaits
-  // it before the first LLM call via `lazyPromptBlocks` (already resolved by
-  // the time the user types in the interactive REPL).
+  // Стартовый health-check: сканируем проект на существующие ошибки, чтобы модель
+  // знала baseline до работы. Пропуск для one-shot и тестов. Старт фоном (без
+  // await), чтобы баннер REPL не ждал `npx tsc` по проекту; Agent дожидается
+  // через `lazyPromptBlocks` перед первым LLM-вызовом (к вводу пользователя
+  // в интерактиве уже резолвнут).
   let startupCheckBlock: PromptBlock | null = null;
   const startupCheckPromise =
     !oneShotMode && !exitOnComplete && process.env.NODE_ENV !== "test"
@@ -780,10 +785,10 @@ export async function bootstrap(
     });
   };
 
-  // Carry the active plan (id, progress, current step) into the compaction
-  // summary so a 9B model doesn't re-create the plan from scratch right after
-  // compaction (observed: ses_msvuao0h — plan_e07pb2 (1/6) discarded for a
-  // fresh plan_xzq9xe the same iteration the old plan was still visible).
+  // Активный план (id, прогресс, текущий шаг) — в сводку компакции, чтобы 9B
+  // модель не пересоздавала план с нуля сразу после неё (наблюдалось:
+  // ses_msvuao0h — plan_e07pb2 (1/6) выкинут ради свежего plan_xzq9xe той же
+  // итерацией, где старый план ещё был виден).
   contextManager.setPlanSummaryProvider(() => execModule.getPlanSummary());
 
   const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
@@ -792,9 +797,9 @@ export async function bootstrap(
     systemInfoPrompt,
     ...moduleRegistry.collectPromptBlocks(["indexer", "session"]),
     ...agentsMdBlocks,
-    // Static plan reminder: always present so the model knows to check for an
-    // active plan before creating a new one (even on the first iteration before
-    // the <system-summary> envelope appears).
+    // Статичное напоминание о плане: всегда в наличии, чтобы модель проверяла
+    // активный план до создания нового (даже на первой итерации, до появления
+    // <system-summary>).
     {
       content:
         "[Plan Reminder] An active plan may exist for this session. Before creating a new plan, check with `plan show`. If a plan is active, continue it — do NOT create a new plan.",
@@ -804,11 +809,11 @@ export async function bootstrap(
     },
   ];
 
-  // Startup overflow warning (banner, A3): dry-run the system-prompt budget
-  // with the same block set the Agent's first build will use (static + skills
-  // + project map + hidden tools) and surface instructions/project-map blocks
-  // that will not fit. The Agent compresses them before the first LLM call;
-  // this warning tells the USER why and how to get the full text included.
+  // Стартовый варнинг переполнения (баннер, A3): dry-run бюджета системного
+  // промпта тем же набором блоков, что возьмёт первая сборка Agent (статика +
+  // скиллы + карта + скрытые тулы), наружу — невместившиеся instructions/
+  // project-map. Agent сожмёт их перед первым LLM-вызовом; варнинг говорит
+  // ПОЛЬЗОВАТЕЛЮ почему и как вернуть полный текст.
   {
     const dynamicBlocks: PromptBlock[] = [];
     const skillsBlock = skillsModule.getSystemPromptBlock();
@@ -861,15 +866,15 @@ export async function bootstrap(
     envReport,
     getDynamicPromptBlocks: () => {
       const blocks: PromptBlock[] = [];
-      // Plan block removed: it mutates every iteration (step status changes),
-      // invalidating the local KV-cache. The plan status is now injected into
-      // the <system-summary> envelope after each tool batch instead.
+      // План-блок удалён: мутирует каждую итерацию (статусы шагов), инвалидируя
+      // локальный KV-кеш. Статус плана теперь инжектится в <system-summary>
+      // после каждого пакета тулов.
       const skillsBlock = skillsModule.getSystemPromptBlock();
       if (skillsBlock) blocks.push(skillsBlock);
-      // Session metadata (id/name/model/context) is collected here, not at
-      // bootstrap: the session is created during bootstrap with messageCount 0,
-      // so a static collect would always yield null. Content is stable per
-      // session (no per-turn fields) to preserve prefix KV-cache.
+      // Мета сессии (id/имя/модель/контекст) собирается здесь, а не при
+      // bootstrap: сессия создаётся при bootstrap с messageCount 0, и статичный
+      // сбор всегда давал бы null. Контент стабилен на сессию (без per-turn
+      // полей) ради prefix KV-кеша.
       const sessionBlock = sessionModule.getSystemPromptBlock();
       if (sessionBlock) blocks.push(sessionBlock);
       const mapBlock = indexerModule.getSystemPromptBlock();
@@ -906,10 +911,10 @@ export async function bootstrap(
 
   const agent = new Agent(agentDeps);
 
-  // Late probe resolution: the window may have been adopted into `config`
-  // after the ContextManager/provider were built — reconfigure once so
-  // budgets and the provider actually use it. No-op when the probe settled
-  // early (same value) or a turn already ran.
+  // Поздний резолв пробы: окно могло попасть в `config` после сборки
+  // ContextManager/провайдера — один reconfigure, чтобы бюджеты и провайдер
+  // его реально использовали. No-op, если проба села рано (то же значение)
+  // или ход уже был.
   void contextProbePromise
     .then((probe) => {
       if (!probe) return;
@@ -917,7 +922,7 @@ export async function bootstrap(
     })
     .catch(() => {});
 
-  // Register set_thinking tool (needs agent's shared reasoning state)
+  // Тул set_thinking (нужен общее reasoning-состояние агента)
   if (config.reasoning) {
     const { createSetThinkingTool } = await import("../tools/set-thinking");
     const setThinkingTool = createSetThinkingTool(

@@ -1,3 +1,4 @@
+// Изоляция сессий: свой temp-каталог, свои security-оверрайды, скоуп путей.
 import { join, resolve } from "path";
 import { mkdirSync, existsSync } from "fs";
 import type { SecurityConfig, AppConfig } from "../../config/types";
@@ -5,67 +6,43 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 import { isInsideDir } from "../../tools/path-utils";
 import { globalSessionsDir } from "../../config/paths";
 
-/**
- * Session isolation configuration
- */
+/** Конфиг изоляции сессий. */
 export interface SessionIsolationConfig {
   /**
-   * Enable session isolation
-   * When enabled, each session has its own:
-   * - Temporary directory
-   * - Plugin instances
-   * - Security overrides
+   * Включить изоляцию. У каждой сессии свои:
+   * - временный каталог
+   * - инстансы плагинов
+   * - security-оверрайды
    */
   enabled: boolean;
-  /**
-   * Base directory for session-specific data
-   * Default: ~/.mma/sessions/<session-id>
-   */
+  /** Базовый каталог данных сессии. Дефолт: ~/.mma/sessions/<session-id> */
   baseDir?: string;
-  /**
-   * Isolate plugins per session
-   */
+  /** Изолировать плагины на сессию */
   isolatePlugins: boolean;
-  /**
-   * Isolate temporary files per session
-   */
+  /** Изолировать временные файлы на сессию */
   isolateTempFiles: boolean;
 }
 
-/**
- * Default session isolation configuration
- */
+/** Дефолтный конфиг изоляции сессий (выключена). */
 export const DEFAULT_SESSION_ISOLATION: SessionIsolationConfig = {
   enabled: false,
   isolatePlugins: true,
   isolateTempFiles: true,
 };
 
-/**
- * Session-specific context
- */
+/** Контекст сессии: id, temp-каталог, security-оверрайды, рабочий каталог. */
 export interface SessionContext {
-  /**
-   * Unique session ID
-   */
+  /** Уникальный id сессии */
   sessionId: string;
-  /**
-   * Session-specific temporary directory
-   */
+  /** Временный каталог сессии */
   tempDir: string;
-  /**
-   * Session-specific security overrides
-   */
+  /** Security-оверрайды сессии */
   securityOverrides?: Partial<SecurityConfig>;
-  /**
-   * Session-specific working directory
-   */
+  /** Рабочий каталог сессии */
   workingDir: string;
 }
 
-/**
- * Create a session context with isolation
- */
+/** Создать контекст сессии с изоляцией (temp-каталог 0700). */
 export function createSessionContext(
   sessionId: string,
   projectDir: string,
@@ -74,7 +51,7 @@ export function createSessionContext(
 ): SessionContext {
   const config = { ...DEFAULT_SESSION_ISOLATION, ...isolationConfig };
 
-  // Create session-specific temporary directory
+  // Временный каталог сессии
   const baseDir = config.baseDir || join(globalSessionsDir(), sessionId);
   const tempDir = join(baseDir, "temp");
 
@@ -82,7 +59,7 @@ export function createSessionContext(
     try {
       mkdirSync(tempDir, { recursive: true, mode: 0o700 });
     } catch {
-      // If we can't create the temp dir, continue without isolation
+      // Каталог не создался — работаем без изоляции
     }
   }
 
@@ -95,8 +72,7 @@ export function createSessionContext(
 }
 
 /**
- * Get session-specific security configuration
- * Merges global security config with session overrides
+ * Security-конфиг сессии: глобальный + оверрайды (вложенные объекты мержатся).
  */
 export function getSessionSecurityConfig(
   globalConfig: AppConfig,
@@ -112,7 +88,7 @@ export function getSessionSecurityConfig(
   return {
     ...globalSecurity,
     ...sessionOverrides,
-    // Merge nested objects
+    // Вложенные объекты — мерж, не замена
     bash: { ...globalSecurity.bash, ...sessionOverrides.bash },
     paths: { ...globalSecurity.paths, ...sessionOverrides.paths },
     network: { ...globalSecurity.network, ...sessionOverrides.network },
@@ -121,25 +97,18 @@ export function getSessionSecurityConfig(
   };
 }
 
-/**
- * Get session-specific temporary directory
- */
+/** Временный каталог сессии. */
 export function getSessionTempDir(sessionContext: SessionContext): string {
   return sessionContext.tempDir;
 }
 
-/**
- * Clean up session-specific temporary data
- */
+/** Убрать временные данные сессии (пока no-op — чистит ОС). */
 export function cleanupSessionTempDir(_sessionContext: SessionContext): void {
-  // Note: In a real implementation, we would recursively delete the temp dir
-  // For now, we just leave it as the OS will clean up eventually
-  // In production, you might want to implement proper cleanup
+  // Заглушка: рекурсивное удаление не реализовано, чистит ОС.
 }
 
 /**
- * Create a session-specific file path
- * Ensures the path is within the session's working directory or temp directory
+ * Путь к файлу сессии: обязан лежать в рабочем или temp-каталоге сессии.
  */
 export function createSessionFilePath(
   sessionContext: SessionContext,
@@ -150,9 +119,7 @@ export function createSessionFilePath(
   return resolve(baseDir, relativePath);
 }
 
-/**
- * Check if a path is within the session's allowed directories
- */
+/** Путь в разрешённых каталогах сессии (рабочий или temp) или нет. */
 export function isPathInSessionScope(sessionContext: SessionContext, path: string): boolean {
   const resolvedPath = resolve(path);
   const workingDir = resolve(sessionContext.workingDir);

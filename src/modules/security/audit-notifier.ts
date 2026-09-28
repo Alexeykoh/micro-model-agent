@@ -1,58 +1,35 @@
+// Нотификации о security-событиях: файл + webhook с ретраями и очередью.
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import type { AuditLogEntry } from "./audit-log";
 import { backoffDelay } from "../../utils/retry";
 import { defaultOutputBus } from "../../output";
 
-// Use global fetch (available in Bun)
+// Глобальный fetch (есть в Bun)
 declare const fetch: (url: string, options?: RequestInit) => Promise<Response>;
 
-/**
- * Audit notification configuration
- */
+/** Конфиг нотификаций аудита. */
 export interface AuditNotifierConfig {
-  /**
-   * Enable audit notifications
-   */
+  /** Включить нотификации */
   enabled: boolean;
-  /**
-   * File path for audit notifications log
-   * Default: ~/.mma/logs/audit-notifications.jsonl
-   */
+  /** Файл лога нотификаций. Дефолт: ~/.mma/logs/audit-notifications.jsonl */
   filePath?: string;
-  /**
-   * Webhook URL for real-time notifications
-   */
+  /** Webhook URL для realtime-нотификаций */
   webhookUrl?: string;
-  /**
-   * Webhook timeout in milliseconds
-   * Default: 5000
-   */
+  /** Таймаут webhook в мс. Дефолт: 5000 */
   webhookTimeout?: number;
-  /**
-   * Minimum severity level to notify
-   * 'low' | 'medium' | 'high' | 'critical'
-   */
+  /** Минимальная severity для нотификации: 'low' | 'medium' | 'high' | 'critical' */
   minSeverity?: AuditSeverity;
-  /**
-   * Notify on these event types
-   */
+  /** Типы событий для нотификации */
   eventTypes?: AuditEventType[];
-  /**
-   * Retry count for webhook failures
-   * Default: 3
-   */
+  /** Ретраев при падении webhook. Дефолт: 3 */
   maxRetries?: number;
 }
 
-/**
- * Audit event severity levels
- */
+/** Уровни severity аудит-событий. */
 export type AuditSeverity = "low" | "medium" | "high" | "critical";
 
-/**
- * Audit event types
- */
+/** Типы аудит-событий. */
 export type AuditEventType =
   | "tool_call"
   | "tool_result"
@@ -65,9 +42,7 @@ export type AuditEventType =
   | "session_start"
   | "session_end";
 
-/**
- * Audit notification entry
- */
+/** Запись нотификации аудита. */
 export interface AuditNotification {
   timestamp: string;
   eventType: AuditEventType;
@@ -78,9 +53,7 @@ export interface AuditNotification {
   userId?: string;
 }
 
-/**
- * Severity weights for comparison
- */
+/** Веса severity для сравнения. */
 const SEVERITY_WEIGHTS: Record<AuditSeverity, number> = {
   low: 1,
   medium: 2,
@@ -88,9 +61,7 @@ const SEVERITY_WEIGHTS: Record<AuditSeverity, number> = {
   critical: 4,
 };
 
-/**
- * Default audit notifier configuration
- */
+/** Дефолтный конфиг нотификатора (выключен). */
 export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
   enabled: false,
   filePath: join(globalLogsDir(), "audit-notifications.jsonl"),
@@ -107,9 +78,7 @@ export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
   maxRetries: 3,
 };
 
-/**
- * Audit notifier for sending notifications about security events
- */
+/** Нотификатор security-событий: файл + webhook с ретраями. */
 export class AuditNotifier {
   private config: AuditNotifierConfig;
   private retryQueue: Array<{ entry: AuditNotification; retries: number }> = [];
@@ -120,38 +89,28 @@ export class AuditNotifier {
     this.ensureLogDirectory();
   }
 
-  /**
-   * Check if notifier is enabled
-   */
+  /** Включён ли нотификатор. */
   isEnabled(): boolean {
     return this.config.enabled;
   }
 
-  /**
-   * Enable the notifier
-   */
+  /** Включить нотификатор. */
   enable(): void {
     this.config.enabled = true;
   }
 
-  /**
-   * Disable the notifier
-   */
+  /** Выключить нотификатор. */
   disable(): void {
     this.config.enabled = false;
   }
 
-  /**
-   * Update configuration
-   */
+  /** Обновить конфиг. */
   updateConfig(config: Partial<AuditNotifierConfig>): void {
     this.config = { ...this.config, ...config };
     this.ensureLogDirectory();
   }
 
-  /**
-   * Ensure the log directory exists
-   */
+  /** Гарантировать каталог лога. */
   private ensureLogDirectory(): void {
     if (this.config.filePath) {
       const dir = dirname(this.config.filePath);
@@ -159,17 +118,13 @@ export class AuditNotifier {
     }
   }
 
-  /**
-   * Check if an event type should be notified
-   */
+  /** Подпадает ли тип события под нотификацию. */
   shouldNotify(eventType: AuditEventType): boolean {
     if (!this.config.enabled) return false;
     return this.config.eventTypes?.includes(eventType) ?? false;
   }
 
-  /**
-   * Check if a severity level should be notified
-   */
+  /** Дотягивает ли severity до порога. */
   shouldNotifySeverity(severity: AuditSeverity): boolean {
     const minSeverity = this.config.minSeverity ?? "medium";
     const minWeight = SEVERITY_WEIGHTS[minSeverity];
@@ -177,9 +132,7 @@ export class AuditNotifier {
     return eventWeight >= minWeight;
   }
 
-  /**
-   * Send a notification for an audit event
-   */
+  /** Нотифицировать аудит-событие: файл + webhook, падение — в retry-очередь. */
   async notify(entry: AuditLogEntry): Promise<AuditNotification | null> {
     if (!this.config.enabled) return null;
 
@@ -198,10 +151,10 @@ export class AuditNotifier {
       sessionId: entry.sessionId,
     };
 
-    // Write to file
+    // Пишем в файл
     this.writeToFile(notification);
 
-    // Send to webhook if configured
+    // Шлём в webhook, если задан
     if (this.config.webhookUrl) {
       try {
         await this.sendToWebhook(notification);
@@ -219,9 +172,7 @@ export class AuditNotifier {
     return notification;
   }
 
-  /**
-   * Map audit log entry action to notification event type
-   */
+  /** Маппинг action записи аудита в тип события нотификации. */
   private mapEventType(action: string): AuditEventType | null {
     const typeMap: Record<string, AuditEventType> = {
       tool_call: "tool_call",
@@ -234,11 +185,9 @@ export class AuditNotifier {
     return typeMap[action] || null;
   }
 
-  /**
-   * Determine severity from audit log entry
-   */
+  /** Severity из записи аудита (по типу action). */
   private determineSeverity(entry: AuditLogEntry): AuditSeverity {
-    // Default severity based on action type
+    // Дефолтная severity по типу action
     const typeSeverity: Record<string, AuditSeverity> = {
       security_block: "high",
       bash_command: "high",
@@ -253,9 +202,7 @@ export class AuditNotifier {
     return typeSeverity[entry.action] || "low";
   }
 
-  /**
-   * Write notification to file
-   */
+  /** Записать нотификацию в файл. */
   private writeToFile(notification: AuditNotification): void {
     if (!this.config.filePath) return;
 
@@ -273,8 +220,9 @@ export class AuditNotifier {
   }
 
   /**
-   * Send notification to webhook. Throws on failure — retry policy is the
-   * caller's decision (notify() queues; processRetryQueue() counts attempts).
+   * Отправить нотификацию в webhook. Падение бросает исключение — политику
+   * ретраев решает вызывающий (notify() кладёт в очередь, processRetryQueue()
+   * считает попытки).
    */
   private async sendToWebhook(notification: AuditNotification): Promise<void> {
     if (!this.config.webhookUrl) return;
@@ -298,9 +246,7 @@ export class AuditNotifier {
     }
   }
 
-  /**
-   * Add notification to retry queue
-   */
+  /** Положить нотификацию в retry-очередь. */
   private addToRetryQueue(notification: AuditNotification): void {
     this.retryQueue.push({ entry: notification, retries: 0 });
     if (!this.isProcessing) {
@@ -308,9 +254,7 @@ export class AuditNotifier {
     }
   }
 
-  /**
-   * Process the retry queue
-   */
+  /** Разобрать retry-очередь (бэкофф, лимит попыток). */
   private async processRetryQueue(): Promise<void> {
     if (this.retryQueue.length === 0 || this.isProcessing) return;
 
@@ -335,8 +279,8 @@ export class AuditNotifier {
           await this.sendToWebhook(item.entry);
           this.retryQueue.shift();
         } catch (error) {
-          // sendToWebhook no longer queues copies itself — the retry counter
-          // actually increments and maxRetries is reachable.
+          // sendToWebhook сам в очередь не кладёт — счётчик ретраев реально
+          // растёт, и maxRetries достижим.
           item.retries++;
           defaultOutputBus.log(
             "warn",
@@ -346,7 +290,7 @@ export class AuditNotifier {
             }`,
             { persist: true },
           );
-          // Exponential backoff before the next attempt on the same head item.
+          // Экспоненциальный бэкофф перед следующей попыткой того же head-элемента.
           const delay = backoffDelay(item.retries, 1000);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -356,9 +300,7 @@ export class AuditNotifier {
     }
   }
 
-  /**
-   * Read notifications from file
-   */
+  /** Прочитать нотификации из файла (последние N). */
   readNotifications(limit: number = 100): AuditNotification[] {
     if (!this.config.filePath || !existsSync(this.config.filePath)) {
       return [];
@@ -379,9 +321,7 @@ export class AuditNotifier {
     }
   }
 
-  /**
-   * Clear all notifications
-   */
+  /** Очистить нотификации (файл + очередь). */
   clearNotifications(): void {
     if (this.config.filePath) {
       writeFileSync(this.config.filePath, "", "utf8");
@@ -389,9 +329,7 @@ export class AuditNotifier {
     this.retryQueue = [];
   }
 
-  /**
-   * Get notification statistics
-   */
+  /** Статистика нотификаций: всего, по severity, по типам. */
   getStats(): {
     total: number;
     bySeverity: Record<AuditSeverity, number>;
@@ -425,18 +363,14 @@ export class AuditNotifier {
   }
 }
 
-/**
- * Global audit notifier instance
- */
+/** Глобальный инстанс нотификатора аудита. */
 export const globalAuditNotifier = new AuditNotifier();
 
-/**
- * Create an audit notifier with custom configuration
- */
+/** Создать нотификатор аудита с кастомным конфигом. */
 export function createAuditNotifier(config?: Partial<AuditNotifierConfig>): AuditNotifier {
   return new AuditNotifier(config);
 }
 
-// Import readFileSync for readNotifications
+// Импорт readFileSync для readNotifications
 import { readFileSync } from "fs";
 import { globalLogsDir } from "../../config/paths";

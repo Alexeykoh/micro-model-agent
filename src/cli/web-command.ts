@@ -1,6 +1,6 @@
 /**
- * `mma web` entry point: bootstrap, start the browser UI, keep the process alive
- * until SIGINT/SIGTERM, then shut down cleanly.
+ * Точка входа `mma web`: bootstrap, старт браузерного UI, жизнь процесса до
+ * SIGINT/SIGTERM, затем чистое завершение.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import { startWebUi } from "../modules/webui/module";
 import { tryOpenBrowser } from "../modules/webui/server";
 import { globalMmaDir } from "../config/paths";
 
+/** Опции `mma web`: порт, хост, токен, suppress автооткрытия, проект. */
 export interface WebCommandOptions {
   port?: number;
   host?: string;
@@ -23,9 +24,9 @@ export interface WebCommandOptions {
 }
 
 /**
- * Parse and validate the `--port` flag. `undefined`/blank → `undefined` (random
- * port). Non-numeric and out-of-range values throw instead of silently falling
- * back to a random port, so `--port abc` cannot masquerade as a working bind.
+ * Парсит и валидирует флаг `--port`. `undefined`/пусто → `undefined` (рандомный
+ * порт). Нечисловые и вне диапазона бросают throw, а не молча откатываются на
+ * рандом: `--port abc` не должен маскироваться под рабочий bind.
  */
 export function parsePort(raw: string | undefined): number | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
@@ -37,9 +38,9 @@ export function parsePort(raw: string | undefined): number | undefined {
 }
 
 /**
- * Bootstrap arguments used by `runWeb`. Extracted so the CLI-flag forwarding
- * (notably `--no-agents-md`) is unit-testable without booting the real agent —
- * Bun module mocks are process-global, so a spy on `bootstrap` would leak.
+ * Аргументы bootstrap для `runWeb`. Вынесены, чтобы форвардинг CLI-флагов
+ * (особенно `--no-agents-md`) был юнит-тестируем без подъёма настоящего агента:
+ * Bun-моки модулей процесс-глобальны, спай на `bootstrap` потёк бы.
  */
 export function webBootstrapArgs(
   opts: WebCommandOptions,
@@ -47,9 +48,10 @@ export function webBootstrapArgs(
   return [undefined, opts.projectDir, opts.noAgentsMd, true];
 }
 
+/** Запуск веб-режима: bootstrap → старт UI → ожидание SIGINT/SIGTERM. */
 export async function runWeb(opts: WebCommandOptions): Promise<void> {
-  // The transport reads these at startup (server/state): port has no config
-  // field, so the CLI flag maps onto the env var the server already honours.
+  // Транспорт читает их на старте (server/state): у порта нет поля конфига,
+  // так что CLI-флаг маппится на env, которую сервер уже уважает.
   if (opts.port !== undefined) process.env.MMA_WEBUI_PORT = String(opts.port);
   if (opts.host) process.env.MMA_WEBUI_HOST = opts.host;
   if (opts.token) process.env.MMA_WEBUI_TOKEN = opts.token;
@@ -59,7 +61,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   const { hasDomainFiles } = await import("../config/domains");
   const virgin = !existsSync(join(mmaDir, "config.json")) && !hasDomainFiles(mmaDir);
 
-  // exitOnComplete=true: no interactive prompt owns stdin in web mode.
+  // exitOnComplete=true: в веб-режиме интерактивный промпт stdin не владеет.
   const {
     agent,
     config,
@@ -105,9 +107,9 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   });
 
   const url = await web.url;
-  // Always show the resolved workspace: a shell-split `-d` path (spaces,
-  // trailing backslash) can silently point somewhere unintended, and this
-  // line is the only place web mode reports it (mirrors the REPL banner).
+  // Всегда показываем резолвленный workspace: shell-нарезка `-d` пути (пробелы,
+  // хвостовой бэкслэш) может молча указать не туда, и эта строка — единственное
+  // место, где веб-режим его репортит (зеркало баннера REPL).
   getDefaultChannel().writeLine(t("cli.web_started", { url, dir: baseDir }));
   if (!opts.noOpen) tryOpenBrowser(url);
 

@@ -1,3 +1,4 @@
+/** Тул прогона именованного YAML-пайплайна (DAG субагентов). */
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext } from "./types";
 import type { PromptBlock } from "../core/types";
@@ -11,9 +12,11 @@ import { HallucinationDetector } from "../modules/hallucination/detector";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 
+/** Максимум параллельных шагов / попыток шага. */
 const MAX_CONCURRENT = 3;
 const MAX_ATTEMPTS = 3;
 
+/** Прогоняет шаг пайплайна субагентом с ретраями (параметры/выходы — в промпт). */
 async function runStep(
   ctx: ToolContext,
   step: { id: string; agent: string; prompt: string },
@@ -63,6 +66,7 @@ async function runStep(
   return { ok: false, output: "", error: lastError };
 }
 
+/** Запускает DAG субагентов в порядке зависимостей. Параметры: name, yaml, params. */
 export const pipelineRunTool: ToolDefinition = {
   name: "pipeline_run",
   icon: "▶️",
@@ -98,9 +102,9 @@ export const pipelineRunTool: ToolDefinition = {
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
     const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
-    // Depth lives on the SHARED executor ctx (nested sub-agents/pipelines read
-    // it there); `ctx.recursionDepth` is captured once and never incremented,
-    // so the guard used to never fire. Mirrors subagent.ts.
+    // Глубина — на SHARED-контексте исполнителя (вложенные субагенты/пайплайны
+    // читают её там); `ctx.recursionDepth` снапшотится раз и не инкрементится,
+    // поэтому старый гард не срабатывал. Зеркало subagent.ts.
     const executor = ctx.toolExecutor;
     const currentDepth = executor?.getRecursionDepth?.() ?? ctx.recursionDepth ?? 0;
     if (currentDepth >= maxDepth) {
@@ -116,8 +120,8 @@ export const pipelineRunTool: ToolDefinition = {
       };
     }
 
-    // A fresh engine per invocation: a module-level singleton was reset() by
-    // concurrent calls (MoE waves share the executor), corrupting step state.
+    // Свежий движок на вызов: module-level синглтон сбрасывался конкурентными
+    // вызовами (MoE-волны делят исполнитель) и портил состояние шагов.
     const engine = new PipelineEngine();
     executor?.setRecursionDepth?.(currentDepth + 1);
     try {

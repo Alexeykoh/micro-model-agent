@@ -1,20 +1,8 @@
+// Корень LSP-workspace по маркерам и поиск локального tsc вверх по node_modules.
 import { existsSync } from "fs";
 import { dirname, join, relative, isAbsolute } from "path";
 import { platform } from "os";
 
-/**
- * Resolve the LSP workspace root for an edited file.
- *
- * The workspace root must be the nearest project of the *edited file*, not the
- * agent baseDir — tsserver resolves `typescript` relative to the workspace
- * root, so for a file in `bicycle-shop/src/x.ts` under baseDir `mma_tests` the
- * root must be `bicycle-shop` (observed: "Could not find a valid TypeScript
- * installation" on every write/edit because baseDir had no node_modules).
- *
- * Which files mark a project root is language-specific and is declared in the
- * LSP server config (`LspServerConfig.workspaceMarkers`) — this function takes
- * the markers as a parameter and performs no language detection itself.
- */
 /**
  * Находит локальный компилятор TypeScript, поднимаясь от `startDir` вверх по
  * `node_modules`. Возвращает готовую команду или null, если tsc не установлен.
@@ -46,13 +34,22 @@ export function resolveTscCommand(startDir: string, maxLevels = 8): string | nul
   return null;
 }
 
+/**
+ * Корень LSP-workspace для редактируемого файла.
+ * Корень — ближайший проект *редактируемого файла*, не baseDir агента:
+ * tsserver резолвит `typescript` от корня workspace (наблюдалось: "Could not
+ * find a valid TypeScript installation" на каждый write/edit, когда у baseDir
+ * не было node_modules). Какие файлы маркируют корень — языко-специфично
+ * (`LspServerConfig.workspaceMarkers`); функция маркеры принимает параметром
+ * и детектом языка не занимается.
+ */
 export function findProjectRoot(filePath: string, baseDir: string, markers: string[]): string {
   if (!markers || markers.length === 0) return baseDir;
   let dir = dirname(filePath);
   const root = baseDir.replace(/[\\/]+$/, "");
-  // Clamp the walk to baseDir: callers that pass baseDir itself as filePath
-  // (probes) start at dirname(baseDir) — ABOVE the sandbox — and would pick up
-  // a marker directory from the parent (e.g. a package.json next to it).
+  // Обход клампим к baseDir: вызывающие с самим baseDir как filePath (пробы)
+  // стартуют от dirname(baseDir) — ВЫШЕ песочницы — и подобрали бы маркер
+  // родителя (напр. package.json рядом).
   const rel = relative(root, dir);
   if ((rel?.startsWith("..")) || isAbsolute(rel)) dir = root;
   while (true) {

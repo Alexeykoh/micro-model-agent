@@ -1,9 +1,11 @@
+// Автокомплит REPL: slash-команды, субкоманды, модели, пути, ключи /config.
 import type { SkillsModule } from "../modules/skills/module";
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
 import { allConfigNames, canonicalKeys, resolveConfigKey } from "../config/registry";
 import { t } from "../i18n/index";
 
+/** Контекст дополнения: строка, курсор, токены, partial, индекс токена. */
 export interface CompletionContext {
   line: string;
   cursor: number;
@@ -12,11 +14,13 @@ export interface CompletionContext {
   tokenIndex: number;
 }
 
+/** Вариант дополнения: значение + опц. описание. */
 export interface CompletionItem {
   value: string;
   description?: string;
 }
 
+/** Провайдер дополнения: матчит позицию и отдаёт варианты. */
 export interface CompletionProvider {
   name: string;
   match(ctx: CompletionContext): boolean;
@@ -24,9 +28,9 @@ export interface CompletionProvider {
 }
 
 /**
- * Build slash-completion items from the command registry. `commands` is keyed
- * by canonical name AND aliases, so every alias becomes a completable token
- * carrying its command's description.
+ * Строит slash-варианты из реестра команд. `commands` ключуется И каноническими
+ * именами, И алиасами — каждый алиас становится дополняемым токеном с описанием
+ * своей команды.
  */
 export function buildSlashCompletions(
   commands: Map<string, { name: string; description: string }>,
@@ -37,6 +41,7 @@ export function buildSlashCompletions(
   }));
 }
 
+/** Дополняет slash-команды в позиции 0. */
 export class SlashCommandProvider implements CompletionProvider {
   name = "slash-commands";
   private commands: Array<{ name: string; description?: string }>;
@@ -56,6 +61,7 @@ export class SlashCommandProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет субкоманды (`/model use`, `/skill load`, …) в позиции 1. */
 export class SubcommandProvider implements CompletionProvider {
   name = "subcommands";
   private command: string;
@@ -80,6 +86,7 @@ export class SubcommandProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет имена моделей для `/model use`. */
 export class ModelArgProvider implements CompletionProvider {
   name = "model-args";
   private getModels: () => string[];
@@ -99,6 +106,7 @@ export class ModelArgProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет файловые пути (до 20 вариантов, каталоги со `/`). */
 export class FilePathProvider implements CompletionProvider {
   name = "file-paths";
   private root?: string;
@@ -143,6 +151,7 @@ export class FilePathProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет имена провайдеров для `/provider use`. */
 export class ProviderArgProvider implements CompletionProvider {
   name = "provider-args";
   private providers: string[];
@@ -160,6 +169,7 @@ export class ProviderArgProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет имена сессий для `/resume` и др. */
 export class SessionNameProvider implements CompletionProvider {
   name = "session-names";
   private getNames: () => string[];
@@ -183,6 +193,7 @@ export class SessionNameProvider implements CompletionProvider {
   }
 }
 
+/** Дополняет имена скиллов для `/skill load|unload`. */
 export class SkillNameProvider implements CompletionProvider {
   name = "skill-names";
   private skillsModule: SkillsModule;
@@ -215,9 +226,9 @@ export class SkillNameProvider implements CompletionProvider {
 }
 
 /**
- * Completes `/config` keys, canonical and aliases. A partial with no dot lists
- * top-level groups plus matching keys; a partial with a dot lists the next
- * segment from the dotted key tree (e.g. `contextBudget.` → systemPrompt).
+ * Дополняет ключи `/config` (канонические и алиасы). Partial без точки листает
+ * верхние группы + подходящие ключи; partial с точкой — следующий сегмент
+ * точечного дерева (напр. `contextBudget.` → systemPrompt).
  */
 export class ConfigKeyProvider implements CompletionProvider {
   name = "config-keys";
@@ -244,7 +255,7 @@ export class ConfigKeyProvider implements CompletionProvider {
   }
 }
 
-/** Completes enum values at the value position of `/config <key> <value>`. */
+/** Дополняет enum-значения в позиции значения `/config <ключ> <значение>`. */
 export class ConfigValueProvider implements CompletionProvider {
   name = "config-values";
 
@@ -261,7 +272,7 @@ export class ConfigValueProvider implements CompletionProvider {
   }
 }
 
-/** Completes `/provider add` flags. */
+/** Дополняет флаги `/provider add`. */
 export class FlagProvider implements CompletionProvider {
   name = "provider-add-flags";
 
@@ -282,7 +293,7 @@ export class FlagProvider implements CompletionProvider {
   }
 }
 
-/** Completes command names for `/help <command>`. */
+/** Дополняет имена команд для `/help <команда>`. */
 export class CommandArgProvider implements CompletionProvider {
   name = "help-command-args";
   private getNames: () => string[];
@@ -302,19 +313,22 @@ export class CommandArgProvider implements CompletionProvider {
   }
 }
 
+/** Комплитер: гоняет ввод через провайдеров, первый с хитами побеждает. */
 export class Completer {
   private providers: CompletionProvider[] = [];
 
+  /** Регистрирует провайдера. */
   registerProvider(provider: CompletionProvider): void {
     this.providers.push(provider);
   }
 
-  /** Drop all registered providers — used before a rebuild (e.g. /reload)
-   *  so re-registering never accumulates duplicates. */
+  /** Сброс всех провайдеров — перед пересборкой (напр. /reload), чтобы
+   *  перерегистрация не копила дубликаты. */
   reset(): void {
     this.providers = [];
   }
 
+  /** Дополняет строку; возвращает [варианты, partial]. */
   complete(line: string): [CompletionItem[], string] {
     const cursor = line.length;
     const tokens = line.split(/\s+/);

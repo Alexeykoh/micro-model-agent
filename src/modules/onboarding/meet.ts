@@ -1,3 +1,4 @@
+// Вход «Познакомимся»: префлайт провайдера, meet-режим и первый ход интервью.
 import type { ReplContext } from "../../cli/repl-commands";
 import type { PreflightResult } from "../providers/preflight";
 import { preflightFromConfig } from "../providers/preflight";
@@ -5,16 +6,17 @@ import { enterMeetMode } from "./mode";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 
+/** Опции запуска интервью. */
 export interface RunMeetOptions {
-  /** Test seam. */
+  /** Шов для тестов: подмена проверки провайдера. */
   preflight?: () => Promise<PreflightResult>;
 }
 
 /**
- * Start the get-acquainted interview. Preflights the provider, enters meet
- * mode, and kicks off the first agent turn. Meet mode stays active across
- * subsequent REPL turns until `meet_done` fires or the user exits.
- * Returns false when the provider is unavailable (nothing is modified).
+ * Запускает интервью-знакомство. Проверяет провайдер, входит в meet-режим
+ * и делает первый ход агента. Режим живёт между ходами REPL, пока не
+ * сработает `meet_done` или пользователь не выйдет.
+ * Возвращает false, когда провайдер недоступен (ничего не меняется).
  */
 export async function runMeet(ctx: ReplContext, opts: RunMeetOptions = {}): Promise<boolean> {
   if (ctx.toolCtx.onboarding) {

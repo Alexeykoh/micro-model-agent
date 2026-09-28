@@ -1,11 +1,18 @@
+// Движок пайплайнов: топологический порядок шагов, готовность, статусы.
 import type { PipelineStep } from "./parser";
 import { t } from "../../i18n/index";
 
+/** Статус шага пайплайна. */
 export type StepStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
+/** Движок пайплайна: порядок обхода зависимостей и учёт статусов шагов. */
 export class PipelineEngine {
   private stepStatus: Map<string, StepStatus> = new Map();
 
+  /**
+   * Топологически сортирует шаги по `depends_on`. Бросает при цикле.
+   * Возвращает id в порядке выполнения.
+   */
   resolveDependencies(steps: PipelineStep[]): string[] {
     const visited = new Set<string>();
     const inStack = new Set<string>();
@@ -37,6 +44,7 @@ export class PipelineEngine {
     return order;
   }
 
+  /** Шаги, готовые к запуску: не завершены, не в работе/провале, зависимости закрыты. */
   getReadySteps(steps: PipelineStep[], completed: Set<string>): PipelineStep[] {
     return steps.filter((s) => {
       if (completed.has(s.id)) return false;
@@ -47,14 +55,17 @@ export class PipelineEngine {
     });
   }
 
+  /** Ставит статус шага. */
   setStepStatus(stepId: string, status: StepStatus): void {
     this.stepStatus.set(stepId, status);
   }
 
+  /** Статус шага; неизвестному — `pending`. */
   getStepStatus(stepId: string): StepStatus {
     return this.stepStatus.get(stepId) || "pending";
   }
 
+  /** True, когда все шаги `done` или `skipped`. */
   isComplete(stepIds: string[]): boolean {
     return stepIds.every((id) => {
       const s = this.stepStatus.get(id);
@@ -62,6 +73,7 @@ export class PipelineEngine {
     });
   }
 
+  /** Сбрасывает все статусы (перезапуск пайплайна). */
   reset(): void {
     this.stepStatus.clear();
   }

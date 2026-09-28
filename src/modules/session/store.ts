@@ -1,3 +1,4 @@
+// Хранилище сессий: meta/history/session-лог на диске, шифрование, ротация в .gz.
 import {
   existsSync,
   mkdirSync,
@@ -13,6 +14,7 @@ import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 
+/** Запись session-журнала (инструменты, usage, MoE, critic, пробы и т.д.). */
 export interface SessionLogEntry {
   ts: string;
   type:
@@ -59,7 +61,7 @@ export interface SessionLogEntry {
   contextLimit?: number;
   toolCount?: number;
   toolNames?: string[];
-  // context event fields (snapshot / per-iteration stats)
+  // Поля context-событий (снапшот / статистика итерации)
   window?: number;
   systemBudget?: number;
   reserveBudget?: number;
@@ -76,7 +78,7 @@ export interface SessionLogEntry {
     tokens: number;
     included: boolean;
   }>;
-  // compaction detail fields
+  // Поля деталей компакции
   reason?: string;
   tokensBefore?: number;
   tokensAfter?: number;
@@ -87,7 +89,7 @@ export interface SessionLogEntry {
   removedTurns?: number;
   keptTurns?: number;
   summary?: string;
-  // llm_usage / provenance fields
+  // Поля llm_usage / провенанса
   provider?: string;
   model?: string;
   promptTokens?: number;
@@ -105,7 +107,7 @@ export interface SessionLogEntry {
   cacheWriteTokens?: number;
   /** Источник кеш-данных: api | derived. */
   cacheSource?: string;
-  // session_start fields
+  // Поля session_start
   environment?: Record<string, unknown>;
   lspProbe?: {
     ok: Array<{ language: string; durationMs: number }>;
@@ -114,14 +116,14 @@ export interface SessionLogEntry {
   };
   plugins?: string[];
   skills?: number;
-  // baseline_typecheck fields
+  // Поля baseline_typecheck
   passed?: boolean;
   message?: string;
-  // reasoning_control fields; `level` is also the severity of persisted output events
+  // Поля reasoning_control; `level` — заодно severity персистентных output-событий
   level?: string;
   strategy?: string;
   probePassed?: boolean;
-  // moe_* event fields (Plan 4.2 observability)
+  // Поля moe_*-событий (observability)
   title?: string;
   subtaskId?: string;
   expertTag?: string;
@@ -136,10 +138,11 @@ export interface SessionLogEntry {
   >;
 }
 
+/** Файловое хранилище сессий: meta.json, history.jsonl, session.jsonl. */
 export class SessionStore {
   private baseDir: string;
   private encryptor: SessionFileEncryptor | null = null;
-  // In-memory meta cache to avoid O(N²) disk reads on appendMessage.
+  // In-memory кеш меты — иначе O(N²) чтений диска на appendMessage.
   private _metaCache = new Map<string, SessionMeta>();
 
   constructor(baseDir: string, encryptionConfig?: SessionEncryptionConfig) {
@@ -149,13 +152,12 @@ export class SessionStore {
     }
   }
 
+  /** Каталог сессии по id. */
   getSessionDir(id: string): string {
     return join(this.baseDir, id);
   }
 
-  /**
-   * Update encryption configuration
-   */
+  /** Обновить конфиг шифрования. */
   updateEncryption(config: SessionEncryptionConfig): void {
     if (config?.enabled) {
       this.encryptor = new SessionFileEncryptor(config);
@@ -164,13 +166,12 @@ export class SessionStore {
     }
   }
 
-  /**
-   * Check if encryption is enabled
-   */
+  /** Включено ли шифрование. */
   isEncryptionEnabled(): boolean {
     return this.encryptor?.isEnabled() ?? false;
   }
 
+  /** Создать базовый каталог (0700). */
   init(): void {
     mkdirSync(this.baseDir, { recursive: true, mode: 0o700 });
   }
@@ -191,10 +192,12 @@ export class SessionStore {
     return join(this.sessionDir(id), "session.jsonl");
   }
 
+  /** Есть ли сессия (по meta.json). */
   sessionExists(id: string): boolean {
     return existsSync(this.metaPath(id));
   }
 
+  /** Сохранить мету (кеш + диск 0600, опционально шифр). */
   saveMeta(id: string, meta: SessionMeta): void {
     this._metaCache.set(id, meta);
     const dir = this.sessionDir(id);
@@ -210,6 +213,7 @@ export class SessionStore {
     }
   }
 
+  /** Загрузить мету (кеш, иначе диск); нет/битая — null. */
   loadMeta(id: string): SessionMeta | null {
     const cached = this._metaCache.get(id);
     if (cached) return cached;
@@ -226,8 +230,8 @@ export class SessionStore {
     }
   }
 
-  /** Read meta straight from disk, bypassing _metaCache — used where counter
-   *  accuracy matters more than read speed (see appendMessage). */
+  /** Мета строго с диска, мимо _metaCache — там, где точность счётчика
+   *  важнее скорости чтения (см. appendMessage). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
     if (!existsSync(path)) return null;
@@ -240,6 +244,7 @@ export class SessionStore {
     }
   }
 
+  /** Добавить сообщение в историю; мету инкрементить с диска (защита от гонки процессов). */
   appendMessage(id: string, msg: SessionMessage): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -252,10 +257,10 @@ export class SessionStore {
     } else {
       appendFileSync(this.historyPath(id), `${line}\n`, { encoding: "utf-8", mode: 0o600 });
     }
-    // Re-read meta from disk (not the cache) right before the increment so
-    // counters appended by ANOTHER process are not clobbered by a stale
-    // in-memory snapshot (last-write-wins). Full cross-process locking is out
-    // of scope; this narrows the race window.
+    // Мету перечитываем с диска прямо перед инкрементом, чтобы счётчики
+    // ДРУГОГО процесса не затирались протухшим in-memory снапшотом
+    // (last-write-wins). Полноценные кросс-процессные локи вне скоупа;
+    // это сужает окно гонки.
     const meta = this.readMetaFromDisk(id) ?? this._metaCache.get(id) ?? null;
     if (meta) {
       meta.messageCount = (meta.messageCount || 0) + 1;
@@ -264,6 +269,7 @@ export class SessionStore {
     }
   }
 
+  /** Загрузить историю (битые строки пропускаются); нет файла — []. */
   loadHistory(id: string): SessionMessage[] {
     const path = this.historyPath(id);
     if (!existsSync(path)) return [];
@@ -297,8 +303,8 @@ export class SessionStore {
   }
 
   /**
-   * Read the history of a rotated session from `<baseDir>/<id>.jsonl.gz`.
-   * Returns [] when the gz file is absent or unreadable.
+   * История ротированной сессии из `<baseDir>/<id>.jsonl.gz`.
+   * Нет gz или не читается — [].
    */
   loadRotatedHistory(id: string): SessionMessage[] {
     const gzPath = join(this.baseDir, `${id}.jsonl.gz`);
@@ -321,6 +327,7 @@ export class SessionStore {
     }
   }
 
+  /** Добавить запись в session-лог. */
   appendSessionLog(id: string, entry: SessionLogEntry): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -335,6 +342,7 @@ export class SessionStore {
     }
   }
 
+  /** Загрузить session-лог (битые строки пропускаются); нет файла — []. */
   loadSessionLog(id: string): SessionLogEntry[] {
     const path = this.sessionLogPath(id);
     if (!existsSync(path)) return [];
@@ -367,6 +375,7 @@ export class SessionStore {
     }
   }
 
+  /** Список сессий по убыванию updatedAt. */
   listSessions(): SessionMeta[] {
     if (!existsSync(this.baseDir)) return [];
     const entries = readdirSync(this.baseDir, { withFileTypes: true });
@@ -381,6 +390,7 @@ export class SessionStore {
     return sessions;
   }
 
+  /** Удалить сессию (кеш + каталог). */
   deleteSession(id: string): void {
     this._metaCache.delete(id);
     const dir = this.sessionDir(id);
@@ -389,6 +399,7 @@ export class SessionStore {
     }
   }
 
+  /** Ротация: истории старше 30 дней — в .jsonl.gz, мета помечается rotated. */
   rotateOldSessions(): void {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -405,8 +416,8 @@ export class SessionStore {
           const gzPath = join(this.baseDir, `${session.id}.jsonl.gz`);
           writeFileSync(gzPath, compressed);
           rmSync(historyPath);
-          // Mark the meta so the session stops looking "live" in lists —
-          // otherwise a gzipped session still advertises messageCount > 0.
+          // Пометить мету, чтобы сессия не выглядела «живой» в списках —
+          // иначе gz-сессия рекламирует messageCount > 0.
           const meta = this.loadMeta(session.id);
           if (meta) {
             meta.messageCount = 0;

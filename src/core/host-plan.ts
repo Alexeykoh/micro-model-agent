@@ -1,15 +1,20 @@
+/** Проекция плана исполнения в снапшот хоста для UI. */
 import type { HostStateSnapshot, PlanStepStatus } from "./host";
 import type { Plan, StepStatus } from "../modules/execution/planner";
 
-/** Minimal plan shape the host UI consumes. Kept separate from the execution
- *  module's `Plan` so `planSnapshotFromModule` stays a pure projection that is
- *  trivially testable without booting the execution module. */
+/**
+ * Минимальная форма плана для UI хоста. Отдельно от `Plan` модуля исполнения,
+ * чтобы `planSnapshotFromModule` оставалась чистой проекцией без бутстрапа модуля.
+ */
 export interface ActivePlanLike {
   steps: { text: string; status: PlanStepStatus }[];
   currentIndex: number;
 }
 
-/** Pure projection of an ExecutionModule plan into a HostStateSnapshot plan. */
+/**
+ * Чистая проекция плана модуля исполнения в план снапшота хоста.
+ * @param plan план в форме ActivePlanLike; @returns план снапшота либо null.
+ */
 export function planSnapshotFromModule(
   plan: ActivePlanLike | null | undefined,
 ): HostStateSnapshot["plan"] {
@@ -21,9 +26,9 @@ export function planSnapshotFromModule(
 }
 
 /**
- * Execution plans carry a fifth status (`skipped`) and no `currentIndex`. Map
- * them onto the host contract: a skipped step is settled, so it reads as done,
- * and the current index is the first step that is neither done nor skipped.
+ * Планы несут пятый статус (`skipped`) без `currentIndex`. Маппим на контракт
+ * хоста: skipped — settled, читается как done; текущий индекс — первый шаг
+ * не в done/skipped.
  */
 function toPlanStepStatus(status: StepStatus): PlanStepStatus {
   switch (status) {
@@ -37,7 +42,10 @@ function toPlanStepStatus(status: StepStatus): PlanStepStatus {
   }
 }
 
-/** Adapt the execution module's real `Plan` into the snapshot input shape. */
+/**
+ * Адаптирует реальный `Plan` модуля исполнения под вход снапшота.
+ * @param plan план исполнения; @returns ActivePlanLike либо null.
+ */
 export function adaptActivePlan(plan: Plan | null | undefined): ActivePlanLike | null {
   if (!plan) return null;
   return {

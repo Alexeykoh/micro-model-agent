@@ -1,3 +1,4 @@
+// Загрузка веб-ассетов (html/css/js) из исходников или из бандла dist.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -6,11 +7,11 @@ import type { WebUiAssets } from "./state";
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Candidate directories, checked in order. In source, `here` is
- * `src/modules/webui` so the first entry is the real asset dir. In the bundle
- * (`dist/main.js`) `here` is `<dist>`, where `build:prod` copies the assets to
- * `assets/` (see `scripts/copy-assets.ts`); the remaining entries cover layouts
- * where the bundle sits elsewhere but the source tree is still present.
+ * Кандидаты каталогов, проверяются по порядку. В исходниках `here` —
+ * `src/modules/webui`, и первая запись — настоящий каталог ассетов. В бандле
+ * (`dist/main.js`) `here` — `<dist>`, куда `build:prod` копирует ассеты в
+ * `assets/` (см. `scripts/copy-assets.ts`); остальные покрывают раскладки,
+ * где бандл лежит в другом месте, а дерево исходников рядом.
  */
 const ASSET_DIR_CANDIDATES = [
   join(here, "assets"),
@@ -21,14 +22,15 @@ const ASSET_DIR_CANDIDATES = [
 
 const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "index.html")));
 
+/** Грузит все ассеты в память (с заглушками, если каталог не найден). */
 export function loadAssets(): WebUiAssets {
   const read = (name: string, fallback: string) => {
     if (!ASSET_DIR) return fallback;
     const p = join(ASSET_DIR, name);
     return existsSync(p) ? readFileSync(p, "utf8") : fallback;
   };
-  // Split frontend modules (`assets/js/*.js`, imported relatively from app.js).
-  // Copied to dist by `scripts/copy-assets.ts` together with the rest of `assets/`.
+  // Разделённые фронтенд-модули (`assets/js/*.js`, импортируются относительно из app.js).
+  // Копируются в dist скриптом `scripts/copy-assets.ts` вместе с остальным `assets/`.
   const jsModules: Record<string, string> = {};
   if (ASSET_DIR) {
     const jsDir = join(ASSET_DIR, "js");

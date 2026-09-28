@@ -1,3 +1,4 @@
+// Манифест сертификации: проектный и глобальный (per-user) файлы, мерж и синк bundled-копии.
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -5,19 +6,22 @@ import { homedir } from "os";
 import type { CertManifest, CertificationEntry, CertMark } from "./types";
 import { MMA_DIR_NAME } from "../../config/paths";
 
+/** Путь к проектному манифесту внутри каталога проекта. */
 export function manifestPath(projectDir: string): string {
   return join(projectDir, "certification", "certifications.json");
 }
 
-/** Directory of the global (per-user) manifest. Overridable for tests. */
+/** Каталог глобального (per-user) манифеста. Переопределяется для тестов. */
 export function globalManifestDir(override?: string): string {
   return override || process.env.MMA_CERT_HOME || join(homedir(), MMA_DIR_NAME);
 }
 
+/** Путь к глобальному манифесту. */
 export function globalManifestPath(override?: string): string {
   return join(globalManifestDir(override), "certifications.json");
 }
 
+/** Читает проектный манифест; битый/отсутствующий даёт пустой. */
 export function readManifest(projectDir: string): CertManifest {
   const path = manifestPath(projectDir);
   try {
@@ -26,17 +30,19 @@ export function readManifest(projectDir: string): CertManifest {
       return { version: 1, certifications: raw.certifications ?? [] };
     }
   } catch {
-    /* corrupted manifest → start fresh */
+    /* битый манифест → начинаем с чистого */
   }
   return { version: 1, certifications: [] };
 }
 
+/** Сохраняет проектный манифест (каталог создаётся). */
 export function saveManifest(m: CertManifest, projectDir: string): void {
   const path = manifestPath(projectDir);
   mkdirSync(join(projectDir, "certification"), { recursive: true });
   writeFileSync(path, JSON.stringify(m, null, 2), "utf-8");
 }
 
+/** Читает глобальный манифест; битый/отсутствующий даёт пустой. */
 export function readGlobalManifest(override?: string): CertManifest {
   const path = globalManifestPath(override);
   try {
@@ -45,11 +51,12 @@ export function readGlobalManifest(override?: string): CertManifest {
       return { version: 1, certifications: raw.certifications ?? [] };
     }
   } catch {
-    /* corrupted global manifest → start fresh */
+    /* битый глобальный манифест → начинаем с чистого */
   }
   return { version: 1, certifications: [] };
 }
 
+/** Сохраняет глобальный манифест. */
 export function saveGlobalManifest(m: CertManifest, override?: string): void {
   const dir = globalManifestDir(override);
   mkdirSync(dir, { recursive: true });
@@ -59,9 +66,9 @@ export function saveGlobalManifest(m: CertManifest, override?: string): void {
 const certKey = (e: CertificationEntry): string => `${e.model}::${e.providerUrl}`;
 
 /**
- * Global + project manifests merged by (model, providerUrl). The NEWER entry
- * wins (by mmaVersion, then certifiedAt); a legacy project manifest no longer
- * shadows a fresher global certification.
+ * Глобальный + проектный манифесты, сведённые по (model, providerUrl). Побеждает
+ * БОЛЕЕ НОВАЯ запись (сначала mmaVersion, затем certifiedAt); легаси-проектный
+ * манифест свежую глобальную сертификацию больше не затеняет.
  */
 export function readMergedManifest(projectDir: string, override?: string): CertManifest {
   const merged = new Map<string, CertificationEntry>();
@@ -74,6 +81,10 @@ export function readMergedManifest(projectDir: string, override?: string): CertM
   return { version: 1, certifications: [...merged.values()] };
 }
 
+/**
+ * Добавляет/обновляет запись в глобальном манифесте по ключу (model, providerUrl).
+ * Возвращает обновлённый манифест.
+ */
 export function upsertCertification(
   entry: CertificationEntry,
   override?: string,
@@ -86,6 +97,10 @@ export function upsertCertification(
   return m;
 }
 
+/**
+ * Удаляет запись из глобального и легаси-проектного манифестов.
+ * Возвращает флаги, откуда реально удалили.
+ */
 export function removeCertification(
   model: string,
   providerUrl: string,
@@ -98,7 +113,7 @@ export function removeCertification(
   const removedGlobal = g.certifications.length !== beforeG;
   if (removedGlobal) saveGlobalManifest(g, opts?.globalDir);
 
-  // Legacy per-project manifests may still hold the entry — clean those too.
+  // В легаси-проектных манифестах запись могла остаться — чистим и их.
   let removedProject = false;
   try {
     const projectDir = opts?.projectDir ?? process.cwd();
@@ -110,11 +125,12 @@ export function removeCertification(
       removedProject = true;
     }
   } catch {
-    /* no project manifest — fine */
+    /* проектного манифеста нет — нормально */
   }
   return { global: removedGlobal, project: removedProject };
 }
 
+/** True, если запись сделана не на текущей версии MMA (протухла). */
 export function isStale(entry: CertificationEntry, currentVersion: string): boolean {
   return entry.mmaVersion !== currentVersion;
 }
@@ -132,9 +148,9 @@ function compareVersions(a: string, b: string): number {
 }
 
 /**
- * Is `candidate` genuinely newer than `current` (by mmaVersion, then
- * certifiedAt)? Used to avoid downgrading a fresher certification — both when
- * syncing the bundled manifest and when merging the legacy project manifest.
+ * Действительно ли `candidate` новее `current` (сначала mmaVersion, затем
+ * certifiedAt)? Защита от даунгрейда свежей сертификации — и при синке
+ * bundled-манифеста, и при мерже легаси-проектного.
  */
 function isEntryNewer(candidate: CertificationEntry, current: CertificationEntry): boolean {
   const v = compareVersions(candidate.mmaVersion, current.mmaVersion);
@@ -145,10 +161,15 @@ function isEntryNewer(candidate: CertificationEntry, current: CertificationEntry
   return false;
 }
 
+/** True, если в записи нет провалов и есть хоть один пройденный сценарий. */
 export function isFullyPassed(entry: CertificationEntry): boolean {
   return entry.suite.failed === 0 && entry.suite.passed > 0;
 }
 
+/**
+ * Метка модели: `certified` (всё прошло на текущей версии), `stale` (запись от
+ * старой версии) или `none` (нет записи / есть провалы).
+ */
 export function getCertMark(
   model: string,
   providerUrl: string,
@@ -169,9 +190,9 @@ function syncSnapshotPath(override?: string): string {
 }
 
 /**
- * Locate the certifications.json bundled with the installed MMA package.
- * - dist/main.js layout: <dist>/certification/certifications.json (copied by copy-assets)
- * - source layout:       <repo-root>/certification/certifications.json
+ * Ищет certifications.json, упакованный в установленный пакет MMA.
+ * - бандл dist/main.js: <dist>/certification/certifications.json (копирует copy-assets)
+ * - исходники:          <repo-root>/certification/certifications.json
  */
 export function bundledManifestPath(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -187,12 +208,12 @@ export function bundledManifestPath(): string | null {
 }
 
 /**
- * Sync the bundled (shipped-with-package) manifest into the global
- * ~/.mma/certifications.json. Runs once per process start:
- * the bundled file overwrites its own entries on every package update;
- * user-local certifications for OTHER keys are preserved. A snapshot of the
- * raw bundled content marks what was already synced, so nothing is rewritten
- * between updates.
+ * Вливает упакованный (поставляемый с пакетом) манифест в глобальный
+ * ~/.mma/certifications.json. Работает раз на старт процесса:
+ * bundled-файл при каждом обновлении пакета перезаписывает СВОИ записи;
+ * пользовательские сертификации под ДРУГИМИ ключами сохраняются. Снапшот
+ * сырого bundled-содержимого фиксирует, что уже синкнуто, чтобы между
+ * обновлениями ничего не переписывать.
  */
 export function syncGlobalManifest(
   override?: string,

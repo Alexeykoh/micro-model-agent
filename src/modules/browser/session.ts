@@ -1,3 +1,4 @@
+// Сессия браузера: диспетчер действий модели, трекер повторов, снапшоты страниц.
 import type { BrowserConfig, BrowserState, ActionResult } from "./types";
 import type { BrowserDriver } from "./driver-types";
 import { createBrowserDriver } from "./driver";
@@ -12,6 +13,7 @@ import {
 import { CookieStore, type StoredCookie } from "./cookie-store";
 import { t } from "../../i18n/index";
 
+/** Ловит N одинаковых действий подряд на одном URL и возвращает предупреждение. */
 export class BrowserActionTracker {
   private history: Array<{
     action: string;
@@ -24,6 +26,7 @@ export class BrowserActionTracker {
     this.threshold = threshold;
   }
 
+  /** Записать действие; при серии повторов — текст предупреждения, иначе null. */
   record(action: string, args: Record<string, unknown>, url: string): string | null {
     this.history.push({ action, args, url });
 
@@ -47,11 +50,13 @@ export class BrowserActionTracker {
     return null;
   }
 
+  /** Сбросить историю (вызывается при open). */
   reset(): void {
     this.history = [];
   }
 }
 
+/** Сессия: ленивый драйвер, куки, выполнение действий модели, снапшоты. */
 export class BrowserSession {
   private driver: BrowserDriver | null = null;
   private config: BrowserConfig;
@@ -69,10 +74,12 @@ export class BrowserSession {
     this.cookieStore = new CookieStore(config.cookieDir);
   }
 
+  /** Копия текущего состояния (открыта/URL/заголовок/счётчик элементов). */
   getState(): BrowserState {
     return { ...this.state };
   }
 
+  /** Выполнить действие модели (open/click/type/…); ошибки — текстом в ActionResult. */
   async execute(action: string, args: Record<string, unknown>): Promise<ActionResult> {
     try {
       let result: ActionResult;
@@ -194,7 +201,7 @@ export class BrowserSession {
   private async open(url: string): Promise<ActionResult> {
     if (!url) return { success: false, output: t("browser.url_required") };
 
-    // Security: block dangerous schemes (file:, chrome:, about:, data:).
+    // Блок опасных схем (file:, chrome:, about:, data:) — обход запретов исключён.
     if (/^(file|chrome|about|data|javascript|view-source):/i.test(url)) {
       return { success: false, output: `[SECURITY BLOCKED] scheme not allowed: ${url}` };
     }
@@ -342,6 +349,7 @@ export class BrowserSession {
     return { success: true, output: snapshot };
   }
 
+  /** Закрыть сессию: сохранить куки, убить драйвер, сбросить состояние. */
   async close(): Promise<ActionResult> {
     await this.saveCookies();
     if (this.driver) {

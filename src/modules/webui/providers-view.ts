@@ -1,14 +1,12 @@
+// Read-проекции страницы настроек «Модель и провайдер» `mma web` (без HTTP/персиста).
 /**
- * Read shapes for the "Model & Provider" settings page of `mma web`.
- *
- * Split out of `providers-api.ts` (rule #1: ≤300 lines/file). Pure
- * config → view projections; no HTTP, no persistence. Secrets are never
- * echoed: the read shape exposes `hasApiKey` instead of the key itself.
+ * Вынесены из `providers-api.ts` (правило #1: ≤300 строк/файл). Чистые проекции
+ * конфиг → вид; секреты не эхом: read-форма отдаёт `hasApiKey` вместо ключа.
  */
 import type { AppConfig, CacheCapability, ProviderEntry } from "../../config/types";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 
-/** Redacted provider entry rendered by the settings UI. */
+/** Отредактированная запись провайдера для UI настроек. */
 export interface ProviderView {
   type: string;
   label: string;
@@ -23,29 +21,29 @@ export interface ProviderView {
   hasApiKey: boolean;
 }
 
-/** A builtin provider template offered as a one-click choice in the UI. */
+/** Встроенный шаблон провайдера для выбора в один клик в UI. */
 export interface ProviderPresetView {
-  /** Unique UI key (`type` for builtins, a stable slug for local presets). */
+  /** Уникальный ключ UI (`type` для встроенных, стабильный слаг для локальных). */
   id: string;
-  /** Registry provider type written to the config. */
+  /** Тип провайдера реестра, пишущийся в конфиг. */
   type: string;
-  /** Suggested provider name (must stay unique across entries). */
+  /** Предложенное имя провайдера (уникальность между записями обязательна). */
   name: string;
   label: string;
   baseUrl?: string;
 }
 
 /**
- * Named local endpoints: same `openai-compat` type, well-known base URLs, so a
- * local setup needs no URL knowledge either. (LM Studio graduated to a real
- * builtin preset — `lmstudio` — and is no longer duplicated here.)
+ * Именованные локальные эндпоинты: тот же тип `openai-compat` с известными base URL,
+ * чтобы локальному сетапу тоже не нужно было знание URL. (LM Studio вырос в
+ * настоящий builtin-пресет `lmstudio` и здесь больше не дублируется.)
  */
 const LOCAL_PRESETS: ProviderPresetView[] = [
   { id: "ollama", type: "openai-compat", name: "ollama", label: "Ollama (localhost:11434)", baseUrl: "http://localhost:11434/v1" },
   { id: "vllm", type: "openai-compat", name: "vllm", label: "vLLM (localhost:8000)", baseUrl: "http://localhost:8000/v1" },
 ];
 
-/** Builtin presets with their fixed base URLs (hosted providers carry one). */
+/** Встроенные пресеты с фиксированными base URL (у хостедных он есть). */
 export function buildProviderPresets(): ProviderPresetView[] {
   const builtin: ProviderPresetView[] = BUILTIN_PROVIDERS.map((spec) => {
     const preset: ProviderPresetView = {
@@ -60,7 +58,7 @@ export function buildProviderPresets(): ProviderPresetView[] {
   return [...builtin, ...LOCAL_PRESETS];
 }
 
-/** Normalize `config.provider` into a display list + active name. */
+/** Нормализует `config.provider` в список для показа + имя активного. */
 export function buildProviderViews(config: AppConfig): {
   entries: ProviderView[];
   active: string;

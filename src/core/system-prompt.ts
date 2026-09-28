@@ -1,20 +1,25 @@
 /**
- * System-prompt assembly for the agent.
+ * Сборка системного промпта агента.
  *
- * Extracted from `bootstrap.ts` (rule #1: ≤300 lines/file). `buildSystemInfo`
- * is pure: it renders the core directive block + conditional Windows/runtime/
- * security/MCP sections into the single system message sent to the model.
+ * Вынесено из `bootstrap.ts` (правило №1: ≤300 строк/файл). `buildSystemInfo`
+ * чиста: рендерит базовый блок директив + условные Windows/runtime/security/
+ * MCP-секции в единственное системное сообщение для модели.
  *
- * Layout (Wave 1, plan 2026-08-27-system-prompt-optimization): short
- * `HEADER:` sections with one directive per line (≤120 chars) instead of
- * prose paragraphs — small models lose track inside 300+ char lines.
- * Behavior-locked phrases (asserted in tests/core/bootstrap.test.ts) are
- * kept verbatim: "Bun is available", "DONE CONDITIONS", "STOP AND ASK THE
- * USER", "ONLY when the user explicitly asks for a file", "ANSWER IN CHAT",
- * "MEMORY PRIVACY", "SECURITY RESTRICTIONS".
+ * Раскладка (Wave 1, план 2026-08-27): короткие секции `HEADER:` по одной
+ * директиве на строку (≤120 символов) вместо абзацев прозы — маленькие модели
+ * теряются в строках 300+ символов. Поведенческие фразы под тестами
+ * (tests/core/bootstrap.test.ts) хранятся дословно: "Bun is available",
+ * "DONE CONDITIONS", "STOP AND ASK THE USER", "ONLY when the user explicitly
+ * asks for a file", "ANSWER IN CHAT", "MEMORY PRIVACY", "SECURITY RESTRICTIONS".
  */
 import type { AppConfig } from "../config/types";
 
+/**
+ * Рендерит системный промпт (чистая функция).
+ * @param config конфиг приложения; @param baseDir workspace;
+ * @param profileCompressed сжатый профиль окружения.
+ * @returns текст системного сообщения для модели.
+ */
 export function buildSystemInfo(
   config: AppConfig,
   baseDir: string,
@@ -85,10 +90,9 @@ export function buildSystemInfo(
     );
   }
 
-  // MMA is a Bun-only project (package.json scripts, Bun API in code) — the
-  // model should prefer bun over node/tsx/ts-node for running TypeScript
-  // files and tests (observed: model wasted 10+ iterations installing tsx
-  // instead of running `bun file.ts`).
+  // MMA — Bun-only проект (скрипты package.json, Bun API в коде): модель
+  // должна предпочитать bun, а не node/tsx/ts-node, для запуска TypeScript
+  // (наблюдалось: модель жгла 10+ итераций на установку tsx вместо `bun file.ts`).
   lines.push(
     `Runtime: Bun is available — run TypeScript directly with "bun <file.ts>", tests with "bun test" (no tsx/ts-node needed).`,
     `Bash: pass "workdir", never "cd dir && cmd". One command per call.`,
@@ -112,14 +116,13 @@ export function buildSystemInfo(
     );
   }
 
-  // When a bug is described in terms of runtime behavior (what happens when
-  // the app runs), the fix is only provable by REPRODUCING it — running the
-  // app/build/browser and comparing against actual output. The model decides
-  // when this applies (no keyword classification). Stale dev servers started
-  // before a config/deps change keep the OLD pipeline in memory and still
-  // throw the original error (observed: old vite on 5173-5176 kept failing
-  // postcss after the fix was on disk, while a fresh server on 5177 was
-  // clean) — the fix is only real when the USER's running server is clean.
+  // Баг в терминах runtime-поведения (что происходит при запуске) доказывается
+  // только ВОСПРОИЗВЕДЕНИЕМ — запуском app/build/browser и сверкой с реальным
+  // выводом. Модель решает сама, когда это применимо (без классификации по
+  // ключевым словам). Протухшие dev-серверы держат СТАРЫЙ пайплайн в памяти и
+  // продолжают кидать исходную ошибку (наблюдалось: старый vite на 5173–5176
+  // сыпал postcss после фикса на диске, а свежий на 5177 был чист) — фикс
+  // реален, только когда чист сервер ПОЛЬЗОВАТЕЛЯ.
   lines.push(
     `Runtime verification: when a bug is described in terms of runtime behavior`,
     `(what happens when the app runs), reproduce it —`,
@@ -131,10 +134,9 @@ export function buildSystemInfo(
     `a fresh port does NOT prove the user's error is gone.`,
   );
 
-  // Security rules: when security is enabled the model should know the
-  // restrictions up front — a blocked call costs an iteration, while this
-  // block costs ~100 tokens once. Kept compact and capped so a long user
-  // blacklist cannot blow the system budget.
+  // Правила безопасности: при включённой защите модель должна знать ограничения
+  // заранее — заблокированный вызов стоит итерацию, а этот блок ~100 токенов
+  // один раз. Компактно и с cap, чтобы длинный blacklist не рвал бюджет.
   const sec = config.security;
   if (sec?.enabled) {
     const secLines: string[] = [

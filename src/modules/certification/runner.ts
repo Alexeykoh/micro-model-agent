@@ -1,3 +1,4 @@
+// Прогон сценариев сертификации: песочница на повтор, запуск MMA, проверки.
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, rmSync, cpSync, writeFileSync, readdirSync, readFileSync, } from "fs";
 import { join, resolve, dirname, relative } from "path";
@@ -8,6 +9,7 @@ import { killTree } from "../processes/kill-tree";
 import { toForwardSlash } from "../../tools/path-utils";
 import { projectMmaDir } from "../../config/paths";
 
+/** Итог одного запуска MMA в песочнице: код выхода, вывод, был ли таймаут. */
 export interface SpawnResult {
   code: number | null;
   stdout: string;
@@ -15,8 +17,10 @@ export interface SpawnResult {
   timedOut: boolean;
 }
 
+/** Запуск одного повтора сценария (инжект для тестов). */
 export type RepRunner = (env: NodeJS.ProcessEnv, cwd: string, args: string[], timeoutMs: number) => Promise<SpawnResult>
 
+/** Опции прогона сценария: модель, песочница, повторы, порог, раннер. */
 export interface RunScenarioOptions {
   model: string;
   providerUrl: string;
@@ -32,6 +36,10 @@ export interface RunScenarioOptions {
   onRep?: (id: string, rep: number, reps: number, passed: boolean, failures: string[]) => void;
 }
 
+/**
+ * Прогоняет сценарий N повторов в изолированных песочницах.
+ * `pass`, когда прошли не меньше порога; при провале прикладывает диагностику.
+ */
 export async function runScenario(
   scenario: CertScenario,
   opts: RunScenarioOptions,
@@ -80,7 +88,7 @@ export async function runScenario(
       };
       if (opts.providerKey) env.MMA_PROVIDER_APIKEY = opts.providerKey;
 
-      // Write cert-specific config if scenario declares overrides
+      // Пишем cert-конфиг, если сценарий объявил оверрайды
       if (scenario.config && opts.baseConfig) {
         const merged = deepMergeAny(opts.baseConfig, scenario.config);
         const certConfigDir = projectMmaDir(sandbox);
@@ -147,11 +155,11 @@ function prepareSandbox(sandbox: string, scenario: CertScenario, mmaRoot: string
   }
 }
 
-/** Collect diagnostic info from a failed sandbox for actionable feedback. */
+/** Собирает диагностику из проваленной песочницы для понятного фидбэка. */
 export function collectDiagnostics(sandbox: string): string {
   const lines: string[] = [];
 
-  // List user-created files (skip .mma internals)
+  // Список созданных пользователем файлов (внутренности .mma пропускаем)
   const files = listFiles(sandbox, sandbox);
   if (files.length > 0) {
     lines.push(`  Files created: ${files.join(", ")}`);
@@ -159,7 +167,7 @@ export function collectDiagnostics(sandbox: string): string {
     lines.push("  Files created: (none)");
   }
 
-  // Read active plan if present
+  // Читаем активный план, если есть
   const planPath = join(projectMmaDir(sandbox), "plans", "active.json");
   if (existsSync(planPath)) {
     try {
@@ -172,7 +180,7 @@ export function collectDiagnostics(sandbox: string): string {
         lines.push(`  Pending: ${pending.map((s: any) => `#${s.id} ${s.description}`).join("; ")}`);
       }
     } catch {
-      /* corrupt plan — skip */
+      /* битый план — пропускаем */
     }
   }
 
@@ -198,12 +206,14 @@ function listFiles(dir: string, root: string): string[] {
   return result;
 }
 
+/** Резолвит точку входа MMA: исходники в dev-дереве, иначе собранный бандл. */
 export function resolveMmaEntry(mmaRoot: string): string {
   const dev = join(mmaRoot, "src", "cli", "main.ts");
   if (existsSync(dev)) return dev;
   return join(mmaRoot, "dist", "main.js");
 }
 
+/** Ищет корень MMA вверх от каталога (по package.json). */
 export function findMmaRoot(fromDir: string): string {
   const candidates = [resolve(fromDir, "..", "..", ".."), resolve(fromDir, "..")];
   for (const c of candidates) {
@@ -212,6 +222,7 @@ export function findMmaRoot(fromDir: string): string {
   return process.cwd();
 }
 
+/** Дефолтный раннер: спавнит MMA дочерним процессом с таймаутом и киллом дерева. */
 export const defaultRunner: RepRunner = (env, cwd, args, timeoutMs) =>
   new Promise<SpawnResult>((resolvePromise) => {
     const child = spawn(process.execPath, args, {

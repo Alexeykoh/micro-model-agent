@@ -1,3 +1,4 @@
+/** Тул поиска по содержимому (rg с fallback на grep -r). */
 import { spawn, } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
@@ -7,6 +8,7 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
 
+/** Обрезает вывод до MAX_PREVIEW_LINES строк. */
 function truncateLines(output: string): string {
   const lines = output.split("\n");
   if (lines.length <= MAX_PREVIEW_LINES) return output;
@@ -17,8 +19,8 @@ function truncateLines(output: string): string {
 }
 
 /**
- * Run a search command asynchronously with kill-on-timeout.
- * Exit code 1 (no matches) resolves to an empty string, like execFileSync semantics.
+ * Поисковая команда асинхронно, с kill по таймауту. Exit code 1 (нет совпадений)
+ * резолвится в пустую строку. Возврат: stdout поиска.
  */
 export function runSearch(
   bin: string,
@@ -60,6 +62,7 @@ export function runSearch(
   });
 }
 
+/** Ищет по содержимому через regex (rg, иначе grep -r); кешируемый. */
 export const grepTool: ToolDefinition = {
   name: "grep",
   icon: "🔍",
@@ -85,8 +88,8 @@ export const grepTool: ToolDefinition = {
     const pattern = String(args.pattern);
     const searchPath = args.path ? resolve(ctx.baseDir, String(args.path)) : ctx.baseDir;
 
-    // Security: the search directory must stay inside baseDir / scope /
-    // allowed paths — `path: "../../.."` must not read outside the sandbox.
+    // Каталог поиска обязан оставаться внутри baseDir/скоупа: `path: "../../.."`
+    // не должен читать вне песочницы.
     const scopeCheck = isPathInScope(
       ctx.baseDir,
       searchPath,
@@ -108,14 +111,13 @@ export const grepTool: ToolDefinition = {
       };
     }
 
-    // Build rg arguments as an array to avoid shell interpretation of regex
-    // metacharacters like |, (, ) — these are regex patterns, not shell operators.
+    // Аргументы rg массивом, чтобы шелл не трактовал метасимволы regex
+    // (|, (, )) как операторы — это паттерны, не команды шелла.
     const rgArgs = ["-n", "--with-filename", pattern, searchPath];
     if (args.include) {
       rgArgs.push("-g", String(args.include));
     }
 
-    // Log the search (sanitized) for audit purposes
     logBashCommand(ctx.sessionId, `rg ${rgArgs.join(" ")}`, false, "grep-tool");
 
     try {
@@ -132,8 +134,8 @@ export const grepTool: ToolDefinition = {
       } else if (e.status === 1) {
         return { success: true, output: t("file.no_matches") };
       }
-      // Fall back to plain grep -r when rg is not available or fails.
-      // Using array args avoids shell injection.
+      // Fallback на plain grep -r, когда rg нет или упал. Массив аргументов —
+      // защита от shell injection.
       try {
         const grepArgs = ["-rn", pattern, searchPath];
         if (args.include) {

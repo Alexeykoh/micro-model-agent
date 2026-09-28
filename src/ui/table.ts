@@ -1,14 +1,17 @@
+// Таблицы чата: парсинг markdown-строк, выравнивание колонок (без рамок, см. STYLE.md).
 import stringWidth from "string-width";
 import { pc } from "./colors";
 
+/** Выравнивание ячейки. */
 export type CellAlign = "left" | "center" | "right";
 
+/** Опции таблицы: выравнивания, капы ширины и числа колонок. */
 export interface TableOptions {
-  /** Column index → alignment. Defaults to left for data, center for header. */
+  /** Индекс колонки → выравнивание. Дефолт: данные влево, шапка по центру. */
   align?: Record<number, CellAlign>;
-  /** Hard cap on total table width (columns get shrunk to fit). */
+  /** Жёсткий кап общей ширины (колонки ужимаются). */
   maxWidth?: number;
-  /** Columns beyond this count are dropped. */
+  /** Колонки сверх этого числа отбрасываются. */
   maxColumns?: number;
 }
 
@@ -35,7 +38,7 @@ function truncate(text: string, width: number): string {
   return acc + ELLIPSIS;
 }
 
-/** Split a markdown table row `| a | b |` into cells. */
+/** Режет строку `| a | b |` на ячейки. */
 export function splitRow(line: string): string[] {
   const trimmed = line.trim();
   let body = trimmed;
@@ -44,7 +47,7 @@ export function splitRow(line: string): string[] {
   return body.split("|").map((c) => c.trim());
 }
 
-/** Detect a markdown table separator row like `|---|---|` / `:---:` / `---:`. */
+/** Детект строки-разделителя вида `|---|---|` / `:---:` / `---:`. */
 export function isSeparatorRow(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.includes("-")) return false;
@@ -53,7 +56,7 @@ export function isSeparatorRow(line: string): boolean {
   return cells.every((c) => /^:?-{3,}:?$/.test(c));
 }
 
-/** Alignments encoded by a separator row, keyed by column index. */
+/** Выравнивания из строки-разделителя, по индексу колонки. */
 export function parseAlignments(separator: string): Record<number, CellAlign> {
   const out: Record<number, CellAlign> = {};
   splitRow(separator).forEach((cell, i) => {
@@ -66,8 +69,8 @@ export function parseAlignments(separator: string): Record<number, CellAlign> {
 }
 
 /**
- * Render a markdown table block into aligned box-drawing lines.
- * `tableLines` must include the header row and (optionally) the separator row.
+ * Рендерит markdown-блок таблицы в выровненные строки без рамок.
+ * `tableLines` включает строку шапки и опц. строку-разделитель.
  */
 export function formatTable(tableLines: string[], opts: TableOptions = {}): string[] {
   const align: Record<number, CellAlign> = opts.align ?? {};
@@ -125,7 +128,7 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
     return isHeader ? pc.bold(content) : content;
   };
 
-  // No box-drawing grid: a bold header, a dim rule, aligned columns.
+  // Без box-рамок: жирная шапка, dim-линейка, выровненные колонки.
   const out: string[] = [];
   out.push(renderRow(headerRow, true));
   const ruleWidth = widths.reduce((a, b) => a + b, 0) + GAP.length * Math.max(0, columnCount - 1);
@@ -136,6 +139,7 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
   return out;
 }
 
+/** Ширина терминала; вне TTY — 80. */
 export function getTerminalWidth(): number {
   if (process.stdout.isTTY && process.stdout.columns) {
     return process.stdout.columns;
@@ -143,7 +147,7 @@ export function getTerminalWidth(): number {
   return 80;
 }
 
-/** Build pipe lines from structured data and render them as a table. */
+/** Строит pipe-строки из структурных данных и рендерит таблицей. */
 export function renderTable(
   headers: string[],
   rows: string[][],

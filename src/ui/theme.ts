@@ -1,47 +1,50 @@
+// Тема чата: глифы, болтливость, акцентные цвета категорий тулов (см. STYLE.md).
 import { pc } from "./colors";
 
 /**
- * Canonical chat glyphs — the single source of truth.
- * See `docs/design/ui/STYLE.md`. Do not invent per-module markers.
+ * Канонические глифы чата — единственный источник правды.
+ * См. `docs/design/ui/STYLE.md`. Свои маркеры по модулям не выдумывать.
  */
 export const glyph = {
-  /** An action (localized tool label follows). */
+  /** Действие (дальше — локализованный ярлык тула). */
   action: "◇",
   success: "✓",
   failure: "✗",
   warning: "⚠",
-  /** Reasoning / thinking. */
+  /** Рассуждение / обдумывание. */
   thinking: "✦",
   question: "?",
-  /** User input echoed in the transcript. */
+  /** Эхо ввода пользователя в транскрипте. */
   user: "↵",
-  /** Detail or recovery hint. */
+  /** Деталь или хинт восстановления. */
   detail: "↳",
-  /** Continuation of a grouped run. */
+  /** Продолжение сгруппированного прогона. */
   group: "│",
-  /** Metric summary line. */
+  /** Строка сводных метрик. */
   metric: "⟡",
-  /** Compaction / refresh. */
+  /** Компакция / обновление. */
   compact: "⟳",
 } as const;
 
+/** Глиф чата (одно из значений glyph). */
 export type Glyph = (typeof glyph)[keyof typeof glyph];
 
 /**
- * How much chat output the user wants.
- * - `quiet` (default): one line per action, metrics once per turn.
- * - `normal`: adds short result summaries.
- * - `verbose`: full per-action detail.
+ * Сколько вывода чата хочет юзер.
+ * - `quiet` (дефолт): строка на действие, метрики раз за ход;
+ * - `normal`: плюс короткие сводки результатов;
+ * - `verbose`: полные детали каждого действия.
  */
 export type Verbosity = "quiet" | "normal" | "verbose";
 
+/** Тайпгард болтливости. */
 export function isVerbosity(value: unknown): value is Verbosity {
   return value === "quiet" || value === "normal" || value === "verbose";
 }
 
 /**
- * Resolve the effective verbosity from config. Explicit `verbosity` wins;
- * otherwise the legacy boolean `verbose` maps to `verbose`/`quiet`.
+ * Резолвит итоговую болтливость из конфига. Явный `verbosity` побеждает;
+ * иначе legacy-bool `verbose` маппится в `verbose`/`quiet`.
  */
 export function resolveVerbosity(ui?: {
   verbose?: boolean;
@@ -51,12 +54,12 @@ export function resolveVerbosity(ui?: {
   return ui?.verbose ? "verbose" : "quiet";
 }
 
-/** Accent-colored action mark. */
+/** Акцентная метка действия (cyan). */
 export function actionMark(): string {
   return pc.cyan(glyph.action);
 }
 
-/** Tool categories — the action glyph keeps one shape, its color encodes kind. */
+/** Категории тулов: форма глифа одна, вид кодируется цветом. */
 export type ToolCategory = "recon" | "mutate" | "execute" | "meta";
 
 const CATEGORY_TOOLS: Record<ToolCategory, ReadonlySet<string>> = {
@@ -108,6 +111,7 @@ const CATEGORY_TOOLS: Record<ToolCategory, ReadonlySet<string>> = {
   ]),
 };
 
+/** Категория тула по имени. Неизвестные — meta. */
 export function toolCategory(tool: string): ToolCategory {
   for (const [category, tools] of Object.entries(CATEGORY_TOOLS) as [
     ToolCategory,
@@ -119,10 +123,10 @@ export function toolCategory(tool: string): ToolCategory {
 }
 
 /**
- * Accent color function for a tool category. The same color is applied to the
- * action glyph **and** the localized tool label, so they read as one unit
- * (see `docs/design/ui/STYLE.md`). Colors stay off the semantic success/warning/
- * error set so a colored label never reads as an outcome.
+ * Акцентный цвет категории тула. Один цвет красит И глиф действия, И
+ * локализованный ярлык — они читаются как единое целое
+ * (см. `docs/design/ui/STYLE.md`). Цвета не пересекаются с семантическими
+ * success/warning/error, чтобы цветной ярлык не читался как исход.
  */
 export function toolAccent(tool: string): (text: string) => string {
   switch (toolCategory(tool)) {
@@ -137,32 +141,32 @@ export function toolAccent(tool: string): (text: string) => string {
   }
 }
 
-/** Action mark colored by tool category. */
+/** Метка действия в цвете категории тула. */
 export function actionMarkFor(tool: string): string {
   return toolAccent(tool)(glyph.action);
 }
 
-/** Green success mark. */
+/** Зелёная метка успеха. */
 export function successMark(): string {
   return pc.green(glyph.success);
 }
 
-/** Red failure mark — reserved for real failures, never soft guards. */
+/** Красная метка провала — только реальные сбои, не мягкие гарды. */
 export function failureMark(): string {
   return pc.red(glyph.failure);
 }
 
-/** Yellow warning mark — soft blocks, protected paths, non-fatal issues. */
+/** Жёлтая метка предупреждения — мягкие блоки, защищённые пути, нефатальное. */
 export function warningMark(): string {
   return pc.yellow(glyph.warning);
 }
 
-/** Dim detail/hint mark. */
+/** Dim-метка детали/хинта. */
 export function detailMark(): string {
   return pc.dim(glyph.detail);
 }
 
-/** Human duration: `ms` under a second, `s` above (matches the mockup). */
+/** Человеческая длительность: `ms` до секунды, `s` выше (как в мокапе). */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;

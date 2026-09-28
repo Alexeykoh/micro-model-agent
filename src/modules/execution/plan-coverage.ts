@@ -1,18 +1,19 @@
+// Покрытие плана: упомянутые в задаче файлы обязаны встречаться в шагах.
 import { stripUrls } from "../hallucination/js-identifiers";
 
 /**
- * Coverage-specific extension allow-list. Only real deliverable file types are
- * counted, so prose like `e.g` / `i.e` (extensions `g`/`e`) is never mistaken
- * for a file, while web/doc deliverables (`.css`, `.html`, `.scss`, `.md`) ARE
- * checked — the old deny-list silently skipped them.
+ * Coverage-allow-list расширений. Считаются только реальные типы deliverable-
+ * файлов: проза `e.g` / `i.e` (расширения `g`/`e`) за файлы не сойдёт, а
+ * web/doc-результаты (`.css`, `.html`, `.scss`, `.md`) проверяются —
+ * старый deny-list их молча пропускал.
  */
 const COVERAGE_EXT = new Set([
-  // code
+  // Код
   "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rb", "go", "rs", "java",
   "kt", "kts", "cs", "php", "swift", "c", "cc", "cpp", "cxx", "h", "hpp",
   "lua", "pl", "sh", "bash", "zsh", "bat", "cmd", "ps1", "sql", "vue",
   "svelte", "dart", "scala", "clj",
-  // web / docs / config
+  // web / доки / конфиги
   "css", "scss", "less", "html", "htm", "md", "mdx", "json", "json5",
   "toml", "yaml", "yml", "ini", "env", "txt",
 ]);
@@ -20,8 +21,8 @@ const COVERAGE_EXT = new Set([
 const FILE_PATH_RE = /\b[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
- * Extract file paths (with extensions) mentioned in a task statement.
- * Used to check whether a generated plan covers every file the task requires.
+ * Извлекает пути файлов (с расширениями), упомянутые в формулировке задачи.
+ * Проверяет, покрывает ли сгенерированный план каждый требуемый файл.
  */
 export function extractFilePaths(text: string): string[] {
   if (!text) return [];
@@ -30,8 +31,8 @@ export function extractFilePaths(text: string): string[] {
   for (const m of stripUrls(text).matchAll(FILE_PATH_RE)) {
     const p = m[0].replace(/[.,;:)\]>]+$/g, "");
     if (!p) continue;
-    // Require a real file name: a non-empty stem before the extension in the
-    // last path segment (so `tsx/.ts` / `.env` segments are not "files").
+    // Требуем настоящее имя: непустой stem перед расширением в последнем
+    // сегменте (сегменты `tsx/.ts` / `.env` — не "файлы").
     const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
     const last = slash >= 0 ? p.slice(slash + 1) : p;
     const dot = last.lastIndexOf(".");
@@ -51,9 +52,9 @@ function basename(p: string): string {
 }
 
 /**
- * Compare the file requirements in the task statement against the plan's step
- * descriptions. A requirement is "covered" when its path (or its basename)
- * appears in at least one step. Returns the missing paths.
+ * Сравнивает файловые требования задачи с описаниями шагов плана. Требование
+ * "покрыто", если его путь (или basename) есть хоть в одном шаге. Возвращает
+ * недостающие пути.
  */
 export function checkPlanCoverage(
   taskText: string,
@@ -66,7 +67,7 @@ export function checkPlanCoverage(
   const missing = taskPaths.filter((p) => {
     const lower = p.toLowerCase();
     const base = basename(lower);
-    // A step mentioning either the full relative path or its basename counts.
+    // Шаг с полным относительным путём или его basename — засчитывается.
     return !stepText.includes(lower) && !stepText.includes(base);
   });
 

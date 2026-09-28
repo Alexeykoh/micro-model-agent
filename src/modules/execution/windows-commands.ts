@@ -1,17 +1,17 @@
 /**
- * Unix commands that do not exist (or have incompatible semantics) in Windows
- * cmd.exe. The 9B model keeps reaching for grep/sed/ls/find via the bash tool;
- * each failure returns a hint, but the model retries.
+ * Unix-команды, которых нет в Windows cmd.exe (или семантика несовместима).
+ * 9B-модель тянется к grep/sed/ls/find через тул bash; каждый фейл возвращает
+ * хинт, но модель ретраит.
  *
- * This is a session-level, module-side companion to the bash tool's own
- * per-command hard-stop (`UNIX_TO_WIN_HINTS` / `FAILING_FIRST_WORDS` /
- * `HARD_BLOCK_THRESHOLD` in src/tools/bash.ts). That mechanism injects
- * "STOP using X" INTO the tool output, which a 9B model tends to ignore; this
- * one, gated to win32 like bash.ts, queues a <system-summary> that lands
- * before the next model call. Keep the two command lists consistent.
+ * Сессионный модульный компаньон пер-командного hard-stop самого тула bash
+ * (`UNIX_TO_WIN_HINTS` / `FAILING_FIRST_WORDS` / `HARD_BLOCK_THRESHOLD` в
+ * src/tools/bash.ts). Тот механизм инжектит "STOP using X" В вывод тула,
+ * который 9B-модель склонна игнорировать; этот, гейченный на win32 как bash.ts,
+ * кладёт <system-summary> перед следующим вызовом модели. Списки команд держим
+ * синхронно.
  *
- * This is a command allow/deny list (like the security module's command
- * blacklist), NOT task classification (rule #10).
+ * Это allow/deny-список команд (как чёрный список команд security-модуля),
+ * НЕ классификация задач (правило #10).
  */
 const FORBIDDEN_COMMANDS = new Set([
   "grep",
@@ -42,7 +42,7 @@ function firstWord(command: string): string {
   return (segs[0] || "").replace(/[^\w-]/g, "").toLowerCase();
 }
 
-/** The forbidden command name if `command` starts with one (handles `cd x && …`). */
+/** Имя запрещённой команды, если `command` с неё начинается (понимает `cd x && …`). */
 export function forbiddenWindowsCommand(command: string): string | null {
   const m = command.match(/^\s*cd\s+\S+\s*&&\s*(\S+)/);
   if (m) return forbiddenWindowsCommand(m[1]);

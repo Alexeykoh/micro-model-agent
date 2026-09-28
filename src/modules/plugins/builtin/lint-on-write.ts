@@ -1,3 +1,4 @@
+// Встроенный плагин: синтаксис-проверка записи, проектный lint и дебаунснутый typecheck.
 import type { AgentPlugin } from "../../types";
 import type { ToolContext, ToolCall, ToolResult } from "../../../tools/types";
 import { spawn, execSync } from "child_process";
@@ -9,32 +10,32 @@ import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
 
 const TYPE_CHECK_DEBOUNCE_MS = 2000;
 
-// Projects whose lint script points at a binary that is not installed
-// (keyed by baseDir::script). The run itself is expensive and the failure
-// marker is pure noise — skip for the rest of the process.
+// Проекты, чей lint-скрипт ссылается на неустановленный бинарник
+// (ключ baseDir::script). Сам прогон дорог, а маркер провала — чистый шум,
+// поэтому пропускаем до конца процесса.
 const missingLintBinaries = new Set<string>();
 
 function lintCacheKey(baseDir: string, lintScript: string): string {
   return `${baseDir}::${lintScript}`;
 }
 
-// Shell-level "command not found" across locales/runtimes: POSIX `sh` prints
-// "command not found" (exit 127); Windows cmd.exe prints "is not recognized"
-// (en) / "не является внутренней или внешней командой" (ru) with exit 1/9009.
+// Шелл-уровень "command not found" по локалям/рантаймам: POSIX `sh` пишет
+// "command not found" (exit 127); Windows cmd.exe — "is not recognized"
+// (en) / "не является внутренней или внешней командой" (ru), exit 1/9009.
 const MISSING_BINARY_RE =
   /command not found|not recognized|не является внутренней|не распознан|не є внутрішньою|".+?" не является/i;
 
 function isMissingBinaryError(err: any, combinedOutput: string): boolean {
   // 127 = POSIX sh "command not found"; 9009 = Windows cmd.exe "is not
-  // recognized" — both are authoritative regardless of output encoding.
+  // recognized" — оба авторитетны независимо от кодировки вывода.
   if (err.status === 127 || err.status === 9009) return true;
   if (err.code === "ENOENT") return true;
   return MISSING_BINARY_RE.test(combinedOutput);
 }
 
-// Per-file syntax checks are cached by (path, content hash): re-writing a file
-// with identical content skips the (expensive) check. Content changes → cache
-// miss → fresh check.
+// Пофайловые синтаксис-проверки кешируются по (путь, хеш содержимого): перезапись
+// файла с тем же содержимым скипает (дорогую) проверку. Смена контента →
+// промах кеша → свежая проверка.
 const syntaxCache = new Map<string, { hash: string; error: string | null }>();
 
 function contentHash(content: string): string {
@@ -48,10 +49,10 @@ function contentHash(content: string): string {
 let _winDecoder: TextDecoder | undefined;
 
 /**
- * OEM decoder for the active console code page (CP866 on Russian Windows).
- * Mirrors `getOemDecoder()` in modules/processes/registry.ts: a transient
- * chcp.com failure under load must NOT be cached — only a successful probe
- * (or the hard ibm866 fallback) is memoized.
+ * OEM-декодер активной консольной кодовой страницы (CP866 на русской Windows).
+ * Зеркалит `getOemDecoder()` из modules/processes/registry.ts: транзиентный
+ * провал chcp.com под нагрузкой НЕ кешируется — мемоизируется только успешный
+ * проб (или жёсткий фолбэк ibm866).
  */
 function getWinDecoder(): TextDecoder {
   if (_winDecoder !== undefined) return _winDecoder;
@@ -69,13 +70,13 @@ function getWinDecoder(): TextDecoder {
     const m = cpOut.match(/(\d+)/);
     if (m) decoder = new TextDecoder(`ibm${m[1]}`);
   } catch {
-    /* chcp failed (load/ENOENT) — retry on the next call */
+    /* chcp упал (нагрузка/ENOENT) — повторим при следующем вызове */
   }
   if (!decoder) {
     try {
       decoder = new TextDecoder("ibm866");
     } catch {
-      return new TextDecoder("utf-8"); // unknown encoding — do not cache
+      return new TextDecoder("utf-8"); // неизвестная кодировка — не кешируем
     }
   }
   _winDecoder = decoder;
@@ -83,16 +84,16 @@ function getWinDecoder(): TextDecoder {
 }
 
 /**
- * Decode child-process output to UTF-8. Modern tools (bun, node, npm, tsc)
- * write UTF-8 into the pipe; cmd.exe builtins/errors use the OEM code page.
- * Strict UTF-8 first; on invalid byte sequences fall back to OEM.
+ * Декодирует вывод дочернего процесса в UTF-8. Современные тулы (bun, node,
+ * npm, tsc) пишут UTF-8 в пайп; встроенные команды/ошибки cmd.exe — OEM-страницу.
+ * Сначала строгий UTF-8; на невалидных байтах — откат на OEM.
  */
 function decodeOutput(chunks: Buffer[]): string {
   const raw = Buffer.concat(chunks);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(raw);
   } catch {
-    /* not valid UTF-8 → OEM code page output */
+    /* невалидный UTF-8 → вывод в OEM-кодировке */
   }
   try {
     return getWinDecoder().decode(raw);
@@ -101,14 +102,16 @@ function decodeOutput(chunks: Buffer[]): string {
   }
 }
 
+/** Встроенный плагин: проверяет каждую запись/правку файла (синтаксис, lint, типы). */
 export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
   priority = 10;
   isBuiltin = true;
-  // Debounced project typecheck, keyed by project root. A single slot leaked
-  // one project's tsc errors onto writes in another project (monorepo).
+  // Дебаунснутый проектный typecheck по корню проекта. Один общий слот
+  // протекал tsc-ошибками одного проекта в записи другого (монорепо).
   private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
 
+  /** После записи/правки: синтаксис файла, затем проектные lint и typecheck. */
   async onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
     if (call.name !== "write_file" && call.name !== "edit_file") {
       return;
@@ -148,9 +151,9 @@ export class LintOnWritePlugin implements AgentPlugin {
     signal?: AbortSignal,
   ): Promise<string | null> {
     if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
-      // Syntax-only check via bun's parser (~200ms) instead of `npx tsc`
-      // (~3-5s per write). Full type errors are still surfaced by the
-      // debounced project typecheck below when a tsconfig exists.
+      // Проверка только синтаксиса парсером bun (~200мс) вместо `npx tsc`
+      // (~3-5с на запись). Полные ошибки типов всё равно отдаёт дебаунснутый
+      // проектный typecheck ниже, когда есть tsconfig.
       let content = "";
       try {
         content = readFileSync(filePath, "utf-8");
@@ -169,7 +172,7 @@ export class LintOnWritePlugin implements AgentPlugin {
           10000,
           signal,
         );
-        // Aborted check (interrupt) never validated the file — don't cache it.
+        // Прерванная проверка (interrupt) файл не валидировала — не кешируем.
         if (signal?.aborted) return null;
         syntaxCache.set(filePath, { hash, error: null });
         return null;
@@ -223,10 +226,10 @@ export class LintOnWritePlugin implements AgentPlugin {
         return;
       }
 
-      // A declared-but-missing linter binary ("eslint" not installed) is a
-      // project-setup gap, not a code problem — appending it to every write
-      // result polluted the context ~25×/session (ses_mt4fn58c). Detect it
-      // once and skip silently for the rest of the process.
+      // Объявленный, но неустановленный бинарник линтера ("eslint" не стоит) —
+      // пробел проектного сетапа, а не проблема кода: дописывание его к каждой
+      // записи засоряло контекст ~25×/сессию (ses_mt4fn58c). Детектим раз
+      // и дальше скипаем молча до конца процесса.
       if (missingLintBinaries.has(lintCacheKey(ctx.baseDir, lintScript))) {
         ctx.logger.debug(`Lint skipped (linter for "${lintScript}" not installed)`);
         return;
@@ -261,10 +264,10 @@ export class LintOnWritePlugin implements AgentPlugin {
     result: ToolResult,
     signal?: AbortSignal,
   ): Promise<void> {
-    // Resolve the project root from the EDITED FILE, not the agent baseDir.
-    // In a nested layout (`baseDir/proj/tsconfig.json`) the old baseDir-based
-    // lookup silently skipped the typecheck on every write — the whole
-    // session then ran with zero type feedback (observed in ses_mst2r0r5).
+    // Корень проекта резолвим от РЕДАКТИРОВАННОГО ФАЙЛА, а не от baseDir агента.
+    // Во вложенной раскладке (`baseDir/proj/tsconfig.json`) старый поиск от
+    // baseDir молча скипал typecheck на каждой записи — вся сессия шла
+    // вообще без типового фидбэка (наблюдено в ses_mst2r0r5).
     const projectRoot = findProjectRoot(filePath, baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
@@ -290,7 +293,7 @@ export class LintOnWritePlugin implements AgentPlugin {
     this._checks.set(projectRoot, { at: now, promise });
     const error = await promise;
     if (error) {
-      // Try to auto-fix fixable errors
+      // Пробуем автофиксить чинимые ошибки
       const { stdout, stderr } = await runAsync(
         `${tsc} --noEmit --skipLibCheck 2>&1`,
         projectRoot,
@@ -305,11 +308,11 @@ export class LintOnWritePlugin implements AgentPlugin {
         const fixResult = autoFixErrors(filePath, readFileSync(filePath, "utf-8"), errors);
 
         if (fixResult.fixed) {
-          // Write the fixed content
+          // Пишем починенное содержимое
           writeFileSync(filePath, fixResult.newContent, "utf-8");
           result.output += `\n\n[Auto-fixed]: ${fixResult.applied.join("; ")}`;
 
-          // If there are remaining errors, show them
+          // Если остались ошибки — показываем их
           if (fixResult.remaining.length > 0) {
             const remainingMsg = fixResult.remaining
               .map((e) => `TS${e.code}: ${e.message}`)
@@ -354,14 +357,13 @@ export class LintOnWritePlugin implements AgentPlugin {
 }
 
 /**
- * Run a command asynchronously (non-blocking event loop) and resolve when it
- * exits. Rejects with captured stderr/stdout on non-zero exit or timeout.
+ * Гоняет команду асинхронно (не стопая event loop) и резолвится на выходе.
+ * Реджектит с захваченными stderr/stdout при ненулевом коде или таймауте.
  *
- * A plain string runs through a shell (project-controlled scripts). An
- * `{file,args}` spec spawns WITHOUT a shell — required for anything built from
- * a model-supplied path (`bun build … <file>`, `node --check <file>`), since a
- * filename may contain `$()`, backticks or `%VAR%` and shell:true would execute
- * it (command injection).
+ * Простая строка идёт через шелл (проектные скрипты). Спецификация
+ * `{file,args}` спавнится БЕЗ шелла — обязательно для всего, собранного из
+ * модельного пути (`bun build … <file>`, `node --check <file>`): в имени могут
+ * быть `$()`, бектики или `%VAR%`, а shell:true их исполнил бы (инъекция).
  */
 function runAsync(
   command: string | { file: string; args: string[] },
@@ -396,10 +398,10 @@ function runAsync(
       child.kill();
       reject(new Error(`Command timed out after ${timeoutMs}ms`));
     }, timeoutMs);
-    // Interrupt (Esc/Ctrl+C): kill the child so the agent loop can return to
-    // the prompt immediately instead of waiting out a long tsc/lint run. The
-    // close handler resolves empty when aborted — the caller's `signal.aborted`
-    // guard discards the result anyway.
+    // Прерывание (Esc/Ctrl+C): убиваем ребёнка, чтобы петля агента сразу
+    // вернулась в промпт, а не высиживала длинный tsc/lint. Хендлер close
+    // при аборте резолвит пусто — гард `signal.aborted` вызывающего результат
+    // всё равно отбрасывает.
     const onAbort = () => child.kill();
     if (signal?.aborted) {
       child.kill();
@@ -433,4 +435,5 @@ function runAsync(
   });
 }
 
+/** Готовый инстанс для регистрации. */
 export const plugin = new LintOnWritePlugin();

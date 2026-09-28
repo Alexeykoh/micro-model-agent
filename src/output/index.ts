@@ -1,3 +1,4 @@
+// Публичный фасад вывода: типы, шина, канал, стоки, машинный вывод.
 export * from "./types";
 export { OutputBus, defaultOutputBus } from "./bus";
 export { formatEventLine } from "./format";

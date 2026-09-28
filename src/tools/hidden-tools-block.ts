@@ -1,11 +1,11 @@
+/** Блок системного промпта о скрытых tag-фильтром тулах. */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
 /**
- * Build a compact system-prompt block listing the tools hidden by the current
- * tag filter. The model must know these tools exist (and how to reach them)
- * even though they are absent from the LLM tool schema. Grouped by tag with
- * short purposes; capped to keep the block small.
+ * Компактный блок системного промпта со скрытыми тулами. Модель должна знать
+ * об их существовании (и пути доступа), хотя их нет в tool-схеме LLM.
+ * Группировка по тегам, размер ограничен.
  */
 export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: string[]): string {
   if (!allTools.length) return "";
@@ -21,7 +21,7 @@ export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: st
   const hidden = allTools.filter((tool) => !visible.has(tool.name));
   if (hidden.length === 0) return "";
 
-  // Group by tag → tools, then by tool name alphabetically within a tag.
+  // Группировка по тегам, внутри тега — по имени тула.
   const byTag = new Map<string, ToolDefinition[]>();
   for (const tool of hidden) {
     const tags = tool.tags && tool.tags.length > 0 ? tool.tags : ["other"];

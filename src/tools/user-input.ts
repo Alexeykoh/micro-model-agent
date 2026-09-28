@@ -1,33 +1,36 @@
+/** Низкоуровневый ввод юзера: меню/парсинг выбора по STYLE.md, readline-фолбэк. */
 import * as readline from "readline";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output/index";
 import type { PromptIO } from "./prompt-io";
 
+/** Вариант выбора: подпись + пояснение. */
 export interface InputOption {
   label: string;
   description: string;
 }
 
+/** Опции выбора: мультивыбор, кастомный ответ. */
 export interface AskChoiceOptions {
   multiple?: boolean;
   allowCustom?: boolean;
 }
 
+/** Опции вопроса: заголовок, опции, прогресс, кастом. */
 export interface AskUserOptions extends AskChoiceOptions {
   header?: string;
   options?: InputOption[];
   progress?: string;
-  /** Allow typing a custom answer (default: true when options are present). */
+  /** Разрешить свой ответ текстом (дефолт: true при наличии опций). */
   custom?: boolean;
 }
 
-/** Index returned by askChoice when the user picks the "custom answer" entry. */
+/** Индекс выбора "свой ответ" из askChoice. */
 export const CUSTOM_INDEX = -1;
 
 /**
- * Parse user input like "1" or "1,3" into 0-based option indexes.
- * Returns null on invalid input (empty, non-numeric, out of range,
- * duplicates, or multiple values when multiple is false).
+ * Парсит ввод вида "1" или "1,3" в 0-based индексы. Невалидное (пусто,
+ * нецифры, вне диапазона, дубли, несколько при multiple=false) — null.
  */
 export function parseSelection(
   input: string,
@@ -49,7 +52,7 @@ export function parseSelection(
   return indexes.length ? indexes : null;
 }
 
-/** Render `? <question>` + indented options per STYLE.md. */
+/** Рендерит `? <вопрос>` + опции с отступом по STYLE.md. */
 export function formatMenu(
   question: string,
   options: InputOption[],
@@ -67,13 +70,14 @@ export function formatMenu(
   return lines.join("\n");
 }
 
-/** `>` prompt marker for a selection, per STYLE.md. */
+/** Маркер промпта выбора `>`, по STYLE.md. */
 export function choicePrompt(optionCount: number, multiple: boolean): string {
   return multiple
     ? t("tool.user_input.choice_multiple")
     : t("tool.user_input.choice_single", { max: optionCount });
 }
 
+/** Создаёт readline-интерфейс на stdio. */
 function createRl(): readline.Interface {
   return readline.createInterface({
     input: process.stdin,
@@ -81,13 +85,14 @@ function createRl(): readline.Interface {
   });
 }
 
+/** Одна строка промпта через readline. */
 function promptLine(rl: readline.Interface, prompt: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(prompt, (answer: string) => resolve(answer));
   });
 }
 
-/** Free-text question. Returns trimmed answer (may be empty). */
+/** Free-text вопрос. Возвращает триммированный ответ (может быть пуст). */
 export async function askText(question: string): Promise<string> {
   const rl = createRl();
   try {
@@ -99,9 +104,9 @@ export async function askText(question: string): Promise<string> {
 }
 
 /**
- * Choice question: shows a numbered menu and waits for a valid selection.
- * Returns selected 0-based indexes; CUSTOM_INDEX marks the custom entry.
- * Re-asks until the input is valid.
+ * Вопрос с выбором: нумерованное меню, ожидание валидного ввода.
+ * Возвращает 0-based индексы; CUSTOM_INDEX — кастомный пункт.
+ * Переспрашивает до валидного.
  */
 export async function askChoice(
   question: string,
@@ -129,13 +134,12 @@ export async function askChoice(
 }
 
 /**
- * High-level helper used by the question tool.
- * - No options: free-text input, returns [text] or [] when empty.
- * - With options: returns selected labels; custom entry resolves to typed text.
+ * Высокоуровневый хелпер тула question.
+ * - Без опций: free-text, `[text]` или `[]` при пустом.
+ * - С опциями: выбранные labels; кастомный пункт — введённый текст.
  *
- * When `io` is provided (REPL), all prompting goes through it so the tool can
- * borrow the terminal from the input editor. Without it (headless/non-REPL)
- * the module-level readline helpers above remain the fallback.
+ * При `io` (REPL) весь промптинг идёт через него (терминал взаймы у редактора
+ * ввода). Без него (headless/non-REPL) — module-level readline-фолбэк выше.
  */
 export async function askUser(
   question: string,

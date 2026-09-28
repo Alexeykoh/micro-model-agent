@@ -1,21 +1,14 @@
+// Шифрование секретов конфига: AES-256-CBC + HMAC, ключ в ~/.mma/.encryption-key.
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "fs";
 import { globalMmaDir } from "../../config/paths";
 
-/**
- * Encryption configuration
- */
+/** Конфиг шифрования. */
 export interface EncryptionConfig {
-  /**
-   * Path to the encryption key file
-   * Default: ~/.mma/.encryption-key
-   */
+  /** Путь к файлу ключа. Дефолт: ~/.mma/.encryption-key */
   keyPath?: string;
-  /**
-   * Encryption algorithm
-   * Default: aes-256-gcm
-   */
+  /** Алгоритм. Дефолт: aes-256-gcm */
   algorithm?: string;
 }
 
@@ -28,24 +21,19 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 16;
 const KEY_LENGTH = 32;
 
-/**
- * Generate a new encryption key
- */
+/** Сгенерировать новый ключ шифрования. */
 export function generateEncryptionKey(): Buffer {
   return randomBytes(KEY_LENGTH);
 }
 
-/**
- * Get or create encryption key from file
- */
+/** Взять ключ из файла или создать новый. */
 export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
   const { keyPath } = { ...DEFAULT_CONFIG, ...config };
 
-  // Ensure directory exists
+  // Каталог обязан существовать
   const dir = join(keyPath, "..");
   if (!existsSync(dir)) {
-    // Note: We can't use mkdirSync here because we're in a pure function
-    // This will be handled by the caller
+    // mkdirSync тут нельзя — чистая функция, создаёт вызывающий
   }
 
   if (!existsSync(keyPath)) {
@@ -54,8 +42,8 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
       writeFileSync(keyPath, key.toString("base64"), { mode: 0o600 });
       return key;
     } catch (e) {
-      // If we can't persist the key, encrypted data would be unrecoverable
-      // on the next run — fail loudly instead of silently degrading.
+      // Без персиста ключа зашифрованное станет невосстановимым при
+      // следующем запуске — падаем громко, а не деградируем молча.
       throw new Error(
         `Cannot write encryption key to ${keyPath}: ${errMsg(e)}`,
       );
@@ -66,12 +54,12 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
     const keyBase64 = readFileSync(keyPath, "utf8");
     return Buffer.from(keyBase64, "base64");
   } catch {
-    // Backup the corrupted key file before throwing
+    // Битый ключ бэкапим перед выбросом
     try {
       const backupPath = `${keyPath}.corrupted.${Date.now()}`;
       copyFileSync(keyPath, backupPath);
     } catch {
-      /* backup failed, continue */
+      /* бэкап не удался, идём дальше */
     }
     throw new Error(
       `Encryption key file is corrupted or unreadable: ${keyPath}. ` +
@@ -82,37 +70,35 @@ export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
 }
 
 /**
- * Encrypt a string using AES-256-GCM
- * Note: Bun's crypto module doesn't support getAuthTag/setAuthTag directly,
- * so we use a simpler approach with AES-256-CBC + HMAC for authentication
+ * Зашифровать строку (AES-256-GCM).
+ * В crypto Bun нет getAuthTag/setAuthTag напрямую, поэтому проще:
+ * AES-256-CBC + HMAC для аутентификации.
  */
 export function encryptString(plaintext: string, key: Buffer): string {
   const iv = randomBytes(IV_LENGTH);
   const salt = randomBytes(SALT_LENGTH);
 
-  // Derive encryption key and HMAC key from the main key
+  // Ключ шифрования и HMAC-ключ выводятся из главного ключа
   const encKey = scryptSync(key, salt, KEY_LENGTH);
   const hmacSalt = Buffer.concat([salt, Buffer.from([1, 2, 3, 4])]);
   const hmacKey = scryptSync(key, hmacSalt, KEY_LENGTH);
 
-  // Encrypt with AES-256-CBC
+  // Шифрование AES-256-CBC
   const cipher = createCipheriv("aes-256-cbc", encKey, iv);
   let encrypted = cipher.update(plaintext, "utf8", "base64");
   encrypted += cipher.final("base64");
 
-  // Create HMAC for authentication
+  // HMAC для аутентификации
   const hmac = createHmac("sha256", hmacKey);
   hmac.update(iv);
   hmac.update(Buffer.from(encrypted, "base64"));
   const authTag = hmac.digest();
 
-  // Format: salt:iv:authTag:encrypted
+  // Формат: salt:iv:authTag:encrypted
   return `${salt.toString("base64")}:${iv.toString("base64")}:${authTag.toString("base64")}:${encrypted}`;
 }
 
-/**
- * Decrypt a string using AES-256-CBC + HMAC
- */
+/** Расшифровать строку (AES-256-CBC + HMAC). */
 export function decryptString(encryptedText: string, key: Buffer): string {
   const parts = encryptedText.split(":");
   if (parts.length !== 4) {
@@ -124,12 +110,12 @@ export function decryptString(encryptedText: string, key: Buffer): string {
   const authTag = Buffer.from(parts[2], "base64");
   const encrypted = parts[3];
 
-  // Derive encryption key and HMAC key from the main key
+  // Ключ шифрования и HMAC-ключ выводятся из главного ключа
   const encKey = scryptSync(key, salt, KEY_LENGTH);
   const hmacSalt = Buffer.concat([salt, Buffer.from([1, 2, 3, 4])]);
   const hmacKey = scryptSync(key, hmacSalt, KEY_LENGTH);
 
-  // Verify HMAC
+  // Проверка HMAC
   const hmac = createHmac("sha256", hmacKey);
   hmac.update(iv);
   hmac.update(Buffer.from(encrypted, "base64"));
@@ -139,7 +125,7 @@ export function decryptString(encryptedText: string, key: Buffer): string {
     throw new Error("Authentication failed: invalid tag");
   }
 
-  // Decrypt with AES-256-CBC
+  // Расшифровка AES-256-CBC
   const decipher = createDecipheriv("aes-256-cbc", encKey, iv);
   let decrypted = decipher.update(encrypted, "base64", "utf8");
   decrypted += decipher.final("utf8");
@@ -150,25 +136,20 @@ export function decryptString(encryptedText: string, key: Buffer): string {
 import { createHmac } from "node:crypto";
 import { errMsg } from "../../utils";
 
-/**
- * Check if a string looks like it's encrypted
- */
+/** Похоже ли значение на зашифрованное (формат salt:iv:authTag:encrypted). */
 export function isEncryptedString(value: string): boolean {
-  // Encrypted strings have the format: salt:iv:authTag:encrypted
-  // Each part is base64 encoded and separated by colons
+  // Формат: salt:iv:authTag:encrypted, каждая часть — base64 через двоеточие
   const parts = value.split(":");
   if (parts.length !== 4) return false;
 
-  // Strict base64 shape check: Buffer.from(value, "base64") NEVER throws
-  // (lenient decode), so it cannot distinguish plaintext from base64.
+  // Строгая проверка формы base64: Buffer.from(value, "base64") НИКОГДА не бросает
+  // (ленивое декодирование), так что plaintext от base64 он не отличит.
   const isB64 = (s: string) =>
     s.length > 0 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
   return parts.every(isB64);
 }
 
-/**
- * Sensitive field names that should be encrypted
- */
+/** Имена чувствительных полей для шифрования. */
 export const SENSITIVE_FIELD_NAMES = [
   "api_key",
   "apikey",
@@ -187,17 +168,13 @@ export const SENSITIVE_FIELD_NAMES = [
   "key",
 ];
 
-/**
- * Check if a field name indicates sensitive data
- */
+/** Имя поля указывает на чувствительные данные или нет. */
 export function isSensitiveFieldName(fieldName: string): boolean {
   const lowerFieldName = fieldName.toLowerCase();
   return SENSITIVE_FIELD_NAMES.some((name) => lowerFieldName.includes(name));
 }
 
-/**
- * Encrypt sensitive fields in an object
- */
+/** Зашифровать чувствительные поля объекта (рекурсивно, RegExp не трогает). */
 export function encryptSensitiveFields<T extends Record<string, unknown>>(obj: T, key: Buffer): T {
   const result: Record<string, unknown> = {};
 
@@ -224,9 +201,7 @@ export function encryptSensitiveFields<T extends Record<string, unknown>>(obj: T
   return result as T;
 }
 
-/**
- * Decrypt sensitive fields in an object
- */
+/** Расшифровать чувствительные поля объекта; неудача — оставить как есть. */
 export function decryptSensitiveFields<T extends Record<string, unknown>>(obj: T, key: Buffer): T {
   const result: Record<string, unknown> = {};
 
@@ -235,7 +210,7 @@ export function decryptSensitiveFields<T extends Record<string, unknown>>(obj: T
       try {
         result[fieldName] = decryptString(value, key);
       } catch {
-        // If decryption fails, keep the encrypted value
+        // Расшифровка не удалась — оставить зашифрованное значение
         result[fieldName] = value;
       }
     } else if (typeof value === "object" && value !== null) {
@@ -258,9 +233,7 @@ export function decryptSensitiveFields<T extends Record<string, unknown>>(obj: T
   return result as T;
 }
 
-/**
- * Create a wrapper for encrypting/decrypting config values
- */
+/** Обёртка шифрования/расшифровки значений конфига. */
 export class ConfigEncryptor {
   private key: Buffer;
 

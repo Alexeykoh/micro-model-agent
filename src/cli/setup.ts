@@ -1,3 +1,4 @@
+// Визард первого запуска: язык → провайдер → ключ → модель → контекст → security.
 import { pc } from "../ui/colors";
 import { t, setLocale } from "../i18n/index";
 import { Spinner } from "../ui/spinner";
@@ -28,7 +29,7 @@ async function withSpinner<T>(message: string, fn: () => Promise<T>): Promise<T>
   }
 }
 
-/** Render a numbered list inside a box. */
+/** Рендерит нумерованный список в рамке. */
 function menuList(items: Array<{ label: string; url?: string }>): void {
   const lines = items.map(
     (it, i) => ` ${pc.cyan(`[${i + 1}]`)} ${it.label}${it.url ? `  ${pc.dim(it.url)}` : ""}`,
@@ -36,6 +37,7 @@ function menuList(items: Array<{ label: string; url?: string }>): void {
   for (const l of box(lines, { width: 72 })) getDefaultChannel().writeLine(l);
 }
 
+/** Спрашивает строку; пустой ответ — defaultValue. */
 function ask(rl: PromptInput, question: string, defaultValue?: string): Promise<string> {
   return new Promise((resolve) => {
     const prompt = defaultValue ? `${question} [${defaultValue}]: ` : `${question}: `;
@@ -45,7 +47,7 @@ function ask(rl: PromptInput, question: string, defaultValue?: string): Promise<
   });
 }
 
-/** Parse a positive integer answer, falling back to the prompt's default. */
+/** Парсит положительный int-ответ, иначе — дефолт промпта. */
 function askInt(rl: PromptInput, question: string, defaultValue: number): Promise<number> {
   return ask(rl, question, String(defaultValue)).then((raw) => {
     const n = parseInt(raw, 10);
@@ -58,6 +60,7 @@ const PROVIDER_TYPES = BUILTIN_PROVIDERS.map((spec) => ({
   label: spec.label,
 }));
 
+/** Прогоняет визард первого запуска (язык → провайдер → … → review). Возвращает ответы. */
 export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> {
   getDefaultChannel().writeLine(t("setup.title"));
 
@@ -169,8 +172,8 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   }
 
   if (ownRl) {
-    // Detach the prompt reader and pause stdin so the REPL's raw-mode
-    // LineEditor can take over cleanly (no readline/raw-mode state left).
+    // Деттачим ридер промпта и ставим stdin на паузу, чтобы raw-режимный
+    // LineEditor REPL захватил его чисто (без leftover readline/raw-состояния).
     (rl as SetupPrompt).close();
   }
 

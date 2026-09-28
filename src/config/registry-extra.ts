@@ -1,3 +1,4 @@
+// Доп. дефы реестра (~110 ключей): фабрики bool/int/share/enum/list/str/json + EXTRA_DEFS.
 import type { AppConfig, AuditEventType } from "./types";
 import type { ConfigKeyDef, ConfigRangeReason } from "./registry";
 import { DEFAULTS } from "./defaults";
@@ -7,6 +8,7 @@ type ReasoningBound = "low" | "medium" | "high";
 
 const REASONING_BOUNDS = ["low", "medium", "high"] as const;
 
+/** Фабрика bool-дефа. */
 function bool(
   key: string,
   domain: string,
@@ -17,6 +19,7 @@ function bool(
   return { key, aliases: [], domain, valueType: "bool", reconfigure, get, set };
 }
 
+/** Фабрика int-дефа с min/max/step. */
 function int(
   key: string,
   domain: string,
@@ -30,6 +33,7 @@ function int(
   return { key, aliases: [], domain, valueType: "int", min, max, step, reconfigure, get, set };
 }
 
+/** Фабрика share-дефа (доля 0.05–0.9). */
 function share(
   key: string,
   domain: string,
@@ -40,6 +44,7 @@ function share(
   return { key, aliases: [], domain, valueType: "share", min: 0.05, max: 0.9, step: 0.01, reconfigure, get, set };
 }
 
+/** Фабрика enum-дефа. */
 function enumOf(
   key: string,
   domain: string,
@@ -51,6 +56,7 @@ function enumOf(
   return { key, aliases: [], domain, valueType: "enum", enumValues: values, reconfigure, get, set };
 }
 
+/** Фабрика list-дефа (без reconfigure, опц. редактор). */
 function list(
   key: string,
   domain: string,
@@ -61,6 +67,7 @@ function list(
   return { key, aliases: [], domain, valueType: "list", reconfigure: false, editor, get, set };
 }
 
+/** Фабрика string-дефа. */
 function str(
   key: string,
   domain: string,
@@ -70,7 +77,7 @@ function str(
   return { key, aliases: [], domain, valueType: "string", reconfigure: false, get, set };
 }
 
-/** Optional string: get returns "" when unset, set clears to undefined on empty. */
+/** Опциональная строка: get отдаёт "" при неустановленной, set чистит в undefined на пустой. */
 function strOpt(
   key: string,
   domain: string,
@@ -80,6 +87,7 @@ function strOpt(
   return str(key, domain, get, set);
 }
 
+/** Фабрика json-дефа с опц. валидацией и редактором. */
 function json(
   key: string,
   domain: string,
@@ -101,7 +109,7 @@ function json(
   };
 }
 
-/** JSON def with a shape predicate; anything failing the check is "invalid". */
+/** JSON-деф с предикатом формы; всё, не прошедшее проверку, — "invalid". */
 function jsonShape(
   key: string,
   domain: string,
@@ -115,16 +123,18 @@ function jsonShape(
   return json(key, domain, get, set, extraValidate, editor);
 }
 
-/** Lazy-init the optional security nest and return it. */
+/** Лениво создаёт опциональное гнездо security и возвращает его. */
 function sec(c: AppConfig) {
   c.security ??= structuredClone(DEFAULT_SECURITY_CONFIG);
   return c.security;
 }
 
+/** Проверка на запись (объект-не-массив). */
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** Проверка на неотрицательное число. */
 function isNonNegNum(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v) && v >= 0;
 }
@@ -141,6 +151,7 @@ const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
   "session_end",
 ];
 
+/** Доп. дефы реестра; мержится в DEFINITIONS конкатом (см. registry.ts). */
 export const EXTRA_DEFS: ConfigKeyDef[] = [
   bool("provider.fallback", "provider", false,
     (c) => c.provider.fallback ?? false,
@@ -357,7 +368,7 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.modelLoad ??= structuredClone(DEFAULTS.modelLoad);
       c.modelLoad.offloadKvCacheToGpu = v as boolean;
     }),
-  // No schema default (omitted unless set); 512 mirrors the llama.cpp default.
+  // Дефолта в схеме нет (поле опускается, пока не задано); 512 зеркалит дефолт llama.cpp.
   int("modelLoad.evalBatchSize", "provider", 1, 4096, 1, true,
     (c) => c.modelLoad?.evalBatchSize ?? 512,
     (c, v) => {
@@ -544,7 +555,7 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c, v) => { sec(c).auditNotifier.eventTypes = v as AuditEventType[]; },
     (v) => Array.isArray(v) && v.every((e) =>
       typeof e === "string" && (AUDIT_EVENT_TYPES as readonly string[]).includes(e)),
-    // Empty array = every event type (see the key's description).
+    // Пустой массив = все типы событий (см. описание ключа).
     { kind: "checkboxes", options: AUDIT_EVENT_TYPES }),
   int("security.auditNotifier.maxRetries", "security", 0, 10, 1, false,
     (c) => c.security?.auditNotifier.maxRetries ?? DEFAULT_SECURITY_CONFIG.auditNotifier.maxRetries,

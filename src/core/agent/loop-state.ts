@@ -1,3 +1,4 @@
+/** Состояние одного запуска агентного цикла: счётчики, бюджеты, сигналы. */
 import { FORCED_COMPACTION_COOLDOWN } from "./constants";
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
@@ -114,13 +115,13 @@ export interface LoopState {
   /** Последняя сводка неудачного аудита — для сообщения об ошибке. */
   lastAuditSummary: string;
 
-  /** Critic LLM calls made this run. */
+  /** Вызовы критика за прогон. */
   criticCalls: number;
-  /** Repair cycles consumed this run. */
+  /** Израсходованные циклы починки за прогон. */
   criticRepairCycles: number;
-  /** Work mutations accumulated since the last critic call. */
+  /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
-  /** Dedupe signatures of critic issues already surfaced. */
+  /** Сигнатуры уже показанных проблем критика (дедупликация). */
   seenCriticIssues: Set<string>;
 
   /** Счётчик пустых ответов. */

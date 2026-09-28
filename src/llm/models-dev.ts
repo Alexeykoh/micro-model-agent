@@ -1,18 +1,18 @@
 /**
- * models.dev fallback for hosted gateways (OpenCode Zen/Go) whose own
- * `/models` endpoint returns bare ids with no context metadata (verified
- * live: `{id, object, created, owned_by}` only).
+ * models.dev-фолбэк для хостед-шлюзов (OpenCode Zen/Go), чей собственный
+ * `/models` отдаёт голые id без метаданных контекста (проверено вживую:
+ * только `{id, object, created, owned_by}`).
  *
- * models.dev is an open-source model database (MIT, sst/models.dev) that
- * opencode itself uses internally. Its `api.json` catalog is keyed
- * `Record<providerId, { models: Record<modelId, { limit: { context } }> }>`
- * and the `opencode` provider lists models under the same bare ids Zen
- * serves (`deepseek-v4.1-flash` → `limit.context`).
+ * models.dev — открытая база моделей (MIT, sst/models.dev), её же использует
+ * сам opencode. Каталог `api.json`: `Record<providerId, { models:
+ * Record<modelId, { limit: { context } }> }>`, провайдер `opencode` держит
+ * модели под теми же bare id, что отдаёт Zen (`deepseek-v4.1-flash` →
+ * `limit.context`).
  *
- * Only a slim projection (`opencode` → model id → context) is kept on disk:
- * `~/.mma/models-dev-cache.json` (override with `MMA_MODELS_DEV_CACHE`),
- * 24h TTL like the reasoning-probe cache. Every failure mode returns null —
- * the caller keeps the configured `contextWindow` (fail-open).
+ * На диске только slim-проекция (`opencode` → id → контекст):
+ * `~/.mma/models-dev-cache.json` (override `MMA_MODELS_DEV_CACHE`), TTL 24h
+ * как у reasoning-пробника. Любой сбой — null, вызывающий хранит настроенный
+ * `contextWindow` (fail-open).
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
@@ -20,16 +20,17 @@ import { globalMmaDir } from "../config/paths";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
 
-/** TTL: re-fetch the catalog after 24 hours. */
+/** TTL: перечитывать каталог после 24 часов. */
 const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Slim projection stored on disk (never the whole catalog). */
+/** Slim-проекция на диске (никогда не весь каталог). */
 interface ModelsDevCache {
   ts: string;
-  /** model id → context window for the `opencode` provider. */
+  /** id модели → окно контекста провайдера `opencode`. */
   models: Record<string, number>;
 }
 
+/** Опции лукапа: таймаут запроса каталога. */
 export interface ModelsDevOpts {
   timeoutMs?: number;
 }
@@ -38,7 +39,7 @@ function cachePath(): string {
   return process.env.MMA_MODELS_DEV_CACHE ?? join(globalMmaDir(), "models-dev-cache.json");
 }
 
-/** In-memory L1: fresh projection for the process lifetime. */
+/** In-memory L1: свежая проекция на время жизни процесса. */
 let memCache: { models: Record<string, number>; ts: number } | null = null;
 
 function readDiskCache(): ModelsDevCache | null {
@@ -51,7 +52,7 @@ function readDiskCache(): ModelsDevCache | null {
     }
     return { ts: parsed.ts, models: parsed.models as Record<string, number> };
   } catch {
-    // Corrupted cache — refetch below.
+    // Битый кэш — перечитываем ниже.
     return null;
   }
 }
@@ -63,11 +64,11 @@ function writeDiskCache(models: Record<string, number>): void {
     const entry: ModelsDevCache = { ts: new Date().toISOString(), models };
     writeFileSync(path, JSON.stringify(entry), "utf-8");
   } catch {
-    // Best-effort — disk write failure must not crash the agent.
+    // Best-effort — падение записи не должно ронять агента.
   }
 }
 
-/** Catalog `limit.context` of one model entry, if it is a usable number. */
+/** `limit.context` одной записи модели, если это годное число. */
 function modelContextOf(meta: unknown): number | null {
   const context = (meta as { limit?: { context?: unknown } } | null)?.limit?.context;
   if (typeof context !== "number" || !Number.isFinite(context) || context <= 0) return null;
@@ -99,9 +100,9 @@ async function fetchCatalog(timeoutMs: number): Promise<Record<string, number> |
 }
 
 /**
- * Look up `model` in the `opencode` provider section of the models.dev
- * catalog. Exact id match only (Zen serves bare ids, the catalog keys them
- * identically). Returns the catalog `limit.context`, or null on any miss.
+ * Ищет `model` в секции провайдера `opencode` каталога models.dev.
+ * Только точное совпадение id (Zen отдаёт bare id, каталог ключует так же).
+ * Возвращает каталожный `limit.context`, на любом промахе — null.
  */
 export async function lookupModelsDevContext(
   model: string,
@@ -118,7 +119,7 @@ export async function lookupModelsDevContext(
   }
   const fresh = await fetchCatalog(timeoutMs);
   if (!fresh) {
-    // Offline with a stale cache: a stale window beats no window.
+    // Офлайн с протухшим кэшем: протухшее окно лучше никакого.
     if (disk) {
       memCache = { models: disk.models, ts: Date.now() };
       return disk.models[model] ?? null;
@@ -130,7 +131,7 @@ export async function lookupModelsDevContext(
   return fresh[model] ?? null;
 }
 
-/** Test seam: drop the in-memory projection (disk cache is env-isolated). */
+/** Тестовый шов: сбросить in-memory проекцию (диск изолирован через env). */
 export function resetModelsDevCache(): void {
   memCache = null;
 }

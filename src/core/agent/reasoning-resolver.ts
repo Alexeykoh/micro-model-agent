@@ -1,3 +1,4 @@
+/** Резолвер уровня reasoning на итерацию: override → политика → фикс. */
 import { evaluateReasoningPolicy } from "../../modules/reasoning/policy";
 import type { PolicyState } from "../../modules/reasoning/policy";
 import type { ReasoningConfig, ReasoningLevel, ReasoningStrategy } from "../../config/types";
@@ -7,6 +8,7 @@ import type { LoopState } from "./loop-state";
 /** Откуда взят текущий уровень reasoning — для логирования и диагностики. */
 export type ReasoningSource = "policy" | "agent_override" | "fixed" | "none";
 
+/** Решение резолвера: уровень effort, стратегия, источник. */
 export interface ReasoningDecision {
   /** Эффективный уровень effort. undefined = механизм не применяется. */
   level: ReasoningLevel | undefined;
@@ -32,6 +34,11 @@ export interface ReasoningDecision {
  * clearIterationSignals сразу после resolve).
  */
 export class ReasoningEffortResolver {
+  /**
+   * Вычисляет уровень reasoning на итерацию (override → политика → фикс).
+   * @param deps состояние цикла, политика, конфиг, probe, стратегия.
+   * @returns уровень, стратегия и источник решения.
+   */
   resolve(deps: {
     state: LoopState;
     policyState: PolicyState;
@@ -68,9 +75,9 @@ export class ReasoningEffortResolver {
           planCreated: state.iterPlanCreated,
           consecutiveSuccesses: state.consecutiveToolSuccesses,
           isRepetitive: state.iterRepetitive,
-          // Baseline defaults to the configured floor (`min`, "low" by default)
-          // so a config without an explicit baseline never silently burns
-          // "medium" on trivial Q&A turns. The policy still raises on signals.
+          // Baseline — настроенный минимум (`min`, по умолчанию "low"),
+          // чтобы конфиг без явного baseline не жёг "medium" на пустяках.
+          // Политика всё равно повышает уровень по сигналам.
           baseline: reasoningConfig.baseline ?? reasoningConfig.min,
         },
         deps.policyState,

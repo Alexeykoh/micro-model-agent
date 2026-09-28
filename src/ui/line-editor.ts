@@ -1,3 +1,4 @@
+// Строчный редактор: raw-ввод, история, Tab-комплит, DSR-якорь кадра (см. DSR ниже).
 import * as readline from "readline";
 import stringWidth from "string-width";
 import { pc } from "./colors";
@@ -11,6 +12,7 @@ import {
   type LayoutRow,
 } from "./line-math";
 
+/** Входная строка хоста (REPL): промпт, вопрос, печать поверх. */
 export interface LineInput {
   setPrompt(prompt: string): void;
   prompt(preserveCursor?: boolean): void;
@@ -22,11 +24,13 @@ export interface LineInput {
   on(event: "close", listener: () => void): this;
 }
 
+/** Вариант автокомплита: значение + опц. описание. */
 export interface CompletionItem {
   value: string;
   description?: string;
 }
 
+/** Опции редактора: потоки, промпт, комплитер, история, обработчик Ctrl+C. */
 export interface LineEditorOptions {
   input: NodeJS.ReadableStream & {
     isTTY?: boolean;
@@ -39,9 +43,9 @@ export interface LineEditorOptions {
   historySize?: number;
   tabSize?: number;
   /**
-   * Ctrl+C handler. Default: emit "SIGINT" when a listener exists (the REPL
-   * installs one). Injectable so tests never fire process-level signals —
-   * under load a real SIGINT can terminate the whole test runner.
+   * Обработчик Ctrl+C. Дефолт: эмитит "SIGINT", если есть слушатель (REPL его
+   * ставит). Инжектится, чтобы тесты не слали процессные сигналы: под нагрузкой
+   * настоящий SIGINT может убить весь тест-раннер.
    */
   onInterrupt?: () => void;
 }
@@ -51,11 +55,12 @@ interface EditorListeners {
   close?: () => void;
 }
 
+/** Многострочный редактор ввода с историей и Tab-комплитом (raw-режим TTY). */
 export class LineEditor implements LineInput {
   input: LineEditorOptions["input"];
   output: LineEditorOptions["output"];
 
-  /** Host hook: return true to swallow the key before the editor handles it. */
+  /** Хук хоста: true — поглотить клавишу до обработки редактором. */
   onKeyInput?: (str: string, key: unknown) => boolean;
   private onInterrupt?: () => void;
 
@@ -66,69 +71,68 @@ export class LineEditor implements LineInput {
   private lines: string[] = [""];
   private row = 0;
   private col = 0;
-  /** Carry-over for non-TTY chunked input (a partial line split across reads). */
+  /** Перенос не-TTY чанкованного ввода (частичная строка между чтениями). */
   private pendingLine = "";
   private historyIndex = -1;
   private stash: { lines: string[]; row: number; col: number } | null = null;
   private isDone = false;
   private isPaste = false;
-  /** Pasted characters accumulated between `paste-start` and `paste-end`.
-   *  Inserted as a single batch on `paste-end` — one render instead of one
-   *  per keypress, so a paste appears as a paste, not as fast typing. */
+  /** Вставленное копятся между `paste-start` и `paste-end`.
+   *  Вставляется одним батчем на `paste-end`: один рендер вместо рендера на
+   *  клавишу, чтобы вставка выглядела вставкой, а не быстрой печатью. */
   private pasteBuffer = "";
-  /** Whether the last paste keypress was a bare CR — used to collapse a
-   *  CRLF pair into a single newline (Windows clipboard text). */
+  /** Была ли последняя вставленная клавиша голым CR: схлопывает CRLF-пару
+   *  в один перевод строки (текст из буфера Windows). */
   private pasteLastWasCR = false;
   private lastWasCR = false;
   private questionCb: ((answer: string) => void) | null = null;
-  /** Active Tab-completion cycle. While set, ↑/↓/Tab cycle candidates and
-   *  Esc restores `original`; any other key drops the session. */
+  /** Активная Tab-сессия комплита. Пока стоит, ↑/↓/Tab крутят кандидатов, а
+   *  Esc возвращает `original`; любая другая клавиша сессию роняет. */
   private completionSession: {
     items: CompletionItem[];
     index: number;
-    /** UTF-16 index in the current buffer line where the completed token begins. */
+    /** UTF-16 индекс в строке буфера, где начинается дополняемый токен. */
     from: number;
-    /** The original partial that was replaced. */
+    /** Исходный частичный ввод, который заменили. */
     original: string;
-    /** The currently inserted candidate value. */
+    /** Сейчас вставленное значение-кандидат. */
     inserted: string;
   } | null = null;
   private rawMode = false;
   private listeners: EditorListeners = {};
-  /** stdin handlers registered in the constructor — removed in close() so
-   *  re-creating the editor never accumulates stale listeners. */
+  /** stdin-хендлеры из конструктора: снимаются в close(), чтобы пересоздание
+   *  редактора не копило протухшие слушатели. */
   private dsrDataHandler?: (buf: Buffer | string) => void;
   private keypressHandler?: (str: string, key: unknown) => void;
   private dataHandler?: (buf: Buffer) => void;
   private endHandler?: () => void;
-  /** Visual row (within the drawn frame) where the cursor was placed by the
-   *  last render — fallback for moving back to the frame's first row before
-   *  redrawing when no absolute anchor is known yet. Relative moves break
-   *  once the terminal scrolls (the frame shifts up on screen while the
-   *  relative count does not), which duplicated multi-line input. */
+  /** Визуальный ряд (внутри рисуемого кадра), куда последний рендер поставил
+   *  курсор. Фолбэк для возврата на первую строку кадра перед перерисовкой,
+   *  пока нет абсолютного якоря. Относительные ходы ломаются при скролле
+   *  терминала (кадр уезжает вверх, счётчик — нет), что дублировало
+   *  многострочный ввод. */
   private prevCursorRow = 0;
-  /** Absolute 1-based screen row of the frame's first visual row, learned
-   *  from a single DSR cursor-position report (`ESC[6n`) sent once per
-   *  prompt presentation. After the initial query the anchor is updated
-   *  deterministically via scroll math — no further queries are sent,
-   *  avoiding ConPTY desync. Falls back to relative moves when the reply
-   *  never arrives (timeout / broken terminal). */
+  /** Абсолютный 1-based экранный ряд первой визуальной строки кадра. Выучен
+   *  из одного DSR-ответа о позиции курсора (`ESC[6n`), шлётся раз на показ
+   *  промпта. Дальше якорь ведётся детерминированной скролл-математикой, новых
+   *  запросов нет (защита от рассинхрона ConPTY). Без ответа (таймаут/битый
+   *  терминал) — фолбэк на относительные ходы. */
   private frameTopAbs: number | null = null;
-  /** True while waiting for a DSR reply (exactly one outstanding query). */
+  /** Ждём ли DSR-ответ (ровно один outstanding-запрос). */
   private dsrPending = false;
-  /** Buffer for partial DSR escape sequences split across data chunks. */
+  /** Буфер частичных DSR-escape, разрезанных между чанками. */
   private dsrTail = "";
-  /** Visual row of the cursor at the exact moment the outstanding DSR query
-   *  was sent. The reply is matched against this, not `prevCursorRow`, which
-   *  later renders overwrite while the query is still pending. */
+  /** Визуальный ряд курсора ровно в момент отправки outstanding DSR-запроса.
+   *  Ответ матчится против него, а не `prevCursorRow`: промежуточные рендеры
+   *  перезаписывают тот, пока запрос ещё летит. */
   private dsrQueryRow = 0;
-  /** When false, keystrokes are ignored (except Ctrl+C) while the agent
-   *  streams — the host owns the terminal during that phase. */
+  /** Выкл — клавиши игнорятся (кроме Ctrl+C), пока агент стримит: терминалом
+   *  в этой фазе владеет хост. */
   private inputEnabled = true;
-  /** While true the prompt frame is not drawn; the agent owns the screen. */
+  /** Вкл — кадр промпта не рисуется; экраном владеет агент. */
   private frameSuspended = false;
-  /** Clears `dsrPending` when no DSR reply arrives, falling back to
-   *  relative cursor moves instead of wedging on a broken terminal. */
+  /** Сбрасывает `dsrPending`, если DSR-ответ не пришёл: фолбэк на относительные
+   *  ходы вместо клина на битом терминале. */
   private dsrTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: LineEditorOptions) {
@@ -147,16 +151,16 @@ export class LineEditor implements LineInput {
       this.rawMode = typeof this.input.setRawMode === "function";
       if (this.rawMode) this.input.setRawMode!(true);
       this.enableTerminalProtocols();
-      // Raw data listener for DSR cursor-position replies. Runs alongside
-      // readline's keypress emitter (both receive every chunk); replies may
-      // arrive merged with regular keystrokes, hence the global regex.
+      // Сырой слушатель DSR-ответов о позиции курсора. Живёт рядом с keypress-эмитером
+      // readline (оба получают каждый чанк); ответы могут приходить склеенными с
+      // обычными клавишами — отсюда глобальный regex.
       this.dsrDataHandler = (buf: Buffer | string) => this.consumeDsrReplies(buf.toString("utf-8"));
       this.input.on("data", this.dsrDataHandler);
       readline.emitKeypressEvents(this.input as never);
       this.keypressHandler = (str: string, key: unknown) => this.onKey(str, key);
       this.input.on("keypress", this.keypressHandler);
-      // The editor owns stdin now: ensure it is flowing even if a previous
-      // consumer paused it (e.g. the setup wizard).
+      // Редактор теперь владеет stdin: взводим flowing, даже если прошлый
+      // потребитель его стопил (напр. визард настройки).
       this.input.resume();
     } else {
       this.dataHandler = (buf: Buffer) => this.onData(buf);
@@ -291,15 +295,15 @@ export class LineEditor implements LineInput {
     this.emitClose();
   }
 
-  // ---- input handling ----
+  // ── Ввод ──
 
   private onData(buf: Buffer): void {
     if (this.isDone) return;
     let text = buf.toString("utf-8");
     text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const parts = text.split("\n");
-    // Carry the incomplete tail to the next chunk: emitting it immediately
-    // split `"hello wor" + "ld\n"` into two wrong lines.
+    // Незавершённый хвост — в следующий чанк: немедленный эмит разрезал бы
+    // `"hello wor" + "ld\n"` на две неверные строки.
     this.pendingLine += parts[0];
     for (let i = 1; i < parts.length; i++) {
       this.emitLine(this.pendingLine);
@@ -313,8 +317,8 @@ export class LineEditor implements LineInput {
   private onKey(str: string, key: unknown): void {
     if (this.isDone) return;
     if (!this.inputEnabled) {
-      // While streaming, only interrupt keys are honored: Ctrl+C aborts the
-      // run, Escape is forwarded so the host can implement double-Esc abort.
+      // На стриме уважаются только прерывающие клавиши: Ctrl+C абортит прогон,
+      // Esc форвардится, чтобы хост реализовал двойной-Esc аборт.
       const k = key as { name?: string; ctrl?: boolean };
       if (k?.ctrl && k.name === "c") {
         this.ctrlC();
@@ -326,10 +330,9 @@ export class LineEditor implements LineInput {
       }
       return;
     }
-    // Completion session takes precedence over host key hooks: Esc must
-    // restore the original partial instead of triggering the host's Esc
-    // handling, and arrow/Tab must cycle. Any other key drops the session
-    // and is processed normally (host hook included).
+    // Сессия комплита приоритетнее хост-хуков: Esc обязан вернуть исходный
+    // partial, а не дёрнуть хостовый Esc-хендлинг; стрелки/Tab — крутить.
+    // Любая другая клавиша роняет сессию и обрабатывается обычно (с хост-хуком).
     if (this.completionSession) {
       const ck = key as { name?: string; ctrl?: boolean; meta?: boolean };
       const plain = !ck.ctrl && !ck.meta;
@@ -371,10 +374,9 @@ export class LineEditor implements LineInput {
       return;
     }
 
-    // Never treat a cursor-position report (`ESC[row;colR`) as typed input:
-    // on some Windows/ConPTY + Bun combinations the trailing "R" leaks into
-    // the buffer and corrupts the answer (observed as every prompt answering
-    // "R"). Swallow the whole sequence.
+    // Отчёт о позиции курсора (`ESC[row;colR`) — никогда не ввод: на части связок
+    // Windows/ConPTY + Bun хвостовой "R" протекает в буфер и портит ответ
+    // (каждый промпт отвечал "R"). Глотаем последовательность целиком.
     if (/^\x1b\[\d+;\d+R$/.test(seq)) return;
 
     if (name === "paste-start" || seq === "\x1b[200~") {
@@ -435,8 +437,8 @@ export class LineEditor implements LineInput {
           this.lastWasCR = false;
           return;
         }
-        // In question mode, LF should also submit (script/pipes send
-        // \n without preceding \r, unlike real terminals).
+        // В question-режиме LF тоже сабмитит (скрипты/пайпы шлют \n без \r спереди,
+        // в отличие от настоящих терминалов).
         if (this.questionCb) {
           this.submit();
           return;
@@ -608,9 +610,9 @@ export class LineEditor implements LineInput {
       this.onInterrupt();
       return;
     }
-    // Default: emit only when someone listens. With zero handlers
-    // process.emit("SIGINT") takes the DEFAULT action (process termination);
-    // the REPL always installs a listener, so production is unaffected.
+    // Дефолт: эмитим, только если слушают. С нулём хендлеров process.emit("SIGINT")
+    // выполняет действие ПО УМОЛЧАНИЮ (смерть процесса); у REPL слушатель всегда
+    // стоит, так что прод не страдает.
     if (process.listenerCount("SIGINT") > 0) {
       process.emit("SIGINT");
     }
@@ -624,7 +626,7 @@ export class LineEditor implements LineInput {
     }
   }
 
-  // ---- editing primitives ----
+  // ── Примитивы правки ──
 
   private currentChars(): string[] {
     return Array.from(this.lines[this.row]);
@@ -645,9 +647,9 @@ export class LineEditor implements LineInput {
     this.render();
   }
 
-  /** Bulk-insert pasted text at the cursor. Splits on newlines so the buffer
-   *  keeps one string per line (instead of embedding literal `\n` chars),
-   *  and renders once — a paste must look like a paste, not like typing. */
+  /** Пакетная вставка текста под курсор. Режет по переводам строк, чтобы буфер
+   *  держал строку на элемент (а не литеральные `\n`), и рендерит один раз:
+   *  вставка должна выглядеть вставкой, а не печатью. */
   private insertPaste(text: string): void {
     const segments = text.split("\n");
     if (segments.length === 1) {
@@ -930,9 +932,8 @@ export class LineEditor implements LineInput {
       return;
     }
     if (matches.length === 1) {
-      // Complete the partial under the CURSOR, not the last occurrence in
-      // the whole line — with the cursor mid-line, lastIndexOf() inserted
-      // at the line's end instead.
+      // Дополняем partial ПОД КУРСОРОМ, а не последнее вхождение в строке: при
+      // курсоре в середине lastIndexOf() вставлял в конец строки.
       const from = this.partialStart(line, partial);
       if (from === -1) {
         this.output.write("\x07");
@@ -955,7 +956,7 @@ export class LineEditor implements LineInput {
       if (stringWidth(plain) <= limit) {
         return m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`;
       }
-      // Truncate by display columns (code points alone are wrong for CJK/emoji).
+      // Режем по видимым колонкам (одних кодпоинтов мало для CJK/emoji).
       let acc = "";
       let w = 0;
       for (const ch of plain) {
@@ -967,15 +968,15 @@ export class LineEditor implements LineInput {
       return `${acc}…`;
     });
     this.output.write(`\r\n${rows.join("\r\n")}\r\n`);
-    // The printed list moved the cursor below the old frame. Drop the absolute
-    // frame anchor so the next render positions RELATIVE to the current cursor
-    // (below the list). Keeping the DSR anchor re-homed the frame to its old
-    // absolute row and its `\x1b[J` erased the list — on Linux/macOS the
-    // candidates flashed and disappeared.
+    // Напечатанный список увёл курсор ниже старого кадра. Сбрасываем абсолютный
+    // якорь, чтобы следующий рендер позиционировался ОТНОСИТЕЛЬНО текущего
+    // курсора (под списком). Сохранение DSR-якоря возвращало кадр на старую
+    // абсолютную строку, и его `\x1b[J` стирал список: на Linux/macOS кандидаты
+    // мигали и исчезали.
     this.invalidateAnchor();
 
-    // Start a cycling session with the first candidate in the buffer:
-    // ↑/↓/Tab cycle through the printed list in place.
+    // Старт сессии циклирования с первым кандидатом в буфере:
+    // ↑/↓/Tab крутят напечатанный список на месте.
     this.completionSession = {
       items: matches,
       index: 0,
@@ -993,7 +994,7 @@ export class LineEditor implements LineInput {
     this.render();
   }
 
-  // ---- rendering ----
+  // ── Рендеринг ──
 
   private columns(): number {
     return this.output.columns || 80;
@@ -1004,17 +1005,17 @@ export class LineEditor implements LineInput {
     return buildLayout(this.lines, this.columns(), Math.max(1, this.columns() - promptWidth));
   }
 
-  /** 1-based terminal height, or null when unknown (tests / non-TTY). */
+  /** 1-based высота терминала, null — неизвестна (тесты / не-TTY). */
   private screenRows(): number | null {
     const r = (this.output as { rows?: number }).rows;
     return typeof r === "number" && r > 3 ? r : null;
   }
 
   /**
-   * Whether the cursor-position query (`ESC[6n`) may be sent. It is opt-in on
-   * Windows: ConPTY can mis-decode the `ESC[row;colR` reply as typed input,
-   * which corrupts answers (the setup wizard answered every prompt "R").
-   * `MMA_DSR=1` forces it on, `MMA_DSR=0` off; elsewhere it defaults on.
+   * Можно ли слать запрос позиции курсора (`ESC[6n`). На Windows — opt-in:
+   * ConPTY может декодировать ответ `ESC[row;colR` как ввод, что портит ответы
+   * (визард настройки отвечал на каждый промпт "R").
+   * `MMA_DSR=1` форсит вкл, `MMA_DSR=0` — выкл; иначе по умолчанию вкл.
    */
   private dsrEnabled(): boolean {
     if (process.env.MMA_DSR === "1") return true;
@@ -1022,10 +1023,9 @@ export class LineEditor implements LineInput {
     return process.platform !== "win32";
   }
 
-  /** Cap the rendered frame to the visible screen. A frame taller than the
-   *  terminal cannot be redrawn in place at all (its top scrolls off), so
-   *  only the tail is drawn; the absolute anchor keeps the next render
-   *  consistent regardless. */
+  /** Режет рисуемый кадр до видимого экрана. Кадр выше терминала нельзя
+   *  перерисовать на месте (верх уехал в скролл), так что рисуется только хвост;
+   *  абсолютный якорь держит следующий рендер консистентным в любом случае. */
   private visibleLayout(): LayoutRow[] {
     const layout = this.layout();
     const H = this.screenRows();
@@ -1036,9 +1036,9 @@ export class LineEditor implements LineInput {
     return layout;
   }
 
-  /** Forget the learned absolute frame position — the cursor has jumped to
-   *  an unknown location (external output, clear screen, fresh prompt).
-   *  The next render will re-query via DSR. */
+  /** Забывает выученную абсолютную позицию кадра: курсор прыгнул в неизвестное
+   *  место (внешний вывод, чистка экрана, свежий промпт). Следующий рендер
+   *  переспросит через DSR. */
   private invalidateAnchor(): void {
     this.frameTopAbs = null;
     this.dsrPending = false;
@@ -1050,10 +1050,9 @@ export class LineEditor implements LineInput {
     }
   }
 
-  /** Parse `ESC[row;colR` cursor-position replies. Buffers partial escape
-   *  sequences across chunks. Accepts at most one reply (the outstanding
-   *  query); extras are silently dropped. Validates the reported row against
-   *  `screenRows()` to reject implausible ConPTY values. */
+  /** Парсит DSR-ответы `ESC[row;colR`. Буферит разрезанные escape между чанками.
+   *  Принимает максимум один ответ (outstanding-запрос); лишние молча дропаются.
+   *  Строку валидирует против `screenRows()`, отсекая неправдоподобные значения ConPTY. */
   private consumeDsrReplies(chunk: string): void {
     this.dsrTail = (this.dsrTail + chunk).slice(-80);
     const m = /\x1b\[(\d+);(\d+)R/.exec(this.dsrTail);
@@ -1066,9 +1065,9 @@ export class LineEditor implements LineInput {
       clearTimeout(this.dsrTimer);
       this.dsrTimer = null;
     }
-    // The frame top is the reply row minus the cursor's visual row at query
-    // time. `dsrQueryRow` — not `prevCursorRow` — because intermediate
-    // renders may have advanced the cursor while the query was pending.
+    // Верх кадра = строка ответа минус визуальный ряд курсора на момент запроса.
+    // `dsrQueryRow`, а не `prevCursorRow`: промежуточные рендеры могли двинуть
+    // курсор, пока запрос летел.
     const top = row - this.dsrQueryRow;
     const H = this.screenRows();
     if (top >= 1 && (H === null || top <= H)) this.frameTopAbs = top;
@@ -1084,10 +1083,9 @@ export class LineEditor implements LineInput {
     const ccol = (idx === 0 ? promptWidth : 0) + vcol;
 
     const out: string[] = [];
-    // Return to the frame's first row before redrawing.  Absolute
-    // positioning (learned via a single DSR query per prompt) is
-    // scroll-proof; relative up-moves are the fallback until the
-    // initial reply arrives.
+    // Возврат на первую строку кадра перед перерисовкой. Абсолютное
+    // позиционирование (выученное одним DSR-запросом на промпт) иммунно к
+    // скроллу; относительные ходы вверх — фолбэк до прихода первого ответа.
     if (this.frameTopAbs !== null) {
       out.push(`\x1b[${this.frameTopAbs};1H`);
     } else if (this.prevCursorRow > 0) {
@@ -1110,10 +1108,9 @@ export class LineEditor implements LineInput {
 
     this.prevCursorRow = idx;
 
-    // Deterministic scroll math: update the anchor for the NEXT render.
-    // After writing L rows starting from frameTopAbs, if the frame extends
-    // past the screen bottom the terminal scrolls; the new frame top is
-    // computed locally — no further DSR queries needed.
+    // Детерминированная скролл-математика: обновляем якорь для СЛЕДУЮЩЕГО рендера.
+    // После записи L строк от frameTopAbs терминал скроллится, если кадр вылез за
+    // низ экрана; новый верх кадра считается локально, новых DSR-запросов не надо.
     if (this.frameTopAbs !== null) {
       const H = this.screenRows();
       if (H) {
@@ -1123,9 +1120,9 @@ export class LineEditor implements LineInput {
         // else: no scroll, anchor unchanged
       }
     } else if (!this.dsrPending && this.questionCb === null && this.dsrEnabled()) {
-      // One DSR query per frame, then the anchor is maintained by local scroll
-      // math. Never queried in question mode (see dsrEnabled). A timeout clears
-      // dsrPending so a non-responding terminal falls back to relative moves.
+      // Один DSR-запрос на кадр, дальше якорь ведёт локальная скролл-математика.
+      // В question-режиме не спрашиваем (см. dsrEnabled). Таймаут сбрасывает
+      // dsrPending, чтобы неотвечающий терминал откатился на относительные ходы.
       this.dsrPending = true;
       this.dsrQueryRow = idx;
       this.output.write("\x1b[6n");
@@ -1152,7 +1149,7 @@ export class LineEditor implements LineInput {
   }
 
   private emitClose(): void {
-    // Flush a final newline-less line from chunked non-TTY input.
+    // Сброс финальной строки без перевода из чанкованного не-TTY ввода.
     if (this.pendingLine) {
       this.emitLine(this.pendingLine);
       this.pendingLine = "";

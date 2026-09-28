@@ -1,3 +1,4 @@
+// Создание провайдера по типу + реестр с builtin-пресетами.
 // src/modules/providers/create.ts
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderRegistry } from "./registry";
@@ -6,9 +7,8 @@ import { BUILTIN_PROVIDERS } from "./presets";
 import { ProviderRegistry as Registry } from "./registry";
 
 /**
- * The single entry point for building a provider. Unknown types fall back to
- * the OpenAI-compatible provider (backward compatible with legacy configs that
- * use a custom `type` + baseUrl).
+ * Единая точка сборки провайдера. Неизвестные типы откатываются на
+ * OpenAI-совместимый (совместимость с легаси-конфигами: кастомный `type` + baseUrl).
  */
 export function createProvider(
   type: string,
@@ -22,7 +22,7 @@ export function createProvider(
   return spec.create(opts);
 }
 
-/** Registry preloaded with all builtin provider presets. */
+/** Реестр, предзагруженный всеми builtin-пресетами. */
 export function defaultRegistry(): ProviderRegistry {
   const registry = new Registry();
   for (const spec of BUILTIN_PROVIDERS) {

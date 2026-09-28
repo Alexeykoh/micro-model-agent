@@ -1,9 +1,10 @@
+// Автоимена сессий: детерминированное из первого сообщения + LLM-уточнение (fail-open).
 import { t } from "../../i18n/index";
 
 const MAX_NAME_LEN = 60;
 const MIN_CUT = 20;
 
-/** Deterministic, instant session name from the first user message. */
+/** Детерминированное мгновенное имя сессии из первого сообщения пользователя. */
 export function deriveSessionName(input: string, date?: string): string {
   const firstLine = input.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
   let s = firstLine
@@ -26,7 +27,7 @@ export function deriveSessionName(input: string, date?: string): string {
   return s;
 }
 
-/** Normalize a model-produced title; returns null when unusable. */
+/** Нормализовать заголовок от модели; мусор — null. */
 export function sanitizeTitle(raw: string): string | null {
   const first =
     raw
@@ -38,8 +39,10 @@ export function sanitizeTitle(raw: string): string | null {
   return cleaned.length > MAX_NAME_LEN ? `${cleaned.slice(0, MAX_NAME_LEN).trim()}…` : cleaned;
 }
 
+/** Тип chat-функции для генерации заголовка (инжектится, тестируемо). */
 export type TitleChat = (prompt: string, signal?: AbortSignal) => Promise<string>;
 
+/** Собрать промпт заголовка из отрывка сообщения (первые 1000 символов). */
 export function buildTitlePrompt(input: string): string {
   const excerpt = input.slice(0, 1000);
   return [
@@ -51,7 +54,7 @@ export function buildTitlePrompt(input: string): string {
   ].join("\n");
 }
 
-/** One-shot LLM title with timeout. Fail-open — returns null on any error. */
+/** Разовый LLM-заголовок с таймаутом. Fail-open — любая ошибка даёт null. */
 export async function generateSessionTitle(
   input: string,
   chat: TitleChat,

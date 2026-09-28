@@ -1,3 +1,4 @@
+// Загрузчик плагинов из каталогов: файлы и папки, гейт по minMmaVersion.
 import { readdirSync, existsSync, statSync, type Stats } from "fs";
 import { join, basename } from "path";
 import type { PluginManager } from "./manager";
@@ -6,18 +7,24 @@ import { semverGt } from "../updater/checker";
 import type { AgentPlugin } from "./types";
 
 /**
- * Entry file candidates for folder plugins. Looked up in order:
+ * Кандидаты точки входа для плагинов-папок. Порядок:
  * `plugin.ts` > `plugin.js` > `index.ts` > `index.js`.
  */
 const FOLDER_ENTRY_NAMES = ["plugin.ts", "plugin.js", "index.ts", "index.js"];
 
+/** Опции загрузки из каталога: источник и текущая версия MMA для гейта. */
 export interface LoadFromDirOptions {
   source?: "global" | "project";
-  /** Current MMA version (semver). When set, plugins declaring a higher `minMmaVersion` are skipped. */
+  /** Текущая версия MMA (semver). Плагины с более высоким `minMmaVersion` пропускаются. */
   mmaVersion?: string;
 }
 
+/** Грузит плагины из каталога и регистрирует в менеджере (битые — скип с варном). */
 export class PluginLoader {
+  /**
+   * Сканирует каталог (файлы .ts/.js и папки с точкой входа).
+   * Нет каталога — no-op.
+   */
   loadFromDir(
     dirPath: string,
     pluginManager: PluginManager,
@@ -29,8 +36,8 @@ export class PluginLoader {
     const entries = readdirSync(dirPath).sort();
     for (const entry of entries) {
       const fullPath = join(dirPath, entry);
-      // A dangling symlink / permission-denied entry must not abort the whole
-      // plugin scan (and with it bootstrap) — skip it with a warning.
+      // Битый симлинк / отказ в доступе не должен ронять весь скан плагинов
+      // (а с ним и bootstrap) — пропускаем с предупреждением.
       let stat: Stats;
       try {
         stat = statSync(fullPath);

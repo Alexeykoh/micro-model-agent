@@ -1,8 +1,10 @@
+/** Хост для `mma web`: без TTY и LineEditor, поверх тех же deps. */
 import type { Host, HostStateSnapshot } from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 
+/** Зависимости веб-хоста: запуск агента, состояние, команды, картинки. */
 export interface WebHostDeps {
   runAgent: (text: string) => Promise<unknown>;
   isBusy: () => boolean;
@@ -12,7 +14,7 @@ export interface WebHostDeps {
   addPendingImage?: (dataUrl: string) => void;
 }
 
-/** Host implementation for `mma web` — no TTY, no LineEditor. */
+/** Реализация хоста для `mma web` — без TTY, без LineEditor. */
 export class WebHost implements Host {
   constructor(private deps: WebHostDeps) {}
 

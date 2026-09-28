@@ -1,12 +1,14 @@
+// Контракт драйвера браузера и конфиг запуска (без циклов импортов).
 import type { ConsoleEntry, NetworkErrorEntry } from "./types";
 import type { StoredCookie } from "./cookie-store";
 
-/** Explicit browser location/channel resolved from the environment. */
+/** Явный путь/канал браузера из окружения. */
 export interface BrowserLaunchOverrides {
   executablePath?: string;
   channel?: string;
 }
 
+/** Параметры запуска: headless, вьюпорт, таймаут, оверрайды. */
 export interface LaunchConfig {
   headless: boolean;
   viewport: { width: number; height: number };
@@ -15,9 +17,9 @@ export interface LaunchConfig {
 }
 
 /**
- * Driver contract shared by the Playwright driver, the Node bridge driver and
- * the session. Kept in its own module so `bridge-client.ts` does not import
- * `driver.ts` (which dynamically imports it) — that edge was one of the cycles.
+ * Контракт драйвера, общий для Playwright, node-моста и сессии.
+ * Живёт в отдельном модуле, чтобы `bridge-client.ts` не импортил `driver.ts`
+ * (который динамически импортит его) — это ребро давало цикл.
  */
 export interface BrowserDriver {
   launch(cfg: LaunchConfig): Promise<void>;

@@ -1,8 +1,9 @@
+// Отбор файлов для блока карты проекта: ранжирование код → тесты → доки.
 import type { IndexedFile } from "./walker";
 import { toForwardSlash } from "../../tools/path-utils";
 import { isCodeLanguage } from "./symbols";
 
-/** Lockfiles and generated manifests: no structural value in the map. */
+/** Локфайлы и генерированные манифесты: структурной ценности в карте нет. */
 const NOISE_BASENAMES = new Set([
   "package-lock.json",
   "bun.lock",
@@ -15,6 +16,7 @@ const NOISE_BASENAMES = new Set([
   "poetry.lock",
 ]);
 
+/** True, если файл — локфайловый шум (не попадает в карту). */
 export function isNoiseFile(file: IndexedFile): boolean {
   const base = toForwardSlash(file.path).split("/").pop()?.toLowerCase() ?? "";
   return NOISE_BASENAMES.has(base);
@@ -31,7 +33,7 @@ function isTestFile(path: string): boolean {
   );
 }
 
-/** Lower rank = more useful for understanding the project structure. */
+/** Ниже ранг — полезнее для понимания структуры проекта. */
 function rank(file: IndexedFile): number {
   const path = toForwardSlash(file.path).toLowerCase();
   if (isTestFile(path)) return 1;
@@ -39,14 +41,14 @@ function rank(file: IndexedFile): number {
   return 2;
 }
 
-/** Top-level segment of a path (`src/core/x.ts` → `src`; root file → its name). */
+/** Верхний сегмент пути (`src/core/x.ts` → `src`; файл корня → его имя). */
 function topDir(path: string): string {
   const normalized = toForwardSlash(path);
   const slash = normalized.indexOf("/");
   return slash >= 0 ? normalized.slice(0, slash) : normalized;
 }
 
-/** How many source-code files live under each top-level directory. */
+/** Сколько файлов исходного кода под каждым верхнеуровневым каталогом. */
 function codeCountByTopDir(files: IndexedFile[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const file of files) {
@@ -58,19 +60,18 @@ function codeCountByTopDir(files: IndexedFile[]): Map<string, number> {
 }
 
 /**
- * Pick the files to list in the project-map prompt block.
+ * Выбирает файлы для блока карты проекта в промпте.
  *
- * The index is built by an arbitrary `readdir` walk, so a naive
- * `files.slice(0, N)` can end up listing only docs, config and tests while the
- * actual source tree (`src/`) never appears — the model then sees a "project
- * map" with no code in it. The selection:
- *   1. drops lockfile noise,
- *   2. ranks source before tests, tests before docs/config,
- *   3. within a rank, puts directories with the most source files first (the
- *      densest code root is almost always the real source tree — no directory
- *      names hardcoded),
- *   4. then shallower paths, then alphabetical — deterministic so the block
- *      does not change between turns and the prefix KV-cache survives.
+ * Индекс строится произвольным обходом `readdir`, так что наивный
+ * `files.slice(0, N)` может перечислить одни доки, конфиги и тесты, а реальное
+ * дерево исходников (`src/`) не показать — модель увидит "карту проекта" без
+ * кода. Отбор:
+ *   1. выкидывает локфайловый шум,
+ *   2. ранжирует исходники выше тестов, тесты выше доков/конфигов,
+ *   3. внутри ранга первыми — каталоги с плотнейшим кодом (плотнейший корень
+ *      почти всегда настоящее дерево исходников — имён каталогов не захардкожено),
+ *   4. затем мельче пути, затем алфавит — детерминированно, чтобы блок не
+ *      менялся между ходами и выживал префиксный KV-кэш.
  */
 export function selectMapFiles(files: IndexedFile[], max: number): IndexedFile[] {
   const codeByDir = codeCountByTopDir(files);

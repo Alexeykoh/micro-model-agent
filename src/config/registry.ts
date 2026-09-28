@@ -1,3 +1,4 @@
+// Реестр ключей конфига для `/config` и сахарных команд: резолв, парсинг, валидация.
 import type { AppConfig, ReasoningMode } from "./types";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
@@ -6,16 +7,18 @@ import { readMmaVersion } from "../core/version";
 import { EXTRA_DEFS } from "./registry-extra";
 
 /**
- * Central registry of user-facing config keys for `/config` and the sugar
- * commands. Canonical keys are literal `config.json` paths so that what the
- * user reads in the file is what they type; short aliases are accepted for
- * convenience but never produce a second entry in the dump. This module owns
- * resolution + parsing + validation only — persistence and `reconfigure` are
- * the caller's job (`repl-commands.mutateConfig`), keeping one write path.
+ * Центральный реестр пользовательских ключей конфига для `/config` и сахарных
+ * команд. Канонические ключи — буквальные пути `config.json`: что юзер видит
+ * в файле, то и печатает; короткие алиасы принимаются для удобства, но второй
+ * записи в дампе не создают. Модуль владеет только резолвом + парсингом +
+ * валидацией; персист и `reconfigure` — дело вызывающего
+ * (`repl-commands.mutateConfig`), чтобы путь записи был один.
  */
 
+/** Тип значения ключа конфига. */
 export type ConfigValueType = "string" | "int" | "share" | "bool" | "enum" | "json" | "list";
 
+/** Допустимые уровни reasoning. */
 export const REASONING_LEVELS = [
   "auto",
   "default",
@@ -26,41 +29,46 @@ export const REASONING_LEVELS = [
   "max",
 ] as const;
 
+/** Допустимые уровни лога. */
 export const LOG_LEVELS = ["silent", "error", "warn", "info", "debug"] as const;
 
+/** Допустимые уровни болтливости. */
 export const VERBOSITY_LEVELS = ["quiet", "normal", "verbose"] as const;
 
+/** Допустимые локали. */
 export const LOCALES = ["en", "ru"] as const;
 
+/** Причина ошибки конфига: неизвестный ключ / read-only / плохое значение. */
 export type ConfigErrorReason = "unknown-key" | "read-only" | "invalid-value";
+/** Причина отказа доли бюджета: вне диапазона / сумма переполнена. */
 export type ConfigRangeReason = "range" | "combined";
 
 /**
- * How a `list`/`json` key should be edited in a GUI. The registry stays the
- * single source of truth for *what* a key holds; this only says how to show it
- * (a comma string is fine for `tools.defaultTags` but wrong for regexes that
- * contain commas). Omitted → a plain input (list) or JSON textarea (json).
+ * Как GUI должен редактировать ключ `list`/`json`. Реестр остаётся единственным
+ * источником правды о ТОМ, что хранит ключ; здесь лишь подсказка показа
+ * (строка через запятую годится для `tools.defaultTags`, но неверна для
+ * regex с запятыми). Без значения — plain-input (list) или JSON-textarea (json).
  */
 export interface ConfigEditorSpec {
-  /** `tags` = string chips; `checkboxes` = multiselect; `table` = record rows. */
+  /** `tags` — чипсы строк; `checkboxes` — мультивыбор; `table` — строки записей. */
   kind: "tags" | "checkboxes" | "table";
-  /** Allowed values for `checkboxes`. */
+  /** Допустимые значения для `checkboxes`. */
   options?: readonly string[];
-  /** Column definitions for `table`. The first column is the record key. */
+  /** Колонки для `table`. Первая колонка — ключ записи. */
   columns?: ReadonlyArray<{
     key: string;
-    /** `number` renders a number input, `bool` a checkbox. Default: text. */
+    /** `number` — числовой инпут, `bool` — чекбокс. Дефолт: текст. */
     type?: "string" | "number" | "bool";
     optional?: boolean;
-    /** Text column whose schema value is a list (edited comma-separated). */
+    /** Текстовая колонка со значением-списком (правится через запятую). */
     array?: boolean;
   }>;
-  /** Free-text hint shown in the row adder (e.g. a regex example). */
+  /** Свободный хинт в добавлялке строк (напр. пример regex). */
   placeholder?: string;
 }
 
 export interface ConfigKeyDef {
-  /** Canonical key — literal config.json path. */
+  /** Канонический ключ — буквальный путь config.json. */
   key: string;
   aliases: string[];
   domain: string;
@@ -68,15 +76,15 @@ export interface ConfigKeyDef {
   enumValues?: readonly string[];
   min?: number;
   max?: number;
-  /** Granularity hint for numeric UIs (e.g. token counts step by 1024). */
+  /** Шаг для числовых UI (напр. токены шагом 1024). */
   step?: number;
   reconfigure: boolean;
   readOnly?: boolean;
-  /** GUI rendering hint for `list`/`json` values (see {@link ConfigEditorSpec}). */
+  /** GUI-хинт рендера значений `list`/`json` (см. {@link ConfigEditorSpec}). */
   editor?: ConfigEditorSpec;
   get(config: AppConfig): unknown;
   set?(config: AppConfig, value: unknown): void;
-  /** Extra validation beyond type/range (e.g. provider entry existence). */
+  /** Доп. валидация сверх типа/диапазона (напр. существование записи провайдера). */
   extraValidate?(config: AppConfig, value: unknown): ConfigRangeReason | "invalid" | null;
 }
 
@@ -106,7 +114,7 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
   };
 }
 
-/** Top-level + nested security toggles, all read live by the tools. */
+/** Верхнеуровневые + вложенные тумблеры безопасности, все читаются тулами живьём. */
 type SecurityToggle = "enabled" | "bash" | "paths" | "contentScan" | "sessionEncryption" | "network";
 
 function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef {
@@ -115,9 +123,9 @@ function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef 
     aliases: [],
     domain: "security",
     valueType: "bool",
-    // Tools read `config.security` live; no agent rebuild is required. Session
-    // encryption is snapshotted into the store at bootstrap, so it only takes
-    // full effect on the next run — reconfigure would not rebuild it either.
+    // Тулы читают `config.security` живьём; пересборка агента не нужна. Шифрование
+    // сессии снапшотится в стор на bootstrap, так что полный эффект — только со
+    // следующего запуска: reconfigure его всё равно не пересобрал бы.
     reconfigure: false,
     get: (c) => {
       const sec = c.security;
@@ -397,9 +405,9 @@ const DEFINITIONS: ConfigKeyDef[] = [
     valueType: "string",
     reconfigure: false,
     readOnly: true,
-    // The *installed package* version, not `config.version` (that field is the
-    // config schema version used by migration detection and never matches a
-    // release). Read at call time so it follows updates without a restart.
+    // Версия *установленного пакета*, а не `config.version` (то — версия схемы
+    // конфига для детекта миграций, с релизом не совпадает никогда). Читается
+    // в момент вызова, так что следует за обновлениями без рестарта.
     get: () => readMmaVersion(),
   },
   securityToggle("enabled", "security.enabled"),
@@ -429,29 +437,31 @@ for (const def of DEFINITIONS) {
   for (const alias of def.aliases) BY_NAME.set(alias, def);
 }
 
+/** Резолвит ключ/алиас в деф. Нет такого — null. */
 export function resolveConfigKey(name: string): ConfigKeyDef | null {
   return BY_NAME.get(name) ?? null;
 }
 
+/** Все дефы реестра (идут и в комплитер без правок). */
 export function configDefs(): readonly ConfigKeyDef[] {
   return DEFINITIONS;
 }
 
-/** All canonical keys (for the dump), in registry order. */
+/** Все канонические ключи (для дампа), в порядке реестра. */
 export function canonicalKeys(): string[] {
   return DEFINITIONS.map((d) => d.key);
 }
 
 /**
- * Keys in a canonical group prefix (e.g. "contextBudget" → systemPrompt,
- * responseReserve). Matches `prefix.` exactly, so `/config contextBudget`
- * lists both shares.
+ * Ключи канонической группы по префиксу (напр. "contextBudget" → systemPrompt,
+ * responseReserve). Матчит ровно `prefix.`, так что `/config contextBudget`
+ * листает обе доли.
  */
 export function keysForGroup(prefix: string): ConfigKeyDef[] {
   return DEFINITIONS.filter((d) => d.key.startsWith(`${prefix}.`));
 }
 
-/** Canonical + alias names, for completion. */
+/** Канонические + алиасные имена, для автокомплита. */
 export function allConfigNames(): Array<{ name: string; def: ConfigKeyDef; alias: boolean }> {
   const out: Array<{ name: string; def: ConfigKeyDef; alias: boolean }> = [];
   for (const def of DEFINITIONS) {
@@ -461,6 +471,7 @@ export function allConfigNames(): Array<{ name: string; def: ConfigKeyDef; alias
   return out;
 }
 
+/** Человекочитаемое форматирование значения (bool → on/off, массивы через запятую). */
 export function formatConfigValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "on" : "off";
   if (Array.isArray(value)) return value.join(", ");
@@ -468,6 +479,7 @@ export function formatConfigValue(value: unknown): string {
   return String(value);
 }
 
+/** Результат парсинга сырого значения: ок или "invalid". */
 export type ParseResult = { ok: true; value: unknown } | { ok: false; reason: "invalid" };
 
 function parseBool(raw: string): ParseResult {
@@ -477,6 +489,7 @@ function parseBool(raw: string): ParseResult {
   return { ok: false, reason: "invalid" };
 }
 
+/** Парсит сырую строку по типу ключа (bool/enum/int/share/list/json). */
 export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
   const trimmed = raw.trim();
   switch (def.valueType) {
@@ -498,7 +511,7 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
       return { ok: true, value: n };
     }
     case "share": {
-      // Accept a fraction (0.1) or a percentage (10%).
+      // Доля (0.1) или проценты (10%).
       const isPct = trimmed.endsWith("%");
       const body = isPct ? trimmed.slice(0, -1).trim() : trimmed;
       if (!/^-?\d+(\.\d+)?$/.test(body)) return { ok: false, reason: "invalid" };
@@ -509,8 +522,8 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
     }
     case "list": {
       if (trimmed.length === 0) return { ok: true, value: [] };
-      // Structured editors post a JSON array (values may contain commas, e.g.
-      // regexes like `a{1,3}`); the REPL keeps the comma syntax.
+      // Структурные редакторы постят JSON-массив (значения могут содержать запятые,
+      // напр. regex вида `a{1,3}`); REPL держит синтаксис через запятую.
       if (trimmed.startsWith("[")) {
         try {
           const parsed: unknown = JSON.parse(trimmed);
@@ -535,6 +548,7 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
   }
 }
 
+/** Успешное чтение ключа: ключ, деф, значение, строка для показа. */
 export interface ConfigGetOk {
   ok: true;
   key: string;
@@ -542,13 +556,16 @@ export interface ConfigGetOk {
   value: unknown;
   display: string;
 }
+/** Ошибка чтения: причина + ввод. */
 export interface ConfigError {
   ok: false;
   reason: ConfigErrorReason;
   input: string;
 }
+/** Результат чтения ключа. */
 export type ConfigGetResult = ConfigGetOk | ConfigError;
 
+/** Читает ключ конфига по имени/алиасу. */
 export function getConfigValue(config: AppConfig, name: string): ConfigGetResult {
   const def = resolveConfigKey(name);
   if (!def) return { ok: false, reason: "unknown-key", input: name };
@@ -556,6 +573,7 @@ export function getConfigValue(config: AppConfig, name: string): ConfigGetResult
   return { ok: true, key: def.key, def, value, display: formatConfigValue(value) };
 }
 
+/** Успешная запись: ключ, значение, нужен ли reconfigure. */
 export interface ConfigSetOk {
   ok: true;
   key: string;
@@ -566,6 +584,7 @@ export interface ConfigSetOk {
   /** Key needs an agent-level reasoning side effect after apply. */
   reasoningChanged: boolean;
 }
+/** Ошибка записи: причина + ввод + опц. ключ/деф. */
 export interface ConfigSetErrorFail {
   ok: false;
   reason: ConfigErrorReason | ConfigRangeReason | "invalid";
@@ -573,13 +592,14 @@ export interface ConfigSetErrorFail {
   key?: string;
   def?: ConfigKeyDef;
 }
+/** Результат записи ключа. */
 export type ConfigSetResult = ConfigSetOk | ConfigSetErrorFail;
 
 /**
- * Keep `provider.models` (the last model used per provider) in sync. Setting
- * `model` records it under the active provider; switching `provider.active`
- * restores that provider's remembered model, so a switch never silently keeps
- * a model the new backend does not serve.
+ * Держит `provider.models` (последняя модель каждого провайдера) в синхроне. Запись
+ * `model` запоминается под активным провайдером; смена `provider.active`
+ * восстанавливает запомненную модель провайдера, чтобы свитч молча не оставлял
+ * модель, которую новый бэкенд не обслуживает.
  */
 function applyProviderModelMemory(config: AppConfig, key: string, value: unknown): void {
   const provider = config.provider;
@@ -595,6 +615,7 @@ function applyProviderModelMemory(config: AppConfig, key: string, value: unknown
   }
 }
 
+/** Пишет ключ: резолв → парсинг → валидация → set + память моделей провайдера. */
 export function setConfigValue(config: AppConfig, name: string, raw: string): ConfigSetResult {
   const def = resolveConfigKey(name);
   if (!def) return { ok: false, reason: "unknown-key", input: name };
@@ -619,15 +640,15 @@ export function setConfigValue(config: AppConfig, name: string, raw: string): Co
   };
 }
 
+/** Проверка известности ключа (для подсказок). */
 export function isKnownConfigKey(name: string): boolean {
   return BY_NAME.has(name);
 }
 
 /**
- * Capture the current value of every canonical key. Used at REPL start as the
- * "boot snapshot" so `/config reset` can undo changes made during the session
- * (rather than jumping to schema defaults, which are ambiguous for fields like
- * `provider.active`).
+ * Снимает текущие значения всех канонических ключей. На старте REPL — "boot-снапшот",
+ * чтобы `/config reset` откатывал изменения сессии (а не прыгал к дефолтам схемы,
+ * неоднозначным для полей вида `provider.active`).
  */
 export function captureConfigSnapshot(config: AppConfig): Map<string, unknown> {
   const snapshot = new Map<string, unknown>();
@@ -635,8 +656,8 @@ export function captureConfigSnapshot(config: AppConfig): Map<string, unknown> {
     try {
       snapshot.set(def.key, structuredClone(def.get(config)));
     } catch {
-      // Partial/mock configs (tests) may lack a field — skip it, not the whole
-      // snapshot. Real configs are complete.
+      // Частичные/мок-конфиги (тесты) могут не иметь поля — скипаем его, а не весь
+      // снапшот. Реальные конфиги полны.
     }
   }
   return snapshot;

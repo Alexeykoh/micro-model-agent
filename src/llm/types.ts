@@ -1,5 +1,7 @@
+/** Типы результатов оркестратора и сабтасков MoE. */
 import type { MoEPlan } from "../modules/execution/types";
 
+/** Результат оркестратора: план, финальный ответ или запрос на переплан. */
 export interface OrchestratorResult {
   type: "plan" | "final" | "replan";
   plan?: MoEPlan;
@@ -7,6 +9,7 @@ export interface OrchestratorResult {
   explanation?: string;
 }
 
+/** Результат одного сабтаска MoE-плана. */
 export interface SubtaskResult {
   subtaskId: string;
   success: boolean;
@@ -14,11 +17,12 @@ export interface SubtaskResult {
   result: string;
   error?: string;
   /**
-   * Present on results produced by the execution engine (see execution/types.ts)
+   * Есть только у результатов движка исполнения (см. execution/types.ts).
    */
   durationMs?: number;
 }
 
+/** Вход верификатора плана: план, результаты сабтасков, ошибки и варнинги. */
 export interface VerifyInput {
   plan: MoEPlan;
   results: SubtaskResult[];

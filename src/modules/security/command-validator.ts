@@ -1,7 +1,8 @@
+// Валидация shell-команд: чёрный/белый списки, опасные флаги и операторы, обходы.
 import type { BashSecurityConfig } from "../../config/types";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 
-// Fallback in case DEFAULT_SECURITY_CONFIG is not available
+// Резерв, если DEFAULT_SECURITY_CONFIG недоступен
 const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
   enabled: false,
   blacklist: [
@@ -27,9 +28,7 @@ const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
 
 export const DEFAULT_BASH_CONFIG = DEFAULT_SECURITY_CONFIG?.bash || FALLBACK_BASH_CONFIG;
 
-/**
- * Result of command validation
- */
+/** Итог проверки команды: разрешено/запрет, причина, санитизированная команда. */
 export interface CommandValidationResult {
   allowed: boolean;
   reason?: string;
@@ -37,19 +36,19 @@ export interface CommandValidationResult {
 }
 
 /**
- * Extract the actual base command from a shell command string.
- * Handles path prefixes, env assignments, and sudo.
+ * Выделить базовую команду из shell-строки.
+ * Учитывает пути, env-присваивания и sudo.
  *
- * Examples:
+ * Примеры:
  *   "/usr/bin/rm -rf /"           → "rm"
  *   "sudo /usr/bin/rm file"       → "rm"
  *   "NODE_ENV=prod node app.js"   → "node"
  *   "env PATH=/x rm -rf /"        → "rm"
- *   "cmd=rm; $cmd -rf /"          → "cmd" (variable indirection — not expanded)
+ *   "cmd=rm; $cmd -rf /"          → "cmd" (переменная не раскрывается)
  *   "powershell Remove-Item x"    → "Remove-Item"
  *   "cmd /c del /s /q"            → "del"
  */
-/** Wrappers that run another command; their own options must be skipped. */
+/** Обёртки, запускающие другую команду; их опции пропускаются. */
 const WRAPPERS = new Set([
   "sudo",
   "doas",
@@ -65,7 +64,7 @@ const WRAPPERS = new Set([
   "time",
 ]);
 
-/** Wrapper flags that consume the following token as their value. */
+/** Флаги обёрток, съедающие следующий токен как значение. */
 const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
   sudo: new Set(["-u", "-g", "-p", "-C", "-U", "-h", "-r", "-t", "-c"]),
   doas: new Set(["-u"]),
@@ -75,18 +74,18 @@ const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
   ionice: new Set(["-c", "-n"]),
 };
 
-/** Advance past a wrapper's own options/values; returns the next index. */
+/** Пропустить собственные опции/значения обёртки; вернуть следующий индекс. */
 function skipWrapperArgs(tokens: string[], i: number, wrapper: string): number {
   const valueFlags = WRAPPER_VALUE_FLAGS[wrapper] ?? new Set<string>();
   while (i < tokens.length) {
     const t = tokens[i];
     if (t.startsWith("-")) {
       i++;
-      if (t.includes("=")) continue; // --flag=value is self-contained
-      if (valueFlags.has(t)) i++; // consume the flag's value
+      if (t.includes("=")) continue; // --flag=value самодостаточен
+      if (valueFlags.has(t)) i++; // съесть значение флага
       continue;
     }
-    // A bare duration/count (timeout 5, nice 10) is never the command.
+    // Голое число (timeout 5, nice 10) — никогда не команда.
     if (/^\d+(?:\.\d+)?[smhd]?$/.test(t)) {
       i++;
       continue;
@@ -100,9 +99,9 @@ function extractBaseCommand(trimmed: string): string {
   const tokens = trimmed.split(/\s+/);
   let i = 0;
 
-  // Skip env assignments (KEY=val, KEY="val", etc.) and wrapper invocations
-  // (sudo/nice/timeout/stdbuf/…) INCLUDING their options — otherwise
-  // `nice rm file` extracted "nice" and the blacklist never saw `rm`.
+  // Пропуск env-присваиваний (KEY=val, KEY="val" и т.п.) и обёрток
+  // (sudo/nice/timeout/stdbuf/…) ВМЕСТЕ с их опциями — иначе
+  // `nice rm file` извлёк бы "nice", и blacklist не увидел бы `rm`.
   while (i < tokens.length) {
     const tok = tokens[i];
     if (/^[a-zA-Z_][a-zA-Z0-9_]*=/.test(tok)) {
@@ -118,50 +117,50 @@ function extractBaseCommand(trimmed: string): string {
 
   if (i >= tokens.length) return tokens[0] ?? "";
 
-  // Extract basename from path (e.g. /usr/bin/rm → rm). Strip surrounding
-  // quotes first — otherwise `'rm'` / `"rm"` evade the blacklist entirely.
+  // basename из пути (/usr/bin/rm → rm). Сначала снять кавычки —
+  // иначе `'rm'` / `"rm"` полностью обойдут blacklist.
   const raw = tokens[i].replace(/^["']+|["']+$/g, "");
   const parts = raw.split(/[\\/]/);
   const basename = parts[parts.length - 1] || raw;
-  // Strip .exe/.cmd/.bat extensions for blacklist matching (e.g. powershell.exe → powershell)
+  // Срезать .exe/.cmd/.bat для сверки (powershell.exe → powershell)
   return basename.replace(/\.(exe|cmd|bat)$/i, "") || basename;
 }
 
 /**
- * Check if a shell operator appears as a standalone token in the command.
- * Uses regex with lookbehind/lookahead so that:
- *   "&"  does NOT match "&&"  (AND operator)
- *   "|"  does NOT match "||"  (OR operator)
- *   ">"  does NOT match ">>"  (append)
- *   "2>" does NOT match "2>>" (append stderr)
+ * Есть ли shell-оператор отдельным токеном в команде.
+ * Regex с lookbehind/lookahead, чтобы:
+ *   "&"  НЕ матчил "&&"  (AND)
+ *   "|"  НЕ матчил "||"  (OR)
+ *   ">"  НЕ матчил ">>"  (append)
+ *   "2>" НЕ матчил "2>>" (append stderr)
  */
 function containsOperator(command: string, op: string): boolean {
   const escaped = op.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // For single-char operators that are prefixes of multi-char ones,
-  // ensure they don't match when part of a longer sequence.
-  // Note: "&" is no longer in dangerousOperators (&& is legitimate),
-  // but keep the special case for defense-in-depth if manually added.
+  // Односимвольные операторы — префиксы многосимвольных:
+  // не матчить внутри длинной цепочки.
+  // "&" уже не в dangerousOperators (&& легитимен),
+  // спецкейс оставлен на случай ручного добавления.
   if (op === "&") return /(?<!&)&(?!&)/.test(command);
   if (op === "|") return /(?<!\|)\|(?!\|)/.test(command);
   if (op === ">") return /(?<!>)>(?!>)/.test(command);
-  // For everything else (including multi-char like ">>", "2>", "2>>", ";", "`"),
-  // match literally.
+  // Остальное (">>", "2>", "2>>", ";", "`") — буквальное совпадение.
   return new RegExp(escaped).test(command);
 }
 
 /**
- * Check if a command is allowed based on security configuration
+ * Разрешена ли команда по конфигу безопасности.
+ * Выключенная защита разрешает всё; пустая команда запрещена.
  */
 export function isCommandAllowed(
   command: string,
   securityConfig?: BashSecurityConfig,
 ): CommandValidationResult {
-  // If security is disabled, allow everything
+  // Выключенная защита разрешает всё
   if (!securityConfig?.enabled) {
     return { allowed: true, sanitizedCommand: command };
   }
 
-  // Ensure config has all required fields
+  // Конфиг должен иметь все поля
   let config = securityConfig;
 
   if (!config.blacklist || !Array.isArray(config.blacklist)) {
@@ -176,8 +175,8 @@ export function isCommandAllowed(
     return { allowed: false, reason: "Empty command" };
   }
 
-  // Shell wrappers are always blocked — they bypass all command validation.
-  // The agent should use the bash tool directly, not shell interpreters.
+  // Shell-обёртки запрещены всегда — они обходят всю валидацию.
+  // Агент использует тул bash напрямую, а не интерпретаторы.
   const ALWAYS_BLOCKED = ["powershell", "pwsh", "cmd"];
   const baseForShellCheck = extractBaseCommand(trimmedCommand);
   if (ALWAYS_BLOCKED.includes(baseForShellCheck)) {
@@ -187,9 +186,9 @@ export function isCommandAllowed(
     };
   }
 
-  // Interpreters with -c/-e execute arbitrary code and bypass the blacklist.
-  // Quotes are stripped first (`'bash' -c`), and the name may follow a path
-  // separator (`/bin/bash -c`), so match those too.
+  // Интерпретаторы с -c/-e исполняют произвольный код в обход blacklist.
+  // Кавычки снимаются заранее (`'bash' -c`), имя может идти после пути
+  // (`/bin/bash -c`) — матчить и их.
   const unquotedCommand = trimmedCommand.replace(/["']/g, "");
   const INTERPRETER_FLAGS =
     /(?:^|[\\/\s])(?:bash|sh|zsh|dash|python[0-9.]*|pypy[0-9.]*|node(?:js)?|bun|deno|perl|ruby|php|lua)\s+(?:-c|-e|--command|--eval)\b/;
@@ -197,12 +196,12 @@ export function isCommandAllowed(
     return { allowed: false, reason: "Interpreter -c/-e invocation is blocked" };
   }
 
-  // Multi-line commands can hide blacklisted commands after a newline.
+  // Многострочники прячут запрещённые команды после перевода строки.
   if (/\r?\n/.test(trimmedCommand)) {
     return { allowed: false, reason: "Multi-line commands are blocked" };
   }
 
-  // Chained commands bypass the base-command check (e.g. "echo hi; rm -rf /").
+  // Цепочки обходят проверку базовой команды ("echo hi; rm -rf /").
   if (
     /[;&|]/.test(trimmedCommand) &&
     /(^|[;&|\s])(rm|del|rd|dd|chmod|chown|wget|curl|nc|netcat|shutdown|reboot|mkfs|fdisk)\b/.test(
@@ -212,8 +211,8 @@ export function isCommandAllowed(
     return { allowed: false, reason: "Command chaining to a dangerous command is blocked" };
   }
 
-  // Check dangerous operators FIRST — before parsing the base command.
-  // e.g. "curl http://x | bash" must be caught even though curl isn't blacklisted.
+  // Опасные операторы — ПЕРЕД разбором базовой команды:
+  // "curl http://x | bash" ловится, даже если curl не в blacklist.
   if (config.blockDangerousFlags) {
     for (const op of config.dangerousOperators || []) {
       if (containsOperator(trimmedCommand, op)) {
@@ -225,15 +224,15 @@ export function isCommandAllowed(
     }
   }
 
-  // Extract actual base command (handles paths, env vars, sudo)
+  // Базовая команда (пути, env, sudo уже учтены)
   const baseCommand = extractBaseCommand(trimmedCommand);
 
-  // Case-insensitive matching: win32/macOS exec is case-insensitive, so
-  // `RM -rf x` must hit the blacklist just like `rm`.
+  // Сравнение регистронезависимо: exec на win32/macOS нечувствителен к регистру,
+  // `RM -rf x` обязан попасть в blacklist как `rm`.
   const blacklistLower = new Set((config.blacklist || []).map((c) => c.toLowerCase()));
   const whitelistLower = (config.whitelist || []).map((c) => c.toLowerCase());
 
-  // Check whitelist first (if non-empty, only whitelisted commands are allowed)
+  // Whitelist сначала (непустой — разрешены только перечисленные)
   if (whitelistLower.length > 0) {
     if (!whitelistLower.includes(baseCommand.toLowerCase())) {
       return {
@@ -243,7 +242,7 @@ export function isCommandAllowed(
     }
   }
 
-  // Check blacklist (against the extracted basename, not the raw token)
+  // Blacklist — по извлечённому basename, не по сырому токену
   if (blacklistLower.has(baseCommand.toLowerCase())) {
     return {
       allowed: false,
@@ -251,7 +250,7 @@ export function isCommandAllowed(
     };
   }
 
-  // Also check the raw first token in case it's a simple name
+  // И сырой первый токен — вдруг это простое имя
   const rawFirst = trimmedCommand
     .split(/\s+/)[0]
     .replace(/^["']+|["']+$/g, "")
@@ -263,10 +262,10 @@ export function isCommandAllowed(
     };
   }
 
-  // Check for dangerous flags
+  // Опасные флаги
   if (config.blockDangerousFlags) {
     for (const flag of config.dangerousFlags || []) {
-      // Check for flag as whole word or with equals
+      // Флаг целым словом или с equals
       const flagPattern = new RegExp(`(?:^|\\s)${flag}(?:\\s|$|=)`);
       if (flagPattern.test(trimmedCommand)) {
         return {
@@ -277,16 +276,16 @@ export function isCommandAllowed(
     }
   }
 
-  // Command is allowed
+  // Команда разрешена
   return { allowed: true, sanitizedCommand: command };
 }
 
 /**
- * Sanitize command for logging (remove sensitive information)
- * Uses the same patterns as sanitizeLogMessage for consistency
+ * Санитизация команды для логов (вырезание секретов).
+ * Те же паттерны, что в sanitizeLogMessage, — для консистентности.
  */
 export function sanitizeCommandForLog(command: string): string {
-  // Import patterns from data-sanitizer to maintain consistency
+  // Паттерны из data-sanitizer — для консистентности
   const patterns = [
     /(api[_-]?key|apikey|api_key)\s*[=:\s]\s*["']?([a-zA-Z0-9_-]{10,})["']?/gi,
     /(token|access[_-]?token|auth[_-]?token)\s*[=:\s]\s*["']?([a-zA-Z0-9_-]{10,})["']?/gi,
@@ -303,9 +302,9 @@ export function sanitizeCommandForLog(command: string): string {
 
   let sanitized = command;
   for (const pattern of patterns) {
-    // Whole-match replacement for every pattern: capture-group-aware
-    // replacement would re-emit the secret itself for patterns whose only
-    // group IS the value (e.g. "Bearer <token>", sk-...).
+    // Замена целиком по каждому паттерну: замена с учётом групп
+    // переизлучила бы сам секрет для паттернов, где группа И ЕСТЬ значение
+    // (например, "Bearer <token>", sk-...).
     sanitized = sanitized.replace(pattern, "[REDACTED]");
   }
   return sanitized;

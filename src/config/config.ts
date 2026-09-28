@@ -1,3 +1,4 @@
+// Загрузка/сохранение конфига: DEFAULTS → legacy → домены → .mmrc → env → decrypt.
 import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -16,17 +17,20 @@ import { loadDomainFiles, saveDomainFiles } from "./domains";
 import { defaultOutputBus } from "../output";
 import { MMA_DIR_NAME } from "./paths";
 
-// ── Centralized path constants ──────────────────────────────────────────
+// ── Централизованные константы путей ──────────────────────────────────────
+/** Глобальный каталог конфига. */
 export const CONFIG_DIR = join(homedir(), MMA_DIR_NAME);
+/** Legacy-файл конфига. */
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+/** Каталог файлов доменов. */
 export const CONFIG_DOMAIN_DIR = join(CONFIG_DIR, "config");
 
-// ── Internal helpers ────────────────────────────────────────────────────
+// ── Внутренние хелперы ────────────────────────────────────────────────────
 
 /**
- * Restore RegExp instances in dangerousPatterns that were serialized as {}
- * (pre-0.8.0 configs) or as {__regex, source, flags} (new format).
- * Falls back to default patterns for any entry that is not a real RegExp.
+ * Восстанавливает RegExp в dangerousPatterns, сериализованных как {}
+ * (конфиги до 0.8.0) или как {__regex, source, flags} (новый формат).
+ * Для записей без настоящего RegExp — фолбэк на дефолтные паттерны.
  */
 function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[] {
   const fallback = (Array.isArray(defaults) ? defaults : []) as RegExp[];
@@ -49,9 +53,7 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
   });
 }
 
-/**
- * Legacy npx `args` for LSP servers that predate the fixed invocation.
- */
+/** Legacy npx-`args` LSP-серверов, предшествующие фикс. вызову. */
 const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }> = {
   typescript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
   javascript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
@@ -60,9 +62,7 @@ const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }
   css: { args: ["vscode-css-languageserver", "--stdio"], timeout: 60000 },
 };
 
-/**
- * Replace stale pre-0.41.1 LSP server invocations with current defaults.
- */
+/** Заменяет протухшие pre-0.41.1 вызовы LSP-серверов текущими дефолтами. */
 function normalizeLspServerArgs(config: AppConfig): void {
   const servers = config.lsp?.servers;
   if (!servers) return;
@@ -80,6 +80,7 @@ function normalizeLspServerArgs(config: AppConfig): void {
   }
 }
 
+/** Чтение JSON с восстановлением RegExp. Битый файл — warn с путём, не тишина. */
 function loadJSON(path: string): Record<string, unknown> | null {
   if (!existsSync(path)) return null;
   try {
@@ -88,7 +89,7 @@ function loadJSON(path: string): Record<string, unknown> | null {
       regexReviver as (key: string, value: unknown) => unknown,
     ) as Record<string, unknown>;
   } catch {
-    // Never silent: a typo'd config must not quietly wipe the user's settings.
+    // Не молчим: конфиг с опечаткой не должен тихо затирать настройки юзера.
     defaultOutputBus.log("warn", "config", t("config.parse_failed", { path }));
   }
   return null;
@@ -101,8 +102,8 @@ interface EnvOverride {
 }
 
 /**
- * Apply MMA_* env overrides. Returns the overridden keys with their PRE-ENV
- * values so `saveConfig` can avoid persisting session-scoped env values (C4).
+ * Применяет MMA_*-оверрайды окружения. Возвращает тронутые ключи с ДО-env
+ * значениями, чтобы `saveConfig` не персистил сессионные env-значения (C4).
  */
 function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOverride[] } {
   const env = process.env;
@@ -121,10 +122,9 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
 
   const originalProvider = result.provider;
 
-  // normalizeEntries prefers entries[] and ignores the flat provider fields, so
-  // a flat-only env override is a silent no-op on multi-provider configs (the
-  // certification harness depends on these vars working). Resolve the active
-  // entry and patch it too.
+  // normalizeEntries предпочитает entries[] и игнорит плоские поля провайдера, так
+  // что плоский env-оверрайд на мультиконфиге — тихий no-op (а cert-харнесс зависит
+  // от работы этих vars). Резолвим активную запись и патчим её тоже.
   const activeEntryIndex = ((): number => {
     const entries = result.provider.entries;
     if (!entries || entries.length === 0) return -1;
@@ -155,8 +155,8 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
     patchActiveEntry({ apiKey: env.MMA_PROVIDER_APIKEY });
   }
   if (env.MMA_PROVIDER_TYPE || env.MMA_PROVIDER_BASEURL || env.MMA_PROVIDER_APIKEY) {
-    // Record once with the FINAL env-mutated provider object so the identity
-    // check in stripEnvOverrides matches what the loaded config holds.
+    // Пишем один раз с ФИНАЛЬНЫМ env-мутированным объектом провайдера, чтобы
+    // identity-проверка в stripEnvOverrides сошлась с загруженным конфигом.
     overrides.push({ key: "provider", envValue: result.provider, originalValue: originalProvider });
   }
   if (env.MMA_LOG_LEVEL) {
@@ -207,14 +207,14 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
   return { config: result, overrides };
 }
 
-/** Pre-env values for env-touched keys, keyed by the loaded config object. */
+/** До-env значения env-тронутых ключей, по объекту загруженного конфига. */
 const envOverrideMap = new WeakMap<AppConfig, EnvOverride[]>();
 
 /**
- * Restore pre-env values before persisting — session-scoped env overrides
- * (e.g. the cert harness baseUrl) must NOT leak into domain files. An explicit
- * later change (setProvider/reconfigure replacing provider, /model use) shows
- * up as a different object/value and is kept as-is.
+ * Возвращает до-env значения перед сохранением: сессионные env-оверрайды
+ * (например, baseUrl cert-харнесса) НЕ должны протекать в файлы доменов. Явное
+ * позднее изменение (setProvider/reconfigure заменил provider, /model use)
+ * видно как другой объект/значение и сохраняется как есть.
  */
 function stripEnvOverrides(config: AppConfig): AppConfig {
   const overrides = envOverrideMap.get(config);
@@ -229,8 +229,9 @@ function stripEnvOverrides(config: AppConfig): AppConfig {
   return result;
 }
 
-// ── Public API ──────────────────────────────────────────────────────────
+// ── Публичное API ─────────────────────────────────────────────────────────
 
+/** Опции загрузки: глобальный каталог и путь проектного конфига. */
 export interface LoadConfigOptions {
   configDir: string;
   projectConfigPath: string;
@@ -238,36 +239,36 @@ export interface LoadConfigOptions {
 
 export interface LoadConfigResult {
   config: AppConfig;
-  /** true when a legacy config.json was used (no domain files found). */
+  /** true, если использовался legacy config.json (файлов доменов нет). */
   legacyDetected: boolean;
 }
 
 /**
- * Load config from domain files (preferred) or legacy config.json (fallback).
+ * Грузит конфиг из файлов доменов (предпочтительно) или legacy config.json.
  *
- * Pipeline:
+ * Конвейер:
  *   1. DEFAULTS
- *   2. deepMerge(legacy config.json)  — if exists
- *   3. deepMerge(domain files)        — if exist, override legacy
- *   4. deepMerge(project .mmrc)       — overrides everything
- *   5. Post-load fixups (RegExp, LSP args)
- *   6. Env vars
+ *   2. deepMerge(legacy config.json)  — если есть
+ *   3. deepMerge(файлы доменов)       — если есть, поверх legacy
+ *   4. deepMerge(проектный .mmrc)     — поверх всего
+ *   5. Пост-загрузочные фиксы (RegExp, LSP-args)
+ *   6. Env-переменные
  *   7. Decrypt
  *
- * On first run (no config.json, no domain files) the result is DEFAULTS;
- * nothing is written — persistence happens only through `saveConfig`.
+ * На первом запуске (нет ни config.json, ни доменов) результат — DEFAULTS;
+ * ничего не пишется: персист только через `saveConfig`.
  */
 export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const globalPath = join(options.configDir, "config.json");
 
   mkdirSync(options.configDir, { recursive: true });
 
-  // v1 → v2 migration check (reads config.json directly, before domain logic)
+  // Проверка v1 → v2 (читает config.json напрямую, до логики доменов).
   const detector = new MigrationDetector(options.configDir);
   if (detector.needsMigration()) {
     const backup = new BackupManager(options.configDir);
-    // Full-directory backup (documented behavior) + config.json snapshot
-    // before we touch anything.
+    // Полный бэкап каталога (документированное поведение) + снапшот config.json
+    // до любых касаний.
     backup.backupAll();
     backup.backupConfig();
     const summary = backup.getBackupSummary();
@@ -275,8 +276,8 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     try {
       unlinkSync(globalPath);
     } catch (e) {
-      // Best-effort removal: loadConfig falls back to defaults either way,
-      // but a leftover v1 file would re-trigger migration on every startup.
+      // Best-effort удаление: loadConfig и так откатится на дефолты, но
+      // leftover v1-файл ретриггерил бы миграцию на каждом старте.
       defaultOutputBus.log(
         "error",
         "config",
@@ -285,32 +286,32 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     }
   }
 
-  // Deep clone: DEFAULTS holds singleton objects (security, lsp, tools…)
-  // that must never be mutated by runtime config changes.
+  // Глубокий клон: DEFAULTS держит синглтон-объекты (security, lsp, tools…),
+  // которые рантайм-изменения конфига мутировать не должны.
   let config: AppConfig = structuredClone(DEFAULTS);
   let legacyDetected = false;
 
-  // Step 2: legacy config.json (fallback)
+  // Шаг 2: legacy config.json (фолбэк).
   const globalData = loadJSON(globalPath);
   if (globalData) {
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
   }
 
-  // Step 3: domain files (override legacy)
+  // Шаг 3: файлы доменов (поверх legacy).
   const domainConfig = loadDomainFiles(options.configDir);
   if (domainConfig) {
     config = deepMerge(config, domainConfig);
     legacyDetected = false;
   }
 
-  // Step 4: project .mmrc (overrides everything)
+  // Шаг 4: проектный .mmrc (поверх всего).
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {
     config = deepMerge(config, projectData as Partial<AppConfig>);
   }
 
-  // Step 5: post-load fixups — AFTER all merges
+  // Шаг 5: пост-загрузочные фиксы — ПОСЛЕ всех мержей.
   if (config.security?.contentScan?.dangerousPatterns) {
     config.security.contentScan.dangerousPatterns = restoreDangerousPatterns(
       config.security.contentScan.dangerousPatterns,
@@ -319,11 +320,11 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   }
   normalizeLspServerArgs(config);
 
-  // Step 6: env vars
+  // Шаг 6: env-переменные.
   const { config: envConfig, overrides } = applyEnvVars(config);
   config = envConfig;
 
-  // Step 7: decrypt
+  // Шаг 7: decrypt.
   try {
     const encryptor = new ConfigEncryptor();
     const decrypted = encryptor.decrypt(config as unknown as Record<string, unknown>);
@@ -331,9 +332,9 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     for (const key of Object.keys(decrypted)) {
       configRec[key] = decrypted[key];
     }
-    // Decrypt rebuilds the object tree (new identities). Re-point the provider
-    // override at the post-decrypt provider so the save-time identity check in
-    // stripEnvOverrides still matches the loaded config.
+    // Decrypt пересобирает дерево объектов (новые identity). Переприцеливаем
+    // provider-оверрайд на пост-decrypt провайдер, чтобы save-time identity-чек
+    // в stripEnvOverrides по-прежнему сходился с загруженным конфигом.
     const providerOverride = overrides.find((o) => o.key === "provider");
     if (providerOverride) providerOverride.envValue = config.provider;
   } catch (e: any) {
@@ -345,6 +346,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   return { config, legacyDetected };
 }
 
+/** Валидирует конфиг против известных тегов тулов. Ошибки — throw. */
 export function validateConfig(config: AppConfig, allToolTags: string[]): void {
   const errors = validateExpertConfig(config, allToolTags);
   const knownTags = new Set(allToolTags);
@@ -361,21 +363,21 @@ export function validateConfig(config: AppConfig, allToolTags: string[]): void {
 }
 
 /**
- * Save config to domain files (preferred) or legacy single file (fallback).
+ * Пишет конфиг в файлы доменов (предпочтительно) или legacy-файл (фолбэк).
  *
- * @param config   Full AppConfig to save
- * @param configPath  Legacy path (e.g. ~/.mma/config.json) — used when configDir is absent
- * @param configDir  Optional config directory (e.g. ~/.mma). When provided, writes domain files.
+ * @param config      полный AppConfig для сохранения;
+ * @param configPath  legacy-путь (напр. ~/.mma/config.json) — когда configDir нет;
+ * @param configDir   каталог конфига (напр. ~/.mma). Если задан — пишет файлы доменов.
  */
 export function saveConfig(config: AppConfig, configPath: string, configDir?: string): void {
-  // Session-scoped MMA_* env overrides must not be persisted (C4).
+  // Сессионные MMA_*-оверрайды персистить нельзя (C4).
   const toWrite = stripEnvOverrides(config);
   if (configDir) {
     saveDomainFiles(toWrite, configDir);
     return;
   }
 
-  // Legacy single-file write (backward compat for tests / edge cases)
+  // Legacy-запись одним файлом (обратная совместимость для тестов/крайних случаев).
   const dir = dirname(configPath);
   mkdirSync(dir, { recursive: true });
 

@@ -1,11 +1,14 @@
 
+/** Тул записи в межсессионную память (preferences, факты, решения, ошибки). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { MemoryStore } from "../modules/memory/store";
 import { globalMemoryDir } from "../config/paths";
 
+/** Категории памяти. */
 const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"];
 
+/** Пишет факт/преференс в глобальную память. Параметры: category, key/value или entry. */
 export const rememberTool: ToolDefinition = {
   name: "remember",
   icon: "🧠",
@@ -68,8 +71,8 @@ export const rememberTool: ToolDefinition = {
         output: t("tool.remember.entry", { category, entry }),
       };
     } catch (err) {
-      // A failed write is a failure: reporting success made the agent (and its
-      // failure accounting) believe the memory was saved.
+      // Упавшая запись — провал: отчёт об успехе заставлял агента (и учёт
+      // падений) верить, что память сохранена.
       return { success: false, output: t("tool.memory_error", { error: String(err) }) };
     }
   },

@@ -1,3 +1,4 @@
+/** Терминал-независимая поверхность промпта для интерактивных тулов. */
 import {
   formatMenu,
   choicePrompt,
@@ -8,13 +9,13 @@ import {
 } from "./user-input";
 import { t } from "../i18n/index";
 
-/** Minimal terminal-agnostic prompt surface used by interactive tools. */
+/** Минимальная терминал-независимая поверхность промпта. */
 export interface PromptIO {
   askText(question: string): Promise<string>;
   askChoice(question: string, options: InputOption[], opts?: AskChoiceOptions): Promise<number[]>;
 }
 
-/** Build a PromptIO from injectable ask/print primitives (testable, terminal-agnostic). */
+/** Собирает PromptIO из инжектируемых ask/print (тестируемо, без терминала). */
 export function createPromptIO(deps: {
   ask: (prompt: string) => Promise<string>;
   print: (line: string) => void;
@@ -26,8 +27,8 @@ export function createPromptIO(deps: {
     async askChoice(question, options, opts = {}) {
       const multiple = opts.multiple ?? false;
       const entryCount = options.length + (opts.allowCustom ? 1 : 0);
-      // No selectable entries (and no custom entry) — parseSelection can never
-      // succeed, so return without printing a dead menu or looping forever.
+      // Выбирать нечего (и кастома нет) — parseSelection не сойдётся никогда,
+      // поэтому выходим без печати мёртвого меню и вечного цикла.
       if (entryCount === 0) return [];
       const customEntry = options.length;
       deps.print(formatMenu(question, options, opts));

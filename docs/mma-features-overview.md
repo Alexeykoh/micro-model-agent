@@ -1,7 +1,16 @@
 # MMA v2 — полный список возможностей с подробностями
 
 > Обзор возможностей агента простыми словами. Технические детали — в [AGENTS.md](../AGENTS.md) и [docs/specs/](./specs/).
-> Актуально для **MMA 2.6.0**. Исторический срез — раздел «Что нового с 0.63.0» ниже.
+> Актуально для **MMA 2.10.0**. Исторический срез — раздел «Что нового с 0.63.0» ниже.
+
+---
+
+## Что нового в 2.7.0–2.10.0 (кратко)
+
+- **2.7.0** — web streaming Markdown + подсветка кода + копирование блоков/сообщений; редизайн панели «Модель и провайдер»; per-provider model memory; name-guard провайдеров; пресеты провайдеров в один клик.
+- **2.8.0** — provider context auto-detect (фактическое окно бэкенда, LM Studio → Ollama → llama.cpp → `/models`-мета → models.dev); `lmstudio` как first-class провайдер.
+- **2.9.0** — тул `process_wait`; мемоизация read-only тулов; success-claim check; `session export --compact`.
+- **2.10.0** — полный реестр `/config` (~110 ключей, типы `json`/`list`); `mma config set --force`; `/security status`; web MCP CRUD + LSP read/edit; generic settings controls + поиск + структурные редакторы; единый вложенный диалог `#subOverlay`.
 
 ---
 

@@ -1,3 +1,4 @@
+// Выбор LLM для критика: выделенный провайдер при critic.model, иначе общий.
 import type { LLMProvider } from "../../llm/provider";
 import type { AppConfig, CriticConfig } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
@@ -6,23 +7,24 @@ import { FallbackProvider } from "../providers/fallback";
 
 const DEFAULT_CRITIC_BASE_URL = "http://localhost:1234/v1";
 
-/** Fallback context window when neither the provider entry nor the config sets one. */
+/** Окно контекста, если ни запись провайдера, ни конфиг его не задали. */
 const DEFAULT_CRITIC_CONTEXT_WINDOW = 32768;
 
+/** Зависимости builder'а critic-провайдера: логгер и id сессии. */
 export interface CriticProviderDeps {
   logger?: Logger;
   getSessionId?: () => string | undefined;
 }
 
 /**
- * Resolve which LLM serves the critic (Phase 2). Mirrors OrchestratorClient:
- * a managed provider is built through ProviderManager (per-entry
- * contextWindow/retry/rateLimits, failover) ONLY when `critic.model` is set;
- * otherwise the critic shares the active provider (v1 behavior). A
- * `critic.provider` without a model keeps v1 behavior.
+ * Резолвит LLM для критика (Phase 2). Зеркалит OrchestratorClient:
+ * управляемый провайдер строится через ProviderManager (per-entry
+ * contextWindow/retry/rateLimits, failover) ТОЛЬКО если задан `critic.model`;
+ * иначе критик делит активный провайдер (поведение v1). `critic.provider`
+ * без модели сохраняет поведение v1.
  *
- * Fail-open: a broken override warns and falls back to the active provider —
- * a misconfigured critic must never silently disable verification.
+ * Fail-open: битый оверрайд предупреждает и откатывается к активному
+ * провайдеру — неверно настроенный критик не должен молча отключать проверку.
  */
 export function buildCriticProvider(
   critic: CriticConfig | undefined,

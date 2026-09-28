@@ -1,13 +1,13 @@
+// Ограниченный кольцевой буфер записей консоли браузера.
 import type { ConsoleEntry, ConsoleType } from "./types";
 
 const CONSOLE_MAX_LINE = 400;
 
 /**
- * Bounded ring buffer of browser console entries.
- *
- * Extracted from `session.ts` so `driver.ts` and `bridge-client.ts` can share
- * it WITHOUT importing `session.ts` — that edge formed the two browser import
- * cycles fallow flagged (`driver ↔ session`, `driver → bridge-client → session`).
+ * Ограниченный буфер записей консоли браузера.
+ * Вынесен из `session.ts`, чтобы `driver.ts` и `bridge-client.ts` делили его
+ * БЕЗ импорта `session.ts` — это ребро давало два цикла импортов
+ * (`driver ↔ session`, `driver → bridge-client → session`).
  */
 export class ConsoleBuffer {
   private entries: ConsoleEntry[] = [];
@@ -17,6 +17,7 @@ export class ConsoleBuffer {
     this.maxEntries = maxEntries;
   }
 
+  /** Добавить запись; пустые отбрасываются, длинные строки режутся. */
   add(type: ConsoleType, text: string): void {
     const clean = String(text).replace(/\s+/g, " ").trim();
     if (!clean) return;
@@ -27,14 +28,17 @@ export class ConsoleBuffer {
     }
   }
 
+  /** Очистить буфер. */
   clear(): void {
     this.entries = [];
   }
 
+  /** Все записи копией. */
   getAll(): ConsoleEntry[] {
     return [...this.entries];
   }
 
+  /** Текущее число записей. */
   get size(): number {
     return this.entries.length;
   }

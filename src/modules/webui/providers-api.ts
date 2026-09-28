@@ -1,14 +1,6 @@
-/**
- * REST handlers for the "Model & Provider" settings page of `mma web`.
- *
- * Split out of `settings-api.ts` (rule #1: ≤300 lines/file). Adds/updates and
- * deletes entries in `config.provider.entries`, persisting through `saveConfig`
- * and hot-swapping the agent through `reconfigure`. Secrets are never echoed:
- * the read shape exposes `hasApiKey` instead of the key itself.
- *
- * Auth + same-origin are enforced upstream in `server.ts`; these functions
- * assume the request already passed both checks.
- */
+// REST-хендлеры страницы «Модель и провайдер»: add/update/delete записей, хот-свап агента.
+// Вынесены из `settings-api.ts`. Секреты не эхом (`hasApiKey` вместо ключа).
+// Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AppConfig, CacheCapability, ProviderEntry } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
@@ -19,7 +11,7 @@ import { persistAndReconfigure } from "./persist";
 import { buildProviderViews } from "./providers-view";
 import type { WebUiState } from "./state";
 
-/** `GET /api/providers` — redacted entries + active name. */
+/** `GET /api/providers` — отредактированные записи + имя активного. */
 export function handleProvidersGet(res: ServerResponse, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -28,6 +20,7 @@ export function handleProvidersGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, buildProviderViews(s.config));
 }
 
+/** Вход add/update: обязательны тип и URL, остальное опционально. */
 interface ProviderInput {
   type: string;
   label?: string;
@@ -40,7 +33,7 @@ interface ProviderInput {
   maxCompletionTokens?: number;
   cache?: Partial<CacheCapability>;
   retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
-  /** Current name of the entry being edited; absent when creating a new one. */
+  /** Текущее имя правимой записи; при создании отсутствует. */
   originalName?: string;
 }
 
@@ -83,7 +76,7 @@ function coerceFlag(v: unknown): boolean | null {
   return null;
 }
 
-/** Parse the per-entry `cache` override object. `null` = malformed (400). */
+/** Парсит потуловой объект оверрайда `cache`. `null` — мусор (400). */
 function parseCache(v: unknown): Partial<CacheCapability> | null | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== "object" || Array.isArray(v)) return null;
@@ -107,7 +100,7 @@ function parseCache(v: unknown): Partial<CacheCapability> | null | undefined {
   return out;
 }
 
-/** Parse the per-entry `retry` override object. `null` = malformed (400). */
+/** Парсит потуловой объект оверрайда `retry`. `null` — мусор (400). */
 function parseRetry(
   v: unknown,
 ): { maxRetries?: number; baseDelay?: number; maxDelay?: number } | null | undefined {
@@ -128,7 +121,7 @@ function parseRetry(
   return out;
 }
 
-/** Parse + validate the POST body. `null` means "reject with 400". */
+/** Парсит и валидирует тело POST. `null` — реджект с 400. */
 function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null {
   const type = typeof rec.type === "string" ? rec.type.trim() : "";
   const baseUrl = typeof rec.baseUrl === "string" ? rec.baseUrl.trim() : "";
@@ -168,7 +161,7 @@ function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null 
   return input;
 }
 
-/** Mirror an active entry onto the legacy flat `provider` fields. */
+/** Зеркалит активную запись на легаси-плоские поля `provider`. */
 function mirrorLegacy(config: AppConfig, entry: ProviderEntry): void {
   config.provider.type = entry.type;
   config.provider.baseUrl = entry.baseUrl;
@@ -179,9 +172,9 @@ function mirrorLegacy(config: AppConfig, entry: ProviderEntry): void {
 }
 
 /**
- * Existing entries, seeding the legacy single-provider config first. A legacy
- * config (`provider.type`/`baseUrl` with no `entries`) must survive the first
- * add, otherwise the new entry would silently replace it.
+ * Существующие записи с подсевом легаси-однопровайдерного конфига. Легаси
+ * (`provider.type`/`baseUrl` без `entries`) должен пережить первый add —
+ * иначе новая запись молча его заменит.
  */
 function seededEntries(config: AppConfig): ProviderEntry[] {
   const provider = config.provider;
@@ -197,14 +190,15 @@ function seededEntries(config: AppConfig): ProviderEntry[] {
   return entries;
 }
 
+/** Итог upsert: записанное имя или конфликт имени. */
 export type UpsertProviderResult =
   | { ok: true; name: string }
   | { ok: false; error: "name-conflict" };
 
 /**
- * Create a provider entry, or update the one named by `input.originalName`.
- * A POST without `originalName` always creates. Rejects a name that collides
- * with another entry's label/type. Returns the written entry name.
+ * Создаёт запись провайдера или обновляет названную в `input.originalName`.
+ * POST без `originalName` всегда создаёт. Имя, бьющееся с чужим label/type, —
+ * отказ. Возвращает имя записанной записи.
  */
 export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertProviderResult {
   const provider = config.provider;
@@ -212,9 +206,9 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
   const entries = seededEntries(config);
   const name = input.label || input.type;
   if (providerNameTaken(entries, name, input.originalName)) {
-    // Degenerate case: a virgin legacy config (no `entries`) seeds exactly one
-    // entry, and a create-POST naming that very entry is an in-place upsert of
-    // the migrated config — not a collision with another provider.
+    // Вырожденный случай: virgin-легаси без `entries` сидирует ровно одну запись,
+    // и create-POST с её именем — in-place upsert мигрированного конфига,
+    // а не коллизия с другим провайдером.
     const loneSeeded = fromLegacySeed && entries.length === 1 && providerEntryName(entries[0]) === name;
     if (!loneSeeded || input.originalName) {
       return { ok: false, error: "name-conflict" };
@@ -258,14 +252,14 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
   else entries.push(entry);
   config.provider.entries = entries;
 
-  // Keep the existing/first provider active; only a first-ever provider becomes active.
+  // Активный провайдер сохраняем; активным становится только первый в истории.
   const wasActive = provider.active || provider.type;
   if (!provider.active) config.provider.active = providerEntryName(entries[0]);
   if (providerEntryName(entry) === wasActive || entries.length === 1) mirrorLegacy(config, entry);
   return { ok: true, name: providerEntryName(entry) };
 }
 
-/** `POST /api/providers` — add/update, persist, reconfigure. */
+/** `POST /api/providers` — add/update, персист, reconfigure. */
 export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -297,8 +291,8 @@ export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s
 }
 
 /**
- * Remove a provider entry. Refuses to delete the active provider (the caller
- * must switch first) so the agent never loses its live backend.
+ * Удаляет запись провайдера. Активный удалять отказывается (сначала
+ * переключись), чтобы агент не потерял живой бэкенд.
  */
 export function removeProvider(config: AppConfig, name: string): "ok" | "active" | "missing" {
   const provider = config.provider;
@@ -310,7 +304,7 @@ export function removeProvider(config: AppConfig, name: string): "ok" | "active"
   return "ok";
 }
 
-/** `DELETE /api/providers/:name` — remove, persist, reconfigure. */
+/** `DELETE /api/providers/:name` — удалить, персист, reconfigure. */
 export function handleProvidersDelete(res: ServerResponse, name: string, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -340,7 +334,7 @@ export function handleProvidersDelete(res: ServerResponse, name: string, s: WebU
   );
 }
 
-/** Dispatch `/api/providers*`; returns whether the request was handled. */
+/** Диспатч `/api/providers*`; возвращает, обработан ли запрос. */
 export function handleProvidersApi(
   req: IncomingMessage,
   res: ServerResponse,

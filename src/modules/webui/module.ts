@@ -1,16 +1,12 @@
+// Модуль `mma web`: единственное место, знающее про `Agent`.
+// Сервер (`./server`) и форвардер (`./forward`) транспортно-чисты; здесь
+// колбэки петли агента вяжутся в SSE-форвардер и отдаются серверу как `Host`.
 /**
- * `mma web` module: the only place that knows about `Agent`.
- *
- * The server (`./server`) and forwarder (`./forward`) stay transport-pure; this
- * file wires the agent loop's callback surface into the SSE forwarder and hands
- * the resulting `Host` to the server.
- *
- * Single-flight (correction #2): the `WebUiState` is created FIRST so the
- * `WebHost`'s busy predicate and the server share ONE state object. The server
- * reserves `busy = true` synchronously on submit; `runAgent` marks
- * `agentRunning = true` once the turn actually starts; the forwarder resets
- * both on `turn_end`. The host guard uses `agentRunning` (not `busy`) so the
- * owner's `submit` is not rejected by the server's own reservation.
+ * Single-flight: `WebUiState` создаётся ПЕРВЫМ, чтобы busy-предикат `WebHost`
+ * и сервер делили ОДИН объект. Сервер ставит `busy = true` синхронно на сабмите;
+ * `runAgent` ставит `agentRunning = true` на старте хода; форвардер сбрасывает
+ * оба на `turn_end`. Гард хоста смотрит на `agentRunning` (не `busy`), чтобы
+ * собственный `submit` владельца не отвергался резервом сервера.
  */
 import type { Agent } from "../../core/agent";
 import type { AppConfig } from "../../config/types";
@@ -39,8 +35,8 @@ import {
   type WebUiState,
 } from "./state";
 
-// Pure snapshot helpers live in `./host-state`; re-exported so existing
-// importers (`webui-usage`, `webui-plan` tests) keep working.
+// Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
+// импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
 export {
   buildHostState,
   captureUsage,
@@ -49,43 +45,45 @@ export {
   type WebIndexer,
 } from "./host-state";
 
+/** Входы старта веб-UI: агент, конфиг, менеджеры, окружение. */
 export interface WebUiDeps {
   agent: Agent;
   config: AppConfig;
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
-  /** Shared global memory store (from bootstrap) backing `/memory` in web mode. */
+  /** Shared-глобальный стор памяти (из bootstrap) для `/memory` в вебе. */
   memory?: MemoryStore;
-  /** Skills registry (from bootstrap) backing the settings "Skills" page. */
+  /** Реестр скиллов (из bootstrap) для страницы настроек "Skills". */
   skills?: WebSkillsModule;
-  /** Plugin manager (from bootstrap) backing the settings "Plugins · MCP" page. */
+  /** Менеджер плагинов (из bootstrap) для страницы "Plugins · MCP". */
   plugins?: WebPluginManager;
   toolRegistry?: PromptIORegistry;
   toolCtx?: { exitOnComplete?: boolean };
-  /** Bootstrap config dir — needed so `/api/config` persists to the right place. */
+  /** Каталог конфига bootstrap — чтобы `/api/config` писал куда надо. */
   configDir?: string;
-  /** Agent workspace (`-d` dir) surfaced in the sidebar "environment" section. */
+  /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара. */
   baseDir?: string;
-  /** Loaded AGENTS.md sources; `disabled` when `--no-agents-md`. */
+  /** Загруженные источники AGENTS.md; `disabled` при `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
-  /** Project-map (index) module for sidebar stats. */
+  /** Модуль карты проекта (индекс) для статистики сайдбара. */
   indexer?: WebIndexer;
   /**
-   * Bootstrap context-probe promise (LM Studio loaded context). Resolved lazily
-   * and surfaced in the sidebar; never awaited at startup so a slow probe can't
-   * delay the server bind.
+   * Промис context-probe bootstrap (загруженный контекст LM Studio). Резолвится
+   * лениво и светится в сайдбаре; на старте не await'ится, чтобы медленный проб
+   * не задерживал бинд сервера.
    */
   contextProbe?: Promise<{ model: string; actual: number } | null>;
-  /** Model ids known to the active provider (defaults to a background cache). */
+  /** Id моделей активного провайдера (дефолт — фоновый кеш). */
   knownModels?: () => string[];
-  /** Bind address override (default: state default / env). */
+  /** Оверрайд адреса бинда (дефолт — дефолт состояния / env). */
   host?: string;
-  /** Token override (mandatory for a non-loopback bind). */
+  /** Оверрайд токена (обязателен для не-loopback бинда). */
   token?: string;
-  /** Virgin config: gate chat behind the browser first-run wizard. */
+  /** Virgin-конфиг: гейтить чат за браузерным визардом первого запуска. */
   setupRequired?: boolean;
 }
 
+/** Хендл запущенного веб-UI: состояние, хост, форвардер, URL, стоп. */
 export interface WebUiHandle {
   state: WebUiState;
   host: Host;
@@ -95,8 +93,8 @@ export interface WebUiHandle {
 }
 
 /**
- * Agent surface the web reconfigure hook needs. Narrow so tests can stub it
- * without constructing a real `Agent` (which would drag in the whole loop).
+ * Поверхность агента для веб-хука reconfigure. Узкая, чтобы тесты стабили
+ * без конструирования настоящего `Agent` (а то потянет всю петлю).
  */
 export interface WebReconfigurableAgent {
   reconfigure(config: AppConfig): void | Promise<void>;
@@ -104,11 +102,10 @@ export interface WebReconfigurableAgent {
 }
 
 /**
- * Build the web-owned `reconfigure` hook. `reconfigure` may resize the context
- * window/budget, so the cached sidebar limit (the previous turn's
- * `budget.history`) goes stale. Re-read the live budget and push a `state`
- * event so the browser updates immediately, without waiting for the next turn
- * or the 2s `/api/state` poll.
+ * Строит вебовый хук `reconfigure`. Он может менять окно/бюджет контекста,
+ * и кешнутый лимит сайдбара (история прошлого хода, `budget.history`) протухает.
+ * Перечитываем живой бюджет и пушим событие `state`, чтобы браузер обновился
+ * сразу, не дожидаясь следующего хода или 2с-полла `/api/state`.
  */
 export function makeReconfigure(
   state: WebUiState,
@@ -118,13 +115,13 @@ export function makeReconfigure(
   return async (config) => {
     await agent.reconfigure(config);
     state.usage = { ...state.usage, contextLimit: agent.contextManager.getBudget().history };
-    // Provider may have changed: refresh the per-provider model list first so the
-    // client's follow-up `/api/models` sees the new provider's models.
+  // Провайдер мог смениться: сначала рефрешим список моделей под провайдера,
+  // чтобы follow-up `/api/models` клиента увидел модели нового провайдера.
     if (after) {
       try {
         await after();
       } catch {
-        /* keep the reconfigure result even if the model refresh fails */
+        /* результат reconfigure сохраняем, даже если рефреш моделей упал */
       }
     }
     broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
@@ -132,21 +129,21 @@ export function makeReconfigure(
 }
 
 /**
- * Start the browser UI. The state is created first, then the `WebHost`, then the
- * server — so the busy flag is shared end-to-end.
+ * Стартует браузерный UI. Сначала состояние, затем `WebHost`, затем сервер —
+ * чтобы флаг busy был общим сквозняком.
  */
 export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const state = createWebUiState();
   if (deps.host) state.host = deps.host;
   if (deps.token) state.token = deps.token;
-  // First-run gating + wizard display data. `buildSetupDisplay` is cheap and
-  // depends only on the provider presets, so it is always populated.
+  // Гейтинг первого запуска + данные визарда. `buildSetupDisplay` дёшев и
+  // зависит только от пресетов провайдеров, поэтому заполняется всегда.
   state.setupRequired = deps.setupRequired ?? false;
   state.setup = buildSetupDisplay();
 
-  // Collaborators for the config/session/model REST surface. `state.config`
-  // aliases the live config object, so `/api/config` writes mutate the same
-  // object the agent reads after `reconfigure`.
+  // Коллабораторы REST конфига/сессий/моделей. `state.config` — алиас живого
+  // объекта конфига, так что записи `/api/config` мутят тот же объект, что
+  // читает агент после `reconfigure`.
   state.config = deps.config;
   state.sessionManager = deps.sessionManager;
   state.memory = deps.memory;
@@ -157,7 +154,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   if (deps.indexer) state.projectMapStats = () => deps.indexer?.stats() ?? null;
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
-  // Web-only interactive tools: `question`/`approve` run over SSE + `/api/answer`.
+  // Веб-онли интерактивные тулы: `question`/`approve` через SSE + `/api/answer`.
   installWebPromptIO({
     state,
     agent: deps.agent,
@@ -165,8 +162,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     toolCtx: deps.toolCtx,
   });
 
-  // Model list: an explicit source wins; otherwise a background cache that
-  // follows the active provider (refreshed on every reconfigure).
+  // Список моделей: явный источник побеждает; иначе фоновый кеш за активным
+  // провайдером (рефреш на каждый reconfigure).
   const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
   state.knownModels = deps.knownModels ?? modelCache!.get;
   if (modelCache) void modelCache.refresh();
@@ -179,8 +176,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const forwarder = makeForwarder(state);
   const stopOutputForwarding = installOutputForwarding(state);
 
-  // Context probe: resolve in the background; `undefined` until it settles so
-  // the sidebar can render a "pending" dash without blocking startup.
+  // Context probe: резолвится в фоне; `undefined`, пока не устоялся, чтобы
+  // сайдбар рисовал прочерк "pending", не стопая старт.
   let probe: { model: string; actual: number } | null | undefined;
   if (deps.contextProbe) {
     void deps.contextProbe
@@ -205,8 +202,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     isBusy: () => state.agentRunning,
     runAgent: runAgent.run,
     interrupt: () => runAgent.interrupt(),
-    // Slash commands run through the shared handler map; output streams over
-    // SSE as `command` events (the HTTP POST only acknowledges acceptance).
+    // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
+    // событиями `command` (HTTP POST лишь подтверждает приём).
     executeCommand: makeWebCommands({ state }),
     getState: () =>
       buildHostState(
@@ -234,7 +231,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
 
   state.bridge = host;
-  // Serve assets fresh from disk so editing `assets/*` needs no server restart.
+  // Ассеты отдаём свежими с диска, чтобы правки `assets/*` не требовали рестарта сервера.
   state.assetSource = loadAssets;
   const url = startServer(loadAssets(), state);
 

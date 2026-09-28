@@ -1,11 +1,6 @@
-/**
- * Shared mutable state for the `mma web` module.
- *
- * Mirrors the proven web-ui plugin state shape but stays transport-focused:
- * no session meta, plans or history here (those arrive in later tasks). The
- * server holds an explicit `WebUiState` so tests can run hermetically against a
- * fresh object instead of the process-global default.
- */
+// Общее мутабельное состояние модуля `mma web`: сервер, SSE-клиенты, busy-слот,
+// коллабораторы bootstrap. Транспортно-ориентировано: меты сессий, планов и
+// истории здесь нет.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { AppConfig } from "../../config/types";
@@ -16,11 +11,12 @@ import type { SetupDisplay } from "../setup/answers";
 import { MAX_BODY_BYTES } from "./limits";
 
 /**
- * Structural subset of `SessionManager` the web REST surface needs. Keeping it
- * narrow lets the real manager satisfy it implicitly while tests stub it
- * without casts. The history readers are optional so lightweight stubs that
- * only exercise list/activate/delete stay valid; the history endpoint answers
- * with an empty transcript when neither is implemented.
+ * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
+ * менеджеру удовлетворять его неявно, а тестам — стабить без кастов. Читалки
+ * истории опциональны, чтобы лёгкие стабы только на list/activate/delete
+ * оставались валидны; эндпоинт истории без них отвечает пустым транскриптом.
+ * Сервер держит явный `WebUiState`, чтобы тесты гонялись герметично на свежем
+ * объекте, а не на процесс-глобальном дефолте.
  */
 export interface WebSessionManager {
   list(): SessionMeta[];
@@ -29,55 +25,58 @@ export interface WebSessionManager {
   setActive(id: string): void;
   delete(id: string): void;
   /**
-   * Create a new session (optionally named) and return its meta. Optional so
-   * list/activate/delete-only stubs stay valid; the create endpoint answers 503
-   * when a wired manager does not implement it.
+   * Создаёт новую сессию (опционально именованную), возвращает мету. Опционален,
+   * чтобы стабы только на list/activate/delete оставались валидны; эндпоинт
+   * создания без него отвечает 503.
    */
   create?(name?: string): SessionMeta;
   loadSessionLog?(id: string): SessionLogEntry[];
   getHistory?(id: string): SessionMessage[];
 }
 
+/** Статические веб-ассеты (снапшот на старт; live-перечитывание — через `assetSource`). */
 export interface WebUiAssets {
   html: string;
   css: string;
   js: string;
   /**
-   * First-run wizard script (`/setup.js`). Optional so lightweight test
-   * fixtures that only exercise the chat surface stay valid.
+   * Скрипт визарда первого запуска (`/setup.js`). Опционален, чтобы лёгкие
+   * тестовые фикстуры только под чат оставались валидны.
    */
   setupJs?: string;
-  /** Streaming Markdown module (`/md.js`). */
+  /** Стриминговый Markdown-модуль (`/md.js`). */
   mdJs?: string;
-  /** Vendored streaming-markdown parser (`/smd.js`, ESM). */
+  /** Вендоренный парсер streaming-markdown (`/smd.js`, ESM). */
   smdJs?: string;
-  /** Vendored highlight.js bundle (`/hljs.js`, exposes `window.hljs`). */
+  /** Вендоренный бандл highlight.js (`/hljs.js`, кладёт `window.hljs`). */
   hljsJs?: string;
   /**
-   * Split frontend modules (`/js/*.js`, relative imports from `/app.js`).
-   * Optional so lightweight test fixtures that only exercise the chat surface
-   * stay valid. Keyed by path without the leading slash (`js/api.js`).
+   * Разделённые фронтенд-модули (`/js/*.js`, относительные импорты из `/app.js`).
+   * Опциональны, чтобы лёгкие фикстуры только под чат оставались валидны.
+   * Ключи — пути без ведущего слеша (`js/api.js`).
    */
   jsModules?: Record<string, string>;
 }
 
 /**
- * Structural subsets of the skills/plugins modules the settings REST surface
- * needs. Narrowing lets the real modules satisfy them implicitly while tests
- * stub them without casts (`SkillsModule`/`PluginManager` are structurally
- * compatible).
+ * Структурные подмножества модулей скиллов/плагинов для REST настроек.
+ * Сужение даёт реальным модулям удовлетворять их неявно, а тестам — стабить
+ * без кастов (`SkillsModule`/`PluginManager` структурно совместимы).
  */
+/** Скилл для REST настроек (имя, описание, путь). */
 export interface WebSkillInfo {
   name: string;
   description?: string;
   sourcePath?: string;
 }
 
+/** Подмножество модуля скиллов для страницы настроек. */
 export interface WebSkillsModule {
   getAvailable(): WebSkillInfo[];
   getLoaded(): WebSkillInfo[];
 }
 
+/** Плагин для REST настроек (имя, версия, источник). */
 export interface WebPluginInfo {
   name: string;
   version?: string;
@@ -85,14 +84,14 @@ export interface WebPluginInfo {
   source?: string;
 }
 
+/** Подмножество менеджера плагинов для страницы настроек. */
 export interface WebPluginManager {
   getPluginInfos(): Array<{ plugin: WebPluginInfo; source?: string }>;
 }
 
 /**
- * Last-turn usage metrics captured from `AgentResult` and surfaced through
- * `HostStateSnapshot`. All fields are optional: a turn that did not report a
- * value leaves the corresponding sidebar cell at `—`.
+ * Метрики usage последнего хода из `AgentResult` для `HostStateSnapshot`.
+ * Все поля опциональны: ход без значения оставляет ячейку сайдбара на `—`.
  */
 export interface UsageSnapshot {
   contextUsed?: number;
@@ -104,6 +103,7 @@ export interface UsageSnapshot {
   contextQuality?: number;
 }
 
+/** Состояние веб-модуля: сервер, клиенты, мост хоста, коллабораторы REST. */
 export interface WebUiState {
   server: Server | null;
   starting: Promise<string> | null;
@@ -113,39 +113,39 @@ export interface WebUiState {
   clients: Set<ServerResponse>;
   bridge: Host | null;
   /**
-   * Single-flight reservation for the UI (`/api/message`). Owned by the server:
-   * set synchronously when a submit is accepted and reset by the forwarder's
-   * `turn_end` (or by {@link releaseBusy} if the turn never started).
+   * Single-flight резерв UI (`/api/message`). Владелец — сервер: ставится
+   * синхронно при принятом сабмите, сбрасывается форвардерным `turn_end`
+   * (или {@link releaseBusy}, если ход так и не стартовал).
    */
   busy: boolean;
   /**
-   * Whether an agent turn is actually executing. Kept separate from {@link busy}
-   * so `WebHost.submit`'s own `isBusy()` guard is NOT tripped by the server's
-   * reservation (which happens before `submit` is invoked). Set when `runAgent`
-   * starts, reset by the forwarder's `turn_end`.
+   * Реально ли выполняется ход агента. Отдельно от {@link busy}, чтобы резерв
+   * сервера (ставится до вызова `submit`) НЕ триггерил собственный `isBusy()`-гард
+   * `WebHost.submit`. Ставится на старте `runAgent`, сбрасывается форвардерным
+   * `turn_end`.
    */
   agentRunning: boolean;
-  /** Ownership token for {@link busy}; see {@link reserveBusy}/{@link releaseBusy}. */
+  /** Токен владения {@link busy}; см. {@link reserveBusy}/{@link releaseBusy}. */
   turnToken: object | null;
   lastPostTs: number;
   minPostIntervalMs: number;
   historyTail: number;
-  /** Transport cap for a POST body; overridable in tests to exercise 413. */
+  /** Транспортный кап тела POST; переопределяется в тестах ради 413. */
   maxBodyBytes: number;
-  /** SSE client cap (env `MMA_WEBUI_MAX_CLIENTS`, default 5); per-state so tests can override. */
+  /** Кап SSE-клиентов (env `MMA_WEBUI_MAX_CLIENTS`, дефолт 5); per-state ради тестов. */
   maxClients: number;
-  /** Usage metrics from the most recent completed turn (see {@link UsageSnapshot}). */
+  /** Метрики usage последнего завершённого хода (см. {@link UsageSnapshot}). */
   usage?: UsageSnapshot;
   /**
-   * Session id owning the current/last turn. Stamped onto every SSE event so
-   * the browser can route streamed output to the originating session tab
-   * instead of whichever tab happens to be foregrounded.
+   * Id сессии-владельца текущего/последнего хода. Штампуется на каждое
+   * SSE-событие, чтобы браузер клал стрим во вкладку исходной сессии,
+   * а не в случайно активную.
    */
   activeSessionId?: string;
   /**
-   * Bootstrap collaborators for the config/session/model REST surface. Wired by
-   * `module.ts`; optional so tests can drive individual endpoints in isolation
-   * (a missing one yields 503, never a crash).
+   * Коллабораторы bootstrap для REST конфига/сессий/моделей. Вяжет `module.ts`;
+   * опциональны, чтобы тесты гоняли точки изолированно (отсутствующий даёт 503,
+   * никогда — краш).
    */
   config?: AppConfig;
   sessionManager?: WebSessionManager;
@@ -153,57 +153,58 @@ export interface WebUiState {
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
   /**
-   * Re-read the static web assets from disk per request. Wired by `module.ts`
-   * so editing `assets/*` is picked up without restarting `mma web`; tests can
-   * leave it unset and rely on the fixed snapshot passed to `startServer`.
+   * Перечитывает статические веб-ассеты с диска на запрос. Вяжет `module.ts`,
+   * чтобы правки `assets/*` подхватывались без рестарта `mma web`; тесты могут
+   * не ставить и полагаться на фиксированный снапшот из `startServer`.
    */
   assetSource?: () => WebUiAssets;
-  /** Agent workspace (`-d` dir) for the sidebar "environment" section + `/status`. */
+  /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара и `/status`. */
   workspace?: string;
-  /** Loaded AGENTS.md sources (project + global), or `disabled` via `--no-agents-md`. */
+  /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
-  /** Project-map stats (`null` until the index walk finishes). */
+  /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /**
-   * Global memory store, shared with the agent (`bootstrap` owns one instance).
-   * Wired by `module.ts`; optional so tests can drive command dispatch without
-   * touching the filesystem — `/memory` then answers "unavailable".
+   * Глобальный стор памяти, общий с агентом (владелец — `bootstrap`).
+   * Вяжет `module.ts`; опционален, чтобы тесты гоняли диспатч команд без
+   * файловой системы — тогда `/memory` отвечает "unavailable".
    */
   memory?: MemoryStore;
   /**
-   * Skills registry from bootstrap (`BootstrapResult.skillsModule`) backing the
-   * settings "Skills" page. Missing → `GET /api/skills` answers 503.
+   * Реестр скиллов из bootstrap (`BootstrapResult.skillsModule`) для страницы
+   * настроек "Skills". Отсутствует → `GET /api/skills` отвечает 503.
    */
   skills?: WebSkillsModule;
   /**
-   * Plugin manager from bootstrap (`BootstrapResult.pluginManager`) backing the
-   * settings "Plugins · MCP" page. Missing → `GET /api/plugins` answers 503.
-   * MCP servers are read from `config.mcpServers`.
+   * Менеджер плагинов из bootstrap (`BootstrapResult.pluginManager`) для
+   * страницы "Plugins · MCP". Отсутствует → `GET /api/plugins` отвечает 503.
+   * MCP-серверы читаются из `config.mcpServers`.
    */
   plugins?: WebPluginManager;
   /**
-   * In-flight interactive questions (`question`/`approve` tools) keyed by the
-   * SSE `question` id. The web `PromptIO` registers a resolver here and
-   * `POST /api/answer` settles it; `cancelPendingQuestions` drains the map on
-   * interrupt/shutdown so a blocked tool never hangs the turn.
+   * Висящие интерактивные вопросы (`question`/`approve`) по id SSE-`question`.
+   * Веб-`PromptIO` регистрирует здесь резолвер, `POST /api/answer` его закрывает;
+   * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown, чтобы
+   * заблокированный тул не вешал ход.
    */
   pendingQuestions: Map<string, (value: unknown) => void>;
   /**
-   * True for a virgin config (`runWeb` computed `virgin`): the browser wizard
-   * must run before chat. Server-enforced — `/api/message` and `/api/command`
-   * answer 409 until `POST /api/setup` clears it.
+   * True для virgin-конфига (`runWeb` вычислил `virgin`): сначала браузерный
+   * визард, потом чат. Принуждается сервером — `/api/message` и `/api/command`
+   * отвечают 409, пока `POST /api/setup` не снимет.
    */
   setupRequired: boolean;
-  /** Static wizard display data (languages/providers/defaults) for `GET /api/setup`. */
+  /** Статика визарда (языки/провайдеры/дефолты) для `GET /api/setup`. */
   setup?: SetupDisplay;
 }
 
-/** Accept only a positive integer; anything malformed falls back to 5. */
+/** Только положительный int; мусор даёт фолбэк 5. */
 export function parseMaxClients(raw: string | undefined): number {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : 5;
 }
 
+/** Свежее состояние с env-дефолтами (хост, токен, капы). */
 export function createWebUiState(): WebUiState {
   return {
     server: null,
@@ -226,20 +227,22 @@ export function createWebUiState(): WebUiState {
   };
 }
 
+/** SSE-событие: тип, время, произвольный пейлоад. */
 export interface SseEvent {
   type: string;
   ts: number;
   [k: string]: unknown;
 }
 
+/** Шлёт событие всем SSE-клиентам (с backpressure-дропом зависших). */
 export function broadcast(ev: SseEvent, s: WebUiState): void {
-  // Stamp the active session onto every event so the client can route streamed
-  // output to the right tab. An event may override it explicitly.
+  // Штампуем активную сессию на каждое событие, чтобы клиент клал стрим
+  // в правильную вкладку. Событие вправе переопределить явно.
   const data: SseEvent = s.activeSessionId ? { sessionId: s.activeSessionId, ...ev } : ev;
   const payload = `event: ${ev.type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of s.clients) {
-    // Backpressure: a `false` return means the socket buffer is full (slow or
-    // stalled reader). Drop the client rather than buffering events unboundedly.
+    // Backpressure: `false` — буфер сокета полон (медленный/виснущий читатель).
+    // Дропаем клиента, а не копим события безгранично.
     try {
       if (!client.write(payload)) {
         s.clients.delete(client);
@@ -252,12 +255,11 @@ export function broadcast(ev: SseEvent, s: WebUiState): void {
 }
 
 /**
- * Atomically reserve the single-flight slot and return its ownership token.
+ * Атомарно резервирует single-flight слот, возвращает токен владения.
  *
- * MUST be called synchronously in the same tick as the busy pre-check: any
- * `await` between check and reserve lets two concurrent submits both win. The
- * token makes the reset owner explicit — a late failure callback from a
- * previous turn can never clear a newer turn's reservation.
+ * Звать СИНХРОННО в том же тике, что пречек busy: любой `await` между чеком
+ * и резервом даст двум конкурентным сабмитам оба выиграть. Токен явно фиксирует
+ * владельца сброса — поздний колбэк провала прошлого хода чужой резерв не снесёт.
  */
 export function reserveBusy(s: WebUiState): object {
   const token = {};
@@ -267,9 +269,9 @@ export function reserveBusy(s: WebUiState): object {
 }
 
 /**
- * Release the slot only if `token` still owns it. Returns whether the caller
- * was the owner (so it can skip a duplicate `state` broadcast when the
- * forwarder's `turn_end` already reset the flag).
+ * Отпускает слот, только если `token` всё ещё владеет им. Возвращает, был ли
+ * вызывающий владельцем (чтобы скипнуть дублирующий бродкаст `state`, когда
+ * форвардерный `turn_end` флаг уже сбросил).
  */
 export function releaseBusy(s: WebUiState, token: object): boolean {
   if (s.turnToken !== token) return false;

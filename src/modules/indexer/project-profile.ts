@@ -1,7 +1,9 @@
+// Профиль проекта: чтение манифеста (package.json/pyproject/Cargo/go.mod) в одну строку.
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { t } from "../../i18n/index";
 
+/** Профиль проекта: имя, рантайм, зависимости, скрипты. */
 export interface ProjectProfile {
   name?: string;
   runtime: string;
@@ -23,7 +25,7 @@ const MAX_DEV_DEPS = 3;
 const MAX_SCRIPTS = 3;
 
 /**
- * Find the first existing manifest in priority order (best-effort, root only).
+ * Находит первый существующий манифест по приоритету (best-effort, только корень).
  */
 export function detectManifest(baseDir: string): string | null {
   for (const manifest of MANIFEST_ORDER) {
@@ -32,7 +34,7 @@ export function detectManifest(baseDir: string): string | null {
   return null;
 }
 
-/** Strip version specifiers from a manifest dependency entry. */
+/** Чистит спеки версий из записи зависимости манифеста (имя без версии). */
 function cleanDependency(entry: string): string {
   let name = entry.trim();
   const eq = name.indexOf("=");
@@ -137,8 +139,8 @@ function readRequirements(baseDir: string): ProjectProfile | null {
 }
 
 /**
- * Read a compact project profile from the workspace manifest (best-effort).
- * Returns null when no readable manifest is present.
+ * Читает компактный профиль проекта из манифеста (best-effort).
+ * Null, если читаемого манифеста нет.
  */
 export function readProjectProfile(baseDir: string): ProjectProfile | null {
   const manifest = detectManifest(baseDir);
@@ -159,7 +161,7 @@ export function readProjectProfile(baseDir: string): ProjectProfile | null {
   }
 }
 
-/** One-line stack-neutral summary of the project profile. */
+/** Однострочная стек-нейтральная сводка профиля проекта. */
 export function formatProjectProfile(profile: ProjectProfile): string {
   const parts: string[] = [];
   if (profile.deps.length > 0) {
@@ -177,8 +179,8 @@ export function formatProjectProfile(profile: ProjectProfile): string {
 }
 
 /**
- * Convenience: detect + read + format in one call. Returns null when the
- * workspace has no readable manifest.
+ * Удобно: detect + read + format одним вызовом. Null, если в проекте нет
+ * читаемого манифеста.
  */
 export function buildProjectProfileLine(baseDir: string): string | null {
   const profile = readProjectProfile(baseDir);

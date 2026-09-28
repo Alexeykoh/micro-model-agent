@@ -1,3 +1,4 @@
+/** Реестр тулов: регистрация и tag-отбор для LLM. */
 import type { ToolDefinition } from "./types";
 
 export class ToolRegistry {
@@ -18,14 +19,17 @@ export class ToolRegistry {
     return this.tools.has(name);
   }
 
+  /** Тулы по именам (отсортированы). */
   list(): string[] {
     return Array.from(this.tools.keys()).sort();
   }
 
+  /** Все зарегистрированные определения. */
   getAll(): ToolDefinition[] {
     return Array.from(this.tools.values());
   }
 
+  /** Подмножество с любым из тегов (без alwaysOn). */
   getByTags(tags: string[]): ToolDefinition[] {
     return this.getAll().filter((t) => {
       if (!t.tags || t.tags.length === 0) return false;
@@ -34,10 +38,8 @@ export class ToolRegistry {
   }
 
   /**
-   * Tools to expose to the LLM. Always includes `alwaysOn` tools, then tools
-   * matching the given tags. When no tags are given, returns every registered
-   * tool (backward-compatible). Duplicates are impossible because the
-   * alwaysOn + tagged sets are unioned by name.
+   * Тулы для LLM: всегда `alwaysOn`, плюс совпавшие по тегам. Без тегов —
+   * все (backward-compatible). Дубликаты исключены объединением по имени.
    */
   getAllForLLM(
     tags?: string[],

@@ -1,12 +1,10 @@
+// Браузерный `PromptIO` для `mma web`: вопросы через SSE, ответы через `POST /api/answer`.
 /**
- * Browser-backed `PromptIO` for `mma web`.
- *
- * Interactive tools (`question`/`approve`) call `askText`/`askChoice`; instead of
- * borrowing a terminal they register a pending resolver on the shared
- * `WebUiState`, broadcast a `question` SSE event, and settle when the browser
- * answers via `POST /api/answer` (see `answer-api.ts`). Rule #11: interactive
- * tools keep going through the same `PromptIO` surface — only the transport
- * differs.
+ * Интерактивные тулы (`question`/`approve`) зовут `askText`/`askChoice`; вместо
+ * терминала регистрируют висящий резолвер в shared `WebUiState`, бродкастят
+ * SSE-событие `question` и закрываются ответом браузера через `POST /api/answer`
+ * (см. `answer-api.ts`). Правило #11: интерактив идёт через ту же поверхность
+ * `PromptIO` — отличается только транспорт.
  */
 import type { PromptIO } from "../../tools/prompt-io";
 import type { InputOption, AskChoiceOptions } from "../../tools/user-input";
@@ -17,16 +15,16 @@ import { broadcast, type WebUiState } from "./state";
 
 let questionSeq = 0;
 
-/** Monotonic, collision-free id for a pending question. */
+/** Монотонный id висящего вопроса без коллизий. */
 function nextQuestionId(): string {
   questionSeq += 1;
   return `q${Date.now().toString(36)}-${questionSeq}`;
 }
 
 /**
- * Coerce an arbitrary browser payload into the index array `askChoice` expects.
- * `-1` ({@link CUSTOM_INDEX}) is preserved: it marks the "own answer" entry,
- * which the tool then resolves with a follow-up `askText`.
+ * Приводит произвольный пейлоад браузера к массиву индексов для `askChoice`.
+ * `-1` ({@link CUSTOM_INDEX}) сохраняется: метка пункта «свой ответ»,
+ * который тул затем дорезолвит follow-up вызовом `askText`.
  */
 function toIndexes(value: unknown): number[] {
   if (!Array.isArray(value)) return [];
@@ -38,14 +36,14 @@ function toIndexes(value: unknown): number[] {
   return out;
 }
 
-/** Coerce an arbitrary browser payload into the string `askText` expects. */
+/** Приводит произвольный пейлоад браузера к строке для `askText`. */
 function toText(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
   return String(value);
 }
 
-/** Register a pending question, broadcast it, and resolve with the coerced answer. */
+/** Регистрирует висящий вопрос, бродкастит его, резолвится приведённым ответом. */
 function ask<T>(
   state: WebUiState,
   payload: Record<string, unknown>,
@@ -58,7 +56,7 @@ function ask<T>(
   });
 }
 
-/** Browser `PromptIO`: asks over SSE, resolves on `resolveAnswer`. */
+/** Браузерный `PromptIO`: спрашивает через SSE, закрывается в `resolveAnswer`. */
 export function createWebPromptIO(state: WebUiState): PromptIO {
   return {
     askText(question) {
@@ -80,7 +78,7 @@ export function createWebPromptIO(state: WebUiState): PromptIO {
   };
 }
 
-/** Settle a pending question by id. Returns false when the id is unknown. */
+/** Закрывает висящий вопрос по id. False — id неизвестен. */
 export function resolveAnswer(state: WebUiState, id: string, value: unknown): boolean {
   const resolver = state.pendingQuestions.get(id);
   if (!resolver) return false;
@@ -90,9 +88,9 @@ export function resolveAnswer(state: WebUiState, id: string, value: unknown): bo
 }
 
 /**
- * Settle every pending question with `undefined` (tools then read empty/`[]`).
- * Called on interrupt/shutdown so a blocked `question`/`approve` never keeps the
- * turn alive after the browser stopped answering.
+ * Закрывает все висящие вопросы через `undefined` (тулы прочтут пусто/`[]`).
+ * Звать на interrupt/shutdown, чтобы заблокированный `question`/`approve`
+ * не держал ход после того, как браузер перестал отвечать.
  */
 export function cancelPendingQuestions(state: WebUiState): void {
   const pending = [...state.pendingQuestions.values()];
@@ -100,22 +98,22 @@ export function cancelPendingQuestions(state: WebUiState): void {
   for (const resolve of pending) resolve(undefined);
 }
 
-/** Minimal agent surface the installer needs (avoids importing `Agent`). */
+/** Минимальная поверхность агента для инсталлера (без импорта `Agent`). */
 export interface PromptIOAgent {
   setPromptIO(io?: PromptIO): void;
 }
 
-/** Minimal registry surface (avoids importing `ToolRegistry`). */
+/** Минимальная поверхность реестра (без импорта `ToolRegistry`). */
 export interface PromptIORegistry {
   has(name: string): boolean;
   register(tool: ToolDefinition): void;
 }
 
 /**
- * Web-only wiring: register the interactive tools, drop `exitOnComplete` from
- * the shared tool context (web turns are interactive, not one-shot — otherwise
- * `question`/`approve` short-circuit), and install the browser `PromptIO`.
- * Terminal mode never calls this, so its behavior is unchanged.
+ * Веб-онли wiring: регистрирует интерактивные тулы, снимает `exitOnComplete`
+ * с shared тул-контекста (веб-ходы интерактивны, не one-shot — иначе
+ * `question`/`approve` коротко замыкаются) и ставит браузерный `PromptIO`.
+ * Терминал сюда не ходит, его поведение не меняется.
  */
 export function installWebPromptIO(deps: {
   state: WebUiState;

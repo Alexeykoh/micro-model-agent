@@ -1,3 +1,4 @@
+// Переключение kind шага плана (create/delete) с сохранением — единая точка.
 import type { Plan, PlanStep, StepKind } from "./planner";
 
 /**
@@ -28,6 +29,7 @@ export function switchStepKind(
   return true;
 }
 
+/** Переключает шаг в kind="delete" (с сохранением плана). Возвращает, был ли сменён. */
 export function switchStepToDelete(
   plan: Plan,
   step: PlanStep,
@@ -36,6 +38,7 @@ export function switchStepToDelete(
   return switchStepKind(plan, step, "delete", save);
 }
 
+/** Переключает шаг в kind="create" (с сохранением плана). Возвращает, был ли сменён. */
 export function switchStepToCreate(
   plan: Plan,
   step: PlanStep,

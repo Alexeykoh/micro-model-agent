@@ -1,24 +1,20 @@
-/**
- * `GET /api/file?path=<p>` — read-only file viewer backing the chat's file
- * cards ("Open" opens the file in a new browser tab).
- *
- * Security (the server handles auth + same-origin upstream):
- *  - the path is resolved against the agent workspace and MUST stay inside it
- *    (absolute paths outside the workspace are rejected);
- *  - symlinks (and Windows junctions) are resolved first, so a link inside the
- *    workspace cannot reach a file outside it;
- *  - protected paths (`.git/`, `.env*`, keys, credentials — see
- *    `matchProtectedPath`) are rejected;
- *  - only regular text files up to {@link MAX_FILE_VIEW_BYTES} are served, so a
- *    stray binary or a multi-GB log cannot be streamed to the browser.
- *
- * Responses — success and error alike — are `text/plain`, because this endpoint
- * is opened directly as a browser tab (a JSON body would render raw). Text is
- * decoded with a UTF-16 LE/BE BOM or a UTF-8 BOM; NUL bytes elsewhere mean a
- * binary file and are refused. One limitation: auth and same-origin rejections
- * happen upstream in `server.ts` and stay JSON — they are only reachable when
- * the auth cookie is missing/forged, not from a real viewer tab.
- */
+// `GET /api/file?path=<p>` — read-only просмотр файлов для карточек чата («Open» — в новой вкладке).
+//
+// Безопасность (auth + same-origin — выше в server.ts):
+// - путь резолвится от воркспейса агента и ОБЯЗАН остаться внутри (абсолютные
+//   снаружи отвергаются);
+// - симлинки (и Windows-джанкшены) резолвятся первыми, чтобы ссылка внутри
+//   воркспейса не дотянулась до файла снаружи;
+// - защищённые пути (`.git/`, `.env*`, ключи, credentials — см.
+//   `matchProtectedPath`) отвергаются;
+// - отдаются только обычные текстовые файлы до {@link MAX_FILE_VIEW_BYTES},
+//   чтобы случайная бинарка или мультигиговый лог не потекли в браузер.
+//
+// Ответы — как успехи, так и ошибки — `text/plain`: точка открывается прямо
+// вкладкой браузера (JSON-тело рендерилось бы сырьём). Текст декодируется по
+// BOM UTF-16 LE/BE или UTF-8; NUL-байты в других местах — бинарка, отказ.
+// Одно ограничение: auth- и same-origin-отказы случаются выше в `server.ts`
+// и остаются JSON — они достижимы лишь с missing/forged кукой, не из вьюера.
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -26,10 +22,10 @@ import { matchProtectedPath } from "../security/protected-paths";
 import { t } from "../../i18n/index";
 import type { WebUiState } from "./state";
 
-/** Cap for a viewed file; larger files are refused rather than truncated. */
+/** Кап просматриваемого файла; большие отвергаются, а не режутся. */
 export const MAX_FILE_VIEW_BYTES = 512 * 1024;
 
-/** The viewer is opened as a browser tab — errors must read as text, not JSON. */
+/** Вьюер открывается вкладкой браузера — ошибки читаются текстом, не JSON. */
 function sendTextError(
   res: ServerResponse,
   status: number,
@@ -43,13 +39,13 @@ function sendTextError(
   res.end(t(key, vars));
 }
 
-/** Decode a text buffer, honouring a UTF-16/UTF-8 BOM; NUL elsewhere means binary. */
+/** Декодирует текстовый буфер с учётом BOM UTF-16/UTF-8; NUL в других местах — бинарка. */
 export function decodeText(buf: Buffer): { text: string; binary: boolean } {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
     return { text: buf.subarray(2).toString("utf16le"), binary: false };
   }
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
-    // `swap16` rejects an odd byte count, so swap only the even prefix.
+    // `swap16` отвергает нечётное число байт — свапаем только чётный префикс.
     const body = buf.subarray(2);
     const even = body.length - (body.length % 2);
     const swapped = Buffer.from(body.subarray(0, even));
@@ -64,15 +60,15 @@ export function decodeText(buf: Buffer): { text: string; binary: boolean } {
   return { text: body.toString("utf8"), binary: false };
 }
 
-/** True when `target` is not inside `base` (lexically). */
+/** True, когда `target` вне `base` (лексически). */
 function escapes(base: string, target: string): boolean {
   const rel = relative(base, target);
   return rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
 }
 
 /**
- * Handle `/api/file`. Returns `false` when the request is not for this route so
- * the caller can fall through to the next handler.
+ * Обрабатывает `/api/file`. Возвращает `false` для чужих роутов, чтобы
+ * вызывающий провалился к следующему хендлеру.
  */
 export function handleFileApi(
   req: IncomingMessage,
@@ -94,9 +90,8 @@ export function handleFileApi(
   }
 
   const abs = isAbsolute(raw) ? resolve(raw) : resolve(base, raw);
-  // Cheap lexical guard first: a path that is obviously outside the workspace
-  // (e.g. `../../etc/passwd`) is refused before touching the filesystem, even
-  // when the target does not exist.
+  // Дешёвый лексический гард первым: очевидно внешний путь (напр.
+  // `../../etc/passwd`) отвергаем до касания ФС, даже если цели нет.
   if (escapes(resolve(base), abs)) {
     sendTextError(res, 403, "web.file.error.outside_workspace");
     return true;
@@ -105,13 +100,13 @@ export function handleFileApi(
   return true;
 }
 
-/** Resolve real paths, enforce the workspace guard, then stream the text file. */
+/** Резолвит реальные пути, держит гард воркспейса, стримит текстовый файл. */
 async function serveFile(res: ServerResponse, base: string, abs: string): Promise<void> {
   let baseReal: string;
   let absReal: string;
   try {
-    // `realpath` follows symlinks/junctions; without it a link inside the
-    // workspace could point at any file on disk and bypass the guard below.
+    // `realpath` идёт по симлинкам/джанкшенам; без него ссылка внутри воркспейса
+    // указывала бы на любой файл диска в обход гарда ниже.
     baseReal = await realpath(resolve(base));
     absReal = await realpath(abs);
   } catch {
@@ -152,7 +147,7 @@ async function serveFile(res: ServerResponse, base: string, abs: string): Promis
     });
     res.end(text);
   } catch {
-    // A directory or an unreadable file — "not found" from the viewer's angle.
+    // Каталог или нечитаемый файл — с точки зрения вьюера "не найдено".
     sendTextError(res, 404, "web.file.error.not_found");
   }
 }

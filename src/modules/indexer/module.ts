@@ -1,3 +1,4 @@
+// Модуль индексатора: построение карты проекта, тул project_map, вотчер.
 import { dirname } from "path";
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
@@ -11,14 +12,16 @@ import { t } from "../../i18n/index";
 import { toForwardSlash } from "../../tools/path-utils";
 import { estimateTokens } from "../../llm/token-counter";
 
+/** Опции модуля индексатора: корень проекта и каталог кэша. */
 export interface IndexerModuleOptions {
   baseDir: string;
   cacheDir: string;
 }
 
-/** Max files listed in the project-map prompt block (code first; see map-select). */
+/** Макс. файлов в блоке карты проекта (сначала код; см. map-select). */
 const MAP_FILE_LIMIT = 80;
 
+/** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
   name = "indexer";
 
@@ -32,15 +35,16 @@ export class IndexerModule implements AgentModule {
   constructor(opts: IndexerModuleOptions) {
     this.baseDir = opts.baseDir;
     this.indexer = new Indexer(opts.baseDir);
-    // Tie the cache to this project root + current tree signature so a stale
-    // `index-cache.json` (files added/removed/edited since the walk) is rebuilt
-    // instead of leaking an outdated map into the system prompt.
+    // Привязываем кэш к корню проекта + текущей сигнатуре дерева, чтобы протухший
+    // `index-cache.json` (файлы добавлены/удалены/правлены после обхода) не
+    // утёк устаревшей картой в системный промпт, а перестроился.
     this.cache = new IndexCache(opts.cacheDir, {
       root: opts.baseDir,
       signature: () => this.indexer.scanSignature(),
     });
   }
 
+  /** Строит индекс (кэш → обход), null при неустранимой ошибке. */
   async buildIndex(): Promise<IndexResult | null> {
     if (this.index) return this.index;
 
@@ -60,12 +64,14 @@ export class IndexerModule implements AgentModule {
     }
   }
 
+  /** Принудительно перестраивает индекс (сброс кэша + обход). */
   async refresh(): Promise<IndexResult | null> {
     this.cache.invalidate();
     this.index = null;
     return this.buildIndex();
   }
 
+  /** Ищет файлы по подстроке пути/экспорта (пусто без индекса). */
   find(query: string): IndexedFile[] {
     if (!this.index) return [];
     const q = query.toLowerCase();
@@ -75,7 +81,7 @@ export class IndexerModule implements AgentModule {
     });
   }
 
-  /** Human/model-readable result of a `find` query (shared by the tool and `mma map`). */
+  /** Человеко/модельно-читаемый результат `find` (общий для тула и `mma map`). */
   formatFind(query: string): string {
     const matches = this.find(query);
     if (matches.length === 0) {
@@ -91,11 +97,12 @@ export class IndexerModule implements AgentModule {
     return t("indexer.find_results", { count: matches.length, results: lines });
   }
 
-  /** The exact project-map text injected into the system prompt (null if not indexed). */
+  /** Точный текст карты проекта для системного промпта (null без индекса). */
   getPromptMap(): string | null {
     return this.index ? this.formatMap(this.index) : null;
   }
 
+  /** Подписка на изменения файлов с дебаунсом перестройки (best-effort). */
   watch(): void {
     this.unwatch();
     try {
@@ -107,10 +114,11 @@ export class IndexerModule implements AgentModule {
         }, 2000);
       });
     } catch {
-      // Watching is best-effort; manual refresh still works.
+      // Вотчинг best-effort; ручной refresh всё равно работает.
     }
   }
 
+  /** Отписывается от вотчера и чистит дебаунс-таймер. */
   unwatch(): void {
     if (this.rebuildTimeout) {
       clearTimeout(this.rebuildTimeout);
@@ -119,6 +127,7 @@ export class IndexerModule implements AgentModule {
     this.indexer.unwatch();
   }
 
+  /** Блок системного промпта с картой проекта (null без индекса). */
   getSystemPromptBlock(): PromptBlock | null {
     if (!this.index) return null;
     const content = this.formatMap(this.index);
@@ -132,9 +141,9 @@ export class IndexerModule implements AgentModule {
   }
 
   /**
-   * Compact project-map stats for the host sidebar (`null` before the walk
-   * finishes). Cached per index object so `/api/state` polling never re-renders
-   * the whole map.
+   * Компактная статистика карты для сайдбара хоста (`null` до конца обхода).
+   * Кэшируется на объект индекса, чтобы поллинг `/api/state` не ререндерил
+   * всю карту.
    */
   stats(): { files: number; symbols: number; tokens: number } | null {
     if (!this.index) return null;
@@ -149,10 +158,12 @@ export class IndexerModule implements AgentModule {
     return value;
   }
 
+  /** Определения тулов модуля (project_map). */
   getToolDefinitions(): ToolDefinition[] {
     return [this.createProjectMapTool()];
   }
 
+  /** Плагин модуля: индекс + вотчер на старт сессии, отписка на конец. */
   getPlugin(): AgentPlugin {
     return {
       name: "indexer",
@@ -204,12 +215,11 @@ export class IndexerModule implements AgentModule {
   }
 
   /**
-   * Find files that share a basename across different extensions in the same
-   * directory (e.g. `ProductCard.js` + `ProductCard.tsx`). This is a purely
-   * structural fact about the file tree — a stale transpiled twin may shadow
-   * the real source at build time. Flagging it is not task classification, so
-   * it does not violate the no-keyword-matching rule; the model decides what
-   * to do with the information.
+   * Находит файлы с общим basename при разных расширениях в одном каталоге
+   * (напр. `ProductCard.js` + `ProductCard.tsx`). Чисто структурный факт дерева —
+   * протухший транспилированный близнец может затенять реальный исходник на
+   * сборке. Подсветить его — не классификация задач, правило no-keyword-matching
+   * не нарушает; что делать с информацией — решает модель.
    */
   private findDuplicateBasenames(result: IndexResult): string[] {
     const byDir: Record<string, Map<string, string[]>> = {};
