@@ -1270,6 +1270,7 @@
   "web.settings.provider_type": "type",
   "web.settings.provider_label_field": "label",
   "web.settings.provider_baseurl": "base URL",
+  "web.settings.provider_baseurl_custom": "custom URL…",
   "web.settings.provider_apikey": "API key",
   "web.settings.provider_key_keep": "leave blank to keep",
   "web.settings.provider_context": "context window",

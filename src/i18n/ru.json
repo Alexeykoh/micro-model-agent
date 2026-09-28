@@ -1243,6 +1243,7 @@
   "web.settings.provider_type": "тип",
   "web.settings.provider_label_field": "метка",
   "web.settings.provider_baseurl": "base URL",
+  "web.settings.provider_baseurl_custom": "свой URL…",
   "web.settings.provider_apikey": "API-ключ",
   "web.settings.provider_key_keep": "оставь пустым, чтобы сохранить",
   "web.settings.provider_context": "окно контекста",
