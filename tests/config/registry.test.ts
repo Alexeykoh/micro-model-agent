@@ -137,4 +137,28 @@ describe("config registry", () => {
     expect(setConfigValue(cfg, "provider.active", "a").ok).toBe(true);
     expect(cfg.model).toBe("model-a");
   });
+
+  it("mirrors legacy flat fields from the active entry on provider switch", () => {
+    const cfg = freshConfig();
+    cfg.provider = {
+      active: "a",
+      entries: [
+        { type: "openai-compat", label: "a", baseUrl: "http://a/v1" },
+        { type: "opencode-go", label: "b", baseUrl: "https://go/v1", apiKey: "k" },
+      ],
+      type: "openai-compat",
+      baseUrl: "http://a/v1",
+    };
+
+    expect(setConfigValue(cfg, "provider.active", "b").ok).toBe(true);
+    expect(cfg.provider.type).toBe("opencode-go");
+    expect(cfg.provider.baseUrl).toBe("https://go/v1");
+    expect(cfg.provider.apiKey).toBe("k");
+
+    // Unknown name is rejected: active and flat fields stay untouched.
+    const bad = setConfigValue(cfg, "provider.active", "nope");
+    expect(bad.ok).toBe(false);
+    expect(cfg.provider.active).toBe("b");
+    expect(cfg.provider.baseUrl).toBe("https://go/v1");
+  });
 });

@@ -599,8 +599,28 @@ export type ConfigSetResult = ConfigSetOk | ConfigSetErrorFail;
  * Держит `provider.models` (последняя модель каждого провайдера) в синхроне. Запись
  * `model` запоминается под активным провайдером; смена `provider.active`
  * восстанавливает запомненную модель провайдера, чтобы свитч молча не оставлял
- * модель, которую новый бэкенд не обслуживает.
+ * модель, которую новый бэкенд не обслуживает. Заодно зеркалит легаси-плоские
+ * поля (`type`/`baseUrl`/`apiKey`) из активной записи — иначе они протухают
+ * после hot-swap, а баннер и внеполосные читатели плоских полей врут.
  */
+/**
+ * Зеркалит легаси-плоские поля (`type`/`baseUrl`/`apiKey`) из активной записи:
+ * после hot-swap `/provider use` они протухают, а баннер и внеполосные читатели
+ * плоских полей врут.
+ */
+function mirrorActiveEntryFields(
+  provider: AppConfig["provider"],
+  activeName: string,
+): void {
+  const entry = (provider.entries ?? []).find(
+    (e) => e.label === activeName || e.type === activeName,
+  );
+  if (!entry) return;
+  provider.type = entry.type;
+  provider.baseUrl = entry.baseUrl;
+  provider.apiKey = entry.apiKey;
+}
+
 function applyProviderModelMemory(config: AppConfig, key: string, value: unknown): void {
   const provider = config.provider;
   const activeName = provider.active ?? provider.type;
@@ -612,6 +632,7 @@ function applyProviderModelMemory(config: AppConfig, key: string, value: unknown
   if (key === "provider.active") {
     const remembered = provider.models?.[String(value)];
     if (remembered) config.model = remembered;
+    mirrorActiveEntryFields(provider, String(value));
   }
 }
 

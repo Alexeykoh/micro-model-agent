@@ -41,6 +41,7 @@ import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { captureConfigSnapshot } from "../config/registry";
+import { activeProviderEndpoint } from "../modules/providers/manager";
 import { probeLspServers } from "../modules/lsp/probe";
 import { FileOnlyLogger } from "../modules/lsp/client";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
@@ -1180,9 +1181,11 @@ export class Repl implements ReplContext, Host {
     const histBudget = ctx - sysBudget - resBudget;
 
     row(t("repl.model"), pc.white(this.config.model));
+    // Плоские поля протухают после `/provider use` — истина в entries.
+    const endpoint = activeProviderEndpoint(this.config.provider);
     row(
       t("repl.provider"),
-      `${this.config.provider.type}  →  ${pc.dim(this.config.provider.baseUrl)}`,
+      `${endpoint.type}  →  ${pc.dim(endpoint.baseUrl)}`,
     );
     row(
       t("repl.context"),
