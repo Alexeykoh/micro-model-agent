@@ -548,7 +548,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   пропуск. Резолвер ограничен baseDir (jail), 10 путями, 500KB; `.drawio` добавлен в
   `FILE_EXTENSIONS` токенайзера. i18n: `hall.claim_artifact`, `hall.claim_output_unverified` (en+ru).
 
-### Current Version: 2.10.0
+### Current Version: 2.11.0
 
 ### Changelog
 
