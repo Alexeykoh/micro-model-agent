@@ -28,14 +28,15 @@ export const DEFAULTS: AppConfig = {
     timeoutMs: 15000,
   },
   tools: {
-    // TODO(2026-08-29): revisit tool-set visibility. enableOnDemand:false
-    // restores the full ~28-tool set (legacy behavior) — safe for small
-    // models but costs schema tokens per call. The on-demand narrowing
-    // (defaultTags + enable_tools) kept the footprint small but made the 9B
-    // model call hidden tools as shell commands / drift to MCP. Decide the
-    // right trade-off for small models and pick one mode.
+    // P5 auto-narrowing (2026-09-28): enableOnDemand:true exposes only
+    // defaultTags + alwaysOn structural/interactive tools; task-type tags are
+    // pre-seeded deterministically before the first LLM call
+    // (src/tools/auto-tags.ts) and the model expands via enable_tools.
+    // The 9B drift that caused the rollback (hidden tools called as shell
+    // commands) is mitigated by the hidden-tools prompt block, the bash
+    // hidden-tool hint + tool-call redirect, and alwaysOn question/approve.
     defaultTags: ["file", "code"],
-    enableOnDemand: false,
+    enableOnDemand: true,
   },
   experts: {
     code: {

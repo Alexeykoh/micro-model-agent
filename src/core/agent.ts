@@ -43,6 +43,7 @@ import { ToolBatchExecutor } from "./agent/tool-batch";
 import { HallucinationGate } from "./agent/hallucination-gate";
 import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
+import { seedToolTags } from "../tools/auto-tags";
 import { CriticClient } from "../modules/critic/client";
 import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
 import {
@@ -554,6 +555,16 @@ export class Agent {
     // (executeSingleAgentLoop re-creates it again for the single-agent path).
     this.abortController = new AbortController();
     this.setScope();
+    // P5 auto-narrowing: deterministically pre-seed tool tags from the raw
+    // user message BEFORE the first LLM call (system prompt + tool schemas).
+    // Additive only — mid-session enable_tools grants are never removed.
+    // Skipped when narrowing is off (enableOnDemand: false → all tools).
+    if (this.deps.config.tools?.enableOnDemand !== false && this.deps.toolTags) {
+      const added = seedToolTags(this.deps.toolTags, input);
+      if (added.length > 0) {
+        this.deps.logger.debug(`Auto-narrowing: pre-seeded tool tags [${added.join(", ")}]`);
+      }
+    }
     const {
       config,
       llmProvider,
