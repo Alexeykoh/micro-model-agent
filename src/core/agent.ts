@@ -812,7 +812,13 @@ export class Agent {
       maxCalls: criticConfig.maxCalls,
       maxRepairCycles: criticConfig.maxRepairCycles,
       verify: this.deps.criticOverride?.verify ?? ((pack, signal) => criticClient.verify(pack, signal)),
-      buildPack: (d) => buildEvidencePack({ task: d.task, planSummary: d.planSummary, toolEvents: d.toolEvents }),
+      buildPack: (d) =>
+        buildEvidencePack({
+          task: d.task,
+          planSummary: d.planSummary,
+          toolEvents: d.toolEvents,
+          baseDir: this.deps.baseDir,
+        }),
       signal: this.abortController?.signal,
     });
 

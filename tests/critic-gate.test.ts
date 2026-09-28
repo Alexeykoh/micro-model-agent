@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { CriticGate } from "../src/core/agent/critic-gate";
+import { CriticGate, gatherTurnToolEvents } from "../src/core/agent/critic-gate";
 import { createLoopState } from "../src/core/agent/loop-state";
 
 function deps(overrides: Partial<any> = {}) {
@@ -89,5 +89,45 @@ describe("CriticGate", () => {
     const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
     expect(names).toEqual(["critic_check"]);
     expect(d.logger.diagnostic).not.toHaveBeenCalled();
+  });
+});
+
+describe("gatherTurnToolEvents", () => {
+  it("passes arguments and output through (production pack is not blind)", () => {
+    const events = gatherTurnToolEvents({
+      getActiveHistory: () => [
+        { role: "user", content: "do it" },
+        { role: "assistant", content: "" },
+        {
+          role: "tool",
+          name: "write_file",
+          content: "Written result.txt",
+          success: true,
+          arguments: { path: "result.txt", content: "HELLO" },
+        },
+        {
+          role: "tool",
+          name: "bash",
+          content: "1 fail",
+          success: false,
+          arguments: { command: "bun test" },
+        },
+      ],
+    } as any);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ tool: "write_file", args: { path: "result.txt", content: "HELLO" }, ok: true, output: "Written result.txt" });
+    expect(events[1]).toEqual({ tool: "bash", args: { command: "bun test" }, ok: false, output: "1 fail" });
+  });
+
+  it("skips non-tool messages and non-string content", () => {
+    const events = gatherTurnToolEvents({
+      getActiveHistory: () => [
+        { role: "assistant", content: "thinking" },
+        { role: "tool", content: "orphan without name", success: true },
+        { role: "tool", name: "read_file", content: [{ type: "text" }], success: true },
+      ],
+    } as any);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ tool: "read_file", args: undefined, ok: true, output: undefined });
   });
 });
