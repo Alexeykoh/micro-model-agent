@@ -459,6 +459,14 @@ body.light .imgcard .ph { background: var(--ph-light); }
 body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
+/* Selector switch pending (boot + provider/model/context/reasoning writes):
+   buttons and menus go inert while the `⋯` mark shows. The mark is a static
+   glyph via `::after` — no animation, so `prefers-reduced-motion` needs no
+   special case and no label rewrites desync the DOM. */
+.selectors[data-pending] .sel > button,
+.selectors[data-pending] .menu { pointer-events: none; }
+.sel > button.pending { cursor: wait; }
+.sel > button.pending b::after { content: " ⋯"; color: var(--dim-b); }
 .menu {
   display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
   background: var(--panel); border: 1px solid var(--border-2); border-radius: 6px;
