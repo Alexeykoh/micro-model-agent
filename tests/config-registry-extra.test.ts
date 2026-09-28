@@ -88,6 +88,18 @@ describe("registry keys", () => {
     if (got.ok) expect(got.display).toBe("rm, dd");
   });
 
+  it("defaults ui.fontSize to comfortable and round-trips it", () => {
+    const cfg = freshCfg();
+    expect(cfg.ui.fontSize).toBe("comfortable");
+    const got = getConfigValue(cfg, "ui.fontSize");
+    expect(got.ok).toBe(true);
+    if (got.ok) expect(got.value).toBe("comfortable");
+    expect(setConfigValue(cfg, "ui.fontSize", "large").ok).toBe(true);
+    expect(cfg.ui.fontSize).toBe("large");
+    expect(setConfigValue(cfg, "ui.fontSize", "banana").ok).toBe(false);
+    expect(cfg.ui.fontSize).toBe("large");
+  });
+
   it("validates regex, record and enum shapes", () => {
     const cfg = freshCfg();
     expect(setConfigValue(cfg, "security.contentScan.dangerousPatterns", '["eval\\\\("]').ok).toBe(true);

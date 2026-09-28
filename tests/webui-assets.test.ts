@@ -182,4 +182,13 @@ describe("webui assets", () => {
     expect(js(a)).toContain('"ui.activityRail"');
     expect(js(a)).toContain("setBusy(S.state.busy)");
   });
+
+  it("wires the ui.fontSize setting to body[data-font]", () => {
+    const a = loadAssets();
+    expect(js(a)).toContain('"ui.fontSize"');
+    expect(js(a)).toContain("applyFontSize(");
+    expect(js(a)).toContain("data-font");
+    expect(a.css).toContain('body[data-font="compact"]');
+    expect(a.css).toContain('body[data-font="large"]');
+  });
 });

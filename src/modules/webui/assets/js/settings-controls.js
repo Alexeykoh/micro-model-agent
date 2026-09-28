@@ -421,7 +421,7 @@ export const PANEL_SECTIONS = {
     { id: "sessions.isolation", titleKey: "web.settings.sec.sessions.isolation", descKey: "web.settings.sec.sessions.isolation.desc", keys: ["sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
   ],
   ui: [
-    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
+    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
   ],
   security: [
     { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.enabled", "security.bash.enabled", "security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.network.enabled", "security.sessionEncryption.enabled"] },

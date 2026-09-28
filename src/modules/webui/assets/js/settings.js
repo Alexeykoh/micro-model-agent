@@ -160,6 +160,7 @@ async function postConfig(key, value, refreshSettings) {
     setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
     if (S.state.config && r.data.value !== undefined) setPath(S.state.config, key, r.data.value);
     if (key === "ui.activityRail") setLayout(String(r.data.value));
+    if (key === "ui.fontSize") applyFontSize(String(r.data.value));
     if (key === "locale") {
       await loadI18n();
       if (hooks.applyStaticI18n) hooks.applyStaticI18n();
@@ -186,6 +187,7 @@ export async function loadConfig() {
   S.state.config = r.data.config || {};
   S.state.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
   S.state.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+  applyFontSize();
   renderSelectors();
   renderSettings();
 }
@@ -1628,6 +1630,16 @@ document.addEventListener("keydown", (e) => {
 
 export function currentTheme() {
   return localStorage.getItem(THEME_KEY) || "auto";
+}
+
+// Web chat font size (`ui.fontSize`, server config — unlike the theme, which
+// is a browser-local preference). Applied as `body[data-font]` so the switch
+// is instant and survives re-renders; unknown values fall back to the default.
+export function applyFontSize(value) {
+  const v = value || (S.state.config && S.state.config.ui && S.state.config.ui.fontSize) || "comfortable";
+  const known = v === "compact" || v === "large" ? v : "comfortable";
+  if (known === "comfortable") document.body.removeAttribute("data-font");
+  else document.body.setAttribute("data-font", known);
 }
 
 export function applyTheme(theme) {
